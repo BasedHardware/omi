@@ -799,7 +799,7 @@ def validate_workerd_publish_job(text: str) -> list[str]:
         'tree="$(git rev-parse "$ADMITTED_SHA:backend-go")"',
         '--label "omi.workerd.backend-go-tree=$tree"',
         "Existing workerd tree tag has a different backend-go tree.",
-        'tree_image="$repository:tree-${tree:0:20}"',
+        'tree_image="$repository:tree-$recipe-${tree:0:20}"',
         "outcome=reused",
         "Existing workerd SHA tag has a different backend-go tree.",
     ):

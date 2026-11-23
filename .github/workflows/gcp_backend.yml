@@ -831,10 +831,13 @@ jobs:
           # SCA-3883: the build context is backend-go/ only, so its git tree identifies the
           # image. A later admitted SHA with the same tree reuses the published digest instead
           # of rebuilding, and a Release go-ahead bound to {digest, backend_go_tree} survives
-          # main moving. The tree also covers the chart and values-prod.yaml.
+          # main moving. The tree also covers the chart and values-prod.yaml. The build
+          # invocation below is outside the tree: bump recipe when it changes, so old images
+          # are not reused for a new recipe.
+          recipe=v1
           tree="$(git rev-parse "$ADMITTED_SHA:backend-go")"
           [[ "$tree" =~ ^[a-f0-9]{40}$ ]]
-          tree_image="$repository:tree-${tree:0:20}"
+          tree_image="$repository:tree-$recipe-${tree:0:20}"
 
           describe() {
             gcloud container images describe "$1" --format='value(image_summary.digest)' 2>"$RUNNER_TEMP/workerd-describe.err"
@@ -846,7 +849,7 @@ jobs:
             # A failed read is fatal and named, never mistaken for a mismatch.
             if ! docker buildx imagetools inspect "$repository@$1" \
                 --format "{{ index .Image.Config.Labels \"$2\" }}" 2>"$RUNNER_TEMP/workerd-label.err"; then
-              echo "::error::Could not read the $2 label of the workerd image."
+              echo "::error::Could not read the $2 label of the workerd image." >&2
               cat "$RUNNER_TEMP/workerd-label.err" >&2
               return 1
             fi
@@ -859,6 +862,11 @@ jobs:
             if [[ "$recorded_tree" != "$tree" ]]; then
               echo "::error::Existing workerd tree tag has a different backend-go tree."
               exit 1
+            fi
+            # Keep the per-SHA tag reachable for this admitted SHA too.
+            if [[ -z "$(describe "$image")" ]]; then
+              missing "$image" || { cat "$RUNNER_TEMP/workerd-describe.err" >&2; exit 1; }
+              gcloud container images add-tag --quiet "$repository@$digest" "$image"
             fi
             outcome=reused
           elif ! missing "$tree_image"; then
@@ -895,13 +903,14 @@ jobs:
             exit 1
           fi
 
+          image_revision="$(label "$digest" org.opencontainers.image.revision)"
           {
             echo "### Workerd production image published"
             echo "- Admitted SHA: \`$ADMITTED_SHA\`"
-            echo "- Image revision: \`$(label "$digest" org.opencontainers.image.revision)\` ($outcome)"
+            echo "- Image revision: \`$image_revision\` ($outcome)"
             echo "- backend-go tree: \`$tree\`"
             echo "- Image: \`$repository@$digest\`"
-            echo "- Release identity: \`backend-go/deploy/workerd/release-identity.sh --digest $digest --ref $ADMITTED_SHA --verify-image $repository\` plus the same \`-f\` files as the install"
+            echo "- Release identity: \`backend-go/deploy/workerd/release-identity.sh --digest $digest --ref $ADMITTED_SHA --verify-image $repository --check-worktree\` plus the same \`-f\` files as the install"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Plan B B2 release train: build-only also publishes every role image

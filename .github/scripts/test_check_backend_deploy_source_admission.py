@@ -236,11 +236,11 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            'tree_image="$repository:tree-${tree:0:20}"',
+            'tree_image="$repository:tree-$recipe-${tree:0:20}"',
             'tree_image="$image"',
         )
         self.assertIn(
-            'workerd publish must retain tree_image="$repository:tree-${tree:0:20}"',
+            'workerd publish must retain tree_image="$repository:tree-$recipe-${tree:0:20}"',
             CHECKER.validate(root),
         )
 
