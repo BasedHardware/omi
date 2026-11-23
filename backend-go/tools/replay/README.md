@@ -74,11 +74,13 @@ and family. Invalid Home token evidence includes a per-slot `failure_reason`, wi
 values. The SCA-3874 exception labels only remaining unexplained rows while the unreadable-
 ciphertext case still shows Python discarding the conversation against Go's failure. The
 reporter checks both statuses and three sentinel differences; the exception expires when that
-case behavior changes. Protected payload, clock, ID, and token checks are listed in
-`comparison-rules.md`.
+case behavior changes. Pass-3 Go-gap patterns from SCA-4012 are applied from
+`approved-go-gaps-sca-4012.csv` to currently unlabelled rows. The report's unexplained gate count
+is `go_gap + unlabelled`; Python-bug exception rows are reported separately. Protected payload,
+clock, ID, and token checks are listed in `comparison-rules.md`.
 Family attribution uses this precedence: goals; apps and webhooks; memory source and
-metering; digest, minimum and relevance; other. A nonzero unlabelled count is a measurement,
-not a gate failure.
+metering; digest, minimum and relevance; other. The report exposes remaining unlabelled groups
+separately from rows already classified as Go gaps.
 
 The seam admits each fixture as one `sync_update` over a stored completed row. It does not
 exercise per-case trigger behavior, repeat-admission, final-attempt handling,

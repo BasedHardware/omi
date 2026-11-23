@@ -100,5 +100,12 @@ rules and Go gaps keep their own labels. The reporter requires both statuses and
 discarded, and transcript sentinel differences, so it fails when Python's behavior is fixed or
 the case changes.
 
+The lead-approved pass-3 Go-gap groups from SCA-4012 are stored in
+`approved-go-gaps-sca-4012.csv`. The reporter applies those path/field patterns only to current
+unlabelled rows; existing by-design labels and the SCA-3874 case-specific exception retain
+precedence. A `<document>` pattern covers differences under that document, and a field pattern
+covers its nested leaf differences. The report's unexplained gate count is `go_gap + unlabelled`;
+`python_bug:<issue>` exception rows are listed separately and excluded from that count.
+
 All other differences keep `label: null` until a lead approves an executable comparison rule or
 files a Python-bug issue with file-and-line evidence and a Done check.

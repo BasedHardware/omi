@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import re
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 
 FAMILIES = (
@@ -58,6 +59,8 @@ DYNAMIC_DERIVED_DOCUMENT_IDS = {
     'pipeline_ledger': '<cid>',
     'users': '<uid>',
 }
+
+GO_GAP_GROUPS_PATH = Path(__file__).resolve().parents[3] / 'backend-go/tools/replay/approved-go-gaps-sca-4012.csv'
 
 
 def family_for_path(path: str) -> str:
@@ -142,6 +145,63 @@ def validate_python_bug_exception(case: dict) -> str | None:
     return exception['issue']
 
 
+def normalized_difference_location(path: str, case_name: str) -> tuple[str, str, bool]:
+    side = ''
+    for prefix in ('/python/derived_documents/', '/go/derived_documents/'):
+        if path.startswith(prefix):
+            side = prefix.split('/')[1]
+            path = path[len(f'/{side}') :]
+            break
+    if path.startswith('/derived_documents/'):
+        rest = path.removeprefix('/derived_documents/')
+        key, separator, field = rest.partition('/')
+        parts = key.replace('~1', '/').split('/')
+        for index in range(0, len(parts) - 1, 2):
+            collection, document_id = parts[index : index + 2]
+            if document_id == case_name or document_id == f'replay-{case_name}':
+                parts[index + 1] = '<uid>' if collection == 'users' else '<cid>'
+            elif collection in DYNAMIC_DERIVED_DOCUMENT_IDS:
+                parts[index + 1] = DYNAMIC_DERIVED_DOCUMENT_IDS[collection]
+            elif re.fullmatch(r'[0-9a-f]{8}-[0-9a-f-]{27,}', document_id):
+                parts[index + 1] = '<uuid>'
+        path_prefix = f'{side}/derived_documents/' if side else '/derived_documents/'
+        return (
+            path_prefix + '/'.join(parts),
+            field if separator else '<document>',
+            bool(side),
+        )
+    parts = path.strip('/').split('/')
+    return (
+        '/' + parts[0] if parts and parts[0] else '/',
+        '/'.join(parts[1:]) if len(parts) > 1 else '<value>',
+        bool(side),
+    )
+
+
+def approved_go_gap_groups() -> list[dict[str, str]]:
+    with GO_GAP_GROUPS_PATH.open(newline='', encoding='utf-8') as source:
+        rows = list(csv.DictReader(source))
+    if len(rows) != 48 or any(row.get('proposed_label') != 'go_gap' for row in rows):
+        raise ValueError('SCA-4012 Go-gap map must contain exactly 48 approved go_gap groups')
+    keys = [(row['path_pattern'], row['field']) for row in rows]
+    if len(set(keys)) != len(keys):
+        raise ValueError('SCA-4012 Go-gap map contains duplicate path/field groups')
+    return rows
+
+
+def pass3_go_gap_group(path: str, case_name: str, groups: list[dict[str, str]]) -> str | None:
+    path_pattern, field, side_specific = normalized_difference_location(path, case_name)
+    if side_specific:
+        return None
+    for group in groups:
+        if path_pattern != group['path_pattern']:
+            continue
+        group_field = group['field']
+        if group_field == '<document>' or field == group_field or field.startswith(group_field + '/'):
+            return group['group']
+    return None
+
+
 def unlabelled_groups(cases: list[dict]) -> list[dict]:
     groups = {}
     for case in cases:
@@ -150,30 +210,7 @@ def unlabelled_groups(cases: list[dict]) -> list[dict]:
             if difference.get('label') is not None:
                 continue
             path = difference.get('path', '')
-            side = ''
-            for prefix in ('/python/derived_documents/', '/go/derived_documents/'):
-                if path.startswith(prefix):
-                    side = prefix.removesuffix('/derived_documents/')
-                    path = path[len(side) :]
-                    break
-            if path.startswith('/derived_documents/'):
-                rest = path.removeprefix('/derived_documents/')
-                key, separator, field = rest.partition('/')
-                parts = key.replace('~1', '/').split('/')
-                for index in range(0, len(parts) - 1, 2):
-                    collection, document_id = parts[index : index + 2]
-                    if document_id == name or document_id == f'replay-{name}':
-                        parts[index + 1] = '<uid>' if collection == 'users' else '<cid>'
-                    elif collection in DYNAMIC_DERIVED_DOCUMENT_IDS:
-                        parts[index + 1] = DYNAMIC_DERIVED_DOCUMENT_IDS[collection]
-                    elif re.fullmatch(r'[0-9a-f]{8}-[0-9a-f-]{27,}', document_id):
-                        parts[index + 1] = '<uuid>'
-                path_pattern = f'{side}/derived_documents/' + '/'.join(parts)
-                field = field if separator else '<document>'
-            else:
-                parts = path.strip('/').split('/')
-                path_pattern = '/' + parts[0] if parts and parts[0] else '/'
-                field = '/'.join(parts[1:]) if len(parts) > 1 else '<value>'
+            path_pattern, field, _ = normalized_difference_location(path, name)
             key = (path_pattern, field)
             row = groups.setdefault(key, {'rows': 0, 'case_ids': set(), 'kinds': set()})
             row['rows'] += 1
@@ -196,6 +233,12 @@ def enrich(report: dict) -> dict:
     totals = {family: {'unexplained': 0, 'allowed': 0, 'go_gap': 0, 'python_bug': 0, 'total': 0} for family in FAMILIES}
     allowed_by_rule = Counter()
     label_totals = Counter()
+    pass3_groups = approved_go_gap_groups()
+    pass3_rows_by_group = Counter()
+    pass3_matches_by_group = Counter()
+    pass3_matches_by_label = Counter()
+    pass3_labels_by_group = defaultdict(Counter)
+    pass3_cases_by_group = defaultdict(set)
     home_receipt_rows = 0
     home_receipt_side_traces = {}
     raw_unexplained = report.get('unexplained_differences', 0)
@@ -259,6 +302,8 @@ def enrich(report: dict) -> dict:
         for difference in case.get('differences', []):
             family = family_for_path(difference.get('path', ''))
             difference['family'] = family
+            pass3_group = pass3_go_gap_group(difference.get('path', ''), case.get('name', ''), pass3_groups)
+            assigned_from_pass3 = False
             if difference.get('failure_reason') == 'home_dirty_receipt_missing':
                 label = None
                 home_receipt_rows += 1
@@ -282,9 +327,20 @@ def enrich(report: dict) -> dict:
             elif python_bug_issue:
                 label = f'python_bug:{python_bug_issue}'
             else:
-                label = None
+                if pass3_group is None:
+                    label = None
+                else:
+                    label = 'go_gap'
+                    assigned_from_pass3 = True
+                    pass3_rows_by_group[pass3_group] += 1
             difference['label'] = label
             label_totals[label or 'unlabelled'] += 1
+            if pass3_group is not None:
+                pass3_matches_by_group[pass3_group] += 1
+                pass3_matches_by_label[label or 'unlabelled'] += 1
+                pass3_cases_by_group[pass3_group].add(case.get('name', ''))
+                if not assigned_from_pass3:
+                    pass3_labels_by_group[pass3_group][label or 'unlabelled'] += 1
             if label is None:
                 state = 'unexplained'
             elif label == 'go_gap':
@@ -299,9 +355,11 @@ def enrich(report: dict) -> dict:
                 allowed_by_rule[label.removeprefix('by_design:')] += 1
     report.pop('cost_table', None)
     unlabelled = label_totals.get('unlabelled', 0)
-    if raw_unexplained < unlabelled:
-        raise ValueError('unlabelled differences exceed the comparator unexplained count')
-    report['unexplained_differences'] = unlabelled
+    go_gap = label_totals.get('go_gap', 0)
+    unexplained_gate_count = go_gap + unlabelled
+    if raw_unexplained < unexplained_gate_count:
+        raise ValueError('gate-counted differences exceed the comparator unexplained count')
+    report['unexplained_differences'] = unexplained_gate_count
     if operation_overages:
         label_totals['go_gap:ops'] += len(operation_overages)
     totals['Firestore operation budget']['go_gap'] += len(operation_overages)
@@ -319,7 +377,44 @@ def enrich(report: dict) -> dict:
             'over_budget_cases': operation_overages,
             'status': 'blocked' if operation_overages else 'pass',
         },
-        'cohort_gate': 'closed' if unlabelled or operation_overages else 'open',
+        'unexplained_gate': {
+            'rule': 'go_gap + unlabelled; python_bug exceptions are reported separately',
+            'go_gap_rows': go_gap,
+            'unlabelled_rows': unlabelled,
+            'total': unexplained_gate_count,
+            'python_bug_exceptions': {
+                label.removeprefix('python_bug:'): count
+                for label, count in label_totals.items()
+                if label.startswith('python_bug:')
+            },
+        },
+        'pass3_go_gap_labels': {
+            'source_issue': 'SCA-4012',
+            'source_csv': 'backend-go/tools/replay/approved-go-gaps-sca-4012.csv',
+            'approved_groups': len(pass3_groups),
+            'groups_with_current_unlabelled_rows': len(pass3_rows_by_group),
+            'rows_labeled': sum(pass3_rows_by_group.values()),
+            'current_matching_rows': sum(pass3_matches_by_group.values()),
+            'current_matching_rows_by_label': dict(sorted(pass3_matches_by_label.items())),
+            'by_group': [
+                {
+                    'group': int(group['group']),
+                    'path_pattern': group['path_pattern'],
+                    'field': group['field'],
+                    'source_rows': int(group['rows']),
+                    'source_cases': int(group['cases']),
+                    'current_matching_rows': pass3_matches_by_group[group['group']],
+                    'current_matching_cases': len(pass3_cases_by_group[group['group']]),
+                    'rows_labeled': pass3_rows_by_group[group['group']],
+                    'already_labeled': dict(sorted(pass3_labels_by_group[group['group']].items())),
+                }
+                for group in pass3_groups
+            ],
+            'groups_without_current_matching_rows': [
+                int(group['group']) for group in pass3_groups if not pass3_matches_by_group[group['group']]
+            ],
+        },
+        'cohort_gate': 'closed' if unexplained_gate_count or operation_overages else 'open',
         'raw_unexplained_differences': raw_unexplained,
         'allowed_by_rule': dict(sorted(allowed_by_rule.items())),
         'approved_rule_reference': 'backend-go/tools/replay/comparison-rules.md',
@@ -347,8 +442,8 @@ def enrich(report: dict) -> dict:
         'value_free': True,
         'cost_measured': False,
     }
-    if sum(row['unexplained'] for row in totals.values()) != report.get('unexplained_differences'):
-        raise ValueError('family totals do not sum to the unexplained-difference count')
+    if sum(row['unexplained'] for row in totals.values()) != unlabelled:
+        raise ValueError('family totals do not sum to the unlabelled row count')
     if sum(label_totals.values()) != sum(row['total'] for row in totals.values()):
         raise ValueError('label totals do not sum to the difference row count')
     groups = unlabelled_groups(report.get('cases', []))
@@ -375,6 +470,17 @@ def main():
         )
     for label, count in enriched['diagnostic']['label_counts'].items():
         print(f"Label ({count}): {label}")
+    gate = enriched['diagnostic']['unexplained_gate']
+    print(
+        f"Unexplained gate: {gate['total']} ({gate['go_gap_rows']} go_gap + "
+        f"{gate['unlabelled_rows']} unlabelled); Python-bug exceptions: "
+        + ', '.join(f'{issue}={count}' for issue, count in gate['python_bug_exceptions'].items())
+    )
+    pass3 = enriched['diagnostic']['pass3_go_gap_labels']
+    print(
+        f"SCA-4012 pass 3: {pass3['rows_labeled']} current rows labeled across "
+        f"{pass3['groups_with_current_unlabelled_rows']}/{pass3['approved_groups']} approved groups"
+    )
     for rule, count in enriched['diagnostic']['allowed_by_rule'].items():
         print(f"Allowed by rule ({count}): {rule}")
     print('Known gaps: trigger, repeat-admission, final attempt, deletion, erase.')
