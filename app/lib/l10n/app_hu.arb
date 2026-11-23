@@ -4478,6 +4478,7 @@
     "processingNewestFirst": "Először a legújabb felvételeket dolgozzuk fel a rendelkezésre álló keretig. A többi tovább várakozik.",
     "processingAction": "Várakozó felvételek feldolgozása",
     "processingProgress": "A várakozó felvételeid feldolgozása…",
+    "waitingForTranscriptionAllowance": "Várakozás az elérhető átírási keretre",
     "processingDeferred": "Feldolgozásra vár",
     "processingCount": "{count, plural, =1{1 beszélgetés várakozik} other{{count} beszélgetés várakozik}}",
     "playbackPartialAudioSaved": "{saved} / {total} hang elmentve",

@@ -14372,6 +14372,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get processingProgress => 'Bekleyen kayıtlarınız işleniyor…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Kullanılabilir deşifre kotası bekleniyor';
+
+  @override
   String get processingDeferred => 'İşlenmeyi bekliyor';
 
   @override

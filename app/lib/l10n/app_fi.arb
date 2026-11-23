@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "Käsittelemme uusimmat tallenteet ensin käytettävissä olevan kiintiön rajoissa. Loput jäävät odottamaan.",
     "processingAction": "Käsittele odottavat tallenteet",
     "processingProgress": "Käsitellään odottavia tallenteitasi…",
+    "waitingForTranscriptionAllowance": "Odottaa vapaata litterointikiintiötä",
     "processingDeferred": "Odottaa käsittelyä",
     "processingCount": "{count, plural, =1{1 keskustelu odottaa} other{{count} keskustelua odottaa}}",
     "playbackPartialAudioSaved": "Ääntä tallennettu {saved} / {total}",

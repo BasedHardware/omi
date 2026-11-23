@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "سنعالج أحدث التسجيلات أولًا ضمن الحصة المتاحة. وسيبقى الباقي قيد الانتظار.",
     "processingAction": "معالجة التسجيلات المنتظرة",
     "processingProgress": "جارٍ معالجة تسجيلاتك المنتظرة…",
+    "waitingForTranscriptionAllowance": "في انتظار حصّة النسخ الصوتي",
     "processingDeferred": "في انتظار المعالجة",
     "processingCount": "{count, plural, =1{محادثة واحدة قيد الانتظار} other{{count} محادثات قيد الانتظار}}",
     "playbackPartialAudioSaved": "تم حفظ {saved} من {total} من الصوت",

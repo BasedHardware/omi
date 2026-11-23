@@ -4417,6 +4417,7 @@
     "processingNewestFirst": "Nous traiterons d'abord les enregistrements les plus récents, dans la limite du quota disponible. Le reste restera en attente.",
     "processingAction": "Traiter les enregistrements en attente",
     "processingProgress": "Traitement de vos enregistrements en attente…",
+    "waitingForTranscriptionAllowance": "En attente d’un quota de transcription disponible",
     "processingDeferred": "En attente de traitement",
     "processingCount": "{count, plural, =1{1 conversation en attente} other{{count} conversations en attente}}",
     "playbackPartialAudioSaved": "{saved} sur {total} d'audio enregistré",

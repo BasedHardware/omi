@@ -4417,6 +4417,7 @@
     "processingNewestFirst": "Najpierw przetworzymy najnowsze nagrania w ramach dostępnego limitu. Pozostałe będą nadal oczekiwać.",
     "processingAction": "Przetwórz oczekujące nagrania",
     "processingProgress": "Przetwarzanie oczekujących nagrań…",
+    "waitingForTranscriptionAllowance": "Oczekiwanie na dostępny limit transkrypcji",
     "processingDeferred": "Oczekuje na przetworzenie",
     "processingCount": "{count, plural, =1{1 rozmowa oczekuje} other{{count} rozmów oczekuje}}",
     "playbackPartialAudioSaved": "Zapisano {saved} z {total} dźwięku",

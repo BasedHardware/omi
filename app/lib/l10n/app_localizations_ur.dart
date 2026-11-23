@@ -14373,6 +14373,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get processingProgress => 'آپ کی منتظر ریکارڈنگز پروسیس ہو رہی ہیں…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'آڈیو کی تحریری نقل کے کوٹے کا انتظار ہے';
+
+  @override
   String get processingDeferred => 'پروسیسنگ کی منتظر';
 
   @override

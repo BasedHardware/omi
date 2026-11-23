@@ -14367,6 +14367,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get processingProgress => 'Обрада ваших снимака на чекању…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Чека се доступна квота за транскрипцију';
+
+  @override
   String get processingDeferred => 'Чека обраду';
 
   @override

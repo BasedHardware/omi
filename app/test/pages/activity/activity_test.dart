@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/schema/review.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/activity/activity_bell_button.dart';
 import 'package:omi/pages/activity/activity_page.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
-import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
+
+import '../../helpers/home_fixture_env.dart';
 
 /// An in-memory bell state starting at [stored] (0: never visited).
 (ActivitySeen, int Function()) _seen(int stored) {
@@ -127,6 +136,8 @@ void main() {
   });
 
   group('ActivityPage', () {
+    setUpAll(() => Env.init(HomeFixtureEnv()));
+
     testWidgets('a failed recap load leaves an unseen recap unseen', (tester) async {
       final (seen, stored) = _seen(yesterday.millisecondsSinceEpoch);
       seen.observe([anHourAgo]);
@@ -231,6 +242,129 @@ void main() {
       expect(find.text('Recap kept'), findsOneWidget);
       expect(find.text("Couldn't load all of your activity"), findsOneWidget);
     });
+
+    for (final location in [
+      'first page',
+      'older page',
+      'outside the Home folder filter',
+      'outside the Home folder filter after a merge redirect',
+    ]) {
+      testWidgets('pulling Activity refreshes a recording from $location as its hold releases and it finishes',
+          (tester) async {
+        SharedPreferences.setMockInitialValues({'uid': 'fixture-user'});
+        await SharedPreferencesUtil.init();
+        final (seen, _) = _seen(0);
+        const recordingId = 'held-release';
+        final redirected = location.endsWith('merge redirect');
+        final completedId = redirected ? 'surviving-recording' : recordingId;
+        final held = ServerConversation(
+          id: recordingId,
+          createdAt: yesterday,
+          structured: Structured('', ''),
+          status: ConversationStatus.completed,
+          homeStep: 'failed',
+          transcriptionAdmission: 'allowance_held',
+        );
+        var current = held;
+        var pageReads = 0;
+        var detailReads = 0;
+        var detailOk = true;
+        List<ServerConversation>? firstPage;
+        final provider = ConversationProvider(
+          conversationListFetcher: () async {
+            pageReads++;
+            return (items: firstPage ?? [current], ok: true);
+          },
+          conversationLifecycleFetcher: (id) async {
+            expect(id, recordingId);
+            detailReads++;
+            return (item: detailOk ? current : null, ok: detailOk);
+          },
+          isSignedIn: () => true,
+        );
+        final store = PendingWorkStore(
+          loadPending: () async => const ApiSuccess(
+            PendingWorkSnapshot(enabled: true, items: [], attentionUnseenCount: 0, homeProcessingToday: true),
+          ),
+          loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+        );
+        addTearDown(provider.dispose);
+        addTearDown(store.dispose);
+        await provider.forceRefreshConversations();
+
+        await tester.pumpWidget(_app(ChangeNotifierProvider.value(
+          value: provider,
+          child: ActivityPage(
+            pendingWork: store,
+            seen: seen,
+            probeDreamReport: () async => false,
+            loadRecaps: () async => (items: [_recap('kept', anHourAgo)], ok: true),
+            loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+          ),
+        )));
+        await tester.pumpAndSettle();
+        final heldRow = find.byKey(const Key('activity_held_$recordingId'));
+        final processingRow = find.byKey(const Key('activity_processing_$recordingId'));
+        expect(heldRow, findsOneWidget);
+        expect(processingRow, findsNothing);
+        expect(pageReads, 1);
+
+        if (location != 'first page') {
+          if (location.startsWith('outside the Home folder filter')) provider.selectedFolderId = 'newer-folder';
+          firstPage = [
+            for (var i = 0; i < 50; i++)
+              ServerConversation(
+                id: 'newer-$i',
+                createdAt: anHourAgo,
+                structured: Structured('Newer recording $i', 'Summary.'),
+                status: ConversationStatus.completed,
+                folderId: 'newer-folder',
+                homeStep: 'ready',
+              ),
+          ];
+          detailOk = false;
+          await tester.drag(find.byType(ListView), const Offset(0, 300));
+          await tester.pumpAndSettle();
+          expect(heldRow, findsOneWidget);
+          expect(processingRow, findsNothing);
+          detailOk = true;
+        }
+
+        current = ServerConversation(
+          id: recordingId,
+          createdAt: yesterday,
+          structured: Structured('', ''),
+          status: ConversationStatus.processing,
+          homeStep: 'transcribing',
+          transcriptionAdmission: 'processing',
+        );
+        await tester.drag(find.byType(ListView), const Offset(0, 300));
+        await tester.pumpAndSettle();
+        expect(pageReads, location == 'first page' ? 2 : 3);
+        expect(detailReads, location == 'first page' ? 1 : 2);
+        expect(heldRow, findsNothing);
+        expect(processingRow, findsOneWidget);
+
+        current = ServerConversation(
+          id: completedId,
+          createdAt: yesterday,
+          structured: Structured('Finished recording', 'A saved summary.'),
+          status: ConversationStatus.completed,
+          folderId: redirected ? 'newer-folder' : null,
+          homeStep: 'ready',
+        );
+        await tester.drag(find.byType(ListView), const Offset(0, 300));
+        await tester.pumpAndSettle();
+        expect(pageReads, location == 'first page' ? 3 : 4);
+        expect(detailReads, location == 'first page' ? 2 : 3);
+        expect(heldRow, findsNothing);
+        expect(processingRow, findsNothing);
+        expect(
+            provider.conversations.singleWhere((row) => row.id == completedId).structured.title, 'Finished recording');
+        if (redirected) expect(provider.conversations.any((row) => row.id == recordingId), isFalse);
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
 
     testWidgets('says so when there is nothing yet', (tester) async {
       final (seen, _) = _seen(0);

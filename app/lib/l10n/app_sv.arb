@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "Vi bearbetar de senaste inspelningarna först, så långt kvoten räcker. Resten fortsätter att vänta.",
     "processingAction": "Bearbeta väntande inspelningar",
     "processingProgress": "Bearbetar dina väntande inspelningar…",
+    "waitingForTranscriptionAllowance": "Väntar på tillgänglig kvot för transkribering",
     "processingDeferred": "Väntar på bearbetning",
     "processingCount": "{count, plural, =1{1 samtal väntar} other{{count} samtal väntar}}",
     "playbackPartialAudioSaved": "{saved} av {total} ljud sparat",

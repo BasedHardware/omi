@@ -14394,6 +14394,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get processingProgress => 'Апрацоўваем запісы ў чаканні…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Чакаем даступнага ліміту транскрыпцыі';
+
+  @override
   String get processingDeferred => 'Чакае апрацоўкі';
 
   @override

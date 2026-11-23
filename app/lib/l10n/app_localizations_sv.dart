@@ -14368,6 +14368,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get processingProgress => 'Bearbetar dina väntande inspelningar…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Väntar på tillgänglig kvot för transkribering';
+
+  @override
   String get processingDeferred => 'Väntar på bearbetning';
 
   @override

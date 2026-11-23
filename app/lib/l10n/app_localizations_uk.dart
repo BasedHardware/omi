@@ -14390,6 +14390,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get processingProgress => 'Обробка записів в очікуванні…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Очікуємо на доступну квоту транскрибування';
+
+  @override
   String get processingDeferred => 'Очікує на обробку';
 
   @override

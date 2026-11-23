@@ -11805,6 +11805,7 @@
     "processingNewestFirst": "جدیدترین ضبط‌ها را ابتدا تا حد سهم باقی‌مانده پردازش می‌کنیم. بقیه در انتظار می‌مانند.",
     "processingAction": "پردازش ضبط‌های منتظر",
     "processingProgress": "در حال پردازش ضبط‌های منتظر شما…",
+    "waitingForTranscriptionAllowance": "در انتظار سهمیهٔ رونویسی صوت",
     "processingDeferred": "در انتظار پردازش",
     "processingCount": "{count, plural, =1{۱ گفتگو در انتظار} other{{count} گفتگو در انتظار}}",
     "playbackPartialAudioSaved": "{saved} از {total} صدا ذخیره شد",

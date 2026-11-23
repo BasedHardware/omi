@@ -14424,6 +14424,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get processingProgress => 'Обработка на вашите снимки на чекање…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Се чека достапна квота за транскрипција';
+
+  @override
   String get processingDeferred => 'Чека обработка';
 
   @override

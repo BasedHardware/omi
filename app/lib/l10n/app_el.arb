@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "Θα επεξεργαστούμε πρώτα τις νεότερες εγγραφές μέχρι το διαθέσιμο όριο. Οι υπόλοιπες θα παραμείνουν σε αναμονή.",
     "processingAction": "Επεξεργασία εγγραφών σε αναμονή",
     "processingProgress": "Γίνεται επεξεργασία των εγγραφών σε αναμονή…",
+    "waitingForTranscriptionAllowance": "Αναμονή για διαθέσιμο όριο απομαγνητοφώνησης",
     "processingDeferred": "Σε αναμονή επεξεργασίας",
     "processingCount": "{count, plural, =1{1 συνομιλία σε αναμονή} other{{count} συνομιλίες σε αναμονή}}",
     "playbackPartialAudioSaved": "Αποθηκεύτηκαν {saved} από {total} ήχου",

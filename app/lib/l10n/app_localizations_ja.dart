@@ -14154,6 +14154,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get processingProgress => '待機中の録音を処理しています…';
 
   @override
+  String get waitingForTranscriptionAllowance => '文字起こし枠の空きを待っています';
+
+  @override
   String get processingDeferred => '処理待ち';
 
   @override

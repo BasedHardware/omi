@@ -14359,6 +14359,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get processingProgress => 'Zpracovávání čekajících nahrávek…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Čeká se na dostupný limit přepisu';
+
+  @override
   String get processingDeferred => 'Čeká na zpracování';
 
   @override

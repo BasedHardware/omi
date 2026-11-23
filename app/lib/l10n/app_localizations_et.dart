@@ -14353,6 +14353,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get processingProgress => 'Sinu ootel salvestiste töötlemine…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Ootab saadaolevat transkribeerimismahtu';
+
+  @override
   String get processingDeferred => 'Ootab töötlemist';
 
   @override

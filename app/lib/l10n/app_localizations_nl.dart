@@ -14399,6 +14399,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get processingProgress => 'Je wachtende opnamen worden verwerkt…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Wachten op beschikbare transcriptieruimte';
+
+  @override
   String get processingDeferred => 'Wacht op verwerking';
 
   @override

@@ -25479,6 +25479,12 @@ abstract class AppLocalizations {
   /// **'Processing your waiting recordings…'**
   String get processingProgress;
 
+  /// Status for a recording whose transcription job is held awaiting allowance. The current monthly plan limit may be unknown or may have reset while the recording still waits.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for transcription allowance'**
+  String get waitingForTranscriptionAllowance;
+
   /// No description provided for @processingDeferred.
   ///
   /// In en, this message translates to:

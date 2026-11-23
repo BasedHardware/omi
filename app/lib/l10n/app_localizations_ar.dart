@@ -14278,6 +14278,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get processingProgress => 'جارٍ معالجة تسجيلاتك المنتظرة…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'في انتظار حصّة النسخ الصوتي';
+
+  @override
   String get processingDeferred => 'في انتظار المعالجة';
 
   @override

@@ -14455,6 +14455,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get processingProgress => 'Γίνεται επεξεργασία των εγγραφών σε αναμονή…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Αναμονή για διαθέσιμο όριο απομαγνητοφώνησης';
+
+  @override
   String get processingDeferred => 'Σε αναμονή επεξεργασίας';
 
   @override

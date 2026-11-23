@@ -14407,6 +14407,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get processingProgress => 'ನಿಮ್ಮ ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'ಪ್ರತಿಲೇಖನ ಕೋಟಾ ಲಭ್ಯವಾಗಲು ಕಾಯುತ್ತಿದೆ';
+
+  @override
   String get processingDeferred => 'ಪ್ರಕ್ರಿಯೆಗಾಗಿ ಕಾಯುತ್ತಿದೆ';
 
   @override

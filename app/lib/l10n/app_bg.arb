@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "Ще обработим първо най-новите записи до наличния лимит. Останалите ще продължат да чакат.",
     "processingAction": "Обработване на чакащите записи",
     "processingProgress": "Обработване на чакащите ви записи…",
+    "waitingForTranscriptionAllowance": "Изчаква се налична квота за транскрипция",
     "processingDeferred": "Чака обработка",
     "processingCount": "{count, plural, =1{1 чакащ разговор} other{{count} чакащи разговора}}",
     "playbackPartialAudioSaved": "Запазени {saved} от {total} аудио",

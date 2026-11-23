@@ -3361,6 +3361,21 @@ Firestore status and custody remain unchanged; populated or unstamped rows keep
 their existing presentation. Main conversation list conditional 304 responses
 are disabled while the gate is on because expiry does not bump writer versions.
 
+The conversation list and detail can also project `transcription_admission`
+from current batch jobs for completed batch-owned captures with no transcript,
+transcript projection, notes, or failure receipt. A wait clock or existing
+audio closure, admission, or queue-observation receipt gates the lookup. An
+owner-written title is kept. The owner-scoped lookup batches conversation IDs
+and reads only state and timing metadata under the list's read budget and a
+256-read, 1.5-second ceiling. The current exhausted-allowance decision on a parked or retry job supports
+`allowance_held`. A recently queued or completed job awaiting projection, or a
+worker with a current lease, supports `processing`. A terminal sibling or
+conversation failure keeps its existing presentation. Missing evidence leaves
+the previous presentation in place. The API reads authoritative Firestore jobs
+because the sampled job-store mirror cannot confirm current admission. The
+lookup makes no writes and grants no admission. Legacy clients still receive
+`transcription_wait` as an age signal.
+
 `HOME_TRANSCRIPTION_SEAL_WAIT_ENABLED` defaults on. With the queue hold on,
 the effective anchor is the later of that original pending clock and
 `record_admitted_at`, the immutable first seal/admission Unix timestamp. Native

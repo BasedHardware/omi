@@ -14469,6 +14469,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get processingProgress => 'Deine wartenden Aufnahmen werden verarbeitet…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Warten auf verfügbares Transkriptionskontingent';
+
+  @override
   String get processingDeferred => 'Wartet auf Verarbeitung';
 
   @override

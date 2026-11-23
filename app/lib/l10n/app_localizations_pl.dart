@@ -14404,6 +14404,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get processingProgress => 'Przetwarzanie oczekujących nagrań…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Oczekiwanie na dostępny limit transkrypcji';
+
+  @override
   String get processingDeferred => 'Oczekuje na przetworzenie';
 
   @override

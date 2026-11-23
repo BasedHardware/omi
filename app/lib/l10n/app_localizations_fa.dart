@@ -14354,6 +14354,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get processingProgress => 'در حال پردازش ضبط‌های منتظر شما…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'در انتظار سهمیهٔ رونویسی صوت';
+
+  @override
   String get processingDeferred => 'در انتظار پردازش';
 
   @override

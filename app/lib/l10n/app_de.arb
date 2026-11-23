@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "Wir verarbeiten zuerst die neuesten Aufnahmen, soweit das Kontingent reicht. Der Rest wartet weiter.",
     "processingAction": "Wartende Aufnahmen verarbeiten",
     "processingProgress": "Deine wartenden Aufnahmen werden verarbeitet…",
+    "waitingForTranscriptionAllowance": "Warten auf verfügbares Transkriptionskontingent",
     "processingDeferred": "Wartet auf Verarbeitung",
     "processingCount": "{count, plural, =1{1 Gespräch wartet} other{{count} Gespräche warten}}",
     "playbackPartialAudioSaved": "{saved} von {total} Audio gespeichert",

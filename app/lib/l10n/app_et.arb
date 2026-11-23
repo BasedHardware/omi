@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "Töötleme esmalt uusimad salvestised saadaoleva mahu piires. Ülejäänud jäävad ootele.",
     "processingAction": "Töötle ootel salvestisi",
     "processingProgress": "Sinu ootel salvestiste töötlemine…",
+    "waitingForTranscriptionAllowance": "Ootab saadaolevat transkribeerimismahtu",
     "processingDeferred": "Ootab töötlemist",
     "processingCount": "{count, plural, =1{1 vestlus ootel} other{{count} vestlust ootel}}",
     "playbackPartialAudioSaved": "Salvestatud {saved} / {total} helist",

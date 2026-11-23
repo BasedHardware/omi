@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "Processarem primer les gravacions més recents fins on arribi la quota. La resta continuarà en espera.",
     "processingAction": "Processa les gravacions pendents",
     "processingProgress": "S'estan processant les gravacions pendents…",
+    "waitingForTranscriptionAllowance": "S'està esperant que hi hagi quota de transcripció disponible",
     "processingDeferred": "En espera de processament",
     "processingCount": "{count, plural, =1{1 conversa en espera} other{{count} converses en espera}}",
     "playbackPartialAudioSaved": "S'han desat {saved} de {total} d'àudio",

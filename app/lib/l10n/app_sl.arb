@@ -11805,6 +11805,7 @@
     "processingNewestFirst": "Najprej bomo obdelali najnovejše posnetke do razpoložljive kvote. Ostali bodo še naprej čakali.",
     "processingAction": "Obdelaj čakajoče posnetke",
     "processingProgress": "Obdelovanje vaših čakajočih posnetkov…",
+    "waitingForTranscriptionAllowance": "Čakanje na razpoložljivo kvoto za prepis",
     "processingDeferred": "Čaka na obdelavo",
     "processingCount": "{count, plural, =1{1 pogovor čaka} other{{count} pogovorov čaka}}",
     "playbackPartialAudioSaved": "Shranjeno {saved} od {total} zvoka",

@@ -14370,6 +14370,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get processingProgress => 'तुमच्या प्रतीक्षेतील रेकॉर्डिंगवर प्रक्रिया होत आहे…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'लिप्यंतरणाचा कोटा उपलब्ध होण्याची प्रतीक्षा आहे';
+
+  @override
   String get processingDeferred => 'प्रक्रियेच्या प्रतीक्षेत';
 
   @override

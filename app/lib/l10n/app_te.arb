@@ -11805,6 +11805,7 @@
     "processingNewestFirst": "అందుబాటులో ఉన్న కోటాలో కొత్త రికార్డింగ్‌లను ముందుగా ప్రాసెస్ చేస్తాము. మిగిలినవి వేచి ఉంటాయి.",
     "processingAction": "వేచి ఉన్న రికార్డింగ్‌లను ప్రాసెస్ చేయండి",
     "processingProgress": "మీ వేచి ఉన్న రికార్డింగ్‌లు ప్రాసెస్ అవుతున్నాయి…",
+    "waitingForTranscriptionAllowance": "లిప్యంతరీకరణ కోటా అందుబాటులోకి రావడానికి వేచి ఉంది",
     "processingDeferred": "ప్రాసెసింగ్ కోసం వేచి ఉంది",
     "processingCount": "{count, plural, =1{1 సంభాషణ వేచి ఉంది} other{{count} సంభాషణలు వేచి ఉన్నాయి}}",
     "playbackPartialAudioSaved": "{saved} ఆడియో సేవ్ చేయబడింది, మొత్తం {total}",

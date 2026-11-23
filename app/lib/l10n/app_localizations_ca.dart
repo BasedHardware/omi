@@ -14433,6 +14433,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get processingProgress => 'S\'estan processant les gravacions pendents…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'S\'està esperant que hi hagi quota de transcripció disponible';
+
+  @override
   String get processingDeferred => 'En espera de processament';
 
   @override

@@ -14435,6 +14435,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get processingProgress => 'Elaborazione delle registrazioni in attesa…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'In attesa di una quota di trascrizione disponibile';
+
+  @override
   String get processingDeferred => 'In attesa di elaborazione';
 
   @override

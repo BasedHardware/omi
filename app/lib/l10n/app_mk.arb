@@ -11805,6 +11805,7 @@
     "processingNewestFirst": "Прво ќе ги обработиме најновите снимки до достапниот лимит. Останатите ќе останат на чекање.",
     "processingAction": "Обработи снимки на чекање",
     "processingProgress": "Обработка на вашите снимки на чекање…",
+    "waitingForTranscriptionAllowance": "Се чека достапна квота за транскрипција",
     "processingDeferred": "Чека обработка",
     "processingCount": "{count, plural, =1{1 разговор на чекање} other{{count} разговори на чекање}}",
     "playbackPartialAudioSaved": "Зачувано {saved} од {total} аудио",

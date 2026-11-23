@@ -4417,6 +4417,7 @@
     "processingNewestFirst": "Önce en yeni kayıtları kullanılabilir kotaya sığdığı kadar işleriz. Kalanlar beklemeye devam eder.",
     "processingAction": "Bekleyen kayıtları işle",
     "processingProgress": "Bekleyen kayıtlarınız işleniyor…",
+    "waitingForTranscriptionAllowance": "Kullanılabilir deşifre kotası bekleniyor",
     "processingDeferred": "İşlenmeyi bekliyor",
     "processingCount": "{count, plural, =1{1 konuşma bekliyor} other{{count} konuşma bekliyor}}",
     "playbackPartialAudioSaved": "Sesin {saved} kadarı kaydedildi (toplam {total})",

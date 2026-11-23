@@ -14382,6 +14382,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get processingProgress => 'Apdorojami laukiantys įrašai…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Laukiama, kol bus prieinama transkribavimo kvota';
+
+  @override
   String get processingDeferred => 'Laukia apdorojimo';
 
   @override

@@ -14355,6 +14355,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get processingProgress => 'Spracúvanie čakajúcich nahrávok…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Čaká sa na dostupný limit prepisu';
+
+  @override
   String get processingDeferred => 'Čaká na spracovanie';
 
   @override

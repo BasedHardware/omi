@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "Elaboreremo prima le registrazioni più recenti, entro la quota disponibile. Le altre rimarranno in attesa.",
     "processingAction": "Elabora registrazioni in attesa",
     "processingProgress": "Elaborazione delle registrazioni in attesa…",
+    "waitingForTranscriptionAllowance": "In attesa di una quota di trascrizione disponibile",
     "processingDeferred": "In attesa di elaborazione",
     "processingCount": "{count, plural, =1{1 conversazione in attesa} other{{count} conversazioni in attesa}}",
     "playbackPartialAudioSaved": "Salvati {saved} di {total} di audio",
