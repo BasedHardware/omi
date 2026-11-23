@@ -931,14 +931,23 @@ async def test_undo_of_a_later_run_over_an_earlier_runs_rows_can_be_rerun(owner,
 
 
 @pytest.mark.asyncio
-async def test_undo_refuses_once_the_owner_account_deletion_began(owner, strict, ledger):
+@pytest.mark.parametrize('wipe_status', ['cancelled', 'billing_failed', 'pending'])
+async def test_undo_respects_owner_account_deletion_marker(owner, strict, ledger, wipe_status):
     sources, rows = lunch(count=3)
     owner(*sources, *rows)
+    original = conversations(strict)
     await rederive()
     after = conversations(strict)
-    strict.rows[account_deletion_document(UID, firestore_client=strict).path] = {'status': 'pending'}
-    assert backfill.undo_run(UID, RUN) == {'outcome': 'busy', 'reason': 'account_deletion'}
-    assert conversations(strict) == after
+    strict.rows[account_deletion_document(UID, firestore_client=strict).path] = {'wipe_status': wipe_status}
+    outcome = backfill.undo_run(UID, RUN)
+    if wipe_status == 'pending':
+        assert outcome == {'outcome': 'busy', 'reason': 'account_deletion'}
+        assert conversations(strict) == after
+        assert priors(strict)
+    else:
+        assert outcome['outcome'] == 'undone'
+        assert conversations(strict) == original
+        assert not priors(strict)
 
 
 @pytest.mark.asyncio
@@ -1509,11 +1518,17 @@ def test_a_resumed_attempt_keeps_the_first_copy_of_a_row(strict):
     assert kept['raw'] == first['raw'] and kept['claims'] == first['claims']
 
 
-def test_priors_are_never_written_once_the_owner_account_deletion_began(strict, monkeypatch):
-    strict.rows[account_deletion_document(UID, firestore_client=strict).path] = {'status': 'pending'}
-    with pytest.raises(store.Conflict, match='account_deletion'):
-        runs.save_priors(UID, RUN, [{'id': 'c0', 'raw': {'id': 'c0'}, 'claims': []}], firestore_client=strict)
-    assert not priors(strict)
+@pytest.mark.parametrize('wipe_status', ['cancelled', 'billing_failed', 'pending'])
+def test_priors_respect_owner_account_deletion_marker(strict, wipe_status):
+    strict.rows[account_deletion_document(UID, firestore_client=strict).path] = {'wipe_status': wipe_status}
+    entry = {'id': 'c0', 'raw': {'id': 'c0'}, 'claims': []}
+    if wipe_status == 'pending':
+        with pytest.raises(store.Conflict, match='account_deletion'):
+            runs.save_priors(UID, RUN, [entry], firestore_client=strict)
+        assert not priors(strict)
+    else:
+        assert runs.save_priors(UID, RUN, [entry], firestore_client=strict) == 1
+        assert len(priors(strict)) == 1
 
 
 def test_the_window_classifier_counts_each_kind_once():

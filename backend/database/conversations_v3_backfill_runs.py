@@ -160,7 +160,7 @@ def save_priors(uid, run_id, entries, *, firestore_client=None):
         # Fenced like the commit: no copy of a row is written once the owner's account deletion began.
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
         ):
             raise Conflict('account_deletion')
         # A conversation the owner deleted since the load is never copied (the commit refuses it too).

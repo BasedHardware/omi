@@ -530,7 +530,7 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
     def undo(tx):
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
         ):
             raise Conflict('account_deletion')
         docs = {cid: coll.document(cid).get(transaction=tx) for cid in ids}
