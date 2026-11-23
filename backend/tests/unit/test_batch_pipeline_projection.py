@@ -683,6 +683,35 @@ def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(bind
         assert 'event=batch_projection_phase' not in text
 
 
+@pytest.mark.parametrize(
+    'percent,key,expected', [('0', 'unit', False), ('1', 'in', True), ('1', 'out', False), ('100', 'out', True)]
+)
+def test_phase_sampling_keeps_pairs_and_unsampled_errors(monkeypatch, caplog, percent, key, expected):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT', percent)
+    cohort = Mock(side_effect=lambda unit, _: 0.5 if unit == 'in' else 1.5)
+    monkeypatch.setattr(projection, 'cohort_bucket', cohort)
+    policy = Mock(projection_timing=True)
+
+    with caplog.at_level(logging.INFO, logger=projection.__name__):
+        with projection.projection_phase('test_success', policy, unit_key=key):
+            pass
+        with pytest.raises(ValueError):
+            with projection.projection_phase('test_failure', policy, unit_key=key):
+                raise ValueError('private')
+        monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED', 'false')
+        with projection.projection_phase('test_rollback', policy, unit_key=key):
+            pass
+
+    assert ('phase=test_success outcome=started' in caplog.text) is expected
+    assert ('phase=test_success outcome=completed' in caplog.text) is expected
+    assert 'phase=test_failure outcome=error' in caplog.text
+    assert 'private' not in caplog.text
+    assert 'phase=test_rollback outcome=started' in caplog.text
+    assert 'phase=test_rollback outcome=completed' in caplog.text
+    assert cohort.call_count == (2 if percent == '1' else 0)
+
+
 @pytest.mark.parametrize('finish', [False, True])
 @pytest.mark.parametrize('failure', ['superseded', 'conflict'])
 def test_assignment_supersession_settles_part_but_conflicts_still_retry(binding, monkeypatch, finish, failure):

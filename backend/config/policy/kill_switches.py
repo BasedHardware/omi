@@ -4,8 +4,10 @@ Worker-only ops switches remain in E1b. Process startup/auth/capacity config is
 not per-unit rollout policy. Every entry here must match the flag registry.
 """
 
+from collections import OrderedDict
 import logging
 import os
+from threading import Lock
 
 KILL_SWITCHES = {
     'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED': True,
@@ -76,6 +78,27 @@ BACKLOG_STATE_MACHINE_SWITCHES = frozenset(
     }
 )
 logger = logging.getLogger(__name__)
+_MAX_LOGGED_SWITCHES = 1024
+_last_logged: OrderedDict[tuple[str, str], bool] = OrderedDict()
+_log_lock = Lock()
+
+
+def _log_switch(env, policy_id: str, name: str, enabled: bool) -> None:
+    message = 'event=batch_policy_kill_switch policy_id=%s switch=%s enabled=%s count=1'
+    if env.get('BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED', '').strip().lower() != 'true':
+        logger.info(message, policy_id, name, enabled)
+        return
+    if not logger.isEnabledFor(logging.INFO):
+        return
+    key = (policy_id, name)
+    with _log_lock:
+        previous = _last_logged.get(key)
+        _last_logged[key] = enabled
+        _last_logged.move_to_end(key)
+        if len(_last_logged) > _MAX_LOGGED_SWITCHES:
+            _last_logged.popitem(last=False)
+        if previous != enabled:
+            logger.info(message + ' changed=%s', policy_id, name, enabled, 'false' if previous is None else 'true')
 
 
 def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool = True) -> bool:
@@ -88,9 +111,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
         raw = env.get(name)
         enabled = KILL_SWITCHES[name] if raw is None else raw.strip().lower() == 'true'
         if log:
-            logger.info(
-                'event=batch_policy_kill_switch policy_id=%s switch=%s enabled=%s count=1', policy_id, name, enabled
-            )
+            _log_switch(env, policy_id, name, enabled)
         return enabled
     value = env.get(name, str(KILL_SWITCHES[name])).strip().lower()
     if name in {
@@ -144,7 +165,5 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
         enabled = default_on(name, enabled, environ=env)
     # Dark observability callers suppress even the switch-read log when disabled.
     if log:
-        logger.info(
-            'event=batch_policy_kill_switch policy_id=%s switch=%s enabled=%s count=1', policy_id, name, enabled
-        )
+        _log_switch(env, policy_id, name, enabled)
     return enabled
