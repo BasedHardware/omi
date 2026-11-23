@@ -1,6 +1,28 @@
 """Recording-derived conversations; independent of the episode engine."""
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
+from typing import Iterator, Mapping
+
+from omi_logging import trace_context
+
+_REQUEST_TRACE_ID: ContextVar[str] = ContextVar('v3_reconcile_trace_id', default='-')
+
+
+@contextmanager
+def bind_request_log_trace(headers: Mapping[bytes, bytes]) -> Iterator[None]:
+    """Carry the validated request trace into the projection worker."""
+    trace = trace_context(headers)
+    token = _REQUEST_TRACE_ID.set(trace[0] if trace else '-')
+    try:
+        yield
+    finally:
+        _REQUEST_TRACE_ID.reset(token)
+
+
+def request_log_trace_id() -> str:
+    return _REQUEST_TRACE_ID.get()
 
 
 class Conflict(RuntimeError):
