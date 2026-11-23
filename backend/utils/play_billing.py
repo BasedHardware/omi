@@ -68,13 +68,18 @@ class PurchaseNotFound(Exception):
     """Google says the token does not exist for this package."""
 
 
+_PUBLISHER_API = 'https://androidpublisher.googleapis.com/androidpublisher/v3/applications'
+
+
 class _GooglePublisher:
-    """Android Publisher v3 over google-api-python-client (lazy; static discovery, no network at build)."""
+    """Android Publisher v3 REST over google-auth (built lazily on first use)."""
 
     def __init__(self):
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
+        from urllib.parse import quote
+
         import google.auth
+        from google.auth.transport.requests import AuthorizedSession
+        from google.oauth2 import service_account
 
         scopes = ['https://www.googleapis.com/auth/androidpublisher']
         key_file = os.getenv('PLAY_PUBLISHER_SERVICE_ACCOUNT_FILE')
@@ -82,26 +87,24 @@ class _GooglePublisher:
             credentials = service_account.Credentials.from_service_account_file(key_file, scopes=scopes)
         else:
             credentials, _ = google.auth.default(scopes=scopes)
-        self._service = build('androidpublisher', 'v3', credentials=credentials, cache_discovery=False)
+        self._session = AuthorizedSession(credentials)
+        self._quote = lambda value: quote(value, safe='')
 
     def get_subscription(self, package_name: str, token: str) -> dict:
-        from googleapiclient.errors import HttpError
-
-        try:
-            request = self._service.purchases().subscriptionsv2().get(packageName=package_name, token=token)
-            return request.execute(num_retries=2)
-        except HttpError as error:
-            if getattr(error, 'status_code', None) in (400, 404, 410):
-                raise PurchaseNotFound() from None
-            raise
+        url = f'{_PUBLISHER_API}/{self._quote(package_name)}/purchases/subscriptionsv2/tokens/{self._quote(token)}'
+        response = self._session.get(url, timeout=15)
+        if response.status_code in (400, 404, 410):
+            raise PurchaseNotFound()
+        response.raise_for_status()
+        return response.json()
 
     def acknowledge(self, package_name: str, product_id: str, token: str) -> None:
-        request = (
-            self._service.purchases()
-            .subscriptions()
-            .acknowledge(packageName=package_name, subscriptionId=product_id, token=token, body={})
+        url = (
+            f'{_PUBLISHER_API}/{self._quote(package_name)}/purchases/subscriptions/'
+            f'{self._quote(product_id)}/tokens/{self._quote(token)}:acknowledge'
         )
-        request.execute(num_retries=2)
+        response = self._session.post(url, json={}, timeout=15)
+        response.raise_for_status()
 
 
 _publisher: Optional[PublisherClient] = None

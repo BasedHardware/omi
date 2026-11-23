@@ -562,3 +562,30 @@ def test_bind_purchase_create_is_exclusive_per_token():
     assert client.store[(play_db.COLLECTION, key)] == {'state': 'A', 'uid': UID}
     assert play_db.bind_purchase(key, UID, {'state': 'C', 'uid': OTHER}, firestore_client=client) == UID
     assert client.store[(play_db.COLLECTION, key)]['uid'] == UID
+
+
+def test_publisher_rest_urls_and_missing_token_mapping():
+    from urllib.parse import quote
+
+    calls = []
+
+    class Session:
+        def get(self, url, timeout):
+            calls.append(('GET', url))
+            return SimpleNamespace(status_code=404 if 'missing' in url else 200, json=lambda: {'ok': 1})
+
+        def post(self, url, json, timeout):
+            calls.append(('POST', url))
+            return SimpleNamespace(status_code=200, raise_for_status=lambda: None)
+
+    client = object.__new__(play_billing._GooglePublisher)
+    client._session = Session()
+    client._quote = lambda value: quote(value, safe='')
+    base = 'https://androidpublisher.googleapis.com/androidpublisher/v3/applications/com.friend.ios'
+    with pytest.raises(play_billing.PurchaseNotFound):
+        client.get_subscription('com.friend.ios', 'missing/token')
+    client.acknowledge('com.friend.ios', 'omi_pro', 'tok')
+    assert calls == [
+        ('GET', f'{base}/purchases/subscriptionsv2/tokens/missing%2Ftoken'),
+        ('POST', f'{base}/purchases/subscriptions/omi_pro/tokens/tok:acknowledge'),
+    ]
