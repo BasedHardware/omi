@@ -79,7 +79,7 @@ EXCEPTIONS: dict[str, SelectorException] = {
         100,
         'two streams per admitted UTC hour',
         'Replace with a bounded aggregate producer when approved',
-        '97cdc6958f2d4aa220e749f393b5f76fd6ebb2ef3edcb0e984e492867f84d591',
+        'e2ea79a4d2e26a62c4e664df62bd70b6bbd05f4ec9a0e3f3b1da8d8165d57cff',
         owner='omi-pipeline',
     ),
     'database.batch_census_export.sample_entry': _legacy(

@@ -81,7 +81,7 @@ def parked_page(client, namespace, *, expired, after):
         'recovery.failure.reason',
         'stt_route.stt_route',
     ]
-    return list(query.select(fields).limit(PAGE_SIZE).stream(retry=None))
+    return query.select(fields).limit(PAGE_SIZE).stream(retry=None)
 
 
 class ParkedSweep:
@@ -128,13 +128,15 @@ class ParkedSweep:
                         return
                     after = cursors.get(name)
                     docs = parked_page(client, self.store.namespace, expired=name == 'held_expired', after=after)
-                    scanned[name] = len(docs)
+                    last_id = None
                     for doc in docs:
+                        scanned[name] += 1
+                        last_id = doc.id
                         job = doc.to_dict() or {}
                         if mapping(job.get('stt_route')).get('stt_route') != 'provider':
                             rows.append(job)
-                    wrapped = len(docs) < PAGE_SIZE
-                    next_cursors[name] = None if wrapped else docs[-1].id
+                    wrapped = scanned[name] < PAGE_SIZE
+                    next_cursors[name] = None if wrapped else last_id
                     coverage[name] = {'started_at_head': not after, 'reached_end': wrapped}
 
                 sample = {

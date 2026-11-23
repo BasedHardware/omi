@@ -92,13 +92,18 @@ def test_control_kill_during_scan_refuses_checkpoint(monkeypatch, sweep_store):
     assert [len(tx.sets) for tx in sweep_store.client.transactions] == [1, 0]
 
 
-def test_dependency_failure_burns_slot_without_advancing_cursor(monkeypatch, sweep_store):
-    scan = Mock(side_effect=TimeoutError)
+def test_partial_stream_failure_counts_rows_and_burns_slot(monkeypatch, sweep_store, caplog):
+    def partial_stream():
+        yield SimpleNamespace(id='inspected', to_dict=dict)
+        raise TimeoutError
+
+    scan = Mock(return_value=partial_stream())
     monkeypatch.setattr(parked_sweep, 'parked_page', scan)
-    with pytest.raises(TimeoutError):
+    with caplog.at_level('INFO'), pytest.raises(TimeoutError):
         ParkedSweep(sweep_store).tick(NOW)
     ParkedSweep(sweep_store).tick(NOW)
 
+    assert 'outcome=dependency_failure scanned={"held_expired": 0, "quarantined": 1} sample=null' in caplog.text
     assert scan.call_count == 1
     assert sweep_store.client.rows[CONTROL_PATH] == {
         'hour': HOUR,
