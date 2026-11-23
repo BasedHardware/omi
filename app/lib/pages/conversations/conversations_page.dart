@@ -922,7 +922,7 @@ class _ConversationsPageState extends State<ConversationsPage>
         final showManualFinish = manualFinish != null && !finishHandedOff;
         if (finishHandedOff) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) v3!.acknowledgeManualFinish(manualFinish);
+            if (mounted) v3.acknowledgeManualFinish(manualFinish);
           });
         }
         // A streaming capture with no server window to show (none yet, between windows, or one Home
