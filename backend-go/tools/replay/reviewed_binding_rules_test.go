@@ -21,7 +21,7 @@ func TestGoOnlyReceiptsRequireBoundGoEvidenceAndNoPythonCopies(t *testing.T) {
 	if !hasKindPath(diffs, "missing_in_python", "/conversation/finalization_job_id") {
 		t.Fatalf("Go job pointer must remain an unexplained go_gap: %+v", diffs)
 	}
-	for _, path := range []string{"/conversation/finalization_engine", "/conversation/go_sync_minimum_revision", "/admitted"} {
+	for _, path := range []string{"/conversation/finalization_engine", "/conversation/go_sync_minimum_revision"} {
 		if !hasReason(diffs, path) {
 			t.Fatalf("missing executable comparison reason for %s: %+v", path, diffs)
 		}

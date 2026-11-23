@@ -41,6 +41,50 @@ func TestPostFinishClockGraceIsFiveSecondsAndFieldScoped(t *testing.T) {
 	}
 }
 
+func TestHourlyUsageAllowsOnlyFiveSecondScheduledPostFinishWrite(t *testing.T) {
+	path := "users/u/hourly_usage/2026-05-06"
+	stamp := ruleRun().Finished.Add(postFinishWriteGrace)
+	py, goRun := ruleRun(), ruleRun()
+	py.Derived[path] = map[string]any{"last_updated": wrappedStamp(stamp)}
+	goRun.Derived[path] = map[string]any{"last_updated": wrappedStamp(stamp.Add(-time.Second))}
+	if diffs := compareObservations(py, goRun); hasUnexplained(diffs) || !hasReason(diffs, "last_updated") {
+		t.Fatalf("scheduled hourly usage write at grace edge was not allowed: %+v", diffs)
+	}
+	py.Derived[path].(map[string]any)["last_updated"] = wrappedStamp(stamp.Add(time.Nanosecond))
+	if diffs := compareObservations(py, goRun); !hasUnexplained(diffs) ||
+		!hasKindPath(diffs, "invalid_clock", "/python/derived_documents/"+escapePointer(path)+"/last_updated") {
+		t.Fatalf("hourly usage write beyond grace was excused: %+v", diffs)
+	}
+}
+
+func TestMemoryExpiryUsesThirtyDayTTLAndMustFollowWrite(t *testing.T) {
+	path := "users/u/memory_items/item"
+	created := ruleStart.Add(20 * time.Minute)
+	updated := created.Add(time.Second)
+	py, goRun := ruleRun(), ruleRun()
+	py.Derived[path] = map[string]any{
+		"captured_at": wrappedStamp(created), "updated_at": wrappedStamp(updated),
+		"expires_at": wrappedStamp(created.Add(memoryItemTTL)),
+	}
+	goRun.Derived[path] = map[string]any{
+		"captured_at": wrappedStamp(created), "updated_at": wrappedStamp(updated),
+		"expires_at": wrappedStamp(created.Add(memoryItemTTL + postFinishWriteGrace)),
+	}
+	if diffs := compareObservations(py, goRun); hasUnexplained(diffs) || !hasReason(diffs, "expires_at") {
+		t.Fatalf("30-day expiries were constrained to replay time: %+v", diffs)
+	}
+	goRun.Derived[path].(map[string]any)["expires_at"] = wrappedStamp(created.Add(memoryItemTTL + postFinishWriteGrace + time.Nanosecond))
+	if diffs := compareObservations(py, goRun); !hasUnexplained(diffs) ||
+		!hasKindPath(diffs, "invalid_ttl", "/go/derived_documents/"+escapePointer(path)+"/expires_at") {
+		t.Fatalf("expiry beyond 30-day TTL grace was excused: %+v", diffs)
+	}
+	goRun.Derived[path].(map[string]any)["expires_at"] = wrappedStamp(updated)
+	if diffs := compareObservations(py, goRun); !hasUnexplained(diffs) ||
+		!hasKindPath(diffs, "invalid_ttl", "/go/derived_documents/"+escapePointer(path)+"/expires_at") {
+		t.Fatalf("expiry equal to the item write time was excused: %+v", diffs)
+	}
+}
+
 func TestApprovedConversationAndNestedWriteClocksAreChecked(t *testing.T) {
 	for _, field := range []string{"notes_written_at", "terminal_family_at", "title_changed_at"} {
 		py, goRun := ruleRun(), ruleRun()

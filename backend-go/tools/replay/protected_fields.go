@@ -50,6 +50,24 @@ func protectedDifferenceReason(path string, python, goRun *observation) string {
 		goValue, _ = nestedField(goRun.Document, "transcript_segments")
 		pyCompressed = objectField(python.Document, "transcript_segments_compressed") == true
 		goCompressed = objectField(goRun.Document, "transcript_segments_compressed") == true
+	case len(parts) == 2 && parts[0] == "conversation" && parts[1] == "transcript_segments_compressed":
+		field = "transcript"
+		pyValue, _ = nestedField(python.Document, "transcript_segments")
+		goValue, _ = nestedField(goRun.Document, "transcript_segments")
+		pyCompressed = objectField(python.Document, "transcript_segments_compressed") == true
+		goCompressed = objectField(goRun.Document, "transcript_segments_compressed") == true
+	case len(parts) >= 2 && parts[0] == "conversation" && parts[1] == "user_corrections":
+		field = "user_corrections"
+		pyValue, _ = nestedField(python.Document, "user_corrections")
+		goValue, _ = nestedField(goRun.Document, "user_corrections")
+		pyCompressed = objectField(python.Document, "user_corrections_compressed") == true
+		goCompressed = objectField(goRun.Document, "user_corrections_compressed") == true
+	case len(parts) == 2 && parts[0] == "conversation" && parts[1] == "user_corrections_compressed":
+		field = "user_corrections"
+		pyValue, _ = nestedField(python.Document, "user_corrections")
+		goValue, _ = nestedField(goRun.Document, "user_corrections")
+		pyCompressed = objectField(python.Document, "user_corrections_compressed") == true
+		goCompressed = objectField(goRun.Document, "user_corrections_compressed") == true
 	case len(parts) == 2 && parts[0] == "conversation" && parts[1] == "home_display":
 		field = "home_display"
 		pyValue, _ = nestedField(python.Document, "home_display")
@@ -71,17 +89,38 @@ func protectedDifferenceReason(path string, python, goRun *observation) string {
 	default:
 		return ""
 	}
-	pyPlain, pyErr := protectedPlaintext(field, python.OwnerID, pyValue, pyCompressed, defaultReplayTestKey)
-	goPlain, goErr := protectedPlaintext(field, goRun.OwnerID, goValue, goCompressed, defaultReplayTestKey)
-	if pyErr != nil || goErr != nil || !reflect.DeepEqual(pyPlain, goPlain) {
+	var pyPlain, goPlain any
+	var pyErr, goErr error
+	if field == "user_corrections" {
+		pyPlain, pyErr = correctionsPlaintext(python.OwnerID, pyValue, pyCompressed, objectField(python.Document, "data_protection_level"), defaultReplayTestKey)
+		goPlain, goErr = correctionsPlaintext(goRun.OwnerID, goValue, goCompressed, objectField(goRun.Document, "data_protection_level"), defaultReplayTestKey)
+	} else {
+		pyPlain, pyErr = protectedPlaintext(field, python.OwnerID, pyValue, pyCompressed, defaultReplayTestKey)
+		goPlain, goErr = protectedPlaintext(field, goRun.OwnerID, goValue, goCompressed, defaultReplayTestKey)
+	}
+	if pyErr != nil || goErr != nil {
 		return ""
 	}
 	switch field {
 	case "transcript":
-		return "both transcript ciphertexts decrypt with the fixture key to the same segment plaintext"
+		if !transcriptSemanticsEqual(pyPlain, goPlain) || !goPreservesPythonStoredFields(pyPlain, goPlain) {
+			return ""
+		}
+		return "transcript semantic fields match and Go preserves every non-default Python segment field"
+	case "user_corrections":
+		if !reflect.DeepEqual(pyPlain, goPlain) {
+			return ""
+		}
+		return "both correction blobs have storage consistent with their protection level and decrypt to the same correction list"
 	case "episode content":
+		if !reflect.DeepEqual(pyPlain, goPlain) {
+			return ""
+		}
 		return "both episode content ciphertexts decrypt with the fixture key to the same content plaintext"
 	default:
+		if !reflect.DeepEqual(pyPlain, goPlain) {
+			return ""
+		}
 		return "both home_display ciphertexts decrypt with the fixture key to the same card plaintext"
 	}
 }
@@ -134,6 +173,158 @@ func protectedPlaintext(kind, uid string, value any, compressed bool, key string
 		return nil, errors.New("protected plaintext has trailing data")
 	}
 	return decoded, nil
+}
+
+func correctionsPlaintext(uid string, value any, compressed bool, protectionLevel any, key string) (any, error) {
+	if uid == "" || !compressed {
+		return nil, errors.New("corrections compression marker is missing")
+	}
+	enhanced, ok := protectionLevel.(string)
+	if !ok || (enhanced != "enhanced" && enhanced != "standard") {
+		return nil, errors.New("corrections protection level is missing or invalid")
+	}
+	var payload []byte
+	switch stored := value.(type) {
+	case string:
+		if enhanced != "enhanced" {
+			return nil, errors.New("encrypted corrections disagree with protection level")
+		}
+		decrypted, err := decryptReplayEnvelope(uid, stored, key)
+		if err != nil {
+			return nil, err
+		}
+		if strings.ToLower(string(decrypted)) != string(decrypted) {
+			return nil, errors.New("corrections compressed hex is not lowercase")
+		}
+		decoded, err := hex.DecodeString(string(decrypted))
+		if err != nil {
+			return nil, err
+		}
+		payload = decoded
+	case []byte:
+		if enhanced != "standard" {
+			return nil, errors.New("plaintext corrections disagree with protection level")
+		}
+		payload = stored
+	case map[string]any:
+		if enhanced != "standard" || len(stored) != 1 {
+			return nil, errors.New("corrections byte wrapper disagrees with protection level")
+		}
+		encoded, ok := stored["$bytes"].(string)
+		if !ok {
+			return nil, errors.New("corrections byte wrapper is malformed")
+		}
+		decoded, err := base64.StdEncoding.Strict().DecodeString(encoded)
+		if err != nil {
+			return nil, err
+		}
+		payload = decoded
+	default:
+		return nil, errors.New("corrections are not stored as a protected blob")
+	}
+	reader, err := zlib.NewReader(bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	plain, readErr := io.ReadAll(io.LimitReader(reader, 16<<20+1))
+	closeErr := reader.Close()
+	if readErr != nil || closeErr != nil || len(plain) > 16<<20 {
+		return nil, errors.New("invalid compressed corrections")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(plain))
+	decoder.UseNumber()
+	var decoded any
+	if err := decoder.Decode(&decoded); err != nil {
+		return nil, err
+	}
+	if _, ok := decoded.([]any); !ok {
+		return nil, errors.New("corrections plaintext is not a list")
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return nil, errors.New("corrections plaintext has trailing data")
+	}
+	return decoded, nil
+}
+
+func transcriptSemanticsEqual(python, goRun any) bool {
+	pySegments, pyOK := python.([]any)
+	goSegments, goOK := goRun.([]any)
+	if !pyOK || !goOK || len(pySegments) != len(goSegments) {
+		return false
+	}
+	for index := range pySegments {
+		py, pyOK := pySegments[index].(map[string]any)
+		goSegment, goOK := goSegments[index].(map[string]any)
+		if !pyOK || !goOK {
+			return false
+		}
+		for _, field := range []string{"text", "start", "end", "speaker", "is_user"} {
+			pyValue, pyPresent := py[field]
+			goValue, goPresent := goSegment[field]
+			if field == "speaker" {
+				if !pyPresent {
+					pyValue, pyPresent = "SPEAKER_00", true
+				}
+				if !goPresent {
+					goValue, goPresent = "SPEAKER_00", true
+				}
+			}
+			if !pyPresent || !goPresent || !equalReplayValue(pyValue, goValue) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func goPreservesPythonStoredFields(python, goRun any) bool {
+	pySegments, pyOK := python.([]any)
+	goSegments, goOK := goRun.([]any)
+	if !pyOK || !goOK || len(pySegments) != len(goSegments) {
+		return false
+	}
+	for index := range pySegments {
+		py, pyOK := pySegments[index].(map[string]any)
+		goSegment, goOK := goSegments[index].(map[string]any)
+		if !pyOK || !goOK {
+			return false
+		}
+		for field, value := range py {
+			if isTranscriptDefault(field, value) {
+				continue
+			}
+			goValue, exists := goSegment[field]
+			if !exists || !equalReplayValue(value, goValue) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isTranscriptDefault(field string, value any) bool {
+	defaults := map[string]any{
+		"id": nil, "original_text": nil, "speaker": "SPEAKER_00", "speaker_id": nil,
+		"person_id": nil, "speaker_label_source": nil, "translations": []any{},
+		"speech_profile_processed": true, "stt_provider": nil, "speaker_match_source": nil,
+		"speaker_id_scope": nil, "speaker_identity_status": "unknown", "audio_alignment": nil,
+		"audio_capture_run": nil, "audio_capture_start": nil, "audio_capture_end": nil,
+		"audio_source": nil, "recurring_voice_id": nil, "voice_candidates": nil,
+		"speaker_match_scores": nil, "provider_speaker": nil, "speaker_grouping_shadow": nil,
+		"speaker_grouping_shadow_expires_at": nil,
+	}
+	defaultValue, known := defaults[field]
+	return known && reflect.DeepEqual(value, defaultValue)
+}
+
+func equalReplayValue(left, right any) bool {
+	if a, ok := left.(json.Number); ok {
+		if b, ok := right.(json.Number); ok {
+			return equalNumbers(a, b)
+		}
+	}
+	return reflect.DeepEqual(left, right)
 }
 
 func transcriptPlaintext(uid string, value any, compressed bool, key string) ([]byte, error) {

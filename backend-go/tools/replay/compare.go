@@ -29,6 +29,7 @@ type observation struct {
 	QueueFanout               string                     `json:"queue_fanout_key"`
 	UpdatedAtChanged          bool                       `json:"updated_at_changed"`
 	Admitted                  *admission                 `json:"admitted"`
+	EpisodeAttachMemoValid    bool                       `json:"episode_attach_memo_valid"`
 	Started                   time.Time                  `json:"started_at"`
 	Finished                  time.Time                  `json:"finished_at"`
 	ProviderCalls             []string                   `json:"provider_calls"`

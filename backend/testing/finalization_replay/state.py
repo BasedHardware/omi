@@ -60,6 +60,41 @@ def _documents(collection):
             yield from _documents(child)
 
 
+def episode_attach_memo_valid(
+    uid, cid, conversation, derived_documents, *, transcript_decoder=None, content_key_fn=None
+):
+    """Return value-free evidence that this side's attach memo matches its transcript."""
+    try:
+        if transcript_decoder is None:
+            from database.conversations import decode_transcript_segments_verified as transcript_decoder
+        if content_key_fn is None:
+            from utils.conversations.episode_attach_key import content_key as content_key_fn
+
+        link_path = f'users/{uid}/episode_links/{cid}'
+        link = derived_documents.get(link_path)
+        if not isinstance(link, dict):
+            return False
+        raw_segments = conversation.get('transcript_segments')
+        if raw_segments is None:
+            return False
+        row = dict(conversation)
+        row['transcript_segments'] = transcript_decoder(
+            uid, raw_segments, bool(conversation.get('transcript_segments_compressed'))
+        )
+        key = content_key_fn(row)
+        completed = link.get('attach_completed')
+        return bool(
+            key
+            and completed == key
+            and link.get('attach_revision') == key
+            and link.get('attach_owner_id') == link.get('episode_id')
+            and (link.get('attach_finalized') is None or link.get('attach_finalized') == completed)
+        )
+    except Exception:
+        # Evidence is fail-closed and contains no decrypted or derived values.
+        return False
+
+
 class CaseState:
     def __init__(self, client, case):
         self.client = client
@@ -243,6 +278,9 @@ class CaseState:
         else:
             derived_documents = changed_documents
         document = self.conversation.get().to_dict()
+        memo_valid = episode_attach_memo_valid(
+            getattr(self, 'uid', ''), getattr(self, 'cid', ''), document or {}, derived_documents
+        )
         empty_privacy = {'exists': False, 'fields': {}}
         privacy_seed = getattr(self, 'batch_privacy_seed', None) or empty_privacy
         privacy_final = self.batch_privacy_snapshot() if hasattr(self, 'client') else empty_privacy
@@ -254,6 +292,7 @@ class CaseState:
             'queue_fanout_key': self.queue_fanout_key,
             'updated_at_changed': (document or {}).get('updated_at') != self.initial_updated_at,
             'admitted': self.admitted,
+            'episode_attach_memo_valid': memo_valid,
             'started_at': self.started_at.isoformat(),
             'finished_at': datetime.now(timezone.utc).isoformat(),
             'provider_calls': sorted(self.provider_calls),

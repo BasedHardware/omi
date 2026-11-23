@@ -8,6 +8,7 @@ import (
 )
 
 const postFinishWriteGrace = 5 * time.Second
+const memoryItemTTL = 30 * 24 * time.Hour
 
 type timestampKind int
 
@@ -36,14 +37,13 @@ var approvedTimestampRules = []timestampRule{
 	{collection: "memory_operations", document: "*", field: "created_at", kind: firestoreTimestamp},
 	{collection: "memory_operations", document: "*", field: "updated_at", kind: firestoreTimestamp},
 	{collection: "memory_items", document: "*", field: "captured_at", kind: firestoreTimestamp},
-	{collection: "memory_items", document: "*", field: "expires_at", kind: firestoreTimestamp},
 	{collection: "memory_items", document: "*", field: "updated_at", kind: firestoreTimestamp},
 	{collection: "memory_items", document: "*", field: "valid_from", kind: firestoreTimestamp},
 	{collection: "memory_source_replacements", document: "*", field: "committed_at", kind: firestoreTimestamp},
 	{collection: "memory_source_replacements", document: "*", field: "control_state/updated_at", kind: firestoreTimestamp},
 	{collection: "episode_segment_receipts", document: "*", field: "updated_at", kind: firestoreTimestamp},
 	{collection: "conversations", document: "*/analytics_markers/*", field: "created_at", kind: firestoreTimestamp},
-	{collection: "hourly_usage", document: "*", field: "last_updated", kind: firestoreTimestamp},
+	{collection: "hourly_usage", document: "*", field: "last_updated", kind: firestoreTimestamp, grace: postFinishWriteGrace},
 }
 
 var approvedConversationTimestampFields = map[string]bool{
@@ -189,6 +189,14 @@ func approvedTimestampDifference(path string, python, goRun *observation) string
 	docPath := parts[1]
 	field := strings.Join(parts[2:], "/")
 	field = strings.TrimSuffix(field, "/$timestamp")
+	if memoryItemDocumentPath(docPath) && field == "expires_at" {
+		pyDoc, pyOK := python.Derived[docPath].(map[string]any)
+		goDoc, goOK := goRun.Derived[docPath].(map[string]any)
+		if pyOK && goOK && validMemoryItemExpiry(pyDoc) && validMemoryItemExpiry(goDoc) {
+			return "both memory expiries follow their write and match the 30-day TTL within five seconds"
+		}
+		return ""
+	}
 	rule, ok := timestampRuleForDocument(docPath, field)
 	if !ok {
 		return ""
@@ -229,8 +237,75 @@ func validateTimestampEvidence(diffs *[]difference, side string, run *observatio
 		if !ok {
 			continue
 		}
+		if memoryItemDocumentPath(docPath) {
+			if _, exists := doc["expires_at"]; exists && !validMemoryItemExpiry(doc) {
+				*diffs = append(*diffs, difference{
+					Path: "/" + side + "/derived_documents/" + escapePointer(docPath) + "/expires_at",
+					Kind: "invalid_ttl", FailureReason: memoryItemExpiryFailureReason(doc),
+				})
+			}
+		}
 		validateNestedTimestampFields(diffs, side, run, docPath, doc, doc, "")
 	}
+}
+
+func memoryItemDocumentPath(path string) bool {
+	parts := strings.Split(path, "/")
+	return len(parts) == 4 && parts[0] == "users" && parts[2] == "memory_items"
+}
+
+func validMemoryItemExpiry(doc map[string]any) bool {
+	expires, ok := timestampText(doc["expires_at"])
+	if !ok {
+		return false
+	}
+	created, ok := timestampText(doc["captured_at"])
+	if !ok {
+		return false
+	}
+	updated := created
+	if value, exists := doc["updated_at"]; exists {
+		updated, ok = timestampText(value)
+		if !ok {
+			return false
+		}
+	}
+	expiresAt, err := time.Parse(time.RFC3339Nano, expires)
+	if err != nil {
+		return false
+	}
+	createdAt, err := time.Parse(time.RFC3339Nano, created)
+	if err != nil {
+		return false
+	}
+	updatedAt, err := time.Parse(time.RFC3339Nano, updated)
+	if err != nil || !expiresAt.After(updatedAt) {
+		return false
+	}
+	delta := expiresAt.Sub(createdAt.Add(memoryItemTTL))
+	return delta >= -postFinishWriteGrace && delta <= postFinishWriteGrace
+}
+
+func memoryItemExpiryFailureReason(doc map[string]any) string {
+	expires, expiresOK := timestampText(doc["expires_at"])
+	created, createdOK := timestampText(doc["captured_at"])
+	if !expiresOK || !createdOK {
+		return "missing_or_malformed_ttl_timestamp"
+	}
+	updated := created
+	if value, exists := doc["updated_at"]; exists {
+		var ok bool
+		updated, ok = timestampText(value)
+		if !ok {
+			return "malformed_write_timestamp"
+		}
+	}
+	expiresAt, expiresErr := time.Parse(time.RFC3339Nano, expires)
+	updatedAt, updatedErr := time.Parse(time.RFC3339Nano, updated)
+	if expiresErr != nil || updatedErr != nil || !expiresAt.After(updatedAt) {
+		return "expiry_not_after_write"
+	}
+	return "outside_30_day_ttl_grace"
 }
 
 func validateNestedTimestampFields(diffs *[]difference, side string, run *observation, docPath string, root, current map[string]any, prefix string) {

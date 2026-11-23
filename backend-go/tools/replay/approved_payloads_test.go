@@ -51,17 +51,50 @@ func encryptedTranscript(t *testing.T, uid string, segments any, nonceByte byte)
 	return sealReplayValue(t, uid, hex.EncodeToString(compressed.Bytes()), nonceByte)
 }
 
+func compressedJSON(t *testing.T, value any) []byte {
+	return compressedJSONLevel(t, value, zlib.DefaultCompression)
+}
+
+func compressedJSONLevel(t *testing.T, value any, level int) []byte {
+	t.Helper()
+	plain, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var compressed bytes.Buffer
+	writer, err := zlib.NewWriterLevel(&compressed, level)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write(plain); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return compressed.Bytes()
+}
+
+func encryptedCorrections(t *testing.T, uid string, corrections any, nonceByte byte) string {
+	t.Helper()
+	return sealReplayValue(t, uid, hex.EncodeToString(compressedJSON(t, corrections)), nonceByte)
+}
+
 func TestProtectedFieldsAllowDifferentNoncesOnlyForEqualPlaintext(t *testing.T) {
 	uid := "synthetic-owner"
 	python, goRun := ruleRun(), ruleRun()
 	python.OwnerID, goRun.OwnerID = uid, uid
+	segments := []any{map[string]any{
+		"text": "agenda", "start": json.Number("0"), "end": json.Number("1"),
+		"speaker": "SPEAKER_00", "is_user": true,
+	}}
 	python.Document = map[string]any{
-		"transcript_segments":            encryptedTranscript(t, uid, []any{map[string]any{"text": "agenda"}}, 1),
+		"transcript_segments":            encryptedTranscript(t, uid, segments, 1),
 		"transcript_segments_compressed": true,
 		"home_display":                   sealReplayValue(t, uid, `{"schema":"home-v1","title":"Agenda"}`, 2),
 	}
 	goRun.Document = map[string]any{
-		"transcript_segments":            encryptedTranscript(t, uid, []any{map[string]any{"text": "agenda"}}, 3),
+		"transcript_segments":            encryptedTranscript(t, uid, segments, 3),
 		"transcript_segments_compressed": true,
 		"home_display":                   sealReplayValue(t, uid, `{"schema":"home-v1","title":"Agenda"}`, 4),
 	}
@@ -116,7 +149,10 @@ func hasUnexplainedAt(diffs []difference, fragment string) bool {
 
 func TestTranscriptByteWrapperComparesDecodedSegments(t *testing.T) {
 	uid := "synthetic-owner"
-	segments := []any{map[string]any{"text": "byte payload"}}
+	segments := []any{map[string]any{
+		"text": "byte payload", "start": json.Number("0"), "end": json.Number("1"),
+		"speaker": "SPEAKER_00", "is_user": true,
+	}}
 	plain, err := json.Marshal(segments)
 	if err != nil {
 		t.Fatal(err)
@@ -139,6 +175,111 @@ func TestTranscriptByteWrapperComparesDecodedSegments(t *testing.T) {
 	diffs := compareObservations(py, goRun)
 	if hasUnexplained(diffs) {
 		t.Fatalf("equivalent byte and encrypted transcript payloads differ: %+v", diffs)
+	}
+}
+
+func TestTranscriptComparesSemanticFieldsAndPreservesNonDefaults(t *testing.T) {
+	uid := "synthetic-owner"
+	python, goRun := ruleRun(), ruleRun()
+	python.OwnerID, goRun.OwnerID = uid, uid
+	pySegments := []any{map[string]any{
+		"text": "corrected", "start": json.Number("0"), "end": json.Number("1"),
+		"speaker": "SPEAKER_00", "is_user": true, "translations": []any{},
+		"speech_profile_processed": true, "original_text": "captured",
+	}}
+	goSegments := []any{map[string]any{
+		"text": "corrected", "start": json.Number("0"), "end": json.Number("1"),
+		"speaker": "SPEAKER_00", "is_user": true,
+	}}
+	python.Document = map[string]any{
+		"transcript_segments": encryptedTranscript(t, uid, pySegments, 20), "transcript_segments_compressed": true,
+	}
+	goRun.Document = map[string]any{
+		"transcript_segments": encryptedTranscript(t, uid, goSegments, 21), "transcript_segments_compressed": true,
+	}
+	if diffs := compareObservations(python, goRun); !hasUnexplainedAt(diffs, "/conversation/transcript_segments") {
+		t.Fatalf("Go dropping a non-default Python field was excused: %+v", diffs)
+	}
+	goSegments[0].(map[string]any)["original_text"] = "captured"
+	goRun.Document.(map[string]any)["transcript_segments"] = encryptedTranscript(t, uid, goSegments, 22)
+	if diffs := compareObservations(python, goRun); hasUnexplained(diffs) || !hasReason(diffs, "transcript_segments") {
+		t.Fatalf("model defaults prevented equal semantic transcript from matching: %+v", diffs)
+	}
+	goSegments[0].(map[string]any)["text"] = "different"
+	goRun.Document.(map[string]any)["transcript_segments"] = encryptedTranscript(t, uid, goSegments, 23)
+	if diffs := compareObservations(python, goRun); !hasUnexplainedAt(diffs, "/conversation/transcript_segments") {
+		t.Fatalf("different transcript text was excused: %+v", diffs)
+	}
+}
+
+func TestUserCorrectionsRequireConsistentCompressedStorageAndEqualPlaintext(t *testing.T) {
+	uid := "synthetic-owner"
+	corrections := []any{map[string]any{"original": "captured", "corrected": "fixed"}}
+	python, goRun := ruleRun(), ruleRun()
+	python.OwnerID, goRun.OwnerID = uid, uid
+	python.Document = map[string]any{
+		"data_protection_level": "enhanced", "user_corrections_compressed": true,
+		"user_corrections": encryptedCorrections(t, uid, corrections, 31),
+	}
+	goRun.Document = map[string]any{
+		"data_protection_level": "enhanced", "user_corrections_compressed": true,
+		"user_corrections": encryptedCorrections(t, uid, corrections, 32),
+	}
+	if diffs := compareObservations(python, goRun); hasUnexplained(diffs) || !hasReason(diffs, "user_corrections") {
+		t.Fatalf("equal corrections with fresh nonces were not approved: %+v", diffs)
+	}
+	goRun.Document.(map[string]any)["user_corrections_compressed"] = false
+	if diffs := compareObservations(python, goRun); !hasUnexplainedAt(diffs, "/conversation/user_corrections") {
+		t.Fatalf("inconsistent correction compression marker was excused: %+v", diffs)
+	}
+	goRun.Document.(map[string]any)["user_corrections_compressed"] = true
+	goRun.Document.(map[string]any)["user_corrections"] = encryptedCorrections(
+		t, uid, []any{map[string]any{"original": "captured", "corrected": "other"}}, 33,
+	)
+	if diffs := compareObservations(python, goRun); !hasUnexplainedAt(diffs, "/conversation/user_corrections") {
+		t.Fatalf("different correction plaintext was excused: %+v", diffs)
+	}
+
+	standard, standardGo := ruleRun(), ruleRun()
+	standard.OwnerID, standardGo.OwnerID = uid, uid
+	standardBlob := compressedJSON(t, corrections)
+	standardGoBlob := compressedJSONLevel(t, corrections, zlib.BestCompression)
+	standard.Document = map[string]any{
+		"data_protection_level": "standard", "user_corrections_compressed": true,
+		"user_corrections": map[string]any{"$bytes": base64.StdEncoding.EncodeToString(standardBlob)},
+	}
+	standardGo.Document = map[string]any{
+		"data_protection_level": "standard", "user_corrections_compressed": true,
+		"user_corrections": map[string]any{"$bytes": base64.StdEncoding.EncodeToString(standardGoBlob)},
+	}
+	if diffs := compareObservations(standard, standardGo); hasUnexplained(diffs) || !hasReason(diffs, "user_corrections") {
+		t.Fatalf("standard compressed corrections were not decoded: %+v", diffs)
+	}
+	standardGo.Document.(map[string]any)["data_protection_level"] = "enhanced"
+	if diffs := compareObservations(standard, standardGo); !hasUnexplainedAt(diffs, "/conversation/user_corrections") {
+		t.Fatalf("byte storage inconsistent with enhanced protection was excused: %+v", diffs)
+	}
+}
+
+func TestEpisodeAttachMemoDifferenceRequiresBothSideChecks(t *testing.T) {
+	python, goRun := ruleRun(), ruleRun()
+	python.EpisodeAttachMemoValid, goRun.EpisodeAttachMemoValid = true, true
+	path := "users/u/episode_links/c"
+	python.Derived[path] = map[string]any{
+		"attach_revision": "python-key", "attach_completed": "python-key", "attach_finalized": nil,
+	}
+	goRun.Derived[path] = map[string]any{
+		"attach_revision": "go-key", "attach_completed": "go-key", "attach_finalized": "go-key",
+	}
+	diffs := compareObservations(python, goRun)
+	for _, field := range []string{"attach_revision", "attach_completed", "attach_finalized"} {
+		if !hasReason(diffs, field) {
+			t.Fatalf("valid side-local memo check did not explain %s: %+v", field, diffs)
+		}
+	}
+	goRun.EpisodeAttachMemoValid = false
+	if diffs = compareObservations(python, goRun); !hasUnexplained(diffs) {
+		t.Fatalf("invalid Go memo evidence was excused: %+v", diffs)
 	}
 }
 

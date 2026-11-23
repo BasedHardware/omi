@@ -13,7 +13,7 @@ from unittest.mock import patch
 from testing.finalization_replay.candidate import _Handler, replay_database
 from testing.finalization_replay.driver import _observe
 from testing.finalization_replay.metrics import _delete_write, _invoke_rpc, _wrap_stream, prompt_token_estimate
-from testing.finalization_replay.state import CaseState
+from testing.finalization_replay.state import CaseState, episode_attach_memo_valid
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 VERIFY_PATH = REPO_ROOT / 'backend-go' / 'tools' / 'replay' / 'verify.py'
@@ -23,6 +23,74 @@ VERIFY_SPEC.loader.exec_module(verify)
 
 
 class ReplayContractTests(unittest.TestCase):
+    def test_episode_attach_memo_evidence_checks_key_owner_and_completion(self):
+        conversation = {'transcript_segments': 'fixture-envelope', 'transcript_segments_compressed': True}
+        link_path = 'users/owner/episode_links/conversation'
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:fixture-key',
+            'attach_completed': 'v2:fixture-key',
+            'attach_finalized': None,
+        }
+        decoded_rows = []
+
+        def decode(uid, raw, compressed):
+            decoded_rows.append((uid, raw, compressed))
+            return [{'text': 'fixture'}]
+
+        def compute_key(row):
+            self.assertEqual(row['transcript_segments'], [{'text': 'fixture'}])
+            return 'v2:fixture-key'
+
+        self.assertTrue(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        self.assertEqual(decoded_rows, [('owner', 'fixture-envelope', True)])
+
+        link['attach_owner_id'] = 'other-episode'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        link['attach_revision'] = 'v2:fixture-key'
+        link['attach_finalized'] = 'stale-finalization'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        link['attach_owner_id'] = 'episode'
+        link['attach_revision'] = 'stale-key'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+
     def test_database_creation_ignores_hostile_libpq_environment(self):
         observed = {}
 

@@ -14,16 +14,26 @@ malformed compression, or different plaintext leaves the row unexplained.
 
 | Field | Check |
 | --- | --- |
-| `conversation.transcript_segments` | Decrypt both envelopes. Inflate the marked compressed payload and compare transcript segment lists. The value-free `$bytes` wrapper is decoded before comparison. |
+| `conversation.transcript_segments` | Decrypt both sides and inflate the marked payload. Compare `text`, `start`, `end`, `speaker`, and `is_user`; absent `speaker` uses the model default `SPEAKER_00`. Go must preserve every non-default field present in Python's stored segment. The value-free `$bytes` wrapper is decoded before comparison. |
+| `conversation.user_corrections` | Require a true compression marker and storage consistent with each side's protection level; decrypt/inflate both blobs and compare correction lists. |
 | `conversation.home_display` | Decrypt both envelopes and compare card content. |
 | `episodes/{id}.content` | Decrypt both envelopes and compare episode content. |
 | `episodes/{id}.home_display` | Decrypt both envelopes and compare card content. |
 
+## Episode attach memo
+
+Differences in `episode_links/{cid}.attach_completed`, `.attach_finalized`, and
+`.attach_revision` are by design only when each side's decrypted transcript reproduces its
+`content_key`, `attach_revision == attach_completed == content_key`,
+`attach_owner_id == episode_id`, and `attach_finalized` is null or equals `attach_completed`.
+The harness emits only a boolean check result. Alternating engines do not reuse the other
+engine's memo because their re-encoded transcript inputs can differ.
+
 ## Clocks
 
 Each timestamp must preserve its field's wire type and fall inside that side's own
-`[started_at, finished_at]` replay window. Only the two scheduled post-finish writes below may
-use the stated five-second grace; all other clocks stop at `finished_at`.
+`[started_at, finished_at]` replay window. Scheduled post-finish writes may use the stated
+five-second grace; TTLs are checked against their write anchor instead of the replay window.
 
 | Field | Additional check |
 | --- | --- |
@@ -32,10 +42,12 @@ use the stated five-second grace; all other clocks stop at `finished_at`.
 | `episodes/{id}.compose_deferred_at`, `created_at`, `title_changed_at` | Firestore timestamp; `created_at` alone permits up to 5 seconds after finish for the scheduled episode write. |
 | `goals/{id}.updated_at` | Firestore timestamp; own replay window. |
 | `goals/{id}/goal_history/{day}.recorded_at` | Firestore timestamp; `date` and document day must match the timestamp's UTC day. |
-| `llm_usage/{day}.last_updated`, `hourly_usage/{day}.last_updated` | Firestore timestamp; bucket day must match the timestamp's UTC day. |
+| `llm_usage/{day}.last_updated` | Firestore timestamp; bucket day must match the timestamp's UTC day. |
+| `hourly_usage/{day}.last_updated` | Firestore timestamp; bucket day must match the timestamp's UTC day and allow up to five seconds for the scheduled post-finish usage write. |
 | `memory_state/apply_control.updated_at` | Firestore timestamp; own replay window. |
 | `memory_state/head.updated_at`, `memory_outbox/{id}.available_at`, `memory_commits/{id}.updated_at`, `memory_operations/{id}.created_at` and `.updated_at` | Firestore timestamp; own replay window. |
-| `memory_items/{id}.captured_at`, `.expires_at`, `.updated_at`, `.valid_from` | Firestore timestamp; own replay window. |
+| `memory_items/{id}.captured_at`, `.updated_at`, `.valid_from` | Firestore timestamp; own replay window. |
+| `memory_items/{id}.expires_at` | TTL timestamp after the item's write and within five seconds of `captured_at + 30 days`; it is not constrained to the replay window. |
 | `memory_source_replacements/{id}.committed_at`, `.control_state.updated_at` | Firestore timestamp; own replay window. |
 | `episode_links/{id}.updated_at` | Firestore timestamp; up to 5 seconds after finish for the scheduled link write. |
 | `episode_segment_receipts/{id}.updated_at`, `conversations/{id}/analytics_markers/{marker}.created_at` | Firestore timestamp; own replay window. |
@@ -50,7 +62,7 @@ IDs may differ only after each side binds them to its own write or queue job.
 
 | Field | Check |
 | --- | --- |
-| Admitted job and fanout IDs | Each side's job and fanout values bind to its own admission and stored row; ordinary-sync Python has no Go admission. |
+| Admitted job and fanout IDs | Validate each side's IDs against its own queue job and stored row. Do not compare IDs across engines; ordinary-sync Python has no Go admission. |
 | `finalization_engine`, `finalization_owner_epoch`, `finalization_revision` | Go values must be present and bind to its admitted job, owner epoch, and revision. The Python row must not contain these Go fence fields. |
 | `go_sync_minimum_discarded`, `go_sync_minimum_revision` | Go receipt fields must be present together, use the expected types, and bind to the Go row's sync content revision and discarded outcome. The Python row must not contain them. |
 | Home version fields and `home_feed_control.generation` | Existing UUIDv4 checks require a fresh, seeded-value-free, side-unique token with its same-side Home receipt or preparation link. |

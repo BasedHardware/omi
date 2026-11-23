@@ -142,7 +142,7 @@ func TestCompareDifferencesWithIncompatibleJSONShapes(t *testing.T) {
 	}
 }
 
-func TestCompareOnlyExcusesVerifiedFanoutAndClocks(t *testing.T) {
+func TestAdmissionIDsAreValidatedPerSideWithoutCrossEngineComparison(t *testing.T) {
 	t.Parallel()
 	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	build := func(job, fanout string, stamp time.Time) *observation {
@@ -165,23 +165,26 @@ func TestCompareOnlyExcusesVerifiedFanoutAndClocks(t *testing.T) {
 	}
 	doc["fanout_key"] = "go-fanout"
 	diffs := compareObservations(py, goRun)
-	fanoutCompared := false
+	finalizationJobUnexplained := false
 	for _, diff := range diffs {
-		if diff.Path == "/fanout_key" {
-			fanoutCompared = true
-		}
 		if diff.Path == "/conversation/finalization_job_id" {
 			if diff.Reason != "" {
 				t.Fatalf("finalization_job_id remains a go_gap pending the status-route fix: %v", diff)
 			}
+			finalizationJobUnexplained = true
 			continue
 		}
 		if diff.Reason == "" {
 			t.Fatalf("verified binding and timestamp drift: %v", diff)
 		}
 	}
-	if !fanoutCompared {
-		t.Fatal("Python queue and Go conversation fanout IDs were not compared")
+	if !finalizationJobUnexplained {
+		t.Fatalf("expected the Go job pointer difference to remain visible: %+v", diffs)
+	}
+	for _, diff := range diffs {
+		if diff.Path == "/conversation/fanout_key" || diff.Path == "/fanout_key" || strings.HasPrefix(diff.Path, "/admitted") {
+			t.Fatalf("cross-engine admission identifiers were compared: %+v", diff)
+		}
 	}
 	goRun = build("go", "go-fanout", start.Add(time.Hour))
 	goRun.Admitted.Job = "wrong"
