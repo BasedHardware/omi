@@ -232,8 +232,6 @@ def test_background_audio_purge_reports_provider_outcome_once(error, outcome, re
     logger = MagicMock()
     namespace = {
         'delete_privacy_conversation_audio': purge,
-        'StoragePrefixPurgeBlocked': StoragePrefixPurgeBlocked,
-        'StoragePrefixPurgeError': StoragePrefixPurgeError,
         'logger': logger,
         'sanitize': sanitize,
     }

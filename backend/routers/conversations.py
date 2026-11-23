@@ -26,7 +26,6 @@ import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
-from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked, StoragePrefixPurgeError
 import database.users as users_db
 from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
 from database import conversation_tombstones
@@ -1820,6 +1819,8 @@ def erase_accepted_conversation(uid: str, conversation_id: str, audio_source_ids
 
 
 def _delete_privacy_audio_after_response(uid: str, conversation_id: str, *, source_ids: List[str]) -> None:
+    from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked, StoragePrefixPurgeError
+
     try:
         delete_privacy_conversation_audio(uid, conversation_id, source_ids=source_ids)
     except StoragePrefixPurgeError as error:
