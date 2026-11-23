@@ -1,13 +1,18 @@
 """Synthetic packet placement and admission-switch custody checks."""
 
-from types import SimpleNamespace
 import time
+from types import SimpleNamespace
+from unittest.mock import Mock
 
+from google.api_core.exceptions import Cancelled, DeadlineExceeded, ServiceUnavailable
+from google.auth.credentials import AnonymousCredentials
+from google.cloud import firestore
 import pytest
 
 from config.record_wal_duplicate import mode
+from database.batch_pipeline_reads import read_snapshot, write_snapshot
 from utils.batch_pipeline import record_wal_duplicate as duplicate
-from utils.batch_pipeline.artifact_reads import ArtifactReadBudget
+from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactReadLimit
 from utils.batch_pipeline.record_wal_alignment import Packet
 from utils.batch_pipeline.record_wal_source import attest
 from utils.other.raw_audio import WAL_FORMAT
@@ -129,12 +134,77 @@ def test_spanning_packs_requires_one_archive_session():
     assert prove([first], wal=first, capture_sessions=(None,))[0] == [None]
 
 
-def test_lifecycle_rpc_records_termination_at_the_sync_boundary():
-    from google.api_core.exceptions import Cancelled, DeadlineExceeded
-    from database.batch_pipeline_reads import observe_rpc
+@pytest.fixture
+def snapshot_rpc(monkeypatch):
+    clock = SimpleNamespace(now=100)
+    monkeypatch.setattr(time, 'monotonic', lambda: clock.now)
+    api = Mock()
+    api.begin_transaction.return_value = SimpleNamespace(transaction=b'wal-snapshot')
+    client = firestore.Client(project='synthetic-project', credentials=AnonymousCredentials())
+    client._firestore_api_internal = api
+    store = SimpleNamespace(client=client, namespace='batch_pipeline_dev')
+    events = []
+    yield SimpleNamespace(
+        api=api,
+        store=store,
+        budget=ArtifactReadBudget(101, 0, 0),
+        clock=clock,
+        events=events,
+        observe=lambda stage, outcome: events.append((stage, outcome)),
+    )
+    client._firestore_api_internal = None
 
-    observed = []
-    for failure, expected in [(Cancelled('cancelled'), 'cancelled'), (DeadlineExceeded('deadline'), 'deadline')]:
-        with pytest.raises(type(failure)), observe_rpc(lambda *event: observed.append(event), 'begin'):
-            raise failure
-        assert observed[-2:] == [('begin', 'attempt'), ('begin', expected)]
+
+def _stage_intake(view):
+    view.put('intakes', 'synthetic', {'kind': 'synthetic'})
+    return 'staged'
+
+
+def test_lifecycle_rpc_observes_successful_commit(snapshot_rpc):
+    case = snapshot_rpc
+    assert write_snapshot(case.store, _stage_intake, case.budget, on_rpc=case.observe) == 'staged'
+    assert [call[0] for call in case.api.mock_calls] == ['begin_transaction', 'commit']
+    assert case.api.begin_transaction.call_args.kwargs['request']['options'] == {'read_write': {}}
+    commit = case.api.commit.call_args.kwargs
+    assert commit['request']['transaction'] == b'wal-snapshot'
+    assert len(commit['request']['writes']) == 1
+    assert commit['timeout'] == 1 and commit['retry'] is None
+    assert case.events == [('begin', 'attempt'), ('begin', 'success'), ('commit', 'attempt'), ('commit', 'success')]
+
+
+@pytest.mark.parametrize(
+    'failure, outcome, propagated',
+    [
+        (ServiceUnavailable, 'error', ServiceUnavailable),
+        (DeadlineExceeded, 'deadline', ArtifactReadLimit),
+        (Cancelled, 'cancelled', Cancelled),
+    ],
+)
+def test_lifecycle_rpc_observes_failed_commit_then_rollback(snapshot_rpc, failure, outcome, propagated):
+    case = snapshot_rpc
+    case.api.commit.side_effect = failure('synthetic transport failure')
+    with pytest.raises(propagated):
+        write_snapshot(case.store, _stage_intake, case.budget, on_rpc=case.observe)
+    assert [call[0] for call in case.api.mock_calls] == ['begin_transaction', 'commit', 'rollback']
+    assert case.api.rollback.call_args.kwargs['request']['transaction'] == b'wal-snapshot'
+    assert case.events == [
+        ('begin', 'attempt'),
+        ('begin', 'success'),
+        ('commit', 'attempt'),
+        ('commit', outcome),
+        ('rollback', 'attempt'),
+        ('rollback', 'success'),
+    ]
+
+
+def test_lifecycle_rpc_records_rollback_expiry_without_attempt(snapshot_rpc):
+    case = snapshot_rpc
+
+    def expire(view):
+        assert view.transaction.id == b'wal-snapshot'
+        case.clock.now = case.budget.deadline
+
+    with pytest.raises(ArtifactReadLimit, match='artifact read deadline'):
+        read_snapshot(case.store, expire, case.budget, on_rpc=case.observe)
+    case.api.rollback.assert_not_called()
+    assert case.events == [('begin', 'attempt'), ('begin', 'success'), ('rollback', 'expired_before_attempt')]
