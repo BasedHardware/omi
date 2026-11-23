@@ -51,6 +51,7 @@ overlay:
         CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
           value: 'off'
           category: rollout
+        SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
         # Unlimited backfill day cap (retryable 503 backfill_capacity until the next UTC day; David 2026-11-18,
         # support-packet decision 13). Listen also admits sync backfill uploads (/v2/sync-local-files), so this
         # pin leaves listen admission uncapped exactly as it is today: serving image 44d0a4f runs it 'false'.
@@ -341,6 +342,7 @@ overlay:
         CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
           value: 'off'
           category: rollout
+        SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
         # The conversations v3 reconcile dispatch (utils/conversations/v3/triggers.py) runs on the
         # recording writes pusher makes. Without this binding each enqueue raised RuntimeError and the
         # owner waited for the 5-minute sweeper (rows pending 10+ minutes). HANDLER_URL/INVOKER_SA come
@@ -671,6 +673,7 @@ overlay:
           ANDROID_PLAY_BILLING_MIN_BUILD: {value: '1617', category: rollout}
           # Empty: cohort members come from the android-play-billing rollout cohort document instead.
           ANDROID_PLAY_BILLING_COHORT: {value: '', category: rollout}
+          SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -1081,6 +1084,7 @@ overlay:
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
+          SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -1524,6 +1528,7 @@ overlay:
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
+          SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
           # SCA-2283: retain the behavior of the serving pre-flag image until custody admission.
           BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
           BATCH_PROJECTION_OUTBOX: {value: 'false', category: ops_kill}
@@ -1919,6 +1924,7 @@ overlay:
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
+          SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -2301,6 +2307,7 @@ overlay:
         flags:
           --service-account: backend-runtime@based-hardware.iam.gserviceaccount.com
         env:
+          SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
           PINECONE_INDEX_NAME:
             value: memories-backend
           REDIS_DB_HOST:
