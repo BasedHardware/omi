@@ -160,6 +160,7 @@ def run_with_transaction_contention_retry(
     operation_name: str,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     deadline: float | None = None,
+    retry_reserve_floor_seconds: float = RETRY_RESERVE_FLOOR_SECONDS,
     sleep: Callable[[float], None] = time.sleep,
     random_value: Callable[[], float] = random.random,
     monotonic: Callable[[], float] = time.monotonic,
@@ -181,7 +182,7 @@ def run_with_transaction_contention_retry(
     worse than running the transaction once.  Each retry (attempt 2 onward)
     starts only while the remaining budget covers
     ``max(last attempt's observed duration × RETRY_RESERVE_FACTOR,
-    RETRY_RESERVE_FLOOR_SECONDS)``, and a post-failure jitter sleep never runs
+    retry_reserve_floor_seconds)``, and a post-failure jitter sleep never runs
     past the deadline.  When the reserve does not fit, the loop stops with
     ``FirestoreContentionExhausted(reason='deadline_exhausted')``.  The
     accepted bound is ``deadline + one in-flight attempt``: an attempt that
@@ -202,7 +203,7 @@ def run_with_transaction_contention_retry(
     for attempt in range(1, max_attempts + 1):
         if attempt > 1 and deadline is not None:
             remaining = deadline - monotonic()
-            reserve = max(last_attempt_seconds * RETRY_RESERVE_FACTOR, RETRY_RESERVE_FLOOR_SECONDS)
+            reserve = max(last_attempt_seconds * RETRY_RESERVE_FACTOR, retry_reserve_floor_seconds)
             if remaining < reserve:
                 logger.error(
                     "firestore_transaction_contention operation=%s attempt=%d/%d outcome=deadline_exhausted "
