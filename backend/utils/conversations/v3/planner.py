@@ -316,7 +316,7 @@ def is_unlocked(row):
     return row.get('status') == 'in_progress' or bool(row.get('v3_unlocked'))
 
 
-def build(uid, window, recordings, existing=None, *, allocated=None):
+def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_home_visible=True):
     lines = window['lines']
     start, end = lines[0]['start'], max(line['end'] for line in lines)
     if existing and (not is_unlocked(existing) or window.get('_held_provisional')):
@@ -432,6 +432,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         words=words,
         finished=window['finished'] and not window.get('_title_preview'),
         manual_end=manual_end,
+        manual_end_home_visible=manual_end_home_visible,
     )
     row: dict[str, Any] = {
         **(existing or {}),

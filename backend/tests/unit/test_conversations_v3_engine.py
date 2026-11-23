@@ -462,15 +462,13 @@ def test_manual_end_with_any_speech_is_visible_and_sticky(words):
 
 
 @pytest.mark.parametrize('kind', ['media', 'background'])
-@pytest.mark.parametrize('mode,expected_hidden', [(None, False), ('off', True)])
-def test_manual_end_visibility_preserves_media_and_background_classification(kind, mode, expected_hidden, monkeypatch):
-    if mode is None:
-        monkeypatch.delenv('CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE', raising=False)
-    else:
-        monkeypatch.setenv('CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE', mode)
+@pytest.mark.parametrize('enabled,expected_hidden', [(True, False), (False, True)])
+def test_manual_end_visibility_preserves_media_and_background_classification(kind, enabled, expected_hidden):
     row = recording(finished_at=NOW + timedelta(seconds=10), v3_manual_end=True)
     group = outline.stretches([row], NOW + timedelta(seconds=11))[0]
-    built = planner.build('u', planner.windows([group], [[entry(kind=kind)]])[0], {'r': row})
+    built = planner.build(
+        'u', planner.windows([group], [[entry(kind=kind)]])[0], {'r': row}, manual_end_home_visible=enabled
+    )
     assert built['manual_end'] is True and built['home_hidden'] is expected_hidden
     assert built['kind'] == built['outline_kind'] == kind
     assert built['home_hidden_reason'] == ('media' if kind == 'media' else 'background_wearer_recognized')
@@ -478,7 +476,7 @@ def test_manual_end_visibility_preserves_media_and_background_classification(kin
     # Rebuilding a retained row can lack the cut on this pass. The row still owns the manual end.
     window = planner.windows([group], [[entry(kind=kind)]])[0]
     window['manual_end'] = False
-    rebuilt = planner.build('u', window, {'r': row}, built)
+    rebuilt = planner.build('u', window, {'r': row}, built, manual_end_home_visible=enabled)
     assert rebuilt['manual_end'] is True and rebuilt['home_hidden'] is expected_hidden
 
 

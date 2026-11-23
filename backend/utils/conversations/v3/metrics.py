@@ -25,11 +25,13 @@ VISIBLE_LATENCY = Histogram(
 )
 MANUAL_END_HOME = Counter(
     'omi_conversations_v3_manual_end_home_total',
-    'Successful processing settlements of live derived manual-end rows, including rewrites',
-    ['visibility'],
+    'First successful processing settlement of each live derived manual-end row, by Home visibility and kind',
+    ['visibility', 'kind'],
 )
+MANUAL_END_KINDS = ('conversation', 'media', 'background', 'other')
 for outcome in ('visible', 'hidden'):
-    MANUAL_END_HOME.labels(outcome)
+    for kind in MANUAL_END_KINDS:
+        MANUAL_END_HOME.labels(outcome, kind)
 
 SUMMARY_LATENCY = Histogram('omi_conversations_v3_end_to_summary_seconds', 'End to stored summary')
 SUMMARY_WRITES = Counter('omi_conversations_v3_summary_writes_total', 'First writes and late rewrites', ['kind'])

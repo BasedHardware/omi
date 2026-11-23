@@ -107,9 +107,11 @@ with positive wearer recognition somewhere in the contributing recordings:
 evidence. Without it, background becomes conversation and uses the normal
 300-word rule or the manual-end override. `kind`, `outline_kind` and the
 classification reason remain available for analytics.
-Set `CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE=off` to restore classification-based
-hiding for manually ended media and recognized background on subsequent
-projections. Previously written rows keep their stored visibility until rebuilt.
+Set `CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE=off` on every service that runs the
+v3 reconcile (`backend` for on-open rebuilds, `backend-sync`, `backend-sync-backfill`)
+to restore classification-based hiding for manually ended media and recognized
+background on subsequent projections. The service reads the switch and passes it to
+the pure planner. Previously written rows keep their stored visibility until rebuilt.
 Five minutes of placed-speech silence is a hard window boundary. An outline's
 `resumes_previous` may undo a topic split within that interval, never rejoin
 windows across the silence boundary, even with the same people. Short socket

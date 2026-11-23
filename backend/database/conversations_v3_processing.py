@@ -15,6 +15,7 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from models.finalization_owner import python_owns_finalization
 from utils.conversations.v3 import Conflict, policy
 from utils.conversations.summary_delivery import present
+from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.encryption import encrypt, decrypt
 
 _LIVE_INPUT_SCOPE = (
@@ -269,8 +270,14 @@ def settle_processing(
             and not row.get('discarded')
             and not row.get('v3_manual_end_home_counted')
         ):
-            visible = conversations.is_visible_conversation(row, hide_home=True, presentation=True)
-            manual_visibility = 'visible' if visible else 'hidden'
+            # Same row filters as the Home feed (database/home_feed._visible) for a derived row.
+            visible = (
+                not row.get('sync_merged_into')
+                and not is_relevance_discarded(row)
+                and conversations.is_visible_conversation(row, hide_home=True, presentation=True)
+            )
+            kind = row.get('kind') if row.get('kind') in metrics.MANUAL_END_KINDS else 'other'
+            manual_visibility = ('visible' if visible else 'hidden', kind)
         tx.update(
             ref,
             {
@@ -296,7 +303,7 @@ def settle_processing(
 
     armed, settled, manual_visibility = settle(client.transaction())
     if manual_visibility is not None:
-        metrics.MANUAL_END_HOME.labels(manual_visibility).inc()
+        metrics.MANUAL_END_HOME.labels(*manual_visibility).inc()
     if settled and word_floor_outcomes is not None:
         metrics.observe_word_floor(*word_floor_outcomes)
     return armed

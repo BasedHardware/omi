@@ -32,6 +32,7 @@ from config.conversations_v3 import (
     SPEECH_LANDED_FIELD,
     boundary_seconds,
     live_title_enabled,
+    manual_end_home_visible_enabled,
     stretch_cohesion_enabled,
 )
 from utils.conversations.v3.triggers import enqueue, changed
@@ -518,7 +519,14 @@ async def reconcile(
                     deferred_lock = False
                 if deferred_lock:
                     window['_title_preview'] = True
-                row = planner.build(uid, window, recordings, prior, allocated=allocated)
+                row = planner.build(
+                    uid,
+                    window,
+                    recordings,
+                    prior,
+                    allocated=allocated,
+                    manual_end_home_visible=manual_end_home_visible_enabled(),
+                )
                 if opening and prior and planner.is_unlocked(prior):
                     row['v3_open_locked'] = True
                 row.pop('v3_unlocked', None)
