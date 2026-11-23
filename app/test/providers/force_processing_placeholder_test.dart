@@ -213,6 +213,7 @@ void main() {
 
     expect(actions.processing.map((conversation) => conversation.id), ['0']);
     expect(actions.processing.single.status, ConversationStatus.processing);
+    expect(actions.manualFinishRow, isNull, reason: 'a coordinator close must remain silent');
     expect(finalize.isCompleted, isFalse);
     expect(processStarted.isCompleted, isFalse);
 

@@ -97,7 +97,9 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                 // Settled: on success the capture has cleared and End is gone; after a failed drain the
                 // capture keeps its segments, and End works again.
                 unawaited(
-                  capture.forceProcessingCurrentConversation(liveConversationId: conversation.id).whenComplete(() {
+                  capture
+                      .forceProcessingCurrentConversation(manualFinish: true, liveConversationId: conversation.id)
+                      .whenComplete(() {
                     _ended = false;
                     if (_owns(conversation, capture, v3Feedback)) {
                       setEndSuppressed?.call(false);

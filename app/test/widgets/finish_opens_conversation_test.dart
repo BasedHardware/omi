@@ -6,24 +6,32 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/app_globals.dart';
+import 'package:omi/backend/http/api/conversations_v3.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/coordinators/provider_capture_external_actions.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/pages/episodes/finished_capture_page.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/finish_outcome.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
@@ -31,6 +39,17 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 // back to the list; the conversation showed up 4 minutes later. A batch pendant's page shows only
 // the on-device preview, never `segments`, so Finish took the "nothing heard" branch. Finish must
 // process it and open the conversation itself, in a processing state until the server has it.
+
+class _ManualFinishConversations extends ConversationProvider {
+  _ManualFinishConversations() : super(isSignedIn: () => false);
+
+  int refreshes = 0;
+
+  @override
+  Future<void> forceRefreshConversations() async {
+    refreshes++;
+  }
+}
 
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
@@ -445,6 +464,26 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('v3 Wrap Up returns to the published Home processing row', (tester) async {
+    final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
+    addTearDown(v3.dispose);
+    final recording = _recordingDoc('rec-1');
+    final capture = _Capture(answer: CreateConversationResponse(messages: const [], conversation: recording))
+      ..verifiedLiveServerRecordingId = recording.id;
+    await _pump(tester, capture, v3: v3);
+    final row = OptimisticProcessingPlaceholder.conversation();
+    v3.startManualFinish(row, recording.id);
+    v3.settleManualFinish(row, recording);
+
+    expect(await _finishAndCapturePushed(tester, capture), isNull);
+    expect(capture.finishes, 1);
+    expect(find.text('home'), findsOneWidget);
+    expect(v3.finishRow, same(row));
+    // Keep the fixture's fake clock and use an explicit terminal settlement before teardown.
+    v3.acknowledgeManualFinish(row);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('v3 Wrap Up sends a verified pendant finish with no transcript and explains a 404', (tester) async {
     final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
     addTearDown(v3.dispose);
@@ -459,6 +498,66 @@ void main() {
     expect(find.text("Didn't go through. Your audio is safe."), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
+
+  for (final absence in [ProcessAbsence.notFound, ProcessAbsence.emptyBody, ProcessAbsence.transport, null]) {
+    testWidgets('detached v3 finish shows the typed message for $absence', (tester) async {
+      var liveReads = 0;
+      final v3 = ConversationsV3Provider(
+        uid: () => 'owner',
+        cached: 'owner:1',
+        fetchLive: () async {
+          liveReads++;
+          return const ApiSuccess(ConversationsLiveRead(v3: true, conversation: null));
+        },
+      );
+      final conversations = _ManualFinishConversations();
+      final messages = MessageProvider();
+      final people = PeopleProvider();
+      final usage = UsageProvider();
+      addTearDown(v3.dispose);
+      addTearDown(conversations.dispose);
+      addTearDown(messages.dispose);
+      addTearDown(people.dispose);
+      addTearDown(usage.dispose);
+      final actions = ProviderCaptureExternalActions(
+        conversationProvider: conversations,
+        messageProvider: messages,
+        peopleProvider: people,
+        usageProvider: usage,
+        conversationsV3: v3,
+      );
+      await tester.pumpWidget(MaterialApp(
+        navigatorKey: globalNavigatorKey,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: const Scaffold(body: Text('Home')),
+      ));
+
+      final row = OptimisticProcessingPlaceholder.conversation();
+      actions.onManualFinishStarted(row, 'rec-1');
+      if (absence == ProcessAbsence.transport) {
+        await tester.pump(OptimisticProcessingPlaceholder.timeout);
+        expect(v3.finishRow, isNull, reason: 'an unresolved row stops displaying after its deadline');
+      }
+      final response = absence == null
+          ? CreateConversationResponse(messages: const [], conversation: _recordingDoc('rec-1', notProcessed: true))
+          : null;
+      actions.onManualFinishSettled(row, InProgressProcessOutcome(response: response, absence: absence),
+          showFailure: true);
+      await tester.pump();
+      final message = switch (absence) {
+        ProcessAbsence.emptyBody => 'That recording was too short or empty to keep.',
+        null => "Audio's still on its way.",
+        _ => "Didn't go through. Your audio is safe.",
+      };
+      expect(find.text(message), findsOneWidget);
+      expect(conversations.refreshes, 1);
+      expect(liveReads, 1);
+      expect(v3.finishRow, isNull);
+      await tester.pump(const Duration(seconds: 10));
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 
   group('FinishedCapturePage', () {
     test('matches the derived conversation, never the recording or an unrelated sync copy', () {

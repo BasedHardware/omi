@@ -203,7 +203,10 @@ class _LiveCapture extends CaptureProvider {
         );
 
   @override
-  String? get liveCaptureSource => 'omi';
+  String? get liveCaptureSource => streaming ? 'omi' : null;
+
+  bool streaming = true;
+  void Function(String?)? onManualEnd;
 
   @override
   String? get topConversationId => 'conv-0-live';
@@ -220,9 +223,10 @@ class _LiveCapture extends CaptureProvider {
   String? verifiedLiveServerRecordingId;
 
   @override
-  Future<void> forceProcessingCurrentConversation({String? liveConversationId}) async {
+  Future<void> forceProcessingCurrentConversation({bool manualFinish = false, String? liveConversationId}) async {
     endCalls++;
     endedLiveId = liveConversationId;
+    if (manualFinish) onManualEnd?.call(liveConversationId);
     final held = drain;
     if (held != null) return held.future;
     segments = [];
@@ -771,6 +775,7 @@ void main() {
       final home = await _pumpHome(tester, v3: true);
       // This phone records something else (another device's window is the one in progress).
       home.capture.segments = [_said('other-1', 'Something only this phone heard.', 0, 3)];
+      home.capture.verifiedLiveServerRecordingId = 'other-recording';
       await tester.tap(find.text('Launch checklist'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
@@ -789,6 +794,11 @@ void main() {
       home.detailSegments = [];
       home.capture.segments = [];
       home.capture.verifiedLiveServerRecordingId = 'rec-1';
+      home.capture.onManualEnd = (id) => home.conversationsV3.startManualFinish(
+            OptimisticProcessingPlaceholder.conversation(),
+            'rec-1',
+            liveConversationId: id,
+          );
       await tester.tap(find.text('Launch checklist'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
@@ -796,6 +806,10 @@ void main() {
       await tester.tap(find.byKey(const Key('live_conversation_end')));
       expect(home.capture.endCalls, 1);
       expect(home.capture.endedLiveId, 'live-1');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(ConversationDetailPage), findsNothing);
+      expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
       await _dispose(tester, home);
     });
   });
@@ -1331,6 +1345,8 @@ void main() {
         await tester.pump();
         expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
 
+        home.capture.streaming = false;
+        home.capture.ping();
         home.conversations.upsertConversation(_conversation('live-1', home.liveStart, 'Launch checklist', v3: _done));
         await tester.pump();
         await tester.pump();
@@ -1338,6 +1354,12 @@ void main() {
         expect(find.text('Launch checklist'), findsOneWidget);
         expect(find.byType(V3LivePlaceholderRow), findsNothing);
         await shoot(tester, '002-mobile-ios-v3-manual-finish-summary');
+
+        home.capture.streaming = true;
+        home.capture.ping();
+        await tester.pump();
+        expect(find.byType(V3LivePlaceholderRow), findsOneWidget,
+            reason: 'the next capture can show Listening before its live window exists');
         await _dispose(tester, home);
         debugDefaultTargetPlatformOverride = null;
       });

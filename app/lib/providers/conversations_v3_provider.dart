@@ -55,10 +55,11 @@ class ConversationsV3Provider extends ChangeNotifier {
   String? _finishLiveId;
   bool _suppressListening = false;
   bool _finishAccepted = false;
+  bool _finishExpired = false;
   Timer? _finishExpiry;
 
   bool get finishFeedbackEnabled => v3 && !const bool.fromEnvironment('OMI_V3_FINISH_FEEDBACK_OFF');
-  ServerConversation? get finishRow => finishFeedbackEnabled ? _finishRow : null;
+  ServerConversation? get finishRow => finishFeedbackEnabled && !_finishExpired ? _finishRow : null;
 
   bool get suppressListeningAfterFinish => finishFeedbackEnabled && _suppressListening;
 
@@ -75,19 +76,19 @@ class ConversationsV3Provider extends ChangeNotifier {
             (recordingId != null && live.v3?.recordingIds.contains(recordingId) == true))) {
       _finishLiveId = live.id;
     }
-    _finishExpiry = Timer(OptimisticProcessingPlaceholder.timeout, () {
-      _clearManualFinish();
-      notifyListeners();
-    });
+    _armFinishExpiry();
     notifyListeners();
   }
 
   bool settleManualFinish(ServerConversation row, ServerConversation? result) {
-    if (!identical(finishRow, row)) return false;
+    if (!finishFeedbackEnabled || !identical(_finishRow, row)) return false;
     if (result == null || result.discarded || result.status == ConversationStatus.in_progress) {
       _clearManualFinish();
     } else {
       _finishAccepted = true;
+      _finishExpired = false;
+      _suppressListening = true;
+      _armFinishExpiry();
       _finishRecordingId = result.id;
       if (result.v3?.recording != true) {
         _finishLiveId = result.id;
@@ -126,15 +127,23 @@ class ConversationsV3Provider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _armFinishExpiry() {
+    _finishExpiry?.cancel();
+    _finishExpiry = Timer(OptimisticProcessingPlaceholder.timeout, () {
+      _finishExpired = true;
+      _suppressListening = false;
+      notifyListeners();
+    });
+  }
+
   void _clearManualFinish({bool keepClosedLive = false}) {
     _finishExpiry?.cancel();
     _finishRow = null;
     _finishRecordingId = null;
-    if (!keepClosedLive) {
-      _finishLiveId = null;
-      _suppressListening = false;
-    }
+    if (!keepClosedLive) _finishLiveId = null;
+    _suppressListening = false;
     _finishAccepted = false;
+    _finishExpired = false;
   }
 
   Future<void> refreshAfterManualFinish() async {
@@ -159,7 +168,8 @@ class ConversationsV3Provider extends ChangeNotifier {
   /// Episode and Home-feed reads wait for this: off for a v3 account, and until the first answer.
   bool get suppressesLegacy => !resolved || v3;
 
-  ServerConversation? get live => v3 && (_live == null || _live!.id != _finishLiveId) ? _live : null;
+  ServerConversation? get live =>
+      v3 && ((_finishExpired && !_finishAccepted) || _live?.id != _finishLiveId) ? _live : null;
 
   @visibleForTesting
   bool get polling => _poll != null;
