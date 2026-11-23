@@ -131,6 +131,36 @@ void main() {
     });
   }
 
+  for (final v3 in [false, true]) {
+    test('manual finish empty body shows one explanation and keeps analytics (v3: $v3)', () async {
+      final dir = await Directory.systemTemp.createTemp('empty-recording-manual-empty-');
+      final world = await CaptureReplayWorld.boot(tempDir: dir);
+      final actions = _ExplainingActions()..v3FinishFeedbackEnabled = v3;
+      final adapter = _RecordingAdapter();
+      addTearDown(() async {
+        await world.dispose();
+        await dir.delete(recursive: true);
+      });
+      world.controller.updateExternalActions(actions);
+      world.processOutcome = () async => const InProgressProcessOutcome(absence: ProcessAbsence.emptyBody);
+      AnalyticsManager.configure(adapter);
+      await AnalyticsManager.init();
+
+      await world.startLiveCapture();
+      world.emitNativeState(PhoneMicCaptureState.running);
+      await world.settle();
+      final pending = world.controller.forceProcessingCurrentConversation(manualFinish: true);
+      await world.settle();
+      await pending;
+      await world.elapse(Duration.zero);
+      await _flush();
+
+      // On v3 the manual finish's settled feedback owns the copy; the controller must not add a second one.
+      expect(actions.emptyExplanations, v3 ? 0 : 1);
+      expect(_produced(adapter), hasLength(1));
+    });
+  }
+
   test('an Apple Watch session is counted as watch when the process body is empty', () async {
     final actions = _ExplainingActions();
     final adapter = _RecordingAdapter();
