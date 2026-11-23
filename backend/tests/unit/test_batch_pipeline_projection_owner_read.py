@@ -69,7 +69,7 @@ def session_fixture(monkeypatch):
     return client, session, ledger, reads
 
 
-@pytest.mark.parametrize('flag,owner_read', [(None, True), ('false', True), ('true', False)])
+@pytest.mark.parametrize('flag,owner_read', [(None, False), ('false', True), ('true', False)])
 def test_valid_receipt_replays_with_configurable_owner_read(session_fixture, monkeypatch, flag, owner_read):
     client, session, ledger, reads = session_fixture
     monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
