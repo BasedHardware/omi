@@ -12,6 +12,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 import database.conversations as conversations_db
+from config.transcript_publication import deferred_transcript_reads_enabled
 from database.transcript_search import InvalidTranscriptCursor, read_transcript_search_page
 from utils.conversations import transcribing_hold
 from utils.conversations.mcp_transcript_search import build_transcript_match_snippets
@@ -64,6 +65,7 @@ def search_transcripts(
     start_dt, end_dt, zone = local_date_window(
         uid, arguments.get('start_date'), arguments.get('end_date'), arguments.get('timezone')
     )
+    include_deferred = deferred_transcript_reads_enabled()
 
     if conversation_id:
         row = fetch_conversation_for_detail(uid, conversation_id, extra_field_paths=['processing_deferred'])
@@ -84,7 +86,13 @@ def search_transcripts(
         )
         try:
             page = read_transcript_search_page(
-                uid, query, cursor=cursor, start_date=start_dt, end_date=end_dt, budget=budget
+                uid,
+                query,
+                cursor=cursor,
+                start_date=start_dt,
+                end_date=end_dt,
+                budget=budget,
+                include_deferred=include_deferred,
             )
         except InvalidTranscriptCursor as exc:
             raise ToolExecutionError(
@@ -183,7 +191,9 @@ def _serialized_chars(matches: List[Dict[str, Any]]) -> int:
 
 
 def _searchable(row: Optional[Dict[str, Any]], start_ts: Optional[float], end_ts: Optional[float], *, scoped: bool):
-    if not row or row.get('is_locked') or row.get('processing_deferred') or row.get('discarded'):
+    if not row or row.get('is_locked') or row.get('discarded'):
+        return False
+    if row.get('processing_deferred') and not deferred_transcript_reads_enabled():
         return False
     if not scoped and not conversations_db.is_visible_conversation(row):
         return False

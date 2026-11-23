@@ -48,6 +48,7 @@ def read_transcript_search_page(
     end_date: datetime | None = None,
     budget: ListReadBudget,
     firestore_client: Any = None,
+    include_deferred: bool = False,
 ) -> TranscriptScanPage:
     """Read at most fifty raw records; signing is independent of rollout levers."""
     scope = query_scope(dict(surface='transcript-search-v1', uid=uid, query=query, start=start_date, end=end_date))
@@ -77,10 +78,18 @@ def read_transcript_search_page(
             raw = document_data_with_revision(doc) or {}
             token = encode_cursor(raw['created_at'], doc.id, scope)
             conversation = None
-            if is_visible_conversation(raw) and not raw.get('is_locked') and not raw.get('processing_deferred'):
+            if (
+                is_visible_conversation(raw)
+                and not raw.get('is_locked')
+                and (include_deferred or not raw.get('processing_deferred'))
+            ):
                 try:
                     conversation = prepare_conversation_for_read(
-                        {**raw, 'id': doc.id}, uid, firestore_client=client, read_budget=budget
+                        {**raw, 'id': doc.id},
+                        uid,
+                        firestore_client=client,
+                        read_budget=budget,
+                        strict_transcript=include_deferred,
                     )
                     budget.check()
                 except ListReadBudgetExhausted:

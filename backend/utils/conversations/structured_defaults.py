@@ -8,6 +8,7 @@ before validation. The stored document is never rewritten.
 
 from typing import Any
 
+from config.transcript_publication import deferred_transcript_reads_enabled
 from models.conversation_enums import CategoryEnum
 
 _UNSET_CATEGORY = object()
@@ -22,6 +23,12 @@ def project_structured_defaults(row: dict[str, Any], *, fold_invalid_category: b
     deciding, and only a *missing* category is filled; such a row is returned unchanged.
     """
     structured = row.get('structured')
+    if (
+        structured is None
+        and (row.get('processing_deferred') or row.get('deferred'))
+        and deferred_transcript_reads_enabled()
+    ):
+        structured = {}
     if not isinstance(structured, dict):
         return row
     category = structured.get('category', _UNSET_CATEGORY)

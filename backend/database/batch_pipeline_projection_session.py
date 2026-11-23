@@ -150,6 +150,7 @@ class ProjectionSession:
         self._privacy_refusal_transaction = None
         self._privacy_replay_transaction = None
         self._privacy_fence_ids: set[str] | None = None
+        self._validated_transcript_revisions: set[tuple[str, int]] = set()
         self.followup_privacy_proof: FollowupPrivacyProof | None = None
         self._followup_privacy_failed = False
 
@@ -365,6 +366,7 @@ class ProjectionSession:
         self._source_deletion_transaction = None
         self._source_deleted = False
         self._privacy_fence_ids = set()
+        self._validated_transcript_revisions.clear()
         self.followup_privacy_proof = None
         self._followup_privacy_failed = False
         self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
@@ -475,6 +477,9 @@ class ProjectionSession:
     def validate_plan(self, transaction, planned):
         # encode is still in assignment's read-only planning phase.
         self.guard(transaction, [planned['id'], *(planned.get('sync_merged_from') or [])])
+        revision = planned.get('sync_content_revision')
+        if type(revision) is int and revision > 0:
+            self._validated_transcript_revisions.add((planned['id'], revision))
 
     def persist(
         self, transaction, planned=None, *, superseded=False, quarantined=False, privacy_deleted=False, silence=False
@@ -534,6 +539,17 @@ class ProjectionSession:
                 assigned.get('id') and (not repeat_only or assigned.get('_sync_lineage_completion_pending'))
             ),
         }
+        # The receipt and the serving rows commit together. Build the bindings
+        # from the winning plan, since candidate preparation can validate
+        # destinations that are later abandoned during reroute or size rollover.
+        revisions = [(row.get('id'), row.get('sync_content_revision')) for row, _ in outputs]
+        if output_ids and all(
+            type(revision) is int and (cid, revision) in self._validated_transcript_revisions
+            for cid, revision in revisions
+        ):
+            receipt['transcript_outputs'] = [
+                {'conversation_id': cid, 'sync_content_revision': revision} for cid, revision in revisions
+            ]
         from database.batch_pipeline_source_reuse import claim
 
         claim(
@@ -615,6 +631,9 @@ class ProjectionSession:
             # The summary describes the whole result, not merely its last part.
             summary.pop('disposition', None)
             summary.pop('superseded_speech_seconds', None)
+            # Each part owns its output revisions. The summary is a completion
+            # receipt and may span several successive revisions of the same ID.
+            summary.pop('transcript_outputs', None)
             if any(part.get('privacy_reason') == 'conversation_deleted' for part in parts.values()):
                 summary['privacy_reason'] = 'conversation_deleted'
             if any(part.get('state') == 'quarantined' for part in parts.values()):

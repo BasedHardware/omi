@@ -339,15 +339,23 @@ def test_batch_fresh_append_measures_final_speech_once_and_replay_is_silent(
     for line in [*lines, *stamp]:
         assert all(secret not in line for secret in ('Fresh projected', 'Earlier sync', 'uid=', 'conversation_id='))
     stored = deepcopy(lane.client.rows[('users', 'u', 'conversations', 'live')])
+    result_key = (f'{lane.namespace}_results', 'segment')
+    receipt = deepcopy(lane.client.rows[result_key]['projection_parts']['0'])
+    assert receipt['transcript_outputs'] == [
+        {'conversation_id': 'live', 'sync_content_revision': stored['sync_content_revision']}
+    ]
     assert not any(key.startswith('_sync_lineage_') for key in stored)
     monkeypatch.setattr(lane.client, 'transaction', lambda: StrictFirestore.transaction(lane.client))
     # Materialize the fixture's known ArrayUnion outputs for receipt replay.
     lane.client.rows[(f'{lane.namespace}_jobs', 'segment')]['conversation_ids'] = ['live']
     lane.client.rows[(f'{lane.namespace}_results', 'segment')]['conversation_ids'] = ['live']
+    stored['sync_content_revision'] += 1
+    lane.client.rows[('users', 'u', 'conversations', 'live')]['sync_content_revision'] += 1
     with caplog.at_level(logging.INFO):
         lane.projector.project('segment')
     assert append_lines(caplog) == lines
     assert lane.client.rows[('users', 'u', 'conversations', 'live')] == stored
+    assert lane.client.rows[result_key]['projection_parts']['0'] == receipt
 
 
 def test_batch_failed_commit_emits_no_append_or_stamp(batch_projection, monkeypatch, caplog):
@@ -361,6 +369,11 @@ def test_batch_failed_commit_emits_no_append_or_stamp(batch_projection, monkeypa
 
         def checked_commit():
             if any(path == ('users', 'u', 'conversations', 'live') for path, _ in transaction.updates):
+                assert any(
+                    path == (f'{lane.namespace}_results', 'segment')
+                    and patch.get('projection_parts', {}).get('0', {}).get('transcript_outputs')
+                    for path, patch in transaction.updates
+                )
                 attempted.append(True)
                 raise RuntimeError('synthetic commit failure')
             commit()
@@ -436,9 +449,52 @@ def test_stamp_gap_reroute_reports_lineage_telemetry_after_batch_commit(batch_pr
     with caplog.at_level(logging.INFO):
         lane.projector.project('segment')
     assert lane.client.rows[('users', 'u', 'conversations', 'live')] == before
+    receipt = lane.client.rows[(f'{lane.namespace}_results', 'segment')]['projection_parts']['0']
+    destination = receipt['conversation_id']
+    assert destination != 'live'
+    assert receipt['transcript_outputs'] == [
+        {
+            'conversation_id': destination,
+            'sync_content_revision': lane.client.rows[('users', 'u', 'conversations', destination)]['sync_content_revision'],
+        }
+    ]
     stamp = [r.message for r in caplog.records if 'event=sync_lineage_stamp_append' in r.message]
     assert stamp == ['event=sync_lineage_stamp_append outcome=stamp_gap_refused span_delta_bucket=0']
     assert not append_lines(caplog)
+
+
+@pytest.mark.parametrize('erased', [False, True])
+def test_split_binding_records_only_fenced_winning_outputs(batch_projection, erased):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    lane = batch_projection
+    session = lane.projector.store.session('segment', lane.binding, 2000, part_index=0, policy=ProjectionPolicy())
+    transaction = lane.client.transaction()
+    output = {'id': 'split-1', 'sync_content_revision': 1}
+    primary = {'id': 'live', 'sync_content_revision': 2, '_sync_size_rollover_rows': [(output, True)]}
+    if erased:
+        lane.client.rows[('users', 'u', 'deleted_conversations', 'split-1')] = {'deleted': True}
+    before = deepcopy(lane.client.rows)
+    session.prepare(transaction)
+    session.validate_plan(transaction, {'id': 'abandoned', 'sync_content_revision': 7})
+    session.validate_plan(transaction, primary)
+    if erased:
+        with pytest.raises(BatchPrivacyBlocked, match='conversation_deleted'):
+            session.validate_plan(transaction, output)
+        assert lane.client.rows == before
+        return
+    session.validate_plan(transaction, output)
+    conversations = lane.client.collection('users').document('u').collection('conversations')
+    transaction.update(conversations.document('live'), {'sync_content_revision': 2})
+    transaction.create(conversations.document('split-1'), output)
+    receipt = session.persist(transaction, (primary, False, []))
+    transaction._commit()
+    stored = lane.client.rows[(f'{lane.namespace}_results', 'segment')]['projection_parts']['0']
+    assert stored == receipt
+    assert receipt['transcript_outputs'] == [
+        {'conversation_id': 'live', 'sync_content_revision': 2},
+        {'conversation_id': 'split-1', 'sync_content_revision': 1},
+    ]
 
 
 def test_batch_invalid_live_timing_is_unknown_on_fleet_path(batch_projection, monkeypatch, caplog):

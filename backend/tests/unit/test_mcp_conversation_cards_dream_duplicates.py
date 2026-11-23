@@ -82,8 +82,9 @@ class _Query:
         return _Query(self._rows, **state)
 
     def where(self, *, filter):
-        assert filter.op_string == '=='
-        return self._with(filters=self._filters + ((filter.field_path, filter.value),))
+        assert filter.op_string in ('==', 'in')
+        values = filter.value if filter.op_string == 'in' else (filter.value,)
+        return self._with(filters=self._filters + ((filter.field_path, values),))
 
     def order_by(self, field_path, direction=None):
         return self
@@ -104,7 +105,7 @@ class _Query:
         return _Ref(doc_id)
 
     def stream(self, **kwargs):
-        rows = [row for row in self._rows if all(row.get(field) == value for field, value in self._filters)]
+        rows = [row for row in self._rows if all(row.get(field) in values for field, values in self._filters)]
         rows.sort(key=lambda row: (row['created_at'], row['id']), reverse=True)
         if self._after is not None:
             rows = [row for row in rows if (row['created_at'], row['id']) < self._after]

@@ -116,8 +116,8 @@ CONVERSATION_KINDS = ('conversation', 'voice_work', 'media', 'background')
 def conversation_state_fields(conversation: Dict[str, Any]) -> Dict[str, Any]:
     """Where a conversation is in its life and what kind of talk it is.
 
-    ``status`` says whether a by-id read is still live (lists hold completed
-    conversations only). ``kind`` separates the wearer's own conversations from
+    ``status`` says whether the conversation is still being processed.
+    ``kind`` separates the wearer's own conversations from
     media and other people's background talk; ``shown_on_home`` is the positive
     form of the stored Home-hiding flag. ``duration_seconds`` is the shared
     duration (transcript speech span, or the wall window for a transcript-free
