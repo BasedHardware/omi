@@ -481,6 +481,73 @@ def test_duplicate_cas_replay_while_disabled_and_rebundle(duplicate_world, monke
     assert original.known[original.file_ids[1]]['expires_at'] == original.prior['expires_at']
 
 
+@pytest.mark.parametrize('winner', ('settlement', 'handoff'))
+def test_phase_one_and_duplicate_receipts_cannot_both_commit(duplicate_world, world, winner):
+    case = duplicate_world
+    client, namespace, uid, cid, conversation, files, begin, originals = world
+    # Same-file reservations already hold duplicate settlement. This race is
+    # between different files that share the canonical record and revision.
+    other_files = [{**entry, 'name': 'handoff-' + entry['name']} for entry in files]
+    pending = begin(other_files)
+    staged = originals(pending)
+    request = case.request('competing-handoff')
+    candidate = case.attempt(request, files=files)
+    assert candidate is not None
+
+    def settle():
+        return case.attempt(request, files=files, expected=candidate.scope, placements=['a', 'b'], commit=True)
+
+    if winner == 'handoff':
+        saved = handoff.commit(client, namespace, pending, staged)
+        assert settle() is None
+        assert case.attempt(request) is None
+        assert handoff.read_status(client, namespace, uid, saved['job_id'])['status'] == 'processing'
+        assert conversation.get().get('record_upload_revision') == 8
+    else:
+        saved = settle()
+        assert saved is not None
+        for operation in (
+            begin,
+            lambda: handoff.check_fence(client, namespace, pending),
+            lambda: handoff.commit(client, namespace, pending, staged),
+        ):
+            with pytest.raises(handoff.HandoffConflict, match='duplicate settlement owns the record'):
+                operation()
+        row = conversation.get().to_dict()
+        assert row['record_upload_revision'] == 7 and 'record_wal_handoff_present' not in row
+        assert handoff.read_status(client, namespace, uid, pending['job_id']) is None
+        assert [
+            doc.to_dict()['kind']
+            for doc in handoff.intake_collection(client, namespace).stream()
+            if doc.id.startswith('wal_file_')
+        ] == [capacity.RESERVATION_KIND] * len(files)
+        assert case.attempt(request).reply == saved.reply
+
+
+def test_duplicate_cas_and_replay_point_reads_are_bounded(duplicate_world):
+    from database import record_wal_duplicate as duplicate
+    from utils.batch_pipeline.record_wal_duplicate import _views
+
+    case = duplicate_world
+    request = case.request('read-budget')
+    budget = ArtifactReadBudget(time.monotonic() + 10, 0, 0)
+    prepare, finish = _views(budget, 'settle')
+    candidate = duplicate.reconcile(case.store, prepare, request, files=case.files)
+    assert candidate is not None
+    saved = duplicate.reconcile(
+        case.store, finish, request, files=case.files, expected=candidate.scope, placements=['a', 'b'], commit=True
+    )
+    assert saved is not None
+    assert 0 < prepare.issued <= 52
+    assert finish.issued == prepare.issued + 1
+    assert 0 < finish.issued <= 53
+    assert prepare.issued + finish.issued <= 105
+
+    replay, _ = _views(budget, 'replay')
+    assert duplicate.reconcile(case.store, replay, request).reply == saved.reply
+    assert 0 < replay.issued <= 56
+
+
 def test_duplicate_terminal_keeps_its_alias_window_after_canonical_expiry(duplicate_world, monkeypatch):
     from config.record_audio import record_identity
     from database import record_wal_duplicate as duplicate

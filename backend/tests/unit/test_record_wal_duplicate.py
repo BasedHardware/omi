@@ -73,6 +73,72 @@ def test_active_proof_uses_anchored_decision_without_shadow_oracle(monkeypatch):
     oracle.assert_not_called()
 
 
+def test_active_holds_repeated_sequence_split_across_archive_packs():
+    first = frames(1, 2, 3, 4)
+    repeated = frames(1, 2, 3, 4, first=4, begin=first[-1].start + 960)
+    assert prove([first, repeated[:2], repeated[2:]], shadow=False)[0] == [None]
+
+
+@pytest.mark.asyncio
+async def test_shadow_holds_and_counts_disagreement_on_packet_placement(monkeypatch):
+    first = frames(1, 2, 3, 4)
+    repeated = frames(1, 2, 3, 4, first=4, begin=first[-1].start + 960)
+    broken = frames(3, 4, first=6, begin=repeated[2].start + 960)
+    runs = [first, repeated[:2], broken]
+    placements, disagree = prove(runs)
+    assert placements[0] and disagree
+
+    claims = {
+        'a': {
+            'capture_root': 'device-root',
+            'clock_epoch': 7,
+            'source_frame_start': 0,
+            'rate_hz': 16000,
+            'frame_count': len(first),
+            'codec': 'opus',
+            'channel': 'mono',
+        }
+    }
+
+    def staged(paths, budget, *, descriptors):
+        descriptors['a'] = {'sample_rate': 16000}
+        return [('a', 32, first)]
+
+    async def inline(executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    snapshot = Mock(return_value=SimpleNamespace(prior=False, scope=SimpleNamespace(source={})))
+    covered = {(r, p) for r, run in enumerate(runs) for p in range(len(run))}
+    inventory = duplicate.Inventory(runs, covered, [], ('archive-session',) * len(runs))
+    monkeypatch.setattr(duplicate, 'run_blocking', inline)
+    monkeypatch.setattr(duplicate, '_claim_process', lambda slot: True)
+    monkeypatch.setattr(duplicate, 'claim_slot', lambda *args, **kwargs: True)
+    monkeypatch.setattr(duplicate.sample, 'read_staged_packets', staged)
+    monkeypatch.setattr(duplicate.ledger, 'reconcile', snapshot)
+    monkeypatch.setattr(duplicate, '_inventory', lambda *args: inventory)
+    disagreement = duplicate.shadow_checks.labels('disagree')._value
+    hold = duplicate.decisions.labels('shadow', 'hold')._value
+    before_disagreement, before_hold = disagreement.get(), hold.get()
+    assert await duplicate.evaluate(None, 'u', 'c', 'omi', 'd', 'id', None, ['a'], claims, 'shadow', 1) is None
+    assert disagreement.get() == before_disagreement + 1
+    assert hold.get() == before_hold + 1
+    snapshot.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ('mode', 'prepare_limit', 'finish_limit'),
+    [('settle', 52, 53), ('shadow', 52, 52), ('replay', 56, 52)],
+)
+def test_proof_read_ceilings_are_fixed(mode, prepare_limit, finish_limit):
+    prepare, finish = duplicate._views(duplicate._budget(), mode)
+    for reads, limit in ((prepare, prepare_limit), (finish, finish_limit)):
+        for _ in range(limit):
+            reads.point(2)
+        assert reads.issued == limit
+        with pytest.raises(ArtifactReadLimit, match='point-read limit'):
+            reads.point(2)
+
+
 @pytest.mark.parametrize(
     'runs',
     (

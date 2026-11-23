@@ -142,6 +142,8 @@ def begin(client, namespace, uid, cid, files, source, device):
             raise BatchPrivacyBlocked('privacy_generation_changed')
         if previous.get('state') == 'accepted':
             return previous
+        if row.get(SETTLED_FIELD) is True:
+            raise HandoffConflict('duplicate settlement owns the record')
         file_rows = []
         new_files = []
         for entry in files:
@@ -210,6 +212,8 @@ def commit(client, namespace, fence, receipts):
         current = ref.get(transaction=tx).to_dict() or {}
         if current.get('state') == 'accepted':
             return current
+        if row.get(SETTLED_FIELD) is True:
+            raise HandoffConflict('duplicate settlement owns the record')
         if current.get('fence_token') != fence['fence_token'] or current.get('fence_until', 0) < time.time():
             raise HandoffConflict('exact request fence lost')
         if len(receipts) != len(fence['files']) or not receipts:
@@ -289,7 +293,7 @@ def commit(client, namespace, fence, receipts):
 def check_fence(client, namespace, fence):
     @firestore.transactional
     def check(tx):
-        _, protection, _ = check_owner_authority(
+        _, protection, row = check_owner_authority(
             client,
             tx,
             fence['owner_id'],
@@ -300,6 +304,8 @@ def check_fence(client, namespace, fence):
         )
         if protection != fence['data_protection_level']:
             raise BatchPrivacyBlocked('data_protection_changed')
+        if row.get(SETTLED_FIELD) is True:
+            raise HandoffConflict('duplicate settlement owns the record')
         current = _ref(client, namespace, fence['job_id']).get(transaction=tx).to_dict() or {}
         if current.get('fence_token') != fence['fence_token'] or current.get('fence_until', 0) < time.time():
             raise HandoffConflict('exact request fence lost')

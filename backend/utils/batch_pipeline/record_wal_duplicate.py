@@ -163,7 +163,7 @@ class Positions(dict):
 
 def _placements(layout, descriptors, claims, inventory, budget, shadow):
     runs = inventory.runs
-    index = index_live(runs, budget.timeout)
+    index = index_live(runs, budget.timeout, include_cross_run_ambiguity=True)
     source_counts = Counter(packet.source for run in runs for packet in run if packet.source is not None)
     positions = Positions(inventory) if shadow else None
     results = []

@@ -26,6 +26,11 @@ closes the commit fence before the worker can dispatch. Once the commit RPC
 has begun, an uncertain result holds for exact replay.
 The legacy coverage transaction preserves a concurrent settlement receipt and
 leaves its status to exact replay.
+Phase 1 checks the same record in its admission and receipt transactions. If
+settlement wins, a preparing handoff cannot revise that record or publish an
+accepted receipt. Its reservations and already-stored originals remain in
+Phase 1 custody for existing cleanup. If the handoff wins, the handoff marker
+blocks new duplicate settlement.
 
 ## Terminal status retention
 
