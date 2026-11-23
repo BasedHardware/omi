@@ -1,4 +1,4 @@
-"""V6 is the default model; the ordered finalize clock stays gated to the v5 rollback."""
+"""V6 is the default model; no model reaches the ordered finalize clock until it is revalidated."""
 
 import asyncio
 import importlib
@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from utils.stt import soniox, soniox_batch
-from utils.stt.soniox_wire_ledger import OrderedSonioxProviderClock, SonioxProviderClock
+from utils.stt.soniox_wire_ledger import SonioxProviderClock
 
 
 @pytest.mark.asyncio
@@ -17,7 +17,8 @@ from utils.stt.soniox_wire_ledger import OrderedSonioxProviderClock, SonioxProvi
     [
         (None, True, True, 16000, None, SonioxProviderClock),
         ('stt-rt-v6', True, True, 16000, None, SonioxProviderClock),
-        ('stt-rt-v5', True, True, 16000, None, OrderedSonioxProviderClock),
+        # Flag on is not enough: no model is validated for the ordered clock.
+        ('stt-rt-v5', True, True, 16000, None, SonioxProviderClock),
         ('stt-rt-v6', True, False, 16000, None, SonioxProviderClock),
         ('stt-rt-v5', True, False, 16000, None, SonioxProviderClock),
         ('stt-rt-v6', False, True, 16000, None, type(None)),
@@ -59,18 +60,6 @@ async def test_model_env_selects_wire_config_and_preserves_clock_gates(
             }
             assert connect.await_args.args[0] == (url or 'wss://stt-rt.soniox.com/transcribe-websocket')
             assert type(sock._provider_clock) is clock_type
-            if clock_type is OrderedSonioxProviderClock:
-                clock = sock._provider_clock
-                clock.begin_finalize()
-                clock.response(
-                    {
-                        'tokens': [{'text': '<fin>', 'is_final': True}],
-                        'final_audio_proc_ms': 121,
-                        'total_audio_proc_ms': 121,
-                    }
-                )
-                assert clock.invalid_from == 0
-                assert not clock.placeable  # A different v6 quantum cannot authorize capture.
             sock._send_task.cancel()
             await asyncio.gather(sock._send_task, sock._recv_task, return_exceptions=True)
     finally:
