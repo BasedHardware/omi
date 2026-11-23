@@ -497,6 +497,44 @@ def test_split_binding_records_only_fenced_winning_outputs(batch_projection, era
     ]
 
 
+@pytest.mark.parametrize('predecessor_delay', [0, 300])
+def test_first_mcp_read_after_canonical_assignment_sees_published_batch(
+    batch_projection, monkeypatch, predecessor_delay
+):
+    from database.batch_pipeline_projection_session import ProjectionPredecessorPending
+    from utils.mcp_server.handlers.conversations import fetch_conversation_for_detail
+
+    lane = batch_projection
+    # The transaction fake supports whole-document BatchGet. Keep real MCP
+    # authorization and decoding around that storage adapter.
+    get_all = lane.client.get_all
+    monkeypatch.setattr(lane.client, 'get_all', lambda refs, **_: get_all(refs))
+    monkeypatch.setattr(db, 'get_firestore_client', lambda: lane.client)
+    text = 'Fresh projected speech is also preserved.'
+    result = lane.client.rows[(f'{lane.namespace}_results', 'segment')]
+    result['committed_at'] = 2000
+    if predecessor_delay:
+        result['previous_segment_id'] = 'previous'
+        with pytest.raises(ProjectionPredecessorPending):
+            lane.projector.project('segment')
+
+    before = fetch_conversation_for_detail('u', 'live')
+    assert before is not None
+    assert all(text not in segment['text'] for segment in before['transcript_segments'])
+
+    if predecessor_delay:
+        lane.client.rows[(f'{lane.namespace}_owners', owner_key('u'))]['projection_watermark'] = 'previous'
+        monkeypatch.setattr(lane.projector, 'clock', lambda: 2000 + predecessor_delay)
+    lane.projector.project('segment')
+
+    after = fetch_conversation_for_detail('u', 'live')
+    assert any(text in segment['text'] for segment in after['transcript_segments'])
+    receipt = lane.client.rows[(f'{lane.namespace}_results', 'segment')]['projection_parts']['0']
+    assert receipt['persisted_at'] - result['committed_at'] == predecessor_delay
+    revision = lane.client.rows[('users', 'u', 'conversations', 'live')]['sync_content_revision']
+    assert receipt['transcript_outputs'] == [{'conversation_id': 'live', 'sync_content_revision': revision}]
+
+
 def test_batch_invalid_live_timing_is_unknown_on_fleet_path(batch_projection, monkeypatch, caplog):
     lane = batch_projection
     monkeypatch.setenv('SYNC_SAFETY_WAL_DEDUPE_ENABLED', 'true')
