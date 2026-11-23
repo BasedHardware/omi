@@ -68,6 +68,20 @@ gauges. Leave optional maintenance and serving settings unset. Python owns ordin
   main `release_sha`. Keep the other inputs at their defaults. The normal admission and
   protected prod Environment apply. Record the source and `gcr.io/based-hardware/workerd@sha256:…`
   from the Actions summary. Use its digest as `WORKERD_DIGEST`.
+- The job keys the image by the git tree of `backend-go/` (SCA-3883). The build context, this
+  chart and `values-prod.yaml` all live in that tree. A later admitted SHA with the same tree reuses
+  the published digest (`reused` in the summary) instead of rebuilding.
+
+### Release identity and carry-forward
+
+A workerd go-ahead names the output of
+`backend-go/deploy/workerd/release-identity.sh --digest "$WORKERD_DIGEST" --ref <source SHA> -f <Release values file>`:
+`{backend_go_tree, digest, rendered_sha256}`. The go-ahead stays valid while main moves, as long as
+rerunning the script at install time, with `--ref` set to the SHA being installed, prints the same
+object. A merge that doesn't touch `backend-go/` keeps the tree and the go-ahead. Any change to the
+tree, the digest or the Release values changes the identity and needs a new go-ahead. The script
+exits nonzero if it can't resolve the ref, read a values file or render the chart. Treat that as a
+refusal, never as a match. `test-render.sh` covers these cases.
 - Confirm the production GKE context and `prod-omi-backend` namespace. On the existing
   `prod-jobs` Postgres 16 instance, David provisions a dedicated queue database and
   migrator and runtime roles with the privileges described above. From GKE, the database

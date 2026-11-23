@@ -828,20 +828,56 @@ jobs:
           [[ "$ADMITTED_SHA" =~ ^[a-f0-9]{40}$ && "$(git rev-parse HEAD)" == "$ADMITTED_SHA" ]]
           repository="gcr.io/based-hardware/workerd"
           image="$repository:${ADMITTED_SHA:0:7}"
+          # SCA-3883: the build context is backend-go/ only, so its git tree identifies the
+          # image. A later admitted SHA with the same tree reuses the published digest instead
+          # of rebuilding, and a Release go-ahead bound to {digest, backend_go_tree} survives
+          # main moving. The tree also covers the chart and values-prod.yaml.
+          tree="$(git rev-parse "$ADMITTED_SHA:backend-go")"
+          [[ "$tree" =~ ^[a-f0-9]{40}$ ]]
+          tree_image="$repository:tree-${tree:0:20}"
 
-          if digest="$(gcloud container images describe "$image" --format='value(image_summary.digest)' 2>"$RUNNER_TEMP/workerd-describe.err")"; then
+          describe() {
+            gcloud container images describe "$1" --format='value(image_summary.digest)' 2>"$RUNNER_TEMP/workerd-describe.err"
+          }
+          missing() {
+            grep -qF "[$1] is not found or is not a valid name" "$RUNNER_TEMP/workerd-describe.err"
+          }
+          label() {
+            docker buildx imagetools inspect "$repository@$1" --format "{{ index .Image.Config.Labels \"$2\" }}"
+          }
+
+          outcome=''
+          if digest="$(describe "$tree_image")"; then
             [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
-            revision="$(docker buildx imagetools inspect "$repository@$digest" --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}')"
+            if [[ "$(label "$digest" omi.workerd.backend-go-tree)" != "$tree" ]]; then
+              echo "::error::Existing workerd tree tag has a different backend-go tree."
+              exit 1
+            fi
+            outcome=reused
+          elif ! missing "$tree_image"; then
+            cat "$RUNNER_TEMP/workerd-describe.err" >&2
+            exit 1
+          elif digest="$(describe "$image")"; then
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            revision="$(label "$digest" org.opencontainers.image.revision)"
             if [[ "$revision" != "$ADMITTED_SHA" ]]; then
               echo "::error::Existing workerd tag has a different source revision."
               exit 1
             fi
-          elif grep -qF "[${image}] is not found or is not a valid name" "$RUNNER_TEMP/workerd-describe.err"; then
+            # Published before tree tags: tag it only if its recorded tree matches.
+            if [[ "$(label "$digest" omi.workerd.backend-go-tree)" == "$tree" ]]; then
+              gcloud container images add-tag --quiet "$repository@$digest" "$tree_image"
+            fi
+            outcome=existing
+          elif missing "$image"; then
             docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$ADMITTED_SHA" \
+              --label "omi.workerd.backend-go-tree=$tree" \
               --tag "$image" --file backend-go/Dockerfile backend-go
             docker push "$image"
             digest="$(gcloud container images describe "$image" --format='value(image_summary.digest)')"
             [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            gcloud container images add-tag --quiet "$repository@$digest" "$tree_image"
+            outcome=built
           else
             cat "$RUNNER_TEMP/workerd-describe.err" >&2
             exit 1
@@ -850,7 +886,9 @@ jobs:
           {
             echo "### Workerd production image published"
             echo "- Source SHA: \`$ADMITTED_SHA\`"
-            echo "- Image: \`$repository@$digest\`"
+            echo "- backend-go tree: \`$tree\`"
+            echo "- Image: \`$repository@$digest\` ($outcome)"
+            echo "- Release identity: \`backend-go/deploy/workerd/release-identity.sh --digest $digest\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Plan B B2 release train: build-only also publishes every role image
