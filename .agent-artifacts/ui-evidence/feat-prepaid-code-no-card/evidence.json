@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-paywall-switch-off.png",
+      "platform": "mobile-ios",
+      "description": "Trial paywall with the switch off: today's code hint",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-paywall-have-a-code.png",
+      "platform": "mobile-ios",
+      "description": "Trial paywall with the switch on: Have a code?",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-plans-switch-off.png",
+      "platform": "mobile-ios",
+      "description": "Plans sheet with the switch off: today's promo code row",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-plans-have-a-code.png",
+      "platform": "mobile-ios",
+      "description": "Plans sheet with the switch on: Have a code? above Promo code",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-sheet-empty.png",
+      "platform": "mobile-ios",
+      "description": "Redeem a code sheet: one field, one button",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-error-invalid.png",
+      "platform": "mobile-ios",
+      "description": "Invalid code",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "007-mobile-ios-error-used.png",
+      "platform": "mobile-ios",
+      "description": "Code already used",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "008-mobile-ios-error-expired.png",
+      "platform": "mobile-ios",
+      "description": "Expired code",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "009-mobile-ios-error-not-prepaid.png",
+      "platform": "mobile-ios",
+      "description": "Partial discount code refused, not consumed",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "010-mobile-ios-success.png",
+      "platform": "mobile-ios",
+      "description": "Success: plan and end date",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "011-mobile-ios-plans-after-redeem.png",
+      "platform": "mobile-ios",
+      "description": "Plans sheet after redeeming: plan ends on the prepaid date",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "012-mobile-ios-success-dark.png",
+      "platform": "mobile-ios",
+      "description": "Success in dark mode",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
