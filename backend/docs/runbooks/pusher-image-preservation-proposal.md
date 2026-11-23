@@ -246,7 +246,11 @@ Immediately after the authorized move, run the same command with
 different protected receipt. Keep the same proof and isolated restored object.
 The helper reads the observed production candidate and fresh resourceVersion,
 server-dry-runs the exact inverse against that live object, compares the result
-with the rehearsed baseline, and rechecks the protected state. On any failure,
+with the rehearsed baseline, and rechecks the protected state. The post-move
+comparison accounts for a forward change to the Deployment controller’s
+`deployment.kubernetes.io/revision` annotation. The inverse dry run must
+preserve the live annotation, and a resourceVersion change during verification
+still refuses. On any failure,
 stop progression, retain the failure receipt, and reconcile the live object
 before another write. Actual rollback requires a separately authorized action.
 

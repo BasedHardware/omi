@@ -30,6 +30,7 @@ ADMISSION = {
     "validatingadmissionpolicybindings.admissionregistration.k8s.io",
 }
 STORAGE_METADATA = {"uid", "resourceVersion", "generation", "creationTimestamp", "managedFields"}
+DEPLOYMENT_REVISION = "deployment.kubernetes.io/revision"
 
 
 class Refused(Exception):
@@ -83,6 +84,27 @@ def current_image(obj):
 def with_image(obj, image):
     expected = copy.deepcopy(comparable(obj))
     expected["spec"]["template"]["spec"]["containers"][container_index(obj)]["image"] = image
+    return expected
+
+
+def post_move_baseline(isolated, live, prior_image):
+    expected = with_image(isolated, prior_image)
+    revisions = []
+    for deployment in (isolated, live):
+        annotation = deployment["metadata"].get("annotations", {}).get(DEPLOYMENT_REVISION)
+        if annotation is None:
+            revisions.append(0)
+        else:
+            require(re.fullmatch(r"[1-9][0-9]{0,18}", annotation), "invalid_deployment_revision")
+            revision = int(annotation)
+            require(revision < 2**63, "invalid_deployment_revision")
+            revisions.append(revision)
+    baseline_revision, live_revision = revisions
+    require(live_revision >= baseline_revision, "deployment_revision_regressed")
+    if live_revision > baseline_revision:
+        # The live controller can advance this annotation after the image move.
+        # The isolated API server has no Deployment controller.
+        expected["metadata"].setdefault("annotations", {})[DEPLOYMENT_REVISION] = str(live_revision)
     return expected
 
 
@@ -405,7 +427,7 @@ class Rehearsal:
         self.prior = proof["prior_image"]
         self.candidate = proof["candidate_image"]
 
-    def observe(self, expected_live, expected_isolated):
+    def observe(self, expected_live, expected_isolated, *, post_move=False):
         validate_proof(self.proof)
         live, isolated = self.live.deployment(), self.isolated.deployment()
         require(version(live)[0] == self.proof["live_deployment"][0], "live_uid_changed")
@@ -415,7 +437,8 @@ class Rehearsal:
             current_image(live) == expected_live and current_image(isolated) == expected_isolated,
             "observed_image_changed",
         )
-        require(with_image(live, self.prior) == with_image(isolated, self.prior), "deployment_baseline_differs")
+        expected = post_move_baseline(isolated, live, self.prior) if post_move else with_image(isolated, self.prior)
+        require(with_image(live, self.prior) == expected, "deployment_baseline_differs")
 
         require(
             self.live.identity() == self.isolated.identity() == self.proof["effective_user"],
@@ -459,8 +482,10 @@ class Rehearsal:
         validate_proof(self.proof)
         return live, isolated, [live_versions, isolated_versions]
 
-    def recheck(self, live, isolated, policies):
-        fresh_live, fresh_isolated, fresh_policies = self.observe(current_image(live), current_image(isolated))
+    def recheck(self, live, isolated, policies, *, post_move=False):
+        fresh_live, fresh_isolated, fresh_policies = self.observe(
+            current_image(live), current_image(isolated), post_move=post_move
+        )
         require(
             version(fresh_live) == version(live)
             and comparable(fresh_live) == comparable(live)
@@ -523,7 +548,7 @@ class Rehearsal:
             and rehearsal["live_baseline"] == self.proof["live_deployment"],
             "rehearsal_receipt_mismatch",
         )
-        live, prior, policies = self.observe(self.candidate, self.prior)
+        live, prior, policies = self.observe(self.candidate, self.prior, post_move=True)
         result["observed_candidate"] = version(live)
         require(version(live)[1] != rehearsal["live_baseline"][1], "live_candidate_not_persisted")
         require(
@@ -532,8 +557,10 @@ class Rehearsal:
         )
         result["stage"] = "server_dry_run_exact_live_inverse"
         reverse = self.live.transition(live, self.candidate, self.prior)
-        require(comparable(reverse) == comparable(prior), "live_inverse_differs_from_rehearsal")
-        self.recheck(live, prior, policies)
+        require(
+            comparable(reverse) == post_move_baseline(prior, live, self.prior), "live_inverse_differs_from_rehearsal"
+        )
+        self.recheck(live, prior, policies, post_move=True)
 
 
 def read_json(path):

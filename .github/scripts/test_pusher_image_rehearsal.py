@@ -189,6 +189,8 @@ class RehearsalTest(unittest.TestCase):
 
     def test_forward_real_inverse_and_immediate_live_preview(self):
         seen = []
+        for cluster in (self.live, self.isolated):
+            cluster.target["metadata"]["annotations"] = {helper.DEPLOYMENT_REVISION: "7"}
 
         def observe(old, new, dry):
             if helper.current_image(old) == CANDIDATE and helper.current_image(new) == PRIOR:
@@ -222,11 +224,53 @@ class RehearsalTest(unittest.TestCase):
         # Simulate a separately authorized Release move. The helper has no live write command.
         self.live.target["spec"] = helper.with_image(prior, CANDIDATE)["spec"]
         self.live.target["metadata"]["resourceVersion"] = "34"
+        self.live.target["metadata"]["annotations"][helper.DEPLOYMENT_REVISION] = "8"
         after = self.result("verify-inverse")
         self.rehearsal.verify_inverse(result, after)
         self.assertEqual(seen[-1], ("target-live", "34", True))
+        self.assertEqual(self.live.requests[-1][1], helper.guarded_patch(self.live.target, CANDIDATE, PRIOR))
+        self.assertEqual(self.live.target["metadata"]["annotations"][helper.DEPLOYMENT_REVISION], "8")
+        self.assertEqual(self.live.config, config)
         self.assertEqual(helper.current_image(self.live.target), CANDIDATE)
         self.assertTrue(all(dry for dry, _ in self.live.requests))
+
+    def test_post_move_revision_exception_refuses_drift_and_admission_rewrites(self):
+        for cluster in (self.live, self.isolated):
+            cluster.target["metadata"]["annotations"] = {helper.DEPLOYMENT_REVISION: "7", "fixture": "preserved"}
+        result = self.result("rehearse")
+        self.rehearsal.rehearse(result)
+        result["status"] = "PASS"
+        self.live.target["spec"] = helper.with_image(self.live.target, CANDIDATE)["spec"]
+        self.live.target["metadata"]["resourceVersion"] = "34"
+        candidate = copy.deepcopy(self.live.target)
+        requests_before = len(self.live.requests)
+        for revision, other_annotation, reason in (
+            ("6", "preserved", "deployment_revision_regressed"),
+            (None, "preserved", "deployment_revision_regressed"),
+            ("invalid", "preserved", "invalid_deployment_revision"),
+            ("8", "changed", "deployment_baseline_differs"),
+        ):
+            with self.subTest(revision=revision, other_annotation=other_annotation):
+                self.live.target = copy.deepcopy(candidate)
+                annotations = self.live.target["metadata"]["annotations"]
+                if revision is None:
+                    del annotations[helper.DEPLOYMENT_REVISION]
+                else:
+                    annotations[helper.DEPLOYMENT_REVISION] = revision
+                annotations["fixture"] = other_annotation
+                with self.assertRaisesRegex(helper.Refused, reason):
+                    self.rehearsal.verify_inverse(result, self.result("verify-inverse"))
+                self.assertEqual(len(self.live.requests), requests_before)
+
+        self.live.target = copy.deepcopy(candidate)
+        self.live.target["metadata"]["annotations"][helper.DEPLOYMENT_REVISION] = "8"
+
+        def rewrite_revision(old, new, dry):
+            new["metadata"]["annotations"][helper.DEPLOYMENT_REVISION] = "9"
+
+        self.live.admit = rewrite_revision
+        with self.assertRaisesRegex(helper.Refused, "admission_changed_more_than_image"):
+            self.rehearsal.verify_inverse(result, self.result("verify-inverse"))
 
     def test_refuses_different_identity_selectors_and_policy_discovery(self):
         split = [
