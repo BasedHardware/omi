@@ -54,6 +54,7 @@ class ConversationsV3Provider extends ChangeNotifier {
   String? _finishRecordingId;
   String? _finishLiveId;
   bool _suppressListening = false;
+  String? _finishCaptureId;
   bool _finishAccepted = false;
   bool _finishExpired = false;
   Timer? _finishExpiry;
@@ -61,13 +62,15 @@ class ConversationsV3Provider extends ChangeNotifier {
   bool get finishFeedbackEnabled => v3 && !const bool.fromEnvironment('OMI_V3_FINISH_FEEDBACK_OFF');
   ServerConversation? get finishRow => finishFeedbackEnabled && !_finishExpired ? _finishRow : null;
 
-  bool get suppressListeningAfterFinish => finishFeedbackEnabled && _suppressListening;
+  bool suppressListeningAfterFinish(String? captureId) =>
+      finishFeedbackEnabled && _suppressListening && _finishCaptureId == captureId;
 
-  void startManualFinish(ServerConversation row, String? recordingId, {String? liveConversationId}) {
+  void startManualFinish(ServerConversation row, String? recordingId, {String? liveConversationId, String? captureId}) {
     if (!finishFeedbackEnabled) return;
     _clearManualFinish();
     _finishRow = row;
     _suppressListening = true;
+    _finishCaptureId = captureId;
     _finishRecordingId = recordingId;
     final live = _live;
     if (live != null &&
@@ -88,7 +91,7 @@ class ConversationsV3Provider extends ChangeNotifier {
       _finishAccepted = true;
       _finishExpired = false;
       _suppressListening = true;
-      _armFinishExpiry();
+      _finishExpiry?.cancel();
       _finishRecordingId = result.id;
       if (result.v3?.recording != true) {
         _finishLiveId = result.id;
@@ -135,8 +138,11 @@ class ConversationsV3Provider extends ChangeNotifier {
     _finishExpiry?.cancel();
     _finishRow = null;
     _finishRecordingId = null;
-    if (!keepClosedLive) _finishLiveId = null;
-    _suppressListening = false;
+    if (!keepClosedLive) {
+      _finishLiveId = null;
+      _finishCaptureId = null;
+      _suppressListening = false;
+    }
     _finishAccepted = false;
     _finishExpired = false;
   }

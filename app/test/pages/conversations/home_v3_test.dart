@@ -206,6 +206,9 @@ class _LiveCapture extends CaptureProvider {
   String? get liveCaptureSource => streaming ? 'omi' : null;
 
   bool streaming = true;
+
+  @override
+  String? activeRecordingId = 'capture-1';
   void Function(String?)? onManualEnd;
 
   @override
@@ -798,6 +801,7 @@ void main() {
             OptimisticProcessingPlaceholder.conversation(),
             'rec-1',
             liveConversationId: id,
+            captureId: home.capture.activeRecordingId,
           );
       await tester.tap(find.text('Launch checklist'));
       await tester.pump();
@@ -1333,11 +1337,16 @@ void main() {
         final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
         final v3 = home.conversationsV3;
         final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'rec-1');
-        v3.startManualFinish(pending, null, liveConversationId: 'live-1');
+        v3.startManualFinish(pending, null, liveConversationId: 'live-1', captureId: home.capture.activeRecordingId);
         await tester.pump();
         expect(find.text('Launch checklist'), findsNothing);
         expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
         expect(find.byType(V3LivePlaceholderRow), findsNothing);
+        final processing = find.byKey(const Key('home_processing_row'));
+        final navigator = Navigator.of(tester.element(processing));
+        await tester.tap(processing);
+        await tester.pump();
+        expect(navigator.canPop(), isFalse, reason: 'the placeholder has no result page yet');
         await shoot(tester, '001-mobile-ios-v3-manual-finish-processing');
 
         final recording = home.conversations.conversations.firstWhere((row) => row.id == 'rec-1');
@@ -1352,8 +1361,15 @@ void main() {
         expect(find.byKey(const Key('home_processing_row')), findsOneWidget,
             reason: 'a failed Activity row does not take over the Home slot');
 
-        home.capture.streaming = false;
-        home.capture.ping();
+        home.liveOpen = false;
+        await v3.refresh();
+        final reads = home.conversations.listReads;
+        await tester.pump(const Duration(minutes: 3));
+        v3.tick();
+        await tester.pump();
+        expect(home.conversations.listReads, greaterThan(reads));
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+
         home.conversations.upsertConversation(
           _conversation('live-1', home.liveStart, 'Launch checklist', v3: _done),
           preserveHomeStep: false,
@@ -1365,7 +1381,7 @@ void main() {
         expect(find.byType(V3LivePlaceholderRow), findsNothing);
         await shoot(tester, '002-mobile-ios-v3-manual-finish-summary');
 
-        home.capture.streaming = true;
+        home.capture.activeRecordingId = 'capture-2';
         home.capture.ping();
         await tester.pump();
         expect(find.byType(V3LivePlaceholderRow), findsOneWidget,

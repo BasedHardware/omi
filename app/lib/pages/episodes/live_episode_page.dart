@@ -168,10 +168,10 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     var stays = false;
     try {
       final outcome = await finishLiveCapture(
+        context,
         provider,
         episodes: _episodes,
         retry: _retryPending,
-        v3Feedback: context.read<ConversationsV3Provider?>()?.finishFeedbackEnabled ?? false,
       );
       if (!mounted) return;
       stays = presentFinishOutcome(

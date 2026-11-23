@@ -869,6 +869,7 @@ class _ConversationsPageState extends State<ConversationsPage>
     final episodes = context.watch<EpisodeProvider?>();
     final episodesOn = episodes?.enabled == true;
     final streaming = context.select<CaptureProvider, bool>((c) => EpisodePresentation.streamingSource(c) != null);
+    final captureId = context.select<CaptureProvider, String?>((c) => c.activeRecordingId);
     final episodeLive = episodesOn && streaming;
     final filling = episodesOn ? fillingSeconds(_pendingWork.pending) : const <String, int>{};
     // Recordings and conversations (v3): a flat list of conversations, the one in progress on top.
@@ -950,7 +951,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                 ));
         final livePlaceholder = v3Home &&
             streaming &&
-            !v3!.suppressListeningAfterFinish &&
+            !v3!.suppressListeningAfterFinish(captureId) &&
             (v3Live == null || v3Live.v3?.homeHidden == true) &&
             !liveRemoved &&
             !callActive;
@@ -1509,6 +1510,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                             if (row.isFirst) DateListItem(date: row.date, isFirst: true),
                             ProcessingConversationRow(
                                 conversation: row.conversation!,
+                                openable: !identical(row.conversation, manualFinish),
                                 step: homeStepOf(row.conversation!) ?? HomeStep.transcribing),
                           ],
                         );

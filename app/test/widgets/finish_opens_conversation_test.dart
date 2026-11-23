@@ -499,6 +499,23 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('the shared Home finish helper classifies a v3 404 as a failure', (tester) async {
+    final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
+    addTearDown(v3.dispose);
+    final capture = _Capture()
+      ..verifiedLiveServerRecordingId = 'rec-1'
+      ..failure = ProcessAbsence.notFound;
+    await _pump(tester, capture, v3: v3);
+    final navigator = Navigator.of(tester.element(find.byType(LiveEpisodePage)));
+    navigator.pop();
+    await tester.pumpAndSettle();
+
+    final outcome = await finishLiveCapture(tester.element(find.text('home')), capture);
+    expect(outcome, isA<FinishFailed>());
+    expect(capture.finishes, 1);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final absence in [ProcessAbsence.notFound, ProcessAbsence.emptyBody, ProcessAbsence.transport, null]) {
     testWidgets('detached v3 finish shows the typed message for $absence', (tester) async {
       var liveReads = 0;

@@ -26,7 +26,8 @@ class _RecordingActions extends NoopCaptureExternalActions {
   ProcessAbsence? manualFinishAbsence;
 
   @override
-  void onManualFinishStarted(ServerConversation placeholder, String? recordingId, {String? liveConversationId}) {
+  void onManualFinishStarted(ServerConversation placeholder, String? recordingId,
+      {String? liveConversationId, String? captureId}) {
     manualFinishRow = placeholder;
   }
 

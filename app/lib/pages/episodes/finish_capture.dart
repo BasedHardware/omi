@@ -34,11 +34,12 @@ HeldCapture? holdCapture(CaptureProvider provider) => provider.segments.isEmpty 
 /// [retry] sends Process Now again after a failed Finish even when the page shows nothing new: the
 /// failed request processed nothing, and the controller already moved its transcript aside.
 Future<FinishOutcome> finishLiveCapture(
+  BuildContext context,
   CaptureProvider provider, {
   EpisodeProvider? episodes,
   bool retry = false,
-  bool v3Feedback = false,
 }) async {
+  final v3Feedback = context.read<ConversationsV3Provider?>()?.finishFeedbackEnabled ?? false;
   final preview = provider.livePreview;
   final closed = provider.lastServerClose;
   final recentClose =
@@ -172,10 +173,7 @@ bool presentFinishOutcome(
 
 /// Try Again for a Finish that failed on Home: send it again and show its outcome there.
 Future<void> retryFinishFromHome(BuildContext context, CaptureProvider provider) async {
-  final outcome = await finishLiveCapture(provider,
-      episodes: context.read<EpisodeProvider?>(),
-      retry: true,
-      v3Feedback: context.read<ConversationsV3Provider?>()?.finishFeedbackEnabled ?? false);
+  final outcome = await finishLiveCapture(context, provider, episodes: context.read<EpisodeProvider?>(), retry: true);
   if (!context.mounted) return;
   presentFinishOutcome(context, outcome,
       entry: FinishEntry.home, onRetry: () => retryFinishFromHome(context, provider));

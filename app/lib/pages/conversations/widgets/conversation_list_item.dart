@@ -802,7 +802,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     final capture = context.read<CaptureProvider>();
     final episodes = context.read<EpisodeProvider?>();
     HapticFeedback.mediumImpact();
-    final outcome = await finishLiveCapture(capture, episodes: episodes);
+    final outcome = await finishLiveCapture(context, capture, episodes: episodes);
     if (!context.mounted) return;
     presentFinishOutcome(context, outcome,
         entry: FinishEntry.home, onRetry: () => retryFinishFromHome(context, capture));

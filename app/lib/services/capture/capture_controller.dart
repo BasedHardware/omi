@@ -4375,7 +4375,8 @@ class CaptureController extends ChangeNotifier
     try {
       // Publish the skeleton before waiting for disk, preserving immediate Process Now feedback.
       if (showManualFinish) {
-        actions.onManualFinishStarted(placeholder, sourceId, liveConversationId: liveConversationId);
+        actions.onManualFinishStarted(placeholder, sourceId,
+            liveConversationId: liveConversationId, captureId: recordingSessionId);
       }
       actions.addProcessingConversation(placeholder);
       _finalizeGate.markFinalized();
