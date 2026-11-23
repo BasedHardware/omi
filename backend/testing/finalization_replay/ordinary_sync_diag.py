@@ -86,6 +86,10 @@ def _seed_worker_intent(state):
     return job
 
 
+class UnexpectedGoOutcome(RuntimeError):
+    """An ordinary-sync fixture stopped before its expected terminal path."""
+
+
 def _go_sync(state, binary, database, key, url, firestore_proxy):
     with suspend_meter():
         job = _seed_worker_intent(state)
@@ -130,14 +134,23 @@ def _go_sync(state, binary, database, key, url, firestore_proxy):
     }
     state.queue_fanout_key = fanout
     state.go_evidence = {
+        'firestore_rpc_failures': firestore_proxy.rpc_failures(),
         'job': {
             'state': row.get('status', ''),
             'outcome': result[1],
             'cause': cause[1] if cause else '',
-        }
+        },
     }
     if result[1] != 'success':
-        return result[1]
+        if (
+            state.case['name'] == 'unreadable-ciphertext-dead-letters'
+            and result[1] == 'failure'
+            and cause is not None
+            and cause[1] == 'conversation_unreadable'
+            and row.get('status') == 'dead_letter'
+        ):
+            return result[1]
+        raise UnexpectedGoOutcome
     with suspend_meter():
         final = state.conversation.get().to_dict()
     return 'discarded' if final.get('discarded') else final['status']
@@ -280,6 +293,19 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                         )
                     if getattr(state, 'diag_missing_module', None):
                         out['errors'][side] = f'ModuleNotFoundError: {state.diag_missing_module}'
+                    if side in out:
+                        calls = getattr(state, 'replay_token_calls', [])
+                        out[side]['provider_token_calls'] = calls
+                        prompt = sum(call['input'] for call in calls if not call['embedding'])
+                        completion = sum(call['output'] for call in calls if not call['embedding'])
+                        out[side]['cost']['llm_tokens'] = {
+                            'prompt': prompt,
+                            'completion': completion,
+                            'total': prompt + completion,
+                        }
+                        out[side]['cost']['embedding_tokens'] = sum(
+                            call['input'] for call in calls if call['embedding']
+                        )
                     if server.errors:
                         out['errors'][side] = server.errors[0]
     return outputs

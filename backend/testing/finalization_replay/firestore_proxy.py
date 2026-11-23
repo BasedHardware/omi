@@ -8,6 +8,20 @@ from threading import Lock
 import grpc
 from google.cloud.firestore_v1.types import firestore
 
+# Bound loopback calls to less than the worker subprocess timeout. grpcio
+# 1.66 returns a finite-looking seconds value (~9e18) when the incoming RPC
+# has no deadline. Passing that value to another RPC immediately expires it.
+_UPSTREAM_TIMEOUT_SECONDS = 60.0
+
+
+def _forward_options(context):
+    remaining = context.time_remaining()
+    return {
+        'metadata': tuple((item.key, item.value) for item in context.invocation_metadata()),
+        'timeout': _UPSTREAM_TIMEOUT_SECONDS if remaining is None else min(remaining, _UPSTREAM_TIMEOUT_SECONDS),
+    }
+
+
 _SERVICE = 'google.firestore.v1.Firestore'
 _SERVER_STREAMING = {'batch_get_documents', 'run_query', 'run_aggregation_query', 'list_documents'}
 _BIDI_STREAMING = {'write', 'listen'}
@@ -102,6 +116,7 @@ class FirestoreProxy:
             }
             self._home_receipt_trace = {'set_true': 0, 'set_false': 0, 'deleted': 0, 'other_write': 0}
             self._operation_sources = {}
+            self._rpc_failures = {}
 
     def counts(self):
         with self._lock:
@@ -114,6 +129,15 @@ class FirestoreProxy:
     def operation_sources(self):
         with self._lock:
             return {path: dict(counts) for path, counts in self._operation_sources.items()}
+
+    def rpc_failures(self):
+        with self._lock:
+            return {method: dict(counts) for method, counts in self._rpc_failures.items()}
+
+    def _record_rpc_failure(self, method, code):
+        with self._lock:
+            counts = self._rpc_failures.setdefault(method, {})
+            counts[code.name] = counts.get(code.name, 0) + 1
 
     def _add(self, **values):
         with self._lock:
@@ -312,13 +336,12 @@ class FirestoreProxy:
                     call = self._channel.unary_stream(
                         path, request_serializer=lambda value: value, response_deserializer=lambda value: value
                     )
-                    kwargs = {'metadata': tuple((item.key, item.value) for item in context.invocation_metadata())}
-                    if context.time_remaining() is not None:
-                        kwargs['timeout'] = context.time_remaining()
+                    kwargs = _forward_options(context)
                     for response in call(request_bytes, **kwargs):
                         self._record_response(method, response)
                         yield response
                 except grpc.RpcError as error:
+                    self._record_rpc_failure(method, error.code())
                     context.abort(error.code(), error.details())
 
             return grpc.unary_stream_rpc_method_handler(
@@ -347,9 +370,7 @@ class FirestoreProxy:
                 call = self._channel.stream_stream(
                     path, request_serializer=lambda value: value, response_deserializer=lambda value: value
                 )
-                kwargs = {'metadata': tuple((item.key, item.value) for item in context.invocation_metadata())}
-                if context.time_remaining() is not None:
-                    kwargs['timeout'] = context.time_remaining()
+                kwargs = _forward_options(context)
                 try:
                     for response in call(forwarding_requests(), **kwargs):
                         if method == 'write':
@@ -359,6 +380,7 @@ class FirestoreProxy:
                                 self._record_committed_home_writes('write', request, response)
                         yield response
                 except grpc.RpcError as error:
+                    self._record_rpc_failure(method, error.code())
                     context.abort(error.code(), error.details())
 
             return grpc.stream_stream_rpc_method_handler(
@@ -372,13 +394,12 @@ class FirestoreProxy:
                 call = self._channel.unary_unary(
                     path, request_serializer=lambda value: value, response_deserializer=lambda value: value
                 )
-                kwargs = {'metadata': tuple((item.key, item.value) for item in context.invocation_metadata())}
-                if context.time_remaining() is not None:
-                    kwargs['timeout'] = context.time_remaining()
+                kwargs = _forward_options(context)
                 response = call(request_bytes, **kwargs)
                 self._record_committed_home_writes(method, request, response)
                 return response
             except grpc.RpcError as error:
+                self._record_rpc_failure(method, error.code())
                 context.abort(error.code(), error.details())
 
         return grpc.unary_unary_rpc_method_handler(

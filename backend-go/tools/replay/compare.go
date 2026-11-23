@@ -22,6 +22,13 @@ type admission struct {
 	Revision   int64  `json:"revision,omitempty"`
 }
 
+type providerTokenCall struct {
+	Feature   string `json:"feature"`
+	Input     int64  `json:"input"`
+	Output    int64  `json:"output"`
+	Embedding bool   `json:"embedding"`
+}
+
 type observation struct {
 	OwnerID                        string                     `json:"owner_id"`
 	ConversationID                 string                     `json:"conversation_id"`
@@ -33,6 +40,7 @@ type observation struct {
 	EpisodeAttachMemoFailureReason string                     `json:"episode_attach_memo_failure_reason,omitempty"`
 	Started                        time.Time                  `json:"started_at"`
 	Finished                       time.Time                  `json:"finished_at"`
+	ProviderTokenCalls             []providerTokenCall        `json:"provider_token_calls,omitempty"`
 	ProviderCalls                  []string                   `json:"provider_calls"`
 	Effects                        map[string]any             `json:"effects"`
 	Status                         string                     `json:"status"`
