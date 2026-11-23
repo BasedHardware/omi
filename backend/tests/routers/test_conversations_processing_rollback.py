@@ -6,10 +6,12 @@ the durable finalization job worker instead; its terminal failure is covered
 by the worker and lifecycle contracts.
 """
 
+from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from starlette.requests import Request
 
 from models.conversation_enums import ConversationStatus
 from models.geolocation import Geolocation
@@ -279,6 +281,54 @@ def _lazy_metric(event: str) -> float:
     from utils.metrics import LAZY_DESKTOP_DEFERRAL_TOTAL
 
     return LAZY_DESKTOP_DEFERRAL_TOTAL.labels(event=event)._value.get()
+
+
+@pytest.mark.parametrize(
+    ('header', 'enabled', 'starts'),
+    [(None, 'on', 0), ('0', 'on', 0), ('1', 'off', 0), ('1', 'on', 1)],
+)
+def test_deferred_detail_first_open_requires_gui_signal(monkeypatch, header, enabled, starts):
+    from utils.metrics import FIRST_OPEN_TRANSCRIPT_TOTAL
+
+    transcript = [{'id': 's1', 'text': 'Saved transcript', 'start': 0, 'end': 1}]
+    row = {
+        'id': 'deferred-conv',
+        'status': 'processing',
+        'deferred': True,
+        'language': 'en',
+        'transcript_segments': transcript,
+    }
+    monkeypatch.setenv('OMI_GUI_FIRST_OPEN_ENABLED', enabled)
+    monkeypatch.setattr(conversations_router, '_get_valid_conversation_by_id', lambda *_a, **_kw: dict(row))
+    monkeypatch.setattr(conversations_router, 'live_recap_enabled', lambda _uid: False)
+    monkeypatch.setattr(conversations_router, 'open_recording', MagicMock())
+    reacquire = MagicMock(return_value=True)
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', reacquire)
+    monkeypatch.setattr(lifecycle_service, 'processing_admission_guard', lambda *_a, **_kw: nullcontext())
+    monkeypatch.setattr(conversations_router, 'submit_with_context', lambda _executor, worker: worker())
+    monkeypatch.setattr(conversations_router, 'deserialize_conversation', lambda _row: SimpleNamespace(language='en'))
+    process = MagicMock(return_value=None)
+    monkeypatch.setattr(conversations_router, 'process_conversation', process)
+    headers = [] if header is None else [(b'x-omi-recording-detail', header.encode())]
+
+    def metric(event, signal):
+        return FIRST_OPEN_TRANSCRIPT_TOTAL.labels(event=event, gui_signal=signal)._value.get()
+
+    signal = 'present' if header == '1' else 'absent'
+    reads_before = metric('detail_returned', signal)
+    gui_starts_before = metric('enrich_started', 'present')
+    headerless_starts_before = metric('enrich_started', 'absent')
+    result = conversations_router.get_conversation_by_id(
+        row['id'], source=None, include_discarded=None, uid='uid1', request=Request({'type': 'http', 'headers': headers})
+    )
+
+    assert result['transcript_segments'] == transcript
+    assert reacquire.call_count == process.call_count == starts
+    if starts:
+        assert process.call_args.kwargs['trigger'] is conversations_router.ProcessingTrigger.FIRST_OPEN
+    assert metric('detail_returned', signal) == reads_before + 1
+    assert metric('enrich_started', 'present') == gui_starts_before + starts
+    assert metric('enrich_started', 'absent') == headerless_starts_before
 
 
 def test_deferred_enrichment_counts_started_and_complete_on_the_real_counter(monkeypatch):

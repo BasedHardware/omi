@@ -712,6 +712,7 @@ def prepare_conversation_for_read(
     *,
     firestore_client: Any = None,
     read_budget: Optional[ListReadBudget] = None,
+    strict_transcript: bool = False,
 ) -> Optional[Dict[str, Any]]:
     if not conversation_data:
         return None
@@ -721,7 +722,14 @@ def prepare_conversation_for_read(
     # replayed as stale projection metadata by a logical-state writer.
     for field in DISPLAY_FIELDS:
         data.pop(field, None)
-    if isinstance(data.get('transcript_segments'), dict):
+    if strict_transcript and 'transcript_segments' in data:
+        try:
+            data['transcript_segments'] = decode_transcript_segments_verified(
+                uid, data['transcript_segments'], bool(data.get('transcript_segments_compressed'))
+            )
+        except transcript_pointer.TranscriptBlobAbsent:
+            return None
+    elif isinstance(data.get('transcript_segments'), dict):
         try:
             data['transcript_segments'] = decode_transcript_segments_blob(uid, data['transcript_segments'], True)
         except transcript_pointer.TranscriptBlobAbsent:
@@ -1902,6 +1910,7 @@ def get_conversation(
     firestore_client: Any = None,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
     include_transcript_decode_status: bool = False,
+    strict_transcript: bool = False,
 ):
     client = firestore_client if firestore_client is not None else db
     user_ref = client.collection('users').document(uid)
@@ -1910,6 +1919,20 @@ def get_conversation(
     record_document_read(
         read_site, FirestoreReadOutcome.HIT if conversation_data is not None else FirestoreReadOutcome.MISS
     )
+    if (
+        strict_transcript
+        and conversation_data
+        and 'transcript_segments' in conversation_data
+        and not any(conversation_data.get(key) for key in ('deleted', 'recording', 'is_locked'))
+    ):
+        try:
+            conversation_data['transcript_segments'] = decode_transcript_segments_verified(
+                uid,
+                conversation_data['transcript_segments'],
+                bool(conversation_data.get('transcript_segments_compressed')),
+            )
+        except transcript_pointer.TranscriptBlobAbsent:
+            return None
     if conversation_data is not None and include_transcript_decode_status:
         # Recovery needs evidence from the raw field, before the tolerant read
         # decoder turns corruption into an empty transcript. Other readers keep
@@ -2453,7 +2476,17 @@ def get_conversations_without_photos(
     return rows
 
 
-@prepare_for_read(decrypt_func=prepare_conversation_for_read)
+def _prepare_mcp_conversation_for_read(data: Dict[str, Any], uid: str) -> Optional[Dict[str, Any]]:
+    from config.transcript_publication import deferred_transcript_reads_enabled
+
+    strict_transcript = deferred_transcript_reads_enabled()
+    if data.get('is_locked') and strict_transcript:
+        data = dict(data)
+        data.pop('transcript_segments', None)
+    return prepare_conversation_for_read(data, uid, strict_transcript=strict_transcript)
+
+
+@prepare_for_read(decrypt_func=_prepare_mcp_conversation_for_read)
 def get_mcp_conversations_by_id(
     uid: str,
     conversation_ids: List[str],

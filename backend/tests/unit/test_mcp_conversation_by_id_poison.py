@@ -103,6 +103,18 @@ class TestGetConversationByIdPoisonRecord:
         assert exc_info.value.status_code == 404
 
 
+def test_undecodable_transcript_returns_a_typed_read_error(monkeypatch, mcp_test_client):
+    db = rest.mcp_conversation_handlers.conversations_db
+    row = dict(_conversation(), transcript_segments='synthetic-invalid-ciphertext', data_protection_level='enhanced')
+    monkeypatch.setenv('OMI_DEFERRED_TRANSCRIPT_READS_ENABLED', 'on')
+    monkeypatch.setattr(db, 'get_mcp_conversations_by_id', lambda *_a, **_kw: [db._prepare_mcp_conversation_for_read(row, UID)])
+
+    response = mcp_test_client.get('/v1/mcp/conversations/conv-good')
+
+    assert response.status_code == 503
+    assert response.json()['detail'] == 'Stored transcript could not be decoded.'
+
+
 def test_high_speaker_ids_are_safe_and_response_compatible(monkeypatch, mcp_test_client):
     conversation = _conversation()
     conversation['transcript_segments'] = [

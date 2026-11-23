@@ -123,7 +123,7 @@ from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
-from utils.metrics import record_lazy_desktop_deferral
+from utils.metrics import record_first_open_transcript, record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
@@ -299,7 +299,7 @@ def _emit_speaker_identity_confirmed(
     )
 
 
-def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
+def _enrich_deferred_conversation(uid: str, conversation: dict, *, gui_signal: bool = False) -> dict:
     """First open of a lazily-deferred desktop conversation. The LLM enrichment (summary, action
     items, memories, embeddings, app results) takes ~10s, so we run it in the BACKGROUND and return
     the conversation immediately: the client gets an instant open (transcript already present) and
@@ -327,6 +327,7 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         # Counted here, not before the submit: a rejected submit (shut-down
         # pool during a deploy) would otherwise leave a start with no terminal.
         record_lazy_desktop_deferral(event='enrich_started')
+        record_first_open_transcript(event='enrich_started', gui_signal=gui_signal)
         try:
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
@@ -1347,13 +1348,16 @@ def get_conversation_by_id(
         raise HTTPException(status_code=404, detail="Conversation not found")
     if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded, presentation=True):
         raise HTTPException(status_code=404, detail="Conversation not found")
-    # Home lifecycle probes also read details; only a detail-page open escalates notes.
-    if request is not None and request.headers.get('X-Omi-Recording-Detail') == '1':
+    gui_signal = request is not None and request.headers.get('X-Omi-Recording-Detail') == '1'
+    was_deferred = bool(conversation.get('deferred') or conversation.get('processing_deferred'))
+    if gui_signal:
         open_recording(uid, conversation)
-    # A desktop conversation stored raw (deferred) for a freemium/Neo user is
-    # enriched on first open. Other conversations are returned unchanged.
-    if conversation.get('deferred') and not conversation.get('processing_deferred'):
-        conversation = _enrich_deferred_conversation(uid, conversation)
+        if (
+            os.getenv('OMI_GUI_FIRST_OPEN_ENABLED', 'on').lower() == 'on'
+            and conversation.get('deferred')
+            and not conversation.get('processing_deferred')
+        ):
+            conversation = _enrich_deferred_conversation(uid, conversation, gui_signal=gui_signal)
     if include_translations is True:
         try:
             conversation, translation_status, next_cursor = translate_open_page(uid, conversation, translation_cursor)
@@ -1375,7 +1379,10 @@ def get_conversation_by_id(
     conversation.pop(v3_policy.LIVE_SUMMARY_FIELD, None)
     if preview:
         conversation['live_summary'] = preview
-    return present_generated_note_sections(historical_projection.project(transcribing_hold.project(conversation)))
+    result = present_generated_note_sections(historical_projection.project(transcribing_hold.project(conversation)))
+    if was_deferred and result.get('transcript_segments'):
+        record_first_open_transcript(event='detail_returned', gui_signal=gui_signal)
+    return result
 
 
 @router.patch(

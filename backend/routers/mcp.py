@@ -718,11 +718,14 @@ def get_conversation_by_id(
     logger.info(f"get_conversation_by_id {uid} {conversation_id}")
     if not mcp_conversation_handlers.is_safe_conversation_id(conversation_id):
         raise HTTPException(status_code=400, detail="conversation_id is not a valid document id")
-    conversation = mcp_conversation_handlers.fetch_conversation_for_detail(
-        uid,
-        conversation_id,
-        extra_field_paths=_REST_CONVERSATION_DETAIL_EXTRA_FIELD_PATHS,
-    )
+    try:
+        conversation = mcp_conversation_handlers.fetch_conversation_for_detail(
+            uid,
+            conversation_id,
+            extra_field_paths=_REST_CONVERSATION_DETAIL_EXTRA_FIELD_PATHS,
+        )
+    except ToolExecutionError as error:
+        raise _http_error_from_tool_error(error) from error
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found. Use the full id from get_conversations.")
 

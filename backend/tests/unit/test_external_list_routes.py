@@ -160,6 +160,36 @@ def test_item_404_cache_runs_after_auth_and_isolates_owner_key_and_item(routes, 
     assert reader.call_count == 4
 
 
+def test_transcript_detail_bypasses_a_cached_miss(routes, monkeypatch):
+    client, _, _, _ = routes
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'true')
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT', '100')
+    monkeypatch.setenv('OMI_DEFERRED_TRANSCRIPT_READS_ENABLED', 'on')
+    now = datetime.now(timezone.utc)
+    transcript = [{'id': 's1', 'text': 'Newly published', 'start': 0, 'end': 1, 'speaker': 'SPEAKER_00'}]
+    reader = Mock(
+        side_effect=[
+            None,
+            {
+                'id': 'fresh',
+                'status': 'processing',
+                'processing_deferred': True,
+                'created_at': now,
+                'started_at': now,
+                'finished_at': now,
+                'transcript_segments': transcript,
+            },
+        ]
+    )
+    monkeypatch.setattr(developer.conversations_db, 'get_conversation', reader)
+    path = '/v1/dev/user/conversations/fresh'
+    assert client.get(path).status_code == 404
+    response = client.get(path + '?include_transcript=true')
+    assert response.status_code == 200, response.text
+    assert response.json()['transcript_segments'][0]['text'] == 'Newly published'
+    assert reader.call_count == 2
+
+
 def test_malformed_goal_is_not_negative_cached_and_repair_is_immediately_visible(routes, monkeypatch):
     client, _, _, storage = routes
     monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'true')

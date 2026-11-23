@@ -158,6 +158,28 @@ def test_new_recording_is_searchable_without_backfill_or_vectors(data):
     assert 'Source conversation:c-01' in out
 
 
+@pytest.mark.parametrize('scoped', [False, True])
+def test_hosted_search_reads_deferred_transcript_with_rollout_enabled(data, monkeypatch, scoped):
+    from utils.mcp_server.handlers import transcripts
+
+    rows, _ = data
+    target = rows[0]
+    target['status'] = 'processing'
+    target['processing_deferred'] = True
+    monkeypatch.setattr(transcripts, 'fetch_conversation_for_detail', lambda *_a, **_kw: target)
+    arguments = {'query': '47 dollars', 'timezone': 'UTC'}
+    if scoped:
+        arguments['conversation_id'] = target['id']
+
+    monkeypatch.setenv('OMI_DEFERRED_TRANSCRIPT_READS_ENABLED', 'on')
+    result = transcripts.search_transcripts('u1', arguments)
+    assert [item['conversation']['id'] for item in result['matches']] == [target['id']]
+    assert '47 dollars' in result['matches'][0]['hits'][0]['text']
+
+    monkeypatch.setenv('OMI_DEFERRED_TRANSCRIPT_READS_ENABLED', 'off')
+    assert transcripts.search_transcripts('u1', arguments)['matches'] == []
+
+
 def test_two_misses_do_not_supply_factual_evidence_after_pushback(data):
     first = service.search_saved_transcripts_text('u1', 'nonexistent invoice')
     second = service.search_saved_transcripts_text(

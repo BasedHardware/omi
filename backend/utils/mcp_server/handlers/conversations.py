@@ -170,13 +170,16 @@ def fetch_conversation_for_detail(
     """Shared bounded detail read (card+transcript projection, no photos)."""
     if not is_safe_conversation_id(conversation_id):
         return None
-    conversations = conversations_db.get_mcp_conversations_by_id(
-        uid,
-        [str(conversation_id)],
-        include_transcript=True,
-        include_discarded=False,
-        extra_field_paths=extra_field_paths,
-    )
+    try:
+        conversations = conversations_db.get_mcp_conversations_by_id(
+            uid,
+            [str(conversation_id)],
+            include_transcript=True,
+            include_discarded=False,
+            extra_field_paths=extra_field_paths,
+        )
+    except conversations_db.TranscriptSegmentsDecodeError as error:
+        raise ToolExecutionError('Stored transcript could not be decoded.', code=-32009, http_status=503) from error
     return transcribing_hold.project(conversations[0]) if conversations else None
 
 

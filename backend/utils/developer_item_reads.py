@@ -5,6 +5,8 @@ Transcript grant checks still precede cache reads. Source behavior and audit
 outcomes stay shared by origin and cache paths.
 """
 
+from config.transcript_publication import deferred_transcript_reads_enabled
+from database.transcript_pointer import TranscriptSegmentsDecodeError
 from utils.conversations.layer import read_product as read_product_conversation
 from fastapi import HTTPException
 from typing import Any, Callable
@@ -33,14 +35,24 @@ def read_conversation_item(
         if include_transcript:
             check_transcript(auth, request=request)
 
-        negative_key = polling_cache.negative_key(request, uid, auth, conversation_id)
+        # A previously absent transcript may have been published since the last request.
+        fresh_transcript = include_transcript and deferred_transcript_reads_enabled()
+        negative_key = None if fresh_transcript else polling_cache.negative_key(request, uid, auth, conversation_id)
         if negative_key and polling_cache.missing(cache_client(), negative_key):
             raise HTTPException(
                 404,
                 detail='Conversation ID not found or unknown conversation sub-route',
                 headers={'X-Omi-List-Cache': 'negative; max-age=10'},
             )
-        conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
+        try:
+            conversation = read_product_conversation(
+                conversations_db.get_conversation,
+                uid,
+                conversation_id,
+                **({'strict_transcript': True} if fresh_transcript else {}),
+            )
+        except TranscriptSegmentsDecodeError as error:
+            raise HTTPException(status_code=503, detail='Stored transcript could not be decoded.') from error
         if conversation is None and negative_key:
             polling_cache.remember_missing(cache_client(), negative_key)
         if not conversation or conversation.get('deleted', False):

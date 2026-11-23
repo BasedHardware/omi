@@ -522,6 +522,21 @@ def record_lazy_desktop_deferral(*, event: str) -> None:
         pass
 
 
+FIRST_OPEN_TRANSCRIPT_TOTAL = Counter(
+    'omi_first_open_transcript_total',
+    'Deferred transcript detail responses and FIRST_OPEN worker starts by exact GUI detail signal.',
+    ['event', 'gui_signal'],
+)
+for _first_open_event in ('detail_returned', 'enrich_started'):
+    for _gui_signal in ('present', 'absent'):
+        FIRST_OPEN_TRANSCRIPT_TOTAL.labels(event=_first_open_event, gui_signal=_gui_signal)
+
+
+def record_first_open_transcript(*, event: str, gui_signal: bool) -> None:
+    if event in ('detail_returned', 'enrich_started'):
+        FIRST_OPEN_TRANSCRIPT_TOTAL.labels(event=event, gui_signal='present' if gui_signal else 'absent').inc()
+
+
 # Conversation relevance (utils/conversations/relevance.py): one increment per
 # processed conversation. `decided_by="policy"` counts triggers that never
 # assess; a share of them that grows is a path skipping the gate by design,
