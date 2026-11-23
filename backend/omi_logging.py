@@ -5,6 +5,7 @@ before importing application dependencies, then install TraceContextMiddleware.
 """
 
 import contextvars
+from contextlib import contextmanager
 import datetime
 import json
 import logging
@@ -44,6 +45,21 @@ def trace_context(headers: Mapping[bytes, bytes]) -> tuple[str, str, bool] | Non
     if match and int(match[1], 16) and 0 < int(match[2]) < 2**64:
         return match[1].lower(), f'{int(match[2]):016x}', match[3] == '1'
     return None
+
+
+@contextmanager
+def bind_request_log_trace(headers: Mapping[bytes, bytes]):
+    """Bind validated trace context for a handler without changing process-wide logging."""
+    token = _TRACE.set(trace_context(headers))
+    try:
+        yield
+    finally:
+        _TRACE.reset(token)
+
+
+def request_log_trace_id() -> str:
+    trace = _TRACE.get()
+    return trace[0] if trace else '-'
 
 
 class TraceContextMiddleware:

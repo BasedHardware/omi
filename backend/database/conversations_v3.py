@@ -15,6 +15,8 @@ from google.api_core.exceptions import DeadlineExceeded, InvalidArgument
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from omi_logging import request_log_trace_id
+
 from database._client import firestore_failure_reason, get_firestore_client
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from database import conversations, conversations_v3_leases as leases
@@ -586,7 +588,8 @@ def _projection_snapshots(client, coll, tx, ids, *, batch_reads):
         chunk = ids[start : start + CLAIM_READ_CHUNK]
         # BatchGet can return snapshots out of order, including missing documents.
         snapshots = {
-            snapshot.id: snapshot for snapshot in client.get_all([coll.document(cid) for cid in chunk], transaction=tx)
+            snapshot.reference.id: snapshot
+            for snapshot in client.get_all([coll.document(cid) for cid in chunk], transaction=tx)
         }
         for cid in chunk:
             yield cid, snapshots[cid]
@@ -873,18 +876,18 @@ def commit_projection(
             observed = commit(
                 client.transaction(), [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
             )
-        except InvalidArgument as error:
-            if size_error(error):
-                log_largest_write(staged, batch=index, batches=len(batches))
+        except Conflict:
             raise
         except Exception as error:
-            if not isinstance(error, Conflict):
-                logger.warning(
-                    'v3 projection commit failed reason=%s batch=%d batches=%d',
-                    firestore_failure_reason(error),
-                    index,
-                    len(batches),
-                )
+            if isinstance(error, InvalidArgument) and size_error(error):
+                log_largest_write(staged, batch=index, batches=len(batches))
+            logger.warning(
+                'event=v3_reconcile stage=projection_commit outcome=%s trace_id=%s batch=%d batches=%d',
+                firestore_failure_reason(error),
+                request_log_trace_id(),
+                index,
+                len(batches),
+            )
             raise
         from utils.conversations.v3 import metrics
 
