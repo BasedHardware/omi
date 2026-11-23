@@ -675,7 +675,10 @@ transcript commits and pusher sends on its archive barrier. Pusher queues
 bounded durable references; overflow applies backpressure or flushes an older
 projection without deleting its archived bytes. Raw capacity/upload failures
 retain uncommitted packs. `audio_custody` events (and opt-in pusher opcode 203)
-are audio receipts; `capture_committed` remains transcript coverage.
+are audio receipts. On opted-in mono Listen sockets, `capture_committed.audio_custody`
+can carry the matching subset of a committed manifest's frames, with the original and
+manifest pins. A bare transcript range carries no audio release authority. If available,
+`audio_custody.recording_session_id` names the recording bound to the pack's conversation.
 `AUDIO_DURABLE_OUTBOX_ENABLED=false` is the emergency legacy rollback.
 `AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED` defaults to `true`; only literal `true`
 enables optional lossless FLAC for new mono PCM16 custody writes. Other values
