@@ -49,7 +49,12 @@ trap 'rm -f "$release_values"' EXIT
 printf 'intake:\n  enabled: true\n  hostname: workerd.example.com\n  addressName: workerd-test-ip\n  tlsSecretName: workerd-test-tls\n  audience: https://workerd.example.com\n  caller: producer@based-hardware.iam.gserviceaccount.com\n  firestoreServiceAccount: workerd@based-hardware.iam.gserviceaccount.com\n' > "$release_values"
 [[ "$(rendered_of "$first")" != "$(rendered_of "$("$identity" --digest "$digest" -f "$release_values")")" ]] ||
   { echo 'release identity ignores Release values' >&2; exit 1; }
-for bad in '--digest sha256:abc' "--digest $digest --ref no-such-ref" "--digest $digest -f /nonexistent.yaml"; do
+[[ "$first" == *'"helm_version":"v'* ]] || { echo 'release identity omits the helm version' >&2; exit 1; }
+# The no -f form must also work under macOS /bin/bash 3.2 (empty arrays under set -u).
+[[ "$(/bin/bash "$identity" --digest "$digest")" == "$first" ]] ||
+  { echo 'release identity differs under /bin/bash' >&2; exit 1; }
+for bad in '--digest sha256:abc' "--digest $digest --ref no-such-ref" "--digest $digest -f /nonexistent.yaml" \
+    "--digest $digest --verify-image invalid.invalid/workerd"; do
   # shellcheck disable=SC2086
   if "$identity" $bad >/dev/null 2>&1; then echo "release identity accepted: $bad" >&2; exit 1; fi
 done

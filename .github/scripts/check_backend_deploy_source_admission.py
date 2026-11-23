@@ -799,6 +799,9 @@ def validate_workerd_publish_job(text: str) -> list[str]:
         'tree="$(git rev-parse "$ADMITTED_SHA:backend-go")"',
         '--label "omi.workerd.backend-go-tree=$tree"',
         "Existing workerd tree tag has a different backend-go tree.",
+        'tree_image="$repository:tree-${tree:0:20}"',
+        "outcome=reused",
+        "Existing workerd SHA tag has a different backend-go tree.",
     ):
         require_fragment(errors, job, fragment, f"workerd publish must retain {fragment}")
     for fragment in MANUAL_BUILD_ONLY_FORBIDDEN:
