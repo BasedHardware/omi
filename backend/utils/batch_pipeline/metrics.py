@@ -64,7 +64,7 @@ _SILENT_READS_AVOIDED = Counter(
 
 
 # Bounded owner-wait queue classes (config.batch_pipeline.Priority names).
-_OWNER_WAIT_PRIORITIES = frozenset({'fresh', 'recent', 'deep'})
+_OWNER_WAIT_PRIORITIES = frozenset(p.name.lower() for p in Priority)
 
 
 class SilentReadStage(Enum):

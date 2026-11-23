@@ -683,7 +683,7 @@ class Scheduler:
                                     'leased',
                                     wait_seconds=now - enqueued_at,
                                     relet=relet,
-                                    priority=Priority(priority).name.lower(),
+                                    priority=priority.name.lower(),
                                 )
                             except Exception:
                                 pass  # Metrics cannot turn an issued lease into a failed pull.
