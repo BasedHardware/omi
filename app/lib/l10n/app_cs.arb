@@ -4740,5 +4740,6 @@
     "firmwareUpdateAppRequired": "Tato aktualizace firmwaru vyžaduje novější verzi aplikace Omi. Aktualizujte aplikaci v obchodě s aplikacemi a poté proveďte kontrolu znovu.",
     "quietPayerTitle": "Žádné nahrávky za 5 dní",
     "quietPayerMessage": "Zkontrolujte svůj Omi.",
-    "quietPayerCheck": "Zkontrolovat"
+    "quietPayerCheck": "Zkontrolovat",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

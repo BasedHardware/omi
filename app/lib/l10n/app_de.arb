@@ -4740,5 +4740,6 @@
     "firmwareUpdateAppRequired": "Dieses Firmware-Update benötigt eine neuere Version der Omi-App. Aktualisiere die App in deinem App-Store und suche dann erneut nach Updates.",
     "quietPayerTitle": "Seit 5 Tagen keine Aufnahmen",
     "quietPayerMessage": "Prüfe dein Omi.",
-    "quietPayerCheck": "Prüfen"
+    "quietPayerCheck": "Prüfen",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

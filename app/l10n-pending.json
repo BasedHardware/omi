@@ -1,0 +1,9 @@
+{
+  "strings": [
+    {
+      "key": "finishHiddenFromHome",
+      "en": "Processing finished. This recording is hidden from Home.",
+      "description": "Informational toast after a manual finish when Home visibility rules hide the resulting conversation."
+    }
+  ]
+}

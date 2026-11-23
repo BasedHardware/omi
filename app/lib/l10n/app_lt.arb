@@ -4740,5 +4740,6 @@
     "firmwareUpdateAppRequired": "Šiam programinės aparatinės įrangos naujinimui reikia naujesnės „Omi“ programėlės versijos. Atnaujinkite programėlę savo programėlių parduotuvėje ir patikrinkite dar kartą.",
     "quietPayerTitle": "5 dienas nėra įrašų",
     "quietPayerMessage": "Patikrinkite savo Omi.",
-    "quietPayerCheck": "Patikrinti"
+    "quietPayerCheck": "Patikrinti",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

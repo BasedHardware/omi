@@ -490,7 +490,6 @@ void main() {
 
   testWidgets('v3 Wrap Up opens the result route when a date filter hides the Home processing row', (tester) async {
     final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
-    addTearDown(v3.dispose);
     final recording = _recordingDoc('rec-1');
     final capture = _Capture(answer: CreateConversationResponse(messages: const [], conversation: recording))
       ..verifiedLiveServerRecordingId = recording.id;
@@ -505,6 +504,7 @@ void main() {
     expect(
         tester.element(find.byType(FinishedCapturePage)).read<ConversationProvider>().selectedStartDate, filterStart);
     await tester.pumpWidget(const SizedBox());
+    v3.dispose();
   });
 
   testWidgets('v3 Wrap Up sends a verified pendant finish with no transcript and explains a 404', (tester) async {

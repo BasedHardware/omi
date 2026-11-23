@@ -4740,5 +4740,6 @@
     "firmwareUpdateAppRequired": "此固件更新需要更新版本的 Omi 应用。请前往应用商店更新应用，然后重新检查。",
     "quietPayerTitle": "5 天没有录音",
     "quietPayerMessage": "请检查你的 Omi。",
-    "quietPayerCheck": "检查"
+    "quietPayerCheck": "检查",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

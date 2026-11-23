@@ -4740,5 +4740,6 @@
     "firmwareUpdateAppRequired": "Denne fastvareoppdateringen krever en nyere Omi-app. Oppdater appen fra appbutikken din, og se etter oppdateringer på nytt.",
     "quietPayerTitle": "Ingen opptak på 5 dager",
     "quietPayerMessage": "Sjekk Omi-en din.",
-    "quietPayerCheck": "Sjekk"
+    "quietPayerCheck": "Sjekk",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

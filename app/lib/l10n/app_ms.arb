@@ -4740,5 +4740,6 @@
     "firmwareUpdateAppRequired": "Kemas kini perisian tegar ini memerlukan versi apl Omi yang lebih baharu. Kemas kini apl daripada gedung aplikasi anda, kemudian semak semula.",
     "quietPayerTitle": "Tiada rakaman dalam 5 hari",
     "quietPayerMessage": "Semak Omi anda.",
-    "quietPayerCheck": "Semak"
+    "quietPayerCheck": "Semak",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

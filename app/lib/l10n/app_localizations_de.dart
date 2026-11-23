@@ -15852,4 +15852,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Prüfen';
+
+  @override
+  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
 }

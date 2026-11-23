@@ -4740,5 +4740,6 @@
     "firmwareUpdateAppRequired": "Αυτή η ενημέρωση υλικολογισμικού απαιτεί νεότερη έκδοση της εφαρμογής Omi. Ενημερώστε την εφαρμογή από το κατάστημα εφαρμογών σας και ελέγξτε ξανά.",
     "quietPayerTitle": "Καμία ηχογράφηση εδώ και 5 ημέρες",
     "quietPayerMessage": "Έλεγξε το Omi σου.",
-    "quietPayerCheck": "Έλεγχος"
+    "quietPayerCheck": "Έλεγχος",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

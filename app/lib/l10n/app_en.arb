@@ -19238,5 +19238,9 @@
     "quietPayerCheck": "Check",
     "@quietPayerCheck": {
         "description": "Button on the quiet Home row; opens the Omi device page"
+    },
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
+    "@finishHiddenFromHome": {
+        "description": "Informational toast after a manual finish when Home visibility rules hide the resulting conversation."
     }
 }

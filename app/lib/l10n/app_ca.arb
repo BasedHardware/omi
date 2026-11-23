@@ -4740,5 +4740,6 @@
     "firmwareUpdateAppRequired": "Aquesta actualització del microprogramari necessita una versió més nova de l'aplicació Omi. Actualitza l'aplicació des de la botiga d'aplicacions i torna-ho a comprovar.",
     "quietPayerTitle": "Cap gravació en 5 dies",
     "quietPayerMessage": "Comprova el teu Omi.",
-    "quietPayerCheck": "Comprova"
+    "quietPayerCheck": "Comprova",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

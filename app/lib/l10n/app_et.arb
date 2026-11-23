@@ -4740,5 +4740,6 @@
     "firmwareUpdateAppRequired": "See püsivara värskendus vajab Omi rakenduse uuemat versiooni. Värskendage rakendust oma rakenduste poes ja kontrollige seejärel uuesti.",
     "quietPayerTitle": "5 päeva pole salvestisi",
     "quietPayerMessage": "Kontrolli oma Omit.",
-    "quietPayerCheck": "Kontrolli"
+    "quietPayerCheck": "Kontrolli",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

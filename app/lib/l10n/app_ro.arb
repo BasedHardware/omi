@@ -4740,5 +4740,6 @@
     "firmwareUpdateAppRequired": "Această actualizare de firmware necesită o versiune mai nouă a aplicației Omi. Actualizează aplicația din magazinul de aplicații, apoi verifică din nou.",
     "quietPayerTitle": "Nicio înregistrare de 5 zile",
     "quietPayerMessage": "Verifică-ți Omi.",
-    "quietPayerCheck": "Verifică"
+    "quietPayerCheck": "Verifică",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

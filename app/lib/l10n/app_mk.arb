@@ -12297,5 +12297,6 @@
     "firmwareUpdateAppRequired": "Ова ажурирање на фирмверот бара понова верзија на апликацијата Omi. Ажурирајте ја апликацијата од вашата продавница за апликации, па проверете повторно.",
     "quietPayerTitle": "Нема снимки 5 дена",
     "quietPayerMessage": "Проверете го вашиот Omi.",
-    "quietPayerCheck": "Провери"
+    "quietPayerCheck": "Провери",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

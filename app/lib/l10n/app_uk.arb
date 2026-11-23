@@ -4740,5 +4740,6 @@
     "firmwareUpdateAppRequired": "Для цього оновлення прошивки потрібна новіша версія застосунку Omi. Оновіть застосунок у магазині застосунків, а потім перевірте ще раз.",
     "quietPayerTitle": "Немає записів 5 днів",
     "quietPayerMessage": "Перевірте свій Omi.",
-    "quietPayerCheck": "Перевірити"
+    "quietPayerCheck": "Перевірити",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

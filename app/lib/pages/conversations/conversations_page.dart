@@ -906,20 +906,31 @@ class _ConversationsPageState extends State<ConversationsPage>
         final v3Home = v3On && defaultHome;
         final v3Live = v3Home ? v3!.live : null;
         final manualFinish = v3On ? v3!.finishRow : null;
-        final finishFailed = manualFinish != null &&
-            v3!.finishHasFailedMatch(convoProvider.conversations.where(
-              (row) => row.v3?.recording != true && isFailedConversation(row),
-            ));
+        final terminalFinish = manualFinish == null ? null : v3!.finishTerminalMatch(convoProvider.conversations);
         final finishHandedOff = v3Home &&
             manualFinish != null &&
             v3!.finishHasSuccessor(
                 convoProvider.groupedConversations.values.expand((rows) => rows).where(shownOnV3Home));
-        final showManualFinish = v3Home && manualFinish != null && !finishHandedOff && !finishFailed;
-        if (manualFinish != null && (finishHandedOff || finishFailed)) {
+        final finishSettled = finishHandedOff || terminalFinish != null;
+        final showManualFinish = v3Home && manualFinish != null && !finishSettled;
+        if (manualFinish != null && finishSettled) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            if (v3.acknowledgeManualFinish(manualFinish) && finishFailed) {
+            if (!mounted || !v3!.acknowledgeManualFinish(manualFinish)) return;
+            if (terminalFinish != null && isFailedConversation(terminalFinish)) {
               OmiFeedback.error(context, context.l10n.attentionSummaryFailed);
+            } else if (terminalFinish?.v3?.homeHidden == true) {
+              OmiFeedback.info(context, context.l10n.finishHiddenFromHome);
+            }
+          });
+        }
+        if (v3On &&
+            v3!.finishTimedOut &&
+            _homeTabActive &&
+            !_wasBackgrounded &&
+            (ModalRoute.of(context)?.isCurrent ?? true)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && v3.takeFinishTimeout()) {
+              OmiFeedback.info(context, context.l10n.finishStillProcessing);
             }
           });
         }

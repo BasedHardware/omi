@@ -58,6 +58,16 @@ class ConversationsV3Provider extends ChangeNotifier {
   bool _finishAccepted = false;
   bool _finishExpired = false;
   Timer? _finishExpiry;
+  Timer? _finishDeadline;
+  bool _finishTimedOut = false;
+
+  bool get finishTimedOut => finishFeedbackEnabled && _finishTimedOut;
+
+  bool takeFinishTimeout() {
+    if (!finishTimedOut) return false;
+    _finishTimedOut = false;
+    return true;
+  }
 
   bool get finishFeedbackEnabled => v3 && !const bool.fromEnvironment('OMI_V3_FINISH_FEEDBACK_OFF');
   ServerConversation? get finishRow => finishFeedbackEnabled && !_finishExpired ? _finishRow : null;
@@ -80,6 +90,12 @@ class ConversationsV3Provider extends ChangeNotifier {
       _finishLiveId = live.id;
     }
     _armFinishExpiry();
+    _finishDeadline = Timer(const Duration(minutes: 20), () {
+      final accepted = _finishAccepted;
+      _clearManualFinish(keepClosedLive: accepted);
+      _finishTimedOut = accepted;
+      notifyListeners();
+    });
     notifyListeners();
   }
 
@@ -103,25 +119,37 @@ class ConversationsV3Provider extends ChangeNotifier {
     return true;
   }
 
-  /// Home supplies visible successors and failed conversations separately.
+  /// A visible successor can take over the row while its summary is pending.
   bool finishHasSuccessor(Iterable<ServerConversation> visibleRows) => _matchesFinish(visibleRows);
 
-  bool finishHasFailedMatch(Iterable<ServerConversation> failedRows) => _finishAccepted && _matchesFinish(failedRows);
+  ServerConversation? finishTerminalMatch(Iterable<ServerConversation> rows) {
+    if (!_finishAccepted) return null;
+    for (final row in rows) {
+      if (row.v3?.recording == true) continue;
+      final terminal = switch (row.v3?.tileState) {
+        ConversationTileState.done || ConversationTileState.failed => true,
+        null => row.status == ConversationStatus.completed || row.status == ConversationStatus.failed,
+        _ => false,
+      };
+      if (terminal && _matchesFinishRow(row)) return row;
+    }
+    return null;
+  }
 
-  bool _matchesFinish(Iterable<ServerConversation> rows) => rows.any(
-        (row) =>
-            row.v3?.tileState != ConversationTileState.live &&
-            row.status != ConversationStatus.in_progress &&
-            (row.id == _finishLiveId ||
-                (_finishAccepted &&
-                    _finishLiveId == null &&
-                    _finishRecordingId != null &&
-                    (row.v3?.recordingIds.contains(_finishRecordingId) == true ||
-                        row.v3?.recordingPieces.any(
-                              (piece) => piece.recordingId == _finishRecordingId,
-                            ) ==
-                            true))),
-      );
+  bool _matchesFinish(Iterable<ServerConversation> rows) => rows.any(_matchesFinishRow);
+
+  bool _matchesFinishRow(ServerConversation row) =>
+      row.v3?.tileState != ConversationTileState.live &&
+      row.status != ConversationStatus.in_progress &&
+      (row.id == _finishLiveId ||
+          (_finishAccepted &&
+              _finishLiveId == null &&
+              _finishRecordingId != null &&
+              (row.v3?.recordingIds.contains(_finishRecordingId) == true ||
+                  row.v3?.recordingPieces.any(
+                        (piece) => piece.recordingId == _finishRecordingId,
+                      ) ==
+                      true)));
 
   bool acknowledgeManualFinish(ServerConversation row) {
     if (!_finishAccepted || !identical(finishRow, row)) return false;
@@ -141,6 +169,8 @@ class ConversationsV3Provider extends ChangeNotifier {
 
   void _clearManualFinish({bool keepClosedLive = false}) {
     _finishExpiry?.cancel();
+    _finishDeadline?.cancel();
+    _finishTimedOut = false;
     _finishRow = null;
     _finishRecordingId = null;
     if (!keepClosedLive) {

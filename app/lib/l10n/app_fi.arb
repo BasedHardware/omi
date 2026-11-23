@@ -4740,5 +4740,6 @@
     "firmwareUpdateAppRequired": "Tämä laiteohjelmistopäivitys tarvitsee Omi-sovelluksen uudemman version. Päivitä sovellus sovelluskaupastasi ja tarkista sitten uudelleen.",
     "quietPayerTitle": "Ei tallenteita 5 päivään",
     "quietPayerMessage": "Tarkista Omisi.",
-    "quietPayerCheck": "Tarkista"
+    "quietPayerCheck": "Tarkista",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

@@ -4740,5 +4740,6 @@
     "firmwareUpdateAppRequired": "이 펌웨어 업데이트에는 더 최신 버전의 Omi 앱이 필요합니다. 앱 스토어에서 앱을 업데이트한 후 다시 확인하세요.",
     "quietPayerTitle": "5일 동안 녹음이 없어요",
     "quietPayerMessage": "Omi를 확인해 보세요.",
-    "quietPayerCheck": "확인"
+    "quietPayerCheck": "확인",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

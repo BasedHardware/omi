@@ -1384,57 +1384,75 @@ void main() {
       });
     });
 
-    testWidgets('a matching failed summary settles the manual finish and stops list polling', (tester) async {
-      await withClock(Clock.fixed(_now), () async {
-        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-        final palette = OmiColors.active;
-        addTearDown(() => OmiColors.active = palette);
-        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
-        final base = theme();
-        final feedbackTheme = base.copyWith(
-          snackBarTheme: base.snackBarTheme.copyWith(
-            contentTextStyle: base.snackBarTheme.contentTextStyle?.copyWith(fontFamily: 'SF Pro Display'),
-          ),
-        );
-        final home =
-            await _pumpHome(tester, v3: true, boundary: boundary, theme: feedbackTheme, size: const Size(393, 852));
-        final v3 = home.conversationsV3;
-        final recording = home.conversations.conversations.firstWhere((row) => row.id == 'rec-1');
-        home.conversations.conversations.removeWhere((row) =>
-            row.v3?.tileState == ConversationTileState.transcribing ||
-            row.v3?.tileState == ConversationTileState.writing);
-        home.conversations.groupConversationsByDate();
-        final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: recording.id);
-        v3.startManualFinish(pending, recording.id, captureId: home.capture.activeRecordingId);
-        expect(v3.settleManualFinish(pending, recording), isTrue);
-        home.liveOpen = false;
-        await v3.refresh();
-        await tester.pump();
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget,
-            reason: 'the unrelated failed conversation must not settle this finish');
+    for (final (caseName, message, image) in [
+      ('failed summary', "Couldn't summarize this conversation", '003-mobile-ios-v3-manual-finish-failed'),
+      ('hidden result', 'Processing finished. This recording is hidden from Home.', '001-mobile-ios-hidden-finish'),
+      ('20-minute deadline', 'Still processing. It will appear on Home.', '002-mobile-ios-finish-deadline'),
+    ]) {
+      testWidgets('a $caseName settles the manual finish and stops list polling', (tester) async {
+        await withClock(Clock.fixed(_now), () async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+          final palette = OmiColors.active;
+          addTearDown(() => OmiColors.active = palette);
+          OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+          final base = theme();
+          final feedbackTheme = base.copyWith(
+            snackBarTheme: base.snackBarTheme.copyWith(
+              contentTextStyle: base.snackBarTheme.contentTextStyle?.copyWith(fontFamily: 'SF Pro Display'),
+            ),
+          );
+          final home =
+              await _pumpHome(tester, v3: true, boundary: boundary, theme: feedbackTheme, size: const Size(393, 852));
+          final v3 = home.conversationsV3;
+          final recording = home.conversations.conversations.firstWhere((row) => row.id == 'rec-1');
+          home.conversations.conversations.removeWhere((row) =>
+              row.v3?.tileState == ConversationTileState.transcribing ||
+              row.v3?.tileState == ConversationTileState.writing);
+          home.conversations.groupConversationsByDate();
+          final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: recording.id);
+          v3.startManualFinish(pending, recording.id, captureId: home.capture.activeRecordingId);
+          expect(v3.settleManualFinish(pending, recording), isTrue);
+          home.liveOpen = false;
+          await v3.refresh();
+          await tester.pump();
+          expect(find.byKey(const Key('home_processing_row')), findsOneWidget,
+              reason: 'the unrelated failed conversation must not settle this finish');
 
-        home.conversations.upsertConversation(
-          _conversation('live-1', home.liveStart, 'Launch checklist',
-              v3: const ConversationV3Fields(
-                  kind: 'conversation', tileState: ConversationTileState.failed, recordingIds: ['rec-1'])),
-        );
-        await tester.pump();
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
-        expect(v3.finishRow, isNull);
-        expect(find.byKey(const Key('home_processing_row')), findsNothing);
-        expect(find.text("Couldn't summarize this conversation"), findsOneWidget);
-        await shoot(tester, '003-mobile-ios-v3-manual-finish-failed');
+          if (caseName == '20-minute deadline') {
+            await tester.pump(const Duration(minutes: 19, seconds: 59));
+            expect(v3.finishRow, same(pending));
+            expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+            await tester.pump(const Duration(seconds: 1));
+          } else {
+            home.conversations.upsertConversation(
+              _conversation('live-1', home.liveStart, 'Launch checklist',
+                  v3: ConversationV3Fields(
+                      kind: caseName == 'hidden result' ? 'media' : 'conversation',
+                      homeHidden: caseName == 'hidden result',
+                      tileState:
+                          caseName == 'hidden result' ? ConversationTileState.done : ConversationTileState.failed,
+                      recordingIds: const ['rec-1'])),
+            );
+          }
+          await tester.pump();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(v3.finishRow, isNull);
+          expect(find.byKey(const Key('home_processing_row')), findsNothing);
+          expect(find.text(message), findsOneWidget);
+          expect(find.text('Launch checklist'), findsNothing);
+          await shoot(tester, image);
 
-        await tester.pump(const Duration(minutes: 3));
-        final reads = home.conversations.listReads;
-        v3.tick();
-        await tester.pump();
-        expect(home.conversations.listReads, reads);
-        await _dispose(tester, home);
-        debugDefaultTargetPlatformOverride = null;
+          await tester.pump(const Duration(minutes: 3));
+          final reads = home.conversations.listReads;
+          v3.tick();
+          await tester.pump();
+          expect(home.conversations.listReads, reads);
+          await _dispose(tester, home);
+          debugDefaultTargetPlatformOverride = null;
+        });
       });
-    });
+    }
 
     testWidgets('visible Summary opens its first live recap', (tester) async {
       await withClock(Clock.fixed(_now), () async {

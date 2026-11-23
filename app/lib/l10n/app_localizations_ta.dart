@@ -15842,4 +15842,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'சரிபார்';
+
+  @override
+  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
 }

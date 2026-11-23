@@ -4775,5 +4775,6 @@
     "firmwareUpdateAppRequired": "Pembaruan firmware ini memerlukan aplikasi Omi versi lebih baru. Perbarui aplikasi dari toko aplikasi Anda, lalu periksa lagi.",
     "quietPayerTitle": "Tidak ada rekaman dalam 5 hari",
     "quietPayerMessage": "Periksa Omi Anda.",
-    "quietPayerCheck": "Periksa"
+    "quietPayerCheck": "Periksa",
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
 }

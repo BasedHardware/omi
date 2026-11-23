@@ -15751,4 +15751,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Periksa';
+
+  @override
+  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
 }

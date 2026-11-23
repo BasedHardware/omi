@@ -15732,4 +15732,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Skontrolovať';
+
+  @override
+  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
 }
