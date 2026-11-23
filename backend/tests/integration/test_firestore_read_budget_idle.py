@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import os
+import time
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -13,7 +14,9 @@ from google.cloud import firestore
 import pytest
 
 from database import _client, sync_jobs
+from database.batch_pipeline_projection_finish import PROJECTION_FINISH_ASYNC_CLOCK, PROJECTION_FINISH_DUE_FIELD
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_VERSION, backfill_ref
+from database.batch_pipeline_projection_followup_clock import DUE_FIELD as FOLLOWUP_DUE_FIELD, MAX_DELAY_SECONDS
 from database.batch_pipeline_store import FirestoreStore
 from routers import pending_work
 from testing.firestore_read_budget import assert_read_budget, delta_reads, snapshot_reads
@@ -52,25 +55,30 @@ def test_idle_backlog_projection_sweep(client, monkeypatch, backlog):
     monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
     store = FirestoreStore('batch_pipeline_test_idle', firestore_client=client)
     backfill_ref(client, store.namespace).set({'complete': True, 'version': BACKFILL_VERSION})
+    now = time.time()
+    # Ready rows match the finish-state index. Their async clock excludes
+    # them from the synchronous finish page, and the follow-up is not due.
     _seed(
         client,
         client.collection(f'{store.namespace}_results'),
         backlog,
         {
-            'projection_state': 'completed',
-            'committed_at': 1_760_000_000.0,
+            'projection_state': 'ready',
+            'committed_at': now - 3600,
+            PROJECTION_FINISH_DUE_FIELD: PROJECTION_FINISH_ASYNC_CLOCK,
+            FOLLOWUP_DUE_FIELD: now + MAX_DELAY_SECONDS,
         },
     )
 
     def unexpected_load(*_):
         pytest.fail('idle sweep attempted to load a result')
 
-    projector = Projector(store, unexpected_load)
+    projector = Projector(store, unexpected_load, clock=lambda: now)
     before = snapshot_reads()
     counts = projector.sweep()
     delta = delta_reads(before)
     assert counts == {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
-    assert not projector.has_async_followups
+    assert projector.has_async_followups  # A single existence read observes the async backlog.
     print(f'idle_backlog_projection_sweep rows={backlog}: total={delta.reads:g}')
     assert delta.reads > 0, delta
     assert_read_budget('idle_backlog_projection_sweep', delta.reads, delta)

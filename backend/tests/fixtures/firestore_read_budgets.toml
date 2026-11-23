@@ -24,7 +24,7 @@ budget_reads = 11
 unit = "sweep"
 owner = "firestore-cost-owner"
 review_by = "2026-12-11"
-notes = "Projector.sweep with pending assignment and finish async skip enabled, a completed finish-clock backfill, and 200 or 400 completed receipts: 9 document reads per sweep at both sizes (1.00x), zero eligible rows; ceil(9 * 1.20) = 11."
+notes = "Projector.sweep with pending assignment, finish async skip, a completed finish-clock backfill, and 200 or 400 ready receipts with async finish clocks and deferred follow-ups: 9 document reads per sweep at both sizes (1.00x), including one async existence read and zero eligible rows; ceil(9 * 1.20) = 11."
 
 [[scenario]]
 scenario = "idle_backlog_pending_work"
