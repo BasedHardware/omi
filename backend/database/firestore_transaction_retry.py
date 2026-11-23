@@ -40,6 +40,12 @@ except Exception:  # pragma: no cover - lightweight tests may stub only google.c
         """Stub-safe fallback for test environments without google-api-core."""
 
 
+try:
+    from google.cloud.firestore_v1.transaction import Transaction as _SDKTransaction
+except ImportError:  # Unit tests may stub the Firestore SDK.
+    _SDKTransaction = None  # type: ignore[reportAssignmentType]
+
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -109,11 +115,7 @@ def is_transaction_retry_failure(error: BaseException) -> bool:
 
 def transaction_with_safe_rollback(transaction: Any) -> Any:
     """Keep Firestore 2.20's rollback from replacing begin, body, or commit failures."""
-    try:
-        from google.cloud.firestore_v1.transaction import Transaction
-    except ImportError:  # Unit tests may stub the Firestore SDK.
-        return transaction
-    if not isinstance(transaction, Transaction):
+    if _SDKTransaction is None or not isinstance(transaction, _SDKTransaction):
         return transaction
     rollback: Callable[[], None] = getattr(transaction, '_rollback')
 
