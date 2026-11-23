@@ -365,6 +365,14 @@ on `failed_held`. Eligible legacy rows get a full window on first examination,
 never immediate expiry based on capture age. Provider-STT holds are excluded
 from GPU expiry/requeue.
 
+Scheduler quarantine also writes `quarantine_diagnostic` for the current
+attempt and records `worker_failure` when supplied. Lease expiry and typed
+worker validation have distinct diagnostic classes. Attempt exhaustion without
+typed worker evidence records an unknown underlying cause. Legacy rows and
+quarantines written outside the scheduler may lack the diagnostic entirely.
+Absence carries no retry or settlement authority. Provider and artifact evidence
+remain in their existing owning records.
+
 `R:expire_held_in_transaction`, called through `R:RecoveryStore.expire_held`
 and `RecoveryStore.checked`, rechecks content/ledger ownership, privacy,
 dormant `held|failed_held`, no result/receipt/token, expired lease and no active

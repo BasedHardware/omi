@@ -6,6 +6,7 @@ from config.batch_pipeline import batch_held_dead_letter_enabled, HELD_DEAD_LETT
 
 from config.policy import SchedulerPolicy
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
+from utils.batch_pipeline.errors import validate_worker_failure
 from utils.capture.retry_cap import observe, retry_cap
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,8 @@ logger = logging.getLogger(__name__)
 def quarantine_job(
     tx, job: dict, now: float, reason: str, *, lease_expired: bool = False, worker_failure: dict | None = None
 ) -> None:
+    if worker_failure is not None:
+        validate_worker_failure(worker_failure)
     # Preserve the durable audio and any existing artifact references for
     # operator recovery; quarantine never deletes encrypted source material.
     # Lease expiry/decode failures may never have reached VAD. Keep unknown
