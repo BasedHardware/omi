@@ -334,7 +334,8 @@
     },
     "BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED": {
       "owner": "provider-stt drain",
-      "review_by": "2026-11-27",
+      "review_by": "2026-12-04",
+      "reason": "SCA-2015: the November 28 metered-release contract review will inform whether to remove the legacy switch or give it a permanent budget slot.",
       "registry": "config/feature-flags.yaml"
     },
     "BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS": {
