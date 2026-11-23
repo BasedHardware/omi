@@ -12297,7 +12297,5 @@
     "firmwareUpdateAppRequired": "اس فرم ویئر اپ ڈیٹ کے لیے Omi ایپ کا نیا ورژن درکار ہے۔ اپنے ایپ اسٹور سے ایپ کو اپ ڈیٹ کریں، پھر دوبارہ چیک کریں۔",
     "quietPayerTitle": "5 دن سے کوئی ریکارڈنگ نہیں",
     "quietPayerMessage": "اپنا Omi چیک کریں۔",
-    "quietPayerCheck": "چیک کریں",
-    "finishHiddenFromHome": "پروسیسنگ مکمل ہو گئی۔ یہ ریکارڈنگ ہوم میں چھپا دی گئی ہے۔",
-    "finishCheckHome": "ابھی پروسیسنگ جاری ہے۔ نتیجے کے لیے ہوم دیکھیں۔"
+    "quietPayerCheck": "چیک کریں"
 }

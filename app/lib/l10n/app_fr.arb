@@ -4775,7 +4775,5 @@
     "firmwareUpdateAppRequired": "Cette mise à jour du micrologiciel nécessite une version plus récente de l'application Omi. Mettez l'application à jour depuis votre boutique d'applications, puis vérifiez à nouveau.",
     "quietPayerTitle": "Aucun enregistrement depuis 5 jours",
     "quietPayerMessage": "Vérifiez votre Omi.",
-    "quietPayerCheck": "Vérifier",
-    "finishHiddenFromHome": "Le traitement est terminé. Cet enregistrement est masqué sur l'accueil.",
-    "finishCheckHome": "Le traitement est toujours en cours. Consultez l'accueil pour voir le résultat."
+    "quietPayerCheck": "Vérifier"
 }

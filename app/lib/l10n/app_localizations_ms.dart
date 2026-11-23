@@ -15773,10 +15773,4 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Semak';
-
-  @override
-  String get finishHiddenFromHome => 'Pemprosesan selesai. Rakaman ini disembunyikan daripada Utama.';
-
-  @override
-  String get finishCheckHome => 'Masih memproses. Semak Utama untuk hasilnya.';
 }

@@ -12297,7 +12297,5 @@
     "firmwareUpdateAppRequired": "या फर्मवेअर अपडेटसाठी Omi ॲपची नवीन आवृत्ती आवश्यक आहे. तुमच्या ॲप स्टोअरमधून ॲप अपडेट करा, नंतर पुन्हा तपासा.",
     "quietPayerTitle": "5 दिवसांत एकही रेकॉर्डिंग नाही",
     "quietPayerMessage": "तुमचा Omi तपासा.",
-    "quietPayerCheck": "तपासा",
-    "finishHiddenFromHome": "प्रक्रिया पूर्ण झाली. ही रेकॉर्डिंग होमवर लपवली गेली आहे.",
-    "finishCheckHome": "अजून प्रक्रिया सुरू आहे. निकालासाठी होम तपासा."
+    "quietPayerCheck": "तपासा"
 }

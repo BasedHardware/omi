@@ -15738,10 +15738,4 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Kiểm tra';
-
-  @override
-  String get finishHiddenFromHome => 'Đã xử lý xong. Bản ghi âm này bị ẩn khỏi Trang chủ.';
-
-  @override
-  String get finishCheckHome => 'Vẫn đang xử lý. Kiểm tra kết quả tại Trang chủ.';
 }

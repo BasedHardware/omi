@@ -15772,10 +15772,4 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Pārbaudīt';
-
-  @override
-  String get finishHiddenFromHome => 'Apstrāde pabeigta. Šis ieraksts ir paslēpts sadaļā Sākums.';
-
-  @override
-  String get finishCheckHome => 'Vēl notiek apstrāde. Rezultātu skatiet sadaļā Sākums.';
 }

@@ -15852,10 +15852,4 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Prüfen';
-
-  @override
-  String get finishHiddenFromHome => 'Die Verarbeitung ist abgeschlossen. Diese Aufnahme ist in Home ausgeblendet.';
-
-  @override
-  String get finishCheckHome => 'Die Verarbeitung läuft noch. Überprüfen Sie das Ergebnis in Home.';
 }

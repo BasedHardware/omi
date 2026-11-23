@@ -15795,10 +15795,4 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Megnézem';
-
-  @override
-  String get finishHiddenFromHome => 'A feldolgozás befejeződött. Ez a felvétel rejtve van a Kezdőlapon.';
-
-  @override
-  String get finishCheckHome => 'A feldolgozás még folyamatban van. Az eredményt a Kezdőlapon találod.';
 }

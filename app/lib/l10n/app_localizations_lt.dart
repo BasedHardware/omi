@@ -15761,10 +15761,4 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Patikrinti';
-
-  @override
-  String get finishHiddenFromHome => 'Apdorojimas baigtas. Šis įrašas nerodomas Pradžioje.';
-
-  @override
-  String get finishCheckHome => 'Vis dar apdorojama. Rezultatą patikrinkite Pradžioje.';
 }

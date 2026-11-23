@@ -4836,7 +4836,5 @@
     "firmwareUpdateAppRequired": "Ehhez a firmware-frissítéshez az Omi alkalmazás újabb verziója szükséges. Frissítse az alkalmazást az alkalmazásboltban, majd ellenőrizze újra.",
     "quietPayerTitle": "5 napja nincs felvétel",
     "quietPayerMessage": "Nézd meg az Omidat.",
-    "quietPayerCheck": "Megnézem",
-    "finishHiddenFromHome": "A feldolgozás befejeződött. Ez a felvétel rejtve van a Kezdőlapon.",
-    "finishCheckHome": "A feldolgozás még folyamatban van. Az eredményt a Kezdőlapon találod."
+    "quietPayerCheck": "Megnézem"
 }

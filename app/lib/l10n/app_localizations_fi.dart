@@ -15742,10 +15742,4 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Tarkista';
-
-  @override
-  String get finishHiddenFromHome => 'Käsittely valmis. Tämä nauhoitus ei näy Etusivulla.';
-
-  @override
-  String get finishCheckHome => 'Käsittely on vielä kesken. Tarkista tulos Etusivulta.';
 }

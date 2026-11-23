@@ -15777,10 +15777,4 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Controleren';
-
-  @override
-  String get finishHiddenFromHome => 'Verwerking voltooid. Deze opname wordt niet weergegeven in Home.';
-
-  @override
-  String get finishCheckHome => 'Wordt nog verwerkt. Bekijk Home voor het resultaat.';
 }

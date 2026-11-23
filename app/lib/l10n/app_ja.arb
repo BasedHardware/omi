@@ -4740,7 +4740,5 @@
     "firmwareUpdateAppRequired": "このファームウェアの更新には、新しいバージョンのOmiアプリが必要です。アプリストアからアプリを更新してから、もう一度確認してください。",
     "quietPayerTitle": "5日間録音がありません",
     "quietPayerMessage": "Omiを確認してください。",
-    "quietPayerCheck": "確認",
-    "finishHiddenFromHome": "処理が完了しました。この録音はホームに表示されません。",
-    "finishCheckHome": "まだ処理中です。結果はホームで確認してください。"
+    "quietPayerCheck": "確認"
 }

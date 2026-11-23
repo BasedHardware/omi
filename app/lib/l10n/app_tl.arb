@@ -12297,7 +12297,5 @@
     "firmwareUpdateAppRequired": "Kailangan ng firmware update na ito ng mas bagong Omi app. I-update ang app mula sa iyong app store, pagkatapos ay tingnan muli.",
     "quietPayerTitle": "Walang recording sa loob ng 5 araw",
     "quietPayerMessage": "Tingnan ang iyong Omi.",
-    "quietPayerCheck": "Tingnan",
-    "finishHiddenFromHome": "Tapos na ang pagproseso. Nakatago sa Home ang recording na ito.",
-    "finishCheckHome": "Pinoproseso pa rin. Tingnan ang Home para sa resulta."
+    "quietPayerCheck": "Tingnan"
 }

@@ -15788,10 +15788,4 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'ಪರಿಶೀಲಿಸಿ';
-
-  @override
-  String get finishHiddenFromHome => 'ಪ್ರಕ್ರಿಯೆ ಪೂರ್ಣಗೊಂಡಿದೆ. ಈ ರೆಕಾರ್ಡಿಂಗ್ ಅನ್ನು ಹೋಮ್‌ನಿಂದ ಮರೆಮಾಡಲಾಗಿದೆ.';
-
-  @override
-  String get finishCheckHome => 'ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿದೆ. ಫಲಿತಾಂಶಕ್ಕಾಗಿ ಹೋಮ್ ಅನ್ನು ಪರಿಶೀಲಿಸಿ.';
 }

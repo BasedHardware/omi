@@ -15788,10 +15788,4 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Проверить';
-
-  @override
-  String get finishHiddenFromHome => 'Обработка завершена. Эта запись скрыта на «Главной».';
-
-  @override
-  String get finishCheckHome => 'Обработка ещё идёт. Проверьте результат на «Главной».';
 }

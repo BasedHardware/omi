@@ -4740,7 +4740,5 @@
     "firmwareUpdateAppRequired": "Šim aparātprogrammatūras atjauninājumam nepieciešama jaunāka Omi lietotnes versija. Atjauniniet lietotni savā lietotņu veikalā un pēc tam pārbaudiet vēlreiz.",
     "quietPayerTitle": "5 dienas nav ierakstu",
     "quietPayerMessage": "Pārbaudiet savu Omi.",
-    "quietPayerCheck": "Pārbaudīt",
-    "finishHiddenFromHome": "Apstrāde pabeigta. Šis ieraksts ir paslēpts sadaļā Sākums.",
-    "finishCheckHome": "Vēl notiek apstrāde. Rezultātu skatiet sadaļā Sākums."
+    "quietPayerCheck": "Pārbaudīt"
 }

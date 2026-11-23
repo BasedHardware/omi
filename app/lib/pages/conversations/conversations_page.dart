@@ -501,11 +501,9 @@ class _ConversationsPageState extends State<ConversationsPage>
         !source.showShortConversations &&
         !source.showDiscardedConversations);
     if (active && _feed?.preparationReady == true) unawaited(_feed!.refresh());
-    // Re-entering Home releases an outage-era grouping and shows deferred finish feedback.
+    // Re-entering Home releases an outage-era grouping.
     // Skip the rebuild when there is nothing to update (tab_switch perf budget).
-    if (active &&
-        mounted &&
-        (_fallbackHomeLayout != null || _paintedStandaloneIds.isNotEmpty || _v3?.finishTimedOut == true)) {
+    if (active && mounted && (_fallbackHomeLayout != null || _paintedStandaloneIds.isNotEmpty)) {
       setState(_releaseHomeLayout);
     }
   }
@@ -920,19 +918,6 @@ class _ConversationsPageState extends State<ConversationsPage>
             if (!mounted || !v3!.acknowledgeManualFinish(manualFinish)) return;
             if (terminalFinish != null && isFailedConversation(terminalFinish)) {
               OmiFeedback.error(context, context.l10n.attentionSummaryFailed);
-            } else if (terminalFinish?.v3?.homeHidden == true) {
-              OmiFeedback.info(context, context.l10n.finishHiddenFromHome);
-            }
-          });
-        }
-        if (v3On &&
-            v3!.finishTimedOut &&
-            _homeTabActive &&
-            !_wasBackgrounded &&
-            (ModalRoute.of(context)?.isCurrent ?? true)) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && v3.takeFinishTimeout(convoProvider.conversations)) {
-              OmiFeedback.info(context, context.l10n.finishCheckHome);
             }
           });
         }

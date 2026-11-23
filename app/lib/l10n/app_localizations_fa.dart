@@ -15729,10 +15729,4 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'بررسی';
-
-  @override
-  String get finishHiddenFromHome => 'پردازش به پایان رسید. این ضبط در «خانه» پنهان است.';
-
-  @override
-  String get finishCheckHome => 'هنوز در حال پردازش است. نتیجه را در «خانه» بررسی کنید.';
 }

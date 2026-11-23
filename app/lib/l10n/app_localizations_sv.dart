@@ -15745,10 +15745,4 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Kolla';
-
-  @override
-  String get finishHiddenFromHome => 'Bearbetningen är klar. Den här inspelningen är dold under Hem.';
-
-  @override
-  String get finishCheckHome => 'Bearbetning pågår. Kontrollera Hem för resultatet.';
 }

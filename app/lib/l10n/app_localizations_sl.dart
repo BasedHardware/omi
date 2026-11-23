@@ -15765,10 +15765,4 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Preveri';
-
-  @override
-  String get finishHiddenFromHome => 'Obdelava končana. Ta posnetek je skrit v razdelku Domov.';
-
-  @override
-  String get finishCheckHome => 'Obdelava še poteka. Preverite rezultat v razdelku Domov.';
 }

@@ -15649,10 +15649,4 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'تحقّق';
-
-  @override
-  String get finishHiddenFromHome => 'انتهت المعالجة. هذا التسجيل مخفي من Home.';
-
-  @override
-  String get finishCheckHome => 'لا تزال المعالجة جارية. تحقق من Home للاطلاع على النتيجة.';
 }

@@ -15802,10 +15802,4 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Verifică';
-
-  @override
-  String get finishHiddenFromHome => 'Procesarea s-a încheiat. Această înregistrare este ascunsă din secțiunea Acasă.';
-
-  @override
-  String get finishCheckHome => 'Încă se procesează. Verifică rezultatul în secțiunea Acasă.';
 }

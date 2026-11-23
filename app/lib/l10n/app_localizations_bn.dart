@@ -15731,10 +15731,4 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'দেখুন';
-
-  @override
-  String get finishHiddenFromHome => 'প্রক্রিয়াকরণ শেষ হয়েছে। এই রেকর্ডিংটি Home থেকে লুকানো আছে।';
-
-  @override
-  String get finishCheckHome => 'এখনও প্রক্রিয়া করা হচ্ছে। ফলাফলের জন্য Home চেক করুন।';
 }

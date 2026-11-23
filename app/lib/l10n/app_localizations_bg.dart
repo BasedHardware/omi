@@ -15788,10 +15788,4 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Провери';
-
-  @override
-  String get finishHiddenFromHome => 'Обработката приключи. Този запис е скрит от Home.';
-
-  @override
-  String get finishCheckHome => 'Все още се обработва. Проверете резултата в Home.';
 }

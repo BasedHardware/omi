@@ -4740,7 +4740,5 @@
     "firmwareUpdateAppRequired": "Den här firmwareuppdateringen kräver en nyare Omi-app. Uppdatera appen från din appbutik och kontrollera sedan igen.",
     "quietPayerTitle": "Inga inspelningar på 5 dagar",
     "quietPayerMessage": "Kolla din Omi.",
-    "quietPayerCheck": "Kolla",
-    "finishHiddenFromHome": "Bearbetningen är klar. Den här inspelningen är dold under Hem.",
-    "finishCheckHome": "Bearbetning pågår. Kontrollera Hem för resultatet."
+    "quietPayerCheck": "Kolla"
 }

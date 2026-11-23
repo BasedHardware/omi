@@ -4,14 +4,14 @@
     {
       "file": "001-mobile-ios-hidden-finish.png",
       "platform": "mobile-ios",
-      "description": "Home clears Processing and explains why the completed recording is hidden.",
+      "description": "Home silently clears Processing when the completed recording is hidden.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "002-mobile-ios-finish-deadline.png",
       "platform": "mobile-ios",
-      "description": "Home clears Processing at the 20-minute deadline and tells the user where the result will appear.",
+      "description": "Home silently clears Processing at the 20-minute deadline.",
       "captured_by": "agent",
       "source": "visual-audit"
     }

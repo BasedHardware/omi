@@ -15513,10 +15513,4 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get quietPayerCheck => '확인';
-
-  @override
-  String get finishHiddenFromHome => '처리가 완료되었습니다. 이 녹음은 홈에 표시되지 않습니다.';
-
-  @override
-  String get finishCheckHome => '아직 처리 중입니다. 홈에서 결과를 확인하세요.';
 }

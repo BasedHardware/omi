@@ -4740,7 +4740,5 @@
     "firmwareUpdateAppRequired": "Bản cập nhật firmware này yêu cầu phiên bản ứng dụng Omi mới hơn. Hãy cập nhật ứng dụng từ cửa hàng ứng dụng của bạn, rồi kiểm tra lại.",
     "quietPayerTitle": "Không có bản ghi nào trong 5 ngày",
     "quietPayerMessage": "Hãy kiểm tra Omi của bạn.",
-    "quietPayerCheck": "Kiểm tra",
-    "finishHiddenFromHome": "Đã xử lý xong. Bản ghi âm này bị ẩn khỏi Trang chủ.",
-    "finishCheckHome": "Vẫn đang xử lý. Kiểm tra kết quả tại Trang chủ."
+    "quietPayerCheck": "Kiểm tra"
 }

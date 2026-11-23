@@ -15719,10 +15719,4 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'जांचें';
-
-  @override
-  String get finishHiddenFromHome => 'प्रोसेसिंग पूरी हुई। यह रिकॉर्डिंग होम पर छिपी है।';
-
-  @override
-  String get finishCheckHome => 'प्रोसेसिंग अभी भी जारी है। नतीजा होम पर देखें।';
 }

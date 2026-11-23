@@ -15782,10 +15782,4 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Sprawdź';
-
-  @override
-  String get finishHiddenFromHome => 'Przetwarzanie zakończone. To nagranie jest ukryte na ekranie głównym.';
-
-  @override
-  String get finishCheckHome => 'Przetwarzanie nadal trwa. Sprawdź wynik na ekranie głównym.';
 }

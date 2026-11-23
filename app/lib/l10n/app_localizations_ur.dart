@@ -15748,10 +15748,4 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'چیک کریں';
-
-  @override
-  String get finishHiddenFromHome => 'پروسیسنگ مکمل ہو گئی۔ یہ ریکارڈنگ ہوم میں چھپا دی گئی ہے۔';
-
-  @override
-  String get finishCheckHome => 'ابھی پروسیسنگ جاری ہے۔ نتیجے کے لیے ہوم دیکھیں۔';
 }

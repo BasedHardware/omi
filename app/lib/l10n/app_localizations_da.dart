@@ -15728,10 +15728,4 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Tjek';
-
-  @override
-  String get finishHiddenFromHome => 'Behandlingen er afsluttet. Denne optagelse er skjult på Home.';
-
-  @override
-  String get finishCheckHome => 'Behandler stadig. Tjek Home for resultatet.';
 }

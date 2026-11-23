@@ -4740,7 +4740,5 @@
     "firmwareUpdateAppRequired": "See püsivara värskendus vajab Omi rakenduse uuemat versiooni. Värskendage rakendust oma rakenduste poes ja kontrollige seejärel uuesti.",
     "quietPayerTitle": "5 päeva pole salvestisi",
     "quietPayerMessage": "Kontrolli oma Omit.",
-    "quietPayerCheck": "Kontrolli",
-    "finishHiddenFromHome": "Töötlemine on lõpetatud. See salvestis on Avalehel peidetud.",
-    "finishCheckHome": "Töötlemine on veel käimas. Kontrollige tulemust Avalehelt."
+    "quietPayerCheck": "Kontrolli"
 }

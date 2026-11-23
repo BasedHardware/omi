@@ -4740,7 +4740,5 @@
     "firmwareUpdateAppRequired": "การอัปเดตเฟิร์มแวร์นี้ต้องใช้แอป Omi เวอร์ชันใหม่กว่า อัปเดตแอปจากร้านค้าแอปของคุณ แล้วตรวจสอบอีกครั้ง",
     "quietPayerTitle": "ไม่มีการบันทึกมา 5 วัน",
     "quietPayerMessage": "ตรวจสอบ Omi ของคุณ",
-    "quietPayerCheck": "ตรวจสอบ",
-    "finishHiddenFromHome": "ประมวลผลเสร็จแล้ว การบันทึกนี้จะไม่แสดงในหน้าแรก",
-    "finishCheckHome": "ยังประมวลผลอยู่ ตรวจสอบผลลัพธ์ที่หน้าแรก"
+    "quietPayerCheck": "ตรวจสอบ"
 }

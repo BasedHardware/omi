@@ -15744,10 +15744,4 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Провери';
-
-  @override
-  String get finishHiddenFromHome => 'Обрада је завршена. Овај снимак је скривен на Почетној.';
-
-  @override
-  String get finishCheckHome => 'Обрада је још у току. Проверите резултат на Почетној.';
 }

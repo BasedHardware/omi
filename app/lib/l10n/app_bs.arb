@@ -12297,7 +12297,5 @@
     "firmwareUpdateAppRequired": "Ovo ažuriranje firmvera zahtijeva noviju verziju aplikacije Omi. Ažurirajte aplikaciju iz svoje prodavnice aplikacija, a zatim provjerite ponovo.",
     "quietPayerTitle": "Nema snimaka 5 dana",
     "quietPayerMessage": "Provjerite svoj Omi.",
-    "quietPayerCheck": "Provjeri",
-    "finishHiddenFromHome": "Obrada je završena. Ova snimka je skrivena na početnoj stranici.",
-    "finishCheckHome": "Još uvek se obrađuje. Proverite rezultat na početnoj stranici."
+    "quietPayerCheck": "Provjeri"
 }

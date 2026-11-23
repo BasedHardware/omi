@@ -15507,10 +15507,4 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get quietPayerCheck => '確認';
-
-  @override
-  String get finishHiddenFromHome => '処理が完了しました。この録音はホームに表示されません。';
-
-  @override
-  String get finishCheckHome => 'まだ処理中です。結果はホームで確認してください。';
 }

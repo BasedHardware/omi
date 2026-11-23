@@ -4740,7 +4740,5 @@
     "firmwareUpdateAppRequired": "Voor deze firmware-update is een nieuwere Omi-app nodig. Werk de app bij via je appwinkel en controleer daarna opnieuw.",
     "quietPayerTitle": "Al 5 dagen geen opnames",
     "quietPayerMessage": "Controleer je Omi.",
-    "quietPayerCheck": "Controleren",
-    "finishHiddenFromHome": "Verwerking voltooid. Deze opname wordt niet weergegeven in Home.",
-    "finishCheckHome": "Wordt nog verwerkt. Bekijk Home voor het resultaat."
+    "quietPayerCheck": "Controleren"
 }

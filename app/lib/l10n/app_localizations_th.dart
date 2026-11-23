@@ -15662,10 +15662,4 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'ตรวจสอบ';
-
-  @override
-  String get finishHiddenFromHome => 'ประมวลผลเสร็จแล้ว การบันทึกนี้จะไม่แสดงในหน้าแรก';
-
-  @override
-  String get finishCheckHome => 'ยังประมวลผลอยู่ ตรวจสอบผลลัพธ์ที่หน้าแรก';
 }

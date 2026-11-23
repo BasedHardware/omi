@@ -15729,10 +15729,4 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Kontrolli';
-
-  @override
-  String get finishHiddenFromHome => 'Töötlemine on lõpetatud. See salvestis on Avalehel peidetud.';
-
-  @override
-  String get finishCheckHome => 'Töötlemine on veel käimas. Kontrollige tulemust Avalehelt.';
 }

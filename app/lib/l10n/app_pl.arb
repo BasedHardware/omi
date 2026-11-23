@@ -4775,7 +4775,5 @@
     "firmwareUpdateAppRequired": "Ta aktualizacja oprogramowania układowego wymaga nowszej aplikacji Omi. Zaktualizuj aplikację w sklepie z aplikacjami, a następnie sprawdź ponownie.",
     "quietPayerTitle": "Brak nagrań od 5 dni",
     "quietPayerMessage": "Sprawdź swoje Omi.",
-    "quietPayerCheck": "Sprawdź",
-    "finishHiddenFromHome": "Przetwarzanie zakończone. To nagranie jest ukryte na ekranie głównym.",
-    "finishCheckHome": "Przetwarzanie nadal trwa. Sprawdź wynik na ekranie głównym."
+    "quietPayerCheck": "Sprawdź"
 }

@@ -15751,10 +15751,4 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Periksa';
-
-  @override
-  String get finishHiddenFromHome => 'Pemrosesan selesai. Rekaman ini disembunyikan dari Beranda.';
-
-  @override
-  String get finishCheckHome => 'Masih diproses. Periksa hasilnya di Beranda.';
 }

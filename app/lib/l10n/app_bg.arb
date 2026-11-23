@@ -4740,7 +4740,5 @@
     "firmwareUpdateAppRequired": "Тази актуализация на фърмуера изисква по-нова версия на приложението Omi. Актуализирайте приложението от магазина си за приложения и проверете отново.",
     "quietPayerTitle": "Няма записи от 5 дни",
     "quietPayerMessage": "Проверете своя Omi.",
-    "quietPayerCheck": "Провери",
-    "finishHiddenFromHome": "Обработката приключи. Този запис е скрит от Home.",
-    "finishCheckHome": "Все още се обработва. Проверете резултата в Home."
+    "quietPayerCheck": "Провери"
 }

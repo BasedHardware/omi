@@ -15799,10 +15799,4 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'తనిఖీ';
-
-  @override
-  String get finishHiddenFromHome => 'ప్రక్రియ పూర్తయింది. ఈ రికార్డింగ్ హోమ్‌లో చూపబడదు.';
-
-  @override
-  String get finishCheckHome => 'ఇంకా ప్రక్రియ జరుగుతోంది. ఫలితం కోసం హోమ్‌ను చెక్ చేయండి.';
 }

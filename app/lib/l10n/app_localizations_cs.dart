@@ -15736,10 +15736,4 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Zkontrolovat';
-
-  @override
-  String get finishHiddenFromHome => 'Zpracování dokončeno. Tato nahrávka je skrytá v Home.';
-
-  @override
-  String get finishCheckHome => 'Stále se zpracovává. Zkontrolujte výsledek v Home.';
 }

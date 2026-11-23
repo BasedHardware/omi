@@ -15770,10 +15770,4 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Перевірити';
-
-  @override
-  String get finishHiddenFromHome => 'Обробку завершено. Цей запис приховано з Головної.';
-
-  @override
-  String get finishCheckHome => 'Обробка ще триває. Перевірте результат на Головній.';
 }

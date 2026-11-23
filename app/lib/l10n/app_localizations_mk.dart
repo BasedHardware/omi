@@ -15801,10 +15801,4 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Провери';
-
-  @override
-  String get finishHiddenFromHome => 'Обработката е завршена. Ова снимање не се прикажува на Почетната страница.';
-
-  @override
-  String get finishCheckHome => 'Сè уште се обработува. Проверете го резултатот на Почетната страница.';
 }

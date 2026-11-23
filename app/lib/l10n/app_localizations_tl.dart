@@ -15861,10 +15861,4 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Tingnan';
-
-  @override
-  String get finishHiddenFromHome => 'Tapos na ang pagproseso. Nakatago sa Home ang recording na ito.';
-
-  @override
-  String get finishCheckHome => 'Pinoproseso pa rin. Tingnan ang Home para sa resulta.';
 }

@@ -15732,10 +15732,4 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Skontrolovať';
-
-  @override
-  String get finishHiddenFromHome => 'Spracovávanie dokončené. Táto nahrávka je skrytá v časti Domov.';
-
-  @override
-  String get finishCheckHome => 'Spracovávanie stále prebieha. Skontrolujte výsledok v časti Domov.';
 }

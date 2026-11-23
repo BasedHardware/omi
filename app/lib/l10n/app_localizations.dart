@@ -27632,18 +27632,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Check'**
   String get quietPayerCheck;
-
-  /// Informational toast after a manual finish when Home visibility rules hide the resulting conversation.
-  ///
-  /// In en, this message translates to:
-  /// **'Processing finished. This recording is hidden from Home.'**
-  String get finishHiddenFromHome;
-
-  /// Informational toast when Home stops waiting for a manual finish. Home is the conversation list tab.
-  ///
-  /// In en, this message translates to:
-  /// **'Still processing. Check Home for the result.'**
-  String get finishCheckHome;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
