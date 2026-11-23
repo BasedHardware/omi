@@ -1562,6 +1562,7 @@ void main() {
               reason: 'the unrelated failed conversation must not settle this finish');
 
           final resultAfterTimeout = caseName == '20-minute deadline followed by a result';
+          int? forcedBefore;
           if (caseName.startsWith('20-minute deadline')) {
             await tester.pump(const Duration(minutes: 19, seconds: 59));
             expect(v3.finishRow, same(pending));
@@ -1579,6 +1580,7 @@ void main() {
                 );
                 await tester.pump();
               }
+              forcedBefore = home.conversations.forcedReads;
               tabs.setIndex(HomeProvider.homeTab);
             } else {
               await tester.pump(const Duration(seconds: 1));
@@ -1609,6 +1611,9 @@ void main() {
           expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
           expect(find.byKey(const Key('conversation_summary_failed_indicator')), findsNothing);
           expect(find.text('Launch checklist'), resultAfterTimeout ? findsOneWidget : findsNothing);
+          if (forcedBefore != null) {
+            expect(home.conversations.forcedReads, forcedBefore + 1, reason: 'Home re-entry reconciles the list once');
+          }
           if (image != null) await shoot(tester, image);
 
           await tester.pump(const Duration(minutes: 3));

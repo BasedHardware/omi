@@ -494,6 +494,9 @@ class _ConversationsPageState extends State<ConversationsPage>
     _homeTabActive = active;
     _syncV3Watch();
     final source = context.read<ConversationProvider>();
+    if (active && context.read<ConversationsV3Provider?>()?.takeHomeReconcile() == true) {
+      unawaited(source.forceRefreshConversations().then<void>((_) {}, onError: (Object _) {}));
+    }
     _feed?.setActive(active &&
         !_wasBackgrounded &&
         !source.hasActiveSearch &&

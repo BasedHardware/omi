@@ -53,6 +53,15 @@ class ConversationsV3Provider extends ChangeNotifier {
   ServerConversation? _finishRow;
   String? _finishRecordingId;
   String? _finishLiveId;
+  // An accepted finish that timed out off Home: the next Home entry reads the list once.
+  bool _reconcileOnHome = false;
+
+  bool takeHomeReconcile() {
+    final due = _reconcileOnHome;
+    _reconcileOnHome = false;
+    return due;
+  }
+
   bool _suppressListening = false;
   String? _finishCaptureId;
   bool _finishAccepted = false;
@@ -83,6 +92,7 @@ class ConversationsV3Provider extends ChangeNotifier {
     }
     _armFinishExpiry();
     _finishDeadline = Timer(const Duration(minutes: 20), () {
+      _reconcileOnHome = _finishAccepted;
       _clearManualFinish(keepClosedLive: _finishAccepted);
       notifyListeners();
     });
