@@ -160,7 +160,7 @@ def run_with_transaction_contention_retry(
     operation_name: str,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     deadline: float | None = None,
-    retry_reserve_floor_seconds: float = RETRY_RESERVE_FLOOR_SECONDS,
+    reserve_retry_time: bool = True,
     sleep: Callable[[float], None] = time.sleep,
     random_value: Callable[[], float] = random.random,
     monotonic: Callable[[], float] = time.monotonic,
@@ -182,7 +182,7 @@ def run_with_transaction_contention_retry(
     worse than running the transaction once.  Each retry (attempt 2 onward)
     starts only while the remaining budget covers
     ``max(last attempt's observed duration × RETRY_RESERVE_FACTOR,
-    retry_reserve_floor_seconds)``, and a post-failure jitter sleep never runs
+    RETRY_RESERVE_FLOOR_SECONDS)``, and a post-failure jitter sleep never runs
     past the deadline.  When the reserve does not fit, the loop stops with
     ``FirestoreContentionExhausted(reason='deadline_exhausted')``.  The
     accepted bound is ``deadline + one in-flight attempt``: an attempt that
@@ -190,6 +190,8 @@ def run_with_transaction_contention_retry(
     270 s; callers keep a post-transaction margin (the sync handler's 120 s)
     to absorb that tail.  Callers without a deadline keep the attempt-only
     bound — expiry at three fresh chains, Aborted at ``max_attempts``.
+    Callers that enforce the deadline on each RPC can set
+    ``reserve_retry_time=False`` to retry in any remaining time.
     """
 
     if max_attempts < 1:
@@ -203,8 +205,8 @@ def run_with_transaction_contention_retry(
     for attempt in range(1, max_attempts + 1):
         if attempt > 1 and deadline is not None:
             remaining = deadline - monotonic()
-            reserve = max(last_attempt_seconds * RETRY_RESERVE_FACTOR, retry_reserve_floor_seconds)
-            if remaining < reserve:
+            reserve = max(last_attempt_seconds * RETRY_RESERVE_FACTOR, RETRY_RESERVE_FLOOR_SECONDS)
+            if remaining <= 0 or (reserve_retry_time and remaining < reserve):
                 logger.error(
                     "firestore_transaction_contention operation=%s attempt=%d/%d outcome=deadline_exhausted "
                     "remaining_ms=%d reserve_ms=%d",

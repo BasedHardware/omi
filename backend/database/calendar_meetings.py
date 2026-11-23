@@ -102,7 +102,7 @@ def create_meeting(uid: str, meeting_data: Dict[str, Any]) -> str:
         operation_name='calendar_meeting_create',
         max_attempts=_UPSERT_ATTEMPTS,
         deadline=deadline,
-        retry_reserve_floor_seconds=0.0,
+        reserve_retry_time=False,
     )
     return meeting_id
 
