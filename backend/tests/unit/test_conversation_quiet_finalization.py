@@ -916,7 +916,9 @@ def test_unowned_expired_row_takes_base_path_without_storage_or_delete(store, mo
     listing = MagicMock(return_value=retained)
     monkeypatch.setattr(storage, 'list_audio_chunks', listing)
     raw_delete = MagicMock(side_effect=AssertionError('retained audio is immutable'))
-    monkeypatch.setattr(lifecycle, 'delete_conversation_audio_files', raw_delete)
+    inventory = MagicMock(return_value=len(retained))
+    monkeypatch.setattr(storage, 'delete_conversation_audio_files', raw_delete)
+    monkeypatch.setattr(lifecycle, 'count_retained_raw_conversation_objects', inventory)
     proof = MagicMock(return_value=False)
     monkeypatch.setattr(quiet, '_empty_storage_proof', proof)
     cleanup = MagicMock(side_effect=AssertionError('base refuses this row'))
@@ -926,6 +928,7 @@ def test_unowned_expired_row_takes_base_path_without_storage_or_delete(store, mo
     assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'done'
     proof.assert_not_called()
     listing.assert_not_called()
+    inventory.assert_not_called()
     cleanup.assert_not_called()
     raw_delete.assert_not_called()
     assert ROW in store.rows
