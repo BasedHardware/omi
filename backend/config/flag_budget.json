@@ -213,6 +213,11 @@
       "review_by": "2026-12-18",
       "registry": "config/feature-flags.yaml"
     },
+    "BATCH_PIPELINE_MERGE_AGED_GPU_RELEASE_ENABLED": {
+      "owner": "Goal: Pipeline",
+      "review_by": "2026-12-07",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST": {
       "owner": "q12-post-seal",
       "review_by": "2026-12-18",
