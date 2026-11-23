@@ -31,6 +31,69 @@ SPEC.loader.exec_module(CHECKER)
 
 
 class GcpBackendProductionBoundaryTests(unittest.TestCase):
+    def test_all_service_production_smoke_requires_completed_http_401(self) -> None:
+        composite = (ROOT / CHECKER.DEPLOY_BACKEND_STACK_ACTION).read_text(encoding="utf-8")
+        smoke = composite.split(f"- name: {CHECKER.PROD_SMOKE}\n", 1)[1].split("\n    - name: ", 1)[0]
+        script = textwrap.dedent(smoke.split("\n      run: |\n", 1)[1])
+        cases = {
+            "unauthorized": ("401", 0, 0, ["POST"]),
+            "timeout_after_headers": ("401", 28, 28, []),
+            "unexpected_response": ("403", 0, 1, []),
+        }
+        for scenario, (http_status, curl_exit, smoke_exit, expected_calls) in cases.items():
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                curl = root / "curl"
+                curl.write_text(
+                    '#!/bin/sh\ncase " $* " in *" --connect-timeout 5 --max-time 10 "*) ;; *) exit 2 ;; esac\n'
+                    'printf "%s" "$FIXTURE_HTTP_STATUS"\nexit "$FIXTURE_CURL_EXIT"\n',
+                    encoding="utf-8",
+                )
+                curl.chmod(0o700)
+                (root / "firebase_release_probe_token.py").write_text(
+                    "import sys\nfrom pathlib import Path\nPath(sys.argv[-1]).touch()\n",
+                    encoding="utf-8",
+                )
+                (root / "transcription_capability_probe.py").write_text(
+                    textwrap.dedent("""\
+                        import os
+                        from pathlib import Path
+                        import sys
+
+                        root = Path(os.environ["RUNNER_TEMP"])
+                        token_file = root / "firebase-production-serving-token"
+                        assert token_file.exists()
+                        assert sys.argv[1:] == [
+                            "--candidate-api-url", "https://api.omi.me",
+                            "--bearer-token-file", str(token_file), "--json-only",
+                        ]
+                        with (root / "calls").open("a") as stream:
+                            stream.write("POST\\n")
+                        """),
+                    encoding="utf-8",
+                )
+                env = {
+                    **os.environ,
+                    "PATH": f"{root}:{os.environ['PATH']}",
+                    "RUNNER_TEMP": directory,
+                    "DEPLOY_CONTROL_SCRIPTS": directory,
+                    "PROBE_SECRET_PROJECT": "fixture",
+                    "FIREBASE_AUTH_PROJECT_ID": "fixture",
+                    "SMOKE_CLOUD_RUN_SERVICE": "all",
+                    "FIXTURE_HTTP_STATUS": http_status,
+                    "FIXTURE_CURL_EXIT": str(curl_exit),
+                }
+                result = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True, timeout=10)
+                self.assertEqual(result.returncode, smoke_exit, result.stderr)
+                calls = root / "calls"
+                self.assertEqual(calls.read_text().splitlines() if calls.exists() else [], expected_calls)
+                self.assertFalse((root / "firebase-production-serving-token").exists())
+
+        rollback = composite.split("    - name: Restore Cloud Run traffic snapshot after failed promotion")[-1]
+        rollback_condition = rollback.split("\n      shell:", 1)[0]
+        self.assertIn("inputs.deploy_profile == 'manual' && (failure() || cancelled())", rollback_condition)
+        self.assertIn(CHECKER.ROLLBACK_CONDITION, rollback_condition)
+
     def test_selected_production_smoke_retries_only_before_an_http_response(self) -> None:
         composite = (ROOT / CHECKER.DEPLOY_BACKEND_STACK_ACTION).read_text(encoding="utf-8")
         smoke = composite.split(f"- name: {CHECKER.PROD_SMOKE}\n", 1)[1].split("\n    - name: ", 1)[0]
