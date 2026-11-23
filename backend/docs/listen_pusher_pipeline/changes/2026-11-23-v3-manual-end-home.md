@@ -11,7 +11,8 @@ The [v3 runtime contract](../../listen_pusher_pipeline.mdx#recording-derived-con
 documents the default-on kill switch. For a rollout window, divide the increase
 in `omi_conversations_v3_manual_end_home_total{visibility="visible"}` by the
 increase across both visibility labels, summed across builders. This measures
-successful first processing settlements after the backend Home visibility checks.
+successful processing settlements after the backend Home visibility checks.
 It excludes historical runs, deleted rows, discarded rows and failed summaries.
-Serving verification must also reconcile the eligible count against the Home list
-and report user exceptions, failed summaries and unknown outcomes separately.
+A late rewrite can settle the same row again. For release readback, count distinct
+eligible rows against the serving Home list and report user exceptions, failed
+summaries and unknown outcomes separately.

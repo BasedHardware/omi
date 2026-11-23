@@ -25,7 +25,7 @@ VISIBLE_LATENCY = Histogram(
 )
 MANUAL_END_HOME = Counter(
     'omi_conversations_v3_manual_end_home_total',
-    'Live derived manual-end rows with a successful first processing settlement',
+    'Successful processing settlements of live derived manual-end rows, including rewrites',
     ['visibility'],
 )
 for outcome in ('visible', 'hidden'):

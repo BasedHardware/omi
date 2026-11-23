@@ -115,6 +115,32 @@ def test_completed_word_floor_is_observed_once_on_settlement(strict, monkeypatch
 
 
 @pytest.mark.parametrize(
+    'updates,outcome',
+    [
+        ({}, 'visible'),
+        ({'home_hidden': True}, 'hidden'),
+        ({'discarded': True}, None),
+        ({'deleted': True}, None),
+        ({'backfilled': True}, None),
+        ({'status': 'failed'}, None),
+        ({'manual_end': False}, None),
+    ],
+)
+def test_manual_end_visibility_counts_successful_settlements(strict, monkeypatch, updates, outcome):
+    row = derived(manual_end=True, v3_process_pending=True)
+    strict.rows[C] = {**row, **updates}
+    counter = Mock()
+    monkeypatch.setattr(writers.metrics, 'MANUAL_END_HOME', counter)
+    settle(strict, notes=False)
+    settle(strict, notes=False)  # No additional settlement is owed here.
+    if outcome is None:
+        counter.labels.assert_not_called()
+    else:
+        counter.labels.assert_called_once_with(outcome)
+        counter.labels.return_value.inc.assert_called_once_with()
+
+
+@pytest.mark.parametrize(
     'counter,label_keys,outcomes',
     [
         (

@@ -286,7 +286,6 @@ def settle_processing(
             and row.get('manual_end')
             and not row.get('backfilled')
             and not row.get('discarded')
-            and row.get('summary_covers_through') is None
         ):
             visible = conversations.is_visible_conversation(row, hide_home=True, presentation=True)
             manual_visibility = 'visible' if visible else 'hidden'
