@@ -186,7 +186,8 @@ class UsageProvider with ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      // omi-ux-allow: silent-catch -- plans sheet shows retry
+      // No offers: the plans sheet shows its retry state.
+      _playOffers = null;
       Logger.debug('Failed to load Play offers: $e');
     } finally {
       _playOffersLoading = false;
@@ -199,7 +200,8 @@ class UsageProvider with ChangeNotifier {
     try {
       if (await playBillingService.deliverPendingTokens()) await fetchSubscription();
     } catch (e) {
-      // omi-ux-allow: silent-catch -- token resent next launch
+      // Try again on the next subscription read.
+      _playPendingSent = false;
       Logger.debug('Failed to deliver pending Play purchases: $e');
     }
   }
