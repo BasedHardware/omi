@@ -65,6 +65,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/conversation_summary_stream.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart' show Wal;
@@ -215,6 +216,9 @@ class _LiveCapture extends CaptureProvider {
   Completer<void>? drain;
 
   @override
+  String? verifiedLiveServerRecordingId;
+
+  @override
   Future<void> forceProcessingCurrentConversation() async {
     endCalls++;
     final held = drain;
@@ -332,7 +336,8 @@ class _Home {
     return _conversation('live-1', _now.subtract(const Duration(minutes: 20)), liveTitle,
         lastSpeech: _now.subtract(const Duration(minutes: 9)),
         segments: detailSegments,
-        v3: ConversationV3Fields(kind: 'conversation', tileState: detailState, homeHidden: detailHidden));
+        v3: ConversationV3Fields(
+            kind: 'conversation', tileState: detailState, homeHidden: detailHidden, recordingIds: const ['rec-1']));
   }
 
   /// False once the conversation in progress has closed.
@@ -405,7 +410,10 @@ class _Home {
                 lastSpeech: _now.subtract(const Duration(minutes: 9)),
                 segments: _liveSoFar,
                 v3: ConversationV3Fields(
-                    kind: 'conversation', tileState: ConversationTileState.live, homeHidden: liveHidden))
+                    kind: 'conversation',
+                    tileState: ConversationTileState.live,
+                    homeHidden: liveHidden,
+                    recordingIds: const ['rec-1']))
             : null,
       ));
     },
@@ -769,6 +777,22 @@ void main() {
       expect(find.byKey(const Key('live_conversation_end')), findsNothing,
           reason: "End would finalize this phone's capture, not the conversation on screen");
       expect(home.capture.endCalls, 0);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('End can finish a verified pendant recording before transcript segments arrive', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.detailSegments = [];
+      home.capture.segments = [];
+      home.capture.verifiedLiveServerRecordingId = 'rec-1';
+      await tester.tap(find.text('Launch checklist'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.byKey(const Key('live_conversation_end')));
+      expect(home.capture.endCalls, 1);
       await _dispose(tester, home);
     });
   });
@@ -1282,6 +1306,39 @@ void main() {
         ),
       );
     }
+
+    testWidgets('manual finish replaces the live row until its summary is listed', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        final v3 = home.conversationsV3;
+        final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'rec-1');
+        v3.startManualFinish(pending, 'rec-1');
+        await tester.pump();
+        expect(find.text('Launch checklist'), findsNothing);
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        expect(find.byType(V3LivePlaceholderRow), findsNothing);
+        await shoot(tester, '001-mobile-ios-v3-manual-finish-processing');
+
+        final recording = home.conversations.conversations.firstWhere((row) => row.id == 'rec-1');
+        expect(v3.settleManualFinish(pending, recording), isTrue);
+        await tester.pump();
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+
+        home.conversations.upsertConversation(_conversation('live-1', home.liveStart, 'Launch checklist', v3: _done));
+        await tester.pump();
+        await tester.pump();
+        expect(find.byKey(const Key('home_processing_row')), findsNothing);
+        expect(find.text('Launch checklist'), findsOneWidget);
+        expect(find.byType(V3LivePlaceholderRow), findsNothing);
+        await shoot(tester, '002-mobile-ios-v3-manual-finish-summary');
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
 
     testWidgets('visible Summary opens its first live recap', (tester) async {
       await withClock(Clock.fixed(_now), () async {

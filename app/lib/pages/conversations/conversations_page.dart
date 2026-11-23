@@ -405,7 +405,11 @@ class _ConversationsPageState extends State<ConversationsPage>
         when: () => mounted && (ModalRoute.of(context)?.isCurrent ?? true),
         // X7: a row still transcribing or writing re-reads the list on the same 15 s tick.
         rowsPending: () =>
-            mounted && ConversationsV3Provider.anyMidPipeline(context.read<ConversationProvider>().conversations),
+            mounted &&
+            (_v3?.finishRow != null ||
+                ConversationsV3Provider.anyMidPipeline(
+                  context.read<ConversationProvider>().conversations,
+                )),
         refreshRows: () => context.read<ConversationProvider>().fetchConversations(),
       );
     } else {
@@ -450,6 +454,7 @@ class _ConversationsPageState extends State<ConversationsPage>
     final last = _v3EventRefreshAt;
     if (previous != null &&
         previous != processingSignature &&
+        v3.finishRow == null &&
         (last == null || clock.now().difference(last) >= const Duration(seconds: 10))) {
       _v3EventRefreshAt = clock.now();
       unawaited(v3.refresh());
@@ -459,7 +464,7 @@ class _ConversationsPageState extends State<ConversationsPage>
     // so it appears as an ordinary row, whatever the processing signature did.
     final previousLive = _v3LiveId;
     _v3LiveId = liveId;
-    if (previousLive != null && previousLive != liveId) {
+    if (previousLive != null && previousLive != liveId && v3.finishRow == null) {
       unawaited(context.read<ConversationProvider>().fetchConversations());
     }
   }
@@ -912,6 +917,14 @@ class _ConversationsPageState extends State<ConversationsPage>
             episodeLive && defaultHome ? hiddenLiveConversations(episodes!.liveConversationIds) : const <String>{};
         final v3Home = v3On && defaultHome;
         final v3Live = v3Home ? v3!.live : null;
+        final manualFinish = v3Home ? v3!.finishRow : null;
+        final finishHandedOff = manualFinish != null && v3!.finishHasSuccessor(snapshot.conversations);
+        final showManualFinish = manualFinish != null && !finishHandedOff;
+        if (finishHandedOff) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) v3!.acknowledgeManualFinish(manualFinish);
+          });
+        }
         // A streaming capture with no server window to show (none yet, between windows, or one Home
         // hides) is the live placeholder row: first under Today, the slot the server's live row takes
         // when it arrives, so the row never jumps sections. An Omi call is shown as the call card
@@ -930,9 +943,15 @@ class _ConversationsPageState extends State<ConversationsPage>
         final liveRemoved = v3Live != null &&
             (v3Live.discarded ||
                 convoProvider.memoriesToDelete.containsKey(v3Live.id) ||
-                SharedPreferencesUtil().isConversationDeleteConfirmed(v3Live.id));
-        final livePlaceholder =
-            v3Home && streaming && (v3Live == null || v3Live.v3?.homeHidden == true) && !liveRemoved && !callActive;
+                SharedPreferencesUtil().isConversationDeleteConfirmed(
+                  v3Live.id,
+                ));
+        final livePlaceholder = v3Home &&
+            streaming &&
+            !v3!.suppressListeningAfterFinish &&
+            (v3Live == null || v3Live.v3?.homeHidden == true) &&
+            !liveRemoved &&
+            !callActive;
         if (v3Home) {
           final waiting = streaming && v3Live == null;
           final signature =
@@ -960,7 +979,8 @@ class _ConversationsPageState extends State<ConversationsPage>
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
         // v3: a conversation's tile shows its processing; capture-side processing rows are recordings.
-        final bool hasProcessingConversations = !v3Home && snapshot.processingConversations.isNotEmpty;
+        final bool hasProcessingConversations =
+            showManualFinish || (!v3Home && snapshot.processingConversations.isNotEmpty);
         final apiPhase = snapshot.apiViewPhase;
         final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
@@ -1165,7 +1185,7 @@ class _ConversationsPageState extends State<ConversationsPage>
         // Default Home already projected every local entry together with server
         // rows. A second insertion can resurrect stale ready/noise entries and
         // bypass the one-row fold. Filtered views keep their adapter; capability negotiation never disables the fold.
-        final conversationRows = showRecordings && !convoProvider.isSelectionModeActive && !defaultHome
+        final rowsWithLocalProcessing = showRecordings && !convoProvider.isSelectionModeActive && !defaultHome
             ? _withProcessingRows(
                 withLive,
                 [
@@ -1181,6 +1201,9 @@ class _ConversationsPageState extends State<ConversationsPage>
                 ],
                 clock.now())
             : withLive;
+        final conversationRows = showManualFinish
+            ? _withProcessingRows(rowsWithLocalProcessing, [manualFinish], clock.now())
+            : rowsWithLocalProcessing;
 
         if (showRecordings &&
             !convoProvider.isSelectionModeActive &&

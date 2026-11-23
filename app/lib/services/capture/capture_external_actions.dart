@@ -44,6 +44,17 @@ abstract interface class CaptureExternalActions {
   /// episode closes and a fresh one starts counting from now (David 2026-10-23).
   void onLiveFinalized();
 
+  void onManualFinishStarted(
+    ServerConversation placeholder,
+    String? recordingId,
+  );
+
+  void onManualFinishSettled(
+    ServerConversation placeholder,
+    ServerConversation? result, {
+    required bool showFailure,
+  });
+
   Future<Person?> createPerson(String name);
 
   int get lastSpeakerAppliedCount;
@@ -104,6 +115,19 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
 
   @override
   void onLiveFinalized() {}
+
+  @override
+  void onManualFinishStarted(
+    ServerConversation placeholder,
+    String? recordingId,
+  ) {}
+
+  @override
+  void onManualFinishSettled(
+    ServerConversation placeholder,
+    ServerConversation? result, {
+    required bool showFailure,
+  }) {}
 
   @override
   Future<Person?> createPerson(String name) async => null;

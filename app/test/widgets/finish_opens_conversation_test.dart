@@ -15,6 +15,7 @@ import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/pages/episodes/finished_capture_page.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -110,6 +111,10 @@ class _Capture extends CaptureProvider {
   CreateConversationResponse? answer;
   final Future<void>? answerDelay;
   var finishes = 0;
+  ProcessAbsence failure = ProcessAbsence.transport;
+
+  @override
+  String? verifiedLiveServerRecordingId;
 
   /// The page renders the preview; this fake only answers what Finish reads, so it is handed over
   /// at the tap.
@@ -136,7 +141,7 @@ class _Capture extends CaptureProvider {
     finishes++;
     await answerDelay;
     final reply = answer;
-    return InProgressProcessOutcome(response: reply, absence: reply == null ? ProcessAbsence.transport : null);
+    return InProgressProcessOutcome(response: reply, absence: reply == null ? failure : null);
   }
 }
 
@@ -189,7 +194,7 @@ class _Harness {
   final _Capture capture;
 }
 
-Future<_Harness> _pump(WidgetTester tester, _Capture capture) async {
+Future<_Harness> _pump(WidgetTester tester, _Capture capture, {ConversationsV3Provider? v3}) async {
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
@@ -209,6 +214,7 @@ Future<_Harness> _pump(WidgetTester tester, _Capture capture) async {
       providers: [
         ChangeNotifierProvider<HomeProvider>.value(value: home),
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+        if (v3 != null) ChangeNotifierProvider<ConversationsV3Provider>.value(value: v3),
         ChangeNotifierProvider<DeviceProvider>.value(value: device),
         ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity),
         ChangeNotifierProvider<UsageProvider>.value(value: usage),
@@ -436,6 +442,21 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(LiveEpisodePage), findsOneWidget, reason: 'the recording carries on');
     await tester.pump(const Duration(seconds: 5));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('v3 Wrap Up sends a verified pendant finish with no transcript and explains a 404', (tester) async {
+    final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
+    addTearDown(v3.dispose);
+    final capture = _Capture()
+      ..verifiedLiveServerRecordingId = 'rec-1'
+      ..failure = ProcessAbsence.notFound;
+    await _pump(tester, capture, v3: v3);
+
+    expect(await _finishAndCapturePushed(tester, capture), isNull);
+    expect(capture.finishes, 1);
+    expect(find.byType(LiveEpisodePage), findsOneWidget);
+    expect(find.text("Didn't go through. Your audio is safe."), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 

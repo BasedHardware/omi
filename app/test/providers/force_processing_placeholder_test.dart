@@ -20,6 +20,18 @@ import '../support/crashlytics_recorder.dart';
 class _RecordingActions extends NoopCaptureExternalActions {
   final processing = <ServerConversation>[];
   final upserted = <ServerConversation>[];
+  ServerConversation? manualFinishRow;
+  bool? manualFinishFailed;
+
+  @override
+  void onManualFinishStarted(ServerConversation placeholder, String? recordingId) {
+    manualFinishRow = placeholder;
+  }
+
+  @override
+  void onManualFinishSettled(ServerConversation placeholder, ServerConversation? result, {required bool showFailure}) {
+    if (identical(placeholder, manualFinishRow)) manualFinishFailed = result == null && showFailure;
+  }
 
   @override
   void addProcessingConversation(ServerConversation conversation) {
@@ -218,6 +230,24 @@ void main() {
 
     expect(actions.processing, isEmpty);
     expect(actions.upserted, isEmpty);
+  });
+
+  test('pendant double tap publishes manual finish before the drain and reports an unanswered request', () async {
+    final finalize = Completer<void>();
+    final actions = _RecordingActions();
+    final provider = _provider(actions: actions, finalizeGate: finalize, process: () async => null);
+    addTearDown(provider.dispose);
+    SharedPreferencesUtil().omiButtonActionsEnabled = true;
+    SharedPreferencesUtil().doubleTapAction = 0;
+
+    provider.handleButtonEventForTesting('synthetic-pendant', 2);
+    expect(actions.manualFinishRow, same(actions.processing.single));
+    expect(actions.manualFinishFailed, isNull);
+
+    finalize.complete();
+    await _flushEventQueue();
+    expect(actions.manualFinishFailed, isTrue);
+    expect(actions.processing, isEmpty);
   });
 
   test('a conversation that changes during the drain removes the skeleton without processing', () async {

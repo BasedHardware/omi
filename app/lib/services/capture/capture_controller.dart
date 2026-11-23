@@ -2281,7 +2281,15 @@ class CaptureController extends ChangeNotifier
         Logger.debug("Double tap: processing conversation");
         PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
         HapticFeedback.lightImpact(); // The tap's only feedback on the phone until the processing row.
-        forceProcessingCurrentConversation();
+        unawaited(
+          forceProcessingCurrentConversation().catchError(
+            (Object error, StackTrace stack) => _reportDetachedCaptureError(
+              'capture_process_now',
+              error,
+              stack,
+            ),
+          ),
+        );
       }
       return;
     }
@@ -4357,11 +4365,16 @@ class CaptureController extends ChangeNotifier
     _pendingProcessCloses.add(close);
     final placeholderOwner = ++_processingPlaceholderOwner;
     var requestAdmitted = false;
+    final confirmedProcessing = _firstCaptureProcess;
+    final placeholder = OptimisticProcessingPlaceholder.conversation(
+      targetConversationId: _conversation?.id,
+    );
+    final actions = externalActions;
+    final sourceId = verifiedLiveServerRecordingId ?? _conversation?.id;
     try {
       // Publish the skeleton before waiting for disk, preserving immediate Process Now feedback.
-      externalActions.addProcessingConversation(
-        OptimisticProcessingPlaceholder.conversation(targetConversationId: _conversation?.id),
-      );
+      actions.onManualFinishStarted(placeholder, sourceId);
+      actions.addProcessingConversation(placeholder);
       _finalizeGate.markFinalized();
       externalActions.onLiveFinalized();
       await close.snapshot;
@@ -4371,13 +4384,13 @@ class CaptureController extends ChangeNotifier
           conversationRevision != _systemSurfaceConversationRevision) {
         // A matching server close may already have bound this cut during the drain.
         close.bind(null);
+        actions.onManualFinishSettled(placeholder, null, showFailure: false);
         if (placeholderOwner == _processingPlaceholderOwner) {
           externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
         }
         return;
       }
       _resetLiveConversationWindow();
-      final confirmedProcessing = _firstCaptureProcess;
       final Future<InProgressProcessOutcome> request = _processInProgressOutcomeOverride != null
           ? _processInProgressOutcomeOverride!()
           : _processInProgressConversationOverride != null
@@ -4394,6 +4407,11 @@ class CaptureController extends ChangeNotifier
         _pendingProcessCloses.remove(close);
         if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
         if (conversationId != null) _rememberConversationClose(conversationId);
+        actions.onManualFinishSettled(
+          placeholder,
+          outcome.response?.conversation,
+          showFailure: !confirmedProcessing,
+        );
         await OptimisticProcessingPlaceholder.applyProcessResult(
           result: outcome.response,
           absence: outcome.absence,
@@ -4415,6 +4433,11 @@ class CaptureController extends ChangeNotifier
         close.bind(null);
         _pendingProcessCloses.remove(close);
         if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
+        actions.onManualFinishSettled(
+          placeholder,
+          null,
+          showFailure: !confirmedProcessing,
+        );
         await OptimisticProcessingPlaceholder.handleFailure(
           actions: externalActions,
           removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
@@ -4425,6 +4448,16 @@ class CaptureController extends ChangeNotifier
       });
     } catch (_) {
       close.bind(null);
+      actions.onManualFinishSettled(
+        placeholder,
+        null,
+        showFailure: !confirmedProcessing,
+      );
+      if (placeholderOwner == _processingPlaceholderOwner) {
+        actions.removeProcessingConversation(
+          OptimisticProcessingPlaceholder.id,
+        );
+      }
       rethrow;
     } finally {
       if (!requestAdmitted) _pendingProcessCloses.remove(close);

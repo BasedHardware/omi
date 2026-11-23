@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-v3-manual-finish-processing.png",
+      "platform": "mobile-ios",
+      "description": "Omi Home v3 shows the Processing row in the current day immediately after a manual finish.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-v3-manual-finish-summary.png",
+      "platform": "mobile-ios",
+      "description": "The completed Launch checklist card replaces the temporary Processing row after the list observes the closed conversation.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
