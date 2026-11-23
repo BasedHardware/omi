@@ -78,9 +78,13 @@ def episode_attach_memo_valid(
         if raw_segments is None:
             return False
         row = dict(conversation)
-        row['transcript_segments'] = transcript_decoder(
-            uid, raw_segments, bool(conversation.get('transcript_segments_compressed'))
-        )
+        if isinstance(raw_segments, (list, tuple)):
+            # Go observations contain the already-decoded segment list.
+            row['transcript_segments'] = raw_segments
+        else:
+            row['transcript_segments'] = transcript_decoder(
+                uid, raw_segments, bool(conversation.get('transcript_segments_compressed'))
+            )
         key = content_key_fn(row)
         completed = link.get('attach_completed')
         return bool(

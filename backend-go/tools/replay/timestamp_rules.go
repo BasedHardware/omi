@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -371,7 +372,21 @@ func additionalTimestampRuleValid(path string, doc map[string]any, field string)
 			return false
 		}
 		parsed, err := time.Parse(time.RFC3339Nano, stamp)
-		return err == nil && parsed.UTC().Format("2006-01-02") == parts[3]
+		if err != nil {
+			return false
+		}
+		day := parsed.UTC().Format("2006-01-02")
+		if parts[2] == "hourly_usage" {
+			if parts[3] == day {
+				return true
+			}
+			if len(parts[3]) != 13 || parts[3][:10] != day || parts[3][10] != '-' {
+				return false
+			}
+			hour, hourErr := strconv.Atoi(parts[3][11:])
+			return hourErr == nil && hour >= 0 && hour <= 23
+		}
+		return parts[3] == day
 	}
 	return true
 }

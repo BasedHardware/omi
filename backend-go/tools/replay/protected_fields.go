@@ -330,6 +330,15 @@ func equalReplayValue(left, right any) bool {
 func transcriptPlaintext(uid string, value any, compressed bool, key string) ([]byte, error) {
 	var content []byte
 	switch stored := value.(type) {
+	case []any:
+		if compressed {
+			return nil, errors.New("decoded transcript segments carry a compression marker")
+		}
+		encoded, err := json.Marshal(stored)
+		if err != nil {
+			return nil, err
+		}
+		content = encoded
 	case string:
 		plain, err := decryptReplayEnvelope(uid, stored, key)
 		if err != nil {

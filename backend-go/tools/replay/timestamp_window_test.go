@@ -42,7 +42,7 @@ func TestPostFinishClockGraceIsFiveSecondsAndFieldScoped(t *testing.T) {
 }
 
 func TestHourlyUsageAllowsOnlyFiveSecondScheduledPostFinishWrite(t *testing.T) {
-	path := "users/u/hourly_usage/2026-05-06"
+	path := "users/u/hourly_usage/2026-05-06-17"
 	stamp := ruleRun().Finished.Add(postFinishWriteGrace)
 	py, goRun := ruleRun(), ruleRun()
 	py.Derived[path] = map[string]any{"last_updated": wrappedStamp(stamp)}
@@ -54,6 +54,11 @@ func TestHourlyUsageAllowsOnlyFiveSecondScheduledPostFinishWrite(t *testing.T) {
 	if diffs := compareObservations(py, goRun); !hasUnexplained(diffs) ||
 		!hasKindPath(diffs, "invalid_clock", "/python/derived_documents/"+escapePointer(path)+"/last_updated") {
 		t.Fatalf("hourly usage write beyond grace was excused: %+v", diffs)
+	}
+	py.Derived["users/u/hourly_usage/2026-05-06-24"] = map[string]any{"last_updated": wrappedStamp(stamp)}
+	diffs := compareObservations(py, goRun)
+	if !hasUnexplained(diffs) || !hasKindPath(diffs, "invalid_clock", "/python/derived_documents/users~1u~1hourly_usage~12026-05-06-24/last_updated") {
+		t.Fatalf("invalid hourly bucket suffix was excused: %+v", diffs)
 	}
 }
 

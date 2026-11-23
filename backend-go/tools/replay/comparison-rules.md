@@ -14,7 +14,7 @@ malformed compression, or different plaintext leaves the row unexplained.
 
 | Field | Check |
 | --- | --- |
-| `conversation.transcript_segments` | Decrypt both sides and inflate the marked payload. Compare `text`, `start`, `end`, `speaker`, and `is_user`; absent `speaker` uses the model default `SPEAKER_00`. Go must preserve every non-default field present in Python's stored segment. The value-free `$bytes` wrapper is decoded before comparison. |
+| `conversation.transcript_segments` | Decrypt both sides and inflate the marked payload. Compare `text`, `start`, `end`, `speaker`, and `is_user`; absent `speaker` uses the model default `SPEAKER_00`. Go must preserve every non-default field present in Python's stored segment. The value-free `$bytes` wrapper is decoded before comparison, and an already-decoded Go segment list is compared as plaintext. |
 | `conversation.user_corrections` | Require a true compression marker and storage consistent with each side's protection level; decrypt/inflate both blobs and compare correction lists. |
 | `conversation.home_display` | Decrypt both envelopes and compare card content. |
 | `episodes/{id}.content` | Decrypt both envelopes and compare episode content. |
@@ -43,7 +43,7 @@ five-second grace; TTLs are checked against their write anchor instead of the re
 | `goals/{id}.updated_at` | Firestore timestamp; own replay window. |
 | `goals/{id}/goal_history/{day}.recorded_at` | Firestore timestamp; `date` and document day must match the timestamp's UTC day. |
 | `llm_usage/{day}.last_updated` | Firestore timestamp; bucket day must match the timestamp's UTC day. |
-| `hourly_usage/{day}.last_updated` | Firestore timestamp; bucket day must match the timestamp's UTC day and allow up to five seconds for the scheduled post-finish usage write. |
+| `hourly_usage/{day[-HH]}.last_updated` | Firestore timestamp; bucket day must match the timestamp's UTC day (with an optional valid hour suffix) and allow up to five seconds for the scheduled post-finish usage write. |
 | `memory_state/apply_control.updated_at` | Firestore timestamp; own replay window. |
 | `memory_state/head.updated_at`, `memory_outbox/{id}.available_at`, `memory_commits/{id}.updated_at`, `memory_operations/{id}.created_at` and `.updated_at` | Firestore timestamp; own replay window. |
 | `memory_items/{id}.captured_at`, `.updated_at`, `.valid_from` | Firestore timestamp; own replay window. |

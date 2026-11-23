@@ -138,6 +138,31 @@ func TestProtectedFieldsAllowDifferentNoncesOnlyForEqualPlaintext(t *testing.T) 
 	}
 }
 
+func TestTranscriptComparisonAcceptsGoDecodedSegmentsAndKeepsStoredFields(t *testing.T) {
+	uid := "synthetic-owner"
+	python, goRun := ruleRun(), ruleRun()
+	python.OwnerID, goRun.OwnerID = uid, uid
+	segments := []any{map[string]any{
+		"text": "agenda", "start": json.Number("0"), "end": json.Number("1"),
+		"speaker": "SPEAKER_00", "is_user": true, "original_text": "agenda raw",
+	}}
+	python.Document = map[string]any{
+		"transcript_segments":            encryptedTranscript(t, uid, segments, 41),
+		"transcript_segments_compressed": true,
+	}
+	goRun.Document = map[string]any{"transcript_segments": segments}
+	diffs := compareObservations(python, goRun)
+	if hasUnexplained(diffs) || !hasReason(diffs, "transcript_segments") {
+		t.Fatalf("decoded Go segments did not match encrypted Python transcript: %+v", diffs)
+	}
+	goSegments := mustMap(goRun.Document)["transcript_segments"].([]any)
+	mustMap(goSegments[0])["original_text"] = "dropped or changed Python stored field"
+	diffs = compareObservations(python, goRun)
+	if !hasUnexplainedAt(diffs, "/conversation/transcript_segments") {
+		t.Fatalf("changed non-default Python segment field was excused: %+v", diffs)
+	}
+}
+
 func hasUnexplainedAt(diffs []difference, fragment string) bool {
 	for _, diff := range diffs {
 		if strings.Contains(diff.Path, fragment) && diff.Reason == "" {

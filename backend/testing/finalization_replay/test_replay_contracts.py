@@ -66,6 +66,7 @@ class ReplayContractTests(unittest.TestCase):
                 content_key_fn=compute_key,
             )
         )
+        link['attach_owner_id'] = 'episode'
         link['attach_revision'] = 'v2:fixture-key'
         link['attach_finalized'] = 'stale-finalization'
         self.assertFalse(
@@ -78,13 +79,53 @@ class ReplayContractTests(unittest.TestCase):
                 content_key_fn=compute_key,
             )
         )
-        link['attach_owner_id'] = 'episode'
+        link['attach_finalized'] = None
         link['attach_revision'] = 'stale-key'
         self.assertFalse(
             episode_attach_memo_valid(
                 'owner',
                 'conversation',
                 conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+
+    def test_episode_attach_memo_accepts_go_decoded_transcript_segments(self):
+        segments = [{'text': 'fixture', 'start': 0, 'end': 1}]
+        link_path = 'users/owner/episode_links/conversation'
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:fixture-key',
+            'attach_completed': 'v2:fixture-key',
+            'attach_finalized': 'v2:fixture-key',
+        }
+
+        def decode(*_args):
+            self.fail('already-decoded segments must not be decoded again')
+
+        def compute_key(row):
+            self.assertEqual(row['transcript_segments'], segments)
+            return 'v2:fixture-key'
+
+        self.assertTrue(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                {'transcript_segments': segments},
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        link['attach_finalized'] = 'stale-key'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                {'transcript_segments': segments},
                 {link_path: link},
                 transcript_decoder=decode,
                 content_key_fn=compute_key,
