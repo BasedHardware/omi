@@ -4,6 +4,7 @@ from unittest.mock import Mock, call
 
 import pytest
 
+from database.firestore_read_origin import current_read_origin
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline import parked_sweep
 from utils.batch_pipeline.parked_sweep import ParkedSweep, summarize
@@ -94,6 +95,7 @@ def test_control_kill_during_scan_refuses_checkpoint(monkeypatch, sweep_store):
 
 def test_partial_stream_failure_counts_rows_and_burns_slot(monkeypatch, sweep_store, caplog):
     def partial_stream():
+        assert current_read_origin() == 'job:batch_pipeline_parked_sweep'
         yield SimpleNamespace(id='inspected', to_dict=dict)
         raise TimeoutError
 

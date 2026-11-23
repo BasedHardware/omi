@@ -9,6 +9,7 @@ from collections import Counter
 from google.cloud import firestore
 
 from config.batch_pipeline import parked_job_sweeper_enabled
+from database.firestore_read_origin import read_origin
 from database.rpc_deadline import bind_firestore_client, rpc_deadline
 from utils.batch_pipeline.errors import WORKER_VALIDATION_REASONS
 
@@ -90,6 +91,7 @@ class ParkedSweep:
         self.store = store
         self.last_attempt_hour = -1
 
+    @read_origin('job:batch_pipeline_parked_sweep')
     def tick(self, now):
         hour = int(now // HOUR_SECONDS)
         if not parked_job_sweeper_enabled() or hour <= self.last_attempt_hour:
