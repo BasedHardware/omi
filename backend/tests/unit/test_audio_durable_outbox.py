@@ -31,6 +31,7 @@ from utils.other import storage, live_audio_archive, audio_outbox
 from utils.other import audio_outbox_metrics
 from utils.other.audio_outbox import AudioReceipt, commit_pcm, read_pcm
 from routers.listen import coverage
+from routers.listen.runtime import ListenSessionRuntime
 from utils.other.live_audio_archive import LiveAudioArchive
 from utils.other.raw_audio import CapturePack, AudioSegment, decode_capture
 from utils.other.raw_audio_read import list_packs, read_pack
@@ -491,8 +492,74 @@ async def test_no_storage_keeps_transcript_receipt_semantics_without_claiming_au
     await archive.close()
     h.persistence.call.assert_awaited_once()
     assert h.events == [event]  # Transcript receipt, never AudioCustodyEvent.
+    assert 'audio_custody' not in event.to_json()
     assert not archive.pending_acks and not archive.sequence
     assert not remote.list_blobs('raw-live/') and not remote.list_blobs('audio-outbox/')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('opt_in,multichannel', [(True, False), (False, False), (True, True)])
+async def test_listen_wire_binds_only_intersecting_pinned_original_frames(remote, monkeypatch, opt_in, multichannel):
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    monkeypatch.setenv('AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED', 'false')
+    monkeypatch.setenv('AUDIO_CUSTODY_FRAMED_PERCENT', '0')
+    h = host()
+    h.is_multi_channel = multichannel
+    h.recording_session_id = 'recording'
+    h.recording_session_ids_by_conversation = {'conversation': 'recording'}
+    if not opt_in:
+        h.request.websocket.query_params.clear()
+    archive = LiveAudioArchive(h)
+    archive.capture_session_id = 'b' * 32
+    h.receiver = SimpleNamespace(raw_archive=archive)
+    root = '11111111-2222-4333-8444-555555555555'
+    other_root = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+    for i, (capture_root, ordinal) in enumerate([(root, 7), (None, None), (other_root, 8), (root, 9)]):
+        claim = (
+            {'capture_root': capture_root, 'clock_epoch': 2, 'source_frame': ordinal}
+            if capture_root is not None
+            else None
+        )
+        await archive.append(bytes([i + 1, 0]) * 160, 'conversation', 1000.0 + i / 100, 160, source_frame=claim)
+    event = coverage.CaptureCommittedEvent(
+        conversation_id='conversation',
+        capture_root=root,
+        channel='mono',
+        clock_epoch='2',
+        recording_session_id='recording',
+        source_start=7,
+        source_end=9,
+    )
+    mismatched = event.model_copy(update={'recording_session_id': 'retired'})
+    h.persistence = SimpleNamespace(call=AsyncMock(return_value=[event, mismatched]))
+    await coverage.publish_committed(h, 'conversation', {'proof': coverage.PROOF_KIND, 'runs': []})
+    assert not h.events
+    await archive.close()
+
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.state = SimpleNamespace(active=True)
+    runtime.request = SimpleNamespace(websocket=SimpleNamespace(send_json=AsyncMock()))
+    for emitted in h.events:
+        assert await runtime.asend_event(emitted)
+    wires = [call.args[0] for call in runtime.request.websocket.send_json.await_args_list]
+    assert wires[-1] == mismatched.to_json()
+    if not opt_in or multichannel:
+        assert wires[-2] == event.to_json()
+        assert len(wires) == (3 if opt_in else 2)
+        return
+
+    audio, transcript, _ = wires
+    fixture = Path(__file__).resolve().parents[3] / 'app/test/fixtures/listen_audio_custody.json'
+    assert audio == json.loads(fixture.read_text())
+    assert transcript['audio_custody'] == {
+        **audio,
+        'recording_session_id': 'recording',
+        'frames': [audio['frames'][0]],
+    }
+    original = AudioReceipt(**audio['receipt'])
+    assert read_pcm('owner', original) == b''.join(bytes([i, 0]) * 160 for i in range(1, 5))
+    manifest = json.loads(remote.blob(original.manifest_path, generation=int(original.manifest_generation)).data)
+    assert transcript['audio_custody']['frames'] == [manifest['frames'][0]]
 
 
 @pytest.mark.asyncio
