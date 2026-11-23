@@ -60,6 +60,15 @@ def rotation_seconds() -> tuple[float, float]:
     return age, cap
 
 
+def manual_end_home_visible_enabled() -> bool:
+    return os.getenv('CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE', 'on').strip().lower() not in {
+        'off',
+        'false',
+        '0',
+        'no',
+    }
+
+
 def stretch_cohesion_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_STRETCH_COHESION', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 

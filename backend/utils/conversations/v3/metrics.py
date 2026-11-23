@@ -23,6 +23,14 @@ PENDING_AGE = Histogram(
 VISIBLE_LATENCY = Histogram(
     'omi_conversations_v3_first_speech_to_visible_seconds', 'First speech to visible projection'
 )
+MANUAL_END_HOME = Counter(
+    'omi_conversations_v3_manual_end_home_total',
+    'Live derived manual-end rows with a successful first processing settlement',
+    ['visibility'],
+)
+for outcome in ('visible', 'hidden'):
+    MANUAL_END_HOME.labels(outcome)
+
 SUMMARY_LATENCY = Histogram('omi_conversations_v3_end_to_summary_seconds', 'End to stored summary')
 SUMMARY_WRITES = Counter('omi_conversations_v3_summary_writes_total', 'First writes and late rewrites', ['kind'])
 WORD_FLOOR_COMPLETIONS = Counter(
