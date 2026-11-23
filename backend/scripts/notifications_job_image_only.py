@@ -159,6 +159,8 @@ def request_job(token, path, body=None):
             return json.load(response)
     except HTTPError as exc:
         # Cloud API diagnostics can include runtime configuration. Log only status.
+        if exc.code >= 500:
+            raise TimeoutError(f'Cloud Run {request.method} outcome unknown after HTTP {exc.code}') from None
         raise ValueError(f'Cloud Run {request.method} failed with HTTP {exc.code}') from None
 
 
@@ -171,7 +173,8 @@ def patch_job(request, body, *, validate_only):
         require(OPERATION.fullmatch(name), 'Unexpected Cloud Run operation name')
         print(f'Cloud Run update operation: {name}', flush=True)
         while operation.get('done') is not True and 'error' not in operation:
-            require(time.monotonic() < deadline, 'Timed out waiting for Cloud Run operation')
+            if time.monotonic() >= deadline:
+                raise TimeoutError('Timed out waiting for Cloud Run operation')
             time.sleep(2)
             operation = request(name)
             require(operation.get('name') == name, 'Cloud Run returned a different operation')
@@ -205,9 +208,13 @@ def project_image(job, image):
 def change_image(request, *, mode, source, generation, candidate, expected_env, receipt=None):
     baseline = request(JOB)
     require_live_generation(baseline, generation)
-    compare_env(baseline, expected_env)
-    digest = config_digest(baseline)
     rollback = mode == 'image-only-rollback'
+    if not rollback:
+        compare_env(baseline, expected_env)
+    # The receipt binds the whole non-image configuration, including the
+    # previously verified gateway literal. Rollback can therefore work during
+    # a gateway outage while still rejecting endpoint or configuration drift.
+    digest = config_digest(baseline)
     validate = mode == 'image-only-validate'
     if not validate:
         require(
@@ -263,13 +270,24 @@ def change_image(request, *, mode, source, generation, candidate, expected_env, 
 
     # Carry the original etag through the last GET-to-PATCH race. No retry or
     # etag refresh after conflict. The caller must obtain fresh admission.
-    applied, operation = patch_job(request, target, validate_only=False)
-    assert_projection(applied, target)
+    operation = None
+    try:
+        applied, operation = patch_job(request, target, validate_only=False)
+    except (TimeoutError, URLError):
+        print('Cloud Run update outcome unknown. Checking live Job without resubmitting.', flush=True)
+    else:
+        assert_projection(applied, target)
     deadline = time.monotonic() + 120
     next_generation = str(int(generation) + 1)
     while True:
         live = request(JOB)
         require(live['uid'] == baseline['uid'], 'Cloud Run Job identity changed after update')
+        if operation is None and live.get('generation') == generation:
+            require(live['etag'] == baseline['etag'], 'Cloud Run Job etag drift after ambiguous update')
+            assert_projection(live, baseline)
+            require(time.monotonic() < deadline, 'Cloud Run update outcome remains unconfirmed')
+            time.sleep(2)
+            continue
         require(live.get('generation') == next_generation, 'Unexpected post-update Cloud Run Job generation')
         assert_projection(live, target)
         if not live.get('reconciling'):
@@ -312,11 +330,14 @@ def main():
         'Pinned rollback image does not resolve',
     )
 
-    env = _load_yaml(DEFAULT_MANIFEST)['environments']['prod']['cloud_run']['jobs']['notifications-job']['env']
-    expected = {
-        entry['name']: entry['value'] for entry in _render_env_entries({name: env[name] for name in (ENDPOINT, BLANK)})
-    }
-    require(expected[ENDPOINT] and expected[ENDPOINT] != 'http://127.0.0.1:9', 'Missing verified gateway endpoint')
+    expected = None
+    if mode != 'image-only-rollback':
+        env = _load_yaml(DEFAULT_MANIFEST)['environments']['prod']['cloud_run']['jobs']['notifications-job']['env']
+        expected = {
+            entry['name']: entry['value']
+            for entry in _render_env_entries({name: env[name] for name in (ENDPOINT, BLANK)})
+        }
+        require(expected[ENDPOINT] and expected[ENDPOINT] != 'http://127.0.0.1:9', 'Missing verified gateway endpoint')
     token = command('gcloud', 'auth', 'print-access-token')
     require(token, 'Cloud Run access token is missing')
 

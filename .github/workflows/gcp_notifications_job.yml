@@ -585,6 +585,10 @@ jobs:
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-notif-prod/providers/github
           service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
 
+      - name: Free runner disk for the image build
+        if: inputs.mode == 'image-only-validate'
+        run: rm -rf /opt/hostedtoolcache
+
       - name: Checkout admitted image source
         if: inputs.mode == 'image-only-validate'
         uses: actions/checkout@v7
@@ -633,8 +637,11 @@ jobs:
         run: |
           set -euo pipefail
           image="$IMAGE_REPOSITORY:$RELEASE_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          python3 backend/scripts/runtime_image_contracts.py smoke \
-            --dockerfile backend/modal/Dockerfile.notifications_job --image "$image"
+          (
+            cd .github/notifications-image-source
+            python3 backend/scripts/runtime_image_contracts.py smoke \
+              --dockerfile backend/modal/Dockerfile.notifications_job --image "$image"
+          )
           docker push "$image"
           docker image inspect "$image" --format '{{range .RepoDigests}}{{println .}}{{end}}' |
             awk -v prefix="$IMAGE_REPOSITORY@" 'index($0, prefix) == 1' > "$RUNNER_TEMP/notifications-pushed-image"
@@ -643,6 +650,7 @@ jobs:
         run: python3 -m pip install -q pyyaml
 
       - name: Get GKE credentials for gateway serving gate
+        if: inputs.mode != 'image-only-rollback'
         uses: google-github-actions/get-gke-credentials@v3
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
@@ -650,6 +658,7 @@ jobs:
           project_id: based-hardware
 
       - name: Verify LLM Gateway serving data plane
+        if: inputs.mode != 'image-only-rollback'
         id: image-gateway
         run: |
           python3 backend/scripts/verify-llm-gateway-serving.py \

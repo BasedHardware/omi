@@ -91,7 +91,7 @@ class ImageOnlyTest(unittest.TestCase):
     def change(self, action="validate", receipt=None, generation="66"):
         return deploy.change_image(
             self.api, mode=f"image-only-{action}", source=SOURCE, generation=generation,
-            candidate=CANDIDATE, expected_env=EXPECTED, receipt=receipt,
+            candidate=CANDIDATE, expected_env=None if action == "rollback" else EXPECTED, receipt=receipt,
         )
 
     def test_validate_apply_rollback_preserve_configuration(self):
@@ -178,6 +178,31 @@ class ImageOnlyTest(unittest.TestCase):
             self.change("rollback", receipt, "67")
         self.assertEqual(self.api.writes, 1)
 
+    def test_reconciles_a_timed_out_apply_without_resubmitting(self):
+        receipt = self.change()
+
+        def request(path, body=None):
+            result = self.api(path, body)
+            if path == deploy.JOB + "?validateOnly=false":
+                raise TimeoutError("lost write response")
+            return result
+
+        result = deploy.change_image(
+            request, mode="image-only-apply", source=SOURCE, generation="66",
+            candidate=CANDIDATE, expected_env=EXPECTED, receipt=receipt,
+        )
+        self.assertEqual(result["installed_image"], CANDIDATE)
+        self.assertIsNone(result["apply_operation"])
+        self.assertEqual(self.api.writes, 1)
+
+    def test_rollback_rejects_endpoint_drift_without_gateway_probe(self):
+        receipt = self.change()
+        self.change("apply", receipt)
+        deploy.literal_env(self.api.job)[deploy.ENDPOINT]["value"] = "http://wrong.internal"
+        with self.assertRaisesRegex(ValueError, "differs from the validation receipt"):
+            self.change("rollback", receipt, "67")
+        self.assertEqual(self.api.writes, 1)
+
     def test_workflow_gates_and_isolates_the_image_only_job(self):
         workflow = (ROOT / ".github/workflows/gcp_notifications_job.yml").read_text()
         full, image_only = workflow.split("\n  image-only:\n", 1)
@@ -187,6 +212,9 @@ class ImageOnlyTest(unittest.TestCase):
         self.assertIn("    environment: prod", image_only)
         self.assertIn('test "$GITHUB_REF" = refs/heads/main', image_only)
         self.assertIn('test "$TARGET_ENVIRONMENT" = prod', image_only)
+        self.assertIn('cd .github/notifications-image-source\n            python3 backend/scripts/runtime_image_contracts.py smoke', image_only)
+        for step in ("Get GKE credentials for gateway serving gate", "Verify LLM Gateway serving data plane"):
+            self.assertIn(f"- name: {step}\n        if: inputs.mode != 'image-only-rollback'", image_only)
         for forbidden in ("deploy-cloudrun", "scheduler_reconcile", "gcloud monitoring", "gcloud logging",
                           "attach_cloud_run_gmp_sidecar", "jobs run"):
             self.assertNotIn(forbidden, image_only)
