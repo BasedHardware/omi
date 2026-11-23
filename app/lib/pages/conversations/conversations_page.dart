@@ -1354,6 +1354,8 @@ class _ConversationsPageState extends State<ConversationsPage>
                     child: feed.items.isEmpty && feed.problem != null
                         ? OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: feed.refresh)
                         : OmiPartialNotice(message: context.l10n.somethingWentWrong, onRetry: feed.retry)),
+              if (!cardsOn && showManualFinish && showTypedStatus && apiPhase != ApiViewPhase.empty)
+                SliverToBoxAdapter(child: ConversationApiStatus(provider: convoProvider)),
               if ((_isBootstrapping && (!cardsOn || feed.items.isEmpty)) || _initialOverlayPending)
                 _buildLoadingShimmer()
               else if (cardsOn && feed.items.isEmpty && feed.partial)

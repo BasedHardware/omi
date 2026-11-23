@@ -4449,7 +4449,9 @@ class CaptureController extends ChangeNotifier
     } catch (_) {
       close.bind(null);
       if (showManualFinish) {
-        actions.onManualFinishSettled(placeholder, null, showFailure: !confirmedProcessing);
+        // The detail button is still available to retry a failed local drain.
+        actions.onManualFinishSettled(placeholder, null,
+            showFailure: !confirmedProcessing && liveConversationId == null);
       }
       if (placeholderOwner == _processingPlaceholderOwner) {
         actions.removeProcessingConversation(
@@ -4548,6 +4550,7 @@ class CaptureController extends ChangeNotifier
       case ProcessAbsence.emptyBody:
         _announceNoConversation(EmptyRecordingReason.emptyDeleted);
       case ProcessAbsence.notFound:
+        if (externalActions.v3FinishFeedbackEnabled) return;
         // POST /v1/conversations returns 404 both when nothing was captured and
         // when the conversation was already finalized. Let the conversation-created
         // path set [_deliveredExplanationGeneration] before treating this as empty.

@@ -102,6 +102,35 @@ void main() {
     expect(_produced(adapter), isEmpty);
   });
 
+  for (final v3 in [false, true]) {
+    test('manual finish 404 uses the too-short explanation only on legacy Home (v3: $v3)', () async {
+      final dir = await Directory.systemTemp.createTemp('empty-recording-manual-404-');
+      final world = await CaptureReplayWorld.boot(tempDir: dir);
+      final actions = _ExplainingActions()..v3FinishFeedbackEnabled = v3;
+      final adapter = _RecordingAdapter();
+      addTearDown(() async {
+        await world.dispose();
+        await dir.delete(recursive: true);
+      });
+      world.controller.updateExternalActions(actions);
+      world.processOutcome = () async => const InProgressProcessOutcome(absence: ProcessAbsence.notFound);
+      AnalyticsManager.configure(adapter);
+      await AnalyticsManager.init();
+
+      await world.startLiveCapture();
+      world.emitNativeState(PhoneMicCaptureState.running);
+      await world.settle();
+      final pending = world.controller.forceProcessingCurrentConversation(manualFinish: true);
+      await world.settle();
+      await pending;
+      await world.elapse(Duration.zero);
+      await _flush();
+
+      expect(actions.emptyExplanations, v3 ? 0 : 1);
+      if (v3) expect(_produced(adapter), isEmpty);
+    });
+  }
+
   test('an Apple Watch session is counted as watch when the process body is empty', () async {
     final actions = _ExplainingActions();
     final adapter = _RecordingAdapter();
@@ -194,6 +223,9 @@ ServerConversation _conversation({required String id, bool discarded = false}) {
 }
 
 class _ExplainingActions extends NoopCaptureExternalActions {
+  @override
+  bool v3FinishFeedbackEnabled = false;
+
   int emptyExplanations = 0;
   final claims = <DiscardedOnlyClaim>[];
   DiscardedOnlyClaim claimResult = DiscardedOnlyClaim.notDiscardedOnly;

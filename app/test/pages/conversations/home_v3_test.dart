@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -47,6 +48,7 @@ import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
+import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -209,7 +211,8 @@ class _LiveCapture extends CaptureProvider {
 
   @override
   String? activeRecordingId = 'capture-1';
-  void Function(String?)? onManualEnd;
+  ServerConversation Function(String?)? onManualEnd;
+  void Function(ServerConversation)? onDrainFailed;
 
   @override
   String? get topConversationId => 'conv-0-live';
@@ -218,8 +221,7 @@ class _LiveCapture extends CaptureProvider {
   int endCalls = 0;
   String? endedLiveId;
 
-  /// While set, End's drain has not finished: the segments stay, as during a real WAL drain. Completing
-  /// it settles the drain as failed: the capture keeps its segments.
+  /// Keeps the segments and ownership visible until End's local drain settles.
   Completer<void>? drain;
 
   @override
@@ -229,10 +231,15 @@ class _LiveCapture extends CaptureProvider {
   Future<void> forceProcessingCurrentConversation({bool manualFinish = false, String? liveConversationId}) async {
     endCalls++;
     endedLiveId = liveConversationId;
-    if (manualFinish) onManualEnd?.call(liveConversationId);
-    final held = drain;
-    if (held != null) return held.future;
+    final row = manualFinish ? onManualEnd?.call(liveConversationId) : null;
+    try {
+      await drain?.future;
+    } catch (_) {
+      if (row != null) onDrainFailed?.call(row);
+      rethrow;
+    }
     segments = [];
+    verifiedLiveServerRecordingId = null;
     notifyListeners();
   }
 }
@@ -429,6 +436,15 @@ class _Home {
       ));
     },
   );
+  void publishManualEnds() {
+    capture.onManualEnd = (id) {
+      final pending = OptimisticProcessingPlaceholder.conversation();
+      conversationsV3.startManualFinish(pending, 'rec-1', liveConversationId: id, captureId: capture.activeRecordingId);
+      return pending;
+    };
+    capture.onDrainFailed = (row) => conversationsV3.settleManualFinish(row, null);
+  }
+
   late final _Conversations conversations = _Conversations()
     ..conversations = [
       // A phone call that started after the conversation in progress: still sorts below it.
@@ -542,6 +558,18 @@ class _Conversations extends ConversationProvider {
   _Conversations() : super(isSignedIn: () => false);
 
   int listReads = 0;
+  int forcedReads = 0;
+  ApiViewState<List<ServerConversation>>? listStatus;
+
+  @override
+  ApiViewState<List<ServerConversation>> get apiViewState => listStatus ?? super.apiViewState;
+
+  @override
+  Future<void> forceRefreshConversations() async {
+    forcedReads++;
+    listStatus = null;
+    notifyListeners();
+  }
 
   @override
   Future<bool> fetchConversations({bool restoreMergeWatches = true}) async {
@@ -799,12 +827,10 @@ void main() {
       home.detailSegments = [];
       home.capture.segments = [];
       home.capture.verifiedLiveServerRecordingId = 'rec-1';
-      home.capture.onManualEnd = (id) => home.conversationsV3.startManualFinish(
-            OptimisticProcessingPlaceholder.conversation(),
-            'rec-1',
-            liveConversationId: id,
-            captureId: home.capture.activeRecordingId,
-          );
+      home.publishManualEnds();
+      Future<bool> openRoute(String route, {bool Function()? canOpen}) async => false;
+      HomeNavigation.register(openRoute);
+      addTearDown(() => HomeNavigation.unregister(openRoute));
       await tester.tap(find.text('Launch checklist'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
@@ -816,32 +842,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.byType(ConversationDetailPage), findsNothing);
       expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
-      await _dispose(tester, home);
-    });
-  });
-
-  testWidgets('End ends once: taps during the drain do not finalize again; a failed drain frees it', (tester) async {
-    await withClock(Clock.fixed(_now), () async {
-      final home = await _pumpHome(tester, v3: true);
-      final drain = home.capture.drain = Completer<void>();
-      await tester.tap(find.text('Launch checklist'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.tap(find.byKey(const Key('live_conversation_end')));
-      await tester.pump();
-      expect(find.byKey(const Key('live_conversation_end')), findsOneWidget, reason: 'the drain is still running');
-      await tester.tap(find.byKey(const Key('live_conversation_end')));
-      await tester.pump();
-      expect(home.capture.endCalls, 1, reason: 'a second tap would add another processing row and finalize again');
-
-      // The drain failed and the capture kept its segments: End still works.
-      home.capture.drain = null;
-      drain.complete();
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('live_conversation_end')));
-      await tester.pump();
-      expect(home.capture.endCalls, 2, reason: 'End is not left on screen but dead');
       await _dispose(tester, home);
     });
   });
@@ -1113,7 +1113,7 @@ void main() {
       hydrate.complete();
       await settleDetailTab(tester);
       expect(opens, 0);
-      drain?.complete();
+      drain?.completeError(StateError('WAL drain failed'));
       await settleDetailTab(tester);
       expect(opens, 0, reason: 'settling End must never spend');
       await tester.tap(find.text('Transcript'));
@@ -1329,6 +1329,118 @@ void main() {
         ),
       );
     }
+
+    testWidgets('a list read failure keeps Try Again beside a manual finish', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        home.conversations.conversations.clear();
+        home.conversations.listStatus = const ApiViewState(
+          phase: ApiViewPhase.error,
+          problem: ApiProblem(ApiProblemKind.server, statusCode: 503),
+        );
+        home.conversations.groupConversationsByDate();
+        home.publishManualEnds();
+        home.capture.onManualEnd!('live-1');
+        await tester.pump();
+
+        expect(find.byKey(const ValueKey('omi.conversations.error')), findsOneWidget);
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        await shoot(tester, '003-mobile-ios-finish-list-retry');
+        await tester.tap(find.text('Try Again'));
+        await tester.pump();
+        expect(home.conversations.forcedReads, 1);
+        expect(find.byKey(const ValueKey('omi.conversations.error')), findsNothing);
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
+
+    testWidgets('End from a deep link selects Home after the drain', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        home.publishManualEnds();
+        final drain = home.capture.drain = Completer<void>();
+        final context = tester.element(find.byType(ConversationsPage));
+        final tabs = context.read<HomeProvider>()..setIndex(HomeProvider.tasksTab);
+        final navigator = Navigator.of(context);
+        Future<bool> openRoute(String route, {bool Function()? canOpen}) async {
+          unawaited(navigator.push(omiPageRoute(
+            builder: (_) => ConversationDetailPage(conversation: home.conversationsV3.live!),
+          )));
+          return true;
+        }
+
+        HomeNavigation.register(openRoute);
+        addTearDown(() => HomeNavigation.unregister(openRoute));
+        expect(await HomeNavigation.openRoute('/conversation/live-1', navigator: navigator), isTrue);
+        await settleDetailTab(tester);
+        final end = find.byKey(const Key('live_conversation_end'));
+        await tester.tap(end);
+        await settleDetailTab(tester);
+        expect(end, findsOneWidget, reason: 'End stays until the close succeeds');
+        expect(tabs.selectedIndex, HomeProvider.tasksTab);
+
+        drain.complete();
+        await settleDetailTab(tester);
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(tabs.selectedIndex, HomeProvider.homeTab);
+        expect(find.byType(ConversationDetailPage), findsNothing);
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        await shoot(tester, '004-mobile-ios-end-returns-home');
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
+
+    testWidgets('a failed drain after publishing Processing leaves End available to retry', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        home.publishManualEnds();
+        final drain = home.capture.drain = Completer<void>();
+        await tester.tap(find.text('Launch checklist'));
+        await settleDetailTab(tester);
+        final end = find.byKey(const Key('live_conversation_end'));
+        await tester.tap(end);
+        await settleDetailTab(tester);
+        expect(home.conversationsV3.finishRow, isNotNull);
+        expect(end, findsOneWidget);
+        await tester.tap(end);
+        expect(home.capture.endCalls, 1, reason: 'only one drain can run at a time');
+
+        drain.completeError(StateError('WAL drain failed'));
+        await settleDetailTab(tester);
+        expect(home.conversationsV3.finishRow, isNull);
+        expect(find.byType(ConversationDetailPage), findsOneWidget);
+        expect(end, findsOneWidget);
+        expect(find.byType(SnackBar), findsNothing);
+        await tester.tap(find.text('Summary'));
+        await settleDetailTab(tester);
+        expect(find.text('Recent transcript'), findsOneWidget);
+        await shoot(tester, '005-mobile-ios-end-retry-after-drain');
+
+        home.capture.drain = Completer<void>();
+        await tester.tap(end);
+        expect(home.capture.endCalls, 2);
+        expect(home.conversationsV3.finishRow, isNotNull);
+        home.capture.drain!.completeError(StateError('WAL drain failed again'));
+        await settleDetailTab(tester);
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
 
     testWidgets('manual finish replaces the live row until its summary is listed', (tester) async {
       await withClock(Clock.fixed(_now), () async {

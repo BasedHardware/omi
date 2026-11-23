@@ -119,6 +119,9 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   void onLiveFinalized() => episodeProvider?.onLiveFinalized();
 
   @override
+  bool get v3FinishFeedbackEnabled => conversationsV3?.finishFeedbackEnabled ?? false;
+
+  @override
   void onManualFinishStarted(
     ServerConversation placeholder,
     String? recordingId, {

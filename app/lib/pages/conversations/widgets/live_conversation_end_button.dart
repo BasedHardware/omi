@@ -1,15 +1,15 @@
 // The End action on a v3 conversation in progress; owns only when it shows and what it calls.
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -83,7 +83,7 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
             ),
             child: InkWell(
               borderRadius: OmiRadius.pillAll,
-              onTap: () {
+              onTap: () async {
                 if (_ended) return;
                 HapticFeedback.mediumImpact();
                 final capture = context.read<CaptureProvider>();
@@ -94,23 +94,24 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                 setEndSuppressed?.call(true);
                 final v3 = context.read<ConversationsV3Provider?>();
                 final previousFinish = v3?.finishRow;
-                // Settled: on success the capture has cleared and End is gone; after a failed drain the
-                // capture keeps its segments, and End works again.
-                unawaited(
-                  capture
-                      .forceProcessingCurrentConversation(manualFinish: true, liveConversationId: conversation.id)
-                      .whenComplete(() {
-                    _ended = false;
-                    if (_owns(conversation, capture, v3Feedback)) {
-                      setEndSuppressed?.call(false);
-                    }
-                  }).catchError((Object _) {}),
-                );
-                if (v3?.finishRow != null &&
-                    !identical(v3!.finishRow, previousFinish) &&
-                    ModalRoute.of(context)?.isCurrent == true) {
-                  unawaited(Navigator.of(context).maybePop());
+                final bool started;
+                try {
+                  final finish = capture.forceProcessingCurrentConversation(
+                      manualFinish: true, liveConversationId: conversation.id);
+                  started = v3?.finishRow != null && !identical(v3!.finishRow, previousFinish);
+                  await finish;
+                } catch (_) {
+                  // The close kept the capture. End stays on detail so the user can retry it.
+                  return;
+                } finally {
+                  _ended = false;
+                  if (_owns(conversation, capture, v3Feedback)) {
+                    setEndSuppressed?.call(false);
+                  }
                 }
+                if (!context.mounted || !started || ModalRoute.of(context)?.isCurrent != true) return;
+                context.read<HomeProvider?>()?.showNewestOnHome();
+                HomeNavigation.returnHome(context);
               },
               // At most half the bar, so Ask Omi keeps its room; a long translation scales down on one
               // line, then ellipsizes, rather than overflowing a 320pt screen.
