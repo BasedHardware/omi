@@ -43,7 +43,6 @@ LEASE = 120.0
 @pytest.fixture
 def ob(outbox_backend, monkeypatch):  # noqa: F811
     outbox_backend.store_harness.seed_user('o')
-    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     return outbox_backend
 
 

@@ -208,12 +208,6 @@ environments:
           OMI_ENV_STAGE:
             value: dev
             category: runtime_identity
-          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
-          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           STT_LIVE_DEMAND_ENABLED: {category: rollout, value: 'false'}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
           STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: ''}
@@ -596,12 +590,6 @@ environments:
           LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
           MEMORY_ENABLED:
             value: 'on'
-          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
-          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
@@ -939,11 +927,6 @@ environments:
         TTS_PROVIDER: {value: gemini, category: rollout}
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
-        DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-        DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-        DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-        DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-        DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
         GCP_LOCATION:
           value: us-central1
         PROMETHEUS_SIDECAR_PORT:
@@ -994,6 +977,12 @@ environments:
       services:
         backend:
           forbidden_env:
+          - DEMAND_PROCESSING_ENABLED
+          - DEMAND_PROCESSING_LAZY_ENABLED
+          - DEMAND_PROCESSING_PERCENT
+          - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+          - DEMAND_PROCESSING_TOOL_ENABLED
+          - DEMAND_PROCESSING_UID_ALLOWLIST
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -1250,11 +1239,6 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
-            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_LID_API_URL:
               value: ''
               category: service_discovery
@@ -1654,11 +1638,6 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
-            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_LID_API_URL:
               value: ''
               category: service_discovery
@@ -1857,6 +1836,12 @@ environments:
               value: conversations-v3-backfill
               category: reliability
           forbidden_env:
+          - DEMAND_PROCESSING_ENABLED
+          - DEMAND_PROCESSING_LAZY_ENABLED
+          - DEMAND_PROCESSING_PERCENT
+          - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+          - DEMAND_PROCESSING_TOOL_ENABLED
+          - DEMAND_PROCESSING_UID_ALLOWLIST
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -2078,11 +2063,6 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
-            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_LID_API_URL:
               value: ''
               category: service_discovery
@@ -2263,6 +2243,12 @@ environments:
               category: reliability
           provisional: true
           forbidden_env:
+          - DEMAND_PROCESSING_ENABLED
+          - DEMAND_PROCESSING_LAZY_ENABLED
+          - DEMAND_PROCESSING_PERCENT
+          - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+          - DEMAND_PROCESSING_TOOL_ENABLED
+          - DEMAND_PROCESSING_UID_ALLOWLIST
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -2461,11 +2447,6 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
-            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
@@ -2641,6 +2622,12 @@ environments:
               value: conversations-v3-backfill
               category: reliability
           forbidden_env:
+          - DEMAND_PROCESSING_ENABLED
+          - DEMAND_PROCESSING_LAZY_ENABLED
+          - DEMAND_PROCESSING_PERCENT
+          - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+          - DEMAND_PROCESSING_TOOL_ENABLED
+          - DEMAND_PROCESSING_UID_ALLOWLIST
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -2702,11 +2689,6 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
-            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -2717,6 +2699,12 @@ environments:
               category: config
           forbidden_env:
           - HOSTED_PUSHER_API_URL
+          - DEMAND_PROCESSING_ENABLED
+          - DEMAND_PROCESSING_LAZY_ENABLED
+          - DEMAND_PROCESSING_PERCENT
+          - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+          - DEMAND_PROCESSING_TOOL_ENABLED
+          - DEMAND_PROCESSING_UID_ALLOWLIST
         x-connector-sync-job:
           flags:
             --task-timeout: 3600s
@@ -3144,12 +3132,6 @@ environments:
           OMI_ENV_STAGE:
             value: prod
             category: runtime_identity
-          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
-          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           STT_LIVE_DEMAND_ENABLED: {category: rollout, value: 'true'}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
           STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
@@ -3657,12 +3639,6 @@ environments:
           LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
           MEMORY_ENABLED:
             value: 'on'
-          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
-          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
@@ -3986,11 +3962,6 @@ environments:
         TTS_PROVIDER: {value: gemini, category: rollout}
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware
-        DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-        DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-        DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-        DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-        DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
         GCP_LOCATION:
           value: us-central1
         PROMETHEUS_SIDECAR_PORT:
@@ -4057,6 +4028,12 @@ environments:
       services:
         backend:
           forbidden_env:
+          - DEMAND_PROCESSING_ENABLED
+          - DEMAND_PROCESSING_LAZY_ENABLED
+          - DEMAND_PROCESSING_PERCENT
+          - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+          - DEMAND_PROCESSING_TOOL_ENABLED
+          - DEMAND_PROCESSING_UID_ALLOWLIST
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           - DREAM_AGENT_PAID_PERCENT
@@ -4351,11 +4328,6 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
-            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_LID_API_URL:
               value: ''
               category: service_discovery
@@ -4901,11 +4873,6 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
-            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_LID_API_URL:
               value: ''
               category: service_discovery
@@ -5257,6 +5224,12 @@ environments:
           flags:
             --timeout: 3600s
           forbidden_env:
+          - DEMAND_PROCESSING_ENABLED
+          - DEMAND_PROCESSING_LAZY_ENABLED
+          - DEMAND_PROCESSING_PERCENT
+          - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+          - DEMAND_PROCESSING_TOOL_ENABLED
+          - DEMAND_PROCESSING_UID_ALLOWLIST
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           - DREAM_AGENT_PAID_PERCENT
@@ -5481,11 +5454,6 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
-            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_LID_API_URL:
               value: ''
               category: service_discovery
@@ -5795,6 +5763,12 @@ environments:
               category: reliability
           provisional: true
           forbidden_env:
+          - DEMAND_PROCESSING_ENABLED
+          - DEMAND_PROCESSING_LAZY_ENABLED
+          - DEMAND_PROCESSING_PERCENT
+          - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+          - DEMAND_PROCESSING_TOOL_ENABLED
+          - DEMAND_PROCESSING_UID_ALLOWLIST
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           - DREAM_AGENT_PAID_PERCENT
@@ -5996,11 +5970,6 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
-            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
@@ -6285,6 +6254,12 @@ environments:
               value: conversations-v3-backfill
               category: reliability
           forbidden_env:
+          - DEMAND_PROCESSING_ENABLED
+          - DEMAND_PROCESSING_LAZY_ENABLED
+          - DEMAND_PROCESSING_PERCENT
+          - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+          - DEMAND_PROCESSING_TOOL_ENABLED
+          - DEMAND_PROCESSING_UID_ALLOWLIST
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           - DREAM_AGENT_PAID_PERCENT
@@ -6486,11 +6461,6 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
-            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
@@ -6781,6 +6751,12 @@ environments:
               value: conversations-v3-backfill
               category: reliability
           forbidden_env:
+          - DEMAND_PROCESSING_ENABLED
+          - DEMAND_PROCESSING_LAZY_ENABLED
+          - DEMAND_PROCESSING_PERCENT
+          - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+          - DEMAND_PROCESSING_TOOL_ENABLED
+          - DEMAND_PROCESSING_UID_ALLOWLIST
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           - DREAM_AGENT_PAID_PERCENT
@@ -6845,11 +6821,6 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
-            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             CONVERSATIONS_V3:
@@ -6859,6 +6830,13 @@ environments:
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
+          forbidden_env:
+          - DEMAND_PROCESSING_ENABLED
+          - DEMAND_PROCESSING_LAZY_ENABLED
+          - DEMAND_PROCESSING_PERCENT
+          - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+          - DEMAND_PROCESSING_TOOL_ENABLED
+          - DEMAND_PROCESSING_UID_ALLOWLIST
         x-connector-sync-job:
           flags:
             --task-timeout: 3600s

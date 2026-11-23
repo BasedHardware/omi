@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from config.home_processing import live_member_notes_enabled, bounded_member_notes_enabled
 from database import episodes, live_member_notes
 from database.outbox_firestore import ENRICHMENT_OUTBOX
-from utils.conversations import demand_processing
+from database.redis_db import create_bounded_redis_client
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.summary_delivery import PROCESS_CONTEXT
 from utils.enrichment import outbox
@@ -110,7 +110,7 @@ def waits(uid: str, row: dict, trigger=ProcessingTrigger.SYNC_UPDATE) -> bool:
             _unavailable('job_unavailable', error)
     # Unlike owner-wide attention, this lease names just the detail being read.
     try:
-        return not bool(demand_processing.client().get(_key(uid, row['id'])))
+        return not bool(create_bounded_redis_client(0.5).get(_key(uid, row['id'])))
     except Exception as error:
         _unavailable('lease_unavailable', error)
         return False  # Redis loss fails eager; durable processing remains authoritative.
@@ -167,7 +167,7 @@ def before_model(uid, conversation, trigger, *, finalization_fence=None):
         return
     detail_lease = None
     try:
-        detail_lease = demand_processing.client().get(_key(uid, conversation.id))
+        detail_lease = create_bounded_redis_client(0.5).get(_key(uid, conversation.id))
     except Exception as error:
         _unavailable('lease_unavailable', error)
     if detail_lease:
@@ -203,6 +203,6 @@ def open_recording(uid: str, row: dict) -> None:
         )
         # Publish the lease only after durable custody exists. Failed enqueue
         # leaves the next detail read free to retry immediately.
-        demand_processing.client().set(_key(uid, row['id']), '1', ex=DETAIL_LEASE_SECONDS)
+        create_bounded_redis_client(0.5).set(_key(uid, row['id']), '1', ex=DETAIL_LEASE_SECONDS)
     except Exception as error:
         _unavailable('escalation_unavailable', error)

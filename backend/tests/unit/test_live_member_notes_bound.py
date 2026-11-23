@@ -23,7 +23,9 @@ def deferred(monkeypatch):
     monkeypatch.setenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', 'true')
     monkeypatch.delenv('HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED', raising=False)
     monkeypatch.setattr(member_notes.time, 'time', lambda: NOW.timestamp())
-    monkeypatch.setattr(member_notes.demand_processing, 'client', lambda: SimpleNamespace(get=lambda key: None))
+    monkeypatch.setattr(
+        member_notes, 'create_bounded_redis_client', lambda _timeout: SimpleNamespace(get=lambda key: None)
+    )
     owner = {
         'id': 'episode',
         'status': 'live',
@@ -118,7 +120,7 @@ def test_old_job_recording_detail_keeps_its_independent_escalation(deferred, mon
     row['transcript_segments'] = [object()]
     redis = Mock()
     redis.get.return_value = None
-    monkeypatch.setattr(member_notes.demand_processing, 'client', lambda: redis)
+    monkeypatch.setattr(member_notes, 'create_bounded_redis_client', lambda _timeout: redis)
     enqueue = Mock()
     monkeypatch.setattr(member_notes.ENRICHMENT_OUTBOX, 'enqueue', enqueue)
     member_notes.open_recording('synthetic', row)
@@ -129,7 +131,9 @@ def test_old_job_recording_detail_keeps_its_independent_escalation(deferred, mon
 def test_aged_finalizer_defers_to_detail_lease_without_paying(deferred, monkeypatch):
     _, job, _ = deferred
     job['created_at'] = NOW - timedelta(seconds=181)
-    monkeypatch.setattr(member_notes.demand_processing, 'client', lambda: SimpleNamespace(get=lambda key: '1'))
+    monkeypatch.setattr(
+        member_notes, 'create_bounded_redis_client', lambda _timeout: SimpleNamespace(get=lambda key: '1')
+    )
     permit = Mock()
     monkeypatch.setattr(permits, 'claim', permit)
     model = Mock()
@@ -275,7 +279,9 @@ def test_idle_retry_reuses_real_transaction_and_speech_wins(monkeypatch, new_spe
     monkeypatch.delenv('HOME_PROCESSING_OWNERSHIP_UIDS', raising=False)
     monkeypatch.setattr(member_notes.time, 'time', lambda: NOW.timestamp())
     monkeypatch.setattr(service, '_now', lambda c: NOW)
-    monkeypatch.setattr(member_notes.demand_processing, 'client', lambda: SimpleNamespace(get=lambda key: None))
+    monkeypatch.setattr(
+        member_notes, 'create_bounded_redis_client', lambda _timeout: SimpleNamespace(get=lambda key: None)
+    )
     episode_path = ('users', 'synthetic', 'episodes', 'episode')
     store = StrictFirestore(
         {

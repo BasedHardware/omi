@@ -216,18 +216,6 @@ env:
     value: "false"
   - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS
     value: "24"
-  - name: DEMAND_PROCESSING_ENABLED
-    value: "false"
-  - name: DEMAND_PROCESSING_LAZY_ENABLED
-    value: "false"
-  - name: DEMAND_PROCESSING_TOOL_ENABLED
-    value: "false"
-  - name: DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
-    value: "false"
-  - name: DEMAND_PROCESSING_UID_ALLOWLIST
-    value: ""
-  - name: DEMAND_PROCESSING_PERCENT
-    value: "0"
   - name: BATCH_CONTROL_CANDIDATE_FANOUT
     value: "16"
   - name: BATCH_ADMISSION_PARALLEL_CALLS

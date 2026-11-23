@@ -2100,10 +2100,8 @@ def _reprocess_merged_conversations(
     """
     from config.sync_reprocess import coalesce_enabled
 
-    from config.demand_processing import enabled as demand_enabled
-
     hold = processing_hold.scheduling_enabled()
-    coalescing = (hold or coalesce_enabled() or demand_enabled(uid)) and not user_selected
+    coalescing = (hold or coalesce_enabled()) and not user_selected
     merged = response.pop('_merged', {})
     if coalescing:
         # Partial-result IDs survive a crash after append/checkpoint but before
@@ -2138,9 +2136,6 @@ def _reprocess_merged_conversations(
                 )
                 if user_selected:
                     complete_explicit(uid, processed, ProcessingTrigger.BACKLOG_CHOICE)
-                    from utils.conversations.demand_processing import promote_conversation_effects
-
-                    promote_conversation_effects(uid, conversation_id)
         except processing_hold.ProcessingDeferred:
             if user_selected:
                 raise

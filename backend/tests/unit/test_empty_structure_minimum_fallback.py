@@ -47,8 +47,6 @@ def _process_conversation_module_loaded():
             module.__path__ = []
         fakes[name] = module
     fakes['database._client'].document_id_from_seed = lambda seed: seed
-    # Its import-time Prometheus Gauge would register a second time on every fresh load.
-    fakes['utils.conversations.demand_processing'] = AutoMockModule('utils.conversations.demand_processing')
     with stub_modules(fakes):
         pc = load_module_fresh(
             'utils.conversations.process_conversation',

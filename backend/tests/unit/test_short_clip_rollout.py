@@ -1,7 +1,5 @@
 """Short-recording compute policy, persisted minimum admission and creation effects."""
 
-import sys
-
 from concurrent.futures import Future
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -13,8 +11,6 @@ from models.structured import Structured
 from utils.llm import notes_short_clip
 from utils.llm.notes_refactor_metrics import RESULTS
 from utils.conversations.minimum_derived import is_server_minimum
-from utils.conversations import demand_processing
-from utils.sync import reprocess
 from tests.unit.test_process_conversation_free_tier_branch import (
     pc,
     _omi_create,
@@ -247,14 +243,7 @@ def test_summary_app_boundary_honors_explicit_selection_on_minimum_rows(pc, monk
 
 
 @pytest.mark.parametrize('deferred', [False, True])
-@pytest.mark.parametrize('lazy', [False, True])
-def test_minimum_creation_preserves_webhook_and_audio_without_llm_derived_work(pc, monkeypatch, deferred, lazy):
-    assert sys.modules['utils.conversations.demand_processing'] is demand_processing
-    assert sys.modules['utils.sync.reprocess'] is reprocess
-
-    monkeypatch.setattr(demand_processing, 'lazy_enrichment_enabled', lambda _uid: lazy)
-    mark_effects = MagicMock(side_effect=AssertionError('minimum queued lazy enrichment'))
-    monkeypatch.setattr(reprocess, 'mark_effects', mark_effects)
+def test_minimum_creation_preserves_webhook_and_audio_without_llm_derived_work(pc, monkeypatch, deferred):
     structure_boundary = pc._get_structured
     memory_boundary, app_boundary = pc.extract_memories, pc.trigger_conversation_apps
     spies = _spy_managed_effects(monkeypatch, pc)
@@ -303,7 +292,6 @@ def test_minimum_creation_preserves_webhook_and_audio_without_llm_derived_work(p
     pc.conversations_db.create_audio_files_from_chunks.assert_called()
     webhook.assert_awaited_once()
     paid.assert_not_called()
-    mark_effects.assert_not_called()
 
 
 def test_minimum_marker_supports_stored_dicts_and_enriched_replacement():

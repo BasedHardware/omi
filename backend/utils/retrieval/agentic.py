@@ -66,7 +66,6 @@ from utils.retrieval.tools import (
     save_user_preference_tool,
     fetch_url_tool,
     traverse_knowledge_graph_tool,
-    process_recent_conversations,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.device_tools import DEVICE_TOOL_NAMES, build_device_tools, device_tool_timeout_for_stream_budget
@@ -279,7 +278,6 @@ CORE_TOOLS = [
     save_user_preference_tool,
     fetch_url_tool,
     traverse_knowledge_graph_tool,
-    process_recent_conversations,
 ]
 
 # Standard tool names (used to detect app tools by exclusion). Device tools are
@@ -1562,11 +1560,6 @@ async def execute_agentic_chat_stream(
             # Copy the fixed core tool list so request-specific filtering cannot
             # mutate the shared prompt-cache prefix.
             core_tools = list(CORE_TOOLS)
-            from config.demand_processing import tool_enabled
-
-            if not tool_enabled():
-                core_tools = [tool for tool in core_tools if tool.name != 'process_recent_conversations']
-
             # Dynamic app tools — exposed directly on the OpenAI/Luna chat-agent lane
             app_tools = []
             try:

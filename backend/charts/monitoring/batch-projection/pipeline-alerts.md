@@ -108,7 +108,7 @@ scheduler, capacity or custody state is changed. The read-only held gauge may re
 
 `omi-oldest-age-gauge-flat-1h` is an agent-tier warning, muted by `omi-tier-silent`.
 It counts each positive series whose one-hour maximum equals its minimum for
-projection obligations, vendor-held work, summary debt and demand processing.
+projection obligations, vendor-held work and summary debt.
 Each series must also have an observation at least 3300 seconds (55 minutes) old
 in that one-hour window: `time() - min_over_time(timestamp(age)[1h:1m]) >= 3300`.
 The timestamp subquery uses the same labels as the age series, so a new replica

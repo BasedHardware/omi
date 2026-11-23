@@ -1010,8 +1010,6 @@ def test_silent_backfill_persists_summary_and_never_schedules_derived_work(monke
     _stub_completed_for_normal_path(monkeypatch, pc)
     payloads = _capture_all_persists(monkeypatch, pc)
     bundle, disposition = [], []
-    lazy = __import__('utils.conversations.demand_processing', fromlist=['lazy_enrichment_enabled'])
-    monkeypatch.setattr(lazy, 'lazy_enrichment_enabled', lambda _: True)
     submitted = MagicMock(side_effect=AssertionError('historical work must stay silent'))
     monkeypatch.setattr(pc, 'submit_with_context', submitted)
     pc.process_conversation(

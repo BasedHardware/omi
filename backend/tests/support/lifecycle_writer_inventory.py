@@ -3312,16 +3312,6 @@ FIELD_SITES = {
             ('coverage', 'end_time', 'event_id', 'start_time', 'status', 'title'),
         )
     ],
-    'utils/conversations/demand_processing.py': [
-        ('process_recent', 'status', "'disabled'", ('ready', 'status')),
-        ('process_recent', 'status', "'rate_limited'", ('ready', 'retry_after_seconds', 'status')),
-        (
-            'promote',
-            'status',
-            "'processing' if count else 'no_indexed_pending_work'",
-            ('has_more', 'promoted', 'ready', 'status'),
-        ),
-    ],
     'utils/conversations/finalizer.py': [
         ('_load_admitted_conversation', 'status', 'ConversationStatus.processing', ('status',))
     ],
@@ -3933,12 +3923,6 @@ FIELD_SITES = {
             'status',
             "{'type': 'string', 'enum': ['created', 'duplicate', 'error']}",
             ('error', 'index', 'memory_id', 'status'),
-        ),
-        (
-            '<module>',
-            'status',
-            "{'type': 'string'}",
-            ('has_more', 'promoted', 'ready', 'retry_after_seconds', 'status'),
         ),
         # The conversation card's output schema (a JSON Schema, not a payload).
         (

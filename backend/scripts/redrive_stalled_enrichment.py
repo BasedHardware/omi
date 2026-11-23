@@ -48,7 +48,6 @@ def main() -> int:
     os.environ['OMI_ENV_STAGE'] = 'prod'
     os.environ['SYNC_TASKS_PROJECT'] = 'based-hardware'
     os.environ['SYNC_TASKS_LOCATION'] = 'us-central1'
-    os.environ['DEMAND_PROCESSING_ENABLED'] = 'false'
     client = firestore.Client(project='based-hardware')
     counts: Counter[str] = Counter()
     selected = keys[args.offset : args.offset + args.limit]

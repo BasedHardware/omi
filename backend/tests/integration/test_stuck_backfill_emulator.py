@@ -348,7 +348,7 @@ def test_silent_worker_http_replay_uses_real_claim_fanout_and_completion(store, 
     from types import SimpleNamespace
     from unittest.mock import Mock, AsyncMock
     from routers import conversation_finalization as router
-    from utils.conversations import finalizer, demand_processing
+    from utils.conversations import finalizer
     from utils.cloud_tasks import verify_listen_finalization_cloud_tasks_oidc
     from models.conversation_enums import ConversationStatus
 
@@ -367,7 +367,6 @@ def test_silent_worker_http_replay_uses_real_claim_fanout_and_completion(store, 
     monkeypatch.setattr(router, 'try_acquire_job_run_lock', lambda *_: 'synthetic-lock')
     monkeypatch.setattr(router, 'release_job_run_lock', lambda *_: None)
     monkeypatch.setattr(router, 'should_skip_background_account_mutation', lambda *_: False)
-    monkeypatch.setattr(demand_processing, 'admit', lambda *_args, **_kwargs: True)
 
     async def inline(_executor, function, *args, **kwargs):
         return function(*args, **kwargs)

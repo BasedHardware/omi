@@ -734,7 +734,6 @@ async def test_sync_reprocess_expected_retry_answers_409_never_503(monkeypatch):
 @pytest.mark.parametrize('path', ['merge', 'quiet', 'preclaim', 'claim'])
 async def test_pending_deletion_finalization_task_uses_retry_contract(monkeypatch, path):
     """Keep durable work available for a restored owner without using queue-wide 5xx throttling."""
-    from utils.conversations import demand_processing
 
     monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
     if path == 'merge':
@@ -759,7 +758,6 @@ async def test_pending_deletion_finalization_task_uses_retry_contract(monkeypatc
             lambda _uid: path == 'preclaim',
         )
         if path == 'claim':
-            monkeypatch.setattr(demand_processing, 'admit', lambda *args, **kwargs: True)
             monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda _key: 'lock-token')
             monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda *_args: None)
             monkeypatch.setattr(

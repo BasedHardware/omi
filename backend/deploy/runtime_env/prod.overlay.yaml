@@ -582,6 +582,12 @@ overlay:
     services:
       backend:
         forbidden_env:
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
         # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
@@ -987,21 +993,6 @@ overlay:
           BATCH_PIPELINE_WORKER_ENABLED:
             value: 'false'
             category: ops_kill
-          DEMAND_PROCESSING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_LAZY_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_PERCENT:
-            value: '0'
-            category: rollout
-          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_TOOL_ENABLED:
-            value: 'false'
-            category: rollout
           SYNC_DURABLE_STATUS_RECONCILIATION:
             value: 'true'
             category: rollout
@@ -1017,6 +1008,12 @@ overlay:
         flags:
           --timeout: 3600s
         forbidden_env:
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
         # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
@@ -1367,21 +1364,6 @@ overlay:
           BATCH_PIPELINE_WORKER_ENABLED:
             value: 'false'
             category: ops_kill
-          DEMAND_PROCESSING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_LAZY_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_PERCENT:
-            value: '0'
-            category: rollout
-          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_TOOL_ENABLED:
-            value: 'false'
-            category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
             category: rollout
@@ -1459,6 +1441,12 @@ overlay:
             secret: SONIOX_API_KEY
             version: latest
         forbidden_env:
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
         # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
@@ -1755,21 +1743,6 @@ overlay:
           BATCH_PIPELINE_WORKER_ENABLED:
             value: 'false'
             category: ops_kill
-          DEMAND_PROCESSING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_LAZY_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_PERCENT:
-            value: '0'
-            category: rollout
-          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_TOOL_ENABLED:
-            value: 'false'
-            category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
             category: rollout
@@ -1848,6 +1821,12 @@ overlay:
             secret: SONIOX_API_KEY
             version: latest
         forbidden_env:
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
         # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
@@ -2149,21 +2128,6 @@ overlay:
           BATCH_PIPELINE_WORKER_ENABLED:
             value: 'false'
             category: ops_kill
-          DEMAND_PROCESSING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_LAZY_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_PERCENT:
-            value: '0'
-            category: rollout
-          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_TOOL_ENABLED:
-            value: 'false'
-            category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
             category: rollout
@@ -2225,6 +2189,13 @@ overlay:
             value: memories-backend
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
+        forbidden_env:
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
       x-connector-sync-job:
         flags:
           --service-account: backend-runtime@based-hardware.iam.gserviceaccount.com

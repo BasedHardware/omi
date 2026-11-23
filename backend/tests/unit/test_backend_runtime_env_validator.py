@@ -752,11 +752,6 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
                 'BATCH_PROJECTION_OUTBOX',
                 'DREAM_AGENT_ELIGIBILITY',
                 'DREAM_ON_DEMAND_ENABLED',
-                'DEMAND_PROCESSING_ENABLED',
-                'DEMAND_PROCESSING_LAZY_ENABLED',
-                'DEMAND_PROCESSING_TOOL_ENABLED',
-                'DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED',
-                'DEMAND_PROCESSING_PERCENT',
                 'CONVERSATION_RELEVANCE_JEV_PERCENT',
             )
         )

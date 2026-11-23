@@ -21,7 +21,6 @@ PAYLOAD = {'conversation_id': 'c', 'language': 'en'}
 
 @pytest.fixture
 def rows(state, monkeypatch):  # noqa: F811
-    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     monkeypatch.setattr(custody, 'discard_blocked', lambda _row_id: False)
     return state
 
@@ -113,12 +112,12 @@ def test_ack_retires_or_rearms_by_version(rows):
 
 
 def test_a_wake_token_rotated_under_a_live_lease_does_not_strand_the_holder(rows):
-    """M1 L09-3: a producer (mark_update / mark_effects) may rotate task_token mid-lease; invariant 1 fences
+    """M1 L09-3: a producer (mark_update) may rotate task_token mid-lease; invariant 1 fences
     on lease_token only, so the live holder still records its summary and settles."""
     state_rows, _tasks = rows
     _enqueue(1.0)
     claim = _claim(rows, now=10)
-    state_rows[KEY]['task_token'] = 'e' * 32  # mark_effects merges a new token and keeps the lease
+    state_rows[KEY]['task_token'] = 'e' * 32  # A producer rotated the wake token during the lease.
     assert outbox.heartbeat(claim, 120, now=20)
     assert outbox.record_summary(claim)
     assert outbox.ack(claim, 'processed', now=21)

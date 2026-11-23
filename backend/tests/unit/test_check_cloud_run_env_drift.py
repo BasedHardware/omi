@@ -278,7 +278,7 @@ def _two_service_manifest(tmp_path: Path) -> Path:
                             'env': {
                                 'SYNC_TASKS_QUEUE': {'value': 'sync-jobs'},
                                 'SUMMARY_DEBT_REPAIR_ENABLED': {'value': 'true'},
-                                'DEMAND_PROCESSING_UID_ALLOWLIST': {'value': ''},
+                                'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST': {'value': ''},
                                 'SYNC_TASKS_HANDLER_URL': {'env_var': 'SYNC_TASKS_HANDLER_URL_FOR_TEST'},
                             },
                             'secrets': {'TYPESENSE_HOST': {'secret': 'TYPESENSE_HOST', 'version': 'latest'}},
@@ -302,7 +302,7 @@ def _sync_env(*, queue: str, repair: str, uid_allowlist: str = '') -> list[dict]
     return [
         {'name': 'SYNC_TASKS_QUEUE', 'value': queue},
         {'name': 'SUMMARY_DEBT_REPAIR_ENABLED', 'value': repair},
-        {'name': 'DEMAND_PROCESSING_UID_ALLOWLIST', 'value': uid_allowlist},
+        {'name': 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', 'value': uid_allowlist},
         {'name': 'SYNC_TASKS_HANDLER_URL', 'value': 'https://handler.example/run'},
         {'name': 'TYPESENSE_HOST', 'valueFrom': {'secretKeyRef': {'name': 'TYPESENSE_HOST', 'key': 'latest'}}},
         {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': SENSITIVE_UID},
@@ -607,7 +607,7 @@ def test_reports_never_print_values_and_redact_sensitive_hashes(checker, tmp_pat
         out = capsys.readouterr().out
         for leaked in (OPERATOR_QUEUE, SENSITIVE_UID, 'https://handler.example/run'):
             assert leaked not in out
-        assert 'DEMAND_PROCESSING_UID_ALLOWLIST' in out
+        assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' in out
         assert checker.value_hash('value', SENSITIVE_UID) not in out
         assert checker.value_hash('value', OPERATOR_QUEUE) in out
         env_map = checker._env_list_to_live(
@@ -2328,7 +2328,7 @@ def test_rendered_state_rejects_contradicting_manifest_literal(checker, tmp_path
                             # different value for it is stale, not exact.
                             {'name': 'SYNC_TASKS_QUEUE', 'value': 'sync-jobs-old'},
                             {'name': 'SUMMARY_DEBT_REPAIR_ENABLED', 'value': 'true'},
-                            {'name': 'DEMAND_PROCESSING_UID_ALLOWLIST', 'value': ''},
+                            {'name': 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', 'value': ''},
                             {'name': 'SYNC_TASKS_HANDLER_URL', 'value': 'https://handler.example/run'},
                             {
                                 'name': 'TYPESENSE_HOST',
@@ -3738,7 +3738,7 @@ def test_rendered_state_rejects_entries_absent_from_the_manifest(checker, tmp_pa
                                 for name in (
                                     'SYNC_TASKS_QUEUE',
                                     'SUMMARY_DEBT_REPAIR_ENABLED',
-                                    'DEMAND_PROCESSING_UID_ALLOWLIST',
+                                    'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST',
                                     'SYNC_TASKS_HANDLER_URL',
                                 )
                             ),
@@ -3828,7 +3828,7 @@ def test_cloud_run_secret_alias_resolves_through_annotation(checker, tmp_path: P
     serving_env = [
         {'name': 'SYNC_TASKS_QUEUE', 'value': 'sync-jobs'},
         {'name': 'SUMMARY_DEBT_REPAIR_ENABLED', 'value': 'true'},
-        {'name': 'DEMAND_PROCESSING_UID_ALLOWLIST', 'value': ''},
+        {'name': 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', 'value': ''},
         {'name': 'SYNC_TASKS_HANDLER_URL', 'value': 'https://handler.example/run'},
         {'name': 'TYPESENSE_HOST', 'valueFrom': {'secretKeyRef': {'name': 'SHARED_TOKEN', 'key': 'latest'}}},
         {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': SENSITIVE_UID},

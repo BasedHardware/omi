@@ -2850,12 +2850,9 @@ class SurfaceStateRequest(BaseModel):
 @router.post(
     '/v1/users/client-state', tags=['users'], response_model=UserStatusResponse, response_model_exclude_none=True
 )
-async def report_surface_state(
+def report_surface_state(
     body: SurfaceStateRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'users:surface_state', fail_closed=True)),
 ):
-    """Explicit expiring human-surface intent; no user-document lookup."""
-    from utils.conversations.demand_processing import observe_surface
-
-    await run_blocking(db_executor, observe_surface, uid, body.session_id, body.model_dump())
+    """Acknowledge surface reports from released clients without storing intent."""
     return {'status': 'ok'}

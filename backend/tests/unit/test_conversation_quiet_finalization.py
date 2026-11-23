@@ -19,7 +19,7 @@ from routers import conversation_finalization as worker
 from services import conversation_finalization as service
 from routers.listen.contracts import ListenRequest
 from routers.listen.runtime import ListenSessionRuntime
-from utils.conversations import demand_processing, lifecycle, quiet_finalization as quiet
+from utils.conversations import lifecycle, quiet_finalization as quiet
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 NOW = datetime(2026, 10, 22, tzinfo=timezone.utc)
@@ -79,7 +79,6 @@ def store(monkeypatch):
     monkeypatch.setattr(jobs, 'create_or_get_finalization_intent', create)
     monkeypatch.setattr(lifecycle, 'enqueue_listen_finalization_job', MagicMock())
 
-    monkeypatch.setattr(demand_processing, 'schedule', lambda *a, **k: False)
     return db
 
 

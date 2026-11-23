@@ -10,7 +10,7 @@ and ``policy_id`` are additive fields. Post-claim calls are fenced on ``lease_to
 producer may rotate ``task_token`` under a live lease, and that must not strand the lease holder.
 
 Wakes (lead ruling 10-19): this implementation creates Cloud Tasks itself through the existing
-``_enqueue`` (binding checks, demand scheduling, eager effects recovery): after a non-transactional
+``_enqueue`` (binding checks and task dispatch): after a non-transactional
 ``enqueue``, on ``defer``, on a not-due ``claim_key`` (returns ``Outcome.DEFERRED``) and on re-armed
 ``ack``. A transactional ``enqueue`` returns the wake token and the caller calls ``wake`` after commit.
 """
@@ -112,7 +112,7 @@ def _observe_streak(observed: dict[str, int], committed: bool) -> None:
 
 
 def _holds(row: Mapping[str, Any] | None, claim: Claim) -> bool:
-    # Invariant 1 fences on the lease token alone. ``mark_update``/``mark_effects`` may rotate ``task_token``
+    # Invariant 1 fences on the lease token alone. ``mark_update`` may rotate ``task_token``
     # under a live lease; requiring it here would reject the live owner and lose that rotation's wake.
     return bool(row and not row.get('dormant') and row.get('owner') == claim.lease_token)
 
@@ -316,17 +316,12 @@ class FirestoreEnrichmentOutbox:
     def claim_key(self, row_id: str, wake_token: str, lease_seconds: float, *, now: float) -> Claim | Outcome:
         if not _DOCUMENT_ID.fullmatch(row_id or '') or not _TOKEN.fullmatch(wake_token or ''):
             return Outcome.STALE  # No row can hold this binding (invariant 2: unknown rows are stale).
-        from utils.conversations.demand_processing import admit
-        from config.demand_processing import enabled
-
         if self._blocked(row_id):
             return Outcome.DISCARDED
         from utils.enrichment.age_gate import park_if_expired
 
         if park_if_expired(row_id, wake_token, now=now, client=self._bound_client):
             return Outcome.STALE
-        if not admit(row_id, now=now, token=wake_token):
-            return Outcome.DEFERRED  # Demand processing owns this row's next wake.
         outbox = _outbox()
         owner = uuid.uuid4().hex
         cache: dict[str, Any] = {}
@@ -346,7 +341,7 @@ class FirestoreEnrichmentOutbox:
             outbox.stamp_claim_policy(row, cache, stamps)
             if row.get('sync_hold') and not outbox.processing_hold.enabled_for(row):
                 row['due_at'] = now
-            if row['due_at'] > now and (not outbox.effects_may_run_early(row) or not enabled(row['uid'])):
+            if row['due_at'] > now:
                 row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
                 return row, (Outcome.DEFERRED, row)
             if record_notes_eager_enabled() and row.get('record_notes_producers'):

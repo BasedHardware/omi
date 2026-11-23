@@ -382,6 +382,12 @@ overlay:
     services:
       backend:
         forbidden_env:
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -482,6 +488,12 @@ overlay:
             value: '0'
       backend-sync:
         forbidden_env:
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -595,6 +607,12 @@ overlay:
             value: '0'
       backend-sync-backfill:
         forbidden_env:
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -686,6 +704,12 @@ overlay:
             value: '0'
       backend-integration:
         forbidden_env:
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -793,6 +817,12 @@ overlay:
             value: based-hardware
         forbidden_env:
         - HOSTED_PUSHER_API_URL
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
       x-connector-sync-job:
         flags:
           --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com

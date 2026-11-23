@@ -551,14 +551,3 @@ def get_daily_summaries(
             kind='get_daily_summaries', uid=uid, position={'offset': offset + consumed}, filters=filters
         )
     return result
-
-
-def process_recent_conversations(uid, arguments, auth_context=None):
-    from utils.conversations.demand_processing import process_recent
-
-    if set(arguments) - {'hours', 'limit'}:
-        raise ToolExecutionError('Only hours and limit are accepted', code=-32602)
-    try:
-        return process_recent(uid, hours=arguments.get('hours', 6), limit=arguments.get('limit', 20))
-    except (ValueError, PermissionError) as error:
-        raise ToolExecutionError(str(error), code=-32602) from error

@@ -469,7 +469,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void initState() {
-    ListenClientState.startSurfaceReporting();
     _homeForNewest = context.read<HomeProvider?>()?..onShowNewest = _showNewest;
     unawaited(
       _backgroundResourceTelemetry.recoverInterrupted(

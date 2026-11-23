@@ -60,7 +60,6 @@ def outbox(store, monkeypatch):  # noqa: F811
     client, uid, _ = store
 
     for name in (
-        'DEMAND_PROCESSING_ENABLED',
         'REPEAT_WORK_REVISION_ENABLED',
         'FIRST_SUMMARY_DEADLINE_SECONDS',
         'FIRST_SUMMARY_DEADLINE_ENABLED',
