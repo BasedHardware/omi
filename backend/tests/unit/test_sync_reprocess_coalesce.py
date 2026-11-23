@@ -38,11 +38,13 @@ def state(monkeypatch):
     monkeypatch.setattr(enrichment_scan, 'begin', lambda *_: (None, None))
     monkeypatch.setattr(enrichment_scan, 'finish', lambda *_: None)
 
-    def empty_failure(_client, _collection, document_id, owner, token):
+    def empty_failure(_client, _collection, document_id, owner, token, *, expected_version=None):
         from database.summary_processing import EmptyFailureOutcome
 
         row = rows[document_id]
         assert row['owner'] == owner and row['task_token'] == token
+        if expected_version is not None and row.get('version') != expected_version:
+            return EmptyFailureOutcome.SUPERSEDED
         row['summary_empty_failures'] = min(3, row.get('summary_empty_failures', 0) + 1)
         if row['summary_empty_failures'] == 3:
             row.update(dormant=True, due_at=None, lease_until=0, summary_blocked_reason='empty_output_exhausted')
@@ -91,6 +93,18 @@ def test_flags_default_to_serving_truth(monkeypatch):
     monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', '127.0.0.1:8080')
     monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
     assert flags.coalesce_enabled()
+
+
+@pytest.mark.parametrize(
+    'raw,expected',
+    [(None, 120), ('', 120), ('0', 0), ('45', 45), ('99999', 3600), ('-5', 0), ('soon', 120)],
+)
+def test_empty_output_backoff_reads_the_kill_switch_at_the_call_boundary(monkeypatch, raw, expected):
+    if raw is None:
+        monkeypatch.delenv('ENRICHMENT_EMPTY_OUTPUT_BACKOFF_SECONDS', raising=False)
+    else:
+        monkeypatch.setenv('ENRICHMENT_EMPTY_OUTPUT_BACKOFF_SECONDS', raw)
+    assert flags.empty_output_backoff_seconds() == expected
 
 
 def test_explicit_env_is_the_kill_switch(monkeypatch):
@@ -704,7 +718,7 @@ def test_unavailable_empty_output_strike_defers_instead_of_raising(state, monkey
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)
     key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
-    monkeypatch.setattr(reprocess, 'record_empty_failure', lambda *_: EmptyFailureOutcome.UNAVAILABLE)
+    monkeypatch.setattr(reprocess, 'record_empty_failure', lambda *_, **__: EmptyFailureOutcome.UNAVAILABLE)
 
     def empty(*_):
         return SimpleNamespace(discarded=False, structured={})
@@ -742,7 +756,7 @@ def test_empty_kept_output_has_a_terminal_budget_and_cannot_be_remarked(state, m
 def test_legacy_empty_output_owner_race_defers_without_spending_attempts(state, monkeypatch):
     from database.summary_processing import EmptyFailureOutcome
 
-    monkeypatch.setattr(reprocess, 'record_empty_failure', lambda *_: EmptyFailureOutcome.OWNER_MISMATCH)
+    monkeypatch.setattr(reprocess, 'record_empty_failure', lambda *_, **__: EmptyFailureOutcome.OWNER_MISMATCH)
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)
     key, token = reprocess.key('u', 'c'), tasks[0]['task_token']

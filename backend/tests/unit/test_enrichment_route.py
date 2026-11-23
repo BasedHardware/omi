@@ -1046,8 +1046,10 @@ def _empty_output(*_):
 def _bounded_empty_failure(rows):
     """The real strike budget, without a Firestore transaction in a unit test."""
 
-    def record(_client, _collection, document_id, _owner, _token):
+    def record(_client, _collection, document_id, _owner, _token, *, expected_version=None):
         row = rows[0][document_id]
+        if expected_version is not None and row.get('version') != expected_version:
+            return EmptyFailureOutcome.SUPERSEDED
         row['summary_empty_failures'] = min(3, row.get('summary_empty_failures', 0) + 1)
         if row['summary_empty_failures'] >= 3:
             row.update(dormant=True, due_at=None, lease_until=0, summary_blocked_reason='empty_output_exhausted')
@@ -1058,13 +1060,23 @@ def _bounded_empty_failure(rows):
 
 
 def test_empty_output_then_success_delivers_the_summary(rows, monkeypatch):
+    """SCA-3667: the first empty result defers 120s, and the retry after the defer delivers."""
     monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
     monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+    token = rows[0][KEY]['task_token']
     first = _deliver(rows, _empty_output)
-    assert (first.outcome, first.reason) == ('retry', 'callback_pending')
-    assert rows[0][KEY]['summary_empty_failures'] == 1
-    # The queue retry reclaims the released lease; a real summary then delivers.
-    second = _deliver(rows, lambda *_: SUMMARY)
+    assert (first.outcome, first.reason) == ('deferred', 'not_due')
+    pending = rows[0][KEY]
+    assert pending['summary_empty_failures'] == 1
+    assert pending['deferred_reason'] == reprocess.EMPTY_OUTPUT_DEFER_REASON
+    # The settle clock is the last heartbeat, so compare the wait, not the epoch.
+    assert 118 <= pending['due_at'] - time.time() <= 121
+    assert pending['lease_until'] == 0
+    # A 200 DEFERRED leaves a durable wake for the same row under a new token.
+    assert pending['task_token'] != token
+    assert rows[1][-1]['task_token'] == pending['task_token']
+    # The deferred wake runs the callback again; a real summary then delivers.
+    second = _deliver(rows, lambda *_: SUMMARY, now=pending['due_at'])
     assert second.outcome == 'done'
     assert rows[0][KEY]['summary_seen']
 
@@ -1072,13 +1084,61 @@ def test_empty_output_then_success_delivers_the_summary(rows, monkeypatch):
 def test_empty_output_twice_records_a_bounded_retry_then_blocks(rows, monkeypatch):
     monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
     monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+    now = 10_000.0
     for expected in (1, 2):
-        result = _deliver(rows, _empty_output)
-        assert (result.outcome, result.reason) == ('retry', 'callback_pending')
+        result = _deliver(rows, _empty_output, now=now)
+        assert (result.outcome, result.reason) == ('deferred', 'not_due')
         assert rows[0][KEY]['summary_empty_failures'] == expected
-    blocked = _deliver(rows, _empty_output)
+        now = rows[0][KEY]['due_at']
+    blocked = _deliver(rows, _empty_output, now=now)
     assert (blocked.outcome, blocked.reason) == ('stale', 'empty_output_blocked')
     assert rows[0][KEY]['dormant'] and rows[0][KEY]['summary_blocked_reason'] == 'empty_output_exhausted'
+
+
+def test_empty_output_answers_200_deferred_and_leaves_a_durable_wake(rows, client, monkeypatch):
+    """SCA-3667: the 409 becomes a 200 DEFERRED, and the outbox re-arms the same row."""
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: _empty_output)
+    token = rows[0][KEY]['task_token']
+    response = client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+    assert response.status_code == 200
+    assert response.json() == {'status': 'deferred', 'reason': 'not_due'}
+    pending = rows[0][KEY]
+    assert pending['task_token'] != token
+    assert pending['lease_until'] == 0 and pending['owner'] is None
+    assert pending['due_at'] > time.time()
+    # The re-arm enqueued the same row under the new token: the wake is durable.
+    assert rows[1][-1]['task_token'] == pending['task_token']
+    assert rows[1][-1]['document_id'] == KEY
+
+
+def test_empty_output_backoff_zero_restores_the_immediate_409(rows, monkeypatch):
+    """The kill switch: 0 restores the pre-SCA-3667 immediate callback retry."""
+    monkeypatch.setenv('ENRICHMENT_EMPTY_OUTPUT_BACKOFF_SECONDS', '0')
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+    token = rows[0][KEY]['task_token']
+    result = _deliver(rows, _empty_output)
+    assert (result.outcome, result.reason) == ('retry', 'callback_pending')
+    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+
+
+def test_empty_output_on_newer_content_charges_no_strike(rows, monkeypatch):
+    """A sync append bumps ``version`` without rotating the token; the strike is fenced to the claim."""
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+
+    def append_then_empty(*_):
+        rows[0][KEY]['version'] += 1  # an append lands while the callback runs
+        return SimpleNamespace(structured={'title': 'Synthetic'})
+
+    result = _deliver(rows, append_then_empty)
+    assert (result.outcome, result.reason) == ('deferred', 'not_due')
+    pending = rows[0][KEY]
+    assert pending.get('summary_empty_failures', 0) == 0
+    assert pending['deferred_reason'] == 'empty_output_superseded'
+    assert pending['due_at'] <= time.time() + 1
 
 
 def test_empty_output_on_an_already_enriched_row_acks_instead_of_retrying(rows):

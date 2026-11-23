@@ -838,10 +838,22 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             # record: settle the empty reprocess like a completed one instead of failing
             # the request and retrying it forever.
             if process_context:
-                empty_outcome = record_empty_failure(get_firestore_client(), COLLECTION, document_id, owner, task_token)
+                empty_outcome = record_empty_failure(
+                    get_firestore_client(),
+                    COLLECTION,
+                    document_id,
+                    owner,
+                    task_token,
+                    expected_version=row.get('version'),
+                )
                 if empty_outcome is EmptyFailureOutcome.STALE:
                     return 'stale'
-                if empty_outcome is EmptyFailureOutcome.RETRY:
+                if empty_outcome is EmptyFailureOutcome.SUPERSEDED:
+                    # New content landed while this attempt ran: no strike, and the
+                    # newer version is due now.
+                    logger.info('event=sync_reprocess outcome=deferred reason=%s', EMPTY_OUTPUT_DEFER_REASON)
+                    process_context.update(defer_reason=EMPTY_OUTPUT_DEFER_REASON, defer_until=current)
+                elif empty_outcome is EmptyFailureOutcome.RETRY:
                     # The strike is recorded and the debt stays armed. Re-arm the row
                     # for its bounded retry (the third strike blocks it) instead of
                     # letting the exception escape the request as a 500.
