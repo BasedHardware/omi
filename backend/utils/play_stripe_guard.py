@@ -7,10 +7,9 @@ first charge refunded, both ids logged, and the user told. Called from the Strip
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+import time
 
 import database.play_subscriptions as play_subscriptions_db
-from config.plan_catalog import _paid_period_still_open
 from models.users import Subscription
 from utils import stripe as stripe_utils
 from utils.executors import db_executor, run_blocking, stripe_executor
@@ -30,7 +29,8 @@ def live_play_row(subscription: Subscription | None) -> bool:
         subscription is not None
         and subscription.provider == 'play'
         and is_paid_plan(subscription.plan)
-        and _paid_period_still_open(subscription.current_period_end, datetime.now(timezone.utc))
+        and bool(subscription.current_period_end)
+        and subscription.current_period_end >= int(time.time())
     )
 
 
