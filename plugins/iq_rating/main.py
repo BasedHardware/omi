@@ -8,7 +8,10 @@ sorted by their IQ scores (smartest to dumbest).
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from iq_auth import require_iq_rating_auth, _presented_token
+try:
+    from .iq_auth import require_iq_rating_auth, _presented_token  # monolith (package) context
+except ImportError:
+    from iq_auth import require_iq_rating_auth, _presented_token  # standalone uvicorn
 from typing import List, Optional, Dict
 import logging
 import os
