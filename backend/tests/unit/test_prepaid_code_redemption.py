@@ -415,7 +415,7 @@ def test_rate_limit_policies_exist():
     assert RATE_POLICIES['payments:prepaid_code_ip'] == (30, 3600)
 
 
-def test_subscription_response_is_byte_identical_with_the_switch_off(monkeypatch):
+def _subscription_body(monkeypatch):
     from fastapi import Request
     from routers import users
 
@@ -423,16 +423,26 @@ def test_subscription_response_is_byte_identical_with_the_switch_off(monkeypatch
     monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: True)
     monkeypatch.setattr(users.users_db, 'get_user_valid_subscription', lambda *a, **k: None)
     monkeypatch.setattr(users.play_subscriptions_db, 'remember_account_once', lambda *a: None)
-
-    def body():
-        return users.get_user_subscription_endpoint(
+    return (
+        users,
+        lambda: users.get_user_subscription_endpoint(
             request=Request({'type': 'http', 'headers': []}),
             uid=UID,
             x_app_platform='android',
             x_app_version='1.0.600',
             x_app_build='1700',
-        ).model_dump_json()
+        ).model_dump_json(),
+    )
 
+
+@pytest.fixture
+def warm_subscription_route(monkeypatch):
+    """Import the router and serve one response in setup, so the CPU budget measures the switch only."""
+    _subscription_body(monkeypatch)[1]()
+
+
+def test_subscription_response_is_byte_identical_with_the_switch_off(monkeypatch, warm_subscription_route):
+    users, body = _subscription_body(monkeypatch)
     monkeypatch.setattr(users.prepaid_code_config, 'enabled_for', lambda uid: False)
     baseline = body()
     assert 'prepaid_code_redeem' not in baseline
