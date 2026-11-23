@@ -50,6 +50,7 @@ from models.memories import MemoryCategory, Memory, MemoryDB
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import ClientProcessing
 from config.action_item_reminder_triggers import action_item_write_affects_reminder
+from config.transcript_publication import deferred_transcript_reads_enabled, discovery_statuses
 from utils.capture_evidence import MAX_ENVELOPE_BYTES
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 from models.conversation import (
@@ -1530,7 +1531,7 @@ def get_conversations(
         budget = external_lists.developer_conversation_offset_budget(request, response, offset, auth)
         cached = (
             external_lists.cached_external_list(request, response, auth, locals())
-            if not home_transcription_presentation_gate_enabled()
+            if not home_transcription_presentation_gate_enabled() and not deferred_transcript_reads_enabled()
             else None
         )
         if cached is not None:
@@ -1574,10 +1575,11 @@ def get_conversations(
                 offset,
                 include_discarded=False,
                 presentation=True,
-                statuses=["completed"],
+                statuses=discovery_statuses([c.value for c in category_list]),
+                transcript_discovery=True,
                 start_date=start_date,
                 end_date=end_date,
-                categories=[c.value for c in category_list],
+                categories=list(dict.fromkeys(c.value for c in category_list)),
                 folder_id=folder_id,
                 starred=starred,
                 **budget_kwargs,

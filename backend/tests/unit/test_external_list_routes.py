@@ -26,6 +26,7 @@ PATHS = ['/v1/dev/user/conversations', '/v1/dev/user/memories', '/v1/dev/user/ac
 def routes(monkeypatch):
     # Legacy cache contract; the transcription gate has independent time-dependent responses.
     monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'off')
+    monkeypatch.setenv('OMI_DEFERRED_TRANSCRIPT_READS_ENABLED', 'off')
     storage = FakeRedis()
     monkeypatch.setattr(cache.action_item_versions, 'version', lambda uid: 'stable-' + uid)
     monkeypatch.setattr(cache, 'submit_with_context', immediate_population)
@@ -188,6 +189,31 @@ def test_transcript_detail_bypasses_a_cached_miss(routes, monkeypatch):
     assert response.status_code == 200, response.text
     assert response.json()['transcript_segments'][0]['text'] == 'Newly published'
     assert reader.call_count == 2
+
+
+def test_deferred_conversation_discovery_bypasses_list_cache(routes, monkeypatch):
+    client, state, calls, _ = routes
+    path = PATHS[0]
+    assert client.get(path).json() == []
+    monkeypatch.setenv('OMI_DEFERRED_TRANSCRIPT_READS_ENABLED', 'on')
+    now = datetime.now(timezone.utc)
+    state.rows = [
+        {
+            'id': 'fresh',
+            'status': 'processing',
+            'processing_deferred': True,
+            'created_at': now,
+            'started_at': now,
+            'finished_at': now,
+        }
+    ]
+    listed = client.get(path)
+    assert listed.status_code == 200
+    assert [row['id'] for row in listed.json()] == ['fresh']
+    response = client.get(path + '?include_transcript=true')
+    assert response.status_code == 200
+    assert [row['id'] for row in response.json()] == ['fresh']
+    assert calls.legacy.call_args.kwargs['statuses'] == ['completed', 'processing']
 
 
 def test_malformed_goal_is_not_negative_cached_and_repair_is_immediately_visible(routes, monkeypatch):

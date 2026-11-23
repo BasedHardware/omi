@@ -1200,6 +1200,7 @@ def _collect_visible_conversation_page(
     hide_home: bool = False,
     capture_only: bool = False,
     show_held: bool = False,
+    transcript_discovery: bool = False,
 ) -> List[Dict[str, Any]]:
     """Page visible rows.
 
@@ -1230,6 +1231,11 @@ def _collect_visible_conversation_page(
         capture_only=capture_only,
         show_held=show_held,
     )
+    if transcript_discovery:
+        from config.transcript_publication import ready_for_discovery
+
+        product_visible = visible
+        visible = lambda row: product_visible(row) and ready_for_discovery(row)
 
     def finish(rows, last_doc, *, storage_rows, has_more):
         if cursor_page is not None:
@@ -2365,6 +2371,7 @@ def get_conversations_without_photos(
     hide_home: bool = False,
     capture_only: bool = False,
     show_held: bool = False,
+    transcript_discovery: bool = False,
     cursor: Optional[str] = None,
     page_envelope: bool = False,
     cursor_page: Optional[Dict[str, Any]] = None,
@@ -2458,6 +2465,7 @@ def get_conversations_without_photos(
         hide_home=hide_home,
         capture_only=capture_only,
         show_held=show_held,
+        transcript_discovery=transcript_discovery,
         budget=budget,
         uid=uid,
         cursor=cursor,

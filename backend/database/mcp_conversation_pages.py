@@ -19,6 +19,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from fastapi import HTTPException
 
 from config.firestore_read_levers import lever_enabled
+from config.transcript_publication import discovery_statuses, ready_for_discovery
 
 from ._client import get_firestore_client
 from .conversations import (
@@ -73,6 +74,23 @@ def _card_field_paths(extra_field_paths: Optional[Sequence[str]]) -> List[str]:
     ]
 
 
+def _card_query(collection, categories, start_date, end_date):
+    categories = list(dict.fromkeys(categories or ()))
+    statuses = discovery_statuses(categories)
+    spec = MCP_CONVERSATION_CARD_QUERY_SPECS[(bool(categories), start_date is not None, end_date is not None)]
+
+    def field_filter(path, operator, value):
+        if path == 'status' and len(statuses) > 1:
+            return FieldFilter(path, 'in', statuses)
+        return FieldFilter(path, operator, value)
+
+    return spec.build(
+        collection,
+        dict(discarded=False, status=statuses[0], categories=categories, start_date=start_date, end_date=end_date),
+        field_filter_factory=field_filter,
+    )
+
+
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 def get_mcp_conversation_cards(
     uid: str,
@@ -101,18 +119,7 @@ def get_mcp_conversation_cards(
         _require_cursor()
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = client.collection('users').document(uid).collection(conversations_collection)
-    query_spec = MCP_CONVERSATION_CARD_QUERY_SPECS[(bool(categories), start_date is not None, end_date is not None)]
-    query = query_spec.build(
-        collection,
-        {
-            'discarded': False,
-            'status': 'completed',
-            'categories': categories,
-            'start_date': start_date,
-            'end_date': end_date,
-        },
-        field_filter_factory=FieldFilter,
-    )
+    query = _card_query(collection, categories, start_date, end_date)
     query = query.order_by('created_at', direction=firestore.Query.DESCENDING).select(
         _card_field_paths(extra_field_paths)
     )
@@ -132,7 +139,7 @@ def get_mcp_conversation_cards(
                 conversation = document_data_with_revision(doc)
                 if conversation is None:
                     continue
-                if not is_visible_conversation(conversation, presentation=True):
+                if not is_visible_conversation(conversation, presentation=True) or not ready_for_discovery(conversation):
                     continue
                 conversation.setdefault('id', doc.id)
                 conversations.append(conversation)
@@ -205,7 +212,6 @@ def get_mcp_conversation_cards_page(
     )
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = client.collection('users').document(uid).collection(conversations_collection)
-    query_spec = MCP_CONVERSATION_CARD_QUERY_SPECS[(bool(categories), start_date is not None, end_date is not None)]
     field_paths = _card_field_paths(extra_field_paths)
     visible: List[Dict[str, Any]] = []
     visible_positions: List[Tuple[Any, str]] = []
@@ -214,17 +220,7 @@ def get_mcp_conversation_cards_page(
     exhausted = False
     while len(visible) < limit + 1 and scanned < scan_cap:
         window_size = min(limit + 1 - len(visible), scan_cap - scanned) if read_cap is not None else limit + 1
-        query = query_spec.build(
-            collection,
-            {
-                'discarded': False,
-                'status': 'completed',
-                'categories': categories,
-                'start_date': start_date,
-                'end_date': end_date,
-            },
-            field_filter_factory=FieldFilter,
-        )
+        query = _card_query(collection, categories, start_date, end_date)
         query = (
             query.order_by('created_at', direction=firestore.Query.DESCENDING)
             .order_by('__name__', direction=firestore.Query.DESCENDING)
@@ -257,7 +253,7 @@ def get_mcp_conversation_cards_page(
             conversation = document_data_with_revision(doc)
             if conversation is None:
                 continue
-            if not is_visible_conversation(conversation, presentation=True):
+            if not is_visible_conversation(conversation, presentation=True) or not ready_for_discovery(conversation):
                 continue
             conversation.setdefault('id', doc.id)
             visible.append(conversation)

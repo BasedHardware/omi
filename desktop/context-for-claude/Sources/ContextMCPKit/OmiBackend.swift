@@ -679,7 +679,7 @@ public final class OmiBackend: @unchecked Sendable {
         if let since { items.append(.init(name: "start_date", value: OmiDate.iso(since))) }
         if let until { items.append(.init(name: "end_date", value: OmiDate.iso(until))) }
 
-        let result = get([OmiConversation].self, path: "v1/mcp/conversations", query: items, ttl: 300)
+        let result = get([OmiConversation].self, path: "v1/mcp/conversations", query: items, ttl: 0)
         return map(result) { self.record($0) }
     }
 
@@ -690,14 +690,12 @@ public final class OmiBackend: @unchecked Sendable {
         // Stricter than `.urlPathAllowed`, which would let a "/" in an id walk off the endpoint.
         let unreserved = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
         let escaped = trimmed.addingPercentEncoding(withAllowedCharacters: unreserved) ?? trimmed
-        // A finished conversation does not change, so hold it for the life of the process; a
-        // truncated response is served but never stored.
+        // Later transcript revisions and erasure must be visible on the next read.
         let result = get(
             OmiFullConversation.self,
             path: "v1/mcp/conversations/\(escaped)",
             query: [],
-            ttl: 3600,
-            cacheIf: { !$0.truncated })
+            ttl: 0)
         return map(result) { full in
             self.record([full.conversation])
             return full
@@ -750,8 +748,7 @@ public final class OmiBackend: @unchecked Sendable {
         _ type: T.Type,
         path: String,
         query: [URLQueryItem],
-        ttl: TimeInterval,
-        cacheIf: @Sendable (T) -> Bool = { _ in true }
+        ttl: TimeInterval
     ) -> OmiResult<T> {
         // Asked *before* the cache, because this read is what notices the app having rewritten the
         // key file: a rejection cached against the superseded key must never get to answer first.
@@ -769,8 +766,11 @@ public final class OmiBackend: @unchecked Sendable {
         let cacheKey = url.absoluteString
         if let cached = cache.lookup(cacheKey, generation: credential.generation) {
             switch cached {
-            case let .success(data): return decode(type, data, path: path, method: "GET")
-            case let .failure(error): return .unavailable(error)
+            case let .success(data) where ttl > 0:
+                return decode(type, data, path: path, method: "GET")
+            case let .failure(error) where ttl > 0 || error == .unauthorized:
+                return .unavailable(error)
+            default: break
             }
         }
 
@@ -806,25 +806,21 @@ public final class OmiBackend: @unchecked Sendable {
 
         switch result {
         case let .success(data):
-            let decoded = decode(type, data, path: path, method: "GET")
-            let cacheable: Bool
-            switch decoded {
-            case let .ok(value): cacheable = cacheIf(value)
-            case .unavailable: cacheable = true
-            }
-            if cacheable {
+            if ttl > 0 {
                 cache.store(cacheKey, .success(data), ttl: ttl, generation: used.generation)
             }
-            return decoded
+            return decode(type, data, path: path, method: "GET")
         case let .failure(error):
             // Terminal failures are held for the life of the credential that earned them; a
             // transient one is held only briefly, so a flaky network recovers within the session
             // without hammering the budget. Stored against the credential actually used, which is
             // the retried one when there was a retry.
-            cache.store(
-                cacheKey, .failure(error),
-                ttl: error.isTerminal ? .greatestFiniteMagnitude : 60,
-                generation: used.generation)
+            if ttl > 0 || error == .unauthorized {
+                cache.store(
+                    cacheKey, .failure(error),
+                    ttl: error.isTerminal ? .greatestFiniteMagnitude : 60,
+                    generation: used.generation)
+            }
             return .unavailable(error)
         }
     }

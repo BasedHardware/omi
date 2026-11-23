@@ -5,11 +5,12 @@ import XCTest
 
 final class TruncatedConversationTests: XCTestCase {
 
-    func testATruncatedAnswerIsServedNotCachedAndTheCompleteOneIs() {
+    func testEachReadObservesTheLatestTranscript() {
         let sent = RequestLog()
         let responses = ResponseQueue([
             .success(Self.conversationJSON(truncated: true)),
             .success(Self.conversationJSON(truncated: false)),
+            .success(Self.conversationJSON(truncated: false, segments: "[]")),
         ])
         let backend = OmiBackend(
             credential: (key: "test-key", source: .appSupportFile),
@@ -32,10 +33,11 @@ final class TruncatedConversationTests: XCTestCase {
         XCTAssertEqual(second.segments.count, 1)
 
         guard case let .ok(third) = backend.conversation(id: "c1") else {
-            return XCTFail("the complete answer is the one that caches")
+            return XCTFail("the third read fetches the updated answer")
         }
         XCTAssertFalse(third.truncated)
-        XCTAssertEqual(sent.count, 2, "one fetch for the partial, one for the complete, none for the hit")
+        XCTAssertTrue(third.segments.isEmpty)
+        XCTAssertEqual(sent.count, 3)
     }
 
     func testTruncatedDefaultsToFalseWhenTheFieldIsAbsent() throws {
