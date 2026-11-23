@@ -3320,6 +3320,7 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
           STT_CAP_DISPATCH_ENFORCEMENT:
             secret:
               name: prod-omi-backend-listen-private-env
@@ -3689,6 +3690,7 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
           SYNC_TASKS_PROJECT:
             value: based-hardware
             category: reliability
@@ -4430,6 +4432,7 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -4999,6 +5002,7 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
             CONVERSATIONS_V3_BACKFILL:
               value: 'on'
               category: ops_kill
@@ -5562,6 +5566,7 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -6064,6 +6069,7 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
@@ -6554,6 +6560,7 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
@@ -6921,6 +6928,7 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            SPEAKER_EVIDENCE_MODE: {value: 'off', category: rollout}
             REDIS_DB_HOST:
               value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
             REDIS_DB_PORT:

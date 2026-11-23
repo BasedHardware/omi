@@ -39,6 +39,7 @@ spec:
           envFrom:
             - secretRef: {name: {{ required "complete backend-sync-backfill runtime secret required" .Values.runtimeSecret }}}
           env:
+            - {name: SPEAKER_EVIDENCE_MODE, value: "off"}
             # Immutable rollout exporter identity, including supervised GPU children.
             - name: ROLLOUT_POD_TEMPLATE_HASH
               valueFrom:

@@ -115,6 +115,8 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: SPEAKER_EVIDENCE_MODE
+    value: "off"
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED
     value: "false"
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT

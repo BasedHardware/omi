@@ -111,6 +111,8 @@ privateSecretEnv:
     - MEDIA_NOISE_MODE_SERVE_UID_SHA256S
 
 env:
+  - name: SPEAKER_EVIDENCE_MODE
+    value: "off"
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED
     value: "false"
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT
