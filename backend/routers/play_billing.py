@@ -41,7 +41,7 @@ class PlayNotificationResponse(BaseModel):
 
 
 def _error(error: play_billing.PlayBillingError) -> JSONResponse:
-    return JSONResponse(status_code=error.status, content={'code': error.code, 'detail': error.message})
+    return JSONResponse(status_code=error.http_status, content={'code': error.code, 'detail': error.message})
 
 
 @router.post(
@@ -84,7 +84,7 @@ def play_rtdn(request: Request, body: dict = Body(...)):
     try:
         outcome = play_billing.handle_developer_notification(notification)
     except play_billing.PlayBillingError as error:
-        if error.status >= 500:
+        if error.http_status >= 500:
             raise HTTPException(status_code=503, detail=error.code) from None
         outcome = error.code
     logger.info('play_billing rtdn outcome=%s', outcome)

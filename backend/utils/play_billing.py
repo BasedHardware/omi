@@ -51,9 +51,9 @@ RECHECK_SECONDS = 24 * 3600
 class PlayBillingError(Exception):
     """Typed refusal with the HTTP status and stable code the route returns."""
 
-    def __init__(self, status: int, code: str, message: str):
+    def __init__(self, http_status: int, code: str, message: str):
         super().__init__(message)
-        self.status = status
+        self.http_status = http_status
         self.code = code
         self.message = message
 

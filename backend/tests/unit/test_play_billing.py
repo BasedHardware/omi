@@ -210,7 +210,7 @@ def test_token_bound_to_another_uid_is_refused(env):
     _verify(uid=OTHER)
     with pytest.raises(play_billing.PlayBillingError) as error:
         _verify(uid=UID)
-    assert (error.value.status, error.value.code) == (409, 'purchase_owned_elsewhere')
+    assert (error.value.http_status, error.value.code) == (409, 'purchase_owned_elsewhere')
     assert _row(env).plan == PlanType.basic
 
 
@@ -236,11 +236,11 @@ def test_wrong_product_or_base_plan_is_refused(env):
 def test_unknown_token_is_a_client_error_and_google_outage_is_retryable(env):
     with pytest.raises(play_billing.PlayBillingError) as missing:
         _verify()
-    assert missing.value.status == 400
+    assert missing.value.http_status == 400
     env.publisher.fail = RuntimeError('timeout')
     with pytest.raises(play_billing.PlayBillingError) as outage:
         _verify()
-    assert outage.value.status == 503
+    assert outage.value.http_status == 503
 
 
 def test_live_stripe_subscription_blocks_play_binding(env):
@@ -250,7 +250,7 @@ def test_live_stripe_subscription_blocks_play_binding(env):
     env.publisher.resources[TOKEN] = resource()
     with pytest.raises(play_billing.PlayBillingError) as error:
         _verify()
-    assert (error.value.status, error.value.code) == (409, 'stripe_subscription_active')
+    assert (error.value.http_status, error.value.code) == (409, 'stripe_subscription_active')
     assert env.publisher.acks == []  # unacknowledged: Google refunds it automatically
     assert len(env.users.writes) == 0
 
