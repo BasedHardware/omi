@@ -30,7 +30,9 @@ from prometheus_client import Counter
 
 from config import rollout_cohorts as policy
 from database import rollout_cohorts as store
+from utils.executors import db_executor, submit_with_context
 from utils.observability.fallback import record_fallback
+from utils.rollout.runtime_percent import deployment_env
 
 COHORT = 'go-finalization'
 RAMP_NAME = 'go-finalization'
@@ -59,8 +61,6 @@ SWITCH_READS = Counter(
 
 
 def _default_read() -> dict[str, Any] | None:
-    from utils.rollout.runtime_percent import deployment_env
-
     document = store.read_ramp()
     if document is None:
         return None
@@ -120,8 +120,6 @@ class _Switch:
                 self._refresh_lock.release()
 
         # A short point read: the managed db executor carries context, health and shutdown.
-        from utils.executors import db_executor, submit_with_context
-
         try:
             self._background = submit_with_context(db_executor, run)
         except Exception:

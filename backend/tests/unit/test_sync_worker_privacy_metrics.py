@@ -13,6 +13,7 @@ from utils.sync.worker_privacy_metrics import WorkerPrivacyMetrics
 
 CHILD = """
 from database import privacy_check_metrics as metrics, privacy_ttl_cache as ttl_cache
+from database.rollout_cohorts import RAMP_NAMES
 from prometheus_client import Counter
 from types import SimpleNamespace
 import sys
@@ -243,8 +244,6 @@ sys.stdin.read()
         assert await asyncio.wait_for(process.stdout.readline(), 30) == b'ready\n'
         rows = [s for f in text_string_to_metric_families(metrics.render().decode()) for s in f.samples]
         values = {s.labels['name']: s.value for s in rows if s.name == 'omi_runtime_percent'}
-        from database.rollout_cohorts import RAMP_NAMES
-
         assert set(values) == set(RAMP_NAMES)
         assert values['batch-pipeline'] == 23 and values['new-owner-cell1'] == 17
         assert [row.value for row in rows if row.name == 'privacy_ttl_cache_disabled'] == [0.0]

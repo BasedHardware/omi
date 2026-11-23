@@ -1,13 +1,16 @@
 """SCA-3883 item 3: Go finalization admission is runtime config that fails closed."""
 
+import asyncio
 from pathlib import Path
 
 import pytest
 
 from config import rollout_cohorts as policy
 from database import rollout_cohorts as store
-from scripts.rollout import go_finalization_cohort as cli
+from scripts import rollout_cohort
+from scripts.rollout import go_finalization_cohort as cli, live_preflight
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils import rollout_cohorts as resolver
 from utils.rollout import go_finalization_admission as admission
 
 UID = 'synthetic-owner-1'
@@ -104,8 +107,6 @@ def test_read_error_closes_and_never_serves_last_known_good(member):
 
 
 def test_event_loop_caller_gets_closed_and_starts_one_background_refresh(member):
-    import asyncio
-
     reader, _clock = configure(env(100))
 
     async def on_loop():
@@ -146,8 +147,6 @@ def test_membership_write_refuses_to_write_back_a_malformed_sibling_flag():
 
 
 def test_live_preflight_knows_every_ramp_name():
-    from scripts.rollout import live_preflight
-
     assert live_preflight.RAMP_NAMES == frozenset(store.RAMP_NAMES)
 
 
@@ -275,8 +274,6 @@ def test_cli_hides_sdk_errors_and_rejects_multiline_uid_files(tmp_path, capsys):
 
 
 def test_generic_cohort_cli_refuses_go_finalization(tmp_path):
-    from scripts import rollout_cohort
-
     uid_file = tmp_path / 'uid'
     uid_file.write_text(UID)
     with pytest.raises(SystemExit):
@@ -303,8 +300,6 @@ def test_switch_reads_stay_outside_transaction_callbacks():
 
 def test_real_resolver_reports_unavailable_membership_as_a_fallback(monkeypatch):
     """A membership-store outage reaches the admission handler instead of reading as a miss."""
-    from utils import rollout_cohorts as resolver
-
     calls = []
     monkeypatch.setattr(admission, 'record_fallback', lambda **kw: calls.append(kw))
     monkeypatch.setattr(policy, '_membership_resolver', resolver._in_rollout_cohort)
