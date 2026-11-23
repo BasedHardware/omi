@@ -6,7 +6,6 @@ for as long as the capture lasted, so Home showed neither row.
 """
 
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -168,9 +167,6 @@ def _home(monkeypatch, rows, *, v3=False, query=''):
         monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: v3)
     _install_listing(monkeypatch, {row['id']: row for row in rows})
     monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
-    monkeypatch.setattr(
-        routes.ListVersionCheck, 'start', lambda *a: SimpleNamespace(not_modified=None, finish=lambda *a, **kw: None)
-    )
     app = FastAPI()
     app.include_router(routes.router)
     app.dependency_overrides[auth.get_current_user_uid] = lambda: 'u'

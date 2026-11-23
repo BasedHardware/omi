@@ -131,7 +131,7 @@ run_proof "privacy cache replay (120-transition smoke and catch proofs)" \
 # Job-store conformance (legacy-retire lane 12): sim + Firestore emulator legs here; the Postgres leg
 # skips in CI (no Postgres service, decision S6) and is proven locally/staging.
 # Includes PL-141/142/143 scheduler pull ownership, expiry and abort/restart recovery.
-run_proof "job-store conformance (sim + emulator, including fenced scheduler pulls)" \
+run_proof "job-store conformance (fenced pulls, projection scan fallback and custody)" \
   env "OMI_REQUIRE_STORE_BACKENDS=${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_store_conformance.py \
   tests/integration/test_recovery_custody_conformance.py
@@ -208,6 +208,10 @@ run_proof "Firestore read budget: batch unit end-to-end (M3 scenario 1)" \
   "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_batch_unit.py
 run_proof "Firestore read budget: conversation list page (M3 scenario 3)" \
   "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_conversation_page.py
+run_proof "Firestore read budget: sync upload, privacy and status polls" \
+  "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_sync.py
+run_proof "Firestore read budget: idle projection and pending-work backlog" \
+  "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_idle.py
 
 
 if (( ${#failures[@]} )); then

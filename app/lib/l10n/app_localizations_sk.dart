@@ -562,11 +562,11 @@ class AppLocalizationsSk extends AppLocalizations {
   String get hardwareSection => 'Hardvér';
 
   @override
-  String get v2Undetected => 'V2 nebolo zistené';
+  String get v2Undetected => 'Offline synchronizácia nie je k dispozícii';
 
   @override
   String get v2UndetectedMessage =>
-      'Zistili sme, že máte zariadenie V1 alebo vaše zariadenie nie je pripojené. Funkcia SD karty je dostupná len pre zariadenia V2.';
+      'Offline synchronizácia vyžaduje pripojené zariadenie Omi s úložiskom na SD karte. Vaše súčasné zariadenie ju nepodporuje.';
 
   @override
   String get endConversation => 'Ukončiť konverzáciu';
@@ -15717,10 +15717,44 @@ class AppLocalizationsSk extends AppLocalizations {
   String get stillWorkingOnIt => 'Ešte sa na tom pracuje.';
 
   @override
+  String get deviceReadyToUse => 'Pripravené na použitie';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmvér vášho zariadenia je pre túto aktualizáciu príliš starý. Obráťte sa na podporu, ktorá vám pomôže aktualizovať zariadenie.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Táto aktualizácia firmvéru vyžaduje novšiu aplikáciu Omi. Aktualizujte aplikáciu v obchode s aplikáciami a potom znova skontrolujte aktualizácie.';
+
+  @override
+  String get quietPayerTitle => 'Žiadne nahrávky za 5 dní';
+
+  @override
+  String get quietPayerMessage => 'Skontrolujte svoj Omi.';
+
+  @override
+  String get quietPayerCheck => 'Skontrolovať';
+
+  @override
+  String get playManageSubscription => 'Spravovať predplatné';
+
+  @override
+  String get playBilledByGoogle => 'Účtované cez Google Play';
+
+  @override
+  String get playPurchasePending => 'Platba čaká. Omi Pro začne, keď ju Google Play potvrdí.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Tento nákup v Google Play patrí inému účtu Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Nákup sa zatiaľ nepodarilo potvrdiť. Skúsime to znova automaticky.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automaticky sa obnovuje za uvedenú cenu, kým ho nezrušíte. Spravovať alebo zrušiť ho môžete kedykoľvek v Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Na Androide nie je k dispozícii';
 }

@@ -214,6 +214,9 @@ class ParakeetTranscriber implements StreamingTranscriber {
 }
 
 /// Feature-gated Whisper via injected runner.
+///
+/// Batches run in input order. [stop] drains queued audio and the buffered tail
+/// before completing. All calls to [stop] share that completion.
 class WhisperTranscriber implements StreamingTranscriber {
   WhisperTranscriber({required this.runner, required this.onTranscript, this.batchSeconds = 5});
 
@@ -221,11 +224,12 @@ class WhisperTranscriber implements StreamingTranscriber {
   final TranscriptHandler onTranscript;
   final int batchSeconds;
   final BytesBuilder _buf = BytesBuilder(copy: false);
-  bool _stopped = false;
+  Future<void> _previousBatch = Future<void>.value();
+  Future<void>? _stopFuture;
 
   @override
   void appendPcm(Uint8List chunk) {
-    if (_stopped) return;
+    if (_stopFuture != null) return;
     _buf.add(chunk);
     final target = batchSeconds * 16000 * 2;
     if (_buf.length >= target) {
@@ -233,18 +237,25 @@ class WhisperTranscriber implements StreamingTranscriber {
     }
   }
 
-  Future<void> _flush({bool deliverWhenStopped = false}) async {
+  Future<void> _flush() async {
     final pcm = Uint8List.fromList(_buf.takeBytes());
-    if (pcm.isEmpty) return;
-    final text = await runner(pcm);
-    if ((!_stopped || deliverWhenStopped) && text.isNotEmpty) onTranscript(text);
+    // The queue advances after a batch settles, while the caller of this
+    // flush still observes its own error.
+    final previous = _previousBatch;
+    final done = Completer<void>();
+    _previousBatch = done.future;
+    try {
+      await previous;
+      if (pcm.isEmpty) return;
+      final text = await runner(pcm);
+      if (text.isNotEmpty) onTranscript(text);
+    } finally {
+      done.complete();
+    }
   }
 
   @override
-  Future<void> stop() async {
-    _stopped = true;
-    await _flush(deliverWhenStopped: true);
-  }
+  Future<void> stop() => _stopFuture ??= _flush();
 }
 
 StreamingTranscriber createTranscriber({

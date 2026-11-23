@@ -559,11 +559,11 @@ class AppLocalizationsBn extends AppLocalizations {
   String get hardwareSection => 'হার্ডওয়্যার';
 
   @override
-  String get v2Undetected => 'V2 সনাক্ত হয়নি';
+  String get v2Undetected => 'অফলাইন সিঙ্ক উপলব্ধ নয়';
 
   @override
   String get v2UndetectedMessage =>
-      'আমরা দেখছি যে আপনার কাছে একটি V1 ডিভাইস রয়েছে বা আপনার ডিভাইস সংযুক্ত নয়। SD কার্ড কার্যকারিতা শুধুমাত্র V2 ডিভাইসের জন্য উপলব্ধ।';
+      'অফলাইন সিঙ্কের জন্য SD কার্ড স্টোরেজ সহ একটি সংযুক্ত Omi ডিভাইস প্রয়োজন। আপনার বর্তমান ডিভাইসটি এটি সমর্থন করে না।';
 
   @override
   String get endConversation => 'কথোপকথন শেষ করুন';
@@ -15716,10 +15716,44 @@ class AppLocalizationsBn extends AppLocalizations {
   String get stillWorkingOnIt => 'এখনও কাজ চলছে।';
 
   @override
+  String get deviceReadyToUse => 'ব্যবহারের জন্য প্রস্তুত';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'এই আপডেটের জন্য আপনার ডিভাইসের ফার্মওয়্যার অনেক পুরোনো। ডিভাইস আপডেট করতে সাহায্যের জন্য সহায়তা দলের সঙ্গে যোগাযোগ করুন।';
 
   @override
   String get firmwareUpdateAppRequired =>
       'এই ফার্মওয়্যার আপডেটের জন্য Omi অ্যাপের আরও নতুন সংস্করণ প্রয়োজন। আপনার অ্যাপ স্টোর থেকে অ্যাপটি আপডেট করুন, তারপর আবার পরীক্ষা করুন।';
+
+  @override
+  String get quietPayerTitle => '৫ দিন ধরে কোনো রেকর্ডিং নেই';
+
+  @override
+  String get quietPayerMessage => 'আপনার Omi দেখে নিন।';
+
+  @override
+  String get quietPayerCheck => 'দেখুন';
+
+  @override
+  String get playManageSubscription => 'সাবস্ক্রিপশন পরিচালনা';
+
+  @override
+  String get playBilledByGoogle => 'Google Play-এর মাধ্যমে বিল করা হয়';
+
+  @override
+  String get playPurchasePending => 'আপনার পেমেন্ট অপেক্ষমাণ। Google Play নিশ্চিত করলেই Omi Pro শুরু হবে।';
+
+  @override
+  String get playPurchaseOtherAccount => 'এই Google Play কেনাকাটা অন্য একটি Omi অ্যাকাউন্টের।';
+
+  @override
+  String get playPurchaseNotConfirmed => 'কেনাকাটা এখনও নিশ্চিত করা যায়নি। আমরা নিজে থেকে আবার চেষ্টা করব।';
+
+  @override
+  String get playRenewalTerms =>
+      'বাতিল না করা পর্যন্ত দেখানো দামে স্বয়ংক্রিয়ভাবে নবায়ন হয়। যেকোনো সময় Google Play-এ পরিচালনা বা বাতিল করুন।';
+
+  @override
+  String get playPaidAppUnavailable => 'Android-এ উপলভ্য নয়';
 }

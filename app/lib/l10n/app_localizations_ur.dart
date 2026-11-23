@@ -560,11 +560,11 @@ class AppLocalizationsUr extends AppLocalizations {
   String get hardwareSection => 'ہارڈ ویئر';
 
   @override
-  String get v2Undetected => 'V2 شناخت نہیں';
+  String get v2Undetected => 'آف لائن سنک دستیاب نہیں ہے';
 
   @override
   String get v2UndetectedMessage =>
-      'ہمیں لگتا ہے کہ آپ کے پاس ایک V1 ڈیوائس ہے یا آپ کا ڈیوائس متصل نہیں ہے۔ SD کارڈ کی فعالیت صرف V2 ڈیوائسز کے لیے دستیاب ہے۔';
+      'آف لائن سنک کے لیے SD کارڈ اسٹوریج والے منسلک Omi ڈیوائس کی ضرورت ہے۔ آپ کا موجودہ ڈیوائس اسے سپورٹ نہیں کرتا۔';
 
   @override
   String get endConversation => 'بات چیت ختم کریں';
@@ -15733,10 +15733,45 @@ class AppLocalizationsUr extends AppLocalizations {
   String get stillWorkingOnIt => 'ابھی کام جاری ہے۔';
 
   @override
+  String get deviceReadyToUse => 'استعمال کے لیے تیار';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'آپ کے آلے کا فرم ویئر اس اپ ڈیٹ کے لیے بہت پرانا ہے۔ آلے کو اپ ڈیٹ کرنے میں مدد کے لیے سپورٹ سے رابطہ کریں۔';
 
   @override
   String get firmwareUpdateAppRequired =>
       'اس فرم ویئر اپ ڈیٹ کے لیے Omi ایپ کا نیا ورژن درکار ہے۔ اپنے ایپ اسٹور سے ایپ کو اپ ڈیٹ کریں، پھر دوبارہ چیک کریں۔';
+
+  @override
+  String get quietPayerTitle => '5 دن سے کوئی ریکارڈنگ نہیں';
+
+  @override
+  String get quietPayerMessage => 'اپنا Omi چیک کریں۔';
+
+  @override
+  String get quietPayerCheck => 'چیک کریں';
+
+  @override
+  String get playManageSubscription => 'سبسکرپشن کا انتظام کریں';
+
+  @override
+  String get playBilledByGoogle => 'Google Play کے ذریعے بل کیا جاتا ہے';
+
+  @override
+  String get playPurchasePending =>
+      'آپ کی ادائیگی زیر التواء ہے۔ Google Play کی تصدیق ہوتے ہی Omi Pro شروع ہو جائے گا۔';
+
+  @override
+  String get playPurchaseOtherAccount => 'یہ Google Play خریداری کسی دوسرے Omi اکاؤنٹ کی ہے۔';
+
+  @override
+  String get playPurchaseNotConfirmed => 'ہم ابھی آپ کی خریداری کی تصدیق نہیں کر سکے۔ ہم خود بخود دوبارہ کوشش کریں گے۔';
+
+  @override
+  String get playRenewalTerms =>
+      'منسوخ کرنے تک دکھائی گئی قیمت پر خودکار طور پر تجدید ہوتی ہے۔ Google Play میں کسی بھی وقت انتظام یا منسوخ کریں۔';
+
+  @override
+  String get playPaidAppUnavailable => 'Android پر دستیاب نہیں';
 }

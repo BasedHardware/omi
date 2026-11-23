@@ -559,11 +559,11 @@ class AppLocalizationsPt extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 não detectado';
+  String get v2Undetected => 'Sincronização offline indisponível';
 
   @override
   String get v2UndetectedMessage =>
-      'Detectamos que você está usando um dispositivo V1 ou não está conectado. A funcionalidade de cartão SD é apenas para dispositivos V2.';
+      'A sincronização offline precisa de um dispositivo Omi conectado com armazenamento em cartão SD. Seu dispositivo atual não oferece suporte a isso.';
 
   @override
   String get endConversation => 'Terminar conversa';
@@ -15750,10 +15750,45 @@ class AppLocalizationsPt extends AppLocalizations {
   String get stillWorkingOnIt => 'Ainda estamos trabalhando nisso.';
 
   @override
+  String get deviceReadyToUse => 'Pronto para utilizar';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'O firmware do seu dispositivo é antigo demais para esta atualização. Entre em contato com o suporte para obter ajuda para atualizar o dispositivo.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Esta atualização de firmware precisa de uma versão mais recente do app Omi. Atualize o app pela sua loja de aplicativos e verifique novamente.';
+
+  @override
+  String get quietPayerTitle => 'Sem gravações há 5 dias';
+
+  @override
+  String get quietPayerMessage => 'Verifique seu Omi.';
+
+  @override
+  String get quietPayerCheck => 'Verificar';
+
+  @override
+  String get playManageSubscription => 'Gerir subscrição';
+
+  @override
+  String get playBilledByGoogle => 'Cobrado pelo Google Play';
+
+  @override
+  String get playPurchasePending => 'O pagamento está pendente. O Omi Pro começa assim que o Google Play o confirmar.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Esta compra do Google Play pertence a outra conta Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Ainda não conseguimos confirmar a compra. Vamos tentar de novo automaticamente.';
+
+  @override
+  String get playRenewalTerms =>
+      'Renova-se automaticamente ao preço indicado até cancelar. Gira ou cancele a qualquer momento no Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Indisponível no Android';
 }

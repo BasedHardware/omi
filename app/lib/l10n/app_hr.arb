@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 nije detektiran",
+    "v2Undetected": "Offline sinkronizacija nije dostupna",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "Vidimo da imaš V1 uređaj ili da tvoj uređaj nije spojen. Funkcionalnost SD kartice dostupna je samo za V2 uređaje.",
+    "v2UndetectedMessage": "Offline sinkronizacija zahtijeva povezani Omi uređaj s pohranom na SD kartici. Tvoj trenutni uređaj to ne podržava.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },
@@ -12293,6 +12293,17 @@
     "finishedSummaryReady": "Sažetak je gotov",
     "writingSummaryStatus": "Pisanje sažetka…",
     "stillWorkingOnIt": "I dalje radimo na tome.",
+    "deviceReadyToUse": "Spremno za upotrebu",
     "firmwareUpdateFirmwareTooOld": "Firmver vašeg uređaja prestar je za ovo ažuriranje. Obratite se podršci za pomoć pri ažuriranju uređaja.",
-    "firmwareUpdateAppRequired": "Ovo ažuriranje firmvera zahtijeva noviju verziju aplikacije Omi. Ažurirajte aplikaciju iz svoje trgovine aplikacija, a zatim ponovno provjerite."
+    "firmwareUpdateAppRequired": "Ovo ažuriranje firmvera zahtijeva noviju verziju aplikacije Omi. Ažurirajte aplikaciju iz svoje trgovine aplikacija, a zatim ponovno provjerite.",
+    "quietPayerTitle": "Nema snimki 5 dana",
+    "quietPayerMessage": "Provjerite svoj Omi.",
+    "quietPayerCheck": "Provjeri",
+    "playManageSubscription": "Upravljaj pretplatom",
+    "playBilledByGoogle": "Naplaćuje Google Play",
+    "playPurchasePending": "Plaćanje je na čekanju. Omi Pro počinje kad ga Google Play potvrdi.",
+    "playPurchaseOtherAccount": "Ova kupnja na Google Playu pripada drugom Omi računu.",
+    "playPurchaseNotConfirmed": "Kupnju još nismo mogli potvrditi. Pokušat ćemo ponovno automatski.",
+    "playRenewalTerms": "Automatski se obnavlja po prikazanoj cijeni dok ne otkažete. Upravljajte ili otkažite bilo kada na Google Playu.",
+    "playPaidAppUnavailable": "Nije dostupno na Androidu"
 }

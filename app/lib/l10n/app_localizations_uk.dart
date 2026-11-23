@@ -562,11 +562,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get hardwareSection => 'Апаратне забезпечення';
 
   @override
-  String get v2Undetected => 'V2 не виявлено';
+  String get v2Undetected => 'Офлайн-синхронізація недоступна';
 
   @override
   String get v2UndetectedMessage =>
-      'Ми бачимо, що у вас або пристрій V1, або ваш пристрій не підключений. Функціонал SD-карти доступний лише для пристроїв V2.';
+      'Для офлайн-синхронізації потрібен підключений пристрій Omi з картою пам’яті SD. Ваш поточний пристрій це не підтримує.';
 
   @override
   String get endConversation => 'Завершити розмову';
@@ -15755,10 +15755,44 @@ class AppLocalizationsUk extends AppLocalizations {
   String get stillWorkingOnIt => 'Ще працюємо над цим.';
 
   @override
+  String get deviceReadyToUse => 'Готово до використання';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Прошивка вашого пристрою застаріла для цього оновлення. Зверніться до служби підтримки по допомогу з оновленням пристрою.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Для цього оновлення прошивки потрібна новіша версія застосунку Omi. Оновіть застосунок у магазині застосунків, а потім перевірте ще раз.';
+
+  @override
+  String get quietPayerTitle => 'Немає записів 5 днів';
+
+  @override
+  String get quietPayerMessage => 'Перевірте свій Omi.';
+
+  @override
+  String get quietPayerCheck => 'Перевірити';
+
+  @override
+  String get playManageSubscription => 'Керувати підпискою';
+
+  @override
+  String get playBilledByGoogle => 'Оплата через Google Play';
+
+  @override
+  String get playPurchasePending => 'Платіж очікує. Omi Pro почнеться, щойно Google Play його підтвердить.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ця покупка в Google Play належить іншому акаунту Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Поки не вдалося підтвердити покупку. Ми спробуємо знову автоматично.';
+
+  @override
+  String get playRenewalTerms =>
+      'Автоматично поновлюється за вказаною ціною, доки ви не скасуєте. Керуйте або скасовуйте будь-коли в Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Недоступно на Android';
 }

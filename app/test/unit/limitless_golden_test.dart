@@ -1005,6 +1005,46 @@ void main() {
     expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 8, 6, 8, 8]);
   });
 
+  test('refreshing a current Custom Live watch preserves a pending retry and its outcome', () async {
+    final transport = FakeDeviceTransport();
+    final device = BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50);
+    final connection = LimitlessDeviceConnection(
+      device,
+      transport,
+      streamHealthWindow: const Duration(milliseconds: 100),
+      setupSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+
+    final retry = Completer<void>();
+    transport.onWrite = (data) {
+      if (decodeWrapperCommand(data)['messageNumber'] == 8 && !retry.isCompleted) retry.complete();
+    };
+    final outcomes = <LimitlessRealtimeHealthOutcome>[];
+    final finished = Completer<void>();
+    var activations = 0;
+    void refresh() => connection.watchCustomLiveAudio(
+          captureIsCurrent: () => true,
+          onEnabled: () => activations++,
+          report: (outcome) {
+            outcomes.add(outcome);
+            if (!finished.isCompleted) finished.complete();
+          },
+        );
+
+    refresh();
+    await retry.future.timeout(const Duration(seconds: 2));
+    refresh();
+    expect(outcomes, isEmpty, reason: 'refresh must keep the pending episode open');
+    await finished.future.timeout(const Duration(seconds: 2));
+    expect(outcomes, [LimitlessRealtimeHealthOutcome.exhausted]);
+
+    refresh();
+    expect(activations, 1, reason: 'refresh must retain the exhausted watch');
+    expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 8]);
+  });
+
   test('concurrent Limitless status probes share one control write', () async {
     final transport = FakeDeviceTransport();
     final device = BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50);

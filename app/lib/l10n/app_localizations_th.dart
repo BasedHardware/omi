@@ -557,11 +557,11 @@ class AppLocalizationsTh extends AppLocalizations {
   String get hardwareSection => 'ฮาร์ดแวร์';
 
   @override
-  String get v2Undetected => 'ไม่พบ V2';
+  String get v2Undetected => 'การซิงค์แบบออฟไลน์ไม่พร้อมใช้งาน';
 
   @override
   String get v2UndetectedMessage =>
-      'เราเห็นว่าคุณมีอุปกรณ์ V1 หรืออุปกรณ์ของคุณไม่ได้เชื่อมต่อ ฟังก์ชัน SD Card จะใช้ได้เฉพาะกับอุปกรณ์ V2 เท่านั้น';
+      'การซิงค์แบบออฟไลน์ต้องใช้อุปกรณ์ Omi ที่เชื่อมต่อและมีพื้นที่จัดเก็บข้อมูลการ์ด SD อุปกรณ์ปัจจุบันของคุณไม่รองรับฟีเจอร์นี้';
 
   @override
   String get endConversation => 'จบบทสนทนา';
@@ -15647,10 +15647,44 @@ class AppLocalizationsTh extends AppLocalizations {
   String get stillWorkingOnIt => 'ยังดำเนินการอยู่';
 
   @override
+  String get deviceReadyToUse => 'พร้อมใช้งาน';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'เฟิร์มแวร์ของอุปกรณ์คุณเก่าเกินไปสำหรับการอัปเดตนี้ ติดต่อฝ่ายสนับสนุนเพื่อขอความช่วยเหลือในการอัปเดตอุปกรณ์';
 
   @override
   String get firmwareUpdateAppRequired =>
       'การอัปเดตเฟิร์มแวร์นี้ต้องใช้แอป Omi เวอร์ชันใหม่กว่า อัปเดตแอปจากร้านค้าแอปของคุณ แล้วตรวจสอบอีกครั้ง';
+
+  @override
+  String get quietPayerTitle => 'ไม่มีการบันทึกมา 5 วัน';
+
+  @override
+  String get quietPayerMessage => 'ตรวจสอบ Omi ของคุณ';
+
+  @override
+  String get quietPayerCheck => 'ตรวจสอบ';
+
+  @override
+  String get playManageSubscription => 'จัดการการสมัครสมาชิก';
+
+  @override
+  String get playBilledByGoogle => 'เรียกเก็บเงินผ่าน Google Play';
+
+  @override
+  String get playPurchasePending => 'การชำระเงินรอดำเนินการ Omi Pro จะเริ่มเมื่อ Google Play ยืนยัน';
+
+  @override
+  String get playPurchaseOtherAccount => 'การซื้อใน Google Play นี้เป็นของบัญชี Omi อื่น';
+
+  @override
+  String get playPurchaseNotConfirmed => 'ยังยืนยันการซื้อไม่ได้ เราจะลองอีกครั้งโดยอัตโนมัติ';
+
+  @override
+  String get playRenewalTerms =>
+      'ต่ออายุอัตโนมัติในราคาที่แสดงจนกว่าคุณจะยกเลิก จัดการหรือยกเลิกได้ทุกเมื่อใน Google Play';
+
+  @override
+  String get playPaidAppUnavailable => 'ไม่พร้อมใช้งานบน Android';
 }

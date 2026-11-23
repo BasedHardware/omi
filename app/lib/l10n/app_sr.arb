@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 није детектован",
+    "v2Undetected": "Офлајн синхронизација није доступна",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "Видимо да имате V1 уређај или ваш уређај није повезан. Функционалност SD картице је доступна само за V2 уређаје.",
+    "v2UndetectedMessage": "Offline синхронизација захтева повезан Omi уређај са SD картицом. Ваш тренутни уређај га не подржава.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },
@@ -12293,6 +12293,17 @@
     "finishedSummaryReady": "Резиме је спреман",
     "writingSummaryStatus": "Пише се резиме…",
     "stillWorkingOnIt": "Још увек радимо на томе.",
+    "deviceReadyToUse": "Спремно за употребу",
     "firmwareUpdateFirmwareTooOld": "Фирмвер вашег уређаја је престар за ово ажурирање. Обратите се подршци за помоћ при ажурирању уређаја.",
-    "firmwareUpdateAppRequired": "Ово ажурирање фирмвера захтева новију апликацију Omi. Ажурирајте апликацију у продавници апликација, па проверите поново."
+    "firmwareUpdateAppRequired": "Ово ажурирање фирмвера захтева новију апликацију Omi. Ажурирајте апликацију у продавници апликација, па проверите поново.",
+    "quietPayerTitle": "Нема снимака 5 дана",
+    "quietPayerMessage": "Проверите свој Omi.",
+    "quietPayerCheck": "Провери",
+    "playManageSubscription": "Управљај претплатом",
+    "playBilledByGoogle": "Наплаћује се преко Google Play-а",
+    "playPurchasePending": "Плаћање је на чекању. Omi Pro почиње када га Google Play потврди.",
+    "playPurchaseOtherAccount": "Ова куповина на Google Play-у припада другом Omi налогу.",
+    "playPurchaseNotConfirmed": "Куповину још нисмо могли да потврдимо. Покушаћемо поново аутоматски.",
+    "playRenewalTerms": "Аутоматски се обнавља по приказаној цени док не откажете. Управљајте или откажите било када на Google Play-у.",
+    "playPaidAppUnavailable": "Није доступно на Android-у"
 }

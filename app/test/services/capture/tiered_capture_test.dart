@@ -88,7 +88,8 @@ void main() {
     expect(world.deviceConnection!.openAudioSubscriptions, 1);
   });
 
-  test('Android Limitless watchdog keeps the admitted owner through device metadata refresh', () async {
+  test('Android Limitless watchdog keeps the admitted owner through metadata and unchanged settings refreshes',
+      () async {
     world.controller.updateRecordingDevice(null);
     await world.settle();
     SharedPreferencesUtil().uid = 'capture-test-owner';
@@ -115,9 +116,22 @@ void main() {
     expect(connection.captureIsCurrent, same(admitted));
     expect(admitted?.call(), isTrue);
 
-    SharedPreferencesUtil().uid = 'replaced-test-owner';
+    await world.controller.onTranscriptionSettingsChanged();
+    expect(world.controller.activeRecordingId, recording);
+    expect(connection.captureIsCurrent, same(admitted));
+
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://changed-stt.example.test'),
+    );
     expect(admitted?.call(), isFalse);
-    await world.controller.pauseCapture();
+    await world.controller.onTranscriptionSettingsChanged();
+    final replacement = connection.captureIsCurrent;
+    expect(replacement, isNot(same(admitted)));
+    expect(replacement?.call(), isTrue);
+
+    SharedPreferencesUtil().uid = 'replaced-test-owner';
+    expect(replacement?.call(), isFalse);
+    await world.controller.onTranscriptionSettingsChanged();
     expect(connection.captureIsCurrent, isNull);
   });
 
@@ -331,6 +345,7 @@ class _WatchedLimitlessConnection extends ScriptedDeviceConnection implements Li
     required void Function() onEnabled,
     required void Function(LimitlessRealtimeHealthOutcome) report,
   }) {
+    if (this.captureIsCurrent?.call() ?? false) return;
     this.captureIsCurrent = captureIsCurrent;
     onEnabled();
   }

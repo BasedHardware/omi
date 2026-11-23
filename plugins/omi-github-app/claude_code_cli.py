@@ -99,9 +99,17 @@ def run_claude_code_on_repo(
 
                 if result.returncode != 0:
                     logger.error(f"Claude Code error:\n{result.stderr}")
+                    return {
+                        'success': False,
+                        'message': f'Claude Code exited with code {result.returncode}: {result.stderr.strip()}'
+                    }
 
             except subprocess.TimeoutExpired:
                 logger.warning("Claude Code timed out after 5 minutes")
+                return {
+                    'success': False,
+                    'message': 'Claude Code timed out after 5 minutes'
+                }
 
             # Check if there are changes to commit
             status_result = subprocess.run(

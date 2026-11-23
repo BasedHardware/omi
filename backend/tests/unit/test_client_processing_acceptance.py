@@ -75,6 +75,8 @@ from models.transcript_segment import TranscriptSegment
 from utils.conversations.projection_payload import PROVENANCE_LOG_MAX_CHARS
 
 
+from database import _client as firestore_client
+from tests.support.isolated_prometheus import isolated_prometheus
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 
@@ -117,17 +119,6 @@ def _build_fakes() -> dict[str, ModuleType]:
         fakes[name] = mod
         return mod
 
-    database_pkg = ModuleType('database')
-    database_pkg.__path__ = [str(_BACKEND / 'database')]  # type: ignore[attr-defined]
-    add('database', database_pkg)
-
-    client_mod = ModuleType('database._client')
-    client_mod.db = MagicMock(name='db')
-    client_mod.get_firestore_client = lambda: client_mod.db
-    client_mod.get_data_plane_firestore_client = lambda: client_mod.db
-    client_mod.run_transactional = lambda client, operation: operation(client.transaction())
-    client_mod.document_id_from_seed = lambda seed: 'seed-id'
-    add('database._client', client_mod)
     tombstones = add('database.conversation_tombstones', AutoMockModule('database.conversation_tombstones'))
     tombstones.is_deleted = MagicMock(return_value=False)
 
@@ -315,7 +306,13 @@ def _add_developer_fakes(fakes: dict[str, ModuleType]) -> None:
 def stack():
     fakes = _build_fakes()
     _add_developer_fakes(fakes)
-    with stub_modules(fakes):
+    with pytest.MonkeyPatch.context() as patch, isolated_prometheus(), stub_modules(fakes):
+        client = MagicMock()
+        patch.setattr(firestore_client, '_firestore_client', client)
+        patch.setattr(firestore_client, '_customer_firestore_client', client)
+        patch.setattr(firestore_client, '_data_plane_firestore_client', client)
+        patch.setattr(firestore_client, 'run_transactional', lambda client, operation: operation(client.transaction()))
+        patch.setattr(firestore_client, 'document_id_from_seed', lambda seed: 'seed-id')
         pc = load_module_fresh(
             'utils.conversations.process_conversation',
             os.path.join(str(_BACKEND), 'utils', 'conversations', 'process_conversation.py'),

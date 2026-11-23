@@ -973,6 +973,19 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0)",
+      "file": "alerts/firestore.json",
+      "issues": [],
+      "metrics": [
+        "omi_firestore_billed_reads_by_caller_total"
+      ],
+      "owner_title": "FirestoreUnattributedReadsAbsolute",
+      "owner_uid": "omi-firestore-unattributed-absolute",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_firestore_billed_reads_by_caller_total{caller=~\"(database|utils)\\\\.batch.*\"}[1h])) / clamp_min((sum(increase(omi_batch_pipeline_completed_audio_seconds_total[1h])) / 3600), 1)",
       "file": "alerts/firestore.json",
       "issues": [],
@@ -4819,7 +4832,7 @@
   ],
   "counts": {
     "explicit_bridge": 42,
-    "query_consumers": 325
+    "query_consumers": 326
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

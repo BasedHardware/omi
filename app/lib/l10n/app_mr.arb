@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 ओळखला नाही",
+    "v2Undetected": "ऑफलाइन सिंक उपलब्ध नाही",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "आम्ही पाहतो की आपल्याकडे V1 डिव्हाइस आहे किंवा आपल्या डिव्हाइस कनेक्ट नाही. SD कार्ड कार्यक्षमता केवळ V2 डिव्हाइससाठी उपलब्ध आहे.",
+    "v2UndetectedMessage": "ऑफलाइन सिंकसाठी SD कार्ड स्टोरेज असलेले कनेक्टेड Omi डिव्हाइस आवश्यक आहे. तुमचे सध्याचे डिव्हाइस याला सपोर्ट करत नाही.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },
@@ -12293,6 +12293,17 @@
     "finishedSummaryReady": "सारांश तयार आहे",
     "writingSummaryStatus": "सारांश लिहिले जात आहे…",
     "stillWorkingOnIt": "अजून त्यावर काम सुरू आहे.",
+    "deviceReadyToUse": "वापरण्यासाठी तयार",
     "firmwareUpdateFirmwareTooOld": "या अपडेटसाठी तुमच्या डिव्हाइसचे फर्मवेअर खूप जुने आहे. डिव्हाइस अपडेट करण्यासाठी मदत हवी असल्यास सपोर्टशी संपर्क साधा.",
-    "firmwareUpdateAppRequired": "या फर्मवेअर अपडेटसाठी Omi ॲपची नवीन आवृत्ती आवश्यक आहे. तुमच्या ॲप स्टोअरमधून ॲप अपडेट करा, नंतर पुन्हा तपासा."
+    "firmwareUpdateAppRequired": "या फर्मवेअर अपडेटसाठी Omi ॲपची नवीन आवृत्ती आवश्यक आहे. तुमच्या ॲप स्टोअरमधून ॲप अपडेट करा, नंतर पुन्हा तपासा.",
+    "quietPayerTitle": "5 दिवसांत एकही रेकॉर्डिंग नाही",
+    "quietPayerMessage": "तुमचा Omi तपासा.",
+    "quietPayerCheck": "तपासा",
+    "playManageSubscription": "सदस्यता व्यवस्थापित करा",
+    "playBilledByGoogle": "Google Play द्वारे बिल केले जाते",
+    "playPurchasePending": "तुमचे पेमेंट प्रलंबित आहे. Google Play ने पुष्टी करताच Omi Pro सुरू होईल.",
+    "playPurchaseOtherAccount": "ही Google Play खरेदी दुसऱ्या Omi खात्याची आहे.",
+    "playPurchaseNotConfirmed": "खरेदीची अद्याप पुष्टी करता आली नाही. आम्ही आपोआप पुन्हा प्रयत्न करू.",
+    "playRenewalTerms": "रद्द करेपर्यंत दाखवलेल्या किमतीत आपोआप नूतनीकरण होते. Google Play मध्ये कधीही व्यवस्थापित किंवा रद्द करा.",
+    "playPaidAppUnavailable": "Android वर उपलब्ध नाही"
 }

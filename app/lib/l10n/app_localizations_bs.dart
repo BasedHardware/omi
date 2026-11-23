@@ -560,11 +560,11 @@ class AppLocalizationsBs extends AppLocalizations {
   String get hardwareSection => 'Hardver';
 
   @override
-  String get v2Undetected => 'V2 nije detektovano';
+  String get v2Undetected => 'Offline sinhronizacija nije dostupna';
 
   @override
   String get v2UndetectedMessage =>
-      'Vidimo da imate V1 uređaj ili vaš uređaj nije povezan. Funkcionalnost SD kartice dostupna je samo za V2 uređaje.';
+      'Offline sinhronizacija zahtijeva povezani Omi uređaj sa SD karticom za pohranu. Vaš trenutni uređaj to ne podržava.';
 
   @override
   String get endConversation => 'Završi razgovor';
@@ -15750,10 +15750,44 @@ class AppLocalizationsBs extends AppLocalizations {
   String get stillWorkingOnIt => 'Još radimo na tome.';
 
   @override
+  String get deviceReadyToUse => 'Spremno za korištenje';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmver vašeg uređaja je prestar za ovo ažuriranje. Obratite se podršci za pomoć pri ažuriranju uređaja.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Ovo ažuriranje firmvera zahtijeva noviju verziju aplikacije Omi. Ažurirajte aplikaciju iz svoje prodavnice aplikacija, a zatim provjerite ponovo.';
+
+  @override
+  String get quietPayerTitle => 'Nema snimaka 5 dana';
+
+  @override
+  String get quietPayerMessage => 'Provjerite svoj Omi.';
+
+  @override
+  String get quietPayerCheck => 'Provjeri';
+
+  @override
+  String get playManageSubscription => 'Upravljaj pretplatom';
+
+  @override
+  String get playBilledByGoogle => 'Naplaćuje se putem Google Playa';
+
+  @override
+  String get playPurchasePending => 'Plaćanje je na čekanju. Omi Pro počinje kad ga Google Play potvrdi.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ova kupovina na Google Playu pripada drugom Omi računu.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Kupovinu još nismo mogli potvrditi. Pokušat ćemo ponovo automatski.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automatski se obnavlja po prikazanoj cijeni dok ne otkažete. Upravljajte ili otkažite bilo kada na Google Playu.';
+
+  @override
+  String get playPaidAppUnavailable => 'Nije dostupno na Androidu';
 }

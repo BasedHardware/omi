@@ -556,11 +556,11 @@ class AppLocalizationsHe extends AppLocalizations {
   String get hardwareSection => 'חומרה';
 
   @override
-  String get v2Undetected => 'V2 לא זוהה';
+  String get v2Undetected => 'סנכרון לא מקוון אינו זמין';
 
   @override
   String get v2UndetectedMessage =>
-      'אנו רואים שיש לך מכשיר V1 או שהמכשיר שלך לא מחובר. פונקציונליות כרטיס SD זמינה רק למכשירי V2.';
+      'סנכרון לא מקוון דורש מכשיר Omi מחובר עם אחסון בכרטיס SD. המכשיר הנוכחי שלך אינו תומך בכך.';
 
   @override
   String get endConversation => 'סיים שיחה';
@@ -15609,10 +15609,43 @@ class AppLocalizationsHe extends AppLocalizations {
   String get stillWorkingOnIt => 'עדיין עובדים על זה.';
 
   @override
+  String get deviceReadyToUse => 'מוכן לשימוש';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'הקושחה של המכשיר שלך ישנה מדי לעדכון הזה. יש לפנות לתמיכה לקבלת עזרה בעדכון המכשיר.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'עדכון הקושחה הזה דורש גרסה חדשה יותר של אפליקציית Omi. יש לעדכן את האפליקציה מחנות האפליקציות שלך, ואז לבדוק שוב.';
+
+  @override
+  String get quietPayerTitle => 'אין הקלטות כבר 5 ימים';
+
+  @override
+  String get quietPayerMessage => 'בדקו את ה-Omi שלכם.';
+
+  @override
+  String get quietPayerCheck => 'בדיקה';
+
+  @override
+  String get playManageSubscription => 'ניהול המינוי';
+
+  @override
+  String get playBilledByGoogle => 'החיוב דרך Google Play';
+
+  @override
+  String get playPurchasePending => 'התשלום ממתין. Omi Pro יתחיל ברגע ש-Google Play יאשר אותו.';
+
+  @override
+  String get playPurchaseOtherAccount => 'הרכישה הזו ב-Google Play שייכת לחשבון Omi אחר.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'עדיין לא הצלחנו לאשר את הרכישה. ננסה שוב אוטומטית.';
+
+  @override
+  String get playRenewalTerms => 'מתחדש אוטומטית במחיר המוצג עד שתבטלו. ניתן לנהל או לבטל בכל עת ב-Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'לא זמין ב-Android';
 }

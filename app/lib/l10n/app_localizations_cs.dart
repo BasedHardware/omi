@@ -560,11 +560,11 @@ class AppLocalizationsCs extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 nedetekováno';
+  String get v2Undetected => 'Offline synchronizace není k dispozici';
 
   @override
   String get v2UndetectedMessage =>
-      'Vidíme, že máte buď zařízení V1, nebo vaše zařízení není připojeno. Funkce SD karty je dostupná pouze pro zařízení V2.';
+      'Offline synchronizace vyžaduje připojené zařízení Omi s úložištěm na SD kartě. Vaše aktuální zařízení ji nepodporuje.';
 
   @override
   String get endConversation => 'Ukončit konverzaci';
@@ -15721,10 +15721,44 @@ class AppLocalizationsCs extends AppLocalizations {
   String get stillWorkingOnIt => 'Stále na tom pracujeme.';
 
   @override
+  String get deviceReadyToUse => 'Připraveno k použití';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmware vašeho zařízení je pro tuto aktualizaci příliš starý. Obraťte se na podporu, která vám s aktualizací zařízení pomůže.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Tato aktualizace firmwaru vyžaduje novější verzi aplikace Omi. Aktualizujte aplikaci v obchodě s aplikacemi a poté proveďte kontrolu znovu.';
+
+  @override
+  String get quietPayerTitle => 'Žádné nahrávky za 5 dní';
+
+  @override
+  String get quietPayerMessage => 'Zkontrolujte svůj Omi.';
+
+  @override
+  String get quietPayerCheck => 'Zkontrolovat';
+
+  @override
+  String get playManageSubscription => 'Spravovat předplatné';
+
+  @override
+  String get playBilledByGoogle => 'Účtováno přes Google Play';
+
+  @override
+  String get playPurchasePending => 'Platba čeká na vyřízení. Omi Pro začne, jakmile ji Google Play potvrdí.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Tento nákup v Google Play patří jinému účtu Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Nákup se zatím nepodařilo potvrdit. Zkusíme to znovu automaticky.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automaticky se obnovuje za uvedenou cenu, dokud ho nezrušíte. Spravovat nebo zrušit ho můžete kdykoli v Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Na Androidu není k dispozici';
 }

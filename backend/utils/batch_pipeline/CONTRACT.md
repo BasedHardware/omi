@@ -365,6 +365,14 @@ on `failed_held`. Eligible legacy rows get a full window on first examination,
 never immediate expiry based on capture age. Provider-STT holds are excluded
 from GPU expiry/requeue.
 
+Scheduler quarantine also writes `quarantine_diagnostic` for the last
+scheduler quarantine and records `worker_failure` when supplied. Lease expiry and typed
+worker validation have distinct diagnostic classes. Attempt exhaustion without
+typed worker evidence records an unknown underlying cause. Legacy rows and
+quarantines written outside the scheduler may lack the diagnostic entirely.
+Absence carries no retry or settlement authority. Provider and artifact evidence
+remain in their existing owning records.
+
 `R:expire_held_in_transaction`, called through `R:RecoveryStore.expire_held`
 and `RecoveryStore.checked`, rechecks content/ledger ownership, privacy,
 dormant `held|failed_held`, no result/receipt/token, expired lease and no active
@@ -606,6 +614,7 @@ for these retained shapes. Defaults are code defaults, not measured live values.
 | Flag | Default | Kill-switch location / behavior when disabled |
 | --- | --- | --- |
 | `BATCH_HELD_DEAD_LETTER_ENABLED` | true | `config/policy/kill_switches.py:KILL_SWITCHES`, read by `config/batch_pipeline.py:batch_held_dead_letter_enabled`; set false on serving and worker roles: no new held/record deadlines/expiry, record stock sampling or GPU nightly pass; private record and manual GPU requeue and existing projection release/nightly recovery remain; ghost settle uses its own switch |
+| `BATCH_PARKED_JOB_SWEEPER_ENABLED` | true | `config/batch_pipeline.py:parked_job_sweeper_enabled`; false, a durable `disabled=true` on the `parked_job_sweep` control document, or `BATCH_HELD_DEAD_LETTER_ENABLED=false` stops the hourly parked GPU page. The page publishes expiring aggregates and never changes a job. |
 | `BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED` | true | `config/policy/kill_switches.py:KILL_SWITCHES`, read inline in `utils/batch_pipeline/quarantine_recovery.py`; false restores the legacy single pinned-source read so a digest mismatch stays a retryable error with no confirmation read, hold write or metric; already-held rows keep their refusal and stay out of automatic nightly and intake-status redrive |
 | `BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED` | true | `config/batch_pipeline.py:projection_hold_recovery_enabled`; false restores older release scope/attempt fences and conflict waiting policy |
 | `BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED` | false | `config/policy/kill_switches.py`, `config/batch_pipeline.py:projection_ghost_settle_enabled`; false classifies existing reads only, no ghost writes or extra queries; record dead-letter and assignment expiry use the held switch independently |

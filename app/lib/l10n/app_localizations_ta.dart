@@ -564,11 +564,11 @@ class AppLocalizationsTa extends AppLocalizations {
   String get hardwareSection => 'ஹார்ட்வேர்';
 
   @override
-  String get v2Undetected => 'V2 கண்டுபிடிக்கப்படவில்லை';
+  String get v2Undetected => 'ஆஃப்லைன் ஒத்திசைவு கிடைக்கவில்லை';
 
   @override
   String get v2UndetectedMessage =>
-      'உங்களுக்கு V1 சாதனம் அல்லது உங்கள் சாதனம் இணைக்கப்படவில்லை என்பதைக் கண்டோம். SD கார்ட் செயல்பாடு V2 சாதனங்களுக்கு மட்டுமே கிடைக்கிறது.';
+      'ஆஃப்லைன் ஒத்திசைவுக்கு SD கார்டு சேமிப்பகத்துடன் இணைக்கப்பட்ட Omi சாதனம் தேவை. உங்கள் தற்போதைய சாதனம் இதை ஆதரிக்கவில்லை.';
 
   @override
   String get endConversation => 'உரையாடல் முடிக்கவும்';
@@ -15827,10 +15827,44 @@ class AppLocalizationsTa extends AppLocalizations {
   String get stillWorkingOnIt => 'இன்னும் அதில் வேலை செய்யப்படுகிறது.';
 
   @override
+  String get deviceReadyToUse => 'பயன்படுத்தத் தயாராக உள்ளது';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'உங்கள் சாதனத்தின் ஃபர்ம்வேர் இந்தப் புதுப்பிப்புக்கு மிகவும் பழையதாக உள்ளது. சாதனத்தைப் புதுப்பிக்க உதவி பெற ஆதரவைத் தொடர்புகொள்ளவும்.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'இந்த ஃபர்ம்வேர் புதுப்பிப்புக்கு Omi ஆப்பின் புதிய பதிப்பு தேவை. உங்கள் ஆப் ஸ்டோரிலிருந்து ஆப்பைப் புதுப்பித்து, மீண்டும் சரிபார்க்கவும்.';
+
+  @override
+  String get quietPayerTitle => '5 நாட்களாக பதிவுகள் இல்லை';
+
+  @override
+  String get quietPayerMessage => 'உங்கள் Omi-ஐ சரிபார்க்கவும்.';
+
+  @override
+  String get quietPayerCheck => 'சரிபார்';
+
+  @override
+  String get playManageSubscription => 'சந்தாவை நிர்வகி';
+
+  @override
+  String get playBilledByGoogle => 'Google Play மூலம் கட்டணம் வசூலிக்கப்படும்';
+
+  @override
+  String get playPurchasePending => 'உங்கள் கட்டணம் நிலுவையில் உள்ளது. Google Play உறுதிசெய்ததும் Omi Pro தொடங்கும்.';
+
+  @override
+  String get playPurchaseOtherAccount => 'இந்த Google Play வாங்குதல் வேறொரு Omi கணக்கைச் சேர்ந்தது.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'உங்கள் வாங்குதலை இன்னும் உறுதிசெய்ய முடியவில்லை. தானாக மீண்டும் முயல்வோம்.';
+
+  @override
+  String get playRenewalTerms =>
+      'நீங்கள் ரத்து செய்யும் வரை காட்டப்பட்ட விலையில் தானாகப் புதுப்பிக்கப்படும். Google Play இல் எப்போது வேண்டுமானாலும் நிர்வகிக்கலாம் அல்லது ரத்து செய்யலாம்.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android இல் கிடைக்காது';
 }

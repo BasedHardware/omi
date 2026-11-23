@@ -563,11 +563,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get hardwareSection => 'Hardver';
 
   @override
-  String get v2Undetected => 'V2 nem észlelhető';
+  String get v2Undetected => 'Az offline szinkronizálás nem érhető el';
 
   @override
   String get v2UndetectedMessage =>
-      'Úgy látjuk, hogy vagy V1 eszközöd van, vagy az eszközöd nincs csatlakoztatva. Az SD kártya funkció csak V2 eszközökön érhető el.';
+      'Az offline szinkronizáláshoz SD-kártyás tárhellyel rendelkező csatlakoztatott Omi eszközre van szükség. A jelenlegi eszközöd ezt nem támogatja.';
 
   @override
   String get endConversation => 'Beszélgetés befejezése';
@@ -15780,10 +15780,44 @@ class AppLocalizationsHu extends AppLocalizations {
   String get stillWorkingOnIt => 'Még dolgozunk rajta.';
 
   @override
+  String get deviceReadyToUse => 'Használatra kész';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Az eszköz firmware-e túl régi ehhez a frissítéshez. Az eszköz frissítéséhez kérjen segítséget az ügyfélszolgálattól.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Ehhez a firmware-frissítéshez az Omi alkalmazás újabb verziója szükséges. Frissítse az alkalmazást az alkalmazásboltban, majd ellenőrizze újra.';
+
+  @override
+  String get quietPayerTitle => '5 napja nincs felvétel';
+
+  @override
+  String get quietPayerMessage => 'Nézd meg az Omidat.';
+
+  @override
+  String get quietPayerCheck => 'Megnézem';
+
+  @override
+  String get playManageSubscription => 'Előfizetés kezelése';
+
+  @override
+  String get playBilledByGoogle => 'A számlázás a Google Playen keresztül történik';
+
+  @override
+  String get playPurchasePending => 'A fizetés függőben van. Az Omi Pro akkor indul, amikor a Google Play megerősíti.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ez a Google Play-vásárlás egy másik Omi-fiókhoz tartozik.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Még nem tudtuk megerősíteni a vásárlást. Automatikusan újrapróbáljuk.';
+
+  @override
+  String get playRenewalTerms =>
+      'Lemondásig automatikusan megújul a feltüntetett áron. Bármikor kezelheted vagy lemondhatod a Google Playen.';
+
+  @override
+  String get playPaidAppUnavailable => 'Androidon nem érhető el';
 }

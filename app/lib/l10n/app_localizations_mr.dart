@@ -561,11 +561,11 @@ class AppLocalizationsMr extends AppLocalizations {
   String get hardwareSection => 'हार्डवेअर';
 
   @override
-  String get v2Undetected => 'V2 ओळखला नाही';
+  String get v2Undetected => 'ऑफलाइन सिंक उपलब्ध नाही';
 
   @override
   String get v2UndetectedMessage =>
-      'आम्ही पाहतो की आपल्याकडे V1 डिव्हाइस आहे किंवा आपल्या डिव्हाइस कनेक्ट नाही. SD कार्ड कार्यक्षमता केवळ V2 डिव्हाइससाठी उपलब्ध आहे.';
+      'ऑफलाइन सिंकसाठी SD कार्ड स्टोरेज असलेले कनेक्टेड Omi डिव्हाइस आवश्यक आहे. तुमचे सध्याचे डिव्हाइस याला सपोर्ट करत नाही.';
 
   @override
   String get endConversation => 'संभाषण समाप्त करा';
@@ -15730,10 +15730,44 @@ class AppLocalizationsMr extends AppLocalizations {
   String get stillWorkingOnIt => 'अजून त्यावर काम सुरू आहे.';
 
   @override
+  String get deviceReadyToUse => 'वापरण्यासाठी तयार';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'या अपडेटसाठी तुमच्या डिव्हाइसचे फर्मवेअर खूप जुने आहे. डिव्हाइस अपडेट करण्यासाठी मदत हवी असल्यास सपोर्टशी संपर्क साधा.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'या फर्मवेअर अपडेटसाठी Omi ॲपची नवीन आवृत्ती आवश्यक आहे. तुमच्या ॲप स्टोअरमधून ॲप अपडेट करा, नंतर पुन्हा तपासा.';
+
+  @override
+  String get quietPayerTitle => '5 दिवसांत एकही रेकॉर्डिंग नाही';
+
+  @override
+  String get quietPayerMessage => 'तुमचा Omi तपासा.';
+
+  @override
+  String get quietPayerCheck => 'तपासा';
+
+  @override
+  String get playManageSubscription => 'सदस्यता व्यवस्थापित करा';
+
+  @override
+  String get playBilledByGoogle => 'Google Play द्वारे बिल केले जाते';
+
+  @override
+  String get playPurchasePending => 'तुमचे पेमेंट प्रलंबित आहे. Google Play ने पुष्टी करताच Omi Pro सुरू होईल.';
+
+  @override
+  String get playPurchaseOtherAccount => 'ही Google Play खरेदी दुसऱ्या Omi खात्याची आहे.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'खरेदीची अद्याप पुष्टी करता आली नाही. आम्ही आपोआप पुन्हा प्रयत्न करू.';
+
+  @override
+  String get playRenewalTerms =>
+      'रद्द करेपर्यंत दाखवलेल्या किमतीत आपोआप नूतनीकरण होते. Google Play मध्ये कधीही व्यवस्थापित किंवा रद्द करा.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android वर उपलब्ध नाही';
 }

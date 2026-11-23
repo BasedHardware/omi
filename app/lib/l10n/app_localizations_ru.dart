@@ -561,11 +561,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get hardwareSection => 'Оборудование';
 
   @override
-  String get v2Undetected => 'V2 не обнаружено';
+  String get v2Undetected => 'Офлайн-синхронизация недоступна';
 
   @override
   String get v2UndetectedMessage =>
-      'Мы видим, что у вас либо устройство V1, либо ваше устройство не подключено. Функция SD-карты доступна только для устройств V2.';
+      'Для офлайн-синхронизации нужно подключённое устройство Omi с SD-картой. Ваше текущее устройство её не поддерживает.';
 
   @override
   String get endConversation => 'Завершить разговор';
@@ -15773,10 +15773,45 @@ class AppLocalizationsRu extends AppLocalizations {
   String get stillWorkingOnIt => 'Всё ещё работаем над этим.';
 
   @override
+  String get deviceReadyToUse => 'Готово к использованию';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Прошивка вашего устройства слишком стара для этого обновления. Обратитесь в службу поддержки за помощью в обновлении устройства.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Для этого обновления прошивки требуется более новая версия приложения Omi. Обновите приложение в магазине приложений, затем проверьте ещё раз.';
+
+  @override
+  String get quietPayerTitle => 'Нет записей 5 дней';
+
+  @override
+  String get quietPayerMessage => 'Проверьте свой Omi.';
+
+  @override
+  String get quietPayerCheck => 'Проверить';
+
+  @override
+  String get playManageSubscription => 'Управлять подпиской';
+
+  @override
+  String get playBilledByGoogle => 'Оплата через Google Play';
+
+  @override
+  String get playPurchasePending =>
+      'Платёж ожидает подтверждения. Omi Pro начнётся, как только Google Play его подтвердит.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Эта покупка в Google Play принадлежит другому аккаунту Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Пока не удалось подтвердить покупку. Мы попробуем снова автоматически.';
+
+  @override
+  String get playRenewalTerms =>
+      'Продлевается автоматически по указанной цене, пока вы не отмените. Управляйте подпиской или отменяйте её в Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Недоступно на Android';
 }

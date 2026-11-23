@@ -559,11 +559,11 @@ class AppLocalizationsSr extends AppLocalizations {
   String get hardwareSection => 'Хардвер';
 
   @override
-  String get v2Undetected => 'V2 није детектован';
+  String get v2Undetected => 'Офлајн синхронизација није доступна';
 
   @override
   String get v2UndetectedMessage =>
-      'Видимо да имате V1 уређај или ваш уређај није повезан. Функционалност SD картице је доступна само за V2 уређаје.';
+      'Offline синхронизација захтева повезан Omi уређај са SD картицом. Ваш тренутни уређај га не подржава.';
 
   @override
   String get endConversation => 'Заврши разговор';
@@ -15729,10 +15729,44 @@ class AppLocalizationsSr extends AppLocalizations {
   String get stillWorkingOnIt => 'Још увек радимо на томе.';
 
   @override
+  String get deviceReadyToUse => 'Спремно за употребу';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Фирмвер вашег уређаја је престар за ово ажурирање. Обратите се подршци за помоћ при ажурирању уређаја.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Ово ажурирање фирмвера захтева новију апликацију Omi. Ажурирајте апликацију у продавници апликација, па проверите поново.';
+
+  @override
+  String get quietPayerTitle => 'Нема снимака 5 дана';
+
+  @override
+  String get quietPayerMessage => 'Проверите свој Omi.';
+
+  @override
+  String get quietPayerCheck => 'Провери';
+
+  @override
+  String get playManageSubscription => 'Управљај претплатом';
+
+  @override
+  String get playBilledByGoogle => 'Наплаћује се преко Google Play-а';
+
+  @override
+  String get playPurchasePending => 'Плаћање је на чекању. Omi Pro почиње када га Google Play потврди.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ова куповина на Google Play-у припада другом Omi налогу.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Куповину још нисмо могли да потврдимо. Покушаћемо поново аутоматски.';
+
+  @override
+  String get playRenewalTerms =>
+      'Аутоматски се обнавља по приказаној цени док не откажете. Управљајте или откажите било када на Google Play-у.';
+
+  @override
+  String get playPaidAppUnavailable => 'Није доступно на Android-у';
 }

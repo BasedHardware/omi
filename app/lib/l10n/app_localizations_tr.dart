@@ -561,11 +561,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get hardwareSection => 'Donanım';
 
   @override
-  String get v2Undetected => 'V2 algılanamadı';
+  String get v2Undetected => 'Çevrimdışı Senkronizasyon Kullanılamıyor';
 
   @override
   String get v2UndetectedMessage =>
-      'V1 cihazınız olduğunu veya cihazınızın bağlı olmadığını görüyoruz. SD Kart işlevi yalnızca V2 cihazlar için mevcuttur.';
+      'Çevrimdışı Senkronizasyon için SD kart depolamasına sahip bağlı bir Omi cihazı gerekir. Mevcut cihazınız bunu desteklemiyor.';
 
   @override
   String get endConversation => 'Konuşmayı Sonlandır';
@@ -15732,10 +15732,44 @@ class AppLocalizationsTr extends AppLocalizations {
   String get stillWorkingOnIt => 'Hâlâ üzerinde çalışılıyor.';
 
   @override
+  String get deviceReadyToUse => 'Kullanıma hazır';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Cihazınızın donanım yazılımı bu güncelleme için çok eski. Cihazınızı güncelleme konusunda yardım almak için destek ekibiyle iletişime geçin.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Bu donanım yazılımı güncellemesi için Omi uygulamasının daha yeni bir sürümü gerekiyor. Uygulamayı uygulama mağazanızdan güncelleyin, ardından yeniden kontrol edin.';
+
+  @override
+  String get quietPayerTitle => '5 gündür kayıt yok';
+
+  @override
+  String get quietPayerMessage => 'Omi\'ni kontrol et.';
+
+  @override
+  String get quietPayerCheck => 'Kontrol Et';
+
+  @override
+  String get playManageSubscription => 'Aboneliği yönet';
+
+  @override
+  String get playBilledByGoogle => 'Google Play üzerinden faturalandırılır';
+
+  @override
+  String get playPurchasePending => 'Ödemeniz beklemede. Google Play onayladığında Omi Pro başlar.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Bu Google Play satın alımı başka bir Omi hesabına ait.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Satın alımınızı henüz doğrulayamadık. Otomatik olarak yeniden deneyeceğiz.';
+
+  @override
+  String get playRenewalTerms =>
+      'İptal edene kadar gösterilen fiyattan otomatik olarak yenilenir. Google Play\'den istediğiniz zaman yönetin veya iptal edin.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android\'de kullanılamaz';
 }

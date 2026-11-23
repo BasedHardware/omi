@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-queue-sla-presented-as-terminal-failure",
+  "family": "projection-contract",
   "violated_contract": "A transcription queue SLA expiry does not prove processing failed. Home and episode presentation must keep queued recordings transcribing within a bounded recovery window, and must not offer a summary retry before transcription exists.",
   "canonical_prevention": "Share a read-time, nonrenewing presentation bound across conversation and episode readers, preserve explicit terminal failure receipts, and regression-test old write-time stamps, exact expiry, retry suppression and rollback without per-row job reads.",
   "canonical_prevention_artifact": [

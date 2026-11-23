@@ -1467,6 +1467,7 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_summary_debt_oldest_age_seconds',
         'omi_summary_debt_sample_timestamp_seconds',
         'omi_live_session_transcript_outcome_total',
+        'omi_sync_future_capture_recovery_total',
         'omi_firestore_documents_per_operation_bucket',
         # Cost lever G1: Parakeet pool request time by caller.
         'omi_parakeet_request_seconds_bucket',

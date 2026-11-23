@@ -563,11 +563,11 @@ class AppLocalizationsTl extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 ay hindi na-detect';
+  String get v2Undetected => 'Hindi Available ang Offline Sync';
 
   @override
   String get v2UndetectedMessage =>
-      'Nakita namin na mayroon kang V1 device o ang iyong device ay hindi konektado. Ang SD Card functionality ay available lamang para sa V2 devices.';
+      'Kailangan ng Offline Sync ng nakakonektang Omi device na may SD card storage. Hindi ito sinusuportahan ng iyong kasalukuyang device.';
 
   @override
   String get endConversation => 'Tapusin ang Pag-uusap';
@@ -15846,10 +15846,46 @@ class AppLocalizationsTl extends AppLocalizations {
   String get stillWorkingOnIt => 'Pinagtatrabahuhan pa rin ito.';
 
   @override
+  String get deviceReadyToUse => 'Handa nang gamitin';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Napakaluma na ng firmware ng iyong device para sa update na ito. Makipag-ugnayan sa support para sa tulong sa pag-update ng iyong device.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Kailangan ng firmware update na ito ng mas bagong Omi app. I-update ang app mula sa iyong app store, pagkatapos ay tingnan muli.';
+
+  @override
+  String get quietPayerTitle => 'Walang recording sa loob ng 5 araw';
+
+  @override
+  String get quietPayerMessage => 'Tingnan ang iyong Omi.';
+
+  @override
+  String get quietPayerCheck => 'Tingnan';
+
+  @override
+  String get playManageSubscription => 'Pamahalaan ang subscription';
+
+  @override
+  String get playBilledByGoogle => 'Sinisingil ng Google Play';
+
+  @override
+  String get playPurchasePending =>
+      'Nakabinbin ang bayad mo. Magsisimula ang Omi Pro kapag kinumpirma ito ng Google Play.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ang pagbiling ito sa Google Play ay pag-aari ng ibang Omi account.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Hindi pa namin makumpirma ang iyong pagbili. Susubukan naming muli nang awtomatiko.';
+
+  @override
+  String get playRenewalTerms =>
+      'Awtomatikong nire-renew sa ipinakitang presyo hanggang kanselahin mo. Pamahalaan o kanselahin anumang oras sa Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Hindi available sa Android';
 }

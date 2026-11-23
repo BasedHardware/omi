@@ -560,11 +560,11 @@ class AppLocalizationsDa extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 ikke opdaget';
+  String get v2Undetected => 'Offlinesynkronisering er ikke tilgængelig';
 
   @override
   String get v2UndetectedMessage =>
-      'Vi kan se, at du enten har en V1-enhed, eller at din enhed ikke er tilsluttet. SD-kort-funktionalitet er kun tilgængelig for V2-enheder.';
+      'Offlinesynkronisering kræver en tilsluttet Omi-enhed med SD-kortlager. Din nuværende enhed understøtter det ikke.';
 
   @override
   String get endConversation => 'Afslut samtale';
@@ -15713,10 +15713,44 @@ class AppLocalizationsDa extends AppLocalizations {
   String get stillWorkingOnIt => 'Vi arbejder stadig på det.';
 
   @override
+  String get deviceReadyToUse => 'Klar til brug';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Din enheds firmware er for gammel til denne opdatering. Kontakt support for at få hjælp til at opdatere din enhed.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Denne firmwareopdatering kræver en nyere version af Omi-appen. Opdater appen fra din appbutik, og søg derefter efter opdateringer igen.';
+
+  @override
+  String get quietPayerTitle => 'Ingen optagelser i 5 dage';
+
+  @override
+  String get quietPayerMessage => 'Tjek din Omi.';
+
+  @override
+  String get quietPayerCheck => 'Tjek';
+
+  @override
+  String get playManageSubscription => 'Administrer abonnement';
+
+  @override
+  String get playBilledByGoogle => 'Faktureres via Google Play';
+
+  @override
+  String get playPurchasePending => 'Din betaling afventer. Omi Pro starter, når Google Play bekræfter den.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Dette Google Play-køb tilhører en anden Omi-konto.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Vi kunne ikke bekræfte købet endnu. Vi prøver igen automatisk.';
+
+  @override
+  String get playRenewalTerms =>
+      'Fornyes automatisk til den viste pris, indtil du opsiger. Administrer eller opsig når som helst i Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Ikke tilgængelig på Android';
 }

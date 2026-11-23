@@ -561,11 +561,11 @@ class AppLocalizationsLv extends AppLocalizations {
   String get hardwareSection => 'Aparatūra';
 
   @override
-  String get v2Undetected => 'V2 nav atklāts';
+  String get v2Undetected => 'Bezsaistes sinhronizācija nav pieejama';
 
   @override
   String get v2UndetectedMessage =>
-      'Redzam, ka jums ir V1 ierīce vai jūsu ierīce nav savienota. SD kartes funkcionalitāte ir pieejama tikai V2 ierīcēm.';
+      'Bezsaistes sinhronizācijai ir nepieciešama pievienota Omi ierīce ar SD kartes krātuvi. Jūsu pašreizējā ierīce to neatbalsta.';
 
   @override
   String get endConversation => 'Beigt sarunu';
@@ -15757,10 +15757,44 @@ class AppLocalizationsLv extends AppLocalizations {
   String get stillWorkingOnIt => 'Vēl tiek pie tā strādāts.';
 
   @override
+  String get deviceReadyToUse => 'Gatavs lietošanai';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Jūsu ierīces aparātprogrammatūra ir pārāk veca šim atjauninājumam. Sazinieties ar atbalsta dienestu, lai saņemtu palīdzību ierīces atjaunināšanā.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Šim aparātprogrammatūras atjauninājumam nepieciešama jaunāka Omi lietotnes versija. Atjauniniet lietotni savā lietotņu veikalā un pēc tam pārbaudiet vēlreiz.';
+
+  @override
+  String get quietPayerTitle => '5 dienas nav ierakstu';
+
+  @override
+  String get quietPayerMessage => 'Pārbaudiet savu Omi.';
+
+  @override
+  String get quietPayerCheck => 'Pārbaudīt';
+
+  @override
+  String get playManageSubscription => 'Pārvaldīt abonementu';
+
+  @override
+  String get playBilledByGoogle => 'Norēķini caur Google Play';
+
+  @override
+  String get playPurchasePending => 'Maksājums gaida. Omi Pro sāksies, tiklīdz Google Play to apstiprinās.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Šis Google Play pirkums pieder citam Omi kontam.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Pirkumu vēl neizdevās apstiprināt. Mēģināsim vēlreiz automātiski.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automātiski atjaunojas par norādīto cenu, līdz atcelsiet. Pārvaldiet vai atceliet jebkurā laikā Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Nav pieejams Android';
 }

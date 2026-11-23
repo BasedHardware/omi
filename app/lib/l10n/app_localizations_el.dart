@@ -564,11 +564,11 @@ class AppLocalizationsEl extends AppLocalizations {
   String get hardwareSection => 'Υλικό';
 
   @override
-  String get v2Undetected => 'Δεν ανιχνεύτηκε V2';
+  String get v2Undetected => 'Ο συγχρονισμός εκτός σύνδεσης δεν είναι διαθέσιμος';
 
   @override
   String get v2UndetectedMessage =>
-      'Βλέπουμε ότι είτε έχετε συσκευή V1 είτε η συσκευή σας δεν είναι συνδεδεμένη. Η λειτουργικότητα κάρτας SD είναι διαθέσιμη μόνο για συσκευές V2.';
+      'Ο συγχρονισμός εκτός σύνδεσης απαιτεί συνδεδεμένη συσκευή Omi με αποθηκευτικό χώρο κάρτας SD. Η τρέχουσα συσκευή σας δεν το υποστηρίζει.';
 
   @override
   String get endConversation => 'Τερματισμός Συνομιλίας';
@@ -15824,10 +15824,45 @@ class AppLocalizationsEl extends AppLocalizations {
   String get stillWorkingOnIt => 'Εξακολουθούμε να δουλεύουμε πάνω σε αυτό.';
 
   @override
+  String get deviceReadyToUse => 'Έτοιμο για χρήση';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Το υλικολογισμικό της συσκευής σας είναι πολύ παλιό για αυτήν την ενημέρωση. Επικοινωνήστε με την υποστήριξη για βοήθεια με την ενημέρωση της συσκευής σας.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Αυτή η ενημέρωση υλικολογισμικού απαιτεί νεότερη έκδοση της εφαρμογής Omi. Ενημερώστε την εφαρμογή από το κατάστημα εφαρμογών σας και ελέγξτε ξανά.';
+
+  @override
+  String get quietPayerTitle => 'Καμία ηχογράφηση εδώ και 5 ημέρες';
+
+  @override
+  String get quietPayerMessage => 'Έλεγξε το Omi σου.';
+
+  @override
+  String get quietPayerCheck => 'Έλεγχος';
+
+  @override
+  String get playManageSubscription => 'Διαχείριση συνδρομής';
+
+  @override
+  String get playBilledByGoogle => 'Χρέωση μέσω Google Play';
+
+  @override
+  String get playPurchasePending => 'Η πληρωμή εκκρεμεί. Το Omi Pro ξεκινά μόλις την επιβεβαιώσει το Google Play.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Αυτή η αγορά Google Play ανήκει σε άλλο λογαριασμό Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Δεν μπορέσαμε να επιβεβαιώσουμε την αγορά ακόμα. Θα ξαναδοκιμάσουμε αυτόματα.';
+
+  @override
+  String get playRenewalTerms =>
+      'Ανανεώνεται αυτόματα στην τιμή που εμφανίζεται μέχρι να την ακυρώσετε. Διαχείριση ή ακύρωση οποτεδήποτε στο Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Μη διαθέσιμο στο Android';
 }

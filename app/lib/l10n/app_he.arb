@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 לא זוהה",
+    "v2Undetected": "סנכרון לא מקוון אינו זמין",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "אנו רואים שיש לך מכשיר V1 או שהמכשיר שלך לא מחובר. פונקציונליות כרטיס SD זמינה רק למכשירי V2.",
+    "v2UndetectedMessage": "סנכרון לא מקוון דורש מכשיר Omi מחובר עם אחסון בכרטיס SD. המכשיר הנוכחי שלך אינו תומך בכך.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },
@@ -12293,6 +12293,17 @@
     "finishedSummaryReady": "הסיכום מוכן",
     "writingSummaryStatus": "כותב סיכום…",
     "stillWorkingOnIt": "עדיין עובדים על זה.",
+    "deviceReadyToUse": "מוכן לשימוש",
     "firmwareUpdateFirmwareTooOld": "הקושחה של המכשיר שלך ישנה מדי לעדכון הזה. יש לפנות לתמיכה לקבלת עזרה בעדכון המכשיר.",
-    "firmwareUpdateAppRequired": "עדכון הקושחה הזה דורש גרסה חדשה יותר של אפליקציית Omi. יש לעדכן את האפליקציה מחנות האפליקציות שלך, ואז לבדוק שוב."
+    "firmwareUpdateAppRequired": "עדכון הקושחה הזה דורש גרסה חדשה יותר של אפליקציית Omi. יש לעדכן את האפליקציה מחנות האפליקציות שלך, ואז לבדוק שוב.",
+    "quietPayerTitle": "אין הקלטות כבר 5 ימים",
+    "quietPayerMessage": "בדקו את ה-Omi שלכם.",
+    "quietPayerCheck": "בדיקה",
+    "playManageSubscription": "ניהול המינוי",
+    "playBilledByGoogle": "החיוב דרך Google Play",
+    "playPurchasePending": "התשלום ממתין. Omi Pro יתחיל ברגע ש-Google Play יאשר אותו.",
+    "playPurchaseOtherAccount": "הרכישה הזו ב-Google Play שייכת לחשבון Omi אחר.",
+    "playPurchaseNotConfirmed": "עדיין לא הצלחנו לאשר את הרכישה. ננסה שוב אוטומטית.",
+    "playRenewalTerms": "מתחדש אוטומטית במחיר המוצג עד שתבטלו. ניתן לנהל או לבטל בכל עת ב-Google Play.",
+    "playPaidAppUnavailable": "לא זמין ב-Android"
 }
