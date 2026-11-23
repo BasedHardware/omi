@@ -213,12 +213,15 @@ class _Harness {
   final _Capture capture;
 }
 
-Future<_Harness> _pump(WidgetTester tester, _Capture capture, {ConversationsV3Provider? v3}) async {
+Future<_Harness> _pump(WidgetTester tester, _Capture capture,
+    {ConversationsV3Provider? v3, DateTime? filterStart}) async {
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   final home = HomeProvider()..setIndex(HomeProvider.tasksTab);
+  final conversations = ConversationProvider(isSignedIn: () => false)..selectedStartDate = filterStart;
+  addTearDown(conversations.dispose);
   final device = _StubDeviceProvider();
   final connectivity = _StubConnectivityProvider();
   final usage = UsageProvider();
@@ -232,6 +235,7 @@ Future<_Harness> _pump(WidgetTester tester, _Capture capture, {ConversationsV3Pr
     MultiProvider(
       providers: [
         ChangeNotifierProvider<HomeProvider>.value(value: home),
+        ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
         if (v3 != null) ChangeNotifierProvider<ConversationsV3Provider>.value(value: v3),
         ChangeNotifierProvider<DeviceProvider>.value(value: device),
@@ -481,6 +485,25 @@ void main() {
     expect(v3.finishRow, same(row));
     // Keep the fixture's fake clock and use an explicit terminal settlement before teardown.
     v3.acknowledgeManualFinish(row);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('v3 Wrap Up opens the result route when a date filter hides the Home processing row', (tester) async {
+    final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
+    addTearDown(v3.dispose);
+    final recording = _recordingDoc('rec-1');
+    final capture = _Capture(answer: CreateConversationResponse(messages: const [], conversation: recording))
+      ..verifiedLiveServerRecordingId = recording.id;
+    final filterStart = DateTime(2026, 11, 1);
+    await _pump(tester, capture, v3: v3, filterStart: filterStart);
+    final row = OptimisticProcessingPlaceholder.conversation();
+    v3.startManualFinish(row, recording.id);
+    v3.settleManualFinish(row, recording);
+
+    final page = await _finishAndCapturePushed(tester, capture) as FinishedCapturePage?;
+    expect(page?.recordingId, recording.id);
+    expect(
+        tester.element(find.byType(FinishedCapturePage)).read<ConversationProvider>().selectedStartDate, filterStart);
     await tester.pumpWidget(const SizedBox());
   });
 

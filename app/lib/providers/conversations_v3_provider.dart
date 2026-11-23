@@ -103,8 +103,12 @@ class ConversationsV3Provider extends ChangeNotifier {
     return true;
   }
 
-  /// Home supplies its visible rows so an excluded or failed row cannot take over the slot.
-  bool finishHasSuccessor(Iterable<ServerConversation> visibleRows) => visibleRows.any(
+  /// Home supplies visible successors and failed conversations separately.
+  bool finishHasSuccessor(Iterable<ServerConversation> visibleRows) => _matchesFinish(visibleRows);
+
+  bool finishHasFailedMatch(Iterable<ServerConversation> failedRows) => _finishAccepted && _matchesFinish(failedRows);
+
+  bool _matchesFinish(Iterable<ServerConversation> rows) => rows.any(
         (row) =>
             row.v3?.tileState != ConversationTileState.live &&
             row.status != ConversationStatus.in_progress &&
@@ -119,10 +123,11 @@ class ConversationsV3Provider extends ChangeNotifier {
                             true))),
       );
 
-  void acknowledgeManualFinish(ServerConversation row) {
-    if (!_finishAccepted || !identical(finishRow, row)) return;
+  bool acknowledgeManualFinish(ServerConversation row) {
+    if (!_finishAccepted || !identical(finishRow, row)) return false;
     _clearManualFinish(keepClosedLive: true);
     notifyListeners();
+    return true;
   }
 
   void _armFinishExpiry() {

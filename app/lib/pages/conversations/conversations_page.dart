@@ -353,7 +353,7 @@ class _ConversationsPageState extends State<ConversationsPage>
       context.read<ConversationsV3Provider?>()?.suppressesLegacy != true &&
       !_feed!.unsupported &&
       !p.hasActiveSearch &&
-      !_hasActiveFilter(p) &&
+      !p.hasActiveHomeFilter &&
       !p.showShortConversations &&
       !p.showDiscardedConversations;
   void _prefetchCards() {
@@ -497,7 +497,7 @@ class _ConversationsPageState extends State<ConversationsPage>
     _feed?.setActive(active &&
         !_wasBackgrounded &&
         !source.hasActiveSearch &&
-        !_hasActiveFilter(source) &&
+        !source.hasActiveHomeFilter &&
         !source.showShortConversations &&
         !source.showDiscardedConversations);
     if (active && _feed?.preparationReady == true) unawaited(_feed!.refresh());
@@ -532,7 +532,7 @@ class _ConversationsPageState extends State<ConversationsPage>
       final source = context.read<ConversationProvider>();
       _feed?.setActive(_homeTabActive &&
           !source.hasActiveSearch &&
-          !_hasActiveFilter(source) &&
+          !source.hasActiveHomeFilter &&
           !source.showShortConversations &&
           !source.showDiscardedConversations);
       _scheduleDayRollover();
@@ -828,15 +828,6 @@ class _ConversationsPageState extends State<ConversationsPage>
     return provider.conversations.where((c) => !c.discarded).length;
   }
 
-  // True when any conversation filter is active. When filters are on, the
-  // `conversations` list reflects filtered server results (e.g. an empty list
-  // when "Starred" + a folder yield no matches). Without this, the title and
-  // folder-tab chips would hide on empty filtered results, leaving no way to
-  // clear filters short of restarting the app.
-  bool _hasActiveFilter(ConversationProvider provider) {
-    return provider.showStarredOnly || provider.selectedFolderId != null || provider.selectedStartDate != null;
-  }
-
   Widget _buildLoadingShimmer() {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -889,7 +880,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             !v3Pending &&
             !feed.unsupported &&
             !convoProvider.hasActiveSearch &&
-            !_hasActiveFilter(convoProvider) &&
+            !convoProvider.hasActiveHomeFilter &&
             !convoProvider.showShortConversations &&
             !convoProvider.showDiscardedConversations;
         if (feed != null) {
@@ -898,7 +889,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             feed.setActive(!_wasBackgrounded &&
                 _homeTabActive &&
                 !convoProvider.hasActiveSearch &&
-                !_hasActiveFilter(convoProvider) &&
+                !convoProvider.hasActiveHomeFilter &&
                 !convoProvider.showShortConversations &&
                 !convoProvider.showDiscardedConversations);
             if (feed.preparationReady &&
@@ -909,23 +900,27 @@ class _ConversationsPageState extends State<ConversationsPage>
             if (cardsOn && widget.requestInitialLoad && !feed.initialized) unawaited(feed.start());
           });
         }
-        final defaultHome = !convoProvider.hasActiveSearch &&
-            !_hasActiveFilter(convoProvider) &&
-            !convoProvider.showShortConversations &&
-            !convoProvider.showDiscardedConversations &&
-            !convoProvider.isSelectionModeActive;
+        final defaultHome = convoProvider.showsDefaultHome;
         final hiddenByLive =
             episodeLive && defaultHome ? hiddenLiveConversations(episodes!.liveConversationIds) : const <String>{};
         final v3Home = v3On && defaultHome;
         final v3Live = v3Home ? v3!.live : null;
-        final manualFinish = v3Home ? v3!.finishRow : null;
-        final finishHandedOff = manualFinish != null &&
+        final manualFinish = v3On ? v3!.finishRow : null;
+        final finishFailed = manualFinish != null &&
+            v3!.finishHasFailedMatch(convoProvider.conversations.where(
+              (row) => row.v3?.recording != true && isFailedConversation(row),
+            ));
+        final finishHandedOff = v3Home &&
+            manualFinish != null &&
             v3!.finishHasSuccessor(
                 convoProvider.groupedConversations.values.expand((rows) => rows).where(shownOnV3Home));
-        final showManualFinish = manualFinish != null && !finishHandedOff;
-        if (finishHandedOff) {
+        final showManualFinish = v3Home && manualFinish != null && !finishHandedOff && !finishFailed;
+        if (manualFinish != null && (finishHandedOff || finishFailed)) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) v3.acknowledgeManualFinish(manualFinish);
+            if (!mounted) return;
+            if (v3!.acknowledgeManualFinish(manualFinish) && finishFailed) {
+              OmiFeedback.error(context, context.l10n.attentionSummaryFailed);
+            }
           });
         }
         // A streaming capture with no server window to show (none yet, between windows, or one Home
@@ -1371,7 +1366,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                   snapshot.conversations.isEmpty &&
                   !hasProcessingConversations &&
                   !hasRecordings &&
-                  !_hasActiveFilter(convoProvider))
+                  !convoProvider.hasActiveHomeFilter)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(child: ConversationApiStatus(provider: convoProvider)),
@@ -1382,7 +1377,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                   !hasProcessingConversations &&
                   !hasRecordings &&
                   !isShowingConversationSkeleton &&
-                  !_hasActiveFilter(convoProvider) &&
+                  !convoProvider.hasActiveHomeFilter &&
                   (!cardsOn || (feed.initialized && !feed.partial)))
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.

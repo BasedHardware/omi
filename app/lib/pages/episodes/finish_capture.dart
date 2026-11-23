@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/episodes/finished_capture_page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -136,7 +137,9 @@ bool presentFinishOutcome(
   VoidCallback? onRetry,
 }) {
   final v3 = context.read<ConversationsV3Provider?>();
-  final homeShowsProcessing = outcome is FinishProcessing && v3?.finishRow != null;
+  final homeShowsProcessing = outcome is FinishProcessing &&
+      v3?.finishRow != null &&
+      context.read<ConversationProvider?>()?.showsDefaultHome == true;
   final page = homeShowsProcessing ? null : finishedPageFor(outcome);
   final message = finishMessage(context, outcome);
   final stays = outcome is FinishFailed || outcome is FinishNotReceived;

@@ -1354,13 +1354,6 @@ void main() {
         await tester.pump();
         expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
 
-        home.conversations.upsertConversation(
-          _conversation('live-1', home.liveStart, 'Launch checklist').withHomeStep('failed'),
-        );
-        await tester.pump();
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget,
-            reason: 'a failed Activity row does not take over the Home slot');
-
         home.liveOpen = false;
         await v3.refresh();
         final reads = home.conversations.listReads;
@@ -1386,6 +1379,58 @@ void main() {
         await tester.pump();
         expect(find.byType(V3LivePlaceholderRow), findsOneWidget,
             reason: 'the next capture can show Listening before its live window exists');
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
+
+    testWidgets('a matching failed summary settles the manual finish and stops list polling', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final base = theme();
+        final feedbackTheme = base.copyWith(
+          snackBarTheme: base.snackBarTheme.copyWith(
+            contentTextStyle: base.snackBarTheme.contentTextStyle?.copyWith(fontFamily: 'SF Pro Display'),
+          ),
+        );
+        final home =
+            await _pumpHome(tester, v3: true, boundary: boundary, theme: feedbackTheme, size: const Size(393, 852));
+        final v3 = home.conversationsV3;
+        final recording = home.conversations.conversations.firstWhere((row) => row.id == 'rec-1');
+        home.conversations.conversations.removeWhere((row) =>
+            row.v3?.tileState == ConversationTileState.transcribing ||
+            row.v3?.tileState == ConversationTileState.writing);
+        home.conversations.groupConversationsByDate();
+        final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: recording.id);
+        v3.startManualFinish(pending, recording.id, captureId: home.capture.activeRecordingId);
+        expect(v3.settleManualFinish(pending, recording), isTrue);
+        home.liveOpen = false;
+        await v3.refresh();
+        await tester.pump();
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget,
+            reason: 'the unrelated failed conversation must not settle this finish');
+
+        home.conversations.upsertConversation(
+          _conversation('live-1', home.liveStart, 'Launch checklist',
+              v3: const ConversationV3Fields(
+                  kind: 'conversation', tileState: ConversationTileState.failed, recordingIds: ['rec-1'])),
+        );
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(v3.finishRow, isNull);
+        expect(find.byKey(const Key('home_processing_row')), findsNothing);
+        expect(find.text("Couldn't summarize this conversation"), findsOneWidget);
+        await shoot(tester, '003-mobile-ios-v3-manual-finish-failed');
+
+        await tester.pump(const Duration(minutes: 3));
+        final reads = home.conversations.listReads;
+        v3.tick();
+        await tester.pump();
+        expect(home.conversations.listReads, reads);
         await _dispose(tester, home);
         debugDefaultTargetPlatformOverride = null;
       });
