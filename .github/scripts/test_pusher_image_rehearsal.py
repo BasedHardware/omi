@@ -281,6 +281,15 @@ class RehearsalTest(unittest.TestCase):
             self.live.transition(self.live.target, PRIOR, CANDIDATE, dry_run=False)
         self.assertEqual(self.live.requests, [])
 
+    def test_refuses_absent_required_dependency(self):
+        for cluster in (self.live, self.isolated):
+            container = cluster.target["spec"]["template"]["spec"]["containers"][1]
+            container["env"][1]["valueFrom"]["secretKeyRef"]["optional"] = False
+        with self.assertRaisesRegex(helper.Refused, "required_dependency_absent"):
+            self.rehearsal.rehearse(self.result("rehearse"))
+        self.assertEqual(self.live.requests, [])
+        self.assertEqual(self.isolated.requests, [])
+
     def test_failed_exact_live_inverse_leaves_candidate_and_refuses(self):
         result = self.result("rehearse")
         self.rehearsal.rehearse(result)

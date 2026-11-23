@@ -206,10 +206,10 @@ def config_references(value):
             if key in kinds and isinstance(item, dict):
                 name = item.get("name") or item.get("secretName")
                 if isinstance(name, str) and name:
-                    yield kinds[key], name
+                    yield (kinds[key], name), item.get("optional") is True
             if key == "imagePullSecrets" and isinstance(item, list):
                 for secret in item:
-                    yield "secret", secret["name"]
+                    yield ("secret", secret["name"]), False
             yield from config_references(item)
     elif isinstance(value, list):
         for item in value:
@@ -443,10 +443,15 @@ class Rehearsal:
                 "invalid_dependency_inventory",
             )
             expected[kind, name] = item["version"]
-        refs = set(config_references(live["spec"]["template"]["spec"]))
+        references = list(config_references(live["spec"]["template"]["spec"]))
+        refs = {ref for ref, _ in references}
         require(
             SHARED in refs and refs <= expected.keys() and expected[SHARED] is not None,
             "shared_reference_or_dependency_missing",
+        )
+        require(
+            all(optional or expected[ref] is not None for ref, optional in references),
+            "required_dependency_absent",
         )
         for (kind, name), identity_version in sorted(expected.items()):
             actual = self.live.get(kind, name, namespace=NAMESPACE, optional=True)
