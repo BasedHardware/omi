@@ -4736,9 +4736,19 @@
     "finishedSummaryReady": "Santrauka paruošta",
     "writingSummaryStatus": "Rašoma santrauka…",
     "stillWorkingOnIt": "Vis dar dirbama.",
+    "deviceReadyToUse": "Paruošta naudoti",
     "firmwareUpdateFirmwareTooOld": "Jūsų įrenginio programinė aparatinė įranga per sena šiam naujinimui. Kreipkitės į palaikymo tarnybą, kad padėtų atnaujinti įrenginį.",
     "firmwareUpdateAppRequired": "Šiam programinės aparatinės įrangos naujinimui reikia naujesnės „Omi“ programėlės versijos. Atnaujinkite programėlę savo programėlių parduotuvėje ir patikrinkite dar kartą.",
     "quietPayerTitle": "5 dienas nėra įrašų",
     "quietPayerMessage": "Patikrinkite savo Omi.",
-    "quietPayerCheck": "Patikrinti"
+    "quietPayerCheck": "Patikrinti",
+    "playManageSubscription": "Tvarkyti prenumeratą",
+    "playBilledByGoogle": "Mokestis per Google Play",
+    "playPurchasePending": "Mokėjimas laukia. Omi Pro prasidės, kai Google Play jį patvirtins.",
+    "playPurchaseOtherAccount": "Šis Google Play pirkinys priklauso kitai Omi paskyrai.",
+    "playPurchaseNotConfirmed": "Pirkinio dar nepavyko patvirtinti. Bandysime dar kartą automatiškai.",
+    "playRenewalTerms": "Automatiškai atnaujinama nurodyta kaina, kol atšauksite. Tvarkykite ar atšaukite bet kada Google Play.",
+    "playPaidAppUnavailable": "Android nepasiekiama",
+    "pageNotAvailableInApp": "Šis puslapis programėlėje nepasiekiamas.",
+    "shopOrderPlacedCheckEmail": "Užsakymas pateiktas. Patvirtinimą rasite el. pašte."
 }

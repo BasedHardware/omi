@@ -15736,6 +15736,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get stillWorkingOnIt => 'Masih dikerjakan.';
 
   @override
+  String get deviceReadyToUse => 'Siap digunakan';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmware perangkat Anda terlalu lama untuk pembaruan ini. Hubungi dukungan untuk bantuan memperbarui perangkat Anda.';
 
@@ -15751,4 +15754,32 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Periksa';
+
+  @override
+  String get playManageSubscription => 'Kelola langganan';
+
+  @override
+  String get playBilledByGoogle => 'Ditagih oleh Google Play';
+
+  @override
+  String get playPurchasePending => 'Pembayaran tertunda. Omi Pro dimulai setelah Google Play mengonfirmasinya.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Pembelian Google Play ini milik akun Omi lain.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Kami belum bisa mengonfirmasi pembelian. Kami akan mencoba lagi otomatis.';
+
+  @override
+  String get playRenewalTerms =>
+      'Diperpanjang otomatis dengan harga yang ditampilkan sampai Anda membatalkan. Kelola atau batalkan kapan saja di Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Tidak tersedia di Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Halaman ini tidak tersedia di aplikasi.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Pesanan dibuat. Periksa email Anda untuk konfirmasinya.';
 }

@@ -642,10 +642,28 @@ overlay:
           MCP_OAUTH_CLIENTS_JSON:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
+          # Google Play Billing account-id HMAC key. Create the secret (32+ random chars) and grant
+          # backend-runtime@ secretAccessor before the first deploy of this config.
+          PLAY_ACCOUNT_ID_HMAC_KEY:
+            secret: PLAY_ACCOUNT_ID_HMAC_KEY
+            version: latest
         env:
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
+          # Google Play Billing (Android). ANDROID_BILLING=stripe keeps new purchases on Stripe ('play' = everyone).
+          # Test accounts go in the android-play-billing rollout cohort (Firestore), never here.
+          ANDROID_BILLING: {value: stripe, category: rollout}
+          # RTDN push and reconcile identities:
+          PLAY_RTDN_OIDC_AUDIENCE: {value: 'https://api.omi.me/v2/internal/play-billing/rtdn', category: service_discovery}
+          PLAY_RTDN_PUSH_SA: {value: play-billing-rtdn-push@based-hardware.iam.gserviceaccount.com, category: service_discovery}
+          PLAY_RECONCILE_OIDC_AUDIENCE: {value: 'https://api.omi.me/v2/internal/play-billing/reconcile', category: service_discovery}
+          PLAY_RECONCILE_INVOKER_SA: {value: play-billing-reconcile@based-hardware.iam.gserviceaccount.com, category: service_discovery}
+          # First Android version code with the Play Billing hardening (1616 predates it). Below it, or with no
+          # cohort membership and ANDROID_BILLING=stripe, nobody is sent to Google Play.
+          ANDROID_PLAY_BILLING_MIN_BUILD: {value: '1617', category: rollout}
+          # Empty: cohort members come from the android-play-billing rollout cohort document instead.
+          ANDROID_PLAY_BILLING_COHORT: {value: '', category: rollout}
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}

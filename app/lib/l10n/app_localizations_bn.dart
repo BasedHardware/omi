@@ -15716,6 +15716,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get stillWorkingOnIt => 'এখনও কাজ চলছে।';
 
   @override
+  String get deviceReadyToUse => 'ব্যবহারের জন্য প্রস্তুত';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'এই আপডেটের জন্য আপনার ডিভাইসের ফার্মওয়্যার অনেক পুরোনো। ডিভাইস আপডেট করতে সাহায্যের জন্য সহায়তা দলের সঙ্গে যোগাযোগ করুন।';
 
@@ -15731,4 +15734,32 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'দেখুন';
+
+  @override
+  String get playManageSubscription => 'সাবস্ক্রিপশন পরিচালনা';
+
+  @override
+  String get playBilledByGoogle => 'Google Play-এর মাধ্যমে বিল করা হয়';
+
+  @override
+  String get playPurchasePending => 'আপনার পেমেন্ট অপেক্ষমাণ। Google Play নিশ্চিত করলেই Omi Pro শুরু হবে।';
+
+  @override
+  String get playPurchaseOtherAccount => 'এই Google Play কেনাকাটা অন্য একটি Omi অ্যাকাউন্টের।';
+
+  @override
+  String get playPurchaseNotConfirmed => 'কেনাকাটা এখনও নিশ্চিত করা যায়নি। আমরা নিজে থেকে আবার চেষ্টা করব।';
+
+  @override
+  String get playRenewalTerms =>
+      'বাতিল না করা পর্যন্ত দেখানো দামে স্বয়ংক্রিয়ভাবে নবায়ন হয়। যেকোনো সময় Google Play-এ পরিচালনা বা বাতিল করুন।';
+
+  @override
+  String get playPaidAppUnavailable => 'Android-এ উপলভ্য নয়';
+
+  @override
+  String get pageNotAvailableInApp => 'এই পৃষ্ঠাটি অ্যাপে উপলব্ধ নয়।';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'অর্ডার দেওয়া হয়েছে। নিশ্চিতকরণের জন্য আপনার ইমেল দেখুন।';
 }

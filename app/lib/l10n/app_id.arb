@@ -4771,9 +4771,19 @@
     "finishedSummaryReady": "Ringkasan siap",
     "writingSummaryStatus": "Menulis ringkasan…",
     "stillWorkingOnIt": "Masih dikerjakan.",
+    "deviceReadyToUse": "Siap digunakan",
     "firmwareUpdateFirmwareTooOld": "Firmware perangkat Anda terlalu lama untuk pembaruan ini. Hubungi dukungan untuk bantuan memperbarui perangkat Anda.",
     "firmwareUpdateAppRequired": "Pembaruan firmware ini memerlukan aplikasi Omi versi lebih baru. Perbarui aplikasi dari toko aplikasi Anda, lalu periksa lagi.",
     "quietPayerTitle": "Tidak ada rekaman dalam 5 hari",
     "quietPayerMessage": "Periksa Omi Anda.",
-    "quietPayerCheck": "Periksa"
+    "quietPayerCheck": "Periksa",
+    "playManageSubscription": "Kelola langganan",
+    "playBilledByGoogle": "Ditagih oleh Google Play",
+    "playPurchasePending": "Pembayaran tertunda. Omi Pro dimulai setelah Google Play mengonfirmasinya.",
+    "playPurchaseOtherAccount": "Pembelian Google Play ini milik akun Omi lain.",
+    "playPurchaseNotConfirmed": "Kami belum bisa mengonfirmasi pembelian. Kami akan mencoba lagi otomatis.",
+    "playRenewalTerms": "Diperpanjang otomatis dengan harga yang ditampilkan sampai Anda membatalkan. Kelola atau batalkan kapan saja di Google Play.",
+    "playPaidAppUnavailable": "Tidak tersedia di Android",
+    "pageNotAvailableInApp": "Halaman ini tidak tersedia di aplikasi.",
+    "shopOrderPlacedCheckEmail": "Pesanan dibuat. Periksa email Anda untuk konfirmasinya."
 }

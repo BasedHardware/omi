@@ -15750,6 +15750,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get stillWorkingOnIt => 'Još radimo na tome.';
 
   @override
+  String get deviceReadyToUse => 'Spremno za korištenje';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmver vašeg uređaja je prestar za ovo ažuriranje. Obratite se podršci za pomoć pri ažuriranju uređaja.';
 
@@ -15765,4 +15768,32 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Provjeri';
+
+  @override
+  String get playManageSubscription => 'Upravljaj pretplatom';
+
+  @override
+  String get playBilledByGoogle => 'Naplaćuje se putem Google Playa';
+
+  @override
+  String get playPurchasePending => 'Plaćanje je na čekanju. Omi Pro počinje kad ga Google Play potvrdi.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ova kupovina na Google Playu pripada drugom Omi računu.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Kupovinu još nismo mogli potvrditi. Pokušat ćemo ponovo automatski.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automatski se obnavlja po prikazanoj cijeni dok ne otkažete. Upravljajte ili otkažite bilo kada na Google Playu.';
+
+  @override
+  String get playPaidAppUnavailable => 'Nije dostupno na Androidu';
+
+  @override
+  String get pageNotAvailableInApp => 'Ova stranica nije dostupna u aplikaciji.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Narudžba je poslana. Potvrdu potražite u e-pošti.';
 }

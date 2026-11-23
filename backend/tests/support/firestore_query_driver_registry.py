@@ -417,6 +417,10 @@ _add(
         domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
     )
 )
+# Play billing reconcile: one single-field ``next_check_at`` range, oldest first.
+_add(DriverEntry('database.play_subscriptions.due_for_reconcile', neutrals={'now': _NOW, 'limit': _LIMIT}))
+# Account deletion: single-field uid equality on the purchase and account-map collections.
+_add(DriverEntry('database.play_subscriptions.purge_account_records', base={'uid': UID}))
 # The pager's separate operations database uses a built-in next_at index.
 _add(DriverEntry('paging.store.due_deliveries', base={'now': T0}))
 # Sealed owner groups use an existing single-field uid index on obligations.

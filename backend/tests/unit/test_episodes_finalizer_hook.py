@@ -367,7 +367,7 @@ def test_detail_intent_survives_quiet_window_and_expiry_restores_wait(monkeypatc
     member_notes.open_recording('u', row)
     enqueue.assert_called_once()
     assert redis.set.call_args.kwargs['ex'] > processing_hold.MAX_HOLD_SECONDS
-    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *a: row)
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *a, **_kwargs: row)
     monkeypatch.setattr(callback, 'get_firestore_client', lambda: None)
     monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *a: True)
     monkeypatch.setattr(

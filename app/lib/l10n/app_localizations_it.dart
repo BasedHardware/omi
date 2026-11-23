@@ -15800,6 +15800,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get stillWorkingOnIt => 'Ancora al lavoro.';
 
   @override
+  String get deviceReadyToUse => 'Pronto per l\'uso';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Il firmware del tuo dispositivo è troppo vecchio per questo aggiornamento. Contatta l\'assistenza per ricevere aiuto con l\'aggiornamento del dispositivo.';
 
@@ -15815,4 +15818,33 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Controlla';
+
+  @override
+  String get playManageSubscription => 'Gestisci abbonamento';
+
+  @override
+  String get playBilledByGoogle => 'Addebitato tramite Google Play';
+
+  @override
+  String get playPurchasePending => 'Il pagamento è in sospeso. Omi Pro inizia appena Google Play lo conferma.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Questo acquisto su Google Play appartiene a un altro account Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Non è stato ancora possibile confermare l\'acquisto. Riproveremo automaticamente.';
+
+  @override
+  String get playRenewalTerms =>
+      'Si rinnova automaticamente al prezzo indicato finché non disdici. Gestisci o disdici in qualsiasi momento su Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Non disponibile su Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Questa pagina non è disponibile nell\'app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Ordine effettuato. Controlla l\'email per la conferma.';
 }

@@ -15758,6 +15758,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get stillWorkingOnIt => 'Masih memprosesnya.';
 
   @override
+  String get deviceReadyToUse => 'Sedia untuk digunakan';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Perisian tegar peranti anda terlalu lama untuk kemas kini ini. Hubungi sokongan untuk mendapatkan bantuan mengemas kini peranti anda.';
 
@@ -15773,4 +15776,33 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Semak';
+
+  @override
+  String get playManageSubscription => 'Urus langganan';
+
+  @override
+  String get playBilledByGoogle => 'Dibilkan oleh Google Play';
+
+  @override
+  String get playPurchasePending => 'Pembayaran anda belum selesai. Omi Pro bermula sebaik Google Play mengesahkannya.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Pembelian Google Play ini milik akaun Omi lain.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Kami belum dapat mengesahkan pembelian. Kami akan cuba lagi secara automatik.';
+
+  @override
+  String get playRenewalTerms =>
+      'Diperbaharui secara automatik pada harga yang ditunjukkan sehingga anda membatalkannya. Urus atau batalkan bila-bila masa di Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Tidak tersedia di Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Halaman ini tidak tersedia dalam apl.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Pesanan dibuat. Semak e-mel anda untuk pengesahan.';
 }

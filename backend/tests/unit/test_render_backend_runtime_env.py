@@ -854,6 +854,8 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
             # Keiki iMessage/WhatsApp signing secrets (David, 2026-10-30: build the Keiki integration).
             'KEIKI_IMESSAGE_SIGNING_SECRET',
             'KEIKI_WHATSAPP_SIGNING_SECRET',
+            # Google Play Billing account-id HMAC key (purchase binding; backend serves the Play routes).
+            'PLAY_ACCOUNT_ID_HMAC_KEY',
         },
         'backend-sync': common
         | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},

@@ -15846,6 +15846,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get stillWorkingOnIt => 'Pinagtatrabahuhan pa rin ito.';
 
   @override
+  String get deviceReadyToUse => 'Handa nang gamitin';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Napakaluma na ng firmware ng iyong device para sa update na ito. Makipag-ugnayan sa support para sa tulong sa pag-update ng iyong device.';
 
@@ -15861,4 +15864,34 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Tingnan';
+
+  @override
+  String get playManageSubscription => 'Pamahalaan ang subscription';
+
+  @override
+  String get playBilledByGoogle => 'Sinisingil ng Google Play';
+
+  @override
+  String get playPurchasePending =>
+      'Nakabinbin ang bayad mo. Magsisimula ang Omi Pro kapag kinumpirma ito ng Google Play.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ang pagbiling ito sa Google Play ay pag-aari ng ibang Omi account.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Hindi pa namin makumpirma ang iyong pagbili. Susubukan naming muli nang awtomatiko.';
+
+  @override
+  String get playRenewalTerms =>
+      'Awtomatikong nire-renew sa ipinakitang presyo hanggang kanselahin mo. Pamahalaan o kanselahin anumang oras sa Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Hindi available sa Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Hindi available ang page na ito sa app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Naipadala na ang order. Tingnan ang email mo para sa kumpirmasyon.';
 }

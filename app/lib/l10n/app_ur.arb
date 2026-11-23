@@ -12293,9 +12293,19 @@
     "finishedSummaryReady": "خلاصہ تیار ہے",
     "writingSummaryStatus": "خلاصہ لکھا جا رہا ہے…",
     "stillWorkingOnIt": "ابھی کام جاری ہے۔",
+    "deviceReadyToUse": "استعمال کے لیے تیار",
     "firmwareUpdateFirmwareTooOld": "آپ کے آلے کا فرم ویئر اس اپ ڈیٹ کے لیے بہت پرانا ہے۔ آلے کو اپ ڈیٹ کرنے میں مدد کے لیے سپورٹ سے رابطہ کریں۔",
     "firmwareUpdateAppRequired": "اس فرم ویئر اپ ڈیٹ کے لیے Omi ایپ کا نیا ورژن درکار ہے۔ اپنے ایپ اسٹور سے ایپ کو اپ ڈیٹ کریں، پھر دوبارہ چیک کریں۔",
     "quietPayerTitle": "5 دن سے کوئی ریکارڈنگ نہیں",
     "quietPayerMessage": "اپنا Omi چیک کریں۔",
-    "quietPayerCheck": "چیک کریں"
+    "quietPayerCheck": "چیک کریں",
+    "playManageSubscription": "سبسکرپشن کا انتظام کریں",
+    "playBilledByGoogle": "Google Play کے ذریعے بل کیا جاتا ہے",
+    "playPurchasePending": "آپ کی ادائیگی زیر التواء ہے۔ Google Play کی تصدیق ہوتے ہی Omi Pro شروع ہو جائے گا۔",
+    "playPurchaseOtherAccount": "یہ Google Play خریداری کسی دوسرے Omi اکاؤنٹ کی ہے۔",
+    "playPurchaseNotConfirmed": "ہم ابھی آپ کی خریداری کی تصدیق نہیں کر سکے۔ ہم خود بخود دوبارہ کوشش کریں گے۔",
+    "playRenewalTerms": "منسوخ کرنے تک دکھائی گئی قیمت پر خودکار طور پر تجدید ہوتی ہے۔ Google Play میں کسی بھی وقت انتظام یا منسوخ کریں۔",
+    "playPaidAppUnavailable": "Android پر دستیاب نہیں",
+    "pageNotAvailableInApp": "یہ صفحہ ایپ میں دستیاب نہیں ہے۔",
+    "shopOrderPlacedCheckEmail": "آرڈر دے دیا گیا۔ تصدیق کے لیے اپنی ای میل دیکھیں۔"
 }

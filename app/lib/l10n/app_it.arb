@@ -4736,9 +4736,19 @@
     "finishedSummaryReady": "Riepilogo pronto",
     "writingSummaryStatus": "Scrittura del riepilogo…",
     "stillWorkingOnIt": "Ancora al lavoro.",
+    "deviceReadyToUse": "Pronto per l'uso",
     "firmwareUpdateFirmwareTooOld": "Il firmware del tuo dispositivo è troppo vecchio per questo aggiornamento. Contatta l'assistenza per ricevere aiuto con l'aggiornamento del dispositivo.",
     "firmwareUpdateAppRequired": "Questo aggiornamento del firmware richiede una versione più recente dell'app Omi. Aggiorna l'app dal tuo store di applicazioni, poi controlla di nuovo.",
     "quietPayerTitle": "Nessuna registrazione da 5 giorni",
     "quietPayerMessage": "Controlla il tuo Omi.",
-    "quietPayerCheck": "Controlla"
+    "quietPayerCheck": "Controlla",
+    "playManageSubscription": "Gestisci abbonamento",
+    "playBilledByGoogle": "Addebitato tramite Google Play",
+    "playPurchasePending": "Il pagamento è in sospeso. Omi Pro inizia appena Google Play lo conferma.",
+    "playPurchaseOtherAccount": "Questo acquisto su Google Play appartiene a un altro account Omi.",
+    "playPurchaseNotConfirmed": "Non è stato ancora possibile confermare l'acquisto. Riproveremo automaticamente.",
+    "playRenewalTerms": "Si rinnova automaticamente al prezzo indicato finché non disdici. Gestisci o disdici in qualsiasi momento su Google Play.",
+    "playPaidAppUnavailable": "Non disponibile su Android",
+    "pageNotAvailableInApp": "Questa pagina non è disponibile nell'app.",
+    "shopOrderPlacedCheckEmail": "Ordine effettuato. Controlla l'email per la conferma."
 }

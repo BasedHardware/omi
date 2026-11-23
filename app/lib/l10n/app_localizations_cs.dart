@@ -15721,6 +15721,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get stillWorkingOnIt => 'Stále na tom pracujeme.';
 
   @override
+  String get deviceReadyToUse => 'Připraveno k použití';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmware vašeho zařízení je pro tuto aktualizaci příliš starý. Obraťte se na podporu, která vám s aktualizací zařízení pomůže.';
 
@@ -15736,4 +15739,32 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Zkontrolovat';
+
+  @override
+  String get playManageSubscription => 'Spravovat předplatné';
+
+  @override
+  String get playBilledByGoogle => 'Účtováno přes Google Play';
+
+  @override
+  String get playPurchasePending => 'Platba čeká na vyřízení. Omi Pro začne, jakmile ji Google Play potvrdí.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Tento nákup v Google Play patří jinému účtu Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Nákup se zatím nepodařilo potvrdit. Zkusíme to znovu automaticky.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automaticky se obnovuje za uvedenou cenu, dokud ho nezrušíte. Spravovat nebo zrušit ho můžete kdykoli v Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Na Androidu není k dispozici';
+
+  @override
+  String get pageNotAvailableInApp => 'Tato stránka není v aplikaci dostupná.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Objednávka byla odeslána. Potvrzení najdete v e-mailu.';
 }

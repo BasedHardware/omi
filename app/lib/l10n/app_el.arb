@@ -4736,9 +4736,19 @@
     "finishedSummaryReady": "Η σύνοψη είναι έτοιμη",
     "writingSummaryStatus": "Γράφεται η σύνοψη…",
     "stillWorkingOnIt": "Εξακολουθούμε να δουλεύουμε πάνω σε αυτό.",
+    "deviceReadyToUse": "Έτοιμο για χρήση",
     "firmwareUpdateFirmwareTooOld": "Το υλικολογισμικό της συσκευής σας είναι πολύ παλιό για αυτήν την ενημέρωση. Επικοινωνήστε με την υποστήριξη για βοήθεια με την ενημέρωση της συσκευής σας.",
     "firmwareUpdateAppRequired": "Αυτή η ενημέρωση υλικολογισμικού απαιτεί νεότερη έκδοση της εφαρμογής Omi. Ενημερώστε την εφαρμογή από το κατάστημα εφαρμογών σας και ελέγξτε ξανά.",
     "quietPayerTitle": "Καμία ηχογράφηση εδώ και 5 ημέρες",
     "quietPayerMessage": "Έλεγξε το Omi σου.",
-    "quietPayerCheck": "Έλεγχος"
+    "quietPayerCheck": "Έλεγχος",
+    "playManageSubscription": "Διαχείριση συνδρομής",
+    "playBilledByGoogle": "Χρέωση μέσω Google Play",
+    "playPurchasePending": "Η πληρωμή εκκρεμεί. Το Omi Pro ξεκινά μόλις την επιβεβαιώσει το Google Play.",
+    "playPurchaseOtherAccount": "Αυτή η αγορά Google Play ανήκει σε άλλο λογαριασμό Omi.",
+    "playPurchaseNotConfirmed": "Δεν μπορέσαμε να επιβεβαιώσουμε την αγορά ακόμα. Θα ξαναδοκιμάσουμε αυτόματα.",
+    "playRenewalTerms": "Ανανεώνεται αυτόματα στην τιμή που εμφανίζεται μέχρι να την ακυρώσετε. Διαχείριση ή ακύρωση οποτεδήποτε στο Google Play.",
+    "playPaidAppUnavailable": "Μη διαθέσιμο στο Android",
+    "pageNotAvailableInApp": "Αυτή η σελίδα δεν είναι διαθέσιμη στην εφαρμογή.",
+    "shopOrderPlacedCheckEmail": "Η παραγγελία καταχωρήθηκε. Δείτε το email σας για την επιβεβαίωση."
 }

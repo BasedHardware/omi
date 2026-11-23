@@ -1,8 +1,29 @@
 """Shared custody admission and deferred delivery seams for enrichment workers."""
 
 import asyncio
+from typing import cast
+
+from prometheus_client import REGISTRY, Counter
 
 from models.conversation import Conversation
+
+# Sync tests re-import admission while retaining the process-wide metrics registry.
+TRANSCRIPT_DECODE_FAILURES = cast(
+    Counter,
+    getattr(REGISTRY, '_names_to_collectors', {}).get('omi_sync_finalization_transcript_decode_failure_total')
+    or Counter(
+        'omi_sync_finalization_transcript_decode_failure_total',
+        'Sync finalization attempts stopped because the stored transcript could not be decoded',
+    ),
+)
+
+
+def require_transcript_decoded(row: dict) -> None:
+    if row.get('_recovery_transcript_decoded') is False:
+        from utils.enrichment.outbox import FirstSummaryCallbackPending
+
+        TRANSCRIPT_DECODE_FAILURES.inc()
+        raise FirstSummaryCallbackPending('transcript_decode_failed')
 
 
 class SyncConversationPersistenceFenced(RuntimeError):

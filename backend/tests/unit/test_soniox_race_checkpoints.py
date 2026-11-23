@@ -4,7 +4,7 @@
 import pytest
 from prometheus_client import REGISTRY
 
-from tests.unit.test_soniox_finalize_padding import setup_peer, send_observed, consume, final
+from tests.unit.test_soniox_finalize_padding import setup_peer, send_observed, consume, final, use_ordered_clock
 from tests.unit.test_soniox_capture_axis_r10 import close
 from tests.unit.test_soniox_wire_ledger import barrier
 from tests.unit.test_capture_window_merge_union_r5 import tick, known
@@ -15,8 +15,7 @@ from tests.unit.test_audio_timeline_round3 import RATE, T0
 @pytest.mark.parametrize('offset', [0, 1, 944, 960, 976, 1904, 1919])
 @pytest.mark.parametrize('controls', [1, 2, 5])
 async def test_raced_fifo_checkpoints_place_observed_post_finalize_audio(monkeypatch, offset, controls):
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'true')
-    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch)
+    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch, ordered=True)
     try:
         length = 23 * 1920 + offset
         send_observed(receiver, leg, length)
@@ -52,8 +51,7 @@ async def test_raced_fifo_checkpoints_place_observed_post_finalize_audio(monkeyp
 @pytest.mark.asyncio
 @pytest.mark.parametrize('bad', ['different', 'missing', 'fractional', 'combined'])
 async def test_mismatch_invalidates_interval_and_future_on_same_socket(monkeypatch, bad):
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'true')
-    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch)
+    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch, ordered=True)
     before = REGISTRY.get_sample_value('omi_soniox_ordered_finalize_checkpoints_total', {'outcome': 'mismatch'}) or 0
     try:
         send_observed(receiver, leg, 42732)
@@ -100,8 +98,7 @@ async def test_mismatch_invalidates_interval_and_future_on_same_socket(monkeypat
 @pytest.mark.parametrize('inside_send', [False, True])
 @pytest.mark.parametrize('mismatch', [False, True])
 async def test_ack_inside_audio_await_and_back_to_back_controls(monkeypatch, inside_send, mismatch):
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'true')
-    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch)
+    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch, ordered=True)
     try:
         send_observed(receiver, leg, 42732)
         reports = []
@@ -136,8 +133,7 @@ async def test_ack_inside_audio_await_and_back_to_back_controls(monkeypatch, ins
 async def test_missing_ack_teardown_invalidates_pending_map_and_late_writes(monkeypatch):
     import asyncio
 
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'true')
-    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch)
+    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch, ordered=True)
     try:
         send_observed(receiver, leg, 42732)
         leg.finalize()
@@ -160,8 +156,7 @@ async def test_missing_ack_teardown_invalidates_pending_map_and_late_writes(monk
 
 @pytest.mark.asyncio
 async def test_clean_looking_report_cannot_reanchor_below_disproven_prediction(monkeypatch):
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'true')
-    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch)
+    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch, ordered=True)
     try:
         send_observed(receiver, leg, 42732)
         leg.finalize()
@@ -200,7 +195,6 @@ async def test_off_receipt_with_ledger_on_and_raced_clean_checkpoints(monkeypatc
     from tests.unit.test_soniox_capture_axis_r10 import soniox_capture_uuid
     from utils.stt import soniox
 
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'false')
     monkeypatch.setattr(soniox.time, 'monotonic', lambda: 100.0)
     ids = iter(range(1, 100))
     monkeypatch.setattr(soniox_capture_uuid, 'uuid4', lambda: UUID(int=next(ids)))
@@ -264,7 +258,7 @@ async def test_ordered_feature_preserves_complete_wire_frames(monkeypatch, path)
         test_on_off_idle_close_reopen_wire_transcript,
     )
 
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'true')
+    use_ordered_clock(monkeypatch)
     if path == 'idle':
         await test_on_off_idle_close_reopen_wire_transcript(monkeypatch)
     else:
@@ -273,8 +267,7 @@ async def test_ordered_feature_preserves_complete_wire_frames(monkeypatch, path)
 
 @pytest.mark.asyncio
 async def test_bounded_prediction_queue_overflow_never_grants_capture(monkeypatch):
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'true')
-    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch)
+    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch, ordered=True)
     try:
         send_observed(receiver, leg, 42732)
         for _ in range(65):
@@ -311,7 +304,7 @@ async def test_ordered_feature_preserves_unknown_prefix_and_idle_origins(monkeyp
         test_idle_reopen_freezes_provider_origin_with_padding_and_separate_pcm_diagnostics,
     )
 
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'true')
+    use_ordered_clock(monkeypatch)
     if path == 'prebind':
         await test_prebind_finalize_padding_and_no_audio_finalizes_grant_no_capture(monkeypatch)
     else:
@@ -322,8 +315,7 @@ async def test_ordered_feature_preserves_unknown_prefix_and_idle_origins(monkeyp
 
 @pytest.mark.asyncio
 async def test_failed_finalize_write_cannot_grant_speculative_mapping(monkeypatch):
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'true')
-    receiver, epoch, _, _, leg, peer, _ = await setup_peer(monkeypatch)
+    receiver, epoch, _, _, leg, peer, _ = await setup_peer(monkeypatch, ordered=True)
     try:
         send_observed(receiver, leg, 42732)
         await barrier(leg.raw, peer)

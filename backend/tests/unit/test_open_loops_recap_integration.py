@@ -16,7 +16,9 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import httpx
 import pytest
+from openai import APITimeoutError
 
 import utils.open_loops.daily as open_loops_daily
 from utils.executors import ExecutorSaturatedError
@@ -247,6 +249,20 @@ def test_pass_skipped_logs_the_reason(recap_env, monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger='utils.other.notifications'):
         notif._run_open_loops_daily_pass(UID, recap_env.today, None, None, 'UTC')
     assert any('skipped_disabled' in record.message for record in caplog.records)
+
+
+def test_failed_pass_records_one_degraded_outcome(monkeypatch, caplog):
+    timeout = APITimeoutError(request=httpx.Request('POST', 'https://example.com'))
+    monkeypatch.setattr(open_loops_daily, 'run_daily_pass', Mock(side_effect=timeout))
+    fallback = Mock()
+    monkeypatch.setattr(notif, '_record_daily_summary_fallback', fallback)
+
+    notif._run_open_loops_daily_pass(UID, _AT.date().isoformat(), None, None, 'UTC')
+
+    fallback.assert_called_once_with(
+        from_mode='open_loops_daily_pass', to_mode='skipped', reason='error', outcome='degraded'
+    )
+    assert sum(record.message.startswith('open_loops_daily_pass_failed ') for record in caplog.records) == 1
 
 
 def test_a_slow_pass_never_delays_the_next_batch(recap_env, monkeypatch):

@@ -15757,6 +15757,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get stillWorkingOnIt => 'Vēl tiek pie tā strādāts.';
 
   @override
+  String get deviceReadyToUse => 'Gatavs lietošanai';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Jūsu ierīces aparātprogrammatūra ir pārāk veca šim atjauninājumam. Sazinieties ar atbalsta dienestu, lai saņemtu palīdzību ierīces atjaunināšanā.';
 
@@ -15772,4 +15775,32 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Pārbaudīt';
+
+  @override
+  String get playManageSubscription => 'Pārvaldīt abonementu';
+
+  @override
+  String get playBilledByGoogle => 'Norēķini caur Google Play';
+
+  @override
+  String get playPurchasePending => 'Maksājums gaida. Omi Pro sāksies, tiklīdz Google Play to apstiprinās.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Šis Google Play pirkums pieder citam Omi kontam.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Pirkumu vēl neizdevās apstiprināt. Mēģināsim vēlreiz automātiski.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automātiski atjaunojas par norādīto cenu, līdz atcelsiet. Pārvaldiet vai atceliet jebkurā laikā Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Nav pieejams Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Šī lapa lietotnē nav pieejama.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Pasūtījums veikts. Apstiprinājumu meklējiet e-pastā.';
 }

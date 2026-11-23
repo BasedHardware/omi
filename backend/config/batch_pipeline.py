@@ -44,6 +44,10 @@ def batch_held_dead_letter_enabled() -> bool:
     return kill_switch('BATCH_HELD_DEAD_LETTER_ENABLED')
 
 
+def parked_job_sweeper_enabled() -> bool:
+    return kill_switch('BATCH_PARKED_JOB_SWEEPER_ENABLED', log=False)
+
+
 def projection_source_deleted_enabled() -> bool:
     """Ship-on no-text settlement for a deleted source without a tombstone or redirect."""
     return rollout_default_on(

@@ -4736,9 +4736,19 @@
     "finishedSummaryReady": "สรุปพร้อมแล้ว",
     "writingSummaryStatus": "กำลังเขียนสรุป…",
     "stillWorkingOnIt": "ยังดำเนินการอยู่",
+    "deviceReadyToUse": "พร้อมใช้งาน",
     "firmwareUpdateFirmwareTooOld": "เฟิร์มแวร์ของอุปกรณ์คุณเก่าเกินไปสำหรับการอัปเดตนี้ ติดต่อฝ่ายสนับสนุนเพื่อขอความช่วยเหลือในการอัปเดตอุปกรณ์",
     "firmwareUpdateAppRequired": "การอัปเดตเฟิร์มแวร์นี้ต้องใช้แอป Omi เวอร์ชันใหม่กว่า อัปเดตแอปจากร้านค้าแอปของคุณ แล้วตรวจสอบอีกครั้ง",
     "quietPayerTitle": "ไม่มีการบันทึกมา 5 วัน",
     "quietPayerMessage": "ตรวจสอบ Omi ของคุณ",
-    "quietPayerCheck": "ตรวจสอบ"
+    "quietPayerCheck": "ตรวจสอบ",
+    "playManageSubscription": "จัดการการสมัครสมาชิก",
+    "playBilledByGoogle": "เรียกเก็บเงินผ่าน Google Play",
+    "playPurchasePending": "การชำระเงินรอดำเนินการ Omi Pro จะเริ่มเมื่อ Google Play ยืนยัน",
+    "playPurchaseOtherAccount": "การซื้อใน Google Play นี้เป็นของบัญชี Omi อื่น",
+    "playPurchaseNotConfirmed": "ยังยืนยันการซื้อไม่ได้ เราจะลองอีกครั้งโดยอัตโนมัติ",
+    "playRenewalTerms": "ต่ออายุอัตโนมัติในราคาที่แสดงจนกว่าคุณจะยกเลิก จัดการหรือยกเลิกได้ทุกเมื่อใน Google Play",
+    "playPaidAppUnavailable": "ไม่พร้อมใช้งานบน Android",
+    "pageNotAvailableInApp": "หน้านี้ไม่พร้อมใช้งานในแอป",
+    "shopOrderPlacedCheckEmail": "สั่งซื้อแล้ว ตรวจสอบอีเมลเพื่อดูการยืนยัน"
 }

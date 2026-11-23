@@ -246,6 +246,8 @@ env:
     value: "true"
   - name: BATCH_HELD_DEAD_LETTER_ENABLED
     value: "true"
+  - name: BATCH_PARKED_JOB_SWEEPER_ENABLED
+    value: "true"
   - name: RECORD_INTAKE_AGE_PRIORITY_ENABLED
     value: "true"
   - name: RECORD_SEAL_REPAIR_FRESH_ENABLED
@@ -873,8 +875,6 @@ env:
     value: "true"
   - name: SONIOX_WIRE_LEDGER
     value: "true"
-  - name: SONIOX_ORDERED_FINALIZE
-    value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "true"
   # Fair-use system (PR #5748)

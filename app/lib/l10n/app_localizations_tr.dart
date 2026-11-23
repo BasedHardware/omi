@@ -15732,6 +15732,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get stillWorkingOnIt => 'Hâlâ üzerinde çalışılıyor.';
 
   @override
+  String get deviceReadyToUse => 'Kullanıma hazır';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Cihazınızın donanım yazılımı bu güncelleme için çok eski. Cihazınızı güncelleme konusunda yardım almak için destek ekibiyle iletişime geçin.';
 
@@ -15747,4 +15750,32 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Kontrol Et';
+
+  @override
+  String get playManageSubscription => 'Aboneliği yönet';
+
+  @override
+  String get playBilledByGoogle => 'Google Play üzerinden faturalandırılır';
+
+  @override
+  String get playPurchasePending => 'Ödemeniz beklemede. Google Play onayladığında Omi Pro başlar.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Bu Google Play satın alımı başka bir Omi hesabına ait.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Satın alımınızı henüz doğrulayamadık. Otomatik olarak yeniden deneyeceğiz.';
+
+  @override
+  String get playRenewalTerms =>
+      'İptal edene kadar gösterilen fiyattan otomatik olarak yenilenir. Google Play\'den istediğiniz zaman yönetin veya iptal edin.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android\'de kullanılamaz';
+
+  @override
+  String get pageNotAvailableInApp => 'Bu sayfa uygulamada kullanılamıyor.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Sipariş verildi. Onay için e-postanızı kontrol edin.';
 }

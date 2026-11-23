@@ -4736,9 +4736,19 @@
     "finishedSummaryReady": "摘要已生成",
     "writingSummaryStatus": "正在生成摘要…",
     "stillWorkingOnIt": "仍在处理中。",
+    "deviceReadyToUse": "可正常使用",
     "firmwareUpdateFirmwareTooOld": "你的设备固件版本太旧，无法安装此更新。请联系支持团队，获取设备更新方面的帮助。",
     "firmwareUpdateAppRequired": "此固件更新需要更新版本的 Omi 应用。请前往应用商店更新应用，然后重新检查。",
     "quietPayerTitle": "5 天没有录音",
     "quietPayerMessage": "请检查你的 Omi。",
-    "quietPayerCheck": "检查"
+    "quietPayerCheck": "检查",
+    "playManageSubscription": "管理订阅",
+    "playBilledByGoogle": "通过 Google Play 计费",
+    "playPurchasePending": "付款待处理。Google Play 确认后 Omi Pro 即会开始。",
+    "playPurchaseOtherAccount": "此 Google Play 购买属于另一个 Omi 账户。",
+    "playPurchaseNotConfirmed": "暂时无法确认你的购买。我们会自动重试。",
+    "playRenewalTerms": "在你取消前将按所示价格自动续订。可随时在 Google Play 中管理或取消。",
+    "playPaidAppUnavailable": "Android 上不可用",
+    "pageNotAvailableInApp": "此页面无法在应用中打开。",
+    "shopOrderPlacedCheckEmail": "订单已提交。请查收确认邮件。"
 }

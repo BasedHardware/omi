@@ -15750,6 +15750,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get stillWorkingOnIt => 'Še vedno poteka obdelava.';
 
   @override
+  String get deviceReadyToUse => 'Pripravljen za uporabo';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Vdelana programska oprema vaše naprave je prestara za to posodobitev. Za pomoč pri posodobitvi naprave se obrnite na podporo.';
 
@@ -15765,4 +15768,32 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Preveri';
+
+  @override
+  String get playManageSubscription => 'Upravljaj naročnino';
+
+  @override
+  String get playBilledByGoogle => 'Obračunano prek Google Play';
+
+  @override
+  String get playPurchasePending => 'Plačilo je v teku. Omi Pro se začne, ko ga Google Play potrdi.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ta nakup v Google Play pripada drugemu računu Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Nakupa še nismo mogli potrditi. Samodejno bomo poskusili znova.';
+
+  @override
+  String get playRenewalTerms =>
+      'Samodejno se podaljšuje po prikazani ceni, dokler ne prekličete. Upravljajte ali prekličite kadar koli v Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Ni na voljo v Androidu';
+
+  @override
+  String get pageNotAvailableInApp => 'Ta stran v aplikaciji ni na voljo.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Naročilo je oddano. Potrditev boste našli v e-pošti.';
 }
