@@ -160,6 +160,7 @@ def cancel_for_account_deletion(uid: str, publisher: Optional[PublisherClient] =
     fields = play_db.get_user_fields(uid)
     pointers = [key for key in (fields.get(play_db.USER_POINTER_FIELD), fields.get(play_db.PENDING_FIELD)) if key]
     cancelled = 0
+    pending: Optional[PlayCancelPending] = None
     for key in dict.fromkeys(pointers + play_db.purchase_keys_for_uid(uid)):
         record = play_db.get_purchase(key) or {}
         if record.get('uid') != uid:
@@ -167,10 +168,17 @@ def cancel_for_account_deletion(uid: str, publisher: Optional[PublisherClient] =
         token = record.get('purchase_token')
         if token:
             publisher = publisher or default_publisher()
-            cancelled += _cancel_one(publisher, key, token)
+            try:
+                cancelled += _cancel_one(publisher, key, token)
+            except PlayCancelPending as error:
+                # One purchase Google cannot confirm never holds back the cancel of the others.
+                pending = pending or error
+                continue
         play_db.update_purchase(
             key, {'auto_renewing': False, play_db.DELETION_CONFIRMED_FIELD: datetime.now(timezone.utc)}
         )
+    if pending is not None:
+        raise pending
     return cancelled
 
 
@@ -204,9 +212,24 @@ def _cancel_one(publisher: PublisherClient, key: str, token: str) -> int:
         return 0
 
 
-def purge_account_records(uid: str, confirmed_since: datetime) -> int:
+def purge_account_records(uid: str, confirmed_since: datetime, publisher: Optional[PublisherClient] = None) -> int:
     """Account wipe: drop the user's Play purchase records and account-map entries (uid + token).
 
-    Refuses while any purchase lacks a cancel confirmed at or after ``confirmed_since``.
+    Refuses while any purchase lacks a cancel confirmed at or after ``confirmed_since``. Right before the
+    delete, Google is read once more per purchase: one that can charge (or be restored) again since the
+    cancel, for example resubscribed in Google Play, raises ``PlayCancelPending`` and is kept, so the
+    retried wipe cancels it again.
     """
+    for key in play_db.purchase_keys_for_uid(uid):
+        token = (play_db.get_purchase(key) or {}).get('purchase_token')
+        if not token:
+            continue
+        publisher = publisher or default_publisher()
+        try:
+            chargeable, restorable = _google_view(publisher, token)
+        except Exception as error:
+            raise PlayCancelPending(_status_code(error), key) from None
+        if chargeable or restorable:
+            logger.warning('play_billing purchase chargeable again before purge; wipe retries')
+            raise PlayCancelPending(None, key)
     return play_db.purge_account_records(uid, confirmed_since)
