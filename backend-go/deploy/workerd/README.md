@@ -85,14 +85,17 @@ A workerd go-ahead names the object printed by:
 
 ```sh
 backend-go/deploy/workerd/release-identity.sh --digest "$WORKERD_DIGEST" --ref <admitted SHA> \
-  --verify-image gcr.io/based-hardware/workerd [-f <Release values file> ...]
+  --verify-image gcr.io/based-hardware/workerd --check-worktree [-f <Release values file> ...]
 ```
 
 The object is `{backend_go_tree, digest, helm_version, rendered_sha256}`. Pass exactly the `-f` files
 that the matching `helm upgrade --install` passes after `values-prod.yaml`. That means none for
 the baseline install below, and the Release values file for the intake activation. Each install
 then has its own identity. `--verify-image` refuses a digest whose `omi.workerd.backend-go-tree`
-label is not `backend_go_tree`.
+label is not `backend_go_tree`. An image published before tree labels passes only when its revision
+label is the exact `--ref` commit. `--check-worktree` refuses unless this checkout's `backend-go/`
+equals the `--ref` tree, because the install commands below use the working-copy chart. Run the
+install from a clean checkout of the admitted SHA.
 
 The go-ahead stays valid while main moves, as long as rerunning the script at install time
 prints the same object. `--ref` is the SHA being installed, and the run uses the same helm
