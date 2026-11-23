@@ -293,6 +293,18 @@
       "reviewed": "2026-11-14"
     },
     {
+      "site": "backend/database/outbox_provider_stt.py",
+      "expression": "f'{namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Goal: Pipeline provider-STT recovery (SCA-3362)",
+      "unit": "scheduled provider-STT recovery pass",
+      "reads_per_unit_budget": 100,
+      "reads_per_day_budget": 72000,
+      "basis": "planning-bound",
+      "source": "One indexed page of at most 25 jobs and at most three transactional rereads per job in FirestoreProviderSttOutbox.sweep_running. Production enrichment-maintenance runs at most 720 scheduled passes per day. The development schedule is paused.",
+      "reviewed": "2026-11-23"
+    },
+    {
       "site": "backend/database/batch_pipeline_purge.py",
       "expression": "f'{namespace}_{ALLOWANCE_OWNERS}'",
       "collection_pattern": "batch_pipeline_*_allowance_holds",
