@@ -16,6 +16,7 @@ import (
 )
 
 const maxCorpusBytes = 16 * 1024 * 1024
+const maxObservationBytes = 128 * 1024 * 1024
 
 type replayInput struct {
 	backend    string
@@ -156,7 +157,23 @@ func loadObservationFile(path string) ([]byte, error) {
 	if _, err := outsideWorktree(canonical); err != nil {
 		return nil, errors.New("diagnostic observations must be outside Git worktrees")
 	}
-	return loadCorpus(canonical)
+	file, err := os.Open(canonical)
+	if err != nil {
+		return nil, fmt.Errorf("open diagnostic observations: %w", err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("inspect diagnostic observations: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxObservationBytes {
+		return nil, errors.New("diagnostic observations must be a regular file of at most 128 MiB")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxObservationBytes+1))
+	if len(data) > maxObservationBytes {
+		return nil, errors.New("diagnostic observations exceed 128 MiB")
+	}
+	return data, err
 }
 
 func validateCorpusLocation(backend, corpus, testKey string, includeValues bool, data []byte) error {

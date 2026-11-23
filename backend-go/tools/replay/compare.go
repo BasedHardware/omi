@@ -8,6 +8,7 @@ import (
 	"maps"
 	"math/big"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 )
@@ -22,24 +23,54 @@ type admission struct {
 }
 
 type observation struct {
-	OwnerID               string                `json:"owner_id"`
-	ConversationID        string                `json:"conversation_id"`
-	SeededTokenHashes     []string              `json:"seeded_token_hashes"`
-	QueueFanout           string                `json:"queue_fanout_key"`
-	UpdatedAtChanged      bool                  `json:"updated_at_changed"`
-	Admitted              *admission            `json:"admitted"`
-	Started               time.Time             `json:"started_at"`
-	Finished              time.Time             `json:"finished_at"`
-	ProviderCalls         []string              `json:"provider_calls"`
-	Effects               map[string]any        `json:"effects"`
-	Status                string                `json:"status"`
-	Document              any                   `json:"conversation"`
-	Derived               map[string]any        `json:"derived_documents"`
-	BatchPrivacy          *batchPrivacyEvidence `json:"batch_pipeline_privacy,omitempty"`
-	HomeDirtyReceiptTrace map[string]int        `json:"home_dirty_receipt_trace,omitempty"`
-	Webhooks              []any                 `json:"webhooks"`
-	Cost                  replayCost            `json:"cost"`
-	GoEvidence            map[string]any        `json:"go_evidence,omitempty"`
+	OwnerID                   string                     `json:"owner_id"`
+	ConversationID            string                     `json:"conversation_id"`
+	SeededTokenHashes         []string                   `json:"seeded_token_hashes"`
+	QueueFanout               string                     `json:"queue_fanout_key"`
+	UpdatedAtChanged          bool                       `json:"updated_at_changed"`
+	Admitted                  *admission                 `json:"admitted"`
+	Started                   time.Time                  `json:"started_at"`
+	Finished                  time.Time                  `json:"finished_at"`
+	ProviderCalls             []string                   `json:"provider_calls"`
+	Effects                   map[string]any             `json:"effects"`
+	Status                    string                     `json:"status"`
+	Document                  any                        `json:"conversation"`
+	Derived                   map[string]any             `json:"derived_documents"`
+	BatchPrivacy              *batchPrivacyEvidence      `json:"batch_pipeline_privacy,omitempty"`
+	HomeDirtyReceiptTrace     map[string]int             `json:"home_dirty_receipt_trace,omitempty"`
+	FirestoreOperationSources map[string]operationSource `json:"firestore_operation_sources,omitempty"`
+	Webhooks                  []any                      `json:"webhooks"`
+	Cost                      replayCost                 `json:"cost"`
+	GoEvidence                map[string]any             `json:"go_evidence,omitempty"`
+}
+
+type operationSource struct {
+	Reads   int64 `json:"reads"`
+	Writes  int64 `json:"writes"`
+	Deletes int64 `json:"deletes"`
+}
+
+type operationSourceRow struct {
+	DocumentPath string `json:"document_path"`
+	Reads        int64  `json:"reads"`
+	Writes       int64  `json:"writes"`
+	Deletes      int64  `json:"deletes"`
+	Operations   int64  `json:"operations"`
+}
+
+type operationRow struct {
+	Case                  string               `json:"case"`
+	PythonReads           int64                `json:"python_reads"`
+	PythonWrites          int64                `json:"python_writes"`
+	PythonDeletes         int64                `json:"python_deletes"`
+	GoReads               int64                `json:"go_reads"`
+	GoWrites              int64                `json:"go_writes"`
+	GoDeletes             int64                `json:"go_deletes"`
+	PythonOperations      int64                `json:"python_operations"`
+	GoOperations          int64                `json:"go_operations"`
+	Difference            int64                `json:"difference"`
+	Label                 string               `json:"label,omitempty"`
+	GoTopOperationSources []operationSourceRow `json:"go_top_operation_sources"`
 }
 
 type batchPrivacySnapshot struct {
@@ -112,14 +143,15 @@ type caseReport struct {
 }
 
 type report struct {
-	Version     int          `json:"version"`
-	CommitSHA   string       `json:"commit_sha,omitempty"`
-	Cases       []caseReport `json:"cases"`
-	Matched     int          `json:"matched_cases"`
-	Unexplained int          `json:"unexplained_differences"`
-	Expected    int          `json:"expected_differences"`
-	Failed      int          `json:"failed_cases"`
-	CostRows    []costRow    `json:"cost_table"`
+	Version        int            `json:"version"`
+	CommitSHA      string         `json:"commit_sha,omitempty"`
+	Cases          []caseReport   `json:"cases"`
+	Matched        int            `json:"matched_cases"`
+	Unexplained    int            `json:"unexplained_differences"`
+	Expected       int            `json:"expected_differences"`
+	Failed         int            `json:"failed_cases"`
+	CostRows       []costRow      `json:"cost_table"`
+	OperationTable []operationRow `json:"operation_table"`
 }
 
 type costRow struct {
@@ -129,7 +161,10 @@ type costRow struct {
 }
 
 func compare(cases []replayCase) (report, error) {
-	out := report{Version: 1, Cases: make([]caseReport, 0, len(cases)), CostRows: make([]costRow, 0, len(cases))}
+	out := report{
+		Version: 1, Cases: make([]caseReport, 0, len(cases)), CostRows: make([]costRow, 0, len(cases)),
+		OperationTable: make([]operationRow, 0, len(cases)),
+	}
 	pythonTokenCounts := generatedHomeTokenCounts(cases, false)
 	goTokenCounts := generatedHomeTokenCounts(cases, true)
 	seen := make(map[string]bool)
@@ -139,6 +174,7 @@ func compare(cases []replayCase) (report, error) {
 		}
 		seen[c.Name] = true
 		entry := caseReport{replayCase: c, Differences: []difference{}}
+		out.OperationTable = append(out.OperationTable, operationTableRow(c))
 		if c.Python != nil {
 			entry.PythonStatus = c.Python.Status
 			entry.Cost.Python = c.Python.Cost
@@ -191,6 +227,48 @@ func compare(cases []replayCase) (report, error) {
 		return report{}, fmt.Errorf("no replay cases")
 	}
 	return out, nil
+}
+
+func operationTableRow(c replayCase) operationRow {
+	row := operationRow{Case: c.Name, GoTopOperationSources: []operationSourceRow{}}
+	if c.Python != nil {
+		operations := c.Python.Cost.Firestore
+		row.PythonReads = operations.DocumentReads + operations.QueryDocuments
+		row.PythonWrites = operations.Writes
+		row.PythonDeletes = operations.Deletes
+		row.PythonOperations = operations.Total()
+	}
+	if c.Go != nil {
+		operations := c.Go.Cost.Firestore
+		row.GoReads = operations.DocumentReads + operations.QueryDocuments
+		row.GoWrites = operations.Writes
+		row.GoDeletes = operations.Deletes
+		row.GoOperations = operations.Total()
+		for path, counts := range c.Go.FirestoreOperationSources {
+			total := counts.Reads + counts.Writes + counts.Deletes
+			row.GoTopOperationSources = append(row.GoTopOperationSources, operationSourceRow{
+				DocumentPath: path,
+				Reads:        counts.Reads,
+				Writes:       counts.Writes,
+				Deletes:      counts.Deletes,
+				Operations:   total,
+			})
+		}
+	}
+	row.Difference = row.GoOperations - row.PythonOperations
+	if row.Difference > 0 {
+		row.Label = "go_gap:ops"
+	}
+	sort.Slice(row.GoTopOperationSources, func(i, j int) bool {
+		if row.GoTopOperationSources[i].Operations != row.GoTopOperationSources[j].Operations {
+			return row.GoTopOperationSources[i].Operations > row.GoTopOperationSources[j].Operations
+		}
+		return row.GoTopOperationSources[i].DocumentPath < row.GoTopOperationSources[j].DocumentPath
+	})
+	if len(row.GoTopOperationSources) > 5 {
+		row.GoTopOperationSources = row.GoTopOperationSources[:5]
+	}
+	return row
 }
 
 func compareValue(diffs *[]difference, path string, python, goValue any) {

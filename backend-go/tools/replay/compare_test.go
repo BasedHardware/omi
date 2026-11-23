@@ -65,6 +65,43 @@ func TestCompareCountsExecutionErrors(t *testing.T) {
 	}
 }
 
+func TestOperationTableSurvivesValueStripping(t *testing.T) {
+	result, err := compare([]replayCase{{
+		Name: "operation-overage",
+		Python: &observation{
+			Status: "completed", Derived: map[string]any{}, Effects: map[string]any{},
+			Cost: replayCost{Firestore: firestoreOperations{DocumentReads: 2, QueryDocuments: 1, Writes: 2, Deletes: 1}},
+		},
+		Go: &observation{
+			Status: "completed", Derived: map[string]any{}, Effects: map[string]any{},
+			Cost: replayCost{Firestore: firestoreOperations{DocumentReads: 4, Writes: 4, Deletes: 1}},
+			FirestoreOperationSources: map[string]operationSource{
+				"users/u/episode_links/c": {Reads: 3, Writes: 1},
+				"users/u/conversations/c": {Reads: 1, Writes: 3, Deletes: 1},
+			},
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.OperationTable) != 1 {
+		t.Fatalf("got %d operation rows", len(result.OperationTable))
+	}
+	row := result.OperationTable[0]
+	if row.PythonReads != 3 || row.PythonWrites != 2 || row.PythonDeletes != 1 ||
+		row.GoReads != 4 || row.GoWrites != 4 || row.GoDeletes != 1 ||
+		row.Difference != 3 || row.Label != "go_gap:ops" {
+		t.Fatalf("unexpected operation row: %+v", row)
+	}
+	if len(row.GoTopOperationSources) != 2 || row.GoTopOperationSources[0].DocumentPath != "users/u/conversations/c" {
+		t.Fatalf("Go operation sources were not ranked: %+v", row.GoTopOperationSources)
+	}
+	stripReportValues(&result)
+	if result.OperationTable[0].Label != "go_gap:ops" || len(result.OperationTable[0].GoTopOperationSources) != 2 {
+		t.Fatalf("value stripping removed the operation report: %+v", result.OperationTable[0])
+	}
+}
+
 func TestCompareRetainsValueFreeHomeReceiptTraceWhenStrippingObservations(t *testing.T) {
 	result, err := compare([]replayCase{{
 		Name: "receipt",

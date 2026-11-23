@@ -106,6 +106,7 @@ def _go_sync(state, binary, database, key, url, firestore_proxy):
         timeout=80,
     )
     state.add_firestore_operations(**firestore_proxy.counts())
+    state.firestore_operation_sources = firestore_proxy.operation_sources()
     for bucket, count in firestore_proxy.home_receipt_trace().items():
         value = {'set_true': True, 'set_false': False, 'deleted': 'deleted'}.get(bucket)
         for _ in range(count):
@@ -198,6 +199,7 @@ def _run_side(cases, side, binary, database, key, worker_backend):
         states = _seed(client, cases, url)
         for state in states:
             state.notes_prompt_hashes = []
+            state.compare_full_derived_documents = True
         with patch.object(store_fixtures, '_emulator_client', lambda: client), replay_environment(
             _ReplayKey(key, client.project, url)
         ), allow_provider_port(server.server_port, connect, connect_ex):
@@ -231,9 +233,16 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                     server.state = state
                     server.errors.clear()
                     client_gate.note_client_seen(state.uid)
-                    finalize.attach_synced_at_intake(state.uid, state.cid, state.conversation.get().to_dict())
                     with ExitStack() as leaves:
-                        _observe(state, lambda target: _observe_sync(target, invoke, leaves, url), out, side)
+                        _observe(
+                            state,
+                            lambda target: _observe_sync(target, invoke, leaves, url),
+                            out,
+                            side,
+                            setup=lambda target: finalize.attach_synced_at_intake(
+                                target.uid, target.cid, target.conversation.get().to_dict()
+                            ),
+                        )
                     if getattr(state, 'diag_missing_module', None):
                         out['errors'][side] = f'ModuleNotFoundError: {state.diag_missing_module}'
                     if server.errors:

@@ -1,7 +1,7 @@
 import unittest
 
 from testing.finalization_replay.ordinary_sync_diag import _stored_sync_cases
-from testing.finalization_replay.ordinary_sync_diag_report import enrich, family_for_path
+from testing.finalization_replay.ordinary_sync_diag_report import enrich, family_for_path, unlabelled_groups
 
 
 class OrdinarySyncDiagnosticTests(unittest.TestCase):
@@ -116,6 +116,116 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
         report['cases'][0]['python_status'] = 'completed'
         with self.assertRaisesRegex(ValueError, 'stale or changed'):
             enrich(report)
+
+    def test_operation_table_separates_r7_overages_from_field_rows(self):
+        report = {
+            'unexplained_differences': 1,
+            'cases': [
+                {
+                    'name': 'synthetic-overage',
+                    'cost': {
+                        'python': {
+                            'firestore_operations': {
+                                'document_reads': 2,
+                                'query_documents': 1,
+                                'writes': 2,
+                                'deletes': 1,
+                            }
+                        },
+                        'go': {
+                            'firestore_operations': {
+                                'document_reads': 4,
+                                'query_documents': 0,
+                                'writes': 4,
+                                'deletes': 1,
+                            }
+                        },
+                    },
+                    'go': {
+                        'firestore_operation_sources': {
+                            'users/u/episode_links/c': {'reads': 3, 'writes': 1, 'deletes': 0},
+                            'users/u/conversations/c': {'reads': 1, 'writes': 3, 'deletes': 1},
+                        }
+                    },
+                    'differences': [{'path': '/conversation/title', 'kind': 'different_value'}],
+                }
+            ],
+        }
+        enriched = enrich(report)
+        self.assertEqual(enriched['diagnostic']['label_counts']['unlabelled'], 1)
+        self.assertEqual(enriched['diagnostic']['label_counts']['go_gap:ops'], 1)
+        self.assertEqual(enriched['diagnostic']['r7_operation_budget']['over_budget_case_count'], 1)
+        self.assertEqual(enriched['diagnostic']['r7_operation_budget']['status'], 'blocked')
+        self.assertEqual(enriched['diagnostic']['cohort_gate'], 'closed')
+        self.assertEqual(
+            enriched['operation_table'][0],
+            {
+                'case': 'synthetic-overage',
+                'python_reads': 3,
+                'python_writes': 2,
+                'python_deletes': 1,
+                'go_reads': 4,
+                'go_writes': 4,
+                'go_deletes': 1,
+                'python_operations': 6,
+                'go_operations': 9,
+                'difference': 3,
+                'label': 'go_gap:ops',
+                'go_top_operation_sources': [
+                    {
+                        'document_path': 'users/u/conversations/c',
+                        'reads': 1,
+                        'writes': 3,
+                        'deletes': 1,
+                        'operations': 5,
+                    },
+                    {
+                        'document_path': 'users/u/episode_links/c',
+                        'reads': 3,
+                        'writes': 1,
+                        'deletes': 0,
+                        'operations': 4,
+                    },
+                ],
+            },
+        )
+
+    def test_unlabelled_groups_normalize_case_specific_document_paths(self):
+        groups = unlabelled_groups(
+            [
+                {
+                    'name': 'case-one',
+                    'differences': [
+                        {
+                            'path': '/derived_documents/users~1replay-case-one~1episode_links~1case-one/home_dirty',
+                            'kind': 'different_value',
+                        }
+                    ],
+                },
+                {
+                    'name': 'case-two',
+                    'differences': [
+                        {
+                            'path': '/derived_documents/users~1replay-case-two~1episode_links~1case-two/home_dirty',
+                            'kind': 'different_value',
+                        }
+                    ],
+                },
+            ]
+        )
+        self.assertEqual(
+            groups,
+            [
+                {
+                    'path_pattern': '/derived_documents/users/<uid>/episode_links/<cid>',
+                    'field': 'home_dirty',
+                    'rows': 2,
+                    'cases': 2,
+                    'case_ids': ['case-one', 'case-two'],
+                    'kinds': ['different_value'],
+                }
+            ],
+        )
 
 
 if __name__ == '__main__':

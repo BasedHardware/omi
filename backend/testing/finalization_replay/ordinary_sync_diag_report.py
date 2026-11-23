@@ -14,6 +14,7 @@ FAMILIES = (
     'Goals',
     'Digest, minimum and relevance',
     'Other',
+    'Firestore operation budget',
 )
 
 KNOWN_GAPS = [
@@ -38,6 +39,25 @@ PYTHON_BUG_EXCEPTIONS = {
 }
 
 PYTHON_BUG_ISSUE = re.compile(r'^[A-Z][A-Z0-9]*-[1-9][0-9]*$')
+DYNAMIC_DERIVED_DOCUMENT_IDS = {
+    'action_items': '<auto-id>',
+    'batch_pipeline_privacy': '<uid-hash>',
+    'canonical_memory_maintenance_registry': '<uid>',
+    'conversations': '<cid>',
+    'episode_links': '<cid>',
+    'episode_segment_receipts': '<receipt-id>',
+    'episodes': '<episode-id>',
+    'events': '<goal-event-id>',
+    'goal_history': '<day>',
+    'hourly_usage': '<hour>',
+    'llm_usage': '<day>',
+    'memory_items': '<memory-id>',
+    'monthly_usage_totals': '<month>',
+    'owner_identity_availability_local': '<uid>',
+    'pinecone_partition_routes': '<route>',
+    'pipeline_ledger': '<cid>',
+    'users': '<uid>',
+}
 
 
 def family_for_path(path: str) -> str:
@@ -122,6 +142,56 @@ def validate_python_bug_exception(case: dict) -> str | None:
     return exception['issue']
 
 
+def unlabelled_groups(cases: list[dict]) -> list[dict]:
+    groups = {}
+    for case in cases:
+        name = case.get('name', '')
+        for difference in case.get('differences', []):
+            if difference.get('label') is not None:
+                continue
+            path = difference.get('path', '')
+            side = ''
+            for prefix in ('/python/derived_documents/', '/go/derived_documents/'):
+                if path.startswith(prefix):
+                    side = prefix.removesuffix('/derived_documents/')
+                    path = path[len(side) :]
+                    break
+            if path.startswith('/derived_documents/'):
+                rest = path.removeprefix('/derived_documents/')
+                key, separator, field = rest.partition('/')
+                parts = key.replace('~1', '/').split('/')
+                for index in range(0, len(parts) - 1, 2):
+                    collection, document_id = parts[index : index + 2]
+                    if document_id == name or document_id == f'replay-{name}':
+                        parts[index + 1] = '<uid>' if collection == 'users' else '<cid>'
+                    elif collection in DYNAMIC_DERIVED_DOCUMENT_IDS:
+                        parts[index + 1] = DYNAMIC_DERIVED_DOCUMENT_IDS[collection]
+                    elif re.fullmatch(r'[0-9a-f]{8}-[0-9a-f-]{27,}', document_id):
+                        parts[index + 1] = '<uuid>'
+                path_pattern = f'{side}/derived_documents/' + '/'.join(parts)
+                field = field if separator else '<document>'
+            else:
+                parts = path.strip('/').split('/')
+                path_pattern = '/' + parts[0] if parts and parts[0] else '/'
+                field = '/'.join(parts[1:]) if len(parts) > 1 else '<value>'
+            key = (path_pattern, field)
+            row = groups.setdefault(key, {'rows': 0, 'case_ids': set(), 'kinds': set()})
+            row['rows'] += 1
+            row['case_ids'].add(name)
+            row['kinds'].add(difference.get('kind', ''))
+    return [
+        {
+            'path_pattern': path,
+            'field': field,
+            'rows': row['rows'],
+            'cases': len(row['case_ids']),
+            'case_ids': sorted(row['case_ids']),
+            'kinds': sorted(kind for kind in row['kinds'] if kind),
+        }
+        for (path, field), row in sorted(groups.items(), key=lambda item: (-item[1]['rows'], item[0]))
+    ]
+
+
 def enrich(report: dict) -> dict:
     totals = {family: {'unexplained': 0, 'allowed': 0, 'go_gap': 0, 'python_bug': 0, 'total': 0} for family in FAMILIES}
     allowed_by_rule = Counter()
@@ -129,7 +199,56 @@ def enrich(report: dict) -> dict:
     home_receipt_rows = 0
     home_receipt_side_traces = {}
     raw_unexplained = report.get('unexplained_differences', 0)
+    operation_table = []
+    operation_overages = []
+    provided_operation_rows = {row.get('case'): row for row in report.get('operation_table', [])}
     for case in report.get('cases', []):
+        operation_row = provided_operation_rows.get(case.get('name'))
+        if operation_row is None:
+            cost = case.get('cost') or {}
+            python_ops = (cost.get('python') or {}).get('firestore_operations') or {}
+            go_ops = (cost.get('go') or {}).get('firestore_operations') or {}
+            python_reads = python_ops.get('document_reads', 0) + python_ops.get('query_documents', 0)
+            python_writes = python_ops.get('writes', 0)
+            python_deletes = python_ops.get('deletes', 0)
+            go_reads = go_ops.get('document_reads', 0) + go_ops.get('query_documents', 0)
+            go_writes = go_ops.get('writes', 0)
+            go_deletes = go_ops.get('deletes', 0)
+            difference = go_reads + go_writes + go_deletes - python_reads - python_writes - python_deletes
+            sources = (case.get('go') or {}).get('firestore_operation_sources') or {}
+            top_sources = sorted(
+                (
+                    {
+                        'document_path': path,
+                        'reads': counts.get('reads', 0),
+                        'writes': counts.get('writes', 0),
+                        'deletes': counts.get('deletes', 0),
+                        'operations': counts.get('reads', 0) + counts.get('writes', 0) + counts.get('deletes', 0),
+                    }
+                    for path, counts in sources.items()
+                ),
+                key=lambda source: (-source['operations'], source['document_path']),
+            )[:5]
+            operation_row = {
+                'case': case.get('name', ''),
+                'python_reads': python_reads,
+                'python_writes': python_writes,
+                'python_deletes': python_deletes,
+                'go_reads': go_reads,
+                'go_writes': go_writes,
+                'go_deletes': go_deletes,
+                'python_operations': python_reads + python_writes + python_deletes,
+                'go_operations': go_reads + go_writes + go_deletes,
+                'difference': difference,
+                'label': 'go_gap:ops' if difference > 0 else None,
+                'go_top_operation_sources': top_sources,
+            }
+        else:
+            operation_row = dict(operation_row)
+        operation_table.append(operation_row)
+        if operation_row['difference'] > 0:
+            operation_overages.append({'case': operation_row['case'], 'difference': operation_row['difference']})
+
         python_bug_issue = validate_python_bug_exception(case)
         captured_receipt_trace = case.get('home_dirty_receipt_trace') or {}
         case['home_dirty_receipt_trace'] = {side: captured_receipt_trace.get(side, {}) for side in ('python', 'go')}
@@ -183,11 +302,24 @@ def enrich(report: dict) -> dict:
     if raw_unexplained < unlabelled:
         raise ValueError('unlabelled differences exceed the comparator unexplained count')
     report['unexplained_differences'] = unlabelled
+    if operation_overages:
+        label_totals['go_gap:ops'] += len(operation_overages)
+    totals['Firestore operation budget']['go_gap'] += len(operation_overages)
+    totals['Firestore operation budget']['total'] += len(operation_overages)
+    report['operation_table'] = operation_table
     report['diagnostic'] = {
         'driver': 'ordinary-sync workerd seam',
         'worker_ref': report.get('commit_sha', ''),
         'family_counts': totals,
         'label_counts': dict(sorted(label_totals.items())),
+        'r7_operation_budget': {
+            'rule': 'Go reads + writes + deletes <= Python reads + writes + deletes per case',
+            'label': 'go_gap:ops',
+            'over_budget_case_count': len(operation_overages),
+            'over_budget_cases': operation_overages,
+            'status': 'blocked' if operation_overages else 'pass',
+        },
+        'cohort_gate': 'closed' if unlabelled or operation_overages else 'open',
         'raw_unexplained_differences': raw_unexplained,
         'allowed_by_rule': dict(sorted(allowed_by_rule.items())),
         'approved_rule_reference': 'backend-go/tools/replay/comparison-rules.md',
@@ -219,6 +351,10 @@ def enrich(report: dict) -> dict:
         raise ValueError('family totals do not sum to the unexplained-difference count')
     if sum(label_totals.values()) != sum(row['total'] for row in totals.values()):
         raise ValueError('label totals do not sum to the difference row count')
+    groups = unlabelled_groups(report.get('cases', []))
+    if sum(group['rows'] for group in groups) != unlabelled:
+        raise ValueError('unlabelled groups do not sum to the unlabelled row count')
+    report['diagnostic']['unlabelled_groups'] = groups
     return report
 
 
@@ -242,6 +378,10 @@ def main():
     for rule, count in enriched['diagnostic']['allowed_by_rule'].items():
         print(f"Allowed by rule ({count}): {rule}")
     print('Known gaps: trigger, repeat-admission, final attempt, deletion, erase.')
+    print(
+        f"R7: {enriched['diagnostic']['r7_operation_budget']['over_budget_case_count']} cases over "
+        f"Go <= Python; cohort gate {enriched['diagnostic']['cohort_gate']}"
+    )
 
 
 if __name__ == '__main__':

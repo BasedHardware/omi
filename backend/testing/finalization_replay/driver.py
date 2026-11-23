@@ -16,7 +16,7 @@ from uuid import uuid4
 
 from testing.finalization_replay.candidate import migrate, replay_database, run_candidate
 from testing.finalization_replay.corpus import DEFAULT_TEST_KEY, pack, read_corpus
-from testing.finalization_replay.metrics import install_firestore_meter, measure
+from testing.finalization_replay.metrics import install_firestore_meter, measure, suspend_meter
 from testing.finalization_replay.providers import allow_provider_port, provider_server
 from testing.finalization_replay.reference import run_reference
 from testing.finalization_replay.state import CaseState, seeded_token_hashes
@@ -24,13 +24,17 @@ from testing.replay_harness.env import emulator_endpoint, replay_environment
 from testing.replay_harness.guard import private_text
 
 
-def _observe(state, run, output, side):
+def _observe(state, run, output, side, *, setup=None):
     try:
         before = state.documents()
         state.start()
         with measure(state):
+            if setup is not None:
+                with suspend_meter():
+                    setup(state)
             status = run(state)
-        output[side] = state.observe(status, before)
+        with suspend_meter():
+            output[side] = state.observe(status, before)
     except Exception as error:
         output['errors'][side] = type(error).__name__
         finished = datetime.now(timezone.utc)

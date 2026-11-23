@@ -43,6 +43,13 @@ class FirestoreProxyTests(unittest.TestCase):
         self.assertEqual(proxy.counts()['rpc_calls'], 1)
         self.assertEqual(proxy.counts()['batch_pipeline_privacy_document_writes'], 1)
         self.assertEqual(proxy.counts()['batch_pipeline_privacy_document_deletes'], 1)
+        self.assertEqual(
+            proxy.operation_sources(),
+            {
+                'batch_pipeline_privacy/owner-hash': {'reads': 0, 'writes': 1, 'deletes': 1},
+                'users/u/episode_links/c': {'reads': 0, 'writes': 2, 'deletes': 0},
+            },
+        )
         self.assertEqual(proxy.home_receipt_trace(), {'set_true': 1, 'set_false': 1, 'deleted': 0, 'other_write': 0})
 
     def test_query_on_privacy_collection_counts_as_a_target_read(self):

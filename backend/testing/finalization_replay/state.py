@@ -227,16 +227,26 @@ class CaseState:
 
     def observe(self, status, before):
         after = self.documents()
-        changed = {
+        changed_documents = {
             path: after.get(path)
             for path in sorted(before.keys() | after.keys())
             if not _same_snapshot_value(before.get(path), after.get(path))
         }
+        if getattr(self, 'compare_full_derived_documents', False):
+            user_path = f'users/{self.uid}'
+            full_case_paths = {
+                path
+                for path in after
+                if path == user_path or path.startswith(user_path + '/') or path == self.batch_privacy_document_path
+            }
+            derived_documents = {path: after.get(path) for path in sorted(full_case_paths | changed_documents.keys())}
+        else:
+            derived_documents = changed_documents
         document = self.conversation.get().to_dict()
         empty_privacy = {'exists': False, 'fields': {}}
         privacy_seed = getattr(self, 'batch_privacy_seed', None) or empty_privacy
         privacy_final = self.batch_privacy_snapshot() if hasattr(self, 'client') else empty_privacy
-        return {
+        observation = {
             'owner_id': getattr(self, 'uid', ''),
             'conversation_id': getattr(self, 'cid', ''),
             'seeded_token_hashes': getattr(self, 'seeded_token_hashes', []),
@@ -260,9 +270,13 @@ class CaseState:
             ),
             'effects': pack(self.effects),
             'conversation': pack(document),
-            'derived_documents': changed,
+            'derived_documents': derived_documents,
             'webhooks': sorted(self.webhooks, key=lambda delivery: delivery['app']),
         }
+        operation_sources = getattr(self, 'firestore_operation_sources', None)
+        if operation_sources:
+            observation['firestore_operation_sources'] = operation_sources
+        return observation
 
     def vector(self, conversation_id):
         self.effects.setdefault('conversation_vector', []).append({'conversation_id': conversation_id})

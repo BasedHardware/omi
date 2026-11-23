@@ -101,6 +101,7 @@ class FirestoreProxy:
                 'batch_pipeline_privacy_document_deletes': 0,
             }
             self._home_receipt_trace = {'set_true': 0, 'set_false': 0, 'deleted': 0, 'other_write': 0}
+            self._operation_sources = {}
 
     def counts(self):
         with self._lock:
@@ -110,10 +111,22 @@ class FirestoreProxy:
         with self._lock:
             return dict(self._home_receipt_trace)
 
+    def operation_sources(self):
+        with self._lock:
+            return {path: dict(counts) for path, counts in self._operation_sources.items()}
+
     def _add(self, **values):
         with self._lock:
             for name, value in values.items():
                 self._counts[name] += value
+
+    def _record_operation_source(self, name, operation, count=1):
+        path = _resource_path(name)
+        if not path or operation not in {'reads', 'writes', 'deletes'} or not count:
+            return
+        with self._lock:
+            source = self._operation_sources.setdefault(path, {'reads': 0, 'writes': 0, 'deletes': 0})
+            source[operation] += count
 
     def _is_privacy_document(self, name):
         return _resource_path(name) == self.privacy_document_path
@@ -156,6 +169,8 @@ class FirestoreProxy:
             query_requests=int(method in _QUERIES),
             document_reads=int(method == 'get_document'),
         )
+        if method == 'get_document':
+            self._record_operation_source(getattr(request, 'name', ''), 'reads')
         if method == 'get_document' and self._is_privacy_document(getattr(request, 'name', '')):
             self._add(batch_pipeline_privacy_document_reads=1)
         elif method == 'batch_get_documents':
@@ -185,6 +200,7 @@ class FirestoreProxy:
                         getattr(request, 'document_id', ''),
                     )
                 )
+            self._record_operation_source(name, 'deletes' if deletes else 'writes')
             if self._is_privacy_document(name):
                 self._add(
                     batch_pipeline_privacy_document_deletes=deletes,
@@ -206,6 +222,9 @@ class FirestoreProxy:
             batch_pipeline_privacy_document_writes=privacy_writes,
             batch_pipeline_privacy_document_deletes=privacy_deletes,
         )
+        for write in writes:
+            is_delete = bool(getattr(write, 'delete', ''))
+            self._record_operation_source(_write_path(write), 'deletes' if is_delete else 'writes')
 
     def _record_response(self, method, raw):
         response_type = _RESPONSE_TYPES.get(method)
@@ -213,13 +232,30 @@ class FirestoreProxy:
             return
         response = response_type.deserialize(raw)
         if method == 'batch_get_documents':
-            has_result = bool(getattr(response, 'found', None) or getattr(response, 'missing', ''))
-            self._add(document_reads=int(has_result))
+            try:
+                result = response.WhichOneof('result')
+            except (AttributeError, ValueError):
+                result = (
+                    'found'
+                    if getattr(response, 'found', None)
+                    else 'missing' if getattr(response, 'missing', '') else None
+                )
+            if result == 'found':
+                self._add(document_reads=1)
+                self._record_operation_source(getattr(response.found, 'name', ''), 'reads')
+            elif result == 'missing':
+                self._add(document_reads=1)
+                self._record_operation_source(getattr(response, 'missing', ''), 'reads')
         elif method == 'run_query':
             document = getattr(response, 'document', None)
-            self._add(query_documents=int(bool(document and document.name)))
+            if document and document.name:
+                self._add(query_documents=1)
+                self._record_operation_source(document.name, 'reads')
         elif method == 'list_documents':
-            self._add(query_documents=len(getattr(response, 'documents', ())))
+            documents = getattr(response, 'documents', ())
+            self._add(query_documents=len(documents))
+            for document in documents:
+                self._record_operation_source(getattr(document, 'name', ''), 'reads')
 
     def _record_committed_home_writes(self, method, request, response):
         if method in {'commit', 'batch_write'}:
