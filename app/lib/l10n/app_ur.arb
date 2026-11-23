@@ -12305,5 +12305,7 @@
     "playPurchaseOtherAccount": "یہ Google Play خریداری کسی دوسرے Omi اکاؤنٹ کی ہے۔",
     "playPurchaseNotConfirmed": "ہم ابھی آپ کی خریداری کی تصدیق نہیں کر سکے۔ ہم خود بخود دوبارہ کوشش کریں گے۔",
     "playRenewalTerms": "منسوخ کرنے تک دکھائی گئی قیمت پر خودکار طور پر تجدید ہوتی ہے۔ Google Play میں کسی بھی وقت انتظام یا منسوخ کریں۔",
-    "playPaidAppUnavailable": "Android پر دستیاب نہیں"
+    "playPaidAppUnavailable": "Android پر دستیاب نہیں",
+    "pageNotAvailableInApp": "یہ صفحہ ایپ میں دستیاب نہیں ہے۔",
+    "shopOrderPlacedCheckEmail": "آرڈر دے دیا گیا۔ تصدیق کے لیے اپنی ای میل دیکھیں۔"
 }

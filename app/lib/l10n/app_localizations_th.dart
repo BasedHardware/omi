@@ -15687,4 +15687,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'ไม่พร้อมใช้งานบน Android';
+
+  @override
+  String get pageNotAvailableInApp => 'หน้านี้ไม่พร้อมใช้งานในแอป';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'สั่งซื้อแล้ว ตรวจสอบอีเมลเพื่อดูการยืนยัน';
 }

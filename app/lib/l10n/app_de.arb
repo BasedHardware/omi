@@ -4748,5 +4748,7 @@
     "playPurchaseOtherAccount": "Dieser Google-Play-Kauf gehört zu einem anderen Omi-Konto.",
     "playPurchaseNotConfirmed": "Wir konnten den Kauf noch nicht bestätigen. Wir versuchen es automatisch erneut.",
     "playRenewalTerms": "Verlängert sich automatisch zum angezeigten Preis, bis du kündigst. Verwalten oder kündigen jederzeit in Google Play.",
-    "playPaidAppUnavailable": "Auf Android nicht verfügbar"
+    "playPaidAppUnavailable": "Auf Android nicht verfügbar",
+    "pageNotAvailableInApp": "Diese Seite ist in der App nicht verfügbar.",
+    "shopOrderPlacedCheckEmail": "Bestellung aufgegeben. Die Bestätigung findest du in deinen E-Mails."
 }

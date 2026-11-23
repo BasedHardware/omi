@@ -2507,7 +2507,8 @@ def test_worker_heartbeats_at_major_operation_boundaries(monkeypatch):
     assert account_deletion.background_wipe_user_data('uid1') is True
     for operation in ('billing', 'agent_vm', 'credentials', 'auth', 'derived', 'firestore'):
         assert calls[calls.index(operation) - 1] == 'heartbeat'
-    assert calls[calls.index('derived') + 1 : calls.index('firestore')] == ['heartbeat', 'heartbeat']
+    # Lake purge, Play billing records and Firestore each heartbeat.
+    assert calls[calls.index('derived') + 1 : calls.index('firestore')] == ['heartbeat'] * 3
     account_deletion.users_db.mark_user_deletion_auth_deleted.assert_called_once_with('uid1')
 
 
@@ -2622,8 +2623,8 @@ def test_off_wipe_never_enters_cell_step(monkeypatch):
     monkeypatch.setattr(account_deletion, 'purge_owner_planes', purge)
     assert account_deletion.background_wipe_user_data('uid1') is True
     purge.assert_not_called()
-    # Lake purge and Firestore each heartbeat; the unconfigured cell is skipped.
-    assert events[events.index('derived') + 1 : events.index('firestore')] == ['heartbeat', 'heartbeat']
+    # Lake purge, Play billing records and Firestore each heartbeat; the unconfigured cell is skipped.
+    assert events[events.index('derived') + 1 : events.index('firestore')] == ['heartbeat'] * 3
 
 
 @pytest.mark.parametrize('routing_mode', ['off', 'new_owners'])

@@ -157,7 +157,7 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
                 );
             final loading = offer == null &&
                 widget.offer == null &&
-                (usage.isLoadingPlans || usage.playOffersLoading || usage.billingProviderUnknown);
+                (usage.isLoadingPlans || usage.playOffersLoading || usage.billingProviderPending);
             final blocked = cancelPending && widget.offer == null && !loading && offer?.resubscribe != true;
             final freeMinutes = (usage.subscription?.transcriptionSecondsLimit ?? 0) ~/ 60;
             final yearly = offer?.yearly;
@@ -236,14 +236,20 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
                           const SizedBox(height: 10),
                           const _Skeleton(height: 74),
                         ] else if (offer == null && !blocked) ...[
-                          Text(l10n.unableToLoadPlans, style: _Graphite.body()),
+                          if (usage.playBilledPurchaser || usage.billingProviderFailed)
+                            const PlayPlansError()
+                          else
+                            Text(l10n.unableToLoadPlans, style: _Graphite.body()),
                         ] else if (offer != null) ...[
                           if (yearly != null)
                             _PlanOption(
                               key: const Key('outline_paywall_yearly'),
                               title: l10n.billingYearly,
                               badge: saving == null ? null : l10n.savePercent(saving),
-                              subtitle: yearly.formattedPerMonth + l10n.perMonthLabel,
+                              // Google Play shows only its own price strings, never a computed per-month.
+                              subtitle: usage.playBilledPurchaser
+                                  ? l10n.paywallTrialBilledYearly
+                                  : yearly.formattedPerMonth + l10n.perMonthLabel,
                               price: yearly.formatted,
                               per: l10n.billingYearly,
                               selected: _yearly || monthly == null,

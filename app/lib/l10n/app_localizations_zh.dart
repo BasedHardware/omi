@@ -15507,4 +15507,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Android 上不可用';
+
+  @override
+  String get pageNotAvailableInApp => '此页面无法在应用中打开。';
+
+  @override
+  String get shopOrderPlacedCheckEmail => '订单已提交。请查收确认邮件。';
 }

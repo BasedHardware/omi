@@ -12305,5 +12305,7 @@
     "playPurchaseOtherAccount": "Гэтая пакупка ў Google Play належыць іншаму акаўнту Omi.",
     "playPurchaseNotConfirmed": "Не ўдалося пацвердзіць пакупку. Мы паспрабуем зноў аўтаматычна.",
     "playRenewalTerms": "Аўтаматычна падаўжаецца па паказаным кошце, пакуль вы не скасуеце. Кіраваць ці скасаваць можна ў любы час у Google Play.",
-    "playPaidAppUnavailable": "Недаступна на Android"
+    "playPaidAppUnavailable": "Недаступна на Android",
+    "pageNotAvailableInApp": "Гэтая старонка недаступная ў праграме.",
+    "shopOrderPlacedCheckEmail": "Заказ аформлены. Пацвярджэнне прыйдзе на вашу пошту."
 }

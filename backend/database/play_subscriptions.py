@@ -131,3 +131,18 @@ def pending_play_purchase(uid: str) -> bool:
     if not key:
         return False
     return (get_purchase(key) or {}).get('state') == 'SUBSCRIPTION_STATE_PENDING'
+
+
+def purge_account_records(uid: str, *, firestore_client: Optional[Any] = None) -> int:
+    """Account deletion: drop every purchase document (uid + plaintext token) and account-map entry of ``uid``.
+
+    Runs inside the Firestore wipe, after the wipe's billing step confirmed Google stopped charging. A later
+    notification for a dropped token finds no owner and is recorded unbound (token, no uid), never granted.
+    """
+    client = firestore_client or _client.get_firestore_client()
+    removed = 0
+    for collection in (COLLECTION, ACCOUNTS):
+        for snapshot in client.collection(collection).where('uid', '==', uid).stream():
+            snapshot.reference.delete()
+            removed += 1
+    return removed

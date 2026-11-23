@@ -15770,4 +15770,10 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Android वर उपलब्ध नाही';
+
+  @override
+  String get pageNotAvailableInApp => 'हे पेज अ‍ॅपमध्ये उपलब्ध नाही.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ऑर्डर दिली आहे. पुष्टीकरणासाठी तुमचा ईमेल तपासा.';
 }

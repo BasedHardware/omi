@@ -4748,5 +4748,7 @@
     "playPurchaseOtherAccount": "Šis Google Play pirkinys priklauso kitai Omi paskyrai.",
     "playPurchaseNotConfirmed": "Pirkinio dar nepavyko patvirtinti. Bandysime dar kartą automatiškai.",
     "playRenewalTerms": "Automatiškai atnaujinama nurodyta kaina, kol atšauksite. Tvarkykite ar atšaukite bet kada Google Play.",
-    "playPaidAppUnavailable": "Android nepasiekiama"
+    "playPaidAppUnavailable": "Android nepasiekiama",
+    "pageNotAvailableInApp": "Šis puslapis programėlėje nepasiekiamas.",
+    "shopOrderPlacedCheckEmail": "Užsakymas pateiktas. Patvirtinimą rasite el. pašte."
 }

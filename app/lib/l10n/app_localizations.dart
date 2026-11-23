@@ -27680,6 +27680,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not available on Android'**
   String get playPaidAppUnavailable;
+
+  /// Shown when an in-app store page links somewhere the app does not open
+  ///
+  /// In en, this message translates to:
+  /// **'This page isn\'t available in the app.'**
+  String get pageNotAvailableInApp;
+
+  /// Shown after the in-app store closes once an order is paid
+  ///
+  /// In en, this message translates to:
+  /// **'Order placed. Check your email for the confirmation.'**
+  String get shopOrderPlacedCheckEmail;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -518,6 +518,11 @@ def background_wipe_user_data(
         current_operation = 'lake_prefix_purge'
         heartbeat()
         purge_owner_lake_content(uid)
+        # Google Play purchase records (uid + purchase token) and the account map live outside users/{uid}.
+        # The billing step above already confirmed Google stopped charging; a failure keeps the wipe retryable.
+        current_operation = 'play_billing_records'
+        heartbeat()
+        play_publisher.purge_account_records(uid)
         current_operation = 'firestore_user_data'
         heartbeat()
         wipe_result = users_db.delete_user_data(uid)
@@ -684,7 +689,7 @@ def _retry_firestore_write(
     logger.critical(msg)
 
 
-def _cancel_subscription_for_account_deletion(uid: str) -> None:
+def _cancel_stripe_for_account_deletion(uid: str) -> None:
     subscription_id = None
     try:
         sub = users_db.get_existing_user_subscription(uid)
@@ -694,11 +699,16 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
         subscription_id = getattr(sub, 'stripe_subscription_id', None) if sub else None
         if subscription_id and subscription_id not in app_subscription_ids:
             stripe_utils.cancel_subscription_for_account_deletion(subscription_id)
-        # Google Play bills outside Stripe: stop it too, or the deleted account keeps being charged.
-        subscription_id = 'google_play'
-        play_publisher.cancel_for_account_deletion(uid)
     except Exception as error:
         raise DeletionBillingError(subscription_id, error) from error
+
+
+def _cancel_subscription_for_account_deletion(uid: str) -> None:
+    _cancel_stripe_for_account_deletion(uid)
+    # Google Play bills outside Stripe: stop it too, or the deleted account keeps being charged. A failure
+    # propagates like a Stripe failure: admission is not marked complete (the grace reconciler re-runs it
+    # every cycle) and the wipe retries it with backoff. It is never a parked billing failure.
+    play_publisher.cancel_for_account_deletion(uid)
 
 
 def purge_user_conversation_index(uid: str) -> None:
