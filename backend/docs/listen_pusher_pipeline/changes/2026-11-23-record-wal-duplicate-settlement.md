@@ -21,6 +21,27 @@ removing backing audio, and retained-donor erasure requires its tombstone. A
 failed fence leaves prefix cleanup pending. A canonical revision change refuses replay
 until equivalence is established.
 
+## Terminal status retention
+
+Settlement copies the already-authorized completed status into one compact
+receipt per canonical handle, in the existing intake collection. The alias,
+file receipts and status receipt share a 45-day absolute deadline. A later
+distinct alias can advance the shared status and matching file deadlines only
+after full canonical proof. Exact replay and direct polls never extend them.
+Existing canonical content, job and media retention keep their original clocks.
+Both readers check live privacy and the original source binding, including the
+successor when present. The intake receipt is erased with its original owner or
+conversation. Ordinary TTL lag confers no replay authority.
+
+An active proof may issue one additional point read and one status-receipt
+write at commit, for a maximum of 105 proof reads across both views and
+22 receipt writes plus the first-settlement donor write. Shadow remains
+bounded to 104 reads per candidate with no witness writes. Direct polls for
+eligible batch handles add one document read on a miss, and use at most 11
+document reads on a hit including the owner snapshot.
+Report fixed-label lookup hit, miss and error counts and include them in
+Release's read budget before activation.
+
 ## Non-erasure merges
 
 Durable manual merge admission persists the keep-or-remove choice alongside

@@ -470,6 +470,82 @@ def test_duplicate_cas_replay_while_disabled_and_rebundle(duplicate_world, monke
         case.attempt(rebundle, files=case.files[:1], expected=existing.scope, placements=['a'], commit=True).reply
         == saved.reply
     )
+    original = case.attempt(first)
+    later = case.attempt(rebundle)
+    assert later.prior['expires_at'] > original.prior['expires_at']
+    assert later.known[later.file_ids[0]]['expires_at'] == later.prior['expires_at']
+    assert original.known[original.file_ids[1]]['expires_at'] == original.prior['expires_at']
+
+
+def test_duplicate_terminal_keeps_its_alias_window_after_canonical_expiry(duplicate_world, monkeypatch):
+    from config.record_audio import record_identity
+    from database import record_wal_duplicate as duplicate
+    from utils.batch_pipeline import intake
+    from utils.sync.stage import collection_name
+
+    case = duplicate_world
+    first = case.request('terminal-witness')
+    candidate = case.attempt(first, files=case.files)
+    saved = case.attempt(first, files=case.files, expected=candidate.scope, placements=['a', 'b'], commit=True)
+    assert saved.reply['job_id'] == case.canonical
+    ledger = case.user.collection(collection_name('sync_content_ledger'))
+    alias = ledger.document(first.content_id)
+    witness = case.store.client.collection(case.store.namespace + '_intakes').document(
+        'wal_duplicate_terminal_' + case.canonical
+    )
+    first_expiry = alias.get().to_dict()['expires_at']
+    assert witness.get().to_dict()['expires_at'] == first_expiry
+    case.intake.delete()
+    case.job_ref.delete()
+    ledger.document(record_identity(first.uid, first.cid)[0]).delete()
+    monkeypatch.setenv('RECORD_WAL_DUPLICATE_PERCENT', '0')
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *_: case.store)
+    legacy = Mock(side_effect=AssertionError('legacy status ran'))
+    monkeypatch.setattr(intake, 'durable_status', legacy)
+    assert case.attempt(first).reply == saved.reply
+    assert intake.get_durable_job_status(case.canonical, first.uid) == saved.reply
+    assert legacy.call_count == 0
+    assert witness.get().to_dict()['expires_at'] == first_expiry
+    assert alias.get().to_dict()['expires_at'] == first_expiry
+    assert case.attempt(case.request('late-rebundle'), files=case.files) is None
+
+    # TTL removal is asynchronous. Past the absolute deadline, even retained
+    # documents do not authorize replay.
+    past = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    alias.update({'expires_at': past})
+    assert case.attempt(first) is None
+    witness.update({'expires_at': past})
+    assert duplicate.terminal_status(case.store, first.uid, case.canonical) == (True, None)
+
+
+@pytest.mark.parametrize('erase', ('conversation', 'account'))
+def test_duplicate_terminal_receipt_is_purged_with_its_erased_owner(duplicate_world, erase):
+    from database import record_wal_duplicate as duplicate
+
+    case = duplicate_world
+    request = case.request('purge-witness')
+    candidate = case.attempt(request, files=case.files)
+    assert case.attempt(request, files=case.files, expected=candidate.scope, placements=['a', 'b'], commit=True)
+    assert duplicate.terminal_status(case.store, request.uid, case.canonical)[1]['status'] == 'completed'
+    if erase == 'conversation':
+        marker = case.user.collection('deleted_conversations').document(case.cid)
+        marker.set({'reason': 'synthetic'})
+    else:
+        marker = case.store.client.collection('account_deletions').document(request.uid)
+        marker.set({'wipe_status': 'pending_deletion'})
+    with pytest.raises(BatchPrivacyBlocked):
+        case.attempt(request)
+    with pytest.raises(BatchPrivacyBlocked):
+        duplicate.terminal_status(case.store, request.uid, case.canonical)
+    purge.purge_batch_owner(
+        request.uid,
+        conversation_id=case.cid if erase == 'conversation' else None,
+        namespaces=(case.store.namespace,),
+        firestore_client=case.store.client,
+        delete_uri=Mock(side_effect=AssertionError('metadata-only witness has no object URI')),
+    )
+    assert duplicate.terminal_status(case.store, request.uid, case.canonical) == (False, None)
+    marker.delete()
 
 
 @pytest.mark.parametrize('race', ('revision', 'tombstone', 'merge_removal'))
@@ -512,6 +588,16 @@ def test_duplicate_shadow_and_mixed_version_leave_no_alias(duplicate_world, monk
     assert case.attempt(request) is None
     case.intake.update({'wal_duplicate_source_v1': firestore.DELETE_FIELD})
     assert case.attempt(request, files=case.files) is None
+
+
+def test_duplicate_settlement_holds_an_unknown_competing_alias(duplicate_world):
+    from config.record_wal_duplicate import RECEIPT_FIELD
+
+    case = duplicate_world
+    request = case.request('unknown-alias')
+    before = case.attempt(request, files=case.files)
+    case.store.run(lambda tx: tx.put('content', f'{request.uid}/{request.content_id}', {RECEIPT_FIELD: {}}))
+    assert case.attempt(request, files=case.files, expected=before.scope, placements=['a', 'b'], commit=True) is None
 
 
 def test_duplicate_competing_concurrent_retries_publish_one_alias(duplicate_world):
@@ -624,6 +710,7 @@ async def test_duplicate_replays_original_handle_through_preparation_and_two_mer
 ):
     from config.record_wal_duplicate import MERGE_TARGET_FIELD, RETAINED_DONORS_FIELD
     from database import conversation_merge_jobs as jobs, conversation_tombstones
+    from database import record_wal_duplicate as duplicate
     from database.record_audio import fence_record_audio_removal
 
     case = duplicate_world
@@ -674,6 +761,7 @@ async def test_duplicate_replays_original_handle_through_preparation_and_two_mer
     assert response.status_code == 202
     assert json.loads(bytes(response.body))['job_id'] == case.canonical
     legacy.assert_not_called()
+    assert duplicate.terminal_status(case.store, request.uid, case.canonical)[1]['status'] == 'completed'
 
     erased = case.cid if erase_end == 'original' else final_target
     conversation_tombstones.accept_deletion(
@@ -681,6 +769,8 @@ async def test_duplicate_replays_original_handle_through_preparation_and_two_mer
     )
     with pytest.raises(BatchPrivacyBlocked):
         case.attempt(request)
+    with pytest.raises(BatchPrivacyBlocked):
+        duplicate.terminal_status(case.store, request.uid, case.canonical)
     if erase_end == 'successor':
         from database.conversation_batch_purge_jobs import erasure_job_ref
 

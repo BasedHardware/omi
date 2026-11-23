@@ -72,6 +72,7 @@ def check_owner_authority(
     *,
     sampling_read_budget=None,
     allow_retained_merge=False,
+    verify_upload_context=True,
 ):
     snapshots = {}
     check = assert_batch_write_allowed
@@ -109,8 +110,8 @@ def check_owner_authority(
         or (row.get('deleted') or row.get('sync_merged_into'))
         and not retained
         or row.get('record_lane_owner') != 'batch_live_v1'
-        or row.get('source') != source
-        or row.get('client_device_id') != device
+        or verify_upload_context
+        and (row.get('source') != source or row.get('client_device_id') != device)
         or row.get('uses_custom_stt')
         or not row.get('private_cloud_sync_enabled')
         or not user.get('private_cloud_sync_enabled', True)
