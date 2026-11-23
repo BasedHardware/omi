@@ -25,11 +25,21 @@ The API exports low-cardinality cohort telemetry without an extra Redis or Fires
 operation. `omi_sync_job_poll_cohort_requests_total{cohort="in"|"out"}` counts
 status requests; `omi_sync_job_poll_active_uploaders{cohort=...}` tracks distinct
 authenticated UIDs with a nonterminal status in the last five minutes on each
-process, capped at 50,000 hashed UIDs. Compare request rate per active pod-UID with
-`sum by (cohort) (rate(omi_sync_job_poll_cohort_requests_total{service_name="backend"}[5m])) /
-sum by (cohort) (omi_sync_job_poll_active_uploaders{service_name="backend"})`. UIDs are never metric
-labels. Because one UID can poll through multiple processes, the denominator is
-process-local and is an approximation when aggregating replicas.
+process, capped at 50,000 hashed UIDs. Query Google Managed Prometheus directly
+for production Cloud Run `backend`. Check that the `in` counter shows measurable
+traffic before starting the soak. Compare requests per second per active pod-UID
+over the same window for both cohorts.
+
+```promql
+sum by (cohort) (increase(omi_sync_job_poll_cohort_requests_total{cluster="__run__",namespace="backend"}[5m]))
+
+sum by (cohort) (rate(omi_sync_job_poll_cohort_requests_total{cluster="__run__",namespace="backend"}[5m]))
+/
+sum by (cohort) (omi_sync_job_poll_active_uploaders{cluster="__run__",namespace="backend"})
+```
+
+UIDs are never metric labels. Because one UID can poll through multiple
+processes, the denominator is an approximation when aggregating replicas.
 
 `omi_sync_job_completion_to_first_terminal_read_seconds` records the delay from
 the stored completion timestamp to the first terminal GET observed by each
@@ -38,9 +48,20 @@ before applying pacing. Cohort labels continue to use the configured percentage
 when the kill switch is off. Both histogram cohorts appear before their first
 sample. The response uses the already-loaded completion
 timestamp and a bounded, process-salted job-ID cache. A terminal row needs an
-authoritative completion timestamp to contribute. Compare its cohort p50 from
-`histogram_quantile(0.5, sum by (le, cohort) (rate(omi_sync_job_completion_to_first_terminal_read_seconds_bucket{service_name="backend"}[5m])))`
-with the 60-second guard, and corroborate the poll ratio with the rollout's 5xx,
+authoritative completion timestamp to contribute. Verify a fresh eligible
+completion increments the histogram, then check for usable sample counts in both
+cohorts before comparing p50. Missing series or an empty cohort leave the guard
+inconclusive.
+
+```promql
+sum by (cohort) (increase(omi_sync_job_completion_to_first_terminal_read_seconds_count{cluster="__run__",namespace="backend"}[5m]))
+
+histogram_quantile(0.5, sum by (le, cohort) (
+  rate(omi_sync_job_completion_to_first_terminal_read_seconds_bucket{cluster="__run__",namespace="backend"}[5m])
+))
+```
+
+Compare p50 against the 60-second guard and corroborate the poll ratio with 5xx,
 429, support, and upload-retry signals.
 
 ## Ramp and rollback
