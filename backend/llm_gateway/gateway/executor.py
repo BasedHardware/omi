@@ -31,6 +31,7 @@ from llm_gateway.gateway.errors import (
     GatewayProviderRequestRejectedError,
 )
 from llm_gateway.gateway.metrics import (
+    CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL,
     FLEX_FIRST_TOTAL,
     KEYED_PROVIDER_ATTEMPTS_TOTAL,
     LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL,
@@ -790,6 +791,14 @@ async def _attempt_provider(
                 # Any Flex failure (capacity 429, slow, rejected) goes straight to
                 # Standard with no backoff; the user-visible path never depends on Flex.
                 FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome='fallback_standard').inc()
+                if route.lane_id == 'omi:auto:conv-structure':
+                    if exc.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT:
+                        reason = 'timeout'
+                    elif exc.failure_class == FailureClass.PROVIDER_429_OMI_PAID:
+                        reason = 'http_429'
+                    else:
+                        reason = 'other'
+                    CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL.labels(reason=reason).inc()
                 continue
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 return None, error

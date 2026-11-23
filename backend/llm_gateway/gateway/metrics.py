@@ -85,6 +85,16 @@ FLEX_FIRST_TOTAL = Counter(
     ['lane_id', 'outcome'],
 )
 
+CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL = Counter(
+    'llm_gateway_conv_structure_flex_fallback_reason_total',
+    'Conversation structure Flex-to-Standard fallbacks by bounded reason',
+    ['reason'],
+)
+
+# Expose zero-count buckets before their first fallback so increase() can see it.
+for _reason in ('timeout', 'http_429', 'other'):
+    CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL.labels(reason=_reason)
+
 STREAM_TTFB_SECONDS = Histogram(
     'llm_gateway_stream_ttfb_seconds',
     'Time to first non-empty stream chunk by bounded API surface, provider, and credential source',
