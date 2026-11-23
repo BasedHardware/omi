@@ -10,6 +10,7 @@ unset means none does. Env is read at call time.
 
 from __future__ import annotations
 
+import hashlib
 import os
 from typing import Mapping, Optional
 
@@ -111,3 +112,18 @@ def reconcile_audience(environ: Optional[Mapping[str, str]] = None) -> str:
 
 def reconcile_invoker_sa(environ: Optional[Mapping[str, str]] = None) -> str:
     return (_env(environ).get('PLAY_RECONCILE_INVOKER_SA') or '').strip()
+
+
+def obfuscated_account_id(uid: str) -> str:
+    """Stable 64-char id the app passes to Play; Google echoes it on the purchase."""
+    return hashlib.sha256(f'omi-play-account:{uid}'.encode('utf-8')).hexdigest()
+
+
+def client_config_payload(uid: str, environ: Optional[Mapping[str, str]] = None) -> dict:
+    """The ``play_billing`` block of the subscription response."""
+    return {
+        'product_id': product_id(environ),
+        'base_plans': [{'id': plan_id, 'interval': interval} for plan_id, interval in base_plans(environ).items()],
+        'trial_offer_id': trial_offer_id(environ),
+        'obfuscated_account_id': obfuscated_account_id(uid),
+    }

@@ -71,14 +71,14 @@ from database.users import (
     resolve_deletion_wipe_job_id,
     set_user_transcription_preferences,
 )
-from utils import ai_profile_refresh, billing_recovery, play_billing, screen_vector_entitlements
+from utils import ai_profile_refresh, billing_recovery, screen_vector_entitlements
 from utils.observability.fallback import record_fallback
 from config import play_billing as play_billing_config
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
 from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
 from utils.generated_compute import require_generated_compute, generated_compute_configured
-from models.users import ProcessingBacklog
+from models.users import PlayBillingConfig, ProcessingBacklog
 from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
@@ -1374,7 +1374,7 @@ def get_user_subscription_endpoint(
         audio = {'count': held.count, 'seconds': held.seconds} if held else {'count': 0, 'seconds': 0}
         response.processing_backlog = processing_backlog.snapshot(uid, allowance=funded, audio=audio)
     if play_billing_config.client_uses_play(x_app_platform, x_app_build, uid):
-        response.play_billing = play_billing.client_config(uid)
+        response.play_billing = PlayBillingConfig.model_validate(play_billing_config.client_config_payload(uid))
     return response
 
 

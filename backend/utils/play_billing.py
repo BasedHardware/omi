@@ -8,7 +8,6 @@ a Stripe Omi Pro subscriber holds.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import time
 from dataclasses import dataclass, replace
@@ -111,9 +110,7 @@ def get_publisher() -> PublisherClient:
     return _publisher
 
 
-def obfuscated_account_id(uid: str) -> str:
-    """Stable 64-char id the app passes to Play; Google echoes it on the purchase."""
-    return hashlib.sha256(f'omi-play-account:{uid}'.encode('utf-8')).hexdigest()
+obfuscated_account_id = config.obfuscated_account_id
 
 
 def _rfc3339_seconds(value: Any) -> Optional[int]:
@@ -430,14 +427,6 @@ def handle_developer_notification(notification: Mapping[str, Any], publisher: Op
 
 def client_config(uid: str):
     """The ``play_billing`` block of the subscription response."""
-    from models.users import PlayBasePlan, PlayBillingConfig
+    from models.users import PlayBillingConfig
 
-    return PlayBillingConfig(
-        product_id=config.product_id(),
-        base_plans=[
-            PlayBasePlan(id=plan_id, interval='year' if interval == 'year' else 'month')
-            for plan_id, interval in config.base_plans().items()
-        ],
-        trial_offer_id=config.trial_offer_id(),
-        obfuscated_account_id=obfuscated_account_id(uid),
-    )
+    return PlayBillingConfig.model_validate(config.client_config_payload(uid))
