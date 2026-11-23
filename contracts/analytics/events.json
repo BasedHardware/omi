@@ -5701,6 +5701,40 @@
         "orphan-audio-reclaim"
       ],
       "correlation": null
+    },
+    {
+      "id": "walCustodyAudit",
+      "wire_name": "WAL Custody Audit",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "agreeCovered": {
+          "type": "int",
+          "wire_name": "agree_covered"
+        },
+        "agreePending": {
+          "type": "int",
+          "wire_name": "agree_pending"
+        },
+        "disagree": {
+          "type": "int",
+          "wire_name": "disagree"
+        },
+        "unknown": {
+          "type": "int",
+          "wire_name": "unknown"
+        },
+        "released": {
+          "type": "int",
+          "wire_name": "released"
+        }
+      },
+      "consumers": [
+        "wal-custody-audit"
+      ],
+      "correlation": null
     }
   ],
   "transport_dispositions": {

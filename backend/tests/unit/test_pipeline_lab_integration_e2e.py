@@ -116,8 +116,13 @@ def test_add_day_run_baseline_and_inspector(lab, capsys):
     assert lab['up'].requests and not any(
         k.startswith('x-pipeline-lab-') for r in lab['up'].requests for k in r['headers']
     )
-    conversation = json.loads(next((run_dir / 'conversations').glob('*.json')).read_text())
-    assert conversation['baseline_id'] == conversation['id'] and conversation['llm_call_ids']
+    conversations = [json.loads(path.read_text()) for path in (run_dir / 'conversations').glob('*.json')]
+    assert len(conversations) == 3
+    for conversation in conversations:
+        assert conversation['baseline_id'] == conversation['id']
+        expected_calls = [call['id'] for call in notes_calls if call['conversation_id'] == conversation['id']]
+        assert len(expected_calls) == 1
+        assert conversation['llm_call_ids'] == expected_calls
     baseline = json.loads((run_dir / 'baseline.json').read_text())
     assert sum(baseline['counts'].values()) == 3
     day_file = json.loads((run_dir / 'day.json').read_text())

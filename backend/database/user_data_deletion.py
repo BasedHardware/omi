@@ -35,7 +35,12 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     # lives in the customer data plane (which can differ from this compute
     # client's project). A failed delete must propagate so the account wipe
     # retries it.
-    get_data_plane_firestore_client().collection('rollout_cohorts').document(uid).delete()
+    cohort_client = get_data_plane_firestore_client()
+    cohort_ref = cohort_client.collection('rollout_cohorts').document(uid)
+    # Child audit rows (go_finalization_audit) survive a parent delete, so erase them first.
+    for sub in cohort_ref.collections():
+        delete_collection(sub, client=cohort_client)
+    cohort_ref.delete()
     # Creator-owned marketplace apps live outside users/{uid}; remove their
     # nested API keys/reviews too so final and immediate erasure share parity.
     delete_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY)

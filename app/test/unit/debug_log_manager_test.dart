@@ -94,6 +94,34 @@ void main() {
     await DebugLogManager.clear();
   });
 
+  test('clear deletes native iOS lifecycle logs', () async {
+    final log = File('${directory.path}/omi_debug_20200101_ios_lifecycle.log');
+    await log.writeAsString('restore_launch');
+
+    await DebugLogManager.clear();
+
+    expect(await log.exists(), isFalse);
+  });
+
+  test('three-day pruning deletes old native iOS lifecycle logs and keeps recent ones', () async {
+    final now = DateTime.now().toUtc();
+    File lifecycleLog(int daysAgo) {
+      final date = now.subtract(Duration(days: daysAgo)).toIso8601String().substring(0, 10).replaceAll('-', '');
+      return File('${directory.path}/omi_debug_${date}_ios_lifecycle.log');
+    }
+
+    final old = lifecycleLog(4);
+    final recent = lifecycleLog(3);
+    addTearDown(DebugLogManager.clear);
+    await old.writeAsString('old');
+    await recent.writeAsString('recent');
+
+    await DebugLogManager.setEnabled(true);
+
+    expect(await old.exists(), isFalse);
+    expect(await recent.readAsString(), 'recent');
+  });
+
   test('disabled logging is a no-op', () async {
     await DebugLogManager.setEnabled(false);
     try {

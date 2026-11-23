@@ -144,6 +144,26 @@ void main() {
       });
     }
 
+    test('preserves evidence and audio order on the Omi record connection for polling STT', () async {
+      final primary = _FakeSocket();
+      final secondary = _FakeSocket();
+      final socket = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        sttProvider: SttProvider.custom.name,
+      );
+      addTearDown(socket.stop);
+      expect(await socket.connect(), isTrue);
+
+      final first = Uint8List.fromList([1, 2, 3]);
+      final second = Uint8List.fromList([4, 5, 6]);
+      socket.sendEvidenceAudioFrame('first evidence', first);
+      socket.sendEvidenceAudioFrame('second evidence', second);
+
+      expect(primary.sent, [same(first), same(second)]);
+      expect(secondary.sent, ['first evidence', same(first), 'second evidence', same(second)]);
+    });
+
     test('keeps forwarding input frames by default', () async {
       final primary = _FakeSocket();
       final secondary = _FakeSocket();
