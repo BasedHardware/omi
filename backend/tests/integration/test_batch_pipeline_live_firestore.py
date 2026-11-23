@@ -129,7 +129,7 @@ async def test_allowance_held_recording_releases_and_publishes_one_transcript(la
     app.include_router(conversations.router)
     app.dependency_overrides[conversations.auth.get_current_user_uid] = lambda: lane.uid
     monkeypatch.setattr(transcribing_hold, 'current_stage', lambda: 'dev')
-    monkeypatch.setattr(transcribing_hold, 'FirestoreStore', lambda _: lane.store)
+    monkeypatch.setattr(transcribing_hold, '_open_admission_store', lambda _: lane.store)
 
     def read_wire():
         with TestClient(app) as client, monkeypatch.context() as scope:

@@ -1,9 +1,13 @@
 """Read current batch admission evidence for the authenticated conversation APIs."""
 
-from typing import Any
+from __future__ import annotations
 
-from database.batch_pipeline_store import FirestoreStore
+from typing import TYPE_CHECKING, Any
+
 from database.firestore_retry import FIRESTORE_NO_RETRY
+
+if TYPE_CHECKING:
+    from database.batch_pipeline_store import FirestoreStore
 
 
 def read_jobs(

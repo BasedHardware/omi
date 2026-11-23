@@ -6,11 +6,13 @@ hydration must remain authoritative for replace_record and finalization replay;
 apply project only at API exits.
 """
 
+from __future__ import annotations
+
 import math
 import time
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from google.api_core.exceptions import GoogleAPICallError
 
@@ -24,13 +26,15 @@ from config.episodes import (
 from config.transcription_pending import pending_retry_enabled, seal_wait_enabled
 from database.batch_pipeline_admission_view import read_jobs as read_admission_jobs
 from database.batch_pipeline_allowance_hold import EXHAUSTED, STATE
-from database.batch_pipeline_store import FirestoreStore
 from utils.conversations import empty_capture
 from utils.conversations.fragment_visibility import BATCH_RECORD_OWNERS
 from utils.conversations.home_titles import notes_pending, placeholder_title_wire, untitled_pending
 from utils.observability.fallback import record_fallback
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
 from utils.sync.stage import InvalidSyncStage, current_stage
+
+if TYPE_CHECKING:
+    from database.batch_pipeline_store import FirestoreStore
 
 TranscriptionAdmission = Literal['allowance_held', 'processing']
 _CONVERSATIONS_PER_QUERY = 30
@@ -236,6 +240,13 @@ def _admission(jobs: list[dict[str, Any]], now: float, max_age: float) -> Transc
     return 'processing' if active else None
 
 
+def _open_admission_store(stage: str) -> FirestoreStore:
+    # Generic presentation also serves MCP reads that never need batch-job dependencies.
+    from database.batch_pipeline_store import FirestoreStore
+
+    return FirestoreStore(f'batch_pipeline_{stage}')
+
+
 def read_admissions(
     uid: str,
     rows: list[dict[str, Any]],
@@ -257,7 +268,7 @@ def read_admissions(
             return {}
         if stage not in {'prod', 'dev'}:
             return {}
-        store = FirestoreStore(f'batch_pipeline_{stage}')
+        store = _open_admission_store(stage)
     observed_at = (now or datetime.now(timezone.utc)).timestamp()
     max_age = home_transcription_max_age_seconds()
     deadline = time.monotonic() + _ADMISSION_READ_SECONDS
