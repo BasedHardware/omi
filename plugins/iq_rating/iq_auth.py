@@ -52,7 +52,11 @@ def require_iq_rating_auth(
         raise HTTPException(status_code=503, detail='iq rating auth is not configured')
 
     token = _presented_token(request)
-    if not token or not hmac.compare_digest(token, secret):
+    # Compare UTF-8 encoded bytes: hmac.compare_digest raises TypeError on
+    # non-ASCII str inputs, which would surface as an unhandled HTTP 500.
+    # Encoding to bytes keeps the comparison constant-time AND lets any
+    # non-ASCII token fail closed with 401 instead of crashing.
+    if not token or not hmac.compare_digest(token.encode('utf-8'), secret.encode('utf-8')):
         raise HTTPException(status_code=401, detail='unauthorized')
 
     trimmed_uid = uid.strip()
