@@ -3,12 +3,14 @@
 from typing import Any
 from google.cloud.firestore_v1 import FieldFilter
 
+from database.conversation_purge_budget import stream_options
+
 
 def owner_documents(client: Any, namespace: str, table: str, key: str, *, after: Any = None) -> list:
     query = client.collection(f'{namespace}_{table}').where(filter=FieldFilter('owner_key', '==', key))
     if after is not None:
         query = query.start_after(after)
-    return list(query.limit(100).stream())
+    return list(query.limit(100).stream(**stream_options()))
 
 
 def artifacts_by_owner_id(client: Any, namespace: str, uid: str, *, after: Any = None) -> list:
@@ -16,7 +18,7 @@ def artifacts_by_owner_id(client: Any, namespace: str, uid: str, *, after: Any =
     query = client.collection(f'{namespace}_artifacts').where(filter=FieldFilter('owner_id', '==', uid))
     if after is not None:
         query = query.start_after(after)
-    return list(query.limit(100).stream())
+    return list(query.limit(100).stream(**stream_options()))
 
 
 def predecessor_documents(client: Any, namespace: str, segment_id: str, transaction: Any) -> list:

@@ -19,6 +19,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Callable, Iterator
 
+from database import conversation_purge_budget as purge_budget
+
 _DEADLINE: ContextVar[float | None] = ContextVar('rpc_deadline', default=None)
 _MARK = '_omi_rpc_deadline_bound'
 # GAPIC methods of google.cloud.firestore_v1's FirestoreClient used by reads, queries and transactions.
@@ -31,6 +33,8 @@ _FIRESTORE_METHODS = (
     'delete_document',
     'get_document',
     'list_documents',
+    'list_collection_ids',
+    'partition_query',
     'rollback',
     'run_aggregation_query',
     'run_query',
@@ -93,6 +97,13 @@ def _bounded_gapic(name: str, call: Callable[..., Any]) -> Callable[..., Any]:
     @functools.wraps(call)
     def bounded(*args: Any, **kwargs: Any) -> Any:
         left = _left_or_raise(name)
+        if name == 'rollback' and purge_budget.current() is not None:
+            left = ROLLBACK_GRACE_SECONDS
+        elif name != 'rollback':
+            ceiling = purge_budget.timeout()
+            if ceiling is not None:
+                left = ceiling if left is None else min(left, ceiling)
+                purge_budget.charge_rpc(name, kwargs.get('request', args[0] if args else None))
         if left is None:
             return call(*args, **kwargs)
         kwargs['retry'] = None
@@ -111,6 +122,16 @@ def bind_firestore_client(client: Any) -> Any:
         call = getattr(api, name, None)
         if callable(call):
             setattr(api, name, _bounded_gapic(name, call))
+    transaction = getattr(client, 'transaction', None)
+    if callable(transaction):
+
+        @functools.wraps(transaction)
+        def transaction_with_deadline(*args, **kwargs):
+            if purge_budget.current() is not None:
+                kwargs['max_attempts'] = 1
+            return transaction(*args, **kwargs)
+
+        client.transaction = transaction_with_deadline
     setattr(api, _MARK, True)
     return client
 
@@ -125,6 +146,9 @@ def bind_storage_client(client: Any) -> Any:
     @functools.wraps(request)
     def bounded(*args: Any, **kwargs: Any) -> Any:
         left = _left_or_raise('storage')
+        ceiling = purge_budget.timeout()
+        if ceiling is not None:
+            left = ceiling if left is None else min(left, ceiling)
         if left is not None:
             # No max_allowed_time: it raises only after a response already arrived,
             # which would disguise a definitive outcome as an unknown one.

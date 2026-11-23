@@ -13,6 +13,8 @@ import threading
 from contextlib import contextmanager
 from typing import Any, Callable, Iterator
 
+from database import conversation_purge_budget as purge_budget, rpc_deadline
+
 MAX_POOL_SIZE = 4
 
 
@@ -40,10 +42,26 @@ def configure(conn: Any) -> Any:
     return conn
 
 
+def _purge_connection_timeout() -> int | None:
+    if purge_budget.current() is None:
+        return None
+    left = purge_budget.timeout()
+    deadline = rpc_deadline.remaining()
+    if deadline is not None:
+        left = min(left, deadline)
+    # libpq imposes a minimum of two seconds for connect_timeout.
+    if left < 2:
+        raise TimeoutError('conversation purge cannot open a Postgres connection before its deadline')
+    return int(left)
+
+
 def dial(dsn: str) -> Any:
     psycopg = _psycopg()
     # autocommit: transaction boundaries are explicit (BEGIN ... COMMIT) in PostgresStore.
-    return psycopg.connect(dsn, autocommit=True)
+    timeout = _purge_connection_timeout()
+    if timeout is None:
+        return psycopg.connect(dsn, autocommit=True)
+    return psycopg.connect(dsn, autocommit=True, connect_timeout=timeout)
 
 
 def iam_connector(host: str, database: str, user: str, *, port: int = 5432) -> Callable[[], Any]:
@@ -60,10 +78,19 @@ def iam_connector(host: str, database: str, user: str, *, port: int = 5432) -> C
         from google.auth.transport.requests import Request
 
         credentials, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/sqlservice.login'])
-        credentials.refresh(Request())
+        request = Request()
+        if purge_budget.current() is None:
+            credentials.refresh(request)
+        else:
+
+            def bounded_request(*args, **kwargs):
+                kwargs['timeout'] = _purge_connection_timeout()
+                return request(*args, **kwargs)
+
+            credentials.refresh(bounded_request)
         return _psycopg().connect(
             host=host, port=port, dbname=database, user=user, password=credentials.token, sslmode='require',
-            autocommit=True, connect_timeout=10,
+            autocommit=True, connect_timeout=_purge_connection_timeout() or 10,
         )  # fmt: skip
 
     return connect

@@ -165,7 +165,12 @@ def _dispatch(snapshot: Any, collection: str, counts: dict[str, int]) -> bool:
     previous = int(row.get('generation') or 0)
     if previous and _task_pending(job, previous, erasure, counts):
         # That task will run this generation; a new one would only queue behind it.
-        purge_jobs.defer(job, purge_jobs.REDRIVE_SECONDS, collection=collection, generation=previous)
+        delay = (
+            ENQUEUE_RETRY_SECONDS
+            if not erasure and row.get('last_outcome') == 'checkpointed'
+            else purge_jobs.REDRIVE_SECONDS
+        )
+        purge_jobs.defer(job, delay, collection=collection, generation=previous)
         counts['queued'] += 1
         return False
     claim = purge_jobs.claim_dispatch(job, collection=collection)

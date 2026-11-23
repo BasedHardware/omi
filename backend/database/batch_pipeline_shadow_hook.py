@@ -100,3 +100,10 @@ def shadow_from_env(primary):
     except Exception:
         logger.warning('event=jobstore_shadow outcome=refused reason=seam_error', exc_info=True)
         return primary
+
+
+def purge_owner_page(namespace: str, uid: str, after: list[str] | None) -> tuple[bool, list[str] | None]:
+    """Resume a bounded erasure copy page, including a cold configured mirror."""
+    from database.jobstore.dual_store import purge_owner_page as reconcile
+
+    return reconcile(namespace, uid, after)

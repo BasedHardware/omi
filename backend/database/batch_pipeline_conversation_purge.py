@@ -25,10 +25,12 @@ long unmatched prefix.
 from __future__ import annotations
 
 import time
+from functools import lru_cache
 from typing import Any, Callable, ContextManager, Iterable, Mapping, Protocol
 
 from google.cloud import firestore
 
+from database import conversation_purge_budget as purge_budget
 from database import rpc_deadline
 from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
@@ -42,6 +44,7 @@ from database.batch_pipeline_purge import erase_result as _erase_result
 from database.batch_pipeline_purge import row_belongs as _belongs
 from database.batch_pipeline_purge import row_references as _references
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
+from database.batch_pipeline_shadow_hook import purge_owner_page
 from database.legal_holds import settles_unknown_erasure
 
 PHASES = ('discover', 'dependents', 'parked', 'segments', 'shadow')
@@ -78,7 +81,9 @@ class PurgeCheckpointed(Exception):
 class MemberProgress(Protocol):
     position: dict[str, Any]
 
-    def checkpoint(self, position: dict[str, Any], *, add_segments: tuple[str, Iterable[str]] | None = None) -> None:
+    def checkpoint(
+        self, position: dict[str, Any], *, add_segments: tuple[str, Iterable[str]] | None = None, fence=None
+    ) -> None:
         """Persist position (and newly found segments) under run ownership."""
         ...
 
@@ -86,6 +91,10 @@ class MemberProgress(Protocol):
 class Progress(MemberProgress, Protocol):
     def segments(self, namespace: str) -> set[str]:
         """Every persisted segment id for ``namespace``."""
+        ...
+
+    def matches_segment(self, namespace: str, segment_ids: Iterable[str]) -> bool:
+        """Whether any named segment belongs to the durable journal."""
         ...
 
     def pending_segments(self, namespace: str, limit: int) -> list[str]:
@@ -148,6 +157,7 @@ def _in_units(
     settle: Callable[[], None],
 ) -> int:
     pending = list(rows)
+    budget = purge_budget.current()
     erased = 0
     while pending:
         _ensure_budget(progress)
@@ -160,6 +170,8 @@ def _in_units(
                 and done < UNIT_MAX_ROWS
                 and (done == 0 or (clock() - started < UNIT_BUDGET_SECONDS and not progress.expired()))
             ):
+                if budget is not None and budget.reads < 64:
+                    raise purge_budget.WorkLimit()
                 erase(pending.pop(0), authority)
                 done += 1
             erased += done
@@ -238,11 +250,33 @@ def purge_conversations(
     start = dict(progress.position or {})
     start_ns = int(start.get('ns') or 0)
     erased = 0
+    budget = purge_budget.current()
+    deferred_position: dict[str, Any] | None = None
+    deferred_pages = 0
 
-    def mark(position: dict[str, Any], **kwargs: Any) -> None:
+    def mark(position: dict[str, Any], *, defer: bool = False, **kwargs: Any) -> None:
+        nonlocal deferred_position, deferred_pages
+        if defer and budget is not None:
+            deferred_position = position
+            deferred_pages += 1
+            if deferred_pages < 4 and not progress.expired():
+                return
+        deferred_position, deferred_pages = None, 0
         progress.checkpoint(position, **kwargs)
         if progress.expired():
             raise PurgeCheckpointed()
+
+    @lru_cache(maxsize=512)
+    def single_segment_match(namespace: str, identifier: str) -> bool:
+        return progress.matches_segment(namespace, (identifier,))
+
+    def segment_match(namespace: str, identifiers: Iterable[str], segments: set[str]) -> bool:
+        if budget is None:
+            return not segments.isdisjoint(identifiers)
+        identifiers = tuple(identifiers)
+        if len(identifiers) == 1:
+            return single_segment_match(namespace, identifiers[0])
+        return bool(identifiers) and progress.matches_segment(namespace, identifiers)
 
     def remote_delete(authority: Any) -> Callable[[str, str], None]:
         # Every object delete holds the gate until its outcome is known (UnitAuthority.remote).
@@ -284,161 +318,213 @@ def purge_conversations(
 
         return erase
 
-    # Re-list before metadata on every run, including a checkpoint from an old
-    # reader already past the last namespace. Deleted generations are their
-    # own cursor: a crash/budget handoff resumes with the remaining first page.
-    if default_storage_cleanup:
-        for conversation_id in members:
-            while True:
-                _ensure_budget(progress)
-                originals = conversation_objects(uid, conversation_id, limit=UNIT_MAX_ROWS)
-                if not originals:
-                    break
-                _in_units(progress, originals, lambda uri, authority: remote_delete(authority)(uid, uri), clock, settle)
-                if len(members) > 1:
-                    # Deleted object generations are the WAL cursor. Persist a
-                    # handoff point even before the first metadata page.
-                    mark(dict(progress.position))
-    for ns_index in range(start_ns, len(NAMESPACES)):
-        namespace = NAMESPACES[ns_index]
-        resuming = ns_index == start_ns and start.get('phase') in PHASES
-        first_phase = PHASES.index(start['phase']) if resuming else 0
-        for phase_index in range(first_phase, len(PHASES)):
-            phase = PHASES[phase_index]
-            here = resuming and phase_index == first_phase
-            first_table = int(start.get('table') or 0) if here else 0
-            after = start.get('after') if here else None
-            if phase in ('discover', 'dependents'):
-                tables = DISCOVER_TABLES if phase == 'discover' else DEPENDENT_TABLES
-                segments = progress.segments(namespace) if phase == 'dependents' else set()
-                for table_index in range(first_table, len(tables)):
-                    table = tables[table_index]
-                    cursor = after if table_index == first_table else None
+    try:
+        # Re-list before metadata on every run, including a checkpoint from an old
+        # reader already past the last namespace. Deleted generations are their
+        # own cursor: a crash/budget handoff resumes with the remaining first page.
+        if default_storage_cleanup:
+            for conversation_id in members:
+                while True:
+                    _ensure_budget(progress)
+                    originals = conversation_objects(uid, conversation_id, limit=UNIT_MAX_ROWS)
+                    if not originals:
+                        break
+                    _in_units(
+                        progress, originals, lambda uri, authority: remote_delete(authority)(uid, uri), clock, settle
+                    )
+                    if budget is not None or len(members) > 1:
+                        # Deleted object generations are the WAL cursor. Persist a
+                        # handoff point even before the first metadata page.
+                        mark(dict(progress.position))
+        for ns_index in range(start_ns, len(NAMESPACES)):
+            namespace = NAMESPACES[ns_index]
+            resuming = ns_index == start_ns and start.get('phase') in PHASES
+            first_phase = PHASES.index(start['phase']) if resuming else 0
+            for phase_index in range(first_phase, len(PHASES)):
+                phase = PHASES[phase_index]
+                here = resuming and phase_index == first_phase
+                first_table = int(start.get('table') or 0) if here else 0
+                after = start.get('after') if here else None
+                if phase in ('discover', 'dependents'):
+                    tables = DISCOVER_TABLES if phase == 'discover' else DEPENDENT_TABLES
+                    segments = progress.segments(namespace) if phase == 'dependents' and budget is None else set()
+                    for table_index in range(first_table, len(tables)):
+                        table = tables[table_index]
+                        cursor = after if table_index == first_table else None
+                        while True:
+                            _ensure_budget(progress)
+                            rows = queries.owner_documents(
+                                client, namespace, table, key, after=_cursor(client, namespace, table, cursor)
+                            )
+                            if not rows:
+                                break
+                            cursor = rows[-1].id
+                            position = {'ns': ns_index, 'phase': phase, 'table': table_index, 'after': cursor}
+                            if phase == 'discover':
+                                found: dict[str, list[str]] = {cid: [] for cid in members}
+                                for snapshot in rows:
+                                    data = snapshot.to_dict() or {}
+                                    result = {}
+                                    if table == 'jobs':
+                                        # Unsaved page: an expiry here replays it from the previous cursor.
+                                        _ensure_budget(progress)
+                                        result_ref = client.collection(f'{namespace}_results').document(snapshot.id)
+                                        result = result_ref.get().to_dict() or {}
+                                    projection = result.get('projection') or data.get('projection')
+                                    for cid in members:
+                                        if _belongs({**data, 'projection': projection}, cid):
+                                            found[cid].append(snapshot.id)
+                                if len(members) == 1 and next(iter(members.values())) is progress:
+                                    mark(position, add_segments=(namespace, next(iter(found.values()))))
+                                else:
+                                    # Fan-out can span transactions. Cursor commits LAST; replay is idempotent.
+                                    for cid, segment_ids in found.items():
+                                        if segment_ids:
+                                            _ensure_budget(progress)
+                                            member = members[cid]
+                                            member.checkpoint(member.position, add_segments=(namespace, segment_ids))
+                                    mark(position, defer=True)
+                                continue
+                            matches = []
+                            for snapshot in rows:
+                                data = snapshot.to_dict() or {}
+                                if (
+                                    belongs(data)
+                                    or (
+                                        table in {'artifacts', 'projections'}
+                                        and data.get('segment_id')
+                                        and segment_match(namespace, (data['segment_id'],), segments)
+                                    )
+                                    or (
+                                        table == 'intakes'
+                                        and segment_match(namespace, data.get('segment_ids') or [], segments)
+                                    )
+                                ):
+                                    matches.append((snapshot, data))
+                            erased += _in_units(progress, matches, erase_dependent(namespace, table), clock, settle)
+                            mark(position, defer=True)
+                        mark({'ns': ns_index, 'phase': phase, 'table': table_index + 1, 'after': None})
+                elif phase == 'parked':
+                    segments = progress.segments(namespace) if budget is None else set()
+                    cursor = after
                     while True:
                         _ensure_budget(progress)
-                        rows = queries.owner_documents(
-                            client, namespace, table, key, after=_cursor(client, namespace, table, cursor)
+                        rows = queries.artifacts_by_owner_id(
+                            client, namespace, uid, after=_cursor(client, namespace, 'artifacts', cursor)
                         )
                         if not rows:
                             break
                         cursor = rows[-1].id
-                        position = {'ns': ns_index, 'phase': phase, 'table': table_index, 'after': cursor}
-                        if phase == 'discover':
-                            found: dict[str, list[str]] = {cid: [] for cid in members}
-                            for snapshot in rows:
-                                data = snapshot.to_dict() or {}
-                                result = {}
-                                if table == 'jobs':
-                                    # Unsaved page: an expiry here replays it from the previous cursor.
-                                    _ensure_budget(progress)
-                                    result_ref = client.collection(f'{namespace}_results').document(snapshot.id)
-                                    result = result_ref.get().to_dict() or {}
-                                projection = result.get('projection') or data.get('projection')
-                                for cid in members:
-                                    if _belongs({**data, 'projection': projection}, cid):
-                                        found[cid].append(snapshot.id)
-                            if len(members) == 1 and next(iter(members.values())) is progress:
-                                mark(position, add_segments=(namespace, next(iter(found.values()))))
-                            else:
-                                # Fan-out can span transactions. Cursor commits LAST; replay is idempotent.
-                                for cid, segment_ids in found.items():
-                                    if segment_ids:
-                                        _ensure_budget(progress)
-                                        member = members[cid]
-                                        member.checkpoint(member.position, add_segments=(namespace, segment_ids))
-                                mark(position)
-                            continue
                         matches = []
                         for snapshot in rows:
                             data = snapshot.to_dict() or {}
-                            if (
-                                belongs(data)
-                                or (table in {'artifacts', 'projections'} and data.get('segment_id') in segments)
-                                or (table == 'intakes' and segments.intersection(data.get('segment_ids') or []))
+                            if data.get('owner_key') == key and not data.get('erasure_requested'):
+                                continue  # Already handled in ``dependents``.
+                            if belongs(data) or (
+                                data.get('segment_id') and segment_match(namespace, (data['segment_id'],), segments)
                             ):
                                 matches.append((snapshot, data))
-                        erased += _in_units(progress, matches, erase_dependent(namespace, table), clock, settle)
-                        mark(position)
-                    mark({'ns': ns_index, 'phase': phase, 'table': table_index + 1, 'after': None})
-            elif phase == 'parked':
-                segments = progress.segments(namespace)
-                cursor = after
-                while True:
-                    _ensure_budget(progress)
-                    rows = queries.artifacts_by_owner_id(
-                        client, namespace, uid, after=_cursor(client, namespace, 'artifacts', cursor)
-                    )
-                    if not rows:
-                        break
-                    cursor = rows[-1].id
-                    matches = []
-                    for snapshot in rows:
-                        data = snapshot.to_dict() or {}
-                        if data.get('owner_key') == key and not data.get('erasure_requested'):
-                            continue  # Already handled in ``dependents``.
-                        if belongs(data) or data.get('segment_id') in segments:
-                            matches.append((snapshot, data))
-                    erased += _in_units(progress, matches, erase_dependent(namespace, 'artifacts'), clock, settle)
-                    mark({'ns': ns_index, 'phase': phase, 'table': 0, 'after': cursor})
-            elif phase == 'segments':
-                while True:
-                    _ensure_budget(progress)
-                    pending = progress.pending_segments(namespace, SEGMENT_PAGE)
-                    if not pending:
-                        break
-                    for chunk_start in range(0, len(pending), UNIT_MAX_ROWS):
-                        chunk = pending[chunk_start : chunk_start + UNIT_MAX_ROWS]
-                        bindings = []
-                        for segment_id in chunk:
-                            # Each read is its own batch: none starts past the budget.
-                            _ensure_budget(progress)
-                            job = client.collection(f'{namespace}_jobs').document(segment_id).get()
-                            _ensure_budget(progress)
-                            result = client.collection(f'{namespace}_results').document(segment_id).get()
-                            bindings.append((segment_id, job, result))
-                        done: list[str] = []
+                        erased += _in_units(progress, matches, erase_dependent(namespace, 'artifacts'), clock, settle)
+                        mark({'ns': ns_index, 'phase': phase, 'table': 0, 'after': cursor}, defer=True)
+                elif phase == 'segments':
+                    while True:
+                        _ensure_budget(progress)
+                        pending = progress.pending_segments(namespace, SEGMENT_PAGE)
+                        if not pending:
+                            break
+                        for chunk_start in range(0, len(pending), UNIT_MAX_ROWS):
+                            chunk = pending[chunk_start : chunk_start + UNIT_MAX_ROWS]
+                            bindings = []
+                            for segment_id in chunk:
+                                # Each read is its own batch: none starts past the budget.
+                                _ensure_budget(progress)
+                                job = client.collection(f'{namespace}_jobs').document(segment_id).get()
+                                _ensure_budget(progress)
+                                result = client.collection(f'{namespace}_results').document(segment_id).get()
+                                bindings.append((segment_id, job, result))
+                            done: list[str] = []
 
-                        def erase_binding(
-                            item: Any, authority: Any, namespace: str = namespace, done: list[str] = done
-                        ) -> None:
-                            segment_id, job, result = item
-                            result_data = (result.to_dict() or {}) if result.exists else {}
-                            if job.exists:
-                                for uri in _references(job.to_dict() or {}) | _references(result_data):
-                                    remote_delete(authority)(uid, uri)
-                                _delete_job(client, namespace, job, retain_ordering=True, fence=authority.fence)
-                            elif result_data and result_data.get('projection_state') != 'erased':
-                                for uri in _references(result_data):
-                                    remote_delete(authority)(uid, uri)
-                                _erase_result(client, namespace, result, fence=authority.fence)
-                                mirror_refresh(namespace, [('results', segment_id)])
-                            done.append(segment_id)
+                            def erase_binding(
+                                item: Any, authority: Any, namespace: str = namespace, done: list[str] = done
+                            ) -> None:
+                                segment_id, job, result = item
+                                result_data = (result.to_dict() or {}) if result.exists else {}
+                                if job.exists:
+                                    for uri in _references(job.to_dict() or {}) | _references(result_data):
+                                        remote_delete(authority)(uid, uri)
+                                    _delete_job(client, namespace, job, retain_ordering=True, fence=authority.fence)
+                                elif result_data and result_data.get('projection_state') != 'erased':
+                                    for uri in _references(result_data):
+                                        remote_delete(authority)(uid, uri)
+                                    _erase_result(client, namespace, result, fence=authority.fence)
+                                    mirror_refresh(namespace, [('results', segment_id)])
+                                done.append(segment_id)
 
+                            _ensure_budget(progress)
+                            settle()
+                            with progress.unit() as authority:
+                                started = clock()
+                                for item in bindings:
+                                    if done and (clock() - started >= UNIT_BUDGET_SECONDS or progress.expired()):
+                                        break
+                                    erase_binding(item, authority)
+                                # Records go only after their binding is gone, under the same ownership.
+                                progress.segments_done(namespace, done)
+                            erased += len(done)
+                            if len(done) < len(bindings):
+                                break  # Budget hit; re-read pending (the rest stays recorded).
+                        mark({'ns': ns_index, 'phase': phase, 'table': 0, 'after': None})
+                elif phase == 'shadow':
+                    if budget is None:
                         _ensure_budget(progress)
                         settle()
-                        with progress.unit() as authority:
-                            started = clock()
-                            for item in bindings:
-                                if done and (clock() - started >= UNIT_BUDGET_SECONDS or progress.expired()):
+                        with progress.unit():
+                            purge_jobstore_owner(namespace, uid)
+                    else:
+                        from database.jobstore.dual_store import PURGE_SETTLE_S
+
+                        pass_number = first_table
+                        if pass_number not in (0, 1):
+                            raise ValueError('invalid conversation purge shadow pass')
+                        while True:
+                            _ensure_budget(progress)
+                            settle()
+                            with progress.unit() as authority:
+                                with rpc_deadline.rpc_deadline(rpc_deadline.now() + 4.0):
+                                    configured, next_keyset = purge_owner_page(namespace, uid, after)
+                                if not configured and (pass_number or after is not None):
+                                    raise RuntimeError('conversation purge mirror disappeared during reconciliation')
+                                if next_keyset is not None:
+                                    progress.checkpoint(
+                                        {'ns': ns_index, 'phase': phase, 'table': pass_number, 'after': next_keyset},
+                                        fence=authority.fence,
+                                    )
+                                elif pass_number == 1 or not configured:
+                                    progress.checkpoint({'ns': ns_index + 1, 'phase': PHASES[0]}, fence=authority.fence)
                                     break
-                                erase_binding(item, authority)
-                            # Records go only after their binding is gone, under the same ownership.
-                            progress.segments_done(namespace, done)
-                        erased += len(done)
-                        if len(done) < len(bindings):
-                            break  # Budget hit; re-read pending (the rest stays recorded).
-                    mark({'ns': ns_index, 'phase': phase, 'table': 0, 'after': None})
-            elif phase == 'shadow':
-                _ensure_budget(progress)
-                settle()
-                with progress.unit():
-                    purge_jobstore_owner(namespace, uid)
-            if phase_index + 1 < len(PHASES):
-                mark({'ns': ns_index, 'phase': PHASES[phase_index + 1]})
-            else:
-                # Past the last namespace this resumes to an empty loop, i.e. complete.
-                mark({'ns': ns_index + 1, 'phase': PHASES[0]})
-        start = {}
+                            after = next_keyset
+                            if after is None:
+                                if budget.work_left <= PURGE_SETTLE_S:
+                                    raise PurgeCheckpointed()
+                                time.sleep(PURGE_SETTLE_S)
+                                with progress.unit() as authority:
+                                    progress.checkpoint(
+                                        {'ns': ns_index, 'phase': phase, 'table': 1, 'after': None},
+                                        fence=authority.fence,
+                                    )
+                                pass_number = 1
+                        continue
+                if phase_index + 1 < len(PHASES):
+                    mark({'ns': ns_index, 'phase': PHASES[phase_index + 1]})
+                else:
+                    # Past the last namespace this resumes to an empty loop, i.e. complete.
+                    mark({'ns': ns_index + 1, 'phase': PHASES[0]})
+            start = {}
+    except (PurgeCheckpointed, purge_budget.WorkLimit):
+        if deferred_position is not None:
+            with purge_budget.settling():
+                progress.checkpoint(deferred_position)
+        raise
     return erased
 
 

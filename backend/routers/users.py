@@ -15,6 +15,7 @@ import functools
 import hashlib
 import os
 import asyncio
+import threading
 
 import pytz
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
@@ -413,6 +414,28 @@ async def run_account_deletion_wipe(
             await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
 
 
+async def _run_bounded_batch_purge(run, job_id, generation, budget):
+    from database import conversation_purge_budget as purge_budget
+
+    started = threading.Event()
+
+    def execute():
+        budget.charge(0)
+        started.set()
+        return run(job_id, generation)
+
+    with purge_budget.activate(budget):
+        task = asyncio.create_task(run_blocking(erasure_executor, execute))
+        try:
+            done, _ = await asyncio.wait((task,), timeout=max(0, budget.work_left))
+            if not done and not started.is_set():
+                raise TimeoutError('conversation batch purge expired while queued')
+            return await asyncio.wait_for(task, timeout=max(0, budget.settlement_left))
+        finally:
+            if not task.done():
+                task.cancel()
+
+
 # Rides the conversation-erasure queue with the account-deletion invoker identity; dispatched by the purge reconciler.
 # Path must equal utils.cloud_tasks.CONVERSATION_BATCH_PURGE_PATH (pinned by its test).
 @router.post('/v1/conversations/deletion-batch-purges/run', include_in_schema=False)
@@ -420,6 +443,9 @@ async def run_conversation_batch_purge(
     request: Request,
     retry_count: int = Depends(verify_conversation_batch_purge_cloud_tasks_oidc),
 ):
+    from database import conversation_purge_budget as purge_budget
+
+    budget = purge_budget.Dispatch()
     try:
         payload = await request.json()
         job_id = payload.get('job_id') if isinstance(payload, dict) else None
@@ -441,7 +467,10 @@ async def run_conversation_batch_purge(
     else:
         run = batch_pipeline_conversation_purge_scans.run_job
     try:
-        outcome = await run_blocking(erasure_executor, run, job_id, generation)
+        if kind == 'erasure':
+            outcome = await run_blocking(erasure_executor, run, job_id, generation)
+        else:
+            outcome = await _run_bounded_batch_purge(run, job_id, generation, budget)
     except Exception as e:
         # The obligation stays durable; the queue retries and the reconciler redrives.
         logger.warning(

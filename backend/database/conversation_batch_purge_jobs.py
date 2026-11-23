@@ -32,6 +32,7 @@ from uuid import uuid4
 from google.cloud import firestore
 
 from database._client import get_firestore_client
+from database import conversation_purge_budget as purge_budget
 from database import rpc_deadline
 from database import legal_holds
 from database.legal_holds import LegalHoldActive, assert_account_deletion_permitted
@@ -157,12 +158,26 @@ def segment_records(
     )
     if limit is not None:
         query = query.limit(limit)
-    return [snapshot.to_dict() or {} for snapshot in query.stream()]
+    return [snapshot.to_dict() or {} for snapshot in query.stream(**purge_budget.stream_options())]
 
 
 def segment_ref(client: Any, job: str, namespace: str, segment_id: str) -> Any:
     digest = hashlib.sha256(f'{namespace}\x00{segment_id}'.encode()).hexdigest()[:40]
     return client.collection(COLLECTION).document(job).collection(SEGMENTS).document(digest)
+
+
+def _journal_matches(firestore_client: Any, job: str, namespace: str, segment_ids: list[str]) -> bool:
+    journal = firestore_client.collection(COLLECTION).document(job).collection(SEGMENTS)
+    for offset in range(0, len(segment_ids), 30):
+        identifiers = segment_ids[offset : offset + 30]
+        refs = [segment_ref(firestore_client, job, namespace, segment) for segment in identifiers]
+        query = journal.where(filter=firestore.FieldFilter('__name__', 'in', refs)).limit(1)
+        for snapshot in query.stream(**purge_budget.stream_options()):
+            record = snapshot.to_dict() or {}
+            if record.get('namespace') != namespace or record.get('segment_id') not in identifiers:
+                raise RuntimeError('invalid conversation batch purge segment journal')
+            return True
+    return False
 
 
 def lease_held(row: dict[str, Any], *, now: datetime | None = None) -> bool:
@@ -324,6 +339,8 @@ def finish_run(
             )
             return False
         if outcome == 'completed':
+            if purge_budget.current() is not None and not lease_held(row, now=_now() + timedelta(seconds=5)):
+                return False
             transaction.delete(ref)
             return True
         release = {'run_token': None, 'lease_generation': None, 'lease_until': None, 'last_outcome': outcome}
@@ -376,17 +393,23 @@ class RunProgress:
             raise RunSuperseded()
         if row.get('progress_arm') != _arm(row):
             raise RunSuperseded()
+        if purge_budget.current() is not None and not lease_held(row, now=_now() + timedelta(seconds=5)):
+            raise RunSuperseded()
 
     @staticmethod
     def _renewal() -> dict[str, Any]:
         return {'lease_until': _now() + timedelta(seconds=LEASE_SECONDS)}
 
-    def checkpoint(self, position: dict[str, Any], *, add_segments: tuple[str, Iterable[str]] | None = None) -> None:
+    def checkpoint(
+        self, position: dict[str, Any], *, add_segments: tuple[str, Iterable[str]] | None = None, fence=None
+    ) -> None:
         namespace, found = add_segments or ('', ())
         segment_ids = list(dict.fromkeys(found))
 
         def body(transaction):
             self._owned(transaction)
+            if fence is not None:
+                fence(transaction)
             for segment_id in segment_ids:
                 transaction.set(
                     segment_ref(self.client, self.job, namespace, segment_id),
@@ -401,6 +424,13 @@ class RunProgress:
     def segments(self, namespace: str) -> set[str]:
         records = segment_records(self.job, namespace, firestore_client=self.client)
         return {str(record['segment_id']) for record in records if record.get('segment_id')}
+
+    def journal_jobs(self) -> Iterable[str]:
+        return (self.job,)
+
+    def matches_segment(self, namespace: str, segment_ids: Iterable[str]) -> bool:
+        identifiers = list(dict.fromkeys(segment_ids))
+        return any(_journal_matches(self.client, job, namespace, identifiers) for job in self.journal_jobs())
 
     def pending_segments(self, namespace: str, limit: int) -> list[str]:
         records = segment_records(self.job, namespace, limit=limit, firestore_client=self.client)
@@ -421,7 +451,7 @@ class RunProgress:
     def unit(self) -> Iterator[legal_holds.UnitAuthority]:
         # Erasures under the unit are fenced by its authority; see bounded_destructive_unit.
         with legal_holds.bounded_destructive_unit(
-            self.uid, kind=GATE_KIND, wait_seconds=UNIT_GATE_WAIT_SECONDS
+            self.uid, kind=GATE_KIND, wait_seconds=purge_budget.start_unit(UNIT_GATE_WAIT_SECONDS)
         ) as authority:
 
             def renew(transaction):
@@ -434,7 +464,7 @@ class RunProgress:
 
     def settle_stuck(self, resolve: Callable[[str], bool]) -> None:
         """Settle a unit gate left held by an unknown remote outcome, under that gate's own token."""
-        client = legal_holds.account_deletion_firestore_client()
+        client = rpc_deadline.bind_firestore_client(legal_holds.account_deletion_firestore_client())
         stuck = legal_holds.stuck_remote_erasure(self.uid, kind=GATE_KIND, firestore_client=client)
         if stuck is None:
             return
@@ -444,6 +474,9 @@ class RunProgress:
             legal_holds.settle_stuck_remote_erasure(self.uid, kind=GATE_KIND, token=token, firestore_client=client)
 
     def expired(self) -> bool:
+        budget = purge_budget.current()
+        if budget is not None:
+            return budget.work_left <= 0
         return self._checkpointed and self._clock() - self._started >= self._budget
 
 
@@ -453,7 +486,7 @@ def _owes_segments(client: Any, job: str) -> bool:
     return any(segment_records(job, namespace, limit=1, firestore_client=client) for namespace in NAMESPACES)
 
 
-def _drop_segment_records(client: Any, job: str) -> None:
+def _drop_segment_records(client: Any, job: str, progress: RunProgress, tombstone: Any) -> None:
     from database.batch_pipeline_purge import NAMESPACES
 
     for namespace in NAMESPACES:
@@ -461,10 +494,16 @@ def _drop_segment_records(client: Any, job: str) -> None:
             records = segment_records(job, namespace, limit=200, firestore_client=client)
             if not records:
                 break
-            batch = client.batch()
-            for record in records:
-                batch.delete(segment_ref(client, job, namespace, str(record.get('segment_id'))))
-            batch.commit()
+
+            def delete(transaction):
+                progress._owned(transaction)
+                if tombstone.get(transaction=transaction).exists:
+                    raise RunSuperseded()
+                for record in records:
+                    transaction.delete(segment_ref(client, job, namespace, str(record.get('segment_id'))))
+
+            _in_transaction(client, delete)
+            progress._checkpointed = True
 
 
 def run_job(
@@ -481,6 +520,9 @@ def run_job(
 
     # The run's budget and its absolute RPC deadline start at entry: admission is debited too.
     started = clock()
+    budget = purge_budget.current()
+    if budget is not None:
+        budget.charge(0)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     # Units hold the gate; their ownership checks on this client honour the unit's RPC deadline.
     rpc_deadline.bind_firestore_client(client)
@@ -503,13 +545,14 @@ def run_job(
         )
 
         def finish(outcome: str) -> bool:
-            return finish_run(job, generation, token, outcome, firestore_client=client)
+            with purge_budget.settling():
+                return finish_run(job, generation, token, outcome, firestore_client=client)
 
         try:
             tombstone = client.collection('users').document(uid).collection(TOMBSTONES).document(conversation_id)
             if not tombstone.get().exists:
                 # Account wipe removed the subtree after erasing every batch row it owned.
-                _drop_segment_records(client, job)
+                _drop_segment_records(client, job, progress, tombstone)
                 return 'no_tombstone' if finish('completed') else 'superseded'
             # Cheap preflight so a held obligation does not rescan; every unit re-checks under the gate.
             assert_account_deletion_permitted(uid)
@@ -525,7 +568,10 @@ def run_job(
         except ArtifactUploadPending:
             finish('artifact_pending')
             return 'artifact_pending'
-        except PurgeCheckpointed:
+        except (PurgeCheckpointed, purge_budget.WorkLimit):
+            if purge_budget.current() is not None and not progress._checkpointed:
+                finish('failed')
+                raise
             finish('checkpointed')
             return 'checkpointed'
         except Exception as error:

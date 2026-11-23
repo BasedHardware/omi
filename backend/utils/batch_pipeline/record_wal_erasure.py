@@ -4,6 +4,7 @@ from google.cloud.exceptions import NotFound
 from google.api_core.retry import Retry
 
 from config.record_wal_storage import private_archive_bucket
+from database import conversation_purge_budget as purge_budget, rpc_deadline
 from utils.other.local_storage import create_storage_client
 
 
@@ -24,10 +25,18 @@ def conversation_objects(uid: str, conversation_id: str, *, limit: int = 10) -> 
     erasure units; a restart re-lists the first page, including crash orphans.
     """
     name = private_archive_bucket()
-    bucket = create_storage_client().bucket(name)
+    client = create_storage_client()
+    budget = purge_budget.current()
+    if budget is not None:
+        rpc_deadline.bind_storage_client(client)
+    bucket = client.bucket(name)
     result = []
     for blob in bucket.list_blobs(
-        prefix=_prefix(uid, conversation_id), versions=True, max_results=limit, timeout=5, retry=Retry(deadline=5)
+        prefix=_prefix(uid, conversation_id),
+        versions=True,
+        max_results=limit,
+        timeout=5,
+        retry=None if budget is not None else Retry(deadline=5),
     ):
         generation = int(blob.generation or 0)
         if generation <= 0:

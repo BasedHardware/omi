@@ -46,12 +46,14 @@ import re
 import threading
 import time
 from copy import deepcopy
+from contextlib import contextmanager
 from enum import StrEnum
 from typing import Any, Callable, TypeVar
 
 from prometheus_client import Counter, Histogram
 
 import database.jobstore.codec as codec
+from database import conversation_purge_budget as purge_budget, rpc_deadline
 from database.jobstore.connection import sql
 from utils.observability.reasons import ReasonFamily, reason_label
 from utils.staging_fence import jobstore_mirror_factory_admits
@@ -84,6 +86,31 @@ MIRRORED_TABLES = frozenset(
         'merge_holds',
     }
 )
+
+
+@contextmanager
+def _purge_page_transaction(conn: Any, seconds: Callable[[], float]):
+    # A statement timeout alone cannot bound a sequence of statements or a
+    # blocked commit. Cancel the in-flight operation and discard that connection.
+    timed_out = threading.Event()
+
+    def cancel() -> None:
+        timed_out.set()
+        try:
+            conn.cancel_safe(timeout=0.5)
+        except Exception:
+            logger.warning('conversation purge could not cancel its Postgres operation')
+
+    timer = threading.Timer(seconds(), cancel)
+    timer.start()
+    try:
+        with conn.transaction():
+            yield
+        if timed_out.is_set():
+            raise TimeoutError('conversation purge Postgres page outcome is unknown')
+    finally:
+        timer.cancel()
+        timer.join()
 
 
 def _statement_timeout(seconds: float):
@@ -263,6 +290,8 @@ def read_current(primary: Any, keys: list[tuple[str, str]]) -> dict[tuple[str, s
     if not isinstance(primary, (FirestoreStore, _ErasurePrimary)):
         return primary.run(lambda tx: {address: tx.get(*address) for address in keys})
     client = primary.client
+    if purge_budget.current() is not None:
+        rpc_deadline.bind_firestore_client(client)
     refs = [client.collection(f'{primary.namespace}_{table}').document(key) for table, key in keys]
     found = {snap.reference.path: (snap.to_dict() or {}) for snap in client.get_all(refs) if snap.exists}
     return {address: found.get(ref.path, {}) for address, ref in zip(keys, refs)}
@@ -463,7 +492,11 @@ class DualStore:
             kind, first, second = self._queue.get()
             try:
                 if kind == 'refresh':
-                    self.refresh_now(first)
+                    if second is None:
+                        self.refresh_now(first)
+                    else:
+                        with purge_budget.activate(second):
+                            self.refresh_now(first)
                 else:
                     self.mirror(first, second)
             finally:
@@ -482,7 +515,12 @@ class DualStore:
             self.refresh_now(keys)
             return
         try:
-            self._queue.put_nowait(('refresh', keys, None))
+            parent = purge_budget.current()
+            permit = None
+            if parent is not None:
+                parent.charge(len(keys))
+                permit = purge_budget.Dispatch(started=parent.started, reads=len(keys), reserve=0, units=0)
+            self._queue.put_nowait(('refresh', keys, permit))
         except queue.Full:
             for table, _ in keys:
                 _count(table, 'refresh', ShadowParityOutcome.DROPPED)
@@ -495,6 +533,7 @@ class DualStore:
         keys: list[tuple[str, str]],
         phase: list[str] | None = None,
         reader: Callable[[Any, list[tuple[str, str]]], dict] | None = None,
+        deadline: Callable[[], float] | None = None,
     ) -> None:
         """Copy the primary's CURRENT state of ``keys`` into Postgres (upsert, or delete when gone).
 
@@ -517,6 +556,8 @@ class DualStore:
         """
         conn.execute('SELECT pg_advisory_xact_lock_shared(hashtextextended(%s, 0))', (self._purge_barrier(),))
         for table, key in keys:
+            if deadline is not None:
+                conn.execute(_statement_timeout(deadline()))
             conn.execute(
                 'SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (f'{self.shadow.namespace}/{table}/{key}',)
             )
@@ -525,6 +566,8 @@ class DualStore:
         docs = (reader or read_current)(self.primary, keys)
         phase[0] = 'postgres_write'
         for (table, key), doc in docs.items():
+            if deadline is not None:
+                conn.execute(_statement_timeout(deadline()))
             projected = project_document(self.namespace, table, key, doc)
             if projected:
                 self.shadow.write_doc(conn, table, key, mirrored(projected, table))
@@ -533,6 +576,92 @@ class DualStore:
 
     def _purge_barrier(self) -> str:
         return f'{self.shadow.namespace}/__purge_barrier__'
+
+    def reconcile_owner_page(self, owner_id: str, after: list[str] | None) -> list[str] | None:
+        """Reconcile up to 32 addresses, advancing across at most 128 raw keys."""
+        from config.batch_pipeline import scheduler_control_key
+        from database.batch_pipeline_privacy import privacy_owner_key
+
+        lanes = ('fixed', 'jobs', 'results', 'docs')
+        lane, table, key = after or ('fixed', '', '')
+        if lane not in lanes:
+            raise ValueError('invalid conversation purge shadow lane')
+        namespace, owner_key = self.namespace, privacy_owner_key(owner_id)
+        shard = scheduler_control_key(owner_key)
+        fixed = {
+            ('control', shard),
+            ('pull_claims', shard),
+            ('owners', owner_key),
+            ('merge_holds', owner_key),
+            ('allowance_holds', owner_key),
+            *(('queues', f'{priority}_{owner_key}') for priority in range(3)),
+        }
+        pool = self.shadow.pool if self.erasure_pool is None else self.erasure_pool
+
+        def limit_seconds() -> float:
+            left = rpc_deadline.remaining()
+            dispatch_left = purge_budget.timeout()
+            if left is not None and dispatch_left is not None:
+                left = min(left, dispatch_left)
+            if left is None or left <= 0:
+                raise rpc_deadline.RpcDeadlineExceeded('conversation purge shadow page expired')
+            return left
+
+        with pool.connection(timeout=limit_seconds()) as conn:
+            with _purge_page_transaction(conn, limit_seconds):
+                conn.execute(_statement_timeout(limit_seconds()))
+                conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (self._purge_barrier(),))
+                conn.execute(_statement_timeout(limit_seconds()))
+                if lane == 'fixed':
+                    raw = [(t, k, True) for t, k in sorted(fixed) if (t, k) > (table, key)]
+                elif lane in ('jobs', 'results'):
+                    raw = [
+                        (lane, k, selected)
+                        for k, selected in conn.execute(
+                            sql()
+                            .SQL("""SELECT key, (doc->>'owner_key' = %s OR doc->>'owner_id' = %s)
+                                FROM {} WHERE namespace = %s AND key > %s ORDER BY key LIMIT 128""")
+                            .format(sql().Identifier(lane)),
+                            (owner_key, owner_id, namespace, key),
+                        ).fetchall()
+                    ]
+                else:
+                    raw = conn.execute(
+                        """SELECT tbl, key, tbl = 'gpus' OR (tbl = ANY(%s)
+                            AND (doc->>'owner_key' = %s OR doc->>'owner_id' = %s))
+                        FROM docs WHERE namespace = %s AND (tbl, key) > (%s, %s)
+                        ORDER BY tbl, key LIMIT 128""",
+                        (
+                            sorted(MIRRORED_TABLES - {'jobs', 'results', 'control'}),
+                            owner_key,
+                            owner_id,
+                            namespace,
+                            table,
+                            key,
+                        ),
+                    ).fetchall()
+
+        if not raw:
+            lane_index = lanes.index(lane) + 1
+            return [lanes[lane_index], '', ''] if lane_index < len(lanes) else None
+
+        keys = []
+        for table, key, selected in raw:
+            if selected and (lane == 'fixed' or (table, key) not in fixed):
+                keys.append((table, key))
+                if len(keys) == 32:
+                    break
+
+        if keys:
+            with pool.connection(timeout=limit_seconds()) as conn:
+                with _purge_page_transaction(conn, limit_seconds):
+                    conn.execute(_statement_timeout(limit_seconds()))
+                    # Keep the copy's shared barrier, sorted per-key locks and current reads.
+                    self.copy_current(conn, sorted(keys), deadline=limit_seconds)
+                    conn.execute(_statement_timeout(limit_seconds()))
+
+        limit_seconds()
+        return [lane, table, key]
 
     def owner_rows(self, conn: Any, owner_id: str) -> list[tuple[str, str]]:
         """Every mirrored Postgres row that belongs to ``owner_id``, plus its scheduler shard (sorted)."""
@@ -919,30 +1048,32 @@ def _configured_copy(primary: Any) -> DualStore | None:
     return DualStore(primary, shadow, erasure_pool=pools.erasure)
 
 
-def purge_owner(namespace: str, owner_id: str) -> int:
-    """Erase retained copies even with mirror mode, admission and writes disabled.
-
-    Keep the PG target configured until all retained copies have been retired. Partial
-    configuration, missing drivers and database failures raise so erasure retries.
-    No new target is opened when no copy target was ever configured.
-    """
+def _owner_copy_store(namespace: str) -> DualStore | None:
     store = _SHADOWED.get(namespace)
     if store is not None:
-        return store.purge_owner_now(owner_id)
+        return store
     if not any(
         os.getenv(name, '').strip() for name in ('JOBSTORE_PG_HOST', 'JOBSTORE_PG_DATABASE', 'JOBSTORE_PG_USER')
     ):
-        return 0
-    # Test namespaces retain FirestoreStore's loopback-only validation.
+        return None
     from database.batch_pipeline_store import FirestoreStore
 
     primary = FirestoreStore(namespace) if namespace.startswith('batch_pipeline_test_') else _ErasurePrimary(namespace)
-    store = _configured_copy(primary)
+    # The pools are process-owned, including cold/mode-off erasure calls.
+    return _configured_copy(primary)
+
+
+def purge_owner(namespace: str, owner_id: str) -> int:
+    """Erase retained copies independently of mirror admission or writer mode."""
+    store = _owner_copy_store(namespace)
+    return store.purge_owner_now(owner_id) if store is not None else 0
+
+
+def purge_owner_page(namespace: str, owner_id: str, after: list[str] | None) -> tuple[bool, list[str] | None]:
+    store = _owner_copy_store(namespace)
     if store is None:
-        return 0
-    # These pools are process-owned, including cold/mode-off erasure. Closing one
-    # here would invalidate other namespaces and concurrent retryable purges.
-    return store.purge_owner_now(owner_id)
+        return False, None
+    return True, store.reconcile_owner_page(owner_id, after)
 
 
 def mirror_refresh(namespace: str, keys) -> None:
