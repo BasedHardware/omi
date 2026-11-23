@@ -58,7 +58,14 @@ from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projecti
 from utils.batch_pipeline import artifact_missing
 from utils.batch_pipeline.errors import error_site_field
 from utils.batch_pipeline.correctness_metrics import record_labels
-from utils.batch_pipeline.metrics import PROJECTION_FINISH_COMPLETED, PROJECTION_FINISH_READS
+from utils.batch_pipeline.metrics import (
+    PROJECTION_FINISH_COMPLETED,
+    PROJECTION_FINISH_READS,
+    SilentReadOutcome,
+    SilentReadStage,
+    record_silent_completion_reads,
+    record_silent_read_skip,
+)
 from utils.batch_pipeline.recovery_disposition import result_outcome
 from utils.batch_pipeline.projection_hold_policy import quarantines_assignment_conflict, log_conflict_hold
 from database.batch_pipeline_projection_claim import projection_claim
@@ -624,14 +631,21 @@ class Projector:
         if job.get('_projection_privacy_deleted'):
             persist_disposition(session, privacy_deleted=True)
             return
-        silent = (
-            silence_read_skip_enabled()
-            and entry['result']['outcome'] == 'silence'
+        skip_enabled = silence_read_skip_enabled()
+        eligible = (
+            (entry.get('result') or {}).get('outcome') == 'silence'
             and not binding.record_origin
             and not binding.native_record
         )
+        silent = skip_enabled and eligible
+        outcome = SilentReadOutcome.NOT_SILENT
+        if eligible:
+            outcome = SilentReadOutcome.SKIPPED if silent else SilentReadOutcome.DISABLED
         # A walk's fresh read showed no receipt; the transaction still fences.
-        prechecked = not silent and not (hint is not None and hint.successor and not entry.get('projection'))
+        walk_skips_check = hint is not None and hint.successor and not entry.get('projection')
+        if not walk_skips_check:
+            record_silent_read_skip(SilentReadStage.ASSIGNMENT_PRECHECK, outcome)
+        prechecked = not silent and not walk_skips_check
         if prechecked:
             try:
                 with projection_phase('predecessor', policy):
@@ -660,6 +674,7 @@ class Projector:
                         # prepare() in this transaction retains every authority,
                         # binding and predecessor fence. No follow-up is owed.
                         session.persist_empty(silence=True)
+                        record_silent_read_skip(SilentReadStage.READY_ACK, outcome)
                     else:
                         session.persist_empty()
             except ProjectionReplay:
@@ -683,6 +698,8 @@ class Projector:
         else:
             with projection_phase('assignment', policy):
                 self.assign_parts(item, entry, binding, finish=finish, policy=policy, hint=hint, job=job)
+        if not silent:
+            record_silent_read_skip(SilentReadStage.READY_ACK, outcome)
 
     def _payload(self, item, entry, hint):
         prefetched = hint.prefetched if hint is not None else None
@@ -755,7 +772,9 @@ class Projector:
     def complete_content(self, segment_id, binding, *, policy=None, silence=False):
         policy = policy or self.store.policy(segment_id)
         entries = None
-        if silence and silence_read_skip_enabled() and not binding.record_origin and not binding.native_record:
+        eligible = silence and not binding.record_origin and not binding.native_record
+        skip_enabled = eligible and silence_read_skip_enabled()
+        if skip_enabled:
             # Reuse ordinary accounting's result reads to rule out known mixed
             # uploads before paying for a speculative completion transaction.
             with projection_phase('completion_scan', policy):
@@ -771,7 +790,11 @@ class Projector:
                 with projection_phase('completion', policy):
                     result = self.store.complete(segment_id, binding, self.clock(), None, policy=policy)
                 if result is not None:
+                    record_silent_read_skip(SilentReadStage.ACCOUNTING, SilentReadOutcome.SKIPPED)
+                    record_silent_completion_reads(SilentReadOutcome.SKIPPED)
                     return self.publish_completion(binding, result, policy=policy)
+        outcome = SilentReadOutcome.DISABLED if eligible and not skip_enabled else SilentReadOutcome.NOT_SILENT
+        record_silent_read_skip(SilentReadStage.ACCOUNTING, outcome)
         with projection_phase('accounting', policy):
             accounting = (
                 self.store.prepare_accounting(binding, self.clock(), result_entries=entries)
@@ -789,6 +812,8 @@ class Projector:
                 record_speech(binding, accounting, self.clock())
         with projection_phase('completion', policy):
             result = self.store.complete(segment_id, binding, self.clock(), accounting, policy=policy)
+        if result is not None:
+            record_silent_completion_reads(outcome)
         return self.publish_completion(binding, result, policy=policy)
 
     def publish_completion(self, binding, result, *, policy):
