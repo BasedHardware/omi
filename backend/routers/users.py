@@ -1373,7 +1373,7 @@ def get_user_subscription_endpoint(
         held = response.held_audio
         audio = {'count': held.count, 'seconds': held.seconds} if held else {'count': 0, 'seconds': 0}
         response.processing_backlog = processing_backlog.snapshot(uid, allowance=funded, audio=audio)
-    if play_billing_config.client_uses_play(x_app_platform, x_app_build):
+    if play_billing_config.client_uses_play(x_app_platform, x_app_build, uid):
         response.play_billing = play_billing.client_config(uid)
     return response
 

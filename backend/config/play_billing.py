@@ -1,9 +1,11 @@
 """Google Play Billing switch for new Android subscription purchases. Pure module: stdlib only.
 
 ``ANDROID_BILLING`` selects how a NEW Android purchase is started: ``stripe`` (default, today's
-flow) or ``play``. ``play`` reaches a client only when it is an Android build at or above
-``ANDROID_PLAY_BILLING_MIN_BUILD`` (the Play version code that first ships the Play code); unset
-means no build qualifies. Env is read at call time so a config change needs no code change.
+flow) or ``play`` (everyone). With ``stripe``, a user still buys through Play when admitted by
+``ANDROID_PLAY_BILLING_COHORT`` (``uid:<uid>,pct:<n>`` or ``all``) or the ``android-play-billing``
+rollout cohort document. Either way only an Android build at or above
+``ANDROID_PLAY_BILLING_MIN_BUILD`` (the first Play version code with the Play code) qualifies;
+unset means none does. Env is read at call time.
 """
 
 from __future__ import annotations
@@ -11,14 +13,20 @@ from __future__ import annotations
 import os
 from typing import Mapping, Optional
 
+from config import rollout_cohorts
+
 ANDROID_BILLING_ENV = 'ANDROID_BILLING'
 MIN_BUILD_ENV = 'ANDROID_PLAY_BILLING_MIN_BUILD'
+COHORT_ENV = 'ANDROID_PLAY_BILLING_COHORT'
+ROLLOUT_COHORT = 'android-play-billing'
 
 DEFAULT_PACKAGE_NAME = 'com.friend.ios'
 DEFAULT_PRODUCT_ID = 'omi_pro'
 DEFAULT_MONTHLY_BASE_PLAN = 'monthly'
 DEFAULT_YEARLY_BASE_PLAN = 'yearly'
-DEFAULT_TRIAL_OFFER = 'free-trial-7d'
+DEFAULT_TRIAL_OFFER = 'trial-7d'
+# Retired Play products, closed to new subscribers: never offered, never granted.
+LEGACY_PRODUCT_IDS = frozenset({'com.omi.app.lite', 'com.omi.app.plus', 'com.omi.app.unlimited_v2'})
 
 
 def _env(environ: Optional[Mapping[str, str]]) -> Mapping[str, str]:
@@ -41,17 +49,32 @@ def min_play_build(environ: Optional[Mapping[str, str]] = None) -> Optional[int]
     return int(raw)
 
 
+def user_in_play_cohort(uid: Optional[str], environ: Optional[Mapping[str, str]] = None) -> bool:
+    if not isinstance(uid, str) or not rollout_cohorts.valid_uid(uid):
+        return False
+    if rollout_cohorts.cohort_admits(uid, _env(environ).get(COHORT_ENV)):
+        return True
+    try:
+        return rollout_cohorts.in_rollout_cohort(uid, ROLLOUT_COHORT)
+    except Exception:
+        # Unknown membership keeps today's Stripe flow.
+        return False
+
+
 def client_uses_play(
-    platform: Optional[str], app_build: Optional[str], environ: Optional[Mapping[str, str]] = None
+    platform: Optional[str],
+    app_build: Optional[str],
+    uid: Optional[str] = None,
+    environ: Optional[Mapping[str, str]] = None,
 ) -> bool:
     """True when this client must start new purchases through Google Play Billing."""
-    if android_billing_mode(environ) != 'play':
-        return False
     if not isinstance(platform, str) or platform.strip().lower() != 'android':
         return False
     minimum = min_play_build(environ)
     build = app_build.strip() if isinstance(app_build, str) else ''
-    return minimum is not None and build.isdigit() and int(build) >= minimum
+    if minimum is None or not build.isdigit() or int(build) < minimum:
+        return False
+    return android_billing_mode(environ) == 'play' or user_in_play_cohort(uid, environ)
 
 
 def package_name(environ: Optional[Mapping[str, str]] = None) -> str:

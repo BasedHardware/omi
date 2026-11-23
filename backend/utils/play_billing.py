@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import time
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -79,14 +78,9 @@ class _GooglePublisher:
 
         import google.auth
         from google.auth.transport.requests import AuthorizedSession
-        from google.oauth2 import service_account
 
-        scopes = ['https://www.googleapis.com/auth/androidpublisher']
-        key_file = os.getenv('PLAY_PUBLISHER_SERVICE_ACCOUNT_FILE')
-        if key_file:
-            credentials = service_account.Credentials.from_service_account_file(key_file, scopes=scopes)
-        else:
-            credentials, _ = google.auth.default(scopes=scopes)
+        # Application Default Credentials: the runtime service account. No key file.
+        credentials, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/androidpublisher'])
         self._session = AuthorizedSession(credentials)
         self._quote = lambda value: quote(value, safe='')
 
@@ -280,6 +274,9 @@ def _fetch(publisher: PublisherClient, token: str) -> PlayState:
 
 
 def _check_product(state: PlayState) -> None:
+    if state.product_id in config.LEGACY_PRODUCT_IDS:
+        logger.warning('play_billing legacy product refused: product=%s', state.product_id)
+        raise PlayBillingError(400, 'legacy_product', 'This older Omi subscription cannot be restored here.')
     if state.product_id != config.product_id() or state.base_plan_id not in config.base_plans():
         raise PlayBillingError(400, 'unknown_product', 'This purchase is not an Omi Pro subscription.')
 
@@ -303,6 +300,9 @@ class VerifyResult:
 def verify_and_bind(uid: str, purchase_token: str, product_id: str, publisher: Optional[PublisherClient] = None):
     """Validate a client-reported purchase, bind it to ``uid`` and grant Omi Pro when Google says it is paid."""
     publisher = publisher or get_publisher()
+    if product_id in config.LEGACY_PRODUCT_IDS:
+        logger.warning('play_billing legacy product refused: product=%s', product_id)
+        raise PlayBillingError(400, 'legacy_product', 'This older Omi subscription cannot be restored here.')
     if product_id != config.product_id():
         raise PlayBillingError(400, 'unknown_product', 'This purchase is not an Omi Pro subscription.')
     now = int(time.time())
@@ -370,6 +370,9 @@ def apply_token(purchase_token: str, publisher: Optional[PublisherClient] = None
         return 'unbound'
     play_db.update_purchase(token_hash, record)
     if state.product_id != config.product_id():
+        if state.product_id in config.LEGACY_PRODUCT_IDS:
+            logger.warning('play_billing legacy product notification ignored: product=%s', state.product_id)
+            return 'legacy_product'
         return 'ignored_product'
     if not revoked and state.has_access(now):
         if account_deletion_blocks_user_work(uid):

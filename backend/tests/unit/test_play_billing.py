@@ -42,7 +42,7 @@ def resource(state='SUBSCRIPTION_STATE_ACTIVE', *, expiry=NOW + 30 * DAY, accoun
                 'productId': 'omi_pro',
                 'expiryTime': _iso(expiry),
                 'autoRenewingPlan': {'autoRenewEnabled': renew},
-                'offerDetails': {'basePlanId': 'monthly', 'offerId': 'free-trial-7d'},
+                'offerDetails': {'basePlanId': 'monthly', 'offerId': 'trial-7d'},
             }
         ],
     }
@@ -421,7 +421,86 @@ def test_reconcile_rereads_due_purchases(subscribed):
     ],
 )
 def test_switch_and_minimum_build(environ, platform, build, expected):
-    assert config.client_uses_play(platform, build, environ) is expected
+    assert config.client_uses_play(platform, build, UID, environ=environ) is expected
+
+
+PLAY_ON = {'ANDROID_PLAY_BILLING_MIN_BUILD': '1700'}
+
+
+def test_cohort_puts_one_user_on_play_while_everyone_else_stays_on_stripe():
+    environ = {**PLAY_ON, 'ANDROID_PLAY_BILLING_COHORT': f'uid:{UID}'}
+    assert config.client_uses_play('android', '1700', UID, environ=environ) is True
+    assert config.client_uses_play('android', '1700', OTHER, environ=environ) is False
+    assert config.client_uses_play('android', '1699', UID, environ=environ) is False  # build gate still applies
+    assert config.client_uses_play('ios', '1700', UID, environ=environ) is False
+    assert config.client_uses_play(
+        'android', '1700', UID, environ={**environ, 'ANDROID_PLAY_BILLING_COHORT': 'junk'}
+    ) is (False)
+    assert config.client_uses_play(
+        'android', '1700', OTHER, environ={**PLAY_ON, 'ANDROID_PLAY_BILLING_COHORT': 'pct:100'}
+    )
+
+
+def test_rollout_cohort_document_admits_a_user(monkeypatch):
+    from config import rollout_cohorts
+
+    seen = []
+
+    def member(uid, name):
+        seen.append(name)
+        if uid == OTHER:
+            raise rollout_cohorts.RolloutCohortUnavailable('down')
+        return uid == UID
+
+    monkeypatch.setattr(config.rollout_cohorts, 'in_rollout_cohort', member)
+    assert config.client_uses_play('android', '1700', UID, environ=PLAY_ON) is True
+    assert config.client_uses_play('android', '1700', OTHER, environ=PLAY_ON) is False  # unknown: Stripe
+    assert seen == ['android-play-billing', 'android-play-billing']
+    assert 'android-play-billing' in rollout_cohorts.COHORT_ENVS
+
+
+@pytest.mark.parametrize('product', sorted(config.LEGACY_PRODUCT_IDS))
+def test_legacy_products_are_never_granted(env, product):
+    with pytest.raises(play_billing.PlayBillingError) as error:
+        play_billing.verify_and_bind(UID, TOKEN, product)
+    assert error.value.code == 'legacy_product'
+    legacy = resource()
+    legacy['lineItems'][0]['productId'] = product
+    env.publisher.resources[TOKEN] = legacy
+    with pytest.raises(play_billing.PlayBillingError) as restored:
+        _verify()
+    assert restored.value.code == 'legacy_product'
+    env.store.docs[play_db.token_key(TOKEN)] = {'uid': UID}
+    assert _notify(4) == 'legacy_product'
+    assert env.users.writes == [] and env.publisher.acks == []
+
+
+@pytest.mark.parametrize(
+    'kind,state,access',
+    [
+        (1, 'SUBSCRIPTION_STATE_ACTIVE', True),  # RECOVERED
+        (2, 'SUBSCRIPTION_STATE_ACTIVE', True),  # RENEWED
+        (3, 'SUBSCRIPTION_STATE_CANCELED', True),  # CANCELED: paid through expiry
+        (4, 'SUBSCRIPTION_STATE_ACTIVE', True),  # PURCHASED
+        (5, 'SUBSCRIPTION_STATE_ON_HOLD', False),  # ON_HOLD
+        (6, 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD', True),  # IN_GRACE_PERIOD
+        (7, 'SUBSCRIPTION_STATE_ACTIVE', True),  # RESTARTED
+        (8, 'SUBSCRIPTION_STATE_ACTIVE', True),  # PRICE_CHANGE_CONFIRMED
+        (9, 'SUBSCRIPTION_STATE_ACTIVE', True),  # DEFERRED
+        (10, 'SUBSCRIPTION_STATE_PAUSED', False),  # PAUSED
+        (11, 'SUBSCRIPTION_STATE_ACTIVE', True),  # PAUSE_SCHEDULE_CHANGED
+        (12, 'SUBSCRIPTION_STATE_ACTIVE', False),  # REVOKED: removed even if Google still reads active
+        (13, 'SUBSCRIPTION_STATE_EXPIRED', False),  # EXPIRED
+        (20, 'SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED', False),  # PENDING_PURCHASE_CANCELED
+    ],
+)
+def test_every_notification_type_maps_to_access_without_the_app(subscribed, kind, state, access):
+    subscribed.publisher.resources[TOKEN] = resource(state, expiry=NOW + 40 * DAY, renew=kind != 3)
+    _notify(kind)
+    row = _row(subscribed)
+    assert (row.plan == PlanType.unlimited_v2) is access
+    if access:
+        assert row.current_period_end == NOW + 40 * DAY
 
 
 def test_stripe_rows_serialize_exactly_as_before():
@@ -448,7 +527,7 @@ def test_subscription_response_omits_play_billing_when_unset():
     assert block == {
         'product_id': 'omi_pro',
         'base_plans': [{'id': 'monthly', 'interval': 'month'}, {'id': 'yearly', 'interval': 'year'}],
-        'trial_offer_id': 'free-trial-7d',
+        'trial_offer_id': 'trial-7d',
         'obfuscated_account_id': play_billing.obfuscated_account_id(UID),
     }
     assert len(block['obfuscated_account_id']) == 64
@@ -476,6 +555,11 @@ def test_switch_off_subscription_route_is_byte_identical(monkeypatch, env):
     assert 'play_billing' not in baseline
     monkeypatch.setenv('ANDROID_PLAY_BILLING_MIN_BUILD', '1700')
     assert _byok_subscription_json(monkeypatch, 'android', '9999') == baseline  # mode still stripe
+    monkeypatch.setenv('ANDROID_PLAY_BILLING_COHORT', f'uid:{OTHER}')
+    assert _byok_subscription_json(monkeypatch, 'android', '9999') == baseline  # not in the cohort
+    monkeypatch.setenv('ANDROID_PLAY_BILLING_COHORT', f'uid:{UID}')
+    assert 'play_billing' in _byok_subscription_json(monkeypatch, 'android', '9999')  # test account only
+    monkeypatch.delenv('ANDROID_PLAY_BILLING_COHORT')
     monkeypatch.setenv('ANDROID_BILLING', 'play')
     assert _byok_subscription_json(monkeypatch, 'android', '1699') == baseline  # old build keeps Stripe
     assert _byok_subscription_json(monkeypatch, 'ios', '9999') == baseline
