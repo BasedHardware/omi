@@ -30,6 +30,20 @@ UNREADABLE_CASE = 'unreadable-ciphertext-dead-letters'
 UNREADABLE_PARK_RULE = 'SCA-4178: verified unreadable retry age-park consequences; both sides retained ciphertext'
 UNREADABLE_RETRY_BUG = 'python_bug:unreadable_ciphertext_retry_until_age_gate'
 UNREADABLE_RETRY_ISSUE = 'SCA-4178'
+# SCA-3551 groups 2 and 4, ruled on the three literal fixture differences.
+RULED_SYNC_VALUE_GAPS = {
+    ('transcript-whitespace', '/conversation/transcript_segments'),
+    (
+        'empty-capture',
+        '/derived_documents/users~1replay-empty-capture~1episodes~1'
+        '4a3517ab-b5a4-58fc-9d1f-7525f189b614/state_version',
+    ),
+    (
+        'transcript-empty-text',
+        '/derived_documents/users~1replay-transcript-empty-text~1episodes~1'
+        '514b6b9f-53d4-5569-8092-f0cdc6a3aa25/state_version',
+    ),
+}
 GO_COORDINATION_FIELDS = {
     'go_sync_inline_fanout_epoch',
     'go_sync_inline_fanout_revision',
@@ -404,6 +418,11 @@ def enrich(report: dict) -> dict:
                 difference['reason'] = UNREADABLE_PARK_RULE
             elif difference.get('reason'):
                 label = f"by_design:{difference['reason']}"
+            elif (
+                difference.get('kind') == 'different_value'
+                and (case['name'], difference['path']) in RULED_SYNC_VALUE_GAPS
+            ):
+                label = 'go_gap'
             else:
                 if pass3_group is None:
                     label = None
