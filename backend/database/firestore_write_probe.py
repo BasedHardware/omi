@@ -223,7 +223,13 @@ def _wrap_bulk_dispatch(original: Any) -> Any:
             }
         except Exception:
             logger.warning('firestore write probe failed to associate bulk attribution')
-        return original(writer, batch, operations)
+        # Serial sends run callbacks inline. A callback that queues its own
+        # write must capture its own caller and origin.
+        token = _retry_attribution.set(None)
+        try:
+            return original(writer, batch, operations)
+        finally:
+            _retry_attribution.reset(token)
 
     return dispatch
 

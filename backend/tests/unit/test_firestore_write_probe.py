@@ -354,6 +354,42 @@ def test_bulk_writer_tracks_each_submitter_through_worker_and_retry(transport, s
     assert _by_origin('users/memories', 'delete', 'job:bulk_second') == origins[2]
 
 
+def test_serial_bulk_retry_does_not_leak_origin_into_callbacks(client, transport):
+    from google.cloud.firestore_v1.bulk_writer import BulkRetry, BulkWriterOptions, SendMode
+
+    writer = client.bulk_writer(options=BulkWriterOptions(mode=SendMode.serial, retry=BulkRetry.immediate))
+    writer.batch_size = 1
+    first = client.document('users/u1/memories/first')
+    second = client.document('users/u1/memories/second')
+    transport.batch_status = [10]
+
+    def on_error(_error, _writer):
+        transport.batch_status = [0]
+        return True
+
+    def on_success(reference, _result, writer):
+        if reference == first:
+            with read_origin('job:serial_bulk_callback'):
+                writer.set(second, {'x': 2})
+
+    def submit():
+        with read_origin('job:serial_bulk_submit'):
+            writer.set(first, {'x': 1})
+
+    writer.on_write_error(on_error)
+    writer.on_write_result(on_success)
+    submit_origin = _by_origin('users/memories', 'set', 'job:serial_bulk_submit')
+    callback_origin = _by_origin('users/memories', 'set', 'job:serial_bulk_callback')
+    callback_caller = _by_caller('users/memories', 'set', f'{__name__}:on_success')
+    submit()
+    writer.close()
+
+    assert len(transport.requests) == 3
+    assert _by_origin('users/memories', 'set', 'job:serial_bulk_submit') == submit_origin + 1
+    assert _by_origin('users/memories', 'set', 'job:serial_bulk_callback') == callback_origin + 1
+    assert _by_caller('users/memories', 'set', f'{__name__}:on_success') == callback_caller + 1
+
+
 def test_async_document_batch_and_transaction_count_once(transport):
     client = firestore.AsyncClient(project='p', credentials=AnonymousCredentials())
     ref = client.document('users/u1/memories/m1')
