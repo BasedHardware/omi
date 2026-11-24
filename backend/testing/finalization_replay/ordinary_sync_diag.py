@@ -56,6 +56,17 @@ def _worker_providers(worker_backend):
     return module.provider_server, module.allow_provider_port
 
 
+def _reset_fixture_caches():
+    from database.apps import PUBLIC_APPROVED_APPS_CACHE_KEY
+    from database.cache import get_memory_cache
+    from database.redis_db import delete_generic_cache
+
+    # The two replay sides each share a process and a fake Redis across fixtures.
+    # Reset the marketplace's two cache layers before any measured work.
+    get_memory_cache().clear()
+    delete_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY)
+
+
 def _enable_worker_backend(worker_backend):
     backend = str(Path(worker_backend).resolve(strict=True))
     if backend not in sys.path:
@@ -309,6 +320,7 @@ def _run_side(cases, side, binary, database, key, worker_backend):
 
                 outputs = []
                 for state in states:
+                    _reset_fixture_caches()
                     out = {'name': state.case['name'], 'errors': {}}
                     outputs.append(out)
                     server.state = state
