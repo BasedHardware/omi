@@ -11,6 +11,7 @@ from unittest.mock import Mock
 import pytest
 
 from database import conversation_finalization_jobs as jobs
+from database import conversations_v3
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.conversations import lifecycle
 
@@ -273,8 +274,6 @@ def test_manual_end_kill_switch(monkeypatch):
     ],
 )
 def test_promotion_writes_the_cut_once_and_marks_nothing_pending(monkeypatch, row, expected):
-    from database import conversations_v3
-
     db = StrictFirestore({ROW: dict(row)})
     monkeypatch.setattr(conversations_v3.firestore, 'transactional', lambda fn: fn)
     assert conversations_v3.promote_manual_end(UID, CID, firestore_client=db) is expected

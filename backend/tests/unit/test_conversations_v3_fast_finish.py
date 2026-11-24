@@ -1,9 +1,16 @@
 """Manual-finish first transcript: gating, audio layout, provisional write and failure containment."""
 
+import asyncio
 from datetime import datetime, timezone
 
 import pytest
 
+from config import rollout_cohorts
+from database import conversations_v3
+
+# Imported at module load: record admission is a heavy import, and one made inside a test is
+# charged to that test's CPU budget.
+from utils.batch_pipeline import live
 from utils.conversations.v3 import fast_finish
 
 UID = 'owner-uid-0000000000000000000'
@@ -63,8 +70,6 @@ def test_rollout_gate(monkeypatch, value, member, expected):
 
 
 def test_cohort_is_registered_and_empty_without_a_resolver():
-    from config import rollout_cohorts
-
     assert rollout_cohorts.COHORT_ENVS[fast_finish.COHORT]() == ''
 
 
@@ -264,11 +269,6 @@ class _Store:
 
 
 def _admit(monkeypatch, current, units, *, fast='written', promoted=True):
-    import asyncio
-
-    from database import conversations_v3
-    from utils.batch_pipeline import live
-
     live._FAST_FINISH_STARTED.clear()
     calls = {'fast': 0, 'promote': 0}
 
@@ -323,10 +323,6 @@ def test_the_kill_switch_stops_the_cut_and_the_fast_pass(monkeypatch):
 
 
 def test_a_retried_admission_starts_one_fast_pass(monkeypatch):
-    import asyncio
-
-    from utils.batch_pipeline import live
-
     live._FAST_FINISH_STARTED.clear()
     started = []
     monkeypatch.setattr(fast_finish, 'run', lambda *a, **k: started.append(1) or 'written')
@@ -341,10 +337,6 @@ def test_a_retried_admission_starts_one_fast_pass(monkeypatch):
 
 
 def test_admission_survives_a_broken_hook(monkeypatch):
-    import asyncio
-
-    from utils.batch_pipeline import live
-
     live._FAST_FINISH_STARTED.clear()
     monkeypatch.setattr(fast_finish, 'eligible', boom)
     asyncio.run(live._manual_finish_admitted(_Store(row()), UID, 'cid', row(), [UNIT], object(), b'k'))
