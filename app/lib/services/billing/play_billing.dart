@@ -316,7 +316,12 @@ class PlayBilling {
       }
       final result = await _verify(token, productId);
       if (!result.retryable) {
-        await _store.write((await _store.read()).where((t) => t['token'] != token).toList());
+        try {
+          await _store.write((await _store.read()).where((t) => t['token'] != token).toList());
+        } catch (error) {
+          // The server has answered: a failed cleanup only means the token is sent once more next launch.
+          Logger.debug('Play token cleanup failed: $error');
+        }
       }
       return switch (result.status) {
         'active' => const PlayPurchaseResult(PlayPurchaseOutcome.purchased),
