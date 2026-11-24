@@ -53,6 +53,8 @@ for _outcome in (
     'ineligible',
     'too_long',
     'superseded',
+    'not_funded',
+    'busy',
     'audio_error',
     'provider_error',
     'write_error',
@@ -65,27 +67,51 @@ for _outcome in (
 COHORT = 'v3-fast-finish'
 
 
+def mode() -> str:
+    return os.getenv('CONVERSATIONS_V3_FAST_FINISH', 'cohort').strip().lower()
+
+
 def enabled(uid: str) -> bool:
     """``cohort`` (default) admits members of the runtime rollout cohort; ``on`` every owner; ``off`` nobody."""
-    mode = os.getenv('CONVERSATIONS_V3_FAST_FINISH', 'cohort').strip().lower()
-    if mode == 'on':
+    current = mode()
+    if current == 'on':
         return True
-    return mode == 'cohort' and in_rollout_cohort(uid, COHORT)
+    return current == 'cohort' and in_rollout_cohort(uid, COHORT)
 
 
-def eligible(row: dict) -> bool:
-    """A sealed, manually ended v3 recording with no transcript of any kind yet."""
+def candidate(row: dict) -> bool:
+    """A sealed, manually ended v3 recording, judged from fields that are stored in the clear.
+
+    Safe on a raw Firestore row. It says nothing about the transcript: stored segments are
+    compressed (and may be encrypted) even when empty, so only ``eligible`` on a decoded row can
+    tell whether the recording already has one.
+    """
     return bool(
         row.get('recording') is True
         and (row.get('v3_manual_end_requested') is True or row.get('v3_manual_end') is True)
         and row.get('status') == 'completed'
         and row.get('private_cloud_sync_enabled')
         and row.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}
-        and not row.get('transcript_segments')
         and not row.get('record_projection_revision')
         and not row.get('record_audio_partial')
         and not any(row.get(key) for key in ('deleted', 'discarded', 'is_locked', 'uses_custom_stt'))
     )
+
+
+def eligible(row: dict) -> bool:
+    """``candidate`` with no transcript of any kind yet. ``row`` must be decoded (``get_conversation``)."""
+    return candidate(row) and not row.get('transcript_segments')
+
+
+def funded(uid: str, seconds: float, language: str | None) -> bool:
+    """The shared consent and funding gate that batch and sync transcription pass before provider spend."""
+    from utils.observability.stt_cap_dispatch import DispatchPath
+    from utils.stt.pre_recorded import get_prerecorded_service
+    from utils.stt_cap_dispatch import sync_admission
+
+    provider = get_prerecorded_service(language)[0]
+    allowed, _ = sync_admission(uid, seconds, provider, lane='batch', path=DispatchPath.BATCH_PROVIDER)
+    return allowed
 
 
 def unit_pcm(references: list[dict], read) -> bytes:
@@ -134,8 +160,12 @@ def run(
     transcribe=None,
     refresh=None,
     cut=None,
+    authorize=None,
 ) -> str:
     """Transcribe ``units`` and write them as provisional segments. Returns the counted outcome; never raises.
+
+    ``row`` and ``refresh()`` must be decoded rows. ``authorize`` is the consent and funding gate;
+    without it nothing is sent to a provider that ordinary batch processing would have held.
 
     Runs on a worker thread: the cohort read is synchronous there (on the event loop a cold
     membership cache answers False). ``refresh`` re-reads the row before any audio leaves for the
@@ -154,6 +184,7 @@ def run(
             transcribe=transcribe or _transcribe,
             refresh=refresh,
             cut=cut,
+            authorize=authorize or funded,
         )
     except Exception as error:
         logger.warning('event=v3_fast_finish outcome=error exception_type=%s', type(error).__name__)
@@ -163,7 +194,7 @@ def run(
     return outcome
 
 
-def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, cut) -> str:
+def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, cut, authorize) -> str:
     if not enabled(uid):
         return 'not_enabled'
     if refresh is not None:
@@ -173,6 +204,8 @@ def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, 
         return 'ineligible'
     if not units or len(units) > MAX_UNITS or sum(duration for _, duration, _ in units) > MAX_SECONDS:
         return 'too_long'
+    if not authorize(uid, sum(duration for _, duration, _ in units), row.get('language')):
+        return 'not_funded'
     origin = row['started_at'].timestamp()
     segments: list[dict[str, Any]] = []
     started = time.monotonic()

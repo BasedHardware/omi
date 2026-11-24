@@ -15,6 +15,7 @@ import logging
 import math
 import os
 import random
+import threading
 import time
 
 from utils.conversations import phase_shadow
@@ -375,7 +376,12 @@ _FAST_FINISH_TASKS: set = set()
 _FAST_FINISH_STARTED: dict[str, None] = {}
 _FAST_FINISH_STARTED_MAX = 4096
 # Each pass holds a recording's PCM in memory and a storage thread for a provider call.
-_FAST_FINISH_MAX_ACTIVE = 2
+_FAST_FINISH_SLOTS = threading.BoundedSemaphore(2)
+
+
+def _admitted_these_units(admitted, job_id) -> bool:
+    """The intake answered ``batch`` for this binding's own job (a same-job replay included)."""
+    return isinstance(admitted, dict) and admitted.get('outcome') == 'batch' and admitted.get('job_id') == job_id
 
 
 async def _manual_finish_admitted(store, uid, conversation_id, current, units, client, key) -> None:
@@ -387,7 +393,7 @@ async def _manual_finish_admitted(store, uid, conversation_id, current, units, c
     then does that pass store the cut. Never raises and never delays admission's result.
     """
     from config.server_batch import manual_end_marker_enabled
-    from database import conversations_v3
+    from database import conversations as conversations_db, conversations_v3
     from utils.conversations.v3 import fast_finish, metrics as v3_metrics, triggers as v3_triggers
 
     try:
@@ -402,11 +408,9 @@ async def _manual_finish_admitted(store, uid, conversation_id, current, units, c
                 db_executor, conversations_v3.promote_manual_end, uid, conversation_id, firestore_client=store.client
             )
             v3_metrics.BATCH_MANUAL_END.labels('promoted' if promoted else 'not_promoted').inc()
-        if (
-            not fast_finish.eligible(current)
-            or conversation_id in _FAST_FINISH_STARTED
-            or len(_FAST_FINISH_TASKS) >= _FAST_FINISH_MAX_ACTIVE
-        ):
+        # ``current`` is a raw row: its stored transcript is opaque here, so this only screens on
+        # clear fields. The pass decides on a decoded row.
+        if fast_finish.mode() == 'off' or not fast_finish.candidate(current) or conversation_id in _FAST_FINISH_STARTED:
             if not single:
                 v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
             return
@@ -421,10 +425,8 @@ async def _manual_finish_admitted(store, uid, conversation_id, current, units, c
             return read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True)
 
         def refresh():
-            snapshot = (
-                store.client.collection('users').document(uid).collection('conversations').document(conversation_id)
-            )
-            return snapshot.get().to_dict() or {}
+            # Decoded: an empty stored transcript is not empty bytes.
+            return conversations_db.get_conversation(uid, conversation_id, firestore_client=store.client) or {}
 
         def cut():
             # Sets the cut and wakes the builder again; the transcript write's own wake may have
@@ -432,9 +434,20 @@ async def _manual_finish_admitted(store, uid, conversation_id, current, units, c
             v3_triggers.changed(uid, conversation_id, manual_end=True)
 
         def run():
-            outcome = fast_finish.run(
-                uid, conversation_id, current, copied, read, refresh=refresh, cut=None if single else cut
-            )
+            # The cohort read is synchronous on this thread. Owners outside the rollout stop here
+            # and never take one of the pass slots.
+            if not fast_finish.enabled(uid):
+                outcome = 'not_enabled'
+            elif not _FAST_FINISH_SLOTS.acquire(blocking=False):
+                outcome = 'busy'
+                fast_finish.OUTCOMES.labels('busy').inc()
+            else:
+                try:
+                    outcome = fast_finish.run(
+                        uid, conversation_id, refresh(), copied, read, refresh=refresh, cut=None if single else cut
+                    )
+                finally:
+                    _FAST_FINISH_SLOTS.release()
             if outcome == 'written':
                 v3_metrics.BATCH_MANUAL_END.labels('fast_finish').inc()
             elif not single:
@@ -632,8 +645,10 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
             **({'server_batch_only': True} if row.get('server_batch_only') is True else {}),
         },
     )
-    # Only after admission committed: a failed admission is retried and must not repeat this.
-    await _manual_finish_admitted(store, uid, conversation_id, current, units, client, artifacts.key_for_owner(uid))
+    # Only when this call's intake owns these units: the transaction can also answer busy or
+    # completed without admitting them, and a failed admission is retried.
+    if _admitted_these_units(admitted, binding.job_id):
+        await _manual_finish_admitted(store, uid, conversation_id, current, units, client, artifacts.key_for_owner(uid))
     return admitted
 
 

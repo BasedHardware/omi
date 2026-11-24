@@ -1,17 +1,22 @@
 """Manual-finish first transcript: gating, audio layout, provisional write and failure containment."""
 
 import asyncio
+import threading
 from datetime import datetime, timezone
 
 import pytest
 
 from config import rollout_cohorts
+from database import conversations as conversations_db
 from database import conversations_v3
+from utils import stt_cap_dispatch
 
 # Imported at module load: record admission is a heavy import, and one made inside a test is
 # charged to that test's CPU budget.
 from utils.batch_pipeline import live
-from utils.conversations.v3 import fast_finish
+from utils.conversations.v3 import fast_finish, triggers
+from utils.observability.stt_cap_dispatch import DispatchPath
+from utils.stt import pre_recorded
 
 UID = 'owner-uid-0000000000000000000'
 START = datetime(2026, 11, 24, 3, 0, tzinfo=timezone.utc)
@@ -94,6 +99,15 @@ def test_only_a_sealed_manual_end_recording_without_transcript_is_eligible(chang
     assert fast_finish.eligible(row(**change)) is False
 
 
+def test_a_raw_row_is_screened_without_reading_its_stored_transcript():
+    # Firestore stores segments compressed (and possibly encrypted) even when there are none, so a
+    # raw row's transcript field is truthy for an empty capture. Only a decoded row can say.
+    raw = row(transcript_segments=b'x\x9c\x8b\x8e\x05\x00\x01\x15\x00\xb9', transcript_segments_compressed=True)
+    assert fast_finish.candidate(raw) is True
+    assert fast_finish.candidate(row(deleted=True)) is False
+    assert fast_finish.candidate(row(v3_manual_end_requested=None)) is False
+
+
 def test_unit_pcm_places_references_and_leaves_gaps_silent():
     packs = {'p1': bytes(range(8)), 'p2': bytes(range(100, 108))}
     reads = []
@@ -116,6 +130,7 @@ def test_unit_pcm_refuses_a_short_source():
 @pytest.fixture(autouse=True)
 def admitted(monkeypatch):
     monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'on')
+    monkeypatch.setattr(fast_finish, 'funded', lambda uid, seconds, language: True)
 
 
 def seg(start, end, **more):
@@ -212,8 +227,6 @@ def test_a_failed_cut_is_counted_and_keeps_the_transcript():
 
 
 def test_real_transcription_restores_the_offset_of_the_first_word(monkeypatch):
-    from utils.stt import pre_recorded
-
     words = [
         {'timestamp': [12.5, 12.9], 'speaker': 'SPEAKER_00', 'text': 'hello'},
         {'timestamp': [13.0, 13.4], 'speaker': 'SPEAKER_00', 'text': 'there'},
@@ -248,6 +261,40 @@ def test_a_member_outside_the_rollout_reads_no_audio(monkeypatch):
     monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'off')
     never = lambda *args: pytest.fail('must not be called')
     assert fast_finish.run(UID, 'cid', row(), one_unit(), never, write=never, transcribe=never) == 'not_enabled'
+
+
+def test_nothing_is_sent_to_the_provider_without_consent_and_funding():
+    never = lambda *args: pytest.fail('must not read audio, transcribe or write')
+    asked = []
+
+    def authorize(uid, seconds, language):
+        asked.append((uid, seconds, language))
+        return False
+
+    units = one_unit(7.0) + one_unit(3.0)
+    outcome = fast_finish.run(UID, 'cid', row(), units, never, write=never, transcribe=never, authorize=authorize)
+    assert outcome == 'not_funded'
+    assert asked == [(UID, 10.0, 'en')]
+
+
+def test_the_funding_gate_is_the_shared_batch_admission(monkeypatch):
+    monkeypatch.undo()
+    seen = {}
+
+    def admission(uid, seconds, provider, *, lane, path):
+        seen.update(uid=uid, seconds=seconds, provider=provider, lane=lane, path=path)
+        return False, 'consent_denied'
+
+    monkeypatch.setattr(stt_cap_dispatch, 'sync_admission', admission)
+    monkeypatch.setattr(pre_recorded, 'get_prerecorded_service', lambda language: ('parakeet', None, 'm'))
+    assert fast_finish.funded(UID, 12.0, 'en') is False
+    assert seen == {
+        'uid': UID,
+        'seconds': 12.0,
+        'provider': 'parakeet',
+        'lane': 'batch',
+        'path': DispatchPath.BATCH_PROVIDER,
+    }
 
 
 def test_a_canonical_transcript_that_already_landed_wins():
@@ -352,13 +399,16 @@ class _Store:
         self.client = _Doc(data)
 
 
-def _admit(monkeypatch, current, units, *, fast='written', promoted=True):
+def _admit(monkeypatch, current, units, *, fast='written', promoted=True, member=True, decoded=None):
     live._FAST_FINISH_STARTED.clear()
     calls = {'fast': 0, 'promote': 0, 'cut': 0}
+    decoded = current if decoded is None else decoded
 
     def run(uid, cid, row_, units_, read, *, refresh, cut):
         calls['fast'] += 1
-        assert refresh() == current and units_ is not units and units_[0][2] is not units[0][2]
+        # The pass is handed a decoded row, never admission's raw snapshot.
+        assert row_ == decoded and refresh() == decoded
+        assert units_ is not units and units_[0][2] is not units[0][2]
         # A single unit is cut by admission before the pass; several units only by the pass itself.
         assert (cut is None) is (len(units) == 1)
         if cut is not None and fast == 'written':
@@ -373,10 +423,10 @@ def _admit(monkeypatch, current, units, *, fast='written', promoted=True):
         assert manual_end is True
         calls['cut'] += 1
 
-    from utils.conversations.v3 import triggers
-
     monkeypatch.setattr(fast_finish, 'run', run)
+    monkeypatch.setattr(fast_finish, 'enabled', lambda uid: member)
     monkeypatch.setattr(conversations_v3, 'promote_manual_end', promote)
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, cid, firestore_client=None: decoded)
     monkeypatch.setattr(triggers, 'changed', changed)
 
     async def admit():
@@ -392,21 +442,42 @@ def _admit(monkeypatch, current, units, *, fast='written', promoted=True):
 UNIT = (0.0, 1.0, [{'bucket': 'b', 'path': 'p', 'generation': 1}])
 
 
-@pytest.mark.parametrize('fast', ['written', 'not_enabled', 'provider_error'])
+@pytest.mark.parametrize('fast', ['written', 'provider_error', 'not_funded'])
 def test_admission_cuts_a_single_unit_itself_before_the_pass(monkeypatch, fast):
     assert _admit(monkeypatch, row(), [UNIT], fast=fast) == {'fast': 1, 'promote': 1, 'cut': 0}
 
 
-@pytest.mark.parametrize('fast,cuts', [('written', 1), ('not_enabled', 0), ('provider_error', 0), ('superseded', 0)])
+@pytest.mark.parametrize('fast,cuts', [('written', 1), ('provider_error', 0), ('superseded', 0), ('not_funded', 0)])
 def test_several_units_are_cut_only_by_a_pass_that_wrote_the_whole_transcript(monkeypatch, fast, cuts):
     # Several units project one at a time: cutting on the first would lock a partial window.
     assert _admit(monkeypatch, row(), [UNIT, UNIT], fast=fast) == {'fast': 1, 'promote': 0, 'cut': cuts}
 
 
-def test_a_recording_that_already_has_a_transcript_skips_the_fast_pass(monkeypatch):
-    current = row(transcript_segments=[{'id': 'a'}])
-    assert _admit(monkeypatch, current, [UNIT]) == {'fast': 0, 'promote': 1, 'cut': 0}
-    assert _admit(monkeypatch, current, [UNIT, UNIT]) == {'fast': 0, 'promote': 0, 'cut': 0}
+@pytest.mark.parametrize('units,promotes', [([UNIT], 1), ([UNIT, UNIT], 0)])
+def test_an_owner_outside_the_rollout_never_starts_a_pass(monkeypatch, units, promotes):
+    assert _admit(monkeypatch, row(), units, member=False) == {'fast': 0, 'promote': promotes, 'cut': 0}
+
+
+def test_the_pass_gets_the_decoded_row_for_a_raw_row_with_stored_bytes(monkeypatch):
+    # The raw snapshot's transcript bytes are truthy for an empty capture; the pass must still start
+    # and must be handed the decoded row, whose transcript is really empty.
+    raw = row(transcript_segments=b'stored-bytes', transcript_segments_compressed=True)
+    assert _admit(monkeypatch, raw, [UNIT, UNIT], decoded=row()) == {'fast': 1, 'promote': 0, 'cut': 1}
+
+
+@pytest.mark.parametrize(
+    'admitted,expected',
+    [
+        ({'outcome': 'batch', 'job_id': 'bp_x'}, True),
+        ({'outcome': 'batch', 'job_id': 'bp_other'}, False),
+        ({'outcome': 'busy'}, False),
+        ({'outcome': 'completed', 'result': {}}, False),
+        (None, False),
+        (True, False),
+    ],
+)
+def test_the_hook_runs_only_when_this_intake_owns_the_units(admitted, expected):
+    assert live._admitted_these_units(admitted, 'bp_x') is expected
 
 
 @pytest.mark.parametrize('current', [row(v3_manual_end_requested=None), row(recording=False)])
@@ -429,6 +500,8 @@ def _admit_many(monkeypatch, ids, release):
         return 'written'
 
     monkeypatch.setattr(fast_finish, 'run', run)
+    monkeypatch.setattr(fast_finish, 'enabled', lambda uid: True)
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, cid, firestore_client=None: row())
 
     async def admit():
         for cid in ids:
@@ -442,19 +515,21 @@ def _admit_many(monkeypatch, ids, release):
 
 
 def test_a_retried_admission_starts_one_fast_pass(monkeypatch):
-    import threading
-
     assert _admit_many(monkeypatch, ['cid', 'cid'], threading.Event()) == ['cid']
 
 
 def test_at_most_two_passes_run_at_once(monkeypatch):
-    import threading
-
-    started = _admit_many(monkeypatch, ['a', 'b', 'c'], threading.Event())
-    assert sorted(started) == ['a', 'b']
+    # Both slots are taken: a third pass is counted busy and never reads audio.
+    assert live._FAST_FINISH_SLOTS.acquire(blocking=False) and live._FAST_FINISH_SLOTS.acquire(blocking=False)
+    try:
+        assert _admit_many(monkeypatch, ['c'], threading.Event()) == []
+    finally:
+        live._FAST_FINISH_SLOTS.release()
+        live._FAST_FINISH_SLOTS.release()
+    assert _admit_many(monkeypatch, ['d'], threading.Event()) == ['d']
 
 
 def test_admission_survives_a_broken_hook(monkeypatch):
     live._FAST_FINISH_STARTED.clear()
-    monkeypatch.setattr(fast_finish, 'eligible', boom)
+    monkeypatch.setattr(fast_finish, 'candidate', boom)
     asyncio.run(live._manual_finish_admitted(_Store(row()), UID, 'cid', row(), [UNIT, UNIT], object(), b'k'))
