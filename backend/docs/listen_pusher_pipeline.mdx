@@ -39,6 +39,11 @@ summary leases, counters, rollout, rollback and deletion criteria.
 to restore classification-based hiding for derived media and recognized background
 on subsequent projections. The manual-end marker and classification remain stored.
 
+`CONVERSATIONS_V3_BATCH_MANUAL_END` defaults to `on`. A user finish of an audio-only
+v3 recording (server-batch capture, no transcript yet) stores `v3_manual_end` in the
+terminal transaction, so the window is cut when its batch transcript lands. Set it to
+`off` on `backend` to restore the silence and lock timers for later finishes.
+
 `CONVERSATIONS_V3_LIVE_TITLE=on` is the default for v3 builder runtimes.
 Set it to `off` to stop new automatic title previews. An open, untitled derived
 row becomes eligible after 180 seconds of transcribed speech, with overlapping

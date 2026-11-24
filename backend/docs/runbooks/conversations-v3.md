@@ -112,6 +112,13 @@ v3 reconcile (`backend` for on-open rebuilds, `backend-sync`, `backend-sync-back
 to restore classification-based hiding for manually ended media and recognized
 background on subsequent projections. The service reads the switch and passes it to
 the pure planner. Previously written rows keep their stored visibility until rebuilt.
+A mobile capture is audio-only when the user finishes it: the transcript is produced by the
+batch pipeline afterwards. The finalization worker closes such a recording through
+`complete_server_batch_capture`, which stores `v3_manual_end` for a `client_finalize` job, so the
+window is cut and locked when the batch transcript lands. `omi_conversations_v3_batch_manual_end_total`
+counts these by whether the transcript had already landed. Set `CONVERSATIONS_V3_BATCH_MANUAL_END=off`
+on the service that runs the finalization worker (`backend`) to stop storing the marker for later
+finishes; those windows then wait out the silence and lock timers again. Stored markers remain.
 Five minutes of placed-speech silence is a hard window boundary. An outline's
 `resumes_previous` may undo a topic split within that interval, never rejoin
 windows across the silence boundary, even with the same people. Short socket
