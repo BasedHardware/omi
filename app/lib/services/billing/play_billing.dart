@@ -138,6 +138,9 @@ class PlayBilling {
   final Set<String> _delivering = {};
   String _accountId = '';
 
+  /// A purchase is on Play's sheet or a token is being confirmed with the server.
+  bool get busy => _purchase != null || _delivering.isNotEmpty;
+
   void _listen() {
     _subscription ??= _platform().purchaseStream.listen(_onPurchases, onError: (Object error) {
       Logger.debug('Play purchase stream error: $error');
