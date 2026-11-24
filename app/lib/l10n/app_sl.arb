@@ -12322,7 +12322,7 @@
     "prepaidCodeResult": "{reason, select, invalid{Ta koda ni veljavna. Preverite jo in poskusite znova.} used{Ta koda je že bila uporabljena.} expired{Tej kodi je potekla veljavnost.} hasPlan{Že imate paket. Vaša koda ni bila uporabljena. Unovčite jo, ko se vaš paket konča.} notPrepaid{Te kode ni mogoče unovčiti tukaj. Uporabite jo, ko izberete paket.} notEligible{Te kode ni mogoče uporabiti v tem računu.} rateLimited{Preveč poskusov. Poskusite pozneje.} other{Prišlo je do napake. Poskusite znova.}}",
     "playStripeBilledOnWeb": "Obračunano prek omi.me. Prekličite tukaj kadar koli.",
     "playStripeBilledOnWebShort": "Obračunano prek omi.me.",
-    "playStripeUpdateCardToGetPlanBack": "Posodobite kartico na omi.me, da dobite {plan} nazaj.",
+    "playStripePlanPaused": "Vaš paket {plan} je začasno ustavljen.",
     "firmwareNewestSupportedForDevice": "Vaša naprava že uporablja najnovejšo podprto različico firmwareja",
     "firmwareSyncRecordingsFirstTitle": "Najprej sinhronizirajte posnetke",
     "firmwareSyncRecordingsFirstMessage": "Nekateri posnetki so še na vaši napravi. Počakajte, da se dokonča sinhroniziranje s telefonom, nato pa začnite posodobitev."

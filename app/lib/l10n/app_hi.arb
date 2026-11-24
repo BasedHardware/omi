@@ -4765,7 +4765,7 @@
     "prepaidCodeResult": "{reason, select, invalid{यह कोड मान्य नहीं है। जांचें और फिर से कोशिश करें।} used{यह कोड पहले ही इस्तेमाल हो चुका है।} expired{इस कोड की अवधि समाप्त हो गई है।} hasPlan{आपके पास पहले से एक प्लान है। आपका कोड इस्तेमाल नहीं हुआ। प्लान खत्म होने के बाद इसे रिडीम करें।} notPrepaid{यह कोड यहां रिडीम नहीं हो सकता। प्लान चुनते समय इसका इस्तेमाल करें।} notEligible{यह कोड इस खाते पर इस्तेमाल नहीं हो सकता।} rateLimited{बहुत ज़्यादा कोशिशें। बाद में फिर कोशिश करें।} other{कुछ गलत हो गया। कृपया फिर से कोशिश करें।}}",
     "playStripeBilledOnWeb": "omi.me के ज़रिए बिल किया जाता है। यहाँ कभी भी रद्द करें।",
     "playStripeBilledOnWebShort": "omi.me के ज़रिए बिल किया जाता है।",
-    "playStripeUpdateCardToGetPlanBack": "{plan} वापस पाने के लिए omi.me पर अपना कार्ड अपडेट करें।",
+    "playStripePlanPaused": "आपका {plan} प्लान रुका हुआ है।",
     "firmwareNewestSupportedForDevice": "आपका डिवाइस पहले से ही नवीनतम समर्थित फर्मवेयर संस्करण पर है",
     "firmwareSyncRecordingsFirstTitle": "पहले अपनी रिकॉर्डिंग सिंक करें",
     "firmwareSyncRecordingsFirstMessage": "कुछ रिकॉर्डिंग अभी भी आपके डिवाइस पर हैं। उन्हें आपके फ़ोन पर सिंक होने दें, फिर अपडेट शुरू करें।"

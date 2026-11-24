@@ -15841,8 +15841,8 @@ class AppLocalizationsUr extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'omi.me کے ذریعے بل کیا جاتا ہے۔';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return '$plan واپس پانے کے لیے omi.me پر اپنا کارڈ اپ ڈیٹ کریں۔';
+  String playStripePlanPaused(String plan) {
+    return 'آپ کا $plan پلان روک دیا گیا ہے۔';
   }
 
   @override

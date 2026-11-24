@@ -884,7 +884,8 @@ class _PlansSheetState extends State<PlansSheet> {
           return _stripePlanOnPlayBuild(provider, current);
         }
 
-        if (_storefrontEnabled) {
+        // A Play build never shows Stripe's storefront: only a prepaid plan reaches here, for its own body.
+        if (_storefrontEnabled && !provider.buysThroughPlay) {
           return StorefrontPlansContent(
             storefront: _storefront,
             loading: _storefrontLoading,

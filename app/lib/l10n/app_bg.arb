@@ -4765,7 +4765,7 @@
     "prepaidCodeResult": "{reason, select, invalid{Този код не е валиден. Проверете го и опитайте отново.} used{Този код вече е използван.} expired{Този код е изтекъл.} hasPlan{Вече имате план. Кодът ви не е използван. Активирайте го, след като планът ви приключи.} notPrepaid{Този код не може да се активира тук. Използвайте го, когато изберете план.} notEligible{Този код не може да се използва в този акаунт.} rateLimited{Твърде много опити. Опитайте по-късно.} other{Нещо се обърка. Опитайте отново.}}",
     "playStripeBilledOnWeb": "Таксува се чрез omi.me. Откажете оттук по всяко време.",
     "playStripeBilledOnWebShort": "Таксува се чрез omi.me.",
-    "playStripeUpdateCardToGetPlanBack": "Обновете картата си на omi.me, за да върнете {plan}.",
+    "playStripePlanPaused": "Планът ви {plan} е на пауза.",
     "firmwareNewestSupportedForDevice": "Вашето устройство вече работи с най-новата поддържана версия на фърмуера",
     "firmwareSyncRecordingsFirstTitle": "Първо синхронизирайте записите си",
     "firmwareSyncRecordingsFirstMessage": "Някои записи все още са на устройството. Оставете ги да приключат със синхронизирането към телефона, след което започнете актуализацията."

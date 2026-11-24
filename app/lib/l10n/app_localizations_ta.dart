@@ -15936,8 +15936,8 @@ class AppLocalizationsTa extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'omi.me மூலம் கட்டணம் வசூலிக்கப்படுகிறது.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return '$plan ஐ மீண்டும் பெற omi.me இல் உங்கள் கார்டைப் புதுப்பிக்கவும்.';
+  String playStripePlanPaused(String plan) {
+    return 'உங்கள் $plan திட்டம் இடைநிறுத்தப்பட்டுள்ளது.';
   }
 
   @override

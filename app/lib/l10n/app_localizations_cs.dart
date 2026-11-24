@@ -15828,8 +15828,8 @@ class AppLocalizationsCs extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Účtováno přes omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Aktualizujte kartu na omi.me a získejte $plan zpět.';
+  String playStripePlanPaused(String plan) {
+    return 'Váš tarif $plan je pozastaven.';
   }
 
   @override

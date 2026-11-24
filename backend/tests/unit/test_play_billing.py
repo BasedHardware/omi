@@ -659,7 +659,9 @@ def test_switch_off_subscription_route_is_byte_identical(monkeypatch, env, warm_
     assert _byok_subscription_json(monkeypatch, 'ios', '9999') == baseline
     on = json.loads(_byok_subscription_json(monkeypatch, 'android', '1700'))
     assert on['play_billing']['product_id'] == 'omi_pro'
-    assert {k: v for k, v in on.items() if k != 'play_billing'} == json.loads(baseline)
+    # A Play build can always redeem a prepaid code (test_play_prepaid_code_entry.py).
+    assert on['prepaid_code_redeem'] is True
+    assert {k: v for k, v in on.items() if k not in ('play_billing', 'prepaid_code_redeem')} == json.loads(baseline)
 
 
 @pytest.fixture(scope='module')

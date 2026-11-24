@@ -88,12 +88,12 @@ class _PaymentIssueRowState extends State<PaymentIssueRow> {
               Text(l10n.paymentDeclinedTitle, style: OmiType.headline),
               Text(
                 playBuild
-                    ? l10n.playStripeUpdateCardToGetPlanBack(planName)
+                    ? l10n.playStripePlanPaused(planName)
                     : offer == null
                         ? l10n.paymentDeclinedMessage(planName)
                         : l10n.paymentDeclinedMonthlyMessage(
                             planName, formatBillingPrice(offer.amount, offer.currency)),
-                key: playBuild ? const ValueKey('payment_issue_update_on_web') : null,
+                key: playBuild ? const ValueKey('payment_issue_plan_paused') : null,
                 style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
               ),
             ],

@@ -15602,8 +15602,8 @@ class AppLocalizationsKo extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'omi.me를 통해 청구됩니다.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return '$plan을(를) 다시 이용하려면 omi.me에서 카드를 업데이트하세요.';
+  String playStripePlanPaused(String plan) {
+    return '$plan 플랜이 일시 중지되었습니다.';
   }
 
   @override

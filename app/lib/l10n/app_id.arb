@@ -4800,7 +4800,7 @@
     "prepaidCodeResult": "{reason, select, invalid{Kode ini tidak valid. Periksa dan coba lagi.} used{Kode ini sudah digunakan.} expired{Kode ini sudah kedaluwarsa.} hasPlan{Anda sudah memiliki paket. Kode Anda tidak digunakan. Tukarkan setelah paket Anda berakhir.} notPrepaid{Kode ini tidak bisa ditukarkan di sini. Gunakan saat memilih paket.} notEligible{Kode ini tidak bisa digunakan di akun ini.} rateLimited{Terlalu banyak percobaan. Coba lagi nanti.} other{Terjadi kesalahan. Silakan coba lagi.}}",
     "playStripeBilledOnWeb": "Ditagih melalui omi.me. Batalkan di sini kapan saja.",
     "playStripeBilledOnWebShort": "Ditagih melalui omi.me.",
-    "playStripeUpdateCardToGetPlanBack": "Perbarui kartu Anda di omi.me untuk mendapatkan {plan} kembali.",
+    "playStripePlanPaused": "Paket {plan} kamu sedang dijeda.",
     "firmwareNewestSupportedForDevice": "Perangkat Anda sudah menggunakan versi firmware terbaru yang didukung",
     "firmwareSyncRecordingsFirstTitle": "Sinkronkan rekaman Anda terlebih dahulu",
     "firmwareSyncRecordingsFirstMessage": "Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan."

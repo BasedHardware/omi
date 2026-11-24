@@ -15821,8 +15821,8 @@ class AppLocalizationsEt extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Arveldatakse omi.me kaudu.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Uuenda oma kaarti aadressil omi.me, et $plan tagasi saada.';
+  String playStripePlanPaused(String plan) {
+    return 'Sinu $plan pakett on peatatud.';
   }
 
   @override

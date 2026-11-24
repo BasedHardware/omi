@@ -4765,7 +4765,7 @@
     "prepaidCodeResult": "{reason, select, invalid{Šis kods nav derīgs. Pārbaudiet to un mēģiniet vēlreiz.} used{Šis kods jau ir izmantots.} expired{Šī koda derīgums ir beidzies.} hasPlan{Jums jau ir plāns. Jūsu kods netika izmantots. Izmantojiet to, kad jūsu plāns beigsies.} notPrepaid{Šo kodu šeit nevar izmantot. Izmantojiet to, izvēloties plānu.} notEligible{Šo kodu nevar izmantot šajā kontā.} rateLimited{Pārāk daudz mēģinājumu. Mēģiniet vēlāk.} other{Kaut kas nogāja greizi. Lūdzu, mēģiniet vēlreiz.}}",
     "playStripeBilledOnWeb": "Rēķins tiek izrakstīts caur omi.me. Atceliet šeit jebkurā laikā.",
     "playStripeBilledOnWebShort": "Rēķins tiek izrakstīts caur omi.me.",
-    "playStripeUpdateCardToGetPlanBack": "Atjauniniet karti omi.me, lai atgūtu {plan}.",
+    "playStripePlanPaused": "Jūsu {plan} plāns ir apturēts.",
     "firmwareNewestSupportedForDevice": "Jūsu ierīcē jau ir jaunākā atbalstītā aparatprogrammatūras versija",
     "firmwareSyncRecordingsFirstTitle": "Vispirms sinhronizējiet savus ierakstus",
     "firmwareSyncRecordingsFirstMessage": "Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu."

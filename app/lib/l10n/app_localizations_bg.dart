@@ -15880,8 +15880,8 @@ class AppLocalizationsBg extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Таксува се чрез omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Обновете картата си на omi.me, за да върнете $plan.';
+  String playStripePlanPaused(String plan) {
+    return 'Планът ви $plan е на пауза.';
   }
 
   @override

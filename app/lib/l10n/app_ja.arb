@@ -4765,7 +4765,7 @@
     "prepaidCodeResult": "{reason, select, invalid{このコードは無効です。確認してもう一度お試しください。} used{このコードはすでに使用されています。} expired{このコードは有効期限が切れています。} hasPlan{すでにプランをお持ちです。コードは使用されていません。プランの終了後に使ってください。} notPrepaid{このコードはここでは使えません。プランを選ぶときに使ってください。} notEligible{このコードはこのアカウントでは使えません。} rateLimited{試行回数が多すぎます。後でもう一度お試しください。} other{問題が発生しました。もう一度お試しください。}}",
     "playStripeBilledOnWeb": "omi.me で請求されています。ここでいつでも解約できます。",
     "playStripeBilledOnWebShort": "omi.me で請求されています。",
-    "playStripeUpdateCardToGetPlanBack": "{plan} を再開するには omi.me でカードを更新してください。",
+    "playStripePlanPaused": "{plan} プランは一時停止中です。",
     "firmwareNewestSupportedForDevice": "お使いのデバイスは、すでにサポートされている最新のファームウェアバージョンで動作しています",
     "firmwareSyncRecordingsFirstTitle": "まず録音を同期してください",
     "firmwareSyncRecordingsFirstMessage": "一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。"

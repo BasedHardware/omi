@@ -51,6 +51,7 @@ import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/pages/home/home_navigation.dart';
+import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -67,6 +68,7 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/capture/finish_outcome.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
@@ -1951,7 +1953,7 @@ void main() {
       });
     }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
-    testWidgets('a manual finish 404 hands Processing off to the placeholder target', (tester) async {
+    testWidgets('a manual Finish 404 clears the Home filter and hands Processing off to its result', (tester) async {
       await withClock(Clock.fixed(_now), () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
         final palette = OmiColors.active;
@@ -1959,10 +1961,24 @@ void main() {
         OmiColors.active = OmiColors.forBrightness(Brightness.dark);
         final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
         final v3 = home.conversationsV3;
+        home.conversations
+          ..showShortConversations = true
+          ..showDiscardedConversations = true
+          ..toggleStarredFilter();
         final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'live-1');
         v3.startManualFinish(pending, null, captureId: home.capture.activeRecordingId);
         expect(v3.settleManualFinish(pending, null, alreadyClosed: true), isTrue);
         await tester.pump();
+        expect(find.byKey(const Key('home_processing_row')), findsNothing);
+        presentFinishOutcome(
+          tester.element(find.byType(ConversationsPage)),
+          const FinishAwaitingResult(),
+          entry: FinishEntry.home,
+        );
+        await tester.pump();
+        expect(home.conversations.showShortConversations, isTrue);
+        expect(home.conversations.showDiscardedConversations, isTrue);
+        expect(home.conversations.showsDefaultHome, isFalse);
         expect(find.text('Launch checklist'), findsNothing);
         expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
         expect(find.byType(V3LivePlaceholderRow), findsNothing);
@@ -1981,6 +1997,9 @@ void main() {
         expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
         await shoot(tester, '001-mobile-ios-finish-404-processing');
 
+        home.conversations
+          ..showShortConversations = false
+          ..showDiscardedConversations = false;
         home.conversations.upsertConversation(
           _conversation('live-1', home.liveStart, 'Launch checklist',
               v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.writing)),

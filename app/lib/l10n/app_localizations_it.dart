@@ -15908,8 +15908,8 @@ class AppLocalizationsIt extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Addebitato tramite omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Aggiorna la carta su omi.me per riavere $plan.';
+  String playStripePlanPaused(String plan) {
+    return 'Il tuo piano $plan è in pausa.';
   }
 
   @override

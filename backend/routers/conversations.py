@@ -31,7 +31,7 @@ import database.redis_db as redis_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
 import database.users as users_db
 from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
-from database import conversation_tombstones
+from database import conversation_tombstones, home_visibility_index
 from database.legal_holds import (
     DestructiveGateTakeover,
     DestructiveOperationInProgress,
@@ -1256,7 +1256,20 @@ def get_conversations(
     default_home = not (reveal or start_date or end_date)
     # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
     # legacy sync piece there would duplicate them.
-    show_held = default_home and not conversations_v3_enabled(uid)
+    v3_home = default_home and conversations_v3_enabled(uid)
+    show_held = default_home and not v3_home
+    requested_mode = request.headers.get(list_page_headers.HOME_MODE_HEADER) if request is not None else None
+    first_page = offset == 0 and not cursor
+    indexed_home = (
+        v3_home
+        and (requested_mode == 'indexed' or (requested_mode == 'auto' and first_page))
+        and home_visibility_index.enabled(uid)
+    )
+    if requested_mode == 'indexed' and not indexed_home:
+        # The gate was removed. An indexed continuation cannot use the legacy offset.
+        offset, cursor = 0, None
+    if requested_mode in {'auto', 'legacy', 'indexed'} and response is not None:
+        response.headers[list_page_headers.HOME_MODE_HEADER] = 'indexed' if indexed_home else 'legacy'
     read_started = time.monotonic()
     conversations = conversations_db.get_conversations_without_photos(
         uid,
@@ -1280,6 +1293,7 @@ def get_conversations(
         # so it hides what Home hides. Explicit reveal filters still opt out.
         hide_home=not reveal,
         show_held=show_held,
+        indexed_home=indexed_home,
     )
 
     read_done = time.monotonic()
@@ -1312,9 +1326,10 @@ def get_conversations(
     budget.observe('truncated' if budget.truncated else 'complete')
     # Read meter: what one list page cost. Counts and timings only, never the owner or the query.
     logger.info(
-        'conversation_list_read home=%s paged=%s limit=%d docs=%s storage_rows=%s hidden=%s rows=%d '
+        'conversation_list_read home=%s indexed_home=%s paged=%s limit=%d docs=%s storage_rows=%s hidden=%s rows=%d '
         'truncated=%s read_ms=%d total_ms=%d',
         default_home,
+        indexed_home,
         'cursor' if cursor else ('offset' if offset else 'first'),
         limit,
         getattr(budget, 'docs_scanned', None),
