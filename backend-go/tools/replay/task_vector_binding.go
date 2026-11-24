@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"reflect"
 	"regexp"
@@ -34,8 +36,14 @@ func taskClock(run *observation, value any) (time.Time, bool) {
 
 func singleTaskBinding(run *observation) (taskBinding, bool) {
 	var b taskBinding
-	if run.OwnerID == "" || run.ConversationID == "" || strings.Contains(run.OwnerID, "/") || documentField(run, "id") != run.ConversationID {
+	if run.OwnerID == "" || run.ConversationID == "" || strings.Contains(run.OwnerID, "/") ||
+		documentField(run, "id") != run.ConversationID || len(run.Effects) != 1 || len(run.TaskWrites) != 1 {
 		return b, false
+	}
+	for path, source := range run.FirestoreOperationSources {
+		if strings.Contains(path, "/action_items/") && (source.Writes != 0 || source.Deletes != 0) {
+			return b, false
+		}
 	}
 	prefix := "users/" + run.OwnerID + "/action_items/"
 	for path, raw := range run.Derived {
@@ -53,7 +61,7 @@ func singleTaskBinding(run *observation) (taskBinding, bool) {
 	provenance := singleObject(b.task["provenance"])
 	segments, _ := b.item["source_segment_ids"].([]any)
 	description, _ := b.item["description"].(string)
-	if id == "" || b.task["source"] != "conversation" || b.task["owner"] != "user" || b.task["conversation_id"] != run.ConversationID ||
+	if id == "" || run.TaskWrites[0] != b.path || b.task["source"] != "conversation" || b.task["owner"] != "user" || b.task["conversation_id"] != run.ConversationID ||
 		b.item["capture_owner"] != "user" || description != "Send the meeting notes" || b.task["description"] != description ||
 		provenance["scope"] != "canonical" || provenance["kind"] != "conversation" || provenance["id"] != run.ConversationID ||
 		len(segments) != 1 || segments[0] != "segment-1" || !reflect.DeepEqual(provenance["transcript_segment_ids"], segments) {
@@ -70,7 +78,10 @@ func singleTaskBinding(run *observation) (taskBinding, bool) {
 	stamp, _ := b.metadata["created_at"].(json.Number)
 	seconds, err := stamp.Int64()
 	embedding, _ := b.vector["values"].([]any)
-	if len(embedding) == 0 || entry["namespace"] != "ns4" || b.vector["id"] != run.OwnerID+"-ai-"+id || b.metadata["uid"] != run.OwnerID ||
+	vectorID := run.OwnerID + "-ai-" + id
+	inputs := run.TaskEmbeddingInputs[vectorID]
+	if len(run.TaskEmbeddingInputs) != 1 || len(inputs) != 1 || inputs[0] != fmt.Sprintf("%x", sha256.Sum256([]byte(description))) ||
+		len(embedding) == 0 || entry["namespace"] != "ns4" || b.vector["id"] != vectorID || b.metadata["uid"] != run.OwnerID ||
 		b.metadata["action_item_id"] != id || err != nil || seconds < updated.Unix() || seconds > run.Finished.Unix() {
 		return b, false
 	}
@@ -119,13 +130,12 @@ func reviewSingleTaskBinding(diffs []difference, python, goRun *observation) {
 		switch {
 		case d.Path == docPath(pyPath) && (d.Kind == "missing_in_go" || d.Kind == "unported"),
 			d.Path == docPath(goPath) && d.Kind == "missing_in_python":
-			diffs[i].Reason = "task_vector_identity"
+			diffs[i].Reason = "generated_identity"
 		case d.Kind == "different_value":
 			switch d.Path {
-			case "/effects/other_vectors/0/record/id", "/effects/other_vectors/0/record/metadata/action_item_id":
-				diffs[i].Reason = "task_vector_identity"
-			case "/effects/other_vectors/0/record/metadata/created_at", "/conversation/structured/action_items/0/created_at/$timestamp":
-				diffs[i].Reason = "replay_clock"
+			case "/effects/other_vectors/0/record/id", "/effects/other_vectors/0/record/metadata/action_item_id",
+				"/effects/other_vectors/0/record/metadata/created_at", "/conversation/structured/action_items/0/created_at/$timestamp":
+				diffs[i].Reason = "generated_identity"
 			}
 		}
 	}

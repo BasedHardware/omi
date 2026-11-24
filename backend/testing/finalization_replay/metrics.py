@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from functools import lru_cache
 import json
 from threading import Lock
@@ -226,20 +227,45 @@ def _delete_write(write):
         return bool(getattr(write, 'delete', ''))
 
 
-def _count_write_request(state, request):
+def _capture_parity_write(state, name, fields, *, deleted=False, paths=()):
+    if not hasattr(state, 'profile_writes'):
+        return
+    path = name.split('/documents/', 1)[-1]
+    if len(path.split('/')) == 4 and path.split('/')[2] == 'action_items':
+        with state._metrics_lock:
+            state.task_writes.append(path if not deleted else '')
+    if path != f'users/{state.uid}' or not (
+        deleted or 'ai_user_profile' in fields or any(p.split('.', 1)[0] == 'ai_user_profile' for p in paths)
+    ):
+        return
+    profile = fields.get('ai_user_profile')
+    values = _field(_field(profile, 'map_value'), 'fields', {}) or {}
+    event = {field: _field(values.get(field), 'string_value', '') for field in ('generated_at', 'refreshed_at')}
+    event['observed_at'] = datetime.now(timezone.utc).isoformat()
+    with state._metrics_lock:
+        state.profile_writes.append(event)
+
+
+def _count_write_request(state, request, statuses=None):
     writes = _writes(request)
     if not writes:
         return
     deletes = sum(_delete_write(write) for write in writes)
     privacy_writes = privacy_deletes = 0
-    for write in writes:
+    for index, write in enumerate(writes):
         name = _write_document_name(write)
         update = _field(write, 'update', {}) or {}
+        fields = _field(update, 'fields', {}) or {}
+        if statuses is None or (index < len(statuses) and statuses[index].code == 0):
+            _capture_parity_write(
+                state, name, fields, deleted=_delete_write(write),
+                paths=_field(_field(write, 'update_mask'), 'field_paths', ()) or (),
+            )
         if _delete_write(write):
             if _matches_home_dirty_receipt(state, name):
                 state.record_home_dirty_receipt_write('deleted')
         else:
-            _record_home_receipt_write(state, name, _field(update, 'fields', {}) or {})
+            _record_home_receipt_write(state, name, fields)
         if _matches_batch_privacy_document(state, name):
             if _delete_write(write):
                 privacy_deletes += 1
@@ -326,13 +352,18 @@ def install_firestore_meter():
                     state.add_firestore_operations(**counts)
                     document = _field(request, 'document', {}) or {}
                     document_name = _direct_write_document_name(name, request)
+                    fields = _field(document, 'fields', {}) or {}
+                    _capture_parity_write(
+                        state, document_name, fields, deleted=deleted,
+                        paths=_field(_field(request, 'update_mask'), 'field_paths', ()) or (),
+                    )
                     if deleted:
                         if _matches_home_dirty_receipt(state, document_name):
                             state.record_home_dirty_receipt_write('deleted')
                     else:
-                        _record_home_receipt_write(state, document_name, _field(document, 'fields', {}) or {})
+                        _record_home_receipt_write(state, document_name, fields)
                 elif name in batched_writes:
-                    _count_write_request(state, request)
+                    _count_write_request(state, request, _field(result, 'status', ()) if name == 'batch_write' else None)
                 if name in streams:
                     return _wrap_stream(result, name, state)
                 return result

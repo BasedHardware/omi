@@ -200,6 +200,9 @@ class CaseState:
         self.go_evidence = {}
         self._metrics_lock = Lock()
         self.cost_measured = False
+        self.profile_writes = []
+        self.task_writes = []
+        self.task_embedding_inputs = {}
         self.started_at = None
         self.seeded_token_hashes = []
         self.batch_privacy_seed = None
@@ -394,6 +397,9 @@ class CaseState:
             'episode_attach_memo_failure_reason': memo_failure_reason,
             'started_at': self.started_at.isoformat(),
             'finished_at': datetime.now(timezone.utc).isoformat(),
+            'profile_writes': self.profile_writes,
+            'task_writes': self.task_writes,
+            'task_embedding_inputs': self.task_embedding_inputs,
             'provider_calls': sorted(self.provider_calls),
             'cost': self.cost(),
             'go_evidence': self.go_evidence,

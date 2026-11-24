@@ -10,11 +10,12 @@ func TestProfileRefreshRequiresOneBackendStampWithinEachWindow(t *testing.T) {
 	makeRun := func(offset time.Duration) *observation {
 		stamp := start.Add(offset).Format(time.RFC3339Nano)
 		return &observation{OwnerID: "u", Started: start, Finished: start.Add(time.Minute), ProviderCalls: []string{"memories"},
+			ProfileWrites: []profileWrite{{Generated: stamp, Refreshed: stamp, Observed: start.Add(3 * time.Second)}},
 			Derived: map[string]any{"users/u": map[string]any{"ai_user_profile": map[string]any{
 				"generated_at": stamp, "refreshed_at": stamp, "source": "backend", "profile_text": "fixture",
 			}}}}
 	}
-	for _, field := range []string{"", "refreshed_at", "generated_at", "source", "profile_text", "both_outside"} {
+	for _, field := range []string{"", "refreshed_at", "generated_at", "source", "profile_text", "both_outside", "second write", "after write", "unobserved"} {
 		py, candidate := makeRun(time.Second), makeRun(2*time.Second)
 		profile := objectField(candidate.Derived["users/u"], "ai_user_profile").(map[string]any)
 		switch field {
@@ -22,6 +23,14 @@ func TestProfileRefreshRequiresOneBackendStampWithinEachWindow(t *testing.T) {
 		case "both_outside":
 			profile["generated_at"] = start.Add(-time.Hour).Format(time.RFC3339Nano)
 			profile["refreshed_at"] = profile["generated_at"]
+			candidate.ProfileWrites[0].Generated = profile["generated_at"].(string)
+			candidate.ProfileWrites[0].Refreshed = profile["generated_at"].(string)
+		case "second write":
+			candidate.ProfileWrites = append(candidate.ProfileWrites, candidate.ProfileWrites[0])
+		case "after write":
+			candidate.ProfileWrites[0].Observed = start.Add(time.Second)
+		case "unobserved":
+			candidate.ProfileWrites = nil
 		default:
 			profile[field] = "different"
 		}
