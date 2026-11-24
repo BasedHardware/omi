@@ -63,6 +63,19 @@ void main() {
 
   Directory recordingsDir() => Directory('${tempDir.path}/voice_recordings');
 
+  VoiceRecorderProvider createProvider(_ContendedMic mic, {VoiceMessageTranscriber? transcriber}) {
+    final provider = VoiceRecorderProvider(mic: mic, transcriber: transcriber);
+    addTearDown(() async {
+      try {
+        // Drain the PCM sink before the shared teardown removes its directory.
+        await provider.discardRecording();
+      } finally {
+        provider.dispose();
+      }
+    });
+    return provider;
+  }
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
@@ -103,7 +116,7 @@ void main() {
   group('VoiceRecorderProvider mic contention', () {
     test('a busy mic unwinds the half-armed session instead of escaping', () async {
       final mic = _ContendedMic();
-      final provider = VoiceRecorderProvider(mic: mic);
+      final provider = createProvider(mic);
       final observed = <VoiceRecorderState>[];
       provider.addListener(() => observed.add(provider.state));
 
@@ -126,7 +139,7 @@ void main() {
 
     test('waveform ticks repaint the waveform, not every provider listener', () async {
       final mic = _ContendedMic()..failStart = false;
-      final provider = VoiceRecorderProvider(mic: mic);
+      final provider = createProvider(mic);
       await provider.startRecording();
       expect(provider.state, VoiceRecorderState.recording);
 
@@ -142,12 +155,11 @@ void main() {
 
       expect(waveformTicks, greaterThanOrEqualTo(3), reason: 'the wave must keep flowing');
       expect(providerNotifies, 0, reason: 'a 60Hz provider notify rebuilds the whole chat composer');
-      provider.dispose();
     });
 
     test('the provider is not wedged — a later start records normally', () async {
       final mic = _ContendedMic();
-      final provider = VoiceRecorderProvider(mic: mic);
+      final provider = createProvider(mic);
 
       await provider.startRecording();
       expect(provider.state, VoiceRecorderState.idle);
@@ -160,7 +172,7 @@ void main() {
       expect(provider.isRecording, isTrue);
       expect(recordingsDir().listSync().length, 1);
 
-      provider.close();
+      await provider.discardRecording();
       expect(mic.stopCalls, 1);
       expect(provider.state, VoiceRecorderState.idle);
     });
@@ -168,12 +180,10 @@ void main() {
     test('discarding an active recording stops the mic and removes PCM without transcription', () async {
       final mic = _ContendedMic()..failStart = false;
       var transcriptionCalls = 0;
-      final provider = VoiceRecorderProvider(
-          mic: mic,
-          transcriber: (_) async {
-            transcriptionCalls++;
-            return 'unexpected';
-          });
+      final provider = createProvider(mic, transcriber: (_) async {
+        transcriptionCalls++;
+        return 'unexpected';
+      });
       await provider.startRecording();
       expect(recordingsDir().listSync().length, 1);
 
