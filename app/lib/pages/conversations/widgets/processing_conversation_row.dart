@@ -20,6 +20,7 @@ class ProcessingConversationRow extends StatelessWidget {
     this.processingEpisodes = const [],
     this.step = HomeStep.transcribing,
     this.count = 1,
+    this.openable = true,
   });
 
   final ServerConversation conversation;
@@ -33,6 +34,8 @@ class ProcessingConversationRow extends StatelessWidget {
 
   /// How many genuinely pending recordings this row stands for.
   final int count;
+
+  final bool openable;
 
   void _open(BuildContext context) {
     OmiHaptics.selection();
@@ -69,20 +72,21 @@ class ProcessingConversationRow extends StatelessWidget {
       l10n.homeRecordingsCount(count),
     ].join(' · ');
     final shownTitle = l10n.wrappedProcessingDefault;
+    final onTap = openable ? () => _open(context) : null;
     return Padding(
       padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
       child: Semantics(
-        button: true,
+        button: openable,
         label: '$shownTitle, $meta',
         excludeSemantics: true,
-        onTap: () => _open(context),
+        onTap: onTap,
         child: Material(
           key: const Key('home_processing_row'),
           color: OmiColors.surface1,
           shape: const RoundedRectangleBorder(borderRadius: OmiRadius.xlAll),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: () => _open(context),
+            onTap: onTap,
             child: Padding(
               padding: const EdgeInsetsDirectional.fromSTEB(14, 14, 10, 14),
               child: Row(
@@ -115,7 +119,7 @@ class ProcessingConversationRow extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right_rounded, color: OmiColors.textDisabled),
+                  if (openable) Icon(Icons.chevron_right_rounded, color: OmiColors.textDisabled),
                 ],
               ),
             ),
