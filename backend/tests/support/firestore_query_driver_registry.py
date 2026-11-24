@@ -172,6 +172,7 @@ BODY_DIGEST = {
     'database.batch_census_export._scope': '239ed05dc6fef88f4ed8a88b870867f37623329cb96d8b1131278a52a3652dc8',
     'database.batch_pipeline_allowance_migration.candidates': '04c9beae56ec6091544a2ec69a8ba170032dbe3670697b704db2f88d513bc5cb',
     'database.conversation_batch_purge_jobs.RunProgress.pending_segments': '86b3d882fe3c575b3a540bb00d1845c941c5256d99848c4dc89917eb707ff3cc',
+    'database.conversations._PageFill._run_lean': 'b63bc3c4fea800ebe132e510332c4ec503c854a560eb5b380bd7e1d2701cbfe3',
     'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
     'database.conversation_batch_purge_jobs._drop_segment_records': '2db3123e6e11d177d434326668969249a7fd4e0aade9788d045056fbdefe8c9d',
     'database.conversation_batch_purge_jobs._owes_segments': '5945da3db3e539efafe6dbc95560280683ea863b77a8e7e720ee3c2902b59c68',
@@ -1349,6 +1350,18 @@ _add(
             'database.conversations.get_conversations_without_photos',
         ),
         reason='shared page fill for the offset and cursor paths (the cursor collector only builds its start_after bookmark query); offset window and start_after refills observed inside both listed consumers',
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.conversations._PageFill._run_lean',
+        covered_by=(
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations_without_photos',
+        ),
+        reason='lean refill of the same page fill: the consumer query with a field projection and a start_after bookmark, so the same filters, order and index as the full-document refill observed inside both listed consumers; it runs only under a request budget, which the drivers hold neutral',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversations._PageFill._run_lean'],
     )
 )
 _add(

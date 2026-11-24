@@ -577,6 +577,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_EXTERNAL_LIST_SINGLE_FLIGHT_ENABLED` | Default on; coalesce simultaneous identical external-list cache misses after each request passes authorization | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `OMI_FIRESTORE_WRITE_PROBE_ENABLED` | Default on; count committed Firestore writes by collection, op, caller and origin at the GAPIC Commit/BatchWrite boundary | backend | env | open | — | — | — | — | keep | keep | — | fswrites |
 | `OMI_GEMINI_OVERFLOW_ENABLED` | Enable overflow routing to Gemini | backend, llm-gateway | env | open | — | — | — | — | keep | keep | — | unowned |
+| `OMI_LIST_LEAN_SKIP_ENABLED` | Default on; conversation list page refills through a run of hidden rows stream only visibility fields and read in full only rows that may be visible. Off restores full-document refills. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
 | `OMI_MCP_MEMORY_LIST_BUDGET_ENABLED` | Default on unless false; Single mixed-view MCP REST memory scan with shared request deadline and document budget | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `OMI_MEMORY_INCREMENTAL_INDEX_WINDOWS_ENABLED` | Default on unless false; historical memory metadata expansions seek after snapshots instead of rereading prefixes | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `OMI_STAGED_PROMOTE_LONG_TTL_ENABLED` | Default on unless false; one-hour write-invalidated promote empty TTL; false restores 90 seconds | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
@@ -1465,6 +1466,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: open)
 - `OMI_IMESSAGE_CONTACT_CARD` — Default-off sharing of a preconfigured Linq contact card. (fail: closed)
 - `OMI_INDEXED_LIST_READS_ENABLED` — Default off; indexed canonical list candidates and slim main conversation lists preserve released row authority (fail: closed)
+- `OMI_LIST_LEAN_SKIP_ENABLED` — Default on; conversation list page refills through a run of hidden rows stream only visibility fields and read in full only rows that may be visible. Off restores full-document refills. (fail: open)
 - `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` — Enable gateway observability logs (fail: closed)
 - `OMI_MCP_MEMORY_LIST_BUDGET_ENABLED` — Default on unless false; Single mixed-view MCP REST memory scan with shared request deadline and document budget (fail: open)
 - `OMI_MEMORY_INCREMENTAL_INDEX_WINDOWS_ENABLED` — Default on unless false; historical memory metadata expansions seek after snapshots instead of rereading prefixes (fail: open)
