@@ -595,6 +595,8 @@ overlay:
     services:
       backend:
         forbidden_env:
+        - OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED
+        - OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT
         # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED

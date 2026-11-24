@@ -995,6 +995,8 @@ environments:
       services:
         backend:
           forbidden_env:
+          - OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED
+          - OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -1081,8 +1083,6 @@ environments:
             SYNC_RECORD_DECODE_FAILURE_MEMO:
               value: 'true'
               category: ops_kill
-            OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED: {value: 'true', category: rollout}
-            OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT: {value: '100', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
@@ -4071,6 +4071,8 @@ environments:
       services:
         backend:
           forbidden_env:
+          - OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED
+          - OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           - DREAM_AGENT_PAID_PERCENT
@@ -4197,8 +4199,6 @@ environments:
             SYNC_RECORD_DECODE_FAILURE_MEMO:
               value: 'true'
               category: ops_kill
-            OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED: {value: 'true', category: rollout}
-            OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT: {value: '100', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:

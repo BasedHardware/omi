@@ -1404,6 +1404,14 @@ def test_full_render_refuses_to_emit_when_a_service_key_would_be_removed(monkeyp
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_backend_removes_graduated_external_polling_cache_flags(environment):
+    backend = _MANIFEST['environments'][environment]['cloud_run']['services']['backend']
+    retired = {'OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT'}
+    assert retired.isdisjoint(backend['env'])
+    assert retired <= set(_MODULE['_remove_env_extra']('backend', backend).split(','))
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
     services = _MANIFEST['environments'][environment]['cloud_run']['services']
     for name, service in services.items():

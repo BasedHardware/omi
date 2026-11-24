@@ -10,8 +10,8 @@ from fastapi import Request, Response
 from utils import external_list_reads as cache, external_polling_cache as policy
 
 
-def test_disabled_policy_does_not_touch_request_identity(monkeypatch):
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'false')
+def test_global_kill_switch_does_not_touch_request_identity(monkeypatch):
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_CACHE_ENABLED', 'false')
     touched = []
 
     class UnusableRequest:
@@ -34,9 +34,7 @@ def test_disabled_policy_does_not_touch_request_identity(monkeypatch):
 
 
 def test_enabled_policy_with_unusable_identity_bypasses_without_breaking_source(monkeypatch):
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'true')
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT', '100')
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_CACHE_ENABLED', 'true')
+    monkeypatch.delenv('OMI_EXTERNAL_LIST_CACHE_ENABLED', raising=False)
     request = Request(
         {'type': 'http', 'method': 'GET', 'path': '/v1/dev/user/memories', 'headers': [], 'query_string': b''}
     )
@@ -53,10 +51,8 @@ def polling(monkeypatch):
     now = [1000.0]
     monkeypatch.setattr(cache, '_client', client)
     monkeypatch.setattr(cache.time, 'time', lambda: now[0])
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'true')
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT', '100')
     monkeypatch.setenv('OMI_EXTERNAL_LIST_SINGLE_FLIGHT_ENABLED', 'false')
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_CACHE_ENABLED', 'true')
+    monkeypatch.delenv('OMI_EXTERNAL_LIST_CACHE_ENABLED', raising=False)
     return client, now
 
 
@@ -77,7 +73,11 @@ def lookup(token='synthetic', path='/v1/dev/user/memories'):
     return request, response, hit
 
 
-def test_only_proven_fast_pollers_can_reuse_an_unversioned_list_after_ten_seconds(polling):
+@pytest.mark.parametrize('stage,service', [('local', None), ('dev', 'backend'), ('prod', 'backend')])
+def test_only_proven_fast_pollers_can_reuse_an_unversioned_list_after_ten_seconds(polling, monkeypatch, stage, service):
+    monkeypatch.setenv('OMI_ENV_STAGE', stage)
+    if service is not None:
+        monkeypatch.setenv('K_SERVICE', service)
     _, now = polling
     for moment in [1000, 1020]:
         now[0] = moment
@@ -106,9 +106,9 @@ def test_slow_gap_and_kill_switch_immediately_make_extended_entries_unreachable(
     assert request.state.external_list_cache_entry.ttl == 300
     extended_key = request.state.external_list_cache_entry.key
     request.state.external_list_cache_entry.store(Response(b'[]', headers=response.headers))
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'false')
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_CACHE_ENABLED', 'false')
     assert lookup()[2] is None
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'true')
+    monkeypatch.delenv('OMI_EXTERNAL_LIST_CACHE_ENABLED')
     now[0] = 1081
     assert client.get(extended_key) is not None  # Still inside its original 300s lifetime.
     request, _, hit = lookup()
@@ -141,20 +141,21 @@ def test_missing_response_disclosure_surface_cannot_use_extended_entries(polling
     assert hit is None and request.state.external_list_cache_entry.ttl == 10
 
 
-def test_redis_failure_default_off_and_non_developer_routes_keep_ten_seconds(polling, monkeypatch):
+def test_redis_failure_and_non_developer_routes_keep_ten_seconds(polling, monkeypatch):
     client, _ = polling
     monkeypatch.setattr(client, 'eval', lambda *args: (_ for _ in ()).throw(ConnectionError()))
     assert lookup()[0].state.external_list_cache_entry.ttl == 10
-    monkeypatch.delenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED')
-    assert lookup()[0].state.external_list_cache_entry.ttl == 10
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'true')
     assert lookup(path='/v1/mcp/memories')[0].state.external_list_cache_entry.ttl == 10
 
 
-@pytest.mark.parametrize('percent', ['0', 'invalid', '-1', '101'])
-def test_closed_or_invalid_cohort_performs_no_polling_io(polling, monkeypatch, percent):
+@pytest.mark.parametrize('service', ['backend-sync', 'backend-sync-backfill', 'backend-integration', None])
+def test_other_deployed_roles_do_not_use_developer_polling_cache(polling, monkeypatch, service):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    if service is None:
+        monkeypatch.delenv('K_SERVICE', raising=False)
+    else:
+        monkeypatch.setenv('K_SERVICE', service)
     client, _ = polling
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT', percent)
     evaluate = Mock()
     monkeypatch.setattr(client, 'eval', evaluate)
     request, _, _ = lookup()

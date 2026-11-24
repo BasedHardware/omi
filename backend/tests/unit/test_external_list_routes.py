@@ -125,8 +125,6 @@ def test_real_routes_cache_final_array_bytes_and_still_authorize(routes, path, o
 @pytest.mark.parametrize('kind', ['conversations', 'daily-summaries', 'goals'])
 def test_item_404_cache_runs_after_auth_and_isolates_owner_key_and_item(routes, monkeypatch, kind):
     client, state, calls, _ = routes
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'true')
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT', '100')
     if kind == 'conversations':
         reader = Mock(return_value=None)
         monkeypatch.setattr(developer.conversations_db, 'get_conversation', reader)
@@ -137,7 +135,7 @@ def test_item_404_cache_runs_after_auth_and_isolates_owner_key_and_item(routes, 
         reader = Mock(return_value=None)
         monkeypatch.setattr(developer.goals_db, 'get_goal_by_id', reader)
         monkeypatch.setattr(
-            developer.goals_db, 'get_all_goals', Mock(side_effect=AssertionError('cohort uses point read'))
+            developer.goals_db, 'get_all_goals', Mock(side_effect=AssertionError('cache-enabled path uses point read'))
         )
     path = f'/v1/dev/user/{kind}/missing'
     assert client.get(path).status_code == 404
@@ -162,8 +160,6 @@ def test_item_404_cache_runs_after_auth_and_isolates_owner_key_and_item(routes, 
 
 def test_malformed_goal_is_not_negative_cached_and_repair_is_immediately_visible(routes, monkeypatch):
     client, _, _, storage = routes
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'true')
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT', '100')
     now = datetime.now(timezone.utc)
     repaired = developer.goals_db.normalize_goal_storage(
         dict(
@@ -181,7 +177,9 @@ def test_malformed_goal_is_not_negative_cached_and_repair_is_immediately_visible
     )
     point_read = Mock(side_effect=[ValueError('malformed stored goal'), repaired])
     monkeypatch.setattr(developer.goals_db, 'get_goal_by_id', point_read)
-    monkeypatch.setattr(developer.goals_db, 'get_all_goals', Mock(side_effect=AssertionError('cohort uses point read')))
+    monkeypatch.setattr(
+        developer.goals_db, 'get_all_goals', Mock(side_effect=AssertionError('cache-enabled path uses point read'))
+    )
     first = client.get('/v1/dev/user/goals/repaired')
     assert first.status_code == 404 and not storage.entries
     second = client.get('/v1/dev/user/goals/repaired')
@@ -189,12 +187,16 @@ def test_malformed_goal_is_not_negative_cached_and_repair_is_immediately_visible
     assert point_read.call_count == 2
 
 
-def test_goal_item_off_cohort_keeps_the_original_list_reader_and_no_negative_cache(routes, monkeypatch):
+def test_goal_item_with_global_cache_disabled_uses_the_original_list_reader(routes, monkeypatch):
     client, _, _, storage = routes
-    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'false')
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_CACHE_ENABLED', 'false')
     reader = Mock(return_value=[])
     monkeypatch.setattr(developer.goals_db, 'get_all_goals', reader)
-    monkeypatch.setattr(developer.goals_db, 'get_goal_by_id', Mock(side_effect=AssertionError('off cohort stays live')))
+    monkeypatch.setattr(
+        developer.goals_db,
+        'get_goal_by_id',
+        Mock(side_effect=AssertionError('cache-disabled path uses the list reader')),
+    )
     for _ in range(2):
         assert client.get('/v1/dev/user/goals/missing').status_code == 404
     assert reader.call_count == 2 and not storage.entries

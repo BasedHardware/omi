@@ -382,6 +382,8 @@ overlay:
     services:
       backend:
         forbidden_env:
+        - OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED
+        - OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY

@@ -67,12 +67,13 @@ Only successful nontruncated pages are stored. Errors, `X-Omi-List-Truncated: tr
 `X-Scan-Truncated: true` responses bypass storage. Cache I/O, encryption or decode faults fail open
 through the shared fallback telemetry without logging payloads or exceptions.
 
-## Adaptive developer pollers (default off)
+## Adaptive developer pollers
 
-`OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED=true` together with
-`OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT=5` admits a deterministic 5% of API keys.
-Both default closed. `false`, percent `0`, or the existing global
-`OMI_EXTERNAL_LIST_CACHE_ENABLED=false` restores the original behavior.
+Adaptive caching is enabled for all Developer API keys on the Cloud Run
+`backend` service. Margin confirmed that the serving backend was enabled at
+100% on 2026-11-24 before graduating the rollout.
+Set `OMI_EXTERNAL_LIST_CACHE_ENABLED=false` to disable response caching,
+cadence tracking and item-absence caching together.
 
 Only repeated identical Developer conversation/memory list queries qualify.
 Two distinct intervals between one and sixty seconds establish a fast poller:
@@ -87,7 +88,7 @@ Every extended response discloses `X-Omi-List-Cache: fast-poller; max-age=N` on
 the origin response and cache hits. Only this class can receive unversioned list
 data older than 10s after a write; the maximum is the disclosed 60/120/300s.
 Separate cache namespaces make extended entries unreachable by normal callers
-or after the polling switch is off. Existing grants, account access, scope,
+or when the global cache switch is off. Existing grants, account access, scope,
 validation and rate limits still run before every cache lookup.
 
 Authenticated conversation, daily-summary and goal item GETs can reuse a 404
@@ -97,23 +98,16 @@ extend absence. Corrupt, locked, deleted or failed results are not admitted.
 Newly created items may remain absent for this bounded interval. There is no
 action-item GET-by-ID route: those router 404s already cost no content reads.
 
-Within the enabled cohort, goal detail GETs use the existing owner-scoped point
+With caching enabled, goal detail GETs use the existing owner-scoped point
 reader instead of scanning all goals. Only its trusted absent-document result
 can fill the negative cache. Goal normalization failures keep the uncached 404,
-so a repaired goal is visible on the next request. Off-cohort goal GETs keep
-their original list projection. Grade both `goals:get_all_goals` and
-`goals:get_goal_by_id` together: moving reads between caller labels is not a
-saving by itself.
-401/403 gates already precede list readers; route tests pin that ordering rather
-than claiming a new saving from sampled error proportions.
+so a repaired goal is visible on the next request. Goal GETs use their original
+list projection when the global cache switch is off. Evaluate `goals:get_all_goals`
+and `goals:get_goal_by_id` together when measuring source reads. The 401/403
+gates run before list readers, and route tests verify that ordering.
 
-Infracost owns 5%, two consecutive `verify.py` ticks PASS, then 100%, with the
-first decision within three days of deployment (Nov 5 target; renew if needed).
-Re-pin a dedicated pre-ramp baseline first. Pair guard PASS with an absolute
-Developer-origin reads/day readout; generic guard PASS alone is not proof of
-this item's economics. Keep 5xx and latency guards clean. The reviewed
-$13–16/day saving is estimated until that readout; no saving is booked here.
-Rollback is enabled=false or percent=0, without a rate-limit/global-TTL change.
+Evaluate Developer-origin reads per day against a dedicated pre-ramp baseline
+alongside the 5xx and latency guards.
 
 ## Read bounds and client compatibility
 
