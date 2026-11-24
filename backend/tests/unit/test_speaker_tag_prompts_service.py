@@ -1,5 +1,6 @@
 import asyncio
 import contextvars
+from contextlib import nullcontext
 import logging
 import threading
 import time
@@ -49,6 +50,7 @@ class World:
         monkeypatch.setattr(service.users_db, 'get_person', lambda uid, pid: self.people.get(pid))
         monkeypatch.setattr(service.users_db, 'get_person_by_name', lambda uid, name: None)
         monkeypatch.setattr(service.users_db, 'create_person', lambda uid, data: self.created.append(data) or data)
+        monkeypatch.setattr(service, 'external_write_fence', lambda uid: nullcontext())
         monkeypatch.setattr(service.users_db, 'get_people', lambda uid: list(self.people.values()))
         monkeypatch.setattr(service.conversations_db, 'get_conversations', lambda *a, **k: [])
         monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda *a, **k: {})
@@ -124,6 +126,23 @@ def test_saving_other_voices_off_labels_without_teaching(monkeypatch):
     assert world.assignments[0]['use_for_speech_training'] is False
     assert world.scheduled == [] and not response.voice_sample_queued
     assert response.quality_outcome == Q.person_not_enrolled
+
+
+def test_new_person_answer_does_not_create_person_during_destructive_gate(monkeypatch):
+    world = World(monkeypatch)
+
+    def gate_busy(uid):
+        assert uid == 'u'
+        raise DestructiveOperationInProgress('external data write blocked by destructive operation')
+
+    monkeypatch.setattr(service, 'external_write_fence', gate_busy)
+
+    with pytest.raises(DestructiveOperationInProgress):
+        service.apply_answer('u', _request(K.identify, O.unnamed, A.new_person, name='Ana'), world.schedule, NOW)
+
+    assert world.created == []
+    assert world.assignments == []
+    assert world.scheduled == []
 
 
 def test_declined_durable_admission_still_queues_immediate_teaching(monkeypatch):
