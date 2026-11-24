@@ -391,12 +391,13 @@ class _ConversationsPageState extends State<ConversationsPage>
   DateTime? _v3QuickSince;
   int? _v3ProcessingSignature;
   String? _v3LiveId;
-  final _liveFinish = LiveFinishLatch();
   DateTime? _v3EventRefreshAt;
 
   /// Episodes were asked for before the switch answered (and so made no call); ask again once it says
   /// this account is not on v3.
   bool _legacyAfterAnswer = false;
+
+  final _liveFinish = LiveFinishLatch();
 
   Future<void> _finishLiveFromHome([ServerConversation? row]) async {
     final capture = context.read<CaptureProvider>();
