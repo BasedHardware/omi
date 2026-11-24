@@ -1088,6 +1088,8 @@ class _PageFill:
         self.visible = visible
         # Lean refills (see :class:`_Scout`); None keeps full-document refills.
         self.scout = scout if scout is not None and hasattr(conversations_ref, 'select') else None
+        # Hidden rows of the first, full window that the scout's flags alone would have caught.
+        self.scout_hits = 0
         self.hydrated = 0
         self.rows: List[Dict[str, Any]] = []
         self.last_doc = None
@@ -1116,6 +1118,8 @@ class _PageFill:
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not self.visible(conversation):
                     self.skipped += 1
+                    if self.scout is not None and conversation is not None and self.scout.hidden(conversation):
+                        self.scout_hits += 1
                     if self.skipped >= self.cap:
                         self.has_more = True
                         return
@@ -1138,7 +1142,10 @@ class _PageFill:
                 missing + self.cap - self.skipped,
                 missing if refill == 1 else max(missing, 2 * batch_limit),
             )
-            if self.scout is not None:
+            # Refill lean only where the scout's flags explain most of what this page hid so far
+            # (recordings, hidden windows, tombstones). A run hidden for reasons only the full
+            # predicate sees would make every row a candidate and pay a second read for each.
+            if self.scout is not None and self.scout_hits * 2 >= self.skipped:
                 self._run_lean(batch_limit)
                 return
             query = self.conversations_ref.start_after(self.last_doc).limit(batch_limit)

@@ -1242,12 +1242,12 @@ def get_conversations(
     budget.observe('truncated' if budget.truncated else 'complete')
     # Read meter: what one list page cost. Counts and timings only, never the owner or the query.
     logger.info(
-        'conversation_list_read home=%s paged=%s limit=%d docs=%d storage_rows=%s hidden=%s rows=%d '
+        'conversation_list_read home=%s paged=%s limit=%d docs=%s storage_rows=%s hidden=%s rows=%d '
         'truncated=%s read_ms=%d total_ms=%d',
         default_home,
         'cursor' if cursor else ('offset' if offset else 'first'),
         limit,
-        budget.docs_scanned,
+        getattr(budget, 'docs_scanned', None),
         page.get('storage_rows'),
         page.get('hidden_rows'),
         len(conversations),

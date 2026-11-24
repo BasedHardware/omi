@@ -277,7 +277,11 @@ def test_scout_projection_carries_only_visibility_fields(monkeypatch):
     original = db._Scout.hidden
     monkeypatch.setattr(db._Scout, 'hidden', lambda self, row: seen.append(set(row)) or original(self, row))
     page(monkeypatch, data, offset=0)
-    assert seen and all(fields <= {'created_at', 'recording', 'home_hidden', 'deleted'} for fields in seen)
+    # The first window is a full read (its hidden rows are also shown to the scout, to decide whether
+    # lean refills fit this page); every row after it reaches the scout as a projection.
+    scouted = [fields for fields in seen if 'discarded' not in fields]
+    assert len(scouted) == 150
+    assert all(fields <= {'created_at', 'recording', 'home_hidden', 'deleted'} for fields in scouted)
 
 
 def test_row_only_the_full_predicate_hides_is_dropped_after_the_full_read(monkeypatch):
@@ -327,3 +331,15 @@ def test_cursor_pages_refill_lean_and_reach_every_row(monkeypatch):
         assert cursor
     assert seen == visible
     assert lean >= 300
+
+
+def test_run_the_scout_cannot_explain_keeps_full_document_refills(monkeypatch):
+    """Rows hidden for a reason only the full predicate sees would each cost a second read if scouted."""
+    data, visible = owner(before=10, hidden=150, after=100, reason='recording')
+    for row in data[10:160]:
+        del row['recording']
+        row['dream_duplicate_of'] = 'x'
+    ids, info, counts = page(monkeypatch, data, offset=0)
+    assert ids == visible[:PAGE]
+    assert 'lean' not in counts and 'hydrated' not in counts
+    assert counts['reads'] == info['storage_rows'] == 200
