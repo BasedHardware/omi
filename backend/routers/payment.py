@@ -903,12 +903,14 @@ def create_checkout_session_endpoint(
             idempotency_key,
             **checkout_options,
         )
-    except stripe.error.InvalidRequestError as e:
-        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
-        raise HTTPException(status_code=400, detail=detail)
-    if not session:
-        raise HTTPException(status_code=500, detail="Could not create checkout session.")
-    return {"url": session.url, "session_id": session.id}
+        if not session:
+            raise HTTPException(status_code=500, detail="Could not create checkout session.")
+        return {"url": session.url, "session_id": session.id}
+    except (stripe.error.InvalidRequestError, stripe.error.StripeError) as e:
+        logger.error(f"Stripe error creating checkout session for user {uid}: {sanitize(str(e))}")
+        raise HTTPException(
+            status_code=400, detail=_stripe_client_error_detail(e, "Could not create checkout session.")
+        )
 
 
 def _release_attached_schedules(stripe_sub: dict) -> None:
@@ -1221,9 +1223,9 @@ def upgrade_subscription_endpoint(
                 e, "Payment for the plan change was declined. Your current subscription remains active."
             ),
         )
-    except stripe.error.InvalidRequestError as e:
+    except (stripe.error.InvalidRequestError, stripe.error.StripeError) as e:
         logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
-        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+        detail = _stripe_client_error_detail(e, "Failed to process subscription change. Please try again.")
         raise HTTPException(status_code=400, detail=detail)
     except Exception as e:
         logger.error(f"Error processing subscription change: {sanitize(str(e))}")
@@ -1309,7 +1311,7 @@ def cancel_subscription_endpoint(
             detail=_stripe_client_error_detail(e, "Could not cancel subscription. Please try again."),
         )
     except Exception as e:
-        logger.error(f"Error canceling subscription: {e}")
+        logger.error(f"Error canceling subscription: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
 
 
@@ -2323,47 +2325,44 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
     if current.prepaid:
         raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
 
-    customer_id = users_db.get_stripe_customer_id(uid)
+    try:
+        customer_id = users_db.get_stripe_customer_id(uid)
+        if not customer_id:
+            subscription = users_db.get_user_subscription(uid)
+            if subscription and subscription.stripe_subscription_id:
+                stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+                customer_id = stripe_sub.customer
+                if customer_id:
+                    users_db.set_stripe_customer_id(uid, customer_id)
+        if not customer_id:
+            raise HTTPException(status_code=400, detail="No Stripe customer found. Please create a subscription first.")
 
-    # If no customer ID stored, try to get it from subscription
-    if not customer_id:
-        subscription = users_db.get_user_subscription(uid)
-        if subscription and subscription.stripe_subscription_id:
-            stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-            customer_id = stripe_sub.customer
-            if customer_id:
-                users_db.set_stripe_customer_id(uid, customer_id)
-
-    if not customer_id:
-        raise HTTPException(status_code=400, detail="No Stripe customer found. Please create a subscription first.")
-
-    # The stored row gets the prepaid marker only when the webhook lands; Stripe has it from creation.
-    # A live paid non-prepaid row cannot sit next to a prepaid plan (redeem refuses a live plan), so only
-    # a free, ended or unmarked row can be in that window and needs the Stripe read.
-    live_paid_row = (
-        is_paid_plan(current.plan)
-        and current.status == SubscriptionStatus.active
-        and (current.current_period_end or 0) >= int(time.time())
-    )
-    # Switch off and no prepaid marker on the row: nobody can be mid-redemption, so the portal is exactly
-    # as before the feature (no extra Stripe read, no new failure mode). Cohort or on turns the read back on.
-    if not live_paid_row and prepaid_code_config.mode() != 'off':
-        try:
-            has_prepaid = _customer_has_prepaid_subscription(customer_id)
-        except stripe.error.StripeError as error:
-            logger.error(f"Customer portal: could not read subscriptions for {uid}: {sanitize(str(error))}")
-            raise HTTPException(status_code=503, detail="Could not verify your subscription. Please try again.")
-        if has_prepaid:
-            raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
-
-    return_url = urljoin(base_url, 'v1/payments/portal-return')
-
-    portal_session = stripe.billing_portal.Session.create(
-        customer=customer_id,
-        return_url=return_url,
-    )
-
-    return {"url": portal_session.url}
+        # The stored row gets the prepaid marker only when the webhook lands; Stripe has it from creation.
+        # A live paid non-prepaid row cannot sit next to a prepaid plan (redeem refuses a live plan), so only
+        # a free, ended or unmarked row can be in that window and needs the Stripe read.
+        live_paid_row = (
+            is_paid_plan(current.plan)
+            and current.status == SubscriptionStatus.active
+            and (current.current_period_end or 0) >= int(time.time())
+        )
+        # Switch off and no prepaid marker on the row: nobody can be mid-redemption, so the portal is exactly
+        # as before the feature (no extra Stripe read, no new failure mode). Cohort or on turns the read back on.
+        if not live_paid_row and prepaid_code_config.mode() != 'off':
+            try:
+                has_prepaid = _customer_has_prepaid_subscription(customer_id)
+            except stripe.error.StripeError as error:
+                logger.error(f"Customer portal: could not read subscriptions for {uid}: {sanitize(str(error))}")
+                raise HTTPException(status_code=503, detail="Could not verify your subscription. Please try again.")
+            if has_prepaid:
+                raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
+        return_url = urljoin(base_url, 'v1/payments/portal-return')
+        return {"url": stripe.billing_portal.Session.create(customer=customer_id, return_url=return_url).url}
+    except HTTPException:
+        raise
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error creating customer portal session for user {uid}: {sanitize(str(e))}")
+        detail = _stripe_client_error_detail(e, "Could not open customer portal. Please try again.")
+        raise HTTPException(status_code=400, detail=detail)
 
 
 @router.get("/v1/payments/portal-return", response_class=HTMLResponse)
@@ -2474,5 +2473,5 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
             detail=_stripe_client_error_detail(e, "Could not cancel subscription. Please try again."),
         )
     except Exception as e:
-        logger.error(f"Error canceling app subscription: {e}")
+        logger.error(f"Error canceling app subscription: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription")
