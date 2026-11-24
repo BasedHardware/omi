@@ -23,6 +23,25 @@ final class ProcessingConversationWatcher: ObservableObject {
     pollDelaysSeconds[min(max(attempt, 0), pollDelaysSeconds.count - 1)]
   }
 
+  /// The first detail request may claim deferred enrichment. Follow processing
+  /// responses with read-only polls until the server settles or the view closes.
+  static func followDetail(
+    fetch: @MainActor (_ polling: Bool) async -> ServerConversation?,
+    onResponse: @MainActor (ServerConversation, _ isProcessing: Bool) -> Void,
+    sleeper: Sleeper = { try await Task.sleep(nanoseconds: $0) }
+  ) async {
+    var attempt = 0
+    while !Task.isCancelled {
+      guard let response = await fetch(attempt > 0), !Task.isCancelled else { return }
+      let isProcessing = response.status == .processing && response.homeStep != "failed"
+      onResponse(response, isProcessing)
+      guard isProcessing else { return }
+      let delay = pollDelay(attempt: attempt)
+      attempt += 1
+      guard (try? await sleeper(UInt64(delay * 1_000_000_000))) != nil else { return }
+    }
+  }
+
   /// Rows that just reached `completed` and whose memories/action items are
   /// still landing server-side. The row shows a quiet hint until the grace
   /// refetch clears it.
@@ -58,7 +77,7 @@ final class ProcessingConversationWatcher: ObservableObject {
   /// call site can reference it without an actor hop in a default-argument
   /// position.
   static func fetchDetail(id: String) async throws -> ServerConversation {
-    try await APIClient.shared.getConversation(id: id)
+    try await APIClient.shared.getConversation(id: id, polling: true)
   }
 
   /// Production wiring: real clock, real sleeper, PostHog telemetry.

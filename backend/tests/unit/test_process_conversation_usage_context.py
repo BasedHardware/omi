@@ -714,7 +714,10 @@ def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch)
     persisted.assert_not_called()
 
 
-def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(monkeypatch):
+@pytest.mark.parametrize('enabled', [True, False])
+def test_deferred_fresh_creation_uses_the_matching_lifecycle_owner(monkeypatch, enabled):
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', str(enabled))
+    expected_status = ConversationStatus.completed if enabled else ConversationStatus.processing
     new_request = CreateConversation(
         started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
         finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
@@ -723,19 +726,26 @@ def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(mo
     )
     deferred_conversation = MagicMock()
     deferred_conversation.id = 'deferred-conversation'
-    deferred_conversation.dict.return_value = {'id': 'deferred-conversation', 'status': 'processing'}
-    created = MagicMock(return_value=True)
+    deferred_conversation.record_lane_owner = None
+    deferred_conversation.recording = False
+    deferred_conversation.dict.return_value = {'id': 'deferred-conversation', 'status': expected_status}
+    completed = MagicMock(return_value=True)
+    processing = MagicMock(return_value=True)
     persisted = MagicMock()
     monkeypatch.setattr(process_conversation, 'build_deferred_structured', lambda *args: MagicMock())
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
-    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', completed)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', processing)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
 
     result = process_conversation._store_deferred_conversation('uid', new_request)
 
     assert result is deferred_conversation
     assert deferred_conversation.deferred is True
-    created.assert_called_once_with('uid', deferred_conversation.dict(), idempotent=True)
+    assert deferred_conversation.status is expected_status
+    used, unused = (completed, processing) if enabled else (processing, completed)
+    used.assert_called_once_with('uid', deferred_conversation.dict(), idempotent=True)
+    unused.assert_not_called()
     persisted.assert_not_called()
 
 
@@ -743,6 +753,7 @@ def test_deferred_desktop_filler_is_discarded_by_the_free_rules(monkeypatch):
     """Free-tier desktop never reaches the model, but the rules still run."""
     from models.transcript_segment import TranscriptSegment
 
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', 'on')
     new_request = CreateConversation(
         started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
         finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
@@ -751,12 +762,14 @@ def test_deferred_desktop_filler_is_discarded_by_the_free_rules(monkeypatch):
     )
     deferred_conversation = MagicMock()
     deferred_conversation.id = 'deferred-filler'
-    deferred_conversation.dict.return_value = {'id': 'deferred-filler', 'status': 'processing'}
+    deferred_conversation.record_lane_owner = None
+    deferred_conversation.recording = False
+    deferred_conversation.dict.return_value = {'id': 'deferred-filler', 'status': 'completed'}
     created = MagicMock(return_value=True)
     monkeypatch.setattr(process_conversation, 'build_deferred_structured', lambda *args: MagicMock())
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
     monkeypatch.setattr(process_conversation, '_calendar_overlap_retains_conversation', lambda *args: False)
-    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', created)
 
     process_conversation._store_deferred_conversation('uid', new_request)
 

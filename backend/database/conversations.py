@@ -3403,7 +3403,11 @@ def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict
         primary_row = primary_ref.get(transaction=transaction).to_dict()
         secondary_row = secondary_ref.get(transaction=transaction).to_dict()
         for row, expected in ((primary_row, primary), (secondary_row, secondary)):
-            if not row or row.get('discarded') or row.get('deleted') or row.get('status') != 'completed':
+            if (
+                not row
+                or any(row.get(field) for field in ('discarded', 'deleted', 'deferred'))
+                or row.get('status') != 'completed'
+            ):
                 return False
             compared = lifecycle_clocks.overlap_fields(uid, row)
             if any(

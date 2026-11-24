@@ -931,6 +931,14 @@ async def _load_admitted_conversation(
             raise ConversationFinalizationError('record_registration_refused')
         return ConversationFinalizationDisposition.fenced, None, None
     for _ in range(3):
+        # A retry can arrive after the lazy transcript commit and before the old
+        # job is acknowledged. Completed intake still owes only first-open work.
+        if (
+            conversation_data.get('deferred') is True
+            and not conversation_data.get('record_lane_owner')
+            and conversation_data.get('status') == ConversationStatus.completed
+        ):
+            return ConversationFinalizationDisposition.fenced, None, None
         try:
             owner = (
                 None
