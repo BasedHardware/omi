@@ -213,6 +213,11 @@
       "review_by": "2026-12-18",
       "registry": "config/feature-flags.yaml"
     },
+    "BATCH_PIPELINE_MERGE_AGED_GPU_RELEASE_ENABLED": {
+      "owner": "Goal: Pipeline",
+      "review_by": "2026-12-07",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST": {
       "owner": "q12-post-seal",
       "review_by": "2026-12-18",
@@ -329,7 +334,8 @@
     },
     "BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED": {
       "owner": "provider-stt drain",
-      "review_by": "2026-11-27",
+      "review_by": "2026-12-04",
+      "reason": "SCA-2015: the November 28 metered-release contract review will inform whether to remove the legacy switch or give it a permanent budget slot.",
       "registry": "config/feature-flags.yaml"
     },
     "BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS": {
@@ -452,7 +458,8 @@
     },
     "BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED": {
       "owner": "margin / SCA-1800",
-      "review_by": "2026-11-26"
+      "review_by": "2026-12-03",
+      "reason": "SCA-1800: retain the rollback switch for upload coalescing on backend-integration and backend-sync. Margin to review Release's effective-setting and safe-drain evidence and identify a permanent budget slot by 2026-12-03."
     },
     "BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED": {
       "owner": "planscost / gpu efficiency sprint",
@@ -1064,7 +1071,8 @@
     },
     "STT_IDLE_REOPEN_COST_RESELECT_ENABLED": {
       "owner": "idlereopen / two-lane lead",
-      "review_by": "2026-11-26"
+      "review_by": "2026-12-03",
+      "reason": "SCA-3850: retain the default-off operations switch recorded in the registry after the first-text regression. Review the longer-term budget disposition with the two-lane lead by 2026-12-03."
     },
     "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT": {
       "seeded": "2026-10-25"

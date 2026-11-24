@@ -82,7 +82,7 @@ abstract final class PaywallCheckout {
         report(message, error: false);
         PlatformManager.instance.analytics
             .upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
-        await provider.fetchSubscription();
+        await provider.fetchSubscription(fresh: true);
         return PaywallCheckoutOutcome.purchased;
       }
       final url = session['url'] as String?;
@@ -104,7 +104,7 @@ abstract final class PaywallCheckout {
       }
       PlatformManager.instance.analytics
           .upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
-      await provider.fetchSubscription();
+      await provider.fetchSubscription(fresh: true);
       await provider.loadAvailablePlans();
       return PaywallCheckoutOutcome.purchased;
     } catch (_) {
@@ -143,7 +143,7 @@ Future<PaywallCheckoutOutcome> _startPlay(
   );
   switch (result.outcome) {
     case PlayPurchaseOutcome.purchased:
-      await provider.fetchSubscription();
+      await provider.fetchSubscription(fresh: true);
       final days = withTrial ? offer.trialDays : null;
       report(days != null && days > 0 ? l10n.paywallTrialStarted(days) : l10n.subscriptionSuccessfulCharged,
           error: false);

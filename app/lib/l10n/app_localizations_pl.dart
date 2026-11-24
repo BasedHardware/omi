@@ -7070,6 +7070,26 @@ class AppLocalizationsPl extends AppLocalizations {
   String get authUnexpectedError => 'Nieoczekiwany błąd podczas logowania, spróbuj ponownie';
 
   @override
+  String get accountSignInMethods => 'Metody logowania';
+
+  @override
+  String get accountAddSignInMethod => 'Dodaj metodę logowania';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Dodaj sposób logowania do tego konta Omi. Twój plan, nagrania i integracje pozostaną na tym koncie.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ta metoda logowania należy do innego konta';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Nadal korzystasz z bieżącego konta. Każde konto Omi zachowuje swój plan, nagrania i integracje.';
+
+  @override
+  String get accountSignInMethodAdded => 'Dodano metodę logowania';
+
+  @override
   String get authFailedToLinkGoogle => 'Nie udało się połączyć z Google, spróbuj ponownie.';
 
   @override
@@ -14404,6 +14424,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get processingProgress => 'Przetwarzanie oczekujących nagrań…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Oczekiwanie na dostępny limit transkrypcji';
+
+  @override
   String get processingDeferred => 'Oczekuje na przetworzenie';
 
   @override
@@ -15813,4 +15836,37 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'Zamówienie złożone. Potwierdzenie znajdziesz w e-mailu.';
+
+  @override
+  String get prepaidCodeEntry => 'Masz kod?';
+
+  @override
+  String get prepaidCodeTitle => 'Wykorzystaj kod';
+
+  @override
+  String get prepaidCodeFieldHint => 'Wpisz swój kod';
+
+  @override
+  String get prepaidCodeRedeem => 'Wykorzystaj';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kod wykorzystany';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Ten kod jest nieprawidłowy. Sprawdź go i spróbuj ponownie.',
+        'used': 'Ten kod został już wykorzystany.',
+        'expired': 'Ten kod wygasł.',
+        'hasPlan': 'Masz już plan. Twój kod nie został wykorzystany. Wykorzystaj go, gdy Twój plan się skończy.',
+        'notPrepaid': 'Tego kodu nie można tu wykorzystać. Użyj go przy wyborze planu.',
+        'notEligible': 'Tego kodu nie można użyć na tym koncie.',
+        'rateLimited': 'Zbyt wiele prób. Spróbuj później.',
+        'other': 'Coś poszło nie tak. Spróbuj ponownie.',
+      },
+    );
+    return '$_temp0';
+  }
 }

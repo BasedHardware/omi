@@ -108,3 +108,35 @@ the ticket; the agent checks the uid matches the ticket's contact first.
 `account summary <uid>`: profile basics, plan, hold and deletion state. Write
 operations are added one at a time after review. Deletes and refunds are never
 offered here.
+
+### Apple and Google sign-ins on separate accounts
+
+When Apple and Google sign-ins point to two established Omi account IDs,
+each account keeps its own subscription, recordings, conversations, and
+integration grants. Mobile linking keeps the original session active when
+the new sign-in method already belongs to another account. Guest migration
+uses a separate flow with proof tied to the anonymous source account.
+
+1. Help the customer sign in to the original account on a client that offers
+   its original sign-in method. For an Apple account, use **Sign in with
+   Apple** and the same Apple Account. If a device has unsynced recordings on
+   its current account, keep that session active and use another supported
+   client, or let the current account's recordings sync before signing out.
+2. Ask the customer to verify their plan and open a conversation they recognize
+   on the original account. Existing integrations stay with the account that
+   authorized them. To connect an integration on the original account, have
+   the customer verify the active account before granting it access.
+3. If Support needs to verify both accounts, use the existing private ticket.
+   Have the requester demonstrate a fresh sign-in to each account separately
+   using its provider. In the mobile app, **Settings → Account → User ID**
+   copies that session's account ID. Use the audited `account summary <uid>`
+   for each independently verified ID to confirm the recorded plan and account
+   state. Treat copied IDs, emails, relay addresses, and screenshots as lookup
+   evidence only. The requester enters credentials with the provider and
+   shares only the account IDs through the private support channel. If control
+   of either account remains unclear, leave both accounts in place and escalate
+   the verification privately.
+4. Keep both accounts intact during recovery. Before any support-assisted
+   account change, record explicit consent in the private ticket for the
+   affected accounts, the specific action, and its expected effects. Then use
+   an approved operator procedure for that action.

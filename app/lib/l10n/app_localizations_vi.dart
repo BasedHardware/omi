@@ -7065,6 +7065,26 @@ class AppLocalizationsVi extends AppLocalizations {
   String get authUnexpectedError => 'Lỗi không mong muốn';
 
   @override
+  String get accountSignInMethods => 'Phương thức đăng nhập';
+
+  @override
+  String get accountAddSignInMethod => 'Thêm phương thức đăng nhập';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Thêm cách đăng nhập vào tài khoản Omi này. Gói dịch vụ, bản ghi và các tích hợp của bạn vẫn thuộc tài khoản này.';
+
+  @override
+  String get accountSignInConflictTitle => 'Phương thức đăng nhập này thuộc tài khoản khác';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Bạn vẫn đang đăng nhập vào tài khoản hiện tại. Mỗi tài khoản Omi giữ gói dịch vụ, bản ghi và các tích hợp riêng.';
+
+  @override
+  String get accountSignInMethodAdded => 'Đã thêm phương thức đăng nhập';
+
+  @override
   String get authFailedToLinkGoogle => 'Không thể liên kết tài khoản Google';
 
   @override
@@ -14360,6 +14380,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get processingProgress => 'Đang xử lý các bản ghi đang chờ của bạn…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Đang chờ hạn mức chép lời khả dụng';
+
+  @override
   String get processingDeferred => 'Đang chờ xử lý';
 
   @override
@@ -15769,4 +15792,37 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'Đã đặt hàng. Kiểm tra email để xem xác nhận.';
+
+  @override
+  String get prepaidCodeEntry => 'Bạn có mã?';
+
+  @override
+  String get prepaidCodeTitle => 'Đổi mã';
+
+  @override
+  String get prepaidCodeFieldHint => 'Nhập mã của bạn';
+
+  @override
+  String get prepaidCodeRedeem => 'Đổi';
+
+  @override
+  String get prepaidCodeRedeemed => 'Đã đổi mã';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Mã này không hợp lệ. Hãy kiểm tra và thử lại.',
+        'used': 'Mã này đã được sử dụng.',
+        'expired': 'Mã này đã hết hạn.',
+        'hasPlan': 'Bạn đã có gói. Mã của bạn chưa được sử dụng. Hãy đổi mã sau khi gói của bạn kết thúc.',
+        'notPrepaid': 'Không thể đổi mã này tại đây. Hãy dùng khi bạn chọn gói.',
+        'notEligible': 'Không thể dùng mã này cho tài khoản này.',
+        'rateLimited': 'Quá nhiều lần thử. Hãy thử lại sau.',
+        'other': 'Đã xảy ra lỗi. Vui lòng thử lại.',
+      },
+    );
+    return '$_temp0';
+  }
 }

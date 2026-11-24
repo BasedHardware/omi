@@ -315,20 +315,18 @@ class _FailedConversationRowState extends State<_FailedConversationRow> {
     final at = (c.startedAt ?? c.createdAt).toLocal();
     final dates = OmiDateFormat.of(context);
     final l = context.l10n;
+    final held = c.isTranscriptionAllowanceHeld;
+    final admitted = c.isAdmittedForTranscription;
     final pending = TranscriptionPendingConversations.contains(c.id);
-    // Held by the free plan's monthly minutes, not failed: a retry cannot transcribe it, Upgrade can.
-    final usage = context.watch<UsageProvider?>();
-    final held = heldByFreeAllowance(c, usage);
+    final upgradeMinutes = held ? heldRecordingUpgradeLimitMinutes(c, context.watch<UsageProvider?>()) : null;
     final title = c.structured.title.trim();
-    final hasTitle = !c.isLocked &&
-        title.isNotEmpty &&
-        !TranscriptionPendingConversations.replacesTitle(c) &&
-        !(held && title == TranscriptionPendingConversations.serverHoldTitle);
-    final status = held
-        ? l.freeCapTitle(((usage?.subscription?.transcriptionSecondsLimit ?? 0) / 60).round())
-        : pending
-            ? l.summaryTranscriptionPendingTitle
-            : l.processingFailed;
+    final hasTitle = !c.isLocked && title.isNotEmpty && !TranscriptionPendingConversations.replacesTitle(c);
+    final status = switch ((held, admitted, pending)) {
+      (true, _, _) => upgradeMinutes == null ? l.waitingForTranscriptionAllowance : l.freeCapTitle(upgradeMinutes),
+      (_, true, _) => l.homeStepTranscribing,
+      (_, _, true) => l.summaryTranscriptionPendingTitle,
+      _ => l.processingFailed,
+    };
     return _AttentionRow(
       key: held ? Key('activity_held_${c.id}') : null,
       title: hasTitle
@@ -338,10 +336,11 @@ class _FailedConversationRowState extends State<_FailedConversationRow> {
               : status,
       subtitle: [if (hasTitle || held) status, dates.dayHeader(at), dates.time(at)].join(' · '),
       busy: _busy,
-      retryLabel: held ? l.upgrade : null,
-      onRetry: held
+      waiting: held,
+      retryLabel: upgradeMinutes != null ? l.upgrade : null,
+      onRetry: upgradeMinutes != null
           ? () => FreemiumSwitchHandler.openHeldRecordingUpgrade(context, source: 'held_recording')
-          : pending
+          : held || admitted || pending
               ? null
               : _retry,
       onTap: () => widget.openConversation(context, c.id),
@@ -357,6 +356,7 @@ class _AttentionRow extends StatelessWidget {
     required this.busy,
     required this.onRetry,
     required this.onTap,
+    this.waiting = false,
     this.retryLabel,
     this.onDismiss,
     this.dismissKey,
@@ -365,6 +365,7 @@ class _AttentionRow extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool busy;
+  final bool waiting;
   final VoidCallback? onRetry;
   final VoidCallback? onTap;
   final String? retryLabel;
@@ -427,7 +428,13 @@ class _AttentionRow extends StatelessWidget {
               height: 36,
               decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
               alignment: Alignment.center,
-              child: Icon(Icons.warning_amber_rounded, size: 18, color: OmiColors.warning),
+              child: ExcludeSemantics(
+                child: Icon(
+                  waiting ? Icons.hourglass_empty : Icons.warning_amber_rounded,
+                  size: 18,
+                  color: waiting ? OmiColors.textSecondary : OmiColors.warning,
+                ),
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from google.api_core.exceptions import PreconditionFailed
 
 from tests.unit.test_owner_storage_purge_and_gate import _Bucket, _Client
 from utils.other import storage
@@ -25,6 +26,28 @@ def test_conversation_erasure_removes_originals_in_every_relevant_bucket(monkeyp
     monkeypatch.setattr(storage, 'invalidate_pack_index', lambda *_: None)
     storage.delete_conversation_audio_files('synthetic', 'record')
     assert all(bucket.names == {'record-wal/synthetic/other/keep.enc'} for bucket in buckets.values())
+
+
+def test_conversation_wal_erasure_still_aborts_on_a_stale_generation(monkeypatch):
+    failure = PreconditionFailed('stale WAL generation', errors=[{'reason': 'conditionNotMet'}])
+    first = SimpleNamespace(generation=1, metageneration=2, delete=Mock(side_effect=failure))
+    second = SimpleNamespace(generation=3, metageneration=4, delete=Mock())
+    list_blobs = Mock(
+        side_effect=lambda *, prefix, versions: [first, second] if prefix == 'record-wal/synthetic/record/' else []
+    )
+    bucket = SimpleNamespace(name='private', list_blobs=list_blobs)
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: _Client({'private': bucket}))
+    monkeypatch.setattr(storage, '_uses_real_gcs_bucket', lambda _: True)
+    monkeypatch.setattr(storage, 'private_cloud_sync_bucket', 'private')
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    monkeypatch.delenv('BUCKET_CANONICAL_AUDIO', raising=False)
+
+    with pytest.raises(PreconditionFailed, match='stale WAL generation'):
+        storage.delete_privacy_conversation_audio('synthetic', 'record')
+
+    first.delete.assert_called_once_with(if_generation_match=1, if_metageneration_match=2)
+    second.delete.assert_not_called()
+    list_blobs.assert_called_with(prefix='record-wal/synthetic/record/', versions=True)
 
 
 def test_account_erasure_discovers_pre_receipt_crash_orphans(monkeypatch, tmp_path):

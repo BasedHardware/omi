@@ -1,4 +1,10 @@
+import 'dart:async';
+
+import 'package:omi/app_globals.dart';
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/models/voice_question_result.dart';
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/recording_speakers.dart';
@@ -21,6 +27,7 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
     required this.peopleProvider,
     required this.usageProvider,
     this.episodeProvider,
+    this.conversationsV3,
   });
 
   final ConversationProvider conversationProvider;
@@ -28,6 +35,7 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   final PeopleProvider peopleProvider;
   final UsageProvider usageProvider;
   final EpisodeProvider? episodeProvider;
+  final ConversationsV3Provider? conversationsV3;
 
   /// The proxy provider rebuilds this adapter on every upstream notify. Two
   /// adapters over the same provider instances behave identically, so the
@@ -39,11 +47,18 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
       identical(other.messageProvider, messageProvider) &&
       identical(other.peopleProvider, peopleProvider) &&
       identical(other.usageProvider, usageProvider) &&
-      identical(other.episodeProvider, episodeProvider);
+      identical(other.episodeProvider, episodeProvider) &&
+      identical(other.conversationsV3, conversationsV3);
 
   @override
-  int get hashCode => Object.hash(identityHashCode(conversationProvider), identityHashCode(messageProvider),
-      identityHashCode(peopleProvider), identityHashCode(usageProvider), identityHashCode(episodeProvider));
+  int get hashCode => Object.hash(
+        identityHashCode(conversationProvider),
+        identityHashCode(messageProvider),
+        identityHashCode(peopleProvider),
+        identityHashCode(usageProvider),
+        identityHashCode(episodeProvider),
+        identityHashCode(conversationsV3),
+      );
 
   @override
   bool? get isOutOfCredits => usageProvider.isOutOfCredits;
@@ -102,6 +117,47 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
 
   @override
   void onLiveFinalized() => episodeProvider?.onLiveFinalized();
+
+  @override
+  void onManualFinishStarted(
+    ServerConversation placeholder,
+    String? recordingId, {
+    String? liveConversationId,
+    String? captureId,
+  }) =>
+      conversationsV3?.startManualFinish(placeholder, recordingId,
+          liveConversationId: liveConversationId, captureId: captureId);
+
+  @override
+  void onManualFinishSettled(
+    ServerConversation placeholder,
+    InProgressProcessOutcome? outcome, {
+    required bool showFailure,
+  }) {
+    final v3 = conversationsV3;
+    final result = outcome?.response?.conversation;
+    if (v3 == null || !v3.settleManualFinish(placeholder, result)) return;
+    if (showFailure) {
+      final l10n = globalNavigatorKey.currentContext?.l10n;
+      if (l10n != null) {
+        if (outcome?.absence == ProcessAbsence.emptyBody || result?.discarded == true) {
+          AppSnackbar.showSnackbar(l10n.discardedOnlyRecording);
+        } else if (result == null) {
+          // A 404 has no active recording. It does not establish whether a summary exists yet.
+          AppSnackbar.showSnackbarError(l10n.finishFailed);
+        } else if (result.status == ConversationStatus.in_progress) {
+          AppSnackbar.showSnackbar(l10n.finishAudioNotReceived);
+        }
+      }
+    }
+    unawaited(v3.refreshAfterManualFinish().catchError((Object _) {}));
+    unawaited(
+      conversationProvider.forceRefreshConversations().then<void>(
+            (_) {},
+            onError: (Object _) {},
+          ),
+    );
+  }
 
   @override
   Future<Person?> createPerson(String name) {

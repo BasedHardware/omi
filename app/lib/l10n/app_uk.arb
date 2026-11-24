@@ -2223,6 +2223,12 @@
     "authFailedToRetrieveToken": "Не вдалося отримати токен Firebase, спробуйте ще раз.",
     "authUnexpectedErrorFirebase": "Неочікувана помилка під час входу, помилка Firebase, спробуйте ще раз.",
     "authUnexpectedError": "Неочікувана помилка під час входу, спробуйте ще раз",
+    "accountSignInMethods": "Способи входу",
+    "accountAddSignInMethod": "Додати спосіб входу",
+    "accountAddSignInMethodDetails": "Додайте спосіб входу до цього облікового запису Omi. Ваш тариф, записи й інтеграції залишаться в цьому обліковому записі.",
+    "accountSignInConflictTitle": "Цей спосіб входу прив’язано до іншого облікового запису",
+    "accountSignInConflictDetails": "Ви досі в цьому обліковому записі. У кожному обліковому записі Omi залишаються його тариф, записи й інтеграції.",
+    "accountSignInMethodAdded": "Спосіб входу додано",
     "authFailedToLinkGoogle": "Не вдалося зв'язати з Google, спробуйте ще раз.",
     "authFailedToLinkApple": "Не вдалося зв'язати з Apple, спробуйте ще раз.",
     "onboardingBluetoothRequired": "Для підключення до пристрою потрібен дозвіл Bluetooth.",
@@ -4382,6 +4388,7 @@
     "processingNewestFirst": "Спочатку обробимо найновіші записи в межах доступного ліміту. Решта залишаться в очікуванні.",
     "processingAction": "Обробити записи в очікуванні",
     "processingProgress": "Обробка записів в очікуванні…",
+    "waitingForTranscriptionAllowance": "Очікуємо на доступну квоту транскрибування",
     "processingDeferred": "Очікує на обробку",
     "processingCount": "{count, plural, =1{1 розмова в очікуванні} other{{count} розмов в очікуванні}}",
     "playbackPartialAudioSaved": "Збережено {saved} з {total} аудіо",
@@ -4750,5 +4757,11 @@
     "playRenewalTerms": "Автоматично поновлюється за вказаною ціною, доки ви не скасуєте. Керуйте або скасовуйте будь-коли в Google Play.",
     "playPaidAppUnavailable": "Недоступно на Android",
     "pageNotAvailableInApp": "Ця сторінка недоступна в застосунку.",
-    "shopOrderPlacedCheckEmail": "Замовлення оформлено. Підтвердження надійде на вашу пошту."
+    "shopOrderPlacedCheckEmail": "Замовлення оформлено. Підтвердження надійде на вашу пошту.",
+    "prepaidCodeEntry": "Маєте код?",
+    "prepaidCodeTitle": "Активувати код",
+    "prepaidCodeFieldHint": "Введіть ваш код",
+    "prepaidCodeRedeem": "Активувати",
+    "prepaidCodeRedeemed": "Код активовано",
+    "prepaidCodeResult": "{reason, select, invalid{Цей код недійсний. Перевірте його та спробуйте ще раз.} used{Цей код уже використано.} expired{Термін дії цього коду минув.} hasPlan{У вас уже є план. Ваш код не використано. Активуйте його після завершення плану.} notPrepaid{Цей код не можна активувати тут. Використайте його під час вибору плану.} notEligible{Цей код не можна використати в цьому акаунті.} rateLimited{Забагато спроб. Спробуйте пізніше.} other{Щось пішло не так. Спробуйте ще раз.}}"
 }

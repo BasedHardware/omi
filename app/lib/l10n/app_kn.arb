@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "ಸೈನ್ ಇನ್ ವಿಧಾನಗಳು",
+    "accountAddSignInMethod": "ಸೈನ್ ಇನ್ ವಿಧಾನವನ್ನು ಸೇರಿಸಿ",
+    "accountAddSignInMethodDetails": "ಈ Omi ಖಾತೆಗೆ ಸೈನ್ ಇನ್ ಮಾಡುವ ಒಂದು ವಿಧಾನವನ್ನು ಸೇರಿಸಿ. ನಿಮ್ಮ ಪ್ಲಾನ್, ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಇಂಟಿಗ್ರೇಷನ್‌ಗಳು ಈ ಖಾತೆಯಲ್ಲೇ ಉಳಿಯುತ್ತವೆ.",
+    "accountSignInConflictTitle": "ಈ ಸೈನ್ ಇನ್ ವಿಧಾನವು ಬೇರೆ ಖಾತೆಗೆ ಲಿಂಕ್ ಆಗಿದೆ",
+    "accountSignInConflictDetails": "ನೀವು ಇನ್ನೂ ಈ ಖಾತೆಗೆ ಸೈನ್ ಇನ್ ಆಗಿದ್ದೀರಿ. ಪ್ರತಿ Omi ಖಾತೆಯ ಪ್ಲಾನ್, ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಇಂಟಿಗ್ರೇಷನ್‌ಗಳು ಆಯಾ ಖಾತೆಯಲ್ಲೇ ಉಳಿಯುತ್ತವೆ.",
+    "accountSignInMethodAdded": "ಸೈನ್ ಇನ್ ವಿಧಾನವನ್ನು ಸೇರಿಸಲಾಗಿದೆ",
     "authFailedToLinkGoogle": "Google ಸಹಿತ ಲಿಂಕ್ ವಿಫಲವಾಗಿದೆ, ದಯವಿಟ್ಟು ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "ಲಭ್ಯವಿರುವ ಕೋಟಾದೊಳಗೆ ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಮೊದಲು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸುತ್ತೇವೆ. ಉಳಿದವು ಕಾಯುತ್ತವೆ.",
     "processingAction": "ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿ",
     "processingProgress": "ನಿಮ್ಮ ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ…",
+    "waitingForTranscriptionAllowance": "ಪ್ರತಿಲೇಖನ ಕೋಟಾ ಲಭ್ಯವಾಗಲು ಕಾಯುತ್ತಿದೆ",
     "processingDeferred": "ಪ್ರಕ್ರಿಯೆಗಾಗಿ ಕಾಯುತ್ತಿದೆ",
     "processingCount": "{count, plural, =1{1 ಸಂಭಾಷಣೆ ಕಾಯುತ್ತಿದೆ} other{{count} ಸಂಭಾಷಣೆಗಳು ಕಾಯುತ್ತಿವೆ}}",
     "playbackPartialAudioSaved": "{saved} ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ಒಟ್ಟು {total}",
@@ -12307,5 +12314,11 @@
     "playRenewalTerms": "ನೀವು ರದ್ದುಗೊಳಿಸುವವರೆಗೆ ತೋರಿಸಿದ ಬೆಲೆಯಲ್ಲಿ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ನವೀಕರಿಸುತ್ತದೆ. Google Play ನಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ನಿರ್ವಹಿಸಿ ಅಥವಾ ರದ್ದುಗೊಳಿಸಿ.",
     "playPaidAppUnavailable": "Android ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ",
     "pageNotAvailableInApp": "ಈ ಪುಟ ಆ್ಯಪ್‌ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ.",
-    "shopOrderPlacedCheckEmail": "ಆರ್ಡರ್ ಮಾಡಲಾಗಿದೆ. ದೃಢೀಕರಣಕ್ಕಾಗಿ ನಿಮ್ಮ ಇಮೇಲ್ ನೋಡಿ."
+    "shopOrderPlacedCheckEmail": "ಆರ್ಡರ್ ಮಾಡಲಾಗಿದೆ. ದೃಢೀಕರಣಕ್ಕಾಗಿ ನಿಮ್ಮ ಇಮೇಲ್ ನೋಡಿ.",
+    "prepaidCodeEntry": "ಕೋಡ್ ಇದೆಯೇ?",
+    "prepaidCodeTitle": "ಕೋಡ್ ರಿಡೀಮ್ ಮಾಡಿ",
+    "prepaidCodeFieldHint": "ನಿಮ್ಮ ಕೋಡ್ ನಮೂದಿಸಿ",
+    "prepaidCodeRedeem": "ರಿಡೀಮ್",
+    "prepaidCodeRedeemed": "ಕೋಡ್ ರಿಡೀಮ್ ಆಗಿದೆ",
+    "prepaidCodeResult": "{reason, select, invalid{ಈ ಕೋಡ್ ಮಾನ್ಯವಾಗಿಲ್ಲ. ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.} used{ಈ ಕೋಡ್ ಈಗಾಗಲೇ ಬಳಸಲಾಗಿದೆ.} expired{ಈ ಕೋಡ್‌ನ ಅವಧಿ ಮುಗಿದಿದೆ.} hasPlan{ನಿಮ್ಮ ಬಳಿ ಈಗಾಗಲೇ ಪ್ಲಾನ್ ಇದೆ. ನಿಮ್ಮ ಕೋಡ್ ಬಳಸಲಾಗಿಲ್ಲ. ಪ್ಲಾನ್ ಮುಗಿದ ನಂತರ ಅದನ್ನು ರಿಡೀಮ್ ಮಾಡಿ.} notPrepaid{ಈ ಕೋಡ್ ಅನ್ನು ಇಲ್ಲಿ ರಿಡೀಮ್ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ. ಪ್ಲಾನ್ ಆಯ್ಕೆ ಮಾಡುವಾಗ ಬಳಸಿ.} notEligible{ಈ ಕೋಡ್ ಅನ್ನು ಈ ಖಾತೆಯಲ್ಲಿ ಬಳಸಲು ಸಾಧ್ಯವಿಲ್ಲ.} rateLimited{ತುಂಬಾ ಪ್ರಯತ್ನಗಳು. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.} other{ಏನೋ ತಪ್ಪಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.}}"
 }

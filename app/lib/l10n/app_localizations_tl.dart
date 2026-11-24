@@ -7120,6 +7120,26 @@ class AppLocalizationsTl extends AppLocalizations {
   String get authUnexpectedError => 'Unexpected error sa pag-sign in, mangyaring subukan ulit';
 
   @override
+  String get accountSignInMethods => 'Mga paraan ng pag-sign in';
+
+  @override
+  String get accountAddSignInMethod => 'Magdagdag ng paraan ng pag-sign in';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Magdagdag ng paraan para mag-sign in sa Omi account na ito. Mananatili rito ang iyong plan, mga recording, at integration.';
+
+  @override
+  String get accountSignInConflictTitle => 'Sa ibang account nakaugnay ang paraang ito';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Naka-sign in ka pa rin sa account na ito. Nananatili sa bawat Omi account ang sarili nitong plan, mga recording, at integration.';
+
+  @override
+  String get accountSignInMethodAdded => 'Naidagdag ang paraan ng pag-sign in';
+
+  @override
   String get authFailedToLinkGoogle => 'Nabigo ang pag-link gamit ang Google, mangyaring subukan ulit.';
 
   @override
@@ -14474,6 +14494,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get processingProgress => 'Pinoproseso ang iyong naghihintay na mga recording…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Naghihintay ng magagamit na quota sa transkripsiyon';
+
+  @override
   String get processingDeferred => 'Naghihintay ng pagproseso';
 
   @override
@@ -15894,4 +15917,37 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'Naipadala na ang order. Tingnan ang email mo para sa kumpirmasyon.';
+
+  @override
+  String get prepaidCodeEntry => 'May code ka?';
+
+  @override
+  String get prepaidCodeTitle => 'I-redeem ang code';
+
+  @override
+  String get prepaidCodeFieldHint => 'Ilagay ang iyong code';
+
+  @override
+  String get prepaidCodeRedeem => 'I-redeem';
+
+  @override
+  String get prepaidCodeRedeemed => 'Na-redeem ang code';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Hindi valid ang code na ito. Suriin ito at subukang muli.',
+        'used': 'Nagamit na ang code na ito.',
+        'expired': 'Nag-expire na ang code na ito.',
+        'hasPlan': 'May plan ka na. Hindi nagamit ang iyong code. I-redeem ito pagkatapos matapos ang iyong plan.',
+        'notPrepaid': 'Hindi ma-redeem dito ang code na ito. Gamitin ito kapag pumili ka ng plan.',
+        'notEligible': 'Hindi magagamit ang code na ito sa account na ito.',
+        'rateLimited': 'Masyadong maraming pagsubok. Subukang muli mamaya.',
+        'other': 'May nangyaring mali. Pakisubukang muli.',
+      },
+    );
+    return '$_temp0';
+  }
 }

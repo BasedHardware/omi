@@ -1,0 +1,3 @@
+{
+  "change": "A failed billing read on Android now stays visible with Retry on the paywalls and on paid Marketplace apps, instead of a spinner that never ends"
+}

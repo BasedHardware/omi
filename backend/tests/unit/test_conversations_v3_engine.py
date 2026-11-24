@@ -462,11 +462,37 @@ def test_manual_end_with_any_speech_is_visible_and_sticky(words):
 
 
 @pytest.mark.parametrize('kind', ['media', 'background'])
-def test_manual_end_does_not_promote_recognized_media_or_background(kind):
+@pytest.mark.parametrize('enabled,expected_hidden', [(True, False), (False, True)])
+def test_manual_end_visibility_preserves_media_and_background_classification(kind, enabled, expected_hidden):
     row = recording(finished_at=NOW + timedelta(seconds=10), v3_manual_end=True)
     group = outline.stretches([row], NOW + timedelta(seconds=11))[0]
-    built = planner.build('u', planner.windows([group], [[entry(kind=kind)]])[0], {'r': row})
-    assert built['manual_end'] is True and built['home_hidden'] is True
+    built = planner.build(
+        'u', planner.windows([group], [[entry(kind=kind)]])[0], {'r': row}, manual_end_home_visible=enabled
+    )
+    assert built['manual_end'] is True and built['home_hidden'] is expected_hidden
+    assert built['kind'] == built['outline_kind'] == kind
+    assert built['home_hidden_reason'] == ('media' if kind == 'media' else 'background_wearer_recognized')
+
+    # Rebuilding a retained row can lack the cut on this pass. The row still owns the manual end.
+    window = planner.windows([group], [[entry(kind=kind)]])[0]
+    window['manual_end'] = False
+    rebuilt = planner.build('u', window, {'r': row}, built, manual_end_home_visible=enabled)
+    assert rebuilt['manual_end'] is True and rebuilt['home_hidden'] is expected_hidden
+
+
+def test_only_final_fragment_of_manual_end_bypasses_classification():
+    row = recording(
+        segments=[
+            {'text': 'broadcast', 'start': 0, 'end': 7190},
+            {'text': 'another broadcast', 'start': 7200, 'end': 7210},
+        ],
+        finished_at=NOW + timedelta(seconds=7210),
+        v3_manual_end=True,
+    )
+    groups = outline.stretches([row], NOW + timedelta(seconds=7211))
+    windows = planner.windows(groups, [[entry(kind='media'), entry(2, kind='media')]])
+    built = [planner.build('u', window, {'r': row}) for window in windows]
+    assert [(r['manual_end'], r['home_hidden']) for r in built] == [(False, True), (True, False)]
 
 
 def test_manual_end_without_speech_creates_no_window():

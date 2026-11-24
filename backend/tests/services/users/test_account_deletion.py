@@ -2843,3 +2843,40 @@ def test_delayed_inline_wipe_stops_when_existing_heartbeat_finds_an_armed_marker
     account_deletion.users_db.delete_user_data.assert_not_called()
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_not_called()
     account_deletion.finish_destructive_operation.assert_not_called()
+
+
+def test_a_wipe_failing_at_the_play_records_step_names_it_in_failure_telemetry(monkeypatch):
+    """The Play-records step is never hidden behind best-effort failures the derived purge recorded earlier."""
+    emit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'emit_posthog_event', emit)
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'get_existing_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock())
+    monkeypatch.setattr(
+        account_deletion,
+        'purge_derived_user_data',
+        MagicMock(
+            return_value={
+                'required_failures': [],
+                'best_effort_failures': [{'operation': 'speech_profile_audio', 'error': 'x'}],
+            }
+        ),
+    )
+
+    def refuse(uid, since):
+        raise account_deletion.play_publisher.PlayCancelPending(None, 'a' * 64)
+
+    monkeypatch.setattr(account_deletion.play_publisher, 'purge_account_records', refuse)
+    monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock(return_value={'status': 'ok'}))
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
+
+    assert account_deletion.background_wipe_user_data('uid1') is False
+
+    account_deletion.users_db.delete_user_data.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    distinct_id, event, props = emit.call_args.args
+    assert event == 'Account Deletion Wipe Failed'
+    assert props['failed_operations'] == ['speech_profile_audio', 'play_billing_records']
+    assert 'uid1' not in str(props)

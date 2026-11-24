@@ -169,6 +169,9 @@ class Subscription {
   /// 'play' for a Google Play Billing subscription; null for Stripe and legacy rows.
   final String? provider;
 
+  /// A prepaid no-card plan: it ends at [currentPeriodEnd] and has nothing to renew or resubscribe.
+  final bool prepaid;
+
   Subscription({
     required this.plan,
     required this.status,
@@ -181,6 +184,7 @@ class Subscription {
     this.deprecationMessage,
     PlanLimits? limits,
     this.provider,
+    this.prepaid = false,
   }) : limits = limits ?? PlanLimits();
 
   bool get billedByPlay => provider == 'play';
@@ -202,6 +206,7 @@ class Subscription {
       deprecationMessage: generated.deprecationMessage,
       limits: PlanLimits.fromGenerated(generated.limits),
       provider: generated.provider,
+      prepaid: generated.prepaid == true,
     );
   }
 
@@ -218,6 +223,7 @@ class Subscription {
       deprecationMessage: deprecationMessage,
       limits: limits.toGenerated(),
       provider: provider,
+      prepaid: prepaid ? true : null,
     );
   }
 
@@ -597,6 +603,9 @@ class UserSubscriptionResponse {
   /// Present only when this Android build must start new purchases through Google Play.
   final PlayBillingConfig? playBilling;
 
+  /// Server switch: this user may redeem a prepaid code with no card. False when omitted.
+  final bool prepaidCodeRedeem;
+
   UserSubscriptionResponse({
     required this.subscription,
     required this.transcriptionSecondsUsed,
@@ -619,6 +628,7 @@ class UserSubscriptionResponse {
     this.processingBacklog,
     this.paymentIssue,
     this.playBilling,
+    this.prepaidCodeRedeem = false,
   });
 
   /// The same response with [trialEligible] replaced (Play decides trial eligibility per Google account).
@@ -644,6 +654,7 @@ class UserSubscriptionResponse {
         processingBacklog: processingBacklog,
         paymentIssue: paymentIssue,
         playBilling: playBilling,
+        prepaidCodeRedeem: prepaidCodeRedeem,
       );
 
   factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) =>
@@ -675,6 +686,7 @@ class UserSubscriptionResponse {
       heldAudio: generated.heldAudio == null ? null : HeldAudioSummary.fromGenerated(generated.heldAudio!),
       paymentIssue: generated.paymentIssue == null ? null : PaymentIssue.fromGenerated(generated.paymentIssue!),
       playBilling: generated.playBilling == null ? null : PlayBillingConfig.fromGenerated(generated.playBilling!),
+      prepaidCodeRedeem: generated.prepaidCodeRedeem == true,
     );
   }
 
@@ -699,6 +711,7 @@ class UserSubscriptionResponse {
       transcriptionAllowance: transcriptionAllowance?.toGenerated(),
       paymentIssue: paymentIssue?.toGenerated(),
       playBilling: playBilling?.toGenerated(),
+      prepaidCodeRedeem: prepaidCodeRedeem ? true : null,
       heldAudio: heldAudio == null
           ? null
           : wire.GeneratedHeldAudioSummary(
