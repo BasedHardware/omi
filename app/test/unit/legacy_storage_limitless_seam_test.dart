@@ -11,6 +11,8 @@ import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/storage_sync.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
@@ -21,6 +23,31 @@ class _Listener implements IWalSyncListener {
 
   @override
   void onWalSynced(Wal wal, {ServerConversation? conversation}) {}
+}
+
+class _ManualTimer implements Timer {
+  _ManualTimer(this.delay, this.callback);
+  final Duration delay;
+  final void Function() callback;
+  Duration elapsed = Duration.zero;
+  @override
+  bool isActive = true;
+  @override
+  int tick = 0;
+  @override
+  void cancel() => isActive = false;
+  void elapse(Duration duration) {
+    if (!isActive) return;
+    elapsed += duration;
+    if (elapsed >= delay) fire();
+  }
+
+  void fire() {
+    if (!isActive) return;
+    isActive = false;
+    tick++;
+    callback();
+  }
 }
 
 class _FakeLocalSync implements LocalWalSync {
@@ -223,8 +250,9 @@ void main() {
         storageTotalBytes: totalBytes,
       );
 
-  StorageSyncImpl storageSyncWith(_FakeLocalSync local, _FakeStorageDevice card, Wal wal) {
-    final sync = StorageSyncImpl(_Listener())
+  StorageSyncImpl storageSyncWith(_FakeLocalSync local, _FakeStorageDevice card, Wal wal,
+      {Timer Function(Duration, void Function())? transferTimer, DateTime Function()? clock}) {
+    final sync = StorageSyncImpl(_Listener(), transferTimer: transferTimer, clock: clock)
       ..testDevice = BtDevice(id: 'devkit-1', name: 'Omi DevKit', type: DeviceType.omi, rssi: -40)
       ..testConnection = card
       ..testWals = [wal];
@@ -242,6 +270,259 @@ void main() {
     return syncs;
   }
 
+  for (final chatter in [
+    <int>[0], // ACK
+    <int>[1, 2, 3, 4], // Timestamp without DATA
+    <int>[1, 2, 3, 4, ...List.filled(440, 0)], // Padding without an audio frame
+  ]) {
+    test('StorageSync: ${chatter.length}-byte non-audio cannot cancel the 60s first-DATA deadline', () async {
+      final card = _SubscribedStorageDevice(script: [chatter]);
+      final local = _FakeLocalSync();
+      final head = storageWal(totalBytes: 4 * 440);
+      final later = storageWal(fileNum: 2, timerStart: head.timerStart + 60);
+      final timers = <_ManualTimer>[];
+      final sync = storageSyncWith(local, card, head, transferTimer: (delay, callback) {
+        final timer = _ManualTimer(delay, callback);
+        timers.add(timer);
+        return timer;
+      })
+        ..testWals = [head, later];
+      final failure = expectLater(sync.syncAll(), throwsException);
+      await card.firstPacketHandled.future;
+      expect(timers, hasLength(1));
+      expect(timers.single.delay, const Duration(seconds: 60));
+      card.controller.add([0]); // More ACKs still prove no audio.
+      await Future<void>.delayed(Duration.zero);
+      expect(timers.single.isActive, isTrue);
+      timers.single.elapse(const Duration(seconds: 59));
+      expect(card.stops, 0);
+      card.controller.add([0]);
+      await Future<void>.delayed(Duration.zero);
+      timers.single.elapse(const Duration(seconds: 1));
+      await failure;
+      expect(card.stops, 1);
+      expect(card.deletes, isEmpty);
+      expect(
+          card.writes,
+          [
+            [1, 0x11, 0]
+          ],
+          reason: 'never skip past the unread head');
+      expect(local.added, isEmpty);
+      expect(head.storageOffset, 0);
+      expect(head.status, WalStatus.miss);
+      expect(later.fileNum, 2);
+      expect(await sync.getMissingWals(), [head, later]);
+      expect(timers.every((timer) => !timer.isActive), isTrue);
+      await card.controller.close();
+      await sync.stop();
+    });
+  }
+
+  final clockNow = DateTime.utc(2026, 11, 15, 11);
+  final phoneSeconds = clockNow.millisecondsSinceEpoch ~/ 1000;
+  for (final raw in [1704067200, phoneSeconds + 86400, phoneSeconds + 86401, 1967677260, 0x7fffffff, 0, -1]) {
+    test('LittleFS clock $raw preserves file index and waits for durable bytes before DELETE', () async {
+      final card = _FakeStorageDevice(script: [
+        _dataPacket([40]),
+        [100]
+      ]);
+      final local = _FakeLocalSync();
+      final wal = storageWal(timerStart: raw);
+      final sync = storageSyncWith(local, card, wal, clock: () => clockNow);
+      addTearDown(sync.stop);
+      addTearDown(card.controller.close);
+      await sync.syncWal(wal: wal);
+      final persisted = local.added.single;
+      final timed = useDeviceCaptureTime(raw, phoneSeconds);
+      expect(persisted.timerStart, timed ? raw : phoneSeconds);
+      expect(persisted.clockRun, timed ? isNull : isNotNull);
+      expect(wal.timerStart, raw);
+      expect(card.writes, [
+        [1, 0x11, 0]
+      ]);
+      expect(card.deletes, [1]);
+      expect(local.events.single, startsWith('addExternalWal:'));
+    });
+  }
+
+  test('an estimated chunk collision keeps its run adjacent to the timestamp', () async {
+    final local = _FakeLocalSync();
+    final source = storageWal();
+    var nonce = 0;
+    final one = await local.persistDeviceChunk(
+        source: source,
+        frames: [
+          [1, 2]
+        ],
+        timerStart: phoneSeconds,
+        admittedGeneration: 1,
+        nextCollisionSequence: () => nonce++,
+        clockRun: 'run12');
+    final two = await local.persistDeviceChunk(
+        source: source,
+        frames: [
+          [3, 4]
+        ],
+        timerStart: phoneSeconds,
+        admittedGeneration: 1,
+        nextCollisionSequence: () => nonce++,
+        clockRun: 'run12');
+    expect(two.filePath, isNot(one.filePath));
+    expect(two.filePath,
+        endsWith(deviceCaptureClockRepairOff ? '_clkerun12_u0_$phoneSeconds.bin' : '_u0_clkerun12_$phoneSeconds.bin'));
+    expect(await File((await Wal.getFilePath(one.filePath))!).readAsBytes(), [2, 0, 0, 0, 1, 2]);
+    expect(await File((await Wal.getFilePath(two.filePath))!).readAsBytes(), [2, 0, 0, 0, 3, 4]);
+  });
+
+  test('LittleFS never invents a date from an implausible phone clock', () async {
+    if (deviceCaptureClockRepairOff) return;
+    final card = _FakeStorageDevice(script: [
+      _dataPacket([40]),
+      [100]
+    ]);
+    final local = _FakeLocalSync();
+    final wal = storageWal(timerStart: 0);
+    final sync = storageSyncWith(local, card, wal, clock: () => DateTime.utc(1970));
+    addTearDown(sync.stop);
+    addTearDown(card.controller.close);
+    await expectLater(sync.syncWal(wal: wal), throwsStateError);
+    expect(local.added, isEmpty);
+    expect(card.deletes, isEmpty);
+    expect(wal.status, WalStatus.miss);
+  });
+
+  test('StorageSync: first real DATA delayed 20 seconds after ACK completes successfully', () async {
+    final card = _SubscribedStorageDevice(script: [
+      <int>[0]
+    ]);
+    final local = _FakeLocalSync();
+    final wal = storageWal(totalBytes: 440);
+    final timers = <_ManualTimer>[];
+    final sync = storageSyncWith(local, card, wal, transferTimer: (delay, callback) {
+      final timer = _ManualTimer(delay, callback);
+      timers.add(timer);
+      return timer;
+    });
+    final transfer = sync.syncAll();
+    await card.firstPacketHandled.future;
+    timers.single.elapse(const Duration(seconds: 20));
+    await Future<void>.delayed(Duration.zero);
+    expect(timers.single.isActive, isTrue, reason: 'ACK is not DATA, but a 20s SD/BLE read is healthy');
+    expect(card.stops, 0);
+    expect(local.added, isEmpty);
+    card.controller.add(_dataPacket([40]));
+    card.controller.add([100]);
+    await transfer;
+    expect(wal.status, WalStatus.synced);
+    expect(local.added.single.totalFrames, 1);
+    expect(card.deletes, [1]);
+    expect(timers.every((timer) => !timer.isActive), isTrue);
+    await card.controller.close();
+    await sync.stop();
+  });
+
+  test('StorageSync: DATA renews the 60s idle deadline; ACKs do not; incomplete audio is retained', () async {
+    final card = _SubscribedStorageDevice(script: [
+      _dataPacket([40])
+    ]);
+    final local = _FakeLocalSync();
+    final wal = storageWal(totalBytes: 4 * 440);
+    final timers = <_ManualTimer>[];
+    final sync = storageSyncWith(local, card, wal, transferTimer: (delay, callback) {
+      final timer = _ManualTimer(delay, callback);
+      timers.add(timer);
+      return timer;
+    });
+    final failure = expectLater(sync.syncWal(wal: wal), throwsException);
+    await card.firstPacketHandled.future;
+    expect(timers.map((timer) => timer.delay), [const Duration(seconds: 60), const Duration(seconds: 60)]);
+    expect(timers.first.isActive, isFalse);
+    card.controller.add(_dataPacket([40]));
+    await Future<void>.delayed(Duration.zero);
+    expect(timers, hasLength(3));
+    expect(timers[1].isActive, isFalse);
+    card.controller.add([0]);
+    card.controller.add([1, 2, 3, 4, ...List.filled(440, 0)]);
+    await Future<void>.delayed(Duration.zero);
+    expect(timers, hasLength(3));
+    timers[1].fire(); // A cancelled old deadline cannot stop new data.
+    expect(card.stops, 0);
+    timers.last.fire();
+    await failure;
+    expect(card.stops, 1);
+    expect(card.deletes, isEmpty);
+    expect(local.added.single.totalFrames, 2, reason: 'keep every parsed frame even on timeout');
+    expect(wal.status, WalStatus.miss);
+    expect(wal.storageOffset, 0);
+    expect(wal.deviceDownloadFraction, isNull);
+    expect(timers.every((timer) => !timer.isActive), isTrue);
+    await card.controller.close();
+    await sync.stop();
+  });
+
+  test('StorageSync: healthy DATA after a 45s flash/BLE gap completes without an early idle abort', () async {
+    final card = _SubscribedStorageDevice(script: [
+      _dataPacket([40])
+    ]);
+    final local = _FakeLocalSync();
+    final wal = storageWal(totalBytes: 2 * 440);
+    final timers = <_ManualTimer>[];
+    final sync = storageSyncWith(local, card, wal, transferTimer: (delay, callback) {
+      final timer = _ManualTimer(delay, callback);
+      timers.add(timer);
+      return timer;
+    });
+    final transfer = sync.syncAll();
+    await card.firstPacketHandled.future;
+    for (final timer in timers.toList()) {
+      timer.elapse(const Duration(seconds: 45));
+    }
+    await Future<void>.delayed(Duration.zero);
+    expect(card.stops, 0);
+    expect(sync.isSyncing, isTrue);
+    card.controller.add(_dataPacket([40]));
+    card.controller.add([100]);
+    await transfer;
+    expect(wal.status, WalStatus.synced);
+    expect(local.added.single.totalFrames, 2);
+    expect(card.deletes, [1]);
+    expect(timers.every((timer) => !timer.isActive), isTrue);
+    await card.controller.close();
+    await sync.stop();
+  });
+
+  test('StorageSync: complete audio cancels both deadlines before durable registration', () async {
+    final card = _SubscribedStorageDevice(script: [
+      _dataPacket([40]),
+      [100]
+    ]);
+    final gate = Completer<void>();
+    final local = _FakeLocalSync()..addGate = gate.future;
+    final wal = storageWal();
+    final timers = <_ManualTimer>[];
+    final sync = storageSyncWith(local, card, wal, transferTimer: (delay, callback) {
+      final timer = _ManualTimer(delay, callback);
+      timers.add(timer);
+      return timer;
+    });
+    final transfer = sync.syncAll();
+    await card.firstPacketHandled.future;
+    await Future<void>.delayed(Duration.zero);
+    expect(timers, hasLength(2));
+    expect(timers.every((timer) => !timer.isActive), isTrue);
+    for (final timer in timers) {
+      timer.fire();
+    }
+    expect(card.deletes, isEmpty, reason: 'no device ACK before the index is durable');
+    gate.complete();
+    await transfer;
+    expect(wal.status, WalStatus.synced);
+    expect(card.deletes, [1]);
+    await card.controller.close();
+    await sync.stop();
+  });
+
   test('StorageSync: durable write failure means the file is never deleted and never marked synced', () async {
     final card = _FakeStorageDevice(
       script: [
@@ -253,7 +534,7 @@ void main() {
     final wal = storageWal();
     final sync = storageSyncWith(local, card, wal);
 
-    await sync.syncAll();
+    await expectLater(sync.syncAll(), throwsException);
 
     expect(card.deletes, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));
@@ -322,7 +603,7 @@ void main() {
       ..timerStart = 1700000600;
     final sync = storageSyncWith(local, card, transferred)..testWals = [transferred, pending];
 
-    await sync.syncAll();
+    await expectLater(sync.syncAll(), throwsException);
 
     expect(transferred.status, WalStatus.synced);
     expect(card.deletes, [0]);
@@ -439,7 +720,7 @@ void main() {
     final wal = storageWal(totalBytes: 2 * 440); // only half the bytes arrive
     final sync = storageSyncWith(local, card, wal);
 
-    await sync.syncAll();
+    await expectLater(sync.syncAll(), throwsException);
 
     expect(card.deletes, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));
@@ -526,8 +807,57 @@ void main() {
     await syncs.storage.stop();
   });
 
+  for (final raw in [1704067200, phoneSeconds + 86400, phoneSeconds + 86401, 1967677260, 0x7fffffff, 0, -1]) {
+    test('Limitless clock $raw guards final batch filename and retains page ACK coordinates', () async {
+      final card = _FakeLimitless(pages: [
+        {
+          'opus_frames': [
+            [1, 2, 3]
+          ],
+          'timestamp_ms': raw * 1000,
+          'max_index': 0
+        },
+        {
+          'opus_frames': [
+            [4, 5]
+          ],
+          'timestamp_ms': raw * 1000,
+          'max_index': 1
+        },
+      ]);
+      final local = _FakeLocalSync();
+      final wal = Wal(
+          timerStart: raw,
+          codec: BleAudioCodec.opus,
+          seconds: 2,
+          status: WalStatus.miss,
+          storage: WalStorage.flashPage,
+          device: 'limitless-1',
+          fileNum: 0,
+          storageOffset: 0,
+          storageTotalBytes: 1);
+      final sync = FlashPageWalSyncImpl(_Listener(), clock: () => clockNow)
+        ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)
+        ..testConnection = card
+        ..testWals = [wal];
+      sync.setLocalSync(local);
+      addTearDown(sync.stop);
+      await sync.syncWal(wal: wal);
+      final persisted = local.added.single;
+      final legacyFallback = deviceCaptureClockRepairOff && raw <= 0;
+      final timed = legacyFallback || useDeviceCaptureTime(raw, phoneSeconds);
+      final expected = legacyFallback ? phoneSeconds : (timed ? raw : phoneSeconds - 1);
+      expect(persisted.timerStart, expected);
+      expect(persisted.clockRun, timed ? isNull : isNotNull);
+      expect(persisted.filePath, endsWith('_${expected * 1000}.bin'));
+      if (!timed) expect(persisted.filePath, contains('_clke${persisted.clockRun}_'));
+      expect(card.acks.last, 1);
+      expect(wal.timerStart, raw);
+    });
+  }
+
   test('Limitless: a session gap ACKs only the saved batch max, never the pending page', () async {
-    const ts1 = 1700000000000;
+    const ts1 = 1794740000000;
     const ts2 = ts1 + 200000; // >120s gap
     final card = _FakeLimitless(
       pages: [

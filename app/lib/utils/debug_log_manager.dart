@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/wals/ring_custody_diagnostics.dart';
 
 /// Lightweight debug log manager to persist important diagnostics when
 /// developer debug logging is enabled.
@@ -108,6 +109,9 @@ class DebugLogManager {
     await _enqueueWrite(() async {
       final f = await _ensureFile();
       await f.writeAsString('', mode: FileMode.write, flush: true);
+      for (final file in await listLogFiles()) {
+        if (file.path.endsWith('_ios_lifecycle.log')) await file.delete();
+      }
     });
   }
 
@@ -145,8 +149,8 @@ class DebugLogManager {
         if (entity is! File) continue;
         final name = entity.uri.pathSegments.isNotEmpty ? entity.uri.pathSegments.last : '';
         if (!name.startsWith('omi_debug_') || !name.endsWith('.log')) continue;
-        // Expect format omi_debug_YYYYMMDD.log
-        final datePart = name.replaceAll('omi_debug_', '').replaceAll('.log', '');
+        // Native iOS lifecycle logs share the daily retention window.
+        final datePart = name.replaceFirst('omi_debug_', '').replaceFirst(RegExp(r'(_ios_lifecycle)?\.log$'), '');
         if (datePart.length != 8) continue;
         final y = int.tryParse(datePart.substring(0, 4));
         final m = int.tryParse(datePart.substring(4, 6));
@@ -169,6 +173,12 @@ class DebugLogManager {
     String? message,
     Map<String, Object?> extra = const {},
   ]) async {
+    if (message == 'RingStorageSync failed' && error is TimeoutException && extra['device'] is String) {
+      RingCustodyDiagnostics.shared.timeout(
+        extra['device']! as String,
+        error.message == 'No data from device' ? RingDiagnosticReason.firstDataTimeout : RingDiagnosticReason.deadline,
+      );
+    }
     final payload = <String, Object?>{
       'ts': _timestamp(),
       'level': 'ERROR',
@@ -179,7 +189,10 @@ class DebugLogManager {
     await _append(jsonEncode(payload));
   }
 
-  static Future<void> logWarning(String message, [Map<String, Object?> extra = const {}]) async {
+  static Future<void> logWarning(
+    String message, [
+    Map<String, Object?> extra = const {},
+  ]) async {
     final payload = <String, Object?>{
       'ts': _timestamp(),
       'level': 'WARN',
@@ -189,7 +202,10 @@ class DebugLogManager {
     await _append(jsonEncode(payload));
   }
 
-  static Future<void> logInfo(String message, [Map<String, Object?> extra = const {}]) async {
+  static Future<void> logInfo(
+    String message, [
+    Map<String, Object?> extra = const {},
+  ]) async {
     final payload = <String, Object?>{
       'ts': _timestamp(),
       'level': 'INFO',
@@ -201,7 +217,27 @@ class DebugLogManager {
 
   /// Logs a structured diagnostic event (e.g., device/transcription connection changes)
   static Future<void> logEvent(String type, Map<String, Object?> fields) async {
-    final payload = <String, Object?>{'timestamp': _timestamp(), 'level': 'EVENT', 'type': type, ...fields};
+    // Observe existing metadata even when optional file logging is disabled.
+    // The typed projection cannot retain the log's arbitrary strings/content.
+    if (type == 'pendant_custody' && fields['action'] == 'chunk_durable' && fields['device'] is String) {
+      int? number(String key) => fields[key] is int ? fields[key] as int : null;
+      final start = number('start_seq');
+      final end = number('end_seq');
+      RingCustodyDiagnostics.shared.event(
+        fields['device']! as String,
+        RingDiagnosticEvent.chunkDurable,
+        ringId: number('ring_id'),
+        start: start,
+        end: end,
+        records: start != null && end != null ? end - start : null,
+      );
+    }
+    final payload = <String, Object?>{
+      'timestamp': _timestamp(),
+      'level': 'EVENT',
+      'type': type,
+      ...fields,
+    };
     await _append(jsonEncode(payload));
   }
 }

@@ -25,6 +25,79 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
+  test('daily ring read disconnect counts preserve unknowns, day bounds and RSSI threshold', () {
+    final day = DateTime(2026, 11, 17);
+    final start = day.millisecondsSinceEpoch;
+    Map<String, dynamic> row(int rssi, {Object? active = true, int? at, String type = 'disconnect'}) => {
+          'timestamp': at ?? start,
+          'eventType': type,
+          'lastRssi': rssi,
+          if (active != null) 'ring_read_active': active,
+        };
+    final result = DeviceHealthTelemetry.rollup({
+      'disconnect_history_v2': [
+        for (final rssi in [-91, -90, -82, -80, -79, -75, -60, 0]) row(rssi),
+        row(-70, active: false),
+        row(-70, active: null),
+        row(-70, active: 'true'),
+        row(-70, at: start - 1),
+        row(-70, at: start + 86400000),
+        row(-70, type: 'fail_to_connect'),
+      ],
+    }, day);
+    expect(result['disconnects_during_ring_read'], 8);
+    expect(result['disconnects_with_ring_read_state'], 9);
+    expect(result['ring_read_disconnect_rssi_below_minus90'], 1);
+    expect(result['ring_read_disconnect_rssi_minus90_to_minus80'], 2);
+    expect(result['ring_read_disconnect_rssi_minus80_to_minus60'], 3);
+    expect(result['ring_read_disconnect_rssi_at_least_minus60'], 1);
+    expect(result['ring_read_disconnect_rssi_unknown'], 1);
+    final legacy = DeviceHealthTelemetry.rollup({
+      'disconnect_history_v2': [row(-70, active: null)]
+    }, day);
+    expect(legacy['disconnects_during_ring_read'], 0);
+    expect(legacy['disconnects_with_ring_read_state'], 0);
+  });
+
+  test('daily emitter includes registered ring counters once and excludes foreign identity', () async {
+    final emitted = <Map<String, dynamic>>[];
+    final names = <String>[];
+    final start = DateTime(2026, 11, 16).millisecondsSinceEpoch;
+    final epoch = AnalyticsManager.identityEpoch;
+    Future<void> emit() => DeviceHealthTelemetry.maybeEmit(
+          BtDevice.empty().copyWith(id: 'ring-device-local-only'),
+          now: DateTime(2026, 11, 17),
+          emissionContext: {},
+          loadDiagnostics: (_) async => jsonEncode({
+            'identity_epoch': epoch,
+            'disconnect_history_v2': [
+              for (final owner in [epoch, epoch - 1])
+                {
+                  'identity_epoch': owner,
+                  'timestamp': start,
+                  'eventType': 'disconnect',
+                  'ring_read_active': true,
+                  'ring_read_age_ms': 4500,
+                  'lastRssi': -79,
+                },
+            ],
+          }),
+          emit: (name, props) {
+            names.add(name);
+            emitted.add(props);
+          },
+        );
+    await emit();
+    await emit();
+    expect(names, ['Mobile Device Health Daily']);
+    expect(emitted.single['disconnects_during_ring_read'], 1);
+    expect(emitted.single['disconnects_with_ring_read_state'], 1);
+    expect(emitted.single['ring_read_disconnect_rssi_minus80_to_minus60'], 1);
+    expect(emitted.single['rssi_at_disconnect_buckets'], {'<-75': 1});
+    expect(jsonEncode(emitted), isNot(contains('ring-device-local-only')));
+    expect(emitted.single.containsKey('ring_read_age_ms'), false); // Per-drop age stays local.
+  });
+
   test('daily rollup clips connected duration and counts only that day', () {
     final day = DateTime(2026, 9, 27);
     final start = day.millisecondsSinceEpoch;

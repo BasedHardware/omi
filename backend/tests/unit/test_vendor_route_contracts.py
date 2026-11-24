@@ -381,8 +381,8 @@ def test_flag_names_are_owned_by_one_slice():
 def test_metric_names_are_frozen_kept_and_backed_by_collectors():
     names = {value for key, value in vars(c).items() if key.startswith('METRIC_')}
     # 15 frozen by slice A + 2 GPU-overflow gauges (slice B follow-up) + the overflow-spend counter
-    # (#24637, read by the omi-batch-vendor-overflow-spend alert).
-    assert len(names) == 18
+    # (#24637, read by the omi-batch-vendor-overflow-spend alert) + the short-speech skip counter.
+    assert len(names) == 19
     assert c.METRIC_OVERFLOW_AUDIO in names
     assert all(name.startswith('omi_batch_pipeline_vendor_') for name in names)
     collected = {collector._name for collector in m.COLLECTORS}

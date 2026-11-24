@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
@@ -87,21 +88,80 @@ void main() {
       });
     });
 
-    test('keeps forwarding non-audio control messages to Omi when audio forwarding is disabled', () async {
+    test('routes Omi controls away from the audio-only Custom Live primary', () async {
       final primary = _FakeSocket();
       final secondary = _FakeSocket();
       final socket = CompositeTranscriptionSocket(
         primarySocket: primary,
         secondarySocket: secondary,
+        sttProvider: SttProvider.customLive.name,
         forwardRawAudioToSecondary: false,
       );
+      addTearDown(socket.stop);
 
       expect(await socket.connect(), isTrue);
       final controlMessage = jsonEncode({'type': 'speaker_assigned', 'speaker_id': 1});
       socket.send(controlMessage);
 
-      expect(primary.sent, [controlMessage]);
+      expect(primary.sent, isEmpty);
       expect(secondary.sent, [controlMessage]);
+    });
+
+    for (final shareRawAudio in [false, true]) {
+      test('Custom Live evidence follows Omi raw-audio consent ($shareRawAudio)', () async {
+        final primary = _FakeSocket();
+        final secondary = _FakeSocket();
+        final socket = CompositeTranscriptionSocket(
+          primarySocket: primary,
+          secondarySocket: secondary,
+          sttProvider: SttProvider.customLive.name,
+          forwardRawAudioToSecondary: shareRawAudio,
+        );
+        addTearDown(socket.stop);
+        final service = TranscriptSegmentSocketService.withSocket(16000, BleAudioCodec.opus, 'en', socket);
+
+        expect(await socket.connect(), isTrue);
+        expect(primary.sent, isEmpty, reason: 'initial client state is Omi-only');
+        secondary.sent.clear();
+        final audio = Uint8List.fromList([1, 2, 3]);
+        service.sendEvidenceFrame(WalFrame(
+          payload: audio,
+          syncKey: FrameSyncKey([1]),
+          captureRoot: '12345678-1234-4234-8234-123456789abc',
+          sourceFramePosition: 7,
+          sourceClockEpoch: 2,
+        ));
+
+        expect(primary.sent, [same(audio)]);
+        if (shareRawAudio) {
+          expect(secondary.sent, hasLength(2));
+          expect(jsonDecode(secondary.sent.first as String)['type'], 'capture_evidence_frame');
+          expect(secondary.sent.last, same(audio));
+        } else {
+          expect(secondary.sent, isEmpty);
+        }
+        expect(service.binaryAudioBytesSent, audio.length);
+      });
+    }
+
+    test('preserves evidence and audio order on the Omi record connection for polling STT', () async {
+      final primary = _FakeSocket();
+      final secondary = _FakeSocket();
+      final socket = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        sttProvider: SttProvider.custom.name,
+      );
+      addTearDown(socket.stop);
+      expect(await socket.connect(), isTrue);
+
+      final first = Uint8List.fromList([1, 2, 3]);
+      final second = Uint8List.fromList([4, 5, 6]);
+      socket.sendEvidenceAudioFrame('first evidence', first);
+      socket.sendEvidenceAudioFrame('second evidence', second);
+
+      expect(primary.sent, [same(first), same(second)]);
+      expect(secondary.sent, ['first evidence', same(first), 'second evidence', same(second)]);
     });
 
     test('keeps forwarding input frames by default', () async {

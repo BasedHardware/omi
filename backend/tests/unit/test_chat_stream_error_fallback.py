@@ -72,7 +72,7 @@ def _make_client():
     notifications.send_notification = MagicMock()
     notifications.send_notification_async = AsyncMock()
     notifications.send_client_displayed_notification = MagicMock()
-    notifications.send_client_displayed_notification_async = AsyncMock()
+    notifications.send_client_displayed_notification_async = AsyncMock(return_value=1)
 
     fallback_obs = _install('utils.observability.fallback')
     fallback_obs.record_fallback = MagicMock()
@@ -258,7 +258,7 @@ def _collect_voice_frames(chat_utils):
         return [
             chunk
             async for chunk in chat_utils.process_voice_message_segment_stream(
-                '/tmp/decoded.wav', 'test-uid', language='en'
+                '/tmp/decoded.wav', 'test-uid', language='en', register_answer=lambda *_: None
             )
         ]
 

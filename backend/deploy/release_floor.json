@@ -1,0 +1,5 @@
+{
+  "floor": "30beae74422cdd68427331814500fde256dc183b",
+  "reason": "#25608 delegated conversation purge scans; pre-floor binaries must not serve purges",
+  "since": "2026-11-18"
+}

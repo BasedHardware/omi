@@ -69,9 +69,15 @@
       "key": "no-uid-literals|prod|gke/pusher/TRANSCRIPTION_SHADOW_UID_ALLOWLIST|uids=1",
       "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
     },
+    {"key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED", "why": "Reviewed 2026-11-21 (SCA-3544): only ProjectionFollowups reads it, constructed by Projector.start_followups and ProjectionOutbox on the Cloud Run serving/pump loops; diarizer/ never constructs a Projector or outbox, so the worker never executes it. Activated 'true' on every Cloud Run role on 2026-11-22 (David, SCA-3544); backend and backend-integration now pin an explicit 'false' (integration rolled back 16:16Z, closed by Shipping), backend-sync keeps 'true'."},
+    {"key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_SERVING_PROJECTION_SWEEP", "why": "Reviewed 2026-11-22 (SCA-3318): only the Cloud Run serving loops read it; the helm GPU worker never executes this path. backend-integration owns the recurring sweep with an explicit 'true' after the step-3 sweep-off was rolled back, and the projection pump is dark. Only the literal 'off' disables it."},
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED",
       "why": "Reviewed 2026-10-18: the worker imports projection only transitively (Pump/Scheduler never call Projection); the flag is not executed there."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_PACKING_SAMPLE_RATE",
+      "why": "SCA-3548: preserve the live GPU worker's unset sampling rate on the depth-only roll. Cloud Run's sampling policy remains independent."
     },
     {
       "key": "task-target-retry-semantics|code|account-deletion/routers/users.py:run_account_deletion_wipe/500",
@@ -124,6 +130,14 @@
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE",
       "why": "Reviewed 2026-10-19: only QuarantineRecovery.sweep reads it, and only the integration serving loop (utils/batch_pipeline/serving.py) runs that sweep; the worker imports config transitively and never sweeps."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS",
+      "why": "Margin-40 PR25539 panel F4 requires integration-only cadence, 2026-11-17: this cadence belongs only to the integration projection sweep/supervisor. The worker entrypoint runs Pump/Scheduler, not Projection.sweep or Serving.supervise; the import-closure inventory over-approximates execution. Retain the excluded worker defaults. The deploy-contract test pins this exact integration/worker distinction; no general reader-split exemption."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_SERVING_TICK_SECONDS",
+      "why": "Margin-40 PR25539 panel F4 requires integration-only cadence, 2026-11-17: this cadence belongs only to the integration projection sweep/supervisor. The worker entrypoint runs Pump/Scheduler, not Projection.sweep or Serving.supervise; the import-closure inventory over-approximates execution. Retain the excluded worker defaults. The deploy-contract test pins this exact integration/worker distinction; no general reader-split exemption."
     }
   ]
 }

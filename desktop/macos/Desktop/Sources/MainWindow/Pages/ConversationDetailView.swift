@@ -162,6 +162,7 @@ struct ConversationDetailView: View {
   @State private var followUpDraftText = ""
   @State private var editedTitle = ""
   @State private var isUpdatingTitle = false
+  @StateObject private var deleteFeedback = ConversationDeleteFeedback()
   @State private var isDeleting = false
 
   // Capture deep-link focus state. A successful acknowledgement is terminal;
@@ -311,6 +312,7 @@ struct ConversationDetailView: View {
     ) {
       Task { await deleteConversation() }
     }
+    .conversationDeleteFeedback(deleteFeedback) { Task { await deleteConversation() } }
     .dismissableSheet(isPresented: $showEditDialog) {
       TextPromptSheet(
         title: "Rename Conversation",
@@ -793,7 +795,10 @@ struct ConversationDetailView: View {
     defer { isDeleting = false }
 
     let conversationId = conversation.id
-    if await AppState.current?.deleteConversation(conversationId) == true {
+    let outcome =
+      await AppState.current?.deleteConversation(conversationId)
+      ?? .failed(message: "Couldn't delete the conversation. Please try again.")
+    if deleteFeedback.present(outcome) {
       await MainActor.run {
         onDelete?()
         onBack()

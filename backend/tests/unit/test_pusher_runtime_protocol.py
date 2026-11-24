@@ -192,3 +192,65 @@ async def test_private_cloud_shutdown_exhausts_bounded_upload_attempts(runtime, 
     assert websocket.close_code == 1000
     pusher.PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS.inc.assert_called_once_with()
     journey.finish.assert_called_once_with('failure')
+
+
+def test_append_optional_evicts_oldest_and_releases_budget(monkeypatch):
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPS', MagicMock())
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPPED_BYTES', MagicMock())
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    budget = pusher_protocol.ByteBudget(100)
+    queue = deque(maxlen=2)
+    for i in range(3):
+        assert budget.reserve(10)
+        evicted = pusher_protocol.append_optional(
+            queue, {'type': 'webhook', 'sample_rate': 8000, 'data': bytes([i]) * 10}, 'audio_bytes', budget
+        )
+        assert evicted == (1 if i == 2 else 0)
+    assert [item['data'][0] for item in queue] == [1, 2]
+    assert budget.used == 20
+    pusher_protocol.PUSHER_QUEUE_DROPS.labels.assert_called_with(queue='audio_bytes')
+
+
+def test_extend_optional_never_raises_and_evicts_stale_items_first(monkeypatch):
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPS', MagicMock())
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPPED_BYTES', MagicMock())
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    budget = pusher_protocol.ByteBudget(30)
+    queue = deque(maxlen=5)
+    assert budget.reserve(20)
+    queue.append({'type': 'app', 'sample_rate': 8000, 'data': b'x' * 20})
+    buffer = bytearray()
+    # Needs 20 bytes with only 10 free: the stale queued item is evicted, never AudioBackpressure.
+    assert pusher_protocol.extend_optional(buffer, b'y' * 20, 'audio_app_buffer', budget, queue) is True
+    assert not queue and bytes(buffer) == b'y' * 20 and budget.used == 20
+    # Nothing left to evict: the new optional data is dropped, still without raising.
+    assert pusher_protocol.extend_optional(buffer, b'z' * 20, 'audio_app_buffer', budget, queue) is False
+    assert bytes(buffer) == b'y' * 20 and budget.used == 20
+
+
+def test_long_webhook_interval_at_48khz_still_delivers_within_the_optional_budget(monkeypatch):
+    """A user-configured 120 s interval at 48 kHz (11.5 MB) must not strand a partial buffer
+    below its own threshold once the 8 MB optional budget is exhausted (Codex review, #25541)."""
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPS', MagicMock())
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPPED_BYTES', MagicMock())
+    rate, seconds = 48000, 120
+    threshold = pusher_protocol.optional_flush_bytes(rate, seconds)
+    assert threshold <= pusher_protocol.OPTIONAL_AUDIO_MAX_BYTES // 4 < rate * seconds * 2
+    budget = pusher_protocol.ByteBudget(pusher_protocol.OPTIONAL_AUDIO_MAX_BYTES)
+    queue, buffer, delivered = deque(maxlen=20), bytearray(), 0
+    for _ in range(300):  # 300 s of 1 s frames with a healthy consumer draining every frame
+        pusher_protocol.extend_optional(buffer, b'\0' * (rate * 2), 'audio_webhook_buffer', budget, queue)
+        if len(buffer) >= threshold:
+            pusher_protocol.append_optional(
+                queue, {'type': 'webhook', 'sample_rate': rate, 'data': bytes(buffer)}, 'audio_bytes', budget
+            )
+            buffer = bytearray()
+        while queue:
+            budget.release(len(queue.popleft()['data']))
+            delivered += 1
+    assert delivered > 0 and budget.used == len(buffer)
+
+
+def test_short_intervals_keep_their_configured_flush_size():
+    assert pusher_protocol.optional_flush_bytes(16000, 5) == 16000 * 5 * 2
+    assert pusher_protocol.optional_flush_bytes(16000, 4) == 16000 * 4 * 2

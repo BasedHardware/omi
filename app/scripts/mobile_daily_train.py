@@ -909,6 +909,7 @@ def run_ios(*, dry_run: bool, release_date: str, advance_only: bool = False, asc
         promote.submit_ios(build, notes, locales=locales, release_type=RELEASE_TYPE, phased=PHASED_RELEASE)
     except promote.PromotionError as exc:
         raise TrainError(str(exc)) from exc
+    promote.record_review_submission("ios", candidate.version)
     version_id = ios_build_version_id(asc, candidate.build_id)
     if version_id is None:
         raise TrainError("submission returned but the build is not attached to an App Store version")
@@ -955,7 +956,7 @@ def play_live_version(production: object) -> str | None:
         if release.get("status") not in ACTIVE_PLAY_STATUSES:
             continue
         name = release.get("name")
-        version = promote.production_release_version(name) if isinstance(name, str) else None
+        version = promote.production_release_version(name, release.get("versionCodes")) if isinstance(name, str) else None
         if version:
             versions.append(version)
     return newest_version(versions)
@@ -970,7 +971,7 @@ def pick_play_candidate(sources: dict[str, object], production: object) -> PlayC
             if release.get("status") not in ACTIVE_PLAY_STATUSES:
                 continue
             name = release.get("name")
-            version = promote.production_release_version(name) if isinstance(name, str) else None
+            version = promote.production_release_version(name, release.get("versionCodes")) if isinstance(name, str) else None
             if version is None:
                 continue
             if live is not None and promote.version_parts(version) <= promote.version_parts(live):
@@ -1124,7 +1125,11 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
         # hop the ladder one step per gate-green day, and never fall through
         # to the candidate path while the track is mid-rollout.
         staged_name = staged.get("name")
-        staged_version = promote.production_release_version(staged_name) if isinstance(staged_name, str) else None
+        staged_version = (
+            promote.production_release_version(staged_name, staged.get("versionCodes"))
+            if isinstance(staged_name, str)
+            else None
+        )
         codes = [str(code) for code in staged.get("versionCodes", [])]
         current = staged.get("userFraction")
         current = float(current) if isinstance(current, (int, float)) else None
@@ -1217,6 +1222,7 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
                         release_name=_staged_name_with_receipt(candidate.version),
                         retained_releases=retained,
                     )
+                    promote.record_review_submission("android", candidate.version, candidate.version_code)
                 except promote.PromotionError as exc:
                     raise TrainError(str(exc)) from exc
                 log(
@@ -1434,6 +1440,7 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
                 user_fraction=STAGED_ROLLOUT_FRACTION,
                 release_name=_staged_name_with_receipt(candidate.version),
             )
+            promote.record_review_submission("android", candidate.version, candidate.version_code)
         else:
             promote.submit_android(client, edit_id, candidate.version, candidate.version_code, notes, status="draft")
     except promote.PromotionError as exc:

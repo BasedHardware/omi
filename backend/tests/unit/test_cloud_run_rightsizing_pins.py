@@ -6,9 +6,8 @@ integration 4Gi/cpu 2/concurrency 80. Seven-day application-memory histogram
 p95/max upper bounds (GiB): backend 1.312/1.710, sync 1.007/3.786,
 backfill 0.882/1.149, integration 1.312/2.229. Sync and integration stay put.
 
-The deploy flags and staging shape must agree on backend 4Gi and backfill
-2Gi/concurrency 6 (concurrency 10 unqualified, Luna P2 on #24596). Rollback restores 8Gi and 3Gi;
-service min/max ownership remains with the existing ops/Redis guard contract.
+Backend and sync memory are owned by the environment's ops file. Backfill still
+uses 2Gi/concurrency 6 (concurrency 10 unqualified, Luna P2 on #24596).
 """
 
 from __future__ import annotations
@@ -16,17 +15,24 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import yaml
+
 from scripts.ops import drift_check as dc
 
 RIGHTSIZED_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 REPO_ROOT = Path(__file__).resolve().parents[3]
+# Named literally so an ops-file edit selects this test through the data-path import graph
+# (dc.source_model reads them by computed path, which the selector cannot see).
+OPS_FILES = ('backend/deploy/ops/prod.yaml', 'backend/deploy/ops/staging.yaml')
+
+
+def test_source_model_reads_the_named_ops_files():
+    for ops_file in OPS_FILES:
+        assert (REPO_ROOT / ops_file).is_file(), ops_file
 
 
 def test_workflow_backend_sync_memory_fallback_is_the_costcut_value():
-    # vars.BACKEND_SYNC_MEMORY is unset in both GitHub environments, so the fallback
-    # literal is what a prod deploy passes. Pinned as text because the drift model
-    # only sees the expression through _WORKFLOW_ENV_SCOPED: an edit that breaks the
-    # expression shape would otherwise pass silently with stale model values.
+    # The composite action now honors this input only for dev.
     text = (REPO_ROOT / '.github' / 'workflows' / 'gcp_backend.yml').read_text(encoding='utf-8')
     assert re.search(
         r"backend_sync_memory: \$\{\{ vars\.BACKEND_SYNC_MEMORY \|\| "
@@ -44,13 +50,14 @@ def test_deploy_action_accepts_the_5gi_sync_trial_value():
 
 def test_prod_deploy_flags_match_the_margin20_target():
     model = dc.source_model('prod')
+    ops = yaml.safe_load((REPO_ROOT / OPS_FILES[0]).read_text())['cloud_run']
 
     backend = model['backend'].scale
-    assert (backend['memory'], backend['cpu'], backend['concurrency']) == ('4Gi', '2', 20)
+    assert (backend['memory'], backend['cpu'], backend['concurrency']) == (ops['backend']['memory'], '2', 20)
     assert (backend['revision_min'], backend['revision_max']) == (3, 100)
 
     sync = model['backend-sync'].scale
-    assert (sync['memory'], sync['cpu']) == ('6Gi', '2')
+    assert (sync['memory'], sync['cpu']) == (ops['backend-sync']['memory'], '2')
     # max-instances is live-resolved by design (Resolve live sync maxScale); the cap
     # itself is pinned in the ops file. The deploy never touches sync min.
     assert sync['revision_min'] is None and sync['revision_max'] is None
@@ -66,7 +73,8 @@ def test_prod_deploy_flags_match_the_margin20_target():
     integration = model['backend-integration'].scale
     # 2026-11-01 packing (#24308): LLM-bound enrichment runs 80 per instance with 64 postprocess threads.
     assert (integration['memory'], integration['cpu'], integration['concurrency']) == ('4Gi', '2', 80)
-    assert (integration['revision_min'], integration['revision_max']) == (3, 35)
+    # max-instances is live-resolved like sync (Resolve live integration maxScale, prod default 35).
+    assert (integration['revision_min'], integration['revision_max']) == (3, None)
 
 
 def test_ops_train_values_match_the_live_right_sizing():
@@ -74,7 +82,7 @@ def test_ops_train_values_match_the_live_right_sizing():
 
     sync = model['backend-sync'].ops_scale
     # Legacy-dark (2026-11-04, David e53a35) dropped the warm floor 5 -> 0.
-    assert (sync['service_min'], sync['service_max']) == (0, 40)
+    assert (sync['service_min'], sync['service_max']) == (0, 50)
 
     # redis_guard owns the backfill cap between its bounds (live 16).
     backfill = model['backend-sync-backfill'].ops_scale
@@ -93,6 +101,11 @@ def test_ops_train_values_match_the_live_right_sizing():
 def test_staging_shape_keeps_parity_with_prod():
     prod = dc.source_model('prod')
     staging = dc.source_model('staging')
+    ops = yaml.safe_load((REPO_ROOT / OPS_FILES[1]).read_text())['cloud_run']
     for name in RIGHTSIZED_SERVICES:
-        findings = dc._scale_vs_prod(name, staging[name].scale, prod[name].scale)
+        expected = dict(prod[name].scale)
+        # A staging trial or production rollout can change memory independently.
+        if memory := ops[f'{name}-staging'].get('memory'):
+            expected['memory'] = memory
+        findings = dc._scale_vs_prod(name, staging[name].scale, expected)
         assert not findings, f'{name}: {[f.line() for f in findings]}'

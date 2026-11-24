@@ -1,5 +1,7 @@
 """Pure baseline notes contract; shared unchanged by production and eval."""
 
+from utils.summary_quality import NOTE_QUALITY_RULES
+
 SHARED_CONVERSATION_PREAMBLE = 'You are analyzing one Omi conversation for the account owner.\nTreat the supplied transcript and capture metadata as the sole source of truth. Preserve attribution and uncertainty.\nThe conversation context below is shared by several independent tasks. Do not perform a task until you read the\ntask-specific instructions that follow it.'
 
 # Notes-only instructions travel after the shared cacheable prefix. Keep the
@@ -50,6 +52,8 @@ def conversation_notes_static_instructions(
     return f'''{SHARED_CONVERSATION_PREAMBLE}
 
 Create the canonical conversation note and return JSON matching the schema below.
+
+{NOTE_QUALITY_RULES}
 
 NOTE BODY — READABLE, GROUNDED RECAP
 {note_body_opening}
@@ -135,6 +139,10 @@ EVENTS AND CONSISTENCY
 
 
 def conversation_note_density(word_count: int, rich: bool) -> str:
+    from utils.llm.notes_lengths import length_guide, scaled_length_range
+
+    if scaled_length_range(word_count):
+        return length_guide(word_count)
     if word_count < 500:
         return f'Use 1-2 sections; target ~{95 if rich else 80} words across the entire note.'
     if word_count < 2500:

@@ -37,7 +37,6 @@ pytestmark = pytest.mark.integration
 T0 = 1_800_000_000.0
 SEGMENT = 'retained-record'
 CAPTURE = 'capture'
-EXPIRY_FIELDS = {'state', 'available_at', 'merge_pending', 'dead_letter_reason', 'record_dead_letter_at'}
 
 
 class BooleanEnqueueClockUnsupported(AssertionError):
@@ -50,6 +49,8 @@ def h(store_backend, monkeypatch):  # noqa: F811
     store_backend.customer.add_conversation(owner, CAPTURE)
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
     monkeypatch.setenv('RECORD_DRAIN_BARRIER_BACKOFF', 'on')
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_FRESH_ENABLED', 'true')
+    monkeypatch.setenv('RECORD_DRAIN_LEASE_SECONDS', '900')
     monkeypatch.setenv('RECORD_DRAIN_BATCH', '10')
     monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '1')
     # Never freeze process-wide time: Firestore/gRPC still need real deadlines.
@@ -90,10 +91,9 @@ def write(h, **fields):
     return read(h)  # Includes the actual store-assigned privacy generation.
 
 
-def assert_preserved(before, after, *, except_fields):
-    assert {k: v for k, v in after.items() if k not in except_fields} == {
-        k: v for k, v in before.items() if k not in except_fields
-    }, 'settlement must retain the entire custody/policy obligation, including unknown fields'
+def retry_fields(claimed_at, delay):
+    retry_at = claimed_at + delay
+    return {'record_intake_claimed_at': claimed_at, 'record_intake_retry_at': retry_at, 'available_at': retry_at}
 
 
 @pytest.mark.asyncio
@@ -105,7 +105,7 @@ async def test_pl487_first_refusal_grants_a_full_window_and_restarts_do_not_rene
     deadline = T0 + RECORD_DEAD_LETTER_SECONDS
     assert first['record_dead_letter_deadline_at'] == deadline
     assert first['state'] == 'record_pending' and first['available_at'] == T0 + 3600
-    assert_preserved(before, first, except_fields={'available_at', 'record_dead_letter_deadline_at'})
+    assert first == {**before, **retry_fields(T0, 3600), 'record_dead_letter_deadline_at': deadline}
     # The production function has no persistent in-process coordinator. Advance
     # only its clock, then call anew to model a fresh worker reading durable debt.
     h.clock[0] = first['available_at']
@@ -114,7 +114,7 @@ async def test_pl487_first_refusal_grants_a_full_window_and_restarts_do_not_rene
     assert again['record_dead_letter_deadline_at'] == deadline
     assert again['state'] == 'record_pending'
     metrics.record_dead_letter.inc.assert_not_called()
-    assert_preserved(first, again, except_fields={'available_at'})
+    assert again == {**first, **retry_fields(h.clock[0], 3600)}
 
 
 @pytest.mark.asyncio
@@ -129,17 +129,28 @@ async def test_pl487_deadline_boundary_requeues_once_without_releasing_custody(h
     dead = read(h)
     assert dead['state'] == 'dead' and dead['dead_letter_reason'] == 'record_barrier_aged'
     assert dead['record_dead_letter_at'] == deadline and dead['merge_pending'] is False
-    assert_preserved(before, dead, except_fields=EXPIRY_FIELDS)
+    assert dead == {
+        **before,
+        **retry_fields(deadline, 3600),
+        'state': 'dead',
+        'dead_letter_reason': 'record_barrier_aged',
+        'record_dead_letter_at': deadline,
+        'merge_pending': False,
+    }
     metrics.record_dead_letter.inc.assert_called_once_with()
     assert SEGMENT not in h.store.due('record_pending', deadline + 86400, 10)
     # Requeue remains usable when expiry is disabled, and cannot be replayed.
     assert requeue_record(h.store, SEGMENT, deadline + 1)
     queued = read(h)
     assert queued['state'] == 'record_pending' and queued['available_at'] == deadline + 1
-    assert all(
-        queued[k] is None for k in ('dead_letter_reason', 'record_dead_letter_at', 'record_dead_letter_deadline_at')
-    )
-    assert_preserved(before, queued, except_fields=EXPIRY_FIELDS | {'record_dead_letter_deadline_at'})
+    assert queued == {
+        **dead,
+        'state': 'record_pending',
+        'available_at': deadline + 1,
+        'dead_letter_reason': None,
+        'record_dead_letter_at': None,
+        'record_dead_letter_deadline_at': None,
+    }
     assert not requeue_record(h.store, SEGMENT, deadline + 2)
     assert read(h) == queued
 
@@ -151,7 +162,7 @@ async def test_pl487_malformed_deadlines_cannot_authorize_expiry(h, deadline):
     metrics = Mock()
     await live.drain_recordings(h.store, metrics=metrics)
     after = read(h)
-    assert after == {**before, 'available_at': T0 + 3600}
+    assert after == {**before, **retry_fields(T0, 3600)}
     metrics.record_dead_letter.inc.assert_not_called()
 
 
@@ -161,7 +172,7 @@ async def test_pl487_kill_switch_stops_stamps_and_expiry_but_not_requeue(h, monk
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
     before = write(h, **({} if deadline is None else {'record_dead_letter_deadline_at': deadline}))
     await live.drain_recordings(h.store)
-    assert read(h) == {**before, 'available_at': T0 + 3600}
+    assert read(h) == {**before, 'record_intake_claimed_at': T0, 'available_at': T0 + 3600}
     write(h, state='dead', dead_letter_reason='record_barrier_aged', record_dead_letter_deadline_at=T0 - 1)
     assert requeue_record(h.store, SEGMENT, T0 + 1)
     assert read(h)['state'] == 'record_pending'
@@ -177,7 +188,7 @@ async def test_pl487_other_failures_keep_their_own_retry_and_never_expire(h, mon
 
     monkeypatch.setattr(live, 'admit_recording', refuse)
     await live.drain_recordings(h.store)
-    assert read(h) == {**before, 'available_at': T0 + 60}
+    assert read(h) == {**before, **retry_fields(T0, 60)}
 
 
 @pytest.mark.asyncio
@@ -214,7 +225,13 @@ async def test_pl487_stale_worker_cannot_expire_a_new_owner_or_cross_privacy(h, 
     assert (
         after == observed[0]
     ), 'a stale refusal cannot overwrite the newer selection or cross the commit privacy fence'
-    assert_preserved(before, after, except_fields={'available_at', 'state'})
+    expected_available = {'successor-lease': T0 + 3600, 'admitted': T0, 'privacy': T0 + 900}
+    assert after == {
+        **before,
+        'state': 'ready' if race == 'admitted' else 'record_pending',
+        'available_at': expected_available[race],
+        'record_intake_claimed_at': T0,
+    }
     metrics.record_dead_letter.inc.assert_not_called()
 
 
@@ -270,7 +287,11 @@ async def test_pl482_barrier_retry_uses_durable_age_and_returns_at_the_bounded_d
     waiting = read(h)
     assert waiting['available_at'] == T0 + delay
     assert waiting['record_dead_letter_deadline_at'] == T0 + RECORD_DEAD_LETTER_SECONDS
-    assert_preserved(before, waiting, except_fields={'available_at', 'record_dead_letter_deadline_at'})
+    assert waiting == {
+        **before,
+        **retry_fields(T0, delay),
+        'record_dead_letter_deadline_at': T0 + RECORD_DEAD_LETTER_SECONDS,
+    }
     assert SEGMENT not in h.store.due('record_pending', T0 + delay - 0.01, 10)
     assert SEGMENT in h.store.due('record_pending', T0 + delay, 10)
     admissions = []
@@ -289,7 +310,9 @@ async def test_pl482_barrier_retry_uses_durable_age_and_returns_at_the_bounded_d
     await live.drain_recordings(h.store)
     after = read(h)
     assert admissions == [SEGMENT] and after['state'] == 'ready'
-    assert_preserved(waiting, after, except_fields={'available_at', 'state'})
+    expected = {**waiting, 'record_intake_claimed_at': T0 + delay, 'available_at': T0 + delay, 'state': 'ready'}
+    del expected['record_intake_retry_at']  # A fresh claim invalidates the previous retry marker.
+    assert after == expected
 
 
 @pytest.mark.asyncio
@@ -300,4 +323,8 @@ async def test_pl482_backoff_kill_switch_restores_flat_retry_without_erasing_deb
     after = read(h)
     assert after['available_at'] == T0 + 60
     assert after['record_dead_letter_deadline_at'] == T0 + RECORD_DEAD_LETTER_SECONDS
-    assert_preserved(before, after, except_fields={'available_at', 'record_dead_letter_deadline_at'})
+    assert after == {
+        **before,
+        **retry_fields(T0, 60),
+        'record_dead_letter_deadline_at': T0 + RECORD_DEAD_LETTER_SECONDS,
+    }

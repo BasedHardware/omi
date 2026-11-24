@@ -48,6 +48,26 @@ def fresh_max_age_seconds() -> float:
         return 1800
 
 
+FRESH_DEMOTE_ENV = 'ENRICHMENT_FRESH_DEMOTE_AFTER_MIN'
+
+
+def fresh_demote_after_seconds() -> float:
+    """Age after which a fresh-queue first summary is moved to the primary queue; 0 disables.
+
+    Defaults to the promotion window so a demoted row can never qualify for promotion again.
+    Kill switch: ENRICHMENT_FRESH_DEMOTE_AFTER_MIN=0.
+    """
+    default = fresh_max_age_seconds()
+    raw = os.getenv(FRESH_DEMOTE_ENV, '').strip()
+    if not raw:
+        return default
+    try:
+        seconds = float(raw) * 60
+    except ValueError:
+        return default
+    return seconds if math.isfinite(seconds) and seconds >= 0 else default
+
+
 def recently_finished(value: object, *, now: float) -> bool:
     """Unknown/future metadata cannot consume the reserved queue; zero disables priority."""
     try:

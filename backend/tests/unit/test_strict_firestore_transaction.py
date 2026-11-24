@@ -69,6 +69,21 @@ def test_named_opt_out_allows_reads_after_writes():
     assert record.get(transaction=transaction).to_dict() == {'value': 'after'}
 
 
+def test_app_review_config_merge_stores_the_updated_fields_and_preserves_other_fields():
+    path = ('app_review_config', 'ios')
+    database = StrictFirestore({path: {'hidden_versions': ['2.1.0'], 'other': 'kept'}})
+    reference = database.collection('app_review_config').document('ios')
+    transaction = database.transaction()
+
+    transaction.set(reference, {'hidden_versions': ['3.0.0'], 'reviewer_uids': ['reviewer']}, merge=True)
+
+    assert database.rows[path] == {
+        'hidden_versions': ['3.0.0'],
+        'reviewer_uids': ['reviewer'],
+        'other': 'kept',
+    }
+
+
 @pytest.mark.parametrize('write_method', ['set', 'update', 'delete'])
 def test_transaction_rejects_writes_to_a_different_store(write_method):
     database = StrictFirestore({('users', 'user-1', 'records', 'record'): {'value': 'before'}})

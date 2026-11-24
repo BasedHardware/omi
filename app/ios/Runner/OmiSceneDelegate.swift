@@ -60,6 +60,7 @@ final class OmiSceneDelegate: FlutterSceneDelegate {
     }
 
     override func sceneDidEnterBackground(_ scene: UIScene) {
+        OmiBluetoothLaunchDiagnostics.record("background")
         super.sceneDidEnterBackground(scene)
         OmiBleManager.shared.markBackgroundTelemetryStart()
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: "com.pravera.flutter_foreground_task.refresh")
@@ -71,6 +72,7 @@ final class OmiSceneDelegate: FlutterSceneDelegate {
     }
 
     override func sceneWillEnterForeground(_ scene: UIScene) {
+        OmiBluetoothLaunchDiagnostics.record("foreground")
         super.sceneWillEnterForeground(scene)
         OmiBleManager.shared.reconnectStalePeripherals()
     }

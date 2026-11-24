@@ -96,7 +96,7 @@ LOCK_CONTRACTS = {
         "deploy-cloud-run-day3-reengagement-email-job-development"
     ),
     "gcp_finops_unit_cost_job.yml": LockContract(
-        "deploy-cloud-run-finops-unit-cost-job-${{ github.event.inputs.environment }}"
+        "${{ inputs.operation == 'margin_scheduler' && 'margin-scheduler-prod' || format('deploy-cloud-run-finops-unit-cost-job-{0}', github.event.inputs.environment) }}"
     ),
     "gcp_models.yml": LockContract("deploy-gke-vad-${{ github.event.inputs.environment }}"),
     "gcp_nllb_translation.yml": LockContract("deploy-gke-nllb-translation-${{ github.event.inputs.environment }}"),
@@ -330,7 +330,6 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
     promotion_index = step_index("Shift Cloud Run traffic to validated revisions")
     serving_vector_index = step_index("Verify serving backend release vector")
     production_smoke_index = step_index("Smoke promoted production serving API")
-    development_smoke_index = step_index("Smoke What Matters Now datastore query")
     restore_steps = [
         (index, "\n".join(step))
         for index, step in enumerate(steps)
@@ -355,10 +354,6 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
         "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in step for step in profile_restore
     ):
         errors.append(f"{name}: traffic restoration must include failed production serving smoke")
-    if name == "gcp_backend.yml" and not any(
-        "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'" in step for step in profile_restore
-    ):
-        errors.append(f"{name}: traffic restoration must include failed development serving smoke")
     if name == "gcp_backend_auto_dev.yml" and any(
         "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in step for step in profile_restore
     ):
@@ -406,12 +401,8 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
     if name == "gcp_backend.yml":
         if production_smoke_index <= serving_vector_index:
             errors.append(f"{name}: production serving smoke must follow serving release-vector verification")
-        if development_smoke_index <= serving_vector_index:
-            errors.append(f"{name}: development serving smoke must follow serving release-vector verification")
         if restore_index <= production_smoke_index:
             errors.append(f"{name}: traffic snapshot restoration must follow production serving smoke")
-        if restore_index <= development_smoke_index:
-            errors.append(f"{name}: traffic snapshot restoration must follow development serving smoke")
 
     snapshot_step = "\n".join(steps[snapshot_index]) if snapshot_index >= 0 else ""
     if not any(

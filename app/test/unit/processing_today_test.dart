@@ -16,6 +16,7 @@ void main() {
           enabled: episodes.isNotEmpty,
           groupAwaitingTranscript: true,
           processingTodayOnly: todayOnly,
+          singleProcessingRow: todayOnly,
           activityOnlyFailures: todayOnly,
           now: midnight);
 
@@ -76,7 +77,11 @@ void main() {
                 pending: [], conversations: [ready, second], episodes: [waitingEpisode], now: midnight)
             .map((c) => c.id)
             .toSet(),
-        {'member', 'second'});
+        isEmpty,
+        reason: 'READY own notes no longer wait in past processing for episode compose');
+    final ownNotes = home([ready, second], episodes: [waitingEpisode]);
+    expect(ownNotes.map((r) => r.conversation.id).toSet(), {'member', 'second'});
+    expect(ownNotes.every((r) => r.isTemporaryMember && !r.isProcessing), isTrue);
     final composed = Episode(
         id: 'e',
         live: false,

@@ -1,8 +1,8 @@
-"""The checked-in prod route table en-overflow-1104b (lead2 863cd6/fb423f, David 49b7e4: English-only overflow).
+"""The checked-in prod route table en-overflow-1116 (lead2 863cd6/fb423f, David 49b7e4: English-only overflow).
 
 GPU first everywhere Parakeet serves; fresh English overflows to Modulate past the GPU SLO; other
 GPU-capable languages stay on GPU; languages Parakeet cannot serve start on Modulate. Modulate carries a
-runaway-only daily cap (3000 audio-h) and its $0.06 list price; Soniox stays failover-only (cap 1000) for
+daily cap (5000 audio-h, raised from 3000 by David 2026-11-16 for RECENT overflow) and its $0.06 list price; Soniox stays failover-only (cap 1000) for
 English and for languages Parakeet cannot serve, exactly as prod-gpu-first-v1 had it. Runs the real parser and the real
 selection over the file the runtime overlay serves as BATCH_VENDOR_ROUTE_TABLE. Hermetic.
 """
@@ -58,7 +58,7 @@ def _decide(table, language, *, down=(), saturated=False):
 
 
 def test_the_file_is_the_standing_english_overflow_table(table):
-    assert table.table_version == 'en-overflow-1104b'
+    assert table.table_version == 'en-overflow-1116'
     assert table.selection == 'ordered'
     assert table.gpu_floor_percent == 0.0
     assert table.routes['soniox'].failover_only and not table.routes['modulate'].failover_only
@@ -69,11 +69,12 @@ def test_the_file_is_the_standing_english_overflow_table(table):
 
 def test_modulate_spend_is_bounded_per_day_and_priced_at_list(table):
     # lead2 2026-11-04 (Luna P1 on #24637): a runaway-only bound. gpu_unsupported needs ~900
-    # audio-h/day, so 3000 leaves ~2100 audio-h/day of overflow before anything holds (~$180/day
+    # audio-h/day; David 2026-11-16 raised 3000 -> 5000 when RECENT English joined overflow during
+    # the L4 stockout, leaving ~4000 audio-h/day of overflow before anything holds (~$300/day
     # worst case). A trip holds units with their audio; it never drops them. $ is table-driven at
     # the $0.06/audio-h list rate; the $50/day overflow-spend alert is the episode bound.
     modulate = table.routes['modulate']
-    assert modulate.daily_audio_hours_cap == 3000.0
+    assert modulate.daily_audio_hours_cap == 5000.0
     assert modulate.price_usd_per_audio_hour == 0.06
     assert modulate.monthly_budget_usd is None
     assert table.routes['gpu'].daily_audio_hours_cap is None

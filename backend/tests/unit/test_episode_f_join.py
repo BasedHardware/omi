@@ -1012,7 +1012,6 @@ def test_synced_f_read_and_jev_budget_includes_close_and_all_attach_retries(
     monkeypatch.setenv('EPISODE_ATTACH_OWNER_REUSE_ENABLED', owner_reuse)
     monkeypatch.setenv('EPISODE_ATTACH_OPTIMIZATIONS_ENABLED', optimizations)
     monkeypatch.setattr(service.sync_attach, 'hidden_conversation', lambda *a, **kw: False)
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'serve')  # Include a cold authority read, not a cached shadow.
     monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: False)
     monkeypatch.setattr(service.episode_groups, 'canonical_row', lambda *a, **kw: None)
     monkeypatch.setattr(service.episode_groups, 'join_duplicates', lambda *a, **kw: None)

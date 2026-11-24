@@ -111,15 +111,21 @@ class _DeleteAccountState extends State<DeleteAccount> {
           PlatformManager.instance.analytics.deleteAccountAbandoned(step: 1, reason: _flow.reason);
         }
       },
-      body: ListView.separated(
+      body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
-        itemCount: _reasons.length,
-        separatorBuilder: (_, __) => const SizedBox(height: OmiSpacing.xs),
-        itemBuilder: (_, i) => LeaveFlowReasonTile(
-          icon: _reasons[i].icon,
-          label: _label(_reasons[i].key),
-          selected: reason == _reasons[i].key,
-          onTap: () => setState(() => _flow.reason = _reasons[i].key),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (i, r) in _reasons.indexed) ...[
+              if (i > 0) const SizedBox(height: OmiSpacing.xs),
+              LeaveFlowReasonTile(
+                icon: r.icon,
+                label: _label(r.key),
+                selected: reason == r.key,
+                onTap: () => setState(() => _flow.reason = r.key),
+              ),
+            ],
+          ],
         ),
       ),
       actions: OmiButton(
@@ -185,38 +191,36 @@ class _DeletePauseInsteadStepState extends State<_DeletePauseInsteadStep> {
       stepCount: flow.stepCount,
       title: context.l10n.deletePauseInsteadTitle,
       subtitle: context.l10n.deletePauseInsteadSubtitle,
-      body: ListView(
+      body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(OmiSpacing.md),
-            decoration: BoxDecoration(
-              color: OmiColors.surface1,
-              borderRadius: OmiRadius.mdAll,
-              border: Border.all(color: OmiColors.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  context.l10n.deletePauseRecordingLine,
-                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.5),
-                ),
-                const SizedBox(height: OmiSpacing.sm),
-                Text(
-                  context.l10n.deletePauseKeepLine,
-                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.5),
-                ),
-                const SizedBox(height: OmiSpacing.sm),
-                Text(
-                  context.l10n.deletePauseReturnLine,
-                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.5),
-                ),
-              ],
-            ),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(OmiSpacing.md),
+          decoration: BoxDecoration(
+            color: OmiColors.surface1,
+            borderRadius: OmiRadius.mdAll,
+            border: Border.all(color: OmiColors.border),
           ),
-        ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                context.l10n.deletePauseRecordingLine,
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.5),
+              ),
+              const SizedBox(height: OmiSpacing.sm),
+              Text(
+                context.l10n.deletePauseKeepLine,
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.5),
+              ),
+              const SizedBox(height: OmiSpacing.sm),
+              Text(
+                context.l10n.deletePauseReturnLine,
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.5),
+              ),
+            ],
+          ),
+        ),
       ),
       actions: Column(
         mainAxisSize: MainAxisSize.min,
@@ -255,15 +259,10 @@ class _DeleteFeedbackStep extends StatelessWidget {
       stepCount: flow.stepCount,
       title: context.l10n.deleteFlowFeedbackTitle,
       subtitle: context.l10n.deleteFlowFeedbackSubtitle,
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: SingleChildScrollView(
-          child: LeaveFlowTextField(
-            controller: flow.details,
-            maxLength: 500,
-            hint: context.l10n.deleteFlowFeedbackHint,
-          ),
-        ),
+      body: LeaveFlowTextField(
+        controller: flow.details,
+        maxLength: 500,
+        hint: context.l10n.deleteFlowFeedbackHint,
       ),
       actions: Column(
         mainAxisSize: MainAxisSize.min,
@@ -362,59 +361,62 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
           _pending?.hasGrace != true ? context.l10n.deleteFlowConfirmSubtitle : context.l10n.deleteConfirmGraceSubtitle,
       canPop: !_isDeleting,
       // Keep typed confirmation with the buttons, above the keyboard.
-      body: ListView(
+      body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
-        children: [
-          if (_loadingPending) const Center(child: OmiSpinner()),
-          if (_pendingFailed)
-            OmiButton.secondary(
-              label: context.l10n.retry,
-              onPressed: () {
-                setState(() {
-                  _pendingFailed = false;
-                  _loadingPending = true;
-                });
-                _loadPending();
-              },
-            ),
-          if (_pending != null && (_pending!.hasGrace || _pending!.pendingCount > 0)) ...[
-            _DeletionPendingNotice(data: _pending!),
-            const SizedBox(height: OmiSpacing.md),
-          ],
-          OmiSettingsGroup(
-            children: [
-              OmiSettingsRow(
-                leading: const FaIcon(FontAwesomeIcons.solidCommentDots),
-                title: _pending?.hasGrace == true
-                    ? context.l10n.deleteDataErasedAfterDays(_pending!.gracePeriodDays)
-                    : context.l10n.allDataErased,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_loadingPending) const Center(child: OmiSpinner()),
+            if (_pendingFailed)
+              OmiButton.secondary(
+                label: context.l10n.retry,
+                onPressed: () {
+                  setState(() {
+                    _pendingFailed = false;
+                    _loadingPending = true;
+                  });
+                  _loadPending();
+                },
               ),
-              OmiSettingsRow(
-                  leading: const FaIcon(FontAwesomeIcons.puzzlePiece),
-                  title: context.l10n.deleteAppsDisconnectImmediately),
-              OmiSettingsRow(
-                leading: const FaIcon(FontAwesomeIcons.creditCard),
-                title: context.l10n.deleteSubscriptionImmediately,
-              ),
+            if (_pending != null && (_pending!.hasGrace || _pending!.pendingCount > 0)) ...[
+              _DeletionPendingNotice(data: _pending!),
+              const SizedBox(height: OmiSpacing.md),
             ],
-          ),
-          const SizedBox(height: OmiSpacing.md),
-          OmiSettingsGroup(
-            children: [
-              ValueListenableBuilder<bool>(
-                valueListenable: DataExport.exportInProgress,
-                builder: (context, exporting, _) => OmiSettingsRow(
-                  key: const Key('delete_account_export_row'),
-                  leading: const FaIcon(FontAwesomeIcons.fileArrowDown),
-                  title: context.l10n.exportAllData,
-                  trailing: exporting ? const OmiSpinner(size: OmiSpinnerSize.small) : null,
-                  showChevron: !exporting,
-                  onTap: _isDeleting || exporting ? null : () => DataExport.run(context),
+            OmiSettingsGroup(
+              children: [
+                OmiSettingsRow(
+                  leading: const FaIcon(FontAwesomeIcons.solidCommentDots),
+                  title: _pending?.hasGrace == true
+                      ? context.l10n.deleteDataErasedAfterDays(_pending!.gracePeriodDays)
+                      : context.l10n.allDataErased,
                 ),
-              ),
-            ],
-          ),
-        ],
+                OmiSettingsRow(
+                    leading: const FaIcon(FontAwesomeIcons.puzzlePiece),
+                    title: context.l10n.deleteAppsDisconnectImmediately),
+                OmiSettingsRow(
+                  leading: const FaIcon(FontAwesomeIcons.creditCard),
+                  title: context.l10n.deleteSubscriptionImmediately,
+                ),
+              ],
+            ),
+            const SizedBox(height: OmiSpacing.md),
+            OmiSettingsGroup(
+              children: [
+                ValueListenableBuilder<bool>(
+                  valueListenable: DataExport.exportInProgress,
+                  builder: (context, exporting, _) => OmiSettingsRow(
+                    key: const Key('delete_account_export_row'),
+                    leading: const FaIcon(FontAwesomeIcons.fileArrowDown),
+                    title: context.l10n.exportAllData,
+                    trailing: exporting ? const OmiSpinner(size: OmiSpinnerSize.small) : null,
+                    showChevron: !exporting,
+                    onTap: _isDeleting || exporting ? null : () => DataExport.run(context),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
       actions: ValueListenableBuilder<TextEditingValue>(
         valueListenable: _flow.confirm,

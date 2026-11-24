@@ -209,15 +209,25 @@ struct DecodedValue: Codable {
 }
 func decodeDiagnostics(_ data: Data) -> DecodedValue {
     let b = Array(data)
-    guard b.count == 25, b[0] == 1, b[12] == 0 else {
+    guard b.count >= 25, b[0] == 1, b[12] == 0 else {
         return DecodedValue(rawHex: hex(data), layout: "unknown; raw bytes only")
     }
-    return DecodedValue(rawHex: hex(data), layout: "diagnostics_v1", fields: [
+    var fields: [String: UInt32] = [
         "version": UInt32(b[0]), "reset_cause": littleEndian(b, 1, 4), "uptime_s": littleEndian(b, 5, 4),
         "battery_mv": littleEndian(b, 9, 2), "charging": UInt32(b[11]),
         "mic_overrun_count": littleEndian(b, 13, 4), "ble_tx_drop_count": littleEndian(b, 17, 4),
         "storage_error_count": littleEndian(b, 21, 4),
-    ])
+    ]
+    if b.count >= 38 {
+        for (key, offset) in [("conn_interval", 30), ("conn_latency", 32), ("conn_timeout", 34)] {
+            let value = littleEndian(b, offset, 2)
+            if value != 0xffff { fields[key] = value }
+        }
+        for (key, offset) in [("tx_phy", 36), ("rx_phy", 37)] {
+            if b[offset] != 0xff { fields[key] = UInt32(b[offset]) }
+        }
+    }
+    return DecodedValue(rawHex: hex(data), layout: "diagnostics_v1", fields: fields)
 }
 func decodeRecovery(_ data: Data) -> DecodedValue {
     DecodedValue(rawHex: hex(data), layout: data.count == 16 ? "recovery_v1; raw bytes" : "unknown; raw bytes only")

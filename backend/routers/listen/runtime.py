@@ -38,6 +38,8 @@ from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
 from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled, mobile_standard_batch_rollout_enabled
 from config.server_batch import owned as server_batch_owned
+from config import listen_reconnect
+from routers.listen.batch_close import resumable_after_drop
 from routers.listen.local_preview import renew_local_preview, restore_non_preview_path
 from utils.observability.fallback import record_fallback
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
@@ -68,7 +70,6 @@ from utils.observability.journeys import ClientJourneyAttempt
 from utils.observability.listen_close import CLOSE_FRAME_DRAIN_SECONDS, note_ws_close, record_listen_ws_close
 from utils.observability.listen_loop import ensure_loop_lag_probe
 from utils.observability.live_speaker_ordinals import LiveSpeakerOrdinalTracker, record_live_speaker_ordinals
-from utils.observability import soniox_idle_arm
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
     LiveSTTAttempt,
@@ -221,6 +222,7 @@ class ListenSessionRuntime:
         )
         self.state.shutdown_event = self.task_supervisor.shutdown_event
         self.request_conversation_processing: Optional[Callable[..., Awaitable[Any]]] = None
+        self.request_recording_close: Optional[Callable[..., Awaitable[Any]]] = None
         self.transcript_send: Optional[Callable[..., Any]] = None
         self.audio_bytes_send: Optional[Callable[..., Any]] = None
         self.send_speaker_sample_request: Optional[Callable[..., Awaitable[Any]]] = None
@@ -259,9 +261,7 @@ class ListenSessionRuntime:
         if not self.state.active:
             return False
         try:
-            await self.request.websocket.send_json(
-                event.model_dump(mode='json') if isinstance(event, CaptureCommittedEvent) else event.to_json()
-            )
+            await self.request.websocket.send_json(event.to_json())
             return True
         except WebSocketDisconnect:
             self.state.active = False
@@ -463,7 +463,6 @@ class ListenSessionRuntime:
             return
         try:
             outcome = self._session_transcript_outcome()
-            soniox_idle_arm.note_outcome(self, outcome)
             record_live_session_transcript_outcome(
                 outcome=outcome,
                 demand_cohort=host_cohort(self),
@@ -635,7 +634,6 @@ class ListenSessionRuntime:
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
         capture_demand_admission(self)
-        soniox_idle_arm.start_plan_pin(self, user_db.get_user_valid_subscription)
         demand_vendor_start = self._demand_cohort == 'admitted'
         window_kwargs: WindowSelection = {} if demand_vendor_start else window_selection_kwargs(self, request.uid)
         demand_kwargs: DemandSelection = {'exclude': frozenset({'parakeet'})} if demand_vendor_start else {}
@@ -1122,12 +1120,17 @@ class ListenSessionRuntime:
                 get_byok_keys=get_byok_keys,
                 on_conversation_processed=self.conversations.on_conversation_processed,
                 wait_for_event=wait_for_event,
+                finish_recording_audio=(
+                    getattr(self.receiver, 'finish_recording_audio', None) if self.private_cloud_sync_enabled else None
+                ),
             ),
         )
         self.pusher_close = session.close
+        self.pusher_audio_session = session
         self.transcript_send = session.transcript_send
         self.audio_bytes_send = session.audio_bytes_send if session.config.audio_bytes_enabled else None
         self.request_conversation_processing = session.request_conversation_processing
+        self.request_recording_close = session.request_recording_close
         self.send_speaker_sample_request = session.send_speaker_sample_request
         try:
             await session.connect()
@@ -1450,6 +1453,8 @@ class ListenSessionRuntime:
                 note_ws_close(self.state, 'server', self.state.close_code)
             except Exception:
                 pass
+        if not owner_persistence_blocked and hasattr(getattr(self, 'conversations', None), 'drain_rotations'):
+            await self.conversations.drain_rotations()  # per-row errors are contained; leftovers keep their quiet check
         conversation_id = self.state.current_conversation_id
         if conversation_id and not owner_persistence_blocked:
             try:
@@ -1464,9 +1469,10 @@ class ListenSessionRuntime:
                         conversation_id,
                         read_site=FirestoreReadSite.LISTEN_RUNTIME_TEARDOWN,
                     )
+                    quiet_armed = False
                     if conversation and conversation.get('source') in {'omi', 'phone'} and quiet_finalization.enabled():
                         try:
-                            await self.persistence.call(
+                            quiet_armed = await self.persistence.call(
                                 quiet_finalization.arm,
                                 self.request.uid,
                                 conversation_id,
@@ -1476,19 +1482,41 @@ class ListenSessionRuntime:
                         except Exception as error:
                             logger.error('Quiet disconnect check persistence failed type=%s', type(error).__name__)
                     finalization_reason = getattr(self.state, 'finalization_reason', None)
-                    if conversation and finalization_reason:
+                    batch_disconnect = 'legacy'
+                    if conversation and server_batch_owned(conversation):
+                        batch_disconnect = await self.conversations.disconnect_batch_producer(
+                            conversation_id, reason=finalization_reason
+                        )
+                    if conversation and finalization_reason and batch_disconnect != 'fenced':
                         await self.persistence.call(
                             conversations_db.update_conversation,
                             self.request.uid,
                             conversation_id,
                             {'external_data.conversation_finalization_reason': finalization_reason},
                         )
-                    if conversation and (
-                        server_batch_owned(conversation)
-                        or (
-                            self.state.close_code == 1000
-                            and getattr(conversation.get('source'), 'value', conversation.get('source')) == 'desktop'
-                            and (conversation.get('transcript_segments') or conversation.get('photos'))
+                    if batch_disconnect == 'held':
+                        await self.transcripts.flush_speaker_assignments(conversation_id)
+                    elif (
+                        batch_disconnect == 'legacy'
+                        and listen_reconnect.enabled()
+                        and await resumable_after_drop(self, conversation_id, conversation, quiet_owned=quiet_armed)
+                    ):
+                        # Holding a dropped capture open is part of the reconnect protocol. With the
+                        # protocol off nothing can end the hold (no producer to drain), so the row
+                        # never gets its close barrier and every reconnect rolls into a new empty
+                        # generation. Off means finalize on drop, as before the protocol shipped.
+                        await self.transcripts.flush_speaker_assignments(conversation_id)
+                    elif (
+                        conversation
+                        and batch_disconnect != 'fenced'
+                        and (
+                            server_batch_owned(conversation)
+                            or (
+                                self.state.close_code == 1000
+                                and getattr(conversation.get('source'), 'value', conversation.get('source'))
+                                == 'desktop'
+                                and (conversation.get('transcript_segments') or conversation.get('photos'))
+                            )
                         )
                     ):
                         await self.transcripts.flush_speaker_assignments(conversation_id)
@@ -1521,8 +1549,7 @@ class ListenSessionRuntime:
         finally:
             # After the transcript loop drained and before the matcher's maps clear (also when
             # cleanup failed): the ordinal ledger needs both the final segments and final naming.
-            speakers = record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
-            soniox_idle_arm.record_session(self, speakers)
+            record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
         self.receiver.clear()
         self.transcripts.clear()
         self.speakers.clear()
@@ -1538,7 +1565,6 @@ async def run_listen_session(request: ListenRequest) -> None:
         runtime = ListenSessionRuntime(request)
         await runtime.run()
     finally:
-        soniox_idle_arm.record_session(runtime, None)  # idempotent; covers exits that skip teardown
         if runtime is not None and runtime.state.first_audio_byte_timestamp is None:
             record_listen_no_audio_teardown(
                 source=request.source, platform=runtime.client_device_context.platform, state=runtime.state

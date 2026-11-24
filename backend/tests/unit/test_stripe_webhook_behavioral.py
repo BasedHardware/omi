@@ -59,6 +59,7 @@ def _get_build_subscription_fn():
         'record_fallback': lambda **kwargs: None,
         'logger': _MagicMock(),
         'sanitize': lambda value: value,
+        'prepaid_code_config': __import__('config.prepaid_code_redeem', fromlist=['is_prepaid_subscription']),
     }
     exec(compile(func_source, '<payment.py>', 'exec'), namespace)
     return namespace['_build_subscription_from_stripe_object'], namespace
@@ -166,12 +167,21 @@ class TestBuildSubscriptionFromStripeObject:
         future = int(time.time()) + 86_400 * 20
         sub = _make_stripe_sub(status='canceled', price_id='price_known')
         sub['current_period_end'] = future
-        result = self.fn(sub, grant_cancel_grace=True)
+        result = self.fn(sub, grant_cancel_grace=True, period_paid=True)
         assert result is not None
         assert result.plan == PlanType.unlimited
         assert result.status == SubscriptionStatus.active
         assert result.cancel_at_period_end is True
         assert result.current_period_end == future
+
+    def test_immediately_canceled_with_unpaid_period_downgrades_to_basic(self):
+        """A renewal that dunning or a void left unpaid must not re-grant the plan."""
+        sub = _make_stripe_sub(status='canceled', price_id='price_known')
+        sub['current_period_end'] = int(time.time()) + 86_400 * 300
+        result = self.fn(sub, grant_cancel_grace=True)
+        assert result is not None
+        assert result.plan == PlanType.basic
+        assert result.cancel_at_period_end is False
 
     def test_canceled_paid_through_keeps_basic_without_grant(self):
         """Schedule/checkout paths keep main's downgrade: no grant, no grace."""
@@ -188,7 +198,7 @@ class TestBuildSubscriptionFromStripeObject:
         future = int(time.time()) + 86_400 * 20
         sub = _make_stripe_sub(status='canceled', price_id='price_unknown')
         sub['current_period_end'] = future
-        result = self.fn(sub, grant_cancel_grace=True)
+        result = self.fn(sub, grant_cancel_grace=True, period_paid=True)
         assert result is not None
         assert result.plan == PlanType.basic
 
@@ -197,7 +207,7 @@ class TestBuildSubscriptionFromStripeObject:
         future = int(time.time()) + 86_400 * 20
         sub = _make_stripe_sub(status='unpaid', price_id='price_known')
         sub['current_period_end'] = future
-        result = self.fn(sub, grant_cancel_grace=True)
+        result = self.fn(sub, grant_cancel_grace=True, period_paid=True)
         assert result is not None
         assert result.plan == PlanType.basic
 

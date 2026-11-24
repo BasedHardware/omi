@@ -2,6 +2,15 @@
 
 Contract (h) of the legacy-retire swarm. Code: `utils/sync/legacy_dark.py`. Switch: `rollout_cohorts/_ramp.envs.<env>.legacy_sync`, scoped by the same entry's `percents.legacy-sync`, read through `utils.rollout.runtime_percent.legacy_sync_mode(uid)` (30s TTL, mode fails safe to `on` on read errors).
 
+## Containment-only changes to retiring code
+
+The modules in `RETIRING_MODULES` (`backend/tests/unit/test_sync_legacy_import_ratchet.py`) are
+scheduled for deletion. Change them only to contain a live defect: stop data loss, a privacy or
+security exposure, or an outage, with the smallest diff that does it. Put new behaviour and
+durable fixes in the batch pipeline that replaces them, not in `utils/sync/pipeline.py` and its
+siblings; every change there widens the gap the deletion PRs must close. A containment change
+says so in its PR body and names the replacement path that carries the real fix.
+
 ## Cohort retirement
 
 `legacy-sync` is a percent from 0 to 100 using the deployed batch admission

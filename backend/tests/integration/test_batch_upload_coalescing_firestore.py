@@ -15,6 +15,8 @@ from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 import pytest
 
+from tests.support.batch_coalescing_scan import scanner
+
 pytestmark = pytest.mark.integration
 
 
@@ -56,7 +58,7 @@ def runtime(monkeypatch):
     monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda _: intake.LegacySyncMode.DARK)
     from database.batch_pipeline_coalescing import note_scan
 
-    note_scan(store, time.time(), producer_enabled=True)
+    note_scan(store, producer_enabled=True, scan=scanner(store, now=time.time()).guard())
     return store, artifacts, objects, uid, cid
 
 
@@ -236,7 +238,7 @@ async def test_release_endpoint_auth_owner_scope_and_rate_limit(runtime, tmp_pat
     args, _ = upload_args(tmp_path, uid, cid, 0)
     # Cold route imports may outlive the five-second drainer heartbeat from
     # fixture setup. This auth test needs an active synthetic drainer at admission.
-    note_scan(store, time.time(), producer_enabled=True)
+    note_scan(store, producer_enabled=True, scan=scanner(store, now=time.time()).guard())
     assert (await intake.accept_upload(**args)).status_code == 202
     snapshot = next(store.client.collection(store.namespace + '_coalesce_groups').stream())
     initial_deadline = snapshot.to_dict()['release_by']
@@ -273,12 +275,12 @@ async def test_denied_full_page_cannot_starve_other_owners_after_restart(runtime
         user.collection('conversations').document(cid).set({'id': cid, 'language': 'en', 'source': 'omi'})
         args, _ = upload_args(tmp_path, owner, cid, index)
         args['intake_context']['recording_session_id'] = f'synthetic-recording-{index}'
-        rows.note_scan(store, time.time(), producer_enabled=True)
+        rows.note_scan(store, producer_enabled=True, scan=scanner(store, now=time.time()).guard())
         assert (await intake.accept_upload(**args)).status_code == 202
         rows.release_for_open(store, owner, 'bp_' + args['job_id'], time.time())
         denied.append(owner)
     args, _ = upload_args(tmp_path, uid, cid, 8)
-    rows.note_scan(store, time.time(), producer_enabled=True)
+    rows.note_scan(store, producer_enabled=True, scan=scanner(store, now=time.time()).guard())
     assert (await intake.accept_upload(**args)).status_code == 202
     rows.release_for_open(store, uid, 'bp_' + args['job_id'], time.time())
     for owner in set(denied):
@@ -286,12 +288,12 @@ async def test_denied_full_page_cannot_starve_other_owners_after_restart(runtime
         store.client.collection('users').document(owner).update({'data_protection_level': 'e2ee'})
     if off:
         monkeypatch.setenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', 'false')
-    await upload_coalescing.drain(store)
+    await upload_coalescing.drain(store, leader=scanner(store))
     assert list(store.client.collection(store.namespace + '_jobs').stream()) == []
-    epoch, boundary = rows.scan_position(store)
+    epoch, boundary = rows.scan_position(store, scan=scanner(store).guard())
     assert epoch == 1 and boundary is not None
     restarted = FirestoreStore(store.namespace, firestore_client=store.client)
-    await upload_coalescing.drain(restarted)
+    await upload_coalescing.drain(restarted, leader=scanner(restarted))
     jobs = list(store.client.collection(store.namespace + '_jobs').stream())
     assert len(jobs) == 1 and jobs[0].to_dict()['owner_id'] == uid
     quota = store.run(lambda tx: tx.get('coalesce_quota', 'global'))
@@ -304,8 +306,8 @@ async def test_denied_full_page_cannot_starve_other_owners_after_restart(runtime
     boundary_row = store.run(lambda tx: tx.get('coalesce_groups', boundary['id']))
     rows.purge_group(store.client, store.namespace, boundary['id'], boundary_row['owner_id'])
     assert rows.due(store.client, store.namespace, time.time(), producer_enabled=not off, after=boundary) == []
-    await upload_coalescing.drain(restarted)  # End-of-range wraps durably.
-    assert rows.scan_position(restarted)[1] is None
+    await upload_coalescing.drain(restarted, leader=scanner(restarted))  # End-of-range wraps durably.
+    assert rows.scan_position(restarted, scan=scanner(restarted).guard())[1] is None
 
 
 @pytest.mark.asyncio
@@ -323,7 +325,7 @@ async def test_projection_completes_unpolled_originals_before_target_ttl(runtime
     store, artifacts, objects, uid, cid = runtime
     uploads = [upload_args(tmp_path, uid, cid, index)[0] for index in (0, 40)]
     for args in uploads:
-        rows.note_scan(store, time.time(), producer_enabled=True)
+        rows.note_scan(store, producer_enabled=True, scan=scanner(store, now=time.time()).guard())
         assert (await intake.accept_upload(**args)).status_code == 202
     held = next(store.client.collection(store.namespace + '_coalesce_groups').stream())
     rows.release_for_open(store, uid, 'bp_' + uploads[0]['job_id'], time.time())

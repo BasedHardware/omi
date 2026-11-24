@@ -2,6 +2,32 @@
   "combined_equals_split": true,
   "consumers": [
     {
+      "expression": "sum(increase(omi_app_review_config_alert_total{reason=~\"credentials_unavailable|store_api_error|submission_token_unavailable|submission_token_rejected\"}[3h])) >= bool 3",
+      "file": "alerts/app-review-config.json",
+      "issues": [],
+      "metrics": [
+        "omi_app_review_config_alert_total"
+      ],
+      "owner_title": "App review config - lifecycle reconciliation needs attention",
+      "owner_uid": "omi-app-review-config-alert",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "time() - max(omi_app_review_config_last_sweep_timestamp_seconds) > bool 7200",
+      "file": "alerts/app-review-config.json",
+      "issues": [],
+      "metrics": [
+        "omi_app_review_config_last_sweep_timestamp_seconds"
+      ],
+      "owner_title": "App review config - sweep is silent or failing",
+      "owner_uid": "omi-app-review-config-sweep-silent",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(rate(omi_sync_dispatch_attempts_total{mode=\"enqueue_uncertain\"}[10m])) / clamp_min(sum(rate(omi_sync_dispatch_attempts_total[10m])), 1e-9)",
       "file": "alerts/backend-sync.json",
       "issues": [],
@@ -158,6 +184,425 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"record_pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_pending\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch record_pending: oldest row older than 1123200s",
+      "owner_uid": "omi-census-age-b-record_pending",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"retry\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"retry\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"retry\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"retry\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch retry: oldest row older than 21600s",
+      "owner_uid": "omi-census-age-b-retry",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"result_ready\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"result_ready\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"result_ready\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"result_ready\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch result_ready: oldest row older than 7200s",
+      "owner_uid": "omi-census-age-b-result_ready",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"vendor_held\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"vendor_held\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"vendor_held\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"vendor_held\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch vendor_held: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-b-vendor_held",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"quarantined\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"quarantined\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"quarantined\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"quarantined\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch quarantined: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-b-quarantined",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"privacy_blocked\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"privacy_blocked\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"privacy_blocked\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"privacy_blocked\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch privacy_blocked: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-b-privacy_blocked",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"provider_pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_pending\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch provider_pending: oldest row older than 604800s",
+      "owner_uid": "omi-census-age-b-provider_pending",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"provider_running\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_running\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_running\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_running\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch provider_running: oldest row older than 21600s",
+      "owner_uid": "omi-census-age-b-provider_running",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"record_recovery_waiting\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_recovery_waiting\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_recovery_waiting\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_recovery_waiting\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch record_recovery_waiting: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-b-record_recovery_waiting",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"pending\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_projection pending: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-p-pending",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"persisted\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"persisted\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"persisted\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"persisted\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_projection persisted: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-p-persisted",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"ready\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"ready\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"ready\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"ready\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_projection ready: oldest row older than 7200s",
+      "owner_uid": "omi-census-age-p-ready",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"quarantine_held\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"quarantine_held\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"quarantine_held\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"quarantine_held\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_projection quarantine_held: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-p-quarantine_held",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"held\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"held\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"held\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"held\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_recovery held: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-r-held",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"prepared\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"prepared\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"prepared\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"prepared\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_recovery prepared: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-r-prepared",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"running\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"running\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"running\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"running\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_recovery running: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-r-running",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"failed_held\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"failed_held\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"failed_held\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"failed_held\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_recovery failed_held: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-r-failed_held",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"provider_outbox\",state=\"open\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"provider_outbox\",state=\"open\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"provider_outbox\",state=\"open\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"provider_outbox\",state=\"open\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch provider_outbox open: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-po-open",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"enrichment_outbox\",state=\"pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"enrichment_outbox\",state=\"pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"enrichment_outbox\",state=\"pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"enrichment_outbox\",state=\"pending\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch enrichment_outbox pending: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-eo-pending",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"cap_hold\",state=\"staging\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"staging\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"staging\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"staging\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch cap_hold staging: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-ch-staging",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"cap_hold\",state=\"sealing\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"sealing\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"sealing\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"sealing\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch cap_hold sealing: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-ch-sealing",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"capturing\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"capturing\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"capturing\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"capturing\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch pipeline_ledger capturing: oldest row older than 21600s",
+      "owner_uid": "omi-census-age-pl-capturing",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"sealed\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"sealed\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"sealed\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"sealed\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch pipeline_ledger sealed: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-pl-sealed",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"transcribed\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"transcribed\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"transcribed\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"transcribed\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch pipeline_ledger transcribed: oldest row older than 1800s",
+      "owner_uid": "omi-census-age-pl-transcribed",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"noted\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"noted\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"noted\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"noted\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch pipeline_ledger noted: oldest row older than 1800s",
+      "owner_uid": "omi-census-age-pl-noted",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"committed_hidden\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"committed_hidden\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"committed_hidden\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"committed_hidden\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch committed_hidden: oldest row older than 7200s",
+      "owner_uid": "omi-census-age-b-committed_hidden",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"ready_runnable\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"ready_runnable\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"ready_runnable\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"ready_runnable\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch ready_runnable: oldest row older than 7200s",
+      "owner_uid": "omi-census-age-b-ready_runnable",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_batch_pipeline_census_snapshot_timestamp_seconds)) or vector(1e9)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_snapshot_timestamp_seconds"
+      ],
+      "owner_title": "Batch stuck-state census has not completed",
+      "owner_uid": "omi-census-snapshot-blind",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(omi_batch_pipeline_census_registered_stocks or vector(0)) - count(count by (machine, state) (omi_batch_pipeline_census_state_observed_at_seconds > (time() - 1800)))",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_registered_stocks",
+        "omi_batch_pipeline_census_state_observed_at_seconds"
+      ],
+      "owner_title": "Batch stuck-state census is missing stocks",
+      "owner_uid": "omi-census-stocks-blind",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(max by (route, language) (omi_batch_pipeline_delivered_share_ratio{language!=\"other\",language!=\"unknown\"}) < 0.7 * max by (route, language) (max_over_time(omi_batch_pipeline_delivered_share_ratio{language!=\"other\",language!=\"unknown\"}[7d]))) and on (route, language) (max by (route, language) (omi_batch_pipeline_delivered_share_admitted_units{language!=\"other\",language!=\"unknown\"}) >= 20)",
+      "file": "alerts/batch-delivered-share.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_delivered_share_admitted_units",
+        "omi_batch_pipeline_delivered_share_ratio"
+      ],
+      "owner_title": "Batch transcripts - one language delivered well below its own baseline",
+      "owner_uid": "omi-batch-delivered-share-language",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "max(omi_batch_held_expired_units and (time() - omi_batch_held_expired_observed_at_seconds < 900)) or vector(0)",
       "file": "alerts/batch-held-dead-letter.json",
       "issues": [],
@@ -205,7 +650,7 @@
         "omi_batch_held_oldest_age_seconds",
         "omi_batch_timeliness_observed_at_seconds"
       ],
-      "owner_title": "Held batch staging input older than 21 days",
+      "owner_title": "Held batch staging input older than 51 days",
       "owner_uid": "omi-batch-staged-input-age",
       "panel": null,
       "pointer": "/data/0/model/expr",
@@ -525,6 +970,72 @@
       "owner_uid": "omi-firestore-unattributed-reads",
       "panel": null,
       "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0)",
+      "file": "alerts/firestore.json",
+      "issues": [],
+      "metrics": [
+        "omi_firestore_billed_reads_by_caller_total"
+      ],
+      "owner_title": "FirestoreUnattributedReadsAbsolute",
+      "owner_uid": "omi-firestore-unattributed-absolute",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_firestore_billed_reads_by_caller_total{caller=~\"(database|utils)\\\\.batch.*\"}[1h])) / clamp_min((sum(increase(omi_batch_pipeline_completed_audio_seconds_total[1h])) / 3600), 1)",
+      "file": "alerts/firestore.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_completed_audio_seconds_total",
+        "omi_firestore_billed_reads_by_caller_total"
+      ],
+      "owner_title": "FirestoreBatchReadsPerAudioHourHigh",
+      "owner_uid": "omi-firestore-batch-reads-audio-hour",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum(increase(omi_batch_pipeline_completed_audio_seconds_total[1h])) / 3600) or vector(0)",
+      "file": "alerts/firestore.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_completed_audio_seconds_total"
+      ],
+      "owner_title": "FirestoreBatchReadsPerAudioHourHigh",
+      "owner_uid": "omi-firestore-batch-reads-audio-hour",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_firestore_billed_reads_by_caller_total{caller=~\"(database|utils)\\\\.batch.*\"}[1h]))",
+      "file": "alerts/firestore.json",
+      "issues": [],
+      "metrics": [
+        "omi_firestore_billed_reads_by_caller_total"
+      ],
+      "owner_title": "FirestoreBatchReadsWithNoOutput",
+      "owner_uid": "omi-firestore-batch-reads-no-output",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum(increase(omi_batch_pipeline_completed_audio_seconds_total[1h])) / 3600) or vector(0)",
+      "file": "alerts/firestore.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_completed_audio_seconds_total"
+      ],
+      "owner_title": "FirestoreBatchReadsWithNoOutput",
+      "owner_uid": "omi-firestore-batch-reads-no-output",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1954,30 +2465,19 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+      "expression": "(((sum(increase(omi_fallback_total{job=~\"backend-listen-metrics|pusher-metrics\",component=\"other\",from_mode=\"cache_write\",reason=~\"auth_error|connection_error|timeout\",outcome=\"degraded\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)) > bool 0.5)\n * (sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])) >= bool 50) == 1)\nor on() max((omi_redis_authenticated_ping_success{job=\"omi-redis-serving-probe\",target=\"prod-serving-redis\"}\n and (omi_redis_authenticated_ping_last_attempt_seconds{job=\"omi-redis-serving-probe\",target=\"prod-serving-redis\"} >= time() - 90)\n and (omi_redis_authenticated_ping_last_attempt_seconds{job=\"omi-redis-serving-probe\",target=\"prod-serving-redis\"} <= time())) == bool 0)",
       "file": "alerts/resilience.json",
       "issues": [],
       "metrics": [
-        "omi_listen_accepted_total"
+        "omi_fallback_total",
+        "omi_listen_accepted_total",
+        "omi_redis_authenticated_ping_last_attempt_seconds",
+        "omi_redis_authenticated_ping_success"
       ],
       "owner_title": "Redis cache - connection-class write failures degrading sessions",
       "owner_uid": "omi-redis-cache-conn-page",
       "panel": null,
       "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "sum(increase(omi_fallback_total{job=~\"backend-listen-metrics|pusher-metrics\",component=\"other\",from_mode=\"cache_write\",reason=~\"auth_error|connection_error|timeout\",outcome=\"degraded\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)",
-      "file": "alerts/resilience.json",
-      "issues": [],
-      "metrics": [
-        "omi_fallback_total",
-        "omi_listen_accepted_total"
-      ],
-      "owner_title": "Redis cache - connection-class write failures degrading sessions",
-      "owner_uid": "omi-redis-cache-conn-page",
-      "panel": null,
-      "pointer": "/data/1/model/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2362,6 +2862,121 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "label_values(omi_batch_pipeline_census_state_units, machine)",
+      "file": "dashboards/general/batch-stuck-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_units"
+      ],
+      "owner_title": "Batch stuck-state census",
+      "owner_uid": "omi-batch-stuck-census",
+      "panel": null,
+      "pointer": "/templating/list/0/query",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "count(count by (machine, state) (omi_batch_pipeline_census_state_observed_at_seconds > (time() - 1800)))",
+      "file": "dashboards/general/batch-stuck-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds"
+      ],
+      "owner_title": "Batch stuck-state census",
+      "owner_uid": "omi-batch-stuck-census",
+      "panel": {
+        "id": 2,
+        "title": "Stocks with a fresh sample"
+      },
+      "pointer": "/panels/1/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_batch_pipeline_census_registered_stocks)",
+      "file": "dashboards/general/batch-stuck-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_registered_stocks"
+      ],
+      "owner_title": "Batch stuck-state census",
+      "owner_uid": "omi-batch-stuck-census",
+      "panel": {
+        "id": 2,
+        "title": "Stocks with a fresh sample"
+      },
+      "pointer": "/panels/1/targets/1/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "time() - max(omi_batch_pipeline_census_snapshot_timestamp_seconds)",
+      "file": "dashboards/general/batch-stuck-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_snapshot_timestamp_seconds"
+      ],
+      "owner_title": "Batch stuck-state census",
+      "owner_uid": "omi-batch-stuck-census",
+      "panel": {
+        "id": 3,
+        "title": "Last completed census pass"
+      },
+      "pointer": "/panels/2/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "omi_batch_pipeline_census_state_units{machine=~\"$machine\"}",
+      "file": "dashboards/general/batch-stuck-census.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_batch_pipeline_census_state_units"
+      ],
+      "owner_title": "Batch stuck-state census",
+      "owner_uid": "omi-batch-stuck-census",
+      "panel": {
+        "id": 4,
+        "title": "Count by stock"
+      },
+      "pointer": "/panels/3/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "omi_batch_pipeline_census_state_oldest_age_seconds{machine=~\"$machine\"}",
+      "file": "dashboards/general/batch-stuck-census.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch stuck-state census",
+      "owner_uid": "omi-batch-stuck-census",
+      "panel": {
+        "id": 5,
+        "title": "Oldest age by stock"
+      },
+      "pointer": "/panels/4/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "omi_batch_pipeline_census_state_oldest_age_seconds{machine=~\"$machine\"}",
+      "file": "dashboards/general/batch-stuck-census.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch stuck-state census",
+      "owner_uid": "omi-batch-stuck-census",
+      "panel": {
+        "id": 6,
+        "title": "Oldest age trend (top states)"
+      },
+      "pointer": "/panels/5/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "100 * (sum(increase(omi_listen_audio_outcome_total{transcription_source=\"omi\",outcome=\"first_audio\"}[$__range])) or 0 * sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range]))) / sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range]))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
@@ -2381,6 +2996,24 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "100 * (sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range]))) / (sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range])) > 0)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 2,
+        "title": "Finalization job succeeded"
+      },
+      "pointer": "/panels/3/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "(100 * (sum(increase(omi_listen_audio_outcome_total{transcription_source=\"omi\",outcome=\"first_audio\"}[$__interval])) or 0 * sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__interval]))) / sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__interval]))) >= 0",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
@@ -2395,24 +3028,6 @@
       "panel": {
         "id": 80,
         "title": ""
-      },
-      "pointer": "/panels/2/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "100 * (sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range]))) / (sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range])) > 0)",
-      "file": "dashboards/general/omi-core-features.json",
-      "issues": [
-        "dashboard variables/macros require explicit expansion before shadow"
-      ],
-      "metrics": [
-        "omi_journey_terminal_total"
-      ],
-      "owner_title": "Omi Core Features",
-      "owner_uid": "omi-core-features",
-      "panel": {
-        "id": 2,
-        "title": "Finalization job succeeded"
       },
       "pointer": "/panels/5/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -2432,7 +3047,7 @@
         "id": 82,
         "title": ""
       },
-      "pointer": "/panels/6/targets/0/expr",
+      "pointer": "/panels/7/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2454,24 +3069,6 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "(100 * (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
-      "file": "dashboards/general/omi-core-features.json",
-      "issues": [
-        "dashboard variables/macros require explicit expansion before shadow"
-      ],
-      "metrics": [
-        "omi_journey_terminal_total"
-      ],
-      "owner_title": "Omi Core Features",
-      "owner_uid": "omi-core-features",
-      "panel": {
-        "id": 84,
-        "title": ""
-      },
-      "pointer": "/panels/10/targets/0/expr",
-      "scope": "explicit-bridge"
-    },
-    {
       "expression": "100 * (sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__range]))) / (sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__range])) > 0)",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
@@ -2486,7 +3083,7 @@
         "id": 36,
         "title": "Cloud PTT transport"
       },
-      "pointer": "/panels/13/targets/0/expr",
+      "pointer": "/panels/11/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2504,25 +3101,7 @@
         "id": 36,
         "title": "Cloud PTT transport"
       },
-      "pointer": "/panels/13/targets/1/expr",
-      "scope": "explicit-bridge"
-    },
-    {
-      "expression": "(100 * (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__interval]))) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
-      "file": "dashboards/general/omi-core-features.json",
-      "issues": [
-        "dashboard variables/macros require explicit expansion before shadow"
-      ],
-      "metrics": [
-        "omi_client_journey_terminal_total"
-      ],
-      "owner_title": "Omi Core Features",
-      "owner_uid": "omi-core-features",
-      "panel": {
-        "id": 86,
-        "title": ""
-      },
-      "pointer": "/panels/14/targets/0/expr",
+      "pointer": "/panels/11/targets/1/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2540,8 +3119,44 @@
         "id": 70,
         "title": "Index write succeeded"
       },
-      "pointer": "/panels/15/targets/0/expr",
+      "pointer": "/panels/12/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(100 * (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 84,
+        "title": ""
+      },
+      "pointer": "/panels/13/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "(100 * (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__interval]))) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 86,
+        "title": ""
+      },
+      "pointer": "/panels/15/targets/0/expr",
+      "scope": "explicit-bridge"
     },
     {
       "expression": "(100 * (sum(increase(omi_conversation_summary_vector_upserts_total{outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_conversation_summary_vector_upserts_total{outcome=~\"success|error\"}[$__interval]))) / sum(increase(omi_conversation_summary_vector_upserts_total{outcome=~\"success|error\"}[$__interval]))) >= 0",
@@ -2703,6 +3318,55 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "100 * sum(omi_batch_pipeline_delivered_share_units) / clamp_min(sum(omi_batch_pipeline_delivered_share_admitted_units), 1)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_delivered_share_admitted_units",
+        "omi_batch_pipeline_delivered_share_units"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 96,
+        "title": "Delivered within 5 min"
+      },
+      "pointer": "/panels/32/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * omi_batch_pipeline_delivered_share_ratio{language!=\"other\"}",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_delivered_share_ratio"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 97,
+        "title": "Delivered share by language"
+      },
+      "pointer": "/panels/33/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * omi_batch_pipeline_delivered_share_ratio",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_delivered_share_ratio"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 98,
+        "title": "Delivered share by route and language"
+      },
+      "pointer": "/panels/34/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum by (journey,outcome) ((rate(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[5m])))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [],
@@ -2715,7 +3379,7 @@
         "id": 6,
         "title": "Terminal outcomes by journey"
       },
-      "pointer": "/panels/31/panels/0/targets/0/expr",
+      "pointer": "/panels/35/panels/0/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2731,7 +3395,7 @@
         "id": 7,
         "title": "Accepted vs settled"
       },
-      "pointer": "/panels/31/panels/1/targets/0/expr",
+      "pointer": "/panels/35/panels/1/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2747,7 +3411,7 @@
         "id": 7,
         "title": "Accepted vs settled"
       },
-      "pointer": "/panels/31/panels/1/targets/1/expr",
+      "pointer": "/panels/35/panels/1/targets/1/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2763,7 +3427,7 @@
         "id": 8,
         "title": "Stale terminal events by journey"
       },
-      "pointer": "/panels/31/panels/2/targets/0/expr",
+      "pointer": "/panels/35/panels/2/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2779,7 +3443,7 @@
         "id": 9,
         "title": "Journey latency p95"
       },
-      "pointer": "/panels/31/panels/3/targets/0/expr",
+      "pointer": "/panels/35/panels/3/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2795,7 +3459,7 @@
         "id": 33,
         "title": "Retries, dead letters, reconciliations"
       },
-      "pointer": "/panels/32/panels/2/targets/2/expr",
+      "pointer": "/panels/36/panels/2/targets/2/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2813,7 +3477,7 @@
         "id": 90,
         "title": "Capture failures by reason"
       },
-      "pointer": "/panels/32/panels/4/targets/0/expr",
+      "pointer": "/panels/36/panels/4/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2831,7 +3495,7 @@
         "id": 62,
         "title": "Pendant sessions accepted"
       },
-      "pointer": "/panels/33/panels/0/targets/0/expr",
+      "pointer": "/panels/37/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2847,7 +3511,7 @@
         "id": 64,
         "title": "Live sessions by platform \u2014 pendant vs phone"
       },
-      "pointer": "/panels/33/panels/1/targets/0/expr",
+      "pointer": "/panels/37/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2863,7 +3527,7 @@
         "id": 64,
         "title": "Live sessions by platform \u2014 pendant vs phone"
       },
-      "pointer": "/panels/33/panels/1/targets/1/expr",
+      "pointer": "/panels/37/panels/1/targets/1/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2879,7 +3543,7 @@
         "id": 46,
         "title": "Conversation length p10 / p50 / p90 by source"
       },
-      "pointer": "/panels/34/panels/0/targets/0/expr",
+      "pointer": "/panels/38/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2895,7 +3559,7 @@
         "id": 46,
         "title": "Conversation length p10 / p50 / p90 by source"
       },
-      "pointer": "/panels/34/panels/0/targets/1/expr",
+      "pointer": "/panels/38/panels/0/targets/1/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2911,7 +3575,7 @@
         "id": 46,
         "title": "Conversation length p10 / p50 / p90 by source"
       },
-      "pointer": "/panels/34/panels/0/targets/2/expr",
+      "pointer": "/panels/38/panels/0/targets/2/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2928,7 +3592,7 @@
         "id": 47,
         "title": "Short conversations (< 2 min) by source"
       },
-      "pointer": "/panels/34/panels/1/targets/0/expr",
+      "pointer": "/panels/38/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2946,7 +3610,7 @@
         "id": 49,
         "title": "Conversations per day (completed, by source)"
       },
-      "pointer": "/panels/34/panels/3/targets/0/expr",
+      "pointer": "/panels/38/panels/3/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2962,7 +3626,7 @@
         "id": 77,
         "title": "Rolling 1h discard share by service / trigger"
       },
-      "pointer": "/panels/34/panels/4/targets/0/expr",
+      "pointer": "/panels/38/panels/4/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2978,7 +3642,7 @@
         "id": 68,
         "title": "Resumed cohort age"
       },
-      "pointer": "/panels/35/panels/5/targets/0/expr",
+      "pointer": "/panels/39/panels/5/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2994,7 +3658,7 @@
         "id": 69,
         "title": "Cohort age now"
       },
-      "pointer": "/panels/35/panels/6/targets/0/expr",
+      "pointer": "/panels/39/panels/6/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3012,7 +3676,7 @@
         "id": 37,
         "title": "PTT attempts"
       },
-      "pointer": "/panels/37/panels/0/targets/0/expr",
+      "pointer": "/panels/41/panels/0/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3030,7 +3694,7 @@
         "id": 38,
         "title": "PTT duration p95 (success)"
       },
-      "pointer": "/panels/37/panels/1/targets/0/expr",
+      "pointer": "/panels/41/panels/1/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3048,7 +3712,7 @@
         "id": 39,
         "title": "PTT issues"
       },
-      "pointer": "/panels/37/panels/2/targets/0/expr",
+      "pointer": "/panels/41/panels/2/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3064,7 +3728,7 @@
         "id": 40,
         "title": "PTT terminal outcomes"
       },
-      "pointer": "/panels/37/panels/3/targets/0/expr",
+      "pointer": "/panels/41/panels/3/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3080,7 +3744,7 @@
         "id": 41,
         "title": "PTT issues by class"
       },
-      "pointer": "/panels/37/panels/4/targets/0/expr",
+      "pointer": "/panels/41/panels/4/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3096,7 +3760,7 @@
         "id": 42,
         "title": "PTT attempts by client kind"
       },
-      "pointer": "/panels/37/panels/5/targets/0/expr",
+      "pointer": "/panels/41/panels/5/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3114,7 +3778,7 @@
         "id": 51,
         "title": "Live transcription transport success"
       },
-      "pointer": "/panels/38/panels/0/targets/0/expr",
+      "pointer": "/panels/42/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3132,7 +3796,7 @@
         "id": 52,
         "title": "Conversation finalization settle success"
       },
-      "pointer": "/panels/38/panels/1/targets/0/expr",
+      "pointer": "/panels/42/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3150,7 +3814,7 @@
         "id": 53,
         "title": "Mobile chat transport success"
       },
-      "pointer": "/panels/38/panels/2/targets/0/expr",
+      "pointer": "/panels/42/panels/2/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3168,7 +3832,7 @@
         "id": 54,
         "title": "Desktop chat transport success"
       },
-      "pointer": "/panels/38/panels/3/targets/0/expr",
+      "pointer": "/panels/42/panels/3/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3186,7 +3850,7 @@
         "id": 55,
         "title": "Desktop proactivity success (success + failure)"
       },
-      "pointer": "/panels/38/panels/4/targets/0/expr",
+      "pointer": "/panels/42/panels/4/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3204,7 +3868,7 @@
         "id": 56,
         "title": "Desktop proactivity degraded share"
       },
-      "pointer": "/panels/38/panels/5/targets/0/expr",
+      "pointer": "/panels/42/panels/5/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3222,7 +3886,7 @@
         "id": 57,
         "title": "Conversation finalization accepted"
       },
-      "pointer": "/panels/38/panels/6/targets/0/expr",
+      "pointer": "/panels/42/panels/6/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3240,7 +3904,7 @@
         "id": 58,
         "title": "Client journeys reporting (of 8)"
       },
-      "pointer": "/panels/38/panels/7/targets/0/expr",
+      "pointer": "/panels/42/panels/7/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3258,7 +3922,7 @@
         "id": 59,
         "title": "Capture unknown-kind share"
       },
-      "pointer": "/panels/38/panels/8/targets/0/expr",
+      "pointer": "/panels/42/panels/8/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3274,7 +3938,7 @@
         "id": 60,
         "title": "Memory retrieval \u2014 tool-gated volume"
       },
-      "pointer": "/panels/38/panels/9/targets/0/expr",
+      "pointer": "/panels/42/panels/9/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3290,7 +3954,7 @@
         "id": 79,
         "title": "Client journey issues by reason and outcome"
       },
-      "pointer": "/panels/38/panels/10/targets/0/expr",
+      "pointer": "/panels/42/panels/10/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3306,7 +3970,7 @@
         "id": 71,
         "title": "Chat search paths and outcomes"
       },
-      "pointer": "/panels/39/panels/0/targets/0/expr",
+      "pointer": "/panels/43/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3322,7 +3986,7 @@
         "id": 16,
         "title": "Lifecycle events over time"
       },
-      "pointer": "/panels/40/panels/1/targets/0/expr",
+      "pointer": "/panels/44/panels/1/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3338,7 +4002,7 @@
         "id": 17,
         "title": "Cancellations by reason (voluntary vs involuntary)"
       },
-      "pointer": "/panels/40/panels/2/targets/0/expr",
+      "pointer": "/panels/44/panels/2/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3354,7 +4018,7 @@
         "id": 18,
         "title": "Cancellation requests by plan"
       },
-      "pointer": "/panels/40/panels/3/targets/0/expr",
+      "pointer": "/panels/44/panels/3/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -4168,7 +4832,7 @@
   ],
   "counts": {
     "explicit_bridge": 42,
-    "query_consumers": 280
+    "query_consumers": 326
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

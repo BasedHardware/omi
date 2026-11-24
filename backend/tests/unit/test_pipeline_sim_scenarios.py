@@ -48,20 +48,43 @@ VARIANTS = {
         {'overrides': {'flags': {'BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED': 'false'}}},
     ),
     # Isolate fenced heads, without the separate held-provider input.
-    # Strict merge order (head wait off) isolates what the purge alone prevents.
+    # Strict merge and legacy lease order isolate what the purge alone prevents.
+    # Protected scheduling changes which captures enter the age-measured cohort.
     'stale_no_purge': (
         'stale_finalize_targets',
         {
             'overrides': {
                 'purge_on_fence': False,
                 'unrecoverable_near_silence': False,
-                'flags': {'BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS': 'off'},
+                'flags': {
+                    'BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS': 'off',
+                    'BATCH_PIPELINE_PROTECTED_SHARE_ENABLED': 'off',
+                },
+            }
+        },
+    ),
+    'stale_no_purge_protected': (
+        'stale_finalize_targets',
+        {
+            'overrides': {
+                'purge_on_fence': False,
+                'unrecoverable_near_silence': False,
+                'flags': {
+                    'BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS': 'off',
+                    'BATCH_PIPELINE_PROTECTED_SHARE_ENABLED': 'true',
+                },
             }
         },
     ),
     'stale_no_purge_head_wait': (
         'stale_finalize_targets',
-        {'overrides': {'purge_on_fence': False, 'unrecoverable_near_silence': False}},
+        {
+            'overrides': {
+                'purge_on_fence': False,
+                'unrecoverable_near_silence': False,
+                'flags': {'BATCH_PIPELINE_PROTECTED_SHARE_ENABLED': 'off'},
+            }
+        },
     ),
     'privacy': ('privacy_blocked_users', {}),
     'summary_shared': ('summary_behind_transcription', {}),
@@ -171,6 +194,14 @@ def test_without_the_purge_a_fenced_head_blocks_the_owners_ordered_merge(samples
     states = sample['sim']['job_states']
     assert states.get('privacy_blocked', 0) > 0 and states.get('result_ready', 0) > 0
     assert sample['projection_obligations_over_15m'] > 0
+
+
+def test_protected_service_preserves_unpurged_privacy_obligations_without_paid_calls(samples):
+    sample = samples['stale_no_purge_protected']
+    states = sample['sim']['job_states']
+    assert states.get('privacy_blocked', 0) > 0 and states.get('result_ready', 0) > 0
+    assert sample['sim']['paid_fallback_calls_after_privacy_fence'] == 0
+    assert sample['sim']['paid_fallback_calls_on_excluded_segments'] == 0
 
 
 def test_bounded_head_wait_commits_past_a_fenced_head_without_the_purge(samples):

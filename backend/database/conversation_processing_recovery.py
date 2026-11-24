@@ -7,6 +7,8 @@ from typing import Any, Callable
 
 from google.cloud import firestore
 
+from models.finalization_owner import python_owns_finalization
+
 from database import conversation_finalization_jobs as jobs
 from database._client import get_firestore_client
 from database.conversation_finalization_values import parse_timestamp, uid_from_conversation_path
@@ -39,7 +41,7 @@ def _stamp_processing_admission_if_absent_txn(
     if not getattr(snapshot, 'exists', False):
         return False
     data = snapshot.to_dict() or {}
-    if data.get('status') != 'processing':
+    if not python_owns_finalization(data) or data.get('status') != 'processing':
         return False
     if data.get('deleted') or data.get('discarded') or data.get('deferred'):
         return False
@@ -82,7 +84,7 @@ def _complete_unstampable_orphan_conversation_txn(
     if not getattr(snapshot, 'exists', False):
         return False
     data = snapshot.to_dict() or {}
-    if data.get('status') != 'processing':
+    if not python_owns_finalization(data) or data.get('status') != 'processing':
         return False
     if data.get('deleted') or data.get('discarded') or data.get('deferred'):
         return False
@@ -155,7 +157,7 @@ def _complete_orphan_conversation_txn(
     if not getattr(snapshot, 'exists', False):
         return False
     data = snapshot.to_dict() or {}
-    if data.get('status') != 'processing':
+    if not python_owns_finalization(data) or data.get('status') != 'processing':
         return False
     if data.get('deleted') or data.get('discarded') or data.get('deferred'):
         return False

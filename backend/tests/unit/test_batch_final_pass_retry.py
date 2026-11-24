@@ -7,10 +7,14 @@ from types import SimpleNamespace
 
 import pytest
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
 from database.batch_final_pass_retry import MAX_ATTEMPTS, LEASE_SECONDS, backoff
 from tests.unit.fixtures.speaker_final_pass_retry import retry_state  # noqa: F401
 from tests.unit.test_batch_final_pass import prod_shaped, run_prod, UID, batch_outcome_counts  # noqa: F401
 from utils.conversations import final_pass_batch as batch, final_pass_retry as retry
+from routers import enrichment, sync
 
 
 @pytest.fixture
@@ -180,10 +184,6 @@ def test_cas_removes_due_field_when_closing_receipt():
 
 @pytest.mark.parametrize('edge', ['enrichment', 'sync'])
 def test_existing_task_edges_dispatch_speaker_kind_without_enrichment(ready, monkeypatch, edge):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-    from routers import enrichment, sync
-
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
     monkeypatch.setattr(sync.uid_sequencer, 'production_fence_mode', lambda: sync.SyncLedgerFenceMode.LEGACY)
     monkeypatch.setattr(sync, 'enrichment_response', lambda *a: pytest.fail('full enrichment route called'))

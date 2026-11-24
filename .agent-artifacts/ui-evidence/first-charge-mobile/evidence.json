@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-pairing-charging.png",
+      "platform": "mobile-ios",
+      "description": "The Connect page after Omi pairs with active charging. The seeded 3% reading is absent.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-pairing-ready.png",
+      "platform": "mobile-ios",
+      "description": "The same paired Omi after charging stops. Ready to use replaces Charging.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-battery-checking.png",
+      "platform": "mobile-ios",
+      "description": "Device Settings shows a dash while the first-charge battery check is pending.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

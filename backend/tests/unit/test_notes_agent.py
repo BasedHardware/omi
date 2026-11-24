@@ -508,7 +508,7 @@ def test_efficiency_switch_restores_prompt_tools_packet_and_charging(monkeypatch
     monkeypatch.setenv(policy.LOOKUP_EFFICIENCY, 'off')
     assert prompt.instructions_for_run() == prompt.INSTRUCTIONS
     assert prompt.tools_for_run() == prompt.TOOL_SCHEMAS
-    assert prompt.version_for_run() == 'notes-agent-v7'
+    assert prompt.version_for_run() == 'notes-agent-v9-legacy'
     box = CountingToolbox()
     result = run_agent(
         ScriptedModel(lookups_per_turn=4),

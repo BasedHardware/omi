@@ -2,14 +2,21 @@
   "id": "subscription-payment-recovery",
   "kind": "question",
   "owner": "Subscription",
-  "question": "How many readers see the failed-renewal Home row, tap Update and successfully load the billing portal, per namespace and build? Shown emits once per visible issue, not on repeated subscription refreshes. Portal Opened requires the web page to finish loading without a main-frame error. These events measure exposure and portal access, never payment or recovered revenue. Names contain Subscription to match the ingestion keep rule.",
+  "question": "How many readers see the failed-renewal Home row, tap Update and successfully load the billing portal, or, for a declined yearly renewal, tap Switch to Monthly and get a confirmed switch, per namespace and build? Shown emits once per visible issue, not on repeated subscription refreshes,; Monthly Shown emits once per visible monthly offer. Portal Opened requires the web page to finish loading without a main-frame error. Monthly Switched emits only after the server confirms the charge. These events measure exposure, portal access and confirmed switches, never recovered revenue. Names contain Subscription to match the ingestion keep rule.",
   "query": "contracts/analytics/consumers/subscription-payment-recovery.sql",
   "events": [
     "subscriptionPaymentIssueShown",
     "subscriptionPaymentIssueUpdateTapped",
-    "subscriptionPaymentIssuePortalOpened"
+    "subscriptionPaymentIssuePortalOpened",
+    "subscriptionPaymentIssueMonthlyShown",
+    "subscriptionPaymentIssueMonthlyTapped",
+    "subscriptionPaymentIssueMonthlySwitched",
+    "subscriptionPaymentIssueMonthlyFailed"
   ],
   "namespace_property": "$app_namespace",
-  "dimensions": ["git_sha", "build_number"],
-  "zero_policy": "Zero is expected before this build or when no mobile reader has an eligible unpaid renewal. Portal Opened does not establish that a card was updated or an invoice paid; verify recovery using authoritative Stripe invoices."
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "Zero is expected before this build or when no mobile reader has an eligible unpaid renewal; the monthly events are zero unless a declined renewal is on a yearly price. Portal Opened does not establish that a card was updated or an invoice paid; verify recovery and switches using authoritative Stripe invoices."
 }

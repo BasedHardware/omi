@@ -62,7 +62,7 @@ export type GoalContextFetchers = {
   fetchGoals: () => Promise<RawGoal[]>
 }
 
-// --- HTTP transport (mirrors aiUserProfile/service.ts authedGet) -------------
+// --- HTTP transport (net.fetch + relayed session + timeout/abort) ------------
 
 async function withTimeout<T>(
   ms: number,

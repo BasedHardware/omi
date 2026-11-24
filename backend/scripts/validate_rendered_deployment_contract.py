@@ -47,6 +47,9 @@ class DeploymentContract:
     expected_env: tuple[tuple[str, str], ...] = ()
     required_secret_name: bool = False
     expected_volume_secret: tuple[tuple[str, str], ...] = ()
+    optional_scoped_secrets: tuple[tuple[str, str], ...] = ()
+    # (environment, secret): one more Secret a secretKeyRef may target in that environment only.
+    extra_secret: tuple[tuple[str, str], ...] = ()
 
 
 # Adding a first-party service means adding one concise entry here.  The
@@ -59,6 +62,8 @@ CONTRACTS = (
         required_env=("OMI_ENV_STAGE", "GOOGLE_CLOUD_PROJECT"),
         expected_env=(("OMI_ENV_STAGE", "{environment}"), ("GOOGLE_CLOUD_PROJECT", "{project}")),
         required_secret_name=True,
+        # Private listen env (privateSecretEnv), synced from Secret Manager LISTEN_PRIVATE_ENV.
+        extra_secret=(("prod", "prod-omi-backend-listen-private-env"),),
     ),
     DeploymentContract(
         service="pusher",
@@ -66,7 +71,16 @@ CONTRACTS = (
         expected_env=(("GOOGLE_CLOUD_PROJECT", "{project}"),),
         required_secret_name=True,
     ),
-    DeploymentContract(service="llm-gateway", image_name="llm-gateway", required_secret_name=True),
+    DeploymentContract(
+        service="llm-gateway",
+        image_name="llm-gateway",
+        required_secret_name=True,
+        expected_env=(("LLM_GATEWAY_IDEMPOTENCY_ENVIRONMENT", "{environment}"),),
+        optional_scoped_secrets=(
+            ("LLM_GATEWAY_IDEMPOTENCY_ENCRYPTION_SECRET", "omi-llm-gateway-idempotency-keys"),
+            ("LLM_GATEWAY_IDEMPOTENCY_SECONDARY_ENCRYPTION_SECRET", "omi-llm-gateway-idempotency-keys"),
+        ),
+    ),
     DeploymentContract(service="diarizer", image_name="diarizer", required_secret_name=True),
     DeploymentContract(service="parakeet", image_name="parakeet", required_secret_name=True),
     DeploymentContract(service="nllb-translation", image_name="nllb-translation"),
@@ -115,9 +129,12 @@ def render_chart(contract: DeploymentContract, environment: str, helm_binary: st
         text=True,
     )
     if result.returncode:
-        detail = result.stderr.strip() or result.stdout.strip() or "Helm did not report an error"
-        raise ValueError(f"{environment}/{contract.service}: helm template failed: {detail}")
-    return [document for document in yaml.safe_load_all(result.stdout) if isinstance(document, dict)]
+        raise ValueError("Helm template failed")
+    try:
+        return [document for document in yaml.safe_load_all(result.stdout) if isinstance(document, dict)]
+    except Exception:
+        # YAML constructors can raise ordinary exceptions containing rendered scalars.
+        raise ValueError("Helm returned invalid YAML") from None
 
 
 def deployment_for(documents: Iterable[dict[str, Any]], expected_name: str) -> dict[str, Any] | None:
@@ -162,10 +179,7 @@ def validate_rendered_deployment(
     errors: list[str] = []
     expected_service_account = release_name(contract, environment)
     if pod_spec.get("serviceAccountName") != expected_service_account:
-        errors.append(
-            f"{prefix}: serviceAccountName must be {expected_service_account!r}, "
-            f"got {pod_spec.get('serviceAccountName')!r}"
-        )
+        errors.append(f"{prefix}: serviceAccountName must be {expected_service_account!r}")
 
     container = _container(deployment, contract.service)
     if container is None:
@@ -174,7 +188,7 @@ def validate_rendered_deployment(
     image = container.get("image")
     expected = expected_image(contract, environment)
     if image != expected:
-        errors.append(f"{prefix}: immutable image must be {expected!r}, got {image!r}")
+        errors.append(f"{prefix}: immutable image must match the deployment contract")
     if not isinstance(image, str) or not image or image.endswith(":latest"):
         errors.append(f"{prefix}: image must not be empty or use the latest tag")
 
@@ -190,34 +204,42 @@ def validate_rendered_deployment(
         if name not in env:
             errors.append(f"{prefix}: required environment variable {name!r} is missing")
     replacements = {"environment": environment, **ENVIRONMENTS[environment]}
-    for name, expected_value in contract.expected_env:
-        actual = _mapping(env.get(name)).get("value")
+    for setting, expected_value in contract.expected_env:
+        actual = _mapping(env.get(setting)).get("value")
         rendered_expected = expected_value.format(**replacements)
         if actual != rendered_expected:
-            errors.append(f"{prefix}: {name} must be {rendered_expected!r}, got {actual!r}")
+            errors.append(f"{prefix}: {setting} must be set to the deployment contract value")
 
     expected_secret = f"{environment}-omi-backend-secrets"
-    rendered_secret_refs: list[dict[str, Any]] = []
+    allowed_secrets = {expected_secret, *(name for env_name, name in contract.extra_secret if env_name == environment)}
+    has_shared_secret_ref = False
+    for name, suffix in contract.optional_scoped_secrets:
+        ref = _mapping(_mapping(env.get(name, {}).get("valueFrom")).get("secretKeyRef"))
+        if ref != {"name": f"{environment}-{suffix}", "key": name, "optional": True}:
+            errors.append(f"{prefix}: invalid or missing optional scoped secretKeyRef")
+
+    scoped_names = {name for name, _ in contract.optional_scoped_secrets}
     for entry in env.values():
+        if entry.get("name") in scoped_names:
+            continue
         ref = _mapping(_mapping(entry.get("valueFrom")).get("secretKeyRef"))
         if ref:
-            rendered_secret_refs.append(ref)
-            if not ref.get("name") or not ref.get("key"):
-                errors.append(f"{prefix}: secretKeyRef for {entry.get('name')!r} needs non-empty name and key")
-            elif ref.get("name") != expected_secret:
-                errors.append(
-                    f"{prefix}: secretKeyRef for {entry.get('name')!r} must target {expected_secret!r}, "
-                    f"got {ref.get('name')!r}"
-                )
-    if contract.required_secret_name and not rendered_secret_refs:
-        errors.append(f"{prefix}: expected at least one secretKeyRef to {expected_secret!r}")
+            ref_name, ref_key = ref.get("name"), ref.get("key")
+            if not isinstance(ref_name, str) or not ref_name or not isinstance(ref_key, str) or not ref_key:
+                errors.append(f"{prefix}: secretKeyRef needs a non-empty name and key")
+            elif ref_name not in allowed_secrets:
+                errors.append(f"{prefix}: secretKeyRef must target the shared backend secret")
+            elif ref_name == expected_secret:
+                has_shared_secret_ref = True
+    if contract.required_secret_name and not has_shared_secret_ref:
+        errors.append(f"{prefix}: missing required shared backend secretKeyRef")
 
     expected_volume_secret = dict(contract.expected_volume_secret).get(environment)
     if expected_volume_secret:
         volumes = _list(pod_spec.get("volumes"))
         secret_names = {_mapping(volume.get("secret")).get("secretName") for volume in volumes}
         if expected_volume_secret not in secret_names:
-            errors.append(f"{prefix}: required volume secret {expected_volume_secret!r} is missing")
+            errors.append(f"{prefix}: required volume secret reference is missing")
     return errors
 
 
@@ -245,8 +267,8 @@ def validate_all_contracts(renderer: Renderer, helm_binary: str = "helm") -> lis
         for contract in CONTRACTS:
             try:
                 documents = renderer(contract, environment, helm_binary)
-            except ValueError as exc:
-                errors.append(str(exc))
+            except ValueError:
+                errors.append(f"{environment}/{contract.service}: Helm render failed or returned invalid YAML")
                 continue
             errors.extend(validate_rendered_deployment(contract, environment, documents))
     return errors

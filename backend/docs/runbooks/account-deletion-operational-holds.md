@@ -5,9 +5,9 @@ A genuine legal hold still blocks erasure. Never clear all GCS holds based on
 their age, bucket, or an untagged `temporaryHold=true` value.
 
 The account worker releases only exact generations in a reviewed operator
-approval on the server-owned `account_deletions` marker. The initial recovery
-format supports the legacy `expiry-20261017` campaign in `syncing-local`, at
-most 1,000 generations per approval. Other campaigns or larger plans require a
+approval on the server-owned `account_deletions` marker. The recovery format
+supports the legacy `expiry-20261017` campaign in `syncing-local`, at
+most 20,000 generations per approval. Other campaigns or larger plans require a
 separate reviewed change. A failed job remains fenced and retryable.
 
 ## Prepare and review
@@ -33,7 +33,8 @@ backend/.venv/bin/python -I backend/scripts/account_deletion_operational_holds.p
 The private plan contains hashes, generation/metageneration pairs and a digest;
 stdout contains only a count and digest. Review the plan, campaign provenance,
 account intent, current legal-hold authority, and the exact backend-sync release
-identity. The new worker must serve the task endpoint before registration.
+identity. All workers that can claim the job must support the sharded format
+before registration. The sharded reader also supports existing inline approvals.
 The tool does not deploy or prove a deployed revision. Record the reviewed
 digest and approval reference before the write step.
 
@@ -59,12 +60,15 @@ backend/.venv/bin/python -I backend/scripts/account_deletion_operational_holds.p
 
 Registration re-reads the full generation plan, checks the reviewed digest,
 acquires the account gate, validates legal-hold authority inside its transaction
-and binds approval to the existing failed job. It does not release holds or
-delete data itself. It wakes the same opaque job through the existing OIDC
-Cloud Tasks path. If queue creation fails after registration, the approval
-remains durable and ordinary reconciliation retries the failed job (backoff
-capped at one hour). Do not reset the intent, delete the gate, or create a new
-account/deletion job to force progress.
+and binds approval to the existing failed job. The transaction creates up to
+256 child documents keyed by the first two hex digits of each object hash.
+It publishes their hashes and the original reviewed plan digest on the marker
+in the same commit. The worker verifies the referenced shard before using it.
+Registration does not release holds or delete data itself. It wakes the same
+opaque job through the existing OIDC Cloud Tasks path. If queue creation fails
+after registration, the approval remains durable and ordinary reconciliation
+retries the failed job (backoff capped at one hour). Do not reset the intent,
+delete the gate, or create a new account/deletion job to force progress.
 
 The worker requires its running marker and matching account gate, rechecks
 legal holds, refuses event-based holds, retention and unknown object metadata,

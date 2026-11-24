@@ -1823,12 +1823,18 @@ def test_billing_failure_on_retry_after_auth_deletion_stays_fenced(monkeypatch):
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
 
 
+@pytest.fixture(scope='module')
+def real_stripe_utils():
+    """Load shared billing dependencies in setup, outside the per-call CPU budget."""
+    from utils import stripe as stripe_utils
+
+    return stripe_utils
+
+
 @pytest.mark.parametrize(
     'outcome', ['resource_missing', 'no such subscription', 'canceled', 'incomplete_expired', 'active']
 )
-def test_background_wipe_uses_immediate_idempotent_stripe_cancellation(monkeypatch, outcome):
-    from utils import stripe as real_stripe_utils
-
+def test_background_wipe_uses_immediate_idempotent_stripe_cancellation(monkeypatch, outcome, real_stripe_utils):
     _stub_wipe_steps_after_billing(monkeypatch)
     monkeypatch.setattr(
         account_deletion.users_db,
@@ -2501,7 +2507,8 @@ def test_worker_heartbeats_at_major_operation_boundaries(monkeypatch):
     assert account_deletion.background_wipe_user_data('uid1') is True
     for operation in ('billing', 'agent_vm', 'credentials', 'auth', 'derived', 'firestore'):
         assert calls[calls.index(operation) - 1] == 'heartbeat'
-    assert calls[calls.index('derived') + 1 : calls.index('firestore')] == ['heartbeat', 'heartbeat']
+    # Lake purge, Play billing records and Firestore each heartbeat.
+    assert calls[calls.index('derived') + 1 : calls.index('firestore')] == ['heartbeat'] * 3
     account_deletion.users_db.mark_user_deletion_auth_deleted.assert_called_once_with('uid1')
 
 
@@ -2616,8 +2623,8 @@ def test_off_wipe_never_enters_cell_step(monkeypatch):
     monkeypatch.setattr(account_deletion, 'purge_owner_planes', purge)
     assert account_deletion.background_wipe_user_data('uid1') is True
     purge.assert_not_called()
-    # Lake purge and Firestore each heartbeat; the unconfigured cell is skipped.
-    assert events[events.index('derived') + 1 : events.index('firestore')] == ['heartbeat', 'heartbeat']
+    # Lake purge, Play billing records and Firestore each heartbeat; the unconfigured cell is skipped.
+    assert events[events.index('derived') + 1 : events.index('firestore')] == ['heartbeat'] * 3
 
 
 @pytest.mark.parametrize('routing_mode', ['off', 'new_owners'])
@@ -2646,3 +2653,230 @@ def test_required_lake_step_failure_retries(monkeypatch, step):
     if step == 'purge_owner_lake_content':
         account_deletion.users_db.delete_user_data.assert_not_called()
         account_deletion.destroy_owner_lake_keys.assert_not_called()
+
+
+@pytest.mark.parametrize('setting', [None, 'false'])
+def test_flag_off_admission_keeps_legacy_steps_without_a_setting_read(monkeypatch, setting):
+    monkeypatch.setenv('K_SERVICE', 'backend')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    if setting is None:
+        monkeypatch.delenv('GO_QUEUE_ERASE_REQUIRED', raising=False)
+    else:
+        monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', setting)
+    failed_setting_store = MagicMock(side_effect=RuntimeError('Firestore setting unavailable'))
+    monkeypatch.setattr(account_deletion.go_erase_db, 'account_deletion_firestore_client', failed_setting_store)
+    monkeypatch.setattr(
+        account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent())
+    )
+    order = MagicMock()
+    monkeypatch.setattr(account_deletion, '_cancel_subscription_for_account_deletion', order.billing)
+    monkeypatch.setattr(account_deletion.firebase_auth, 'revoke_refresh_tokens', order.revoke)
+    monkeypatch.setattr(account_deletion, 'delete_account_credentials', order.credentials)
+    monkeypatch.setattr(account_deletion, 'enqueue_deletion_wipe', order.enqueue)
+
+    assert account_deletion.start_account_deletion('uid1')['status'] == 'ok'
+
+    assert [(call[0], call.args) for call in order.mock_calls] == [
+        ('billing', ('uid1',)),
+        ('revoke', ('uid1',)),
+        ('credentials', ('uid1',)),
+        ('enqueue', ('uid1', 'job-1')),
+    ]
+    failed_setting_store.assert_not_called()
+
+
+@pytest.mark.parametrize('grace', [False, True])
+def test_protected_admission_retains_credentials_during_workerd_outage(monkeypatch, grace):
+    from services.users.go_queue_erase import EraseUnavailable
+
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'true')
+    monkeypatch.setenv('ACCOUNT_DELETION_GRACE_ENABLED', 'true' if grace else 'false')
+    monkeypatch.setattr(
+        account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent())
+    )
+    monkeypatch.setattr(
+        account_deletion.deletion_grace_db,
+        'mark_user_deletion_grace_intent',
+        lambda uid, due: {
+            **_new_wipe_intent(),
+            'mode': 'created',
+            'wipe_status': 'pending_deletion',
+            'wipe_due_at': due,
+        },
+    )
+    monkeypatch.setattr(
+        account_deletion.deletion_grace_db, 'mark_user_deletion_grace_actions_complete', MagicMock(return_value=True)
+    )
+    monkeypatch.setattr(account_deletion.deletion_marker_db, 'read_account_deletion_marker', lambda _: None)
+    monkeypatch.setattr(account_deletion.deletion_marker_db, 'account_deletion_firestore_client', lambda: object())
+    monkeypatch.setattr(account_deletion, 'enqueue_deletion_wipe', MagicMock())
+    monkeypatch.setattr(account_deletion, 'renew_job_run_lock', MagicMock(return_value=True))
+    monkeypatch.setattr(account_deletion, 'assert_destructive_gate_still_ours', MagicMock())
+    monkeypatch.setattr(account_deletion, 'mark_remote_erasure', MagicMock())
+    credentials = MagicMock()
+    monkeypatch.setattr(account_deletion, 'delete_account_credentials', credentials)
+    barrier = MagicMock(side_effect=EraseUnavailable('workerd unavailable'))
+    monkeypatch.setattr(account_deletion, 'require_committed_erase', barrier)
+
+    result = account_deletion.start_account_deletion('uid1', grace=grace)
+
+    assert result['pending_deletion'] is grace
+    account_deletion.firebase_auth.revoke_refresh_tokens.assert_called_once_with('uid1')
+    credentials.assert_not_called()
+    barrier.assert_not_called()
+
+    # For grace admission this represents the later, due wipe.
+    assert not account_deletion.background_wipe_user_data('uid1', erase_claim=('job-1', 'token'))
+    barrier.assert_called_once()
+    credentials.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ('workerd_down', 'already_armed'),
+    [(False, False), (True, False), (True, True)],
+)
+def test_go_queue_erase_gates_data_wipe_after_billing(monkeypatch, workerd_down, already_armed):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    seen = []
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'false' if already_armed else 'true')
+    if already_armed:
+        monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', lambda *args, **kwargs: True)
+    monkeypatch.setattr(account_deletion, 'renew_job_run_lock', lambda _key, _token, *_ttl: True)
+    monkeypatch.setattr(account_deletion, 'assert_destructive_gate_still_ours', MagicMock())
+    mark_remote = MagicMock()
+    monkeypatch.setattr(account_deletion, 'mark_remote_erasure', mark_remote)
+    monkeypatch.setattr(account_deletion.deletion_marker_db, 'account_deletion_firestore_client', lambda: object())
+    monkeypatch.setattr(
+        account_deletion, '_cancel_subscription_for_account_deletion', lambda uid: seen.append('billing')
+    )
+    monkeypatch.setattr(account_deletion, 'delete_agent_vm_for_account', lambda uid: seen.append('agent_vm'))
+
+    def barrier(uid, job_id, token, owns_claim, remote_inflight):
+        assert (uid, job_id, token) == ('uid1', 'opaque-job-id', 'current-token')
+        owns_claim()
+        seen.append('erase')
+        if workerd_down:
+            remote_inflight(True)
+            raise RuntimeError('unknown remote outcome')
+
+    monkeypatch.setattr(account_deletion, 'require_committed_erase', barrier)
+    result = account_deletion.background_wipe_user_data('uid1', erase_claim=('opaque-job-id', 'current-token'))
+    assert result is (not workerd_down)
+    assert seen == (['billing', 'erase'] if workerd_down else ['billing', 'erase', 'agent_vm'])
+    if workerd_down:
+        assert mark_remote.call_args is not None
+        assert mark_remote.call_args.kwargs['inflight'] is True
+        account_deletion.finish_destructive_operation.assert_not_called()
+        account_deletion.auth.delete_account.assert_not_called()
+        account_deletion.users_db.delete_user_data.assert_not_called()
+        account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
+
+
+def test_unarmed_flag_off_task_records_lake_failure_for_retry(monkeypatch):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'false')
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock(return_value=False))
+    renew = MagicMock(side_effect=RuntimeError('unexpected synchronous renewal'))
+    monkeypatch.setattr(account_deletion, 'renew_job_run_lock', renew)
+    require_erase = MagicMock()
+    monkeypatch.setattr(account_deletion, 'require_committed_erase', require_erase)
+    monkeypatch.setattr(
+        account_deletion, 'destroy_owner_lake_keys', MagicMock(side_effect=RuntimeError('final lake purge failed'))
+    )
+    assert not account_deletion.background_wipe_user_data('uid1')
+
+    renew.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_running.assert_called_once_with('uid1')
+    require_erase.assert_not_called()
+    account_deletion.destroy_owner_lake_keys.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
+
+
+def test_required_go_erase_refuses_inline_dispatch_and_execution(monkeypatch):
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'true')
+    monkeypatch.setattr(account_deletion, 'is_account_deletion_dispatch_enabled', lambda: False)
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+
+    with pytest.raises(RuntimeError, match='requires Cloud Tasks'):
+        account_deletion.enqueue_deletion_wipe('uid1', 'opaque-job-id')
+    with pytest.raises(RuntimeError, match='requires an authenticated wipe task'):
+        account_deletion.background_wipe_user_data('uid1')
+
+    submit.assert_not_called()
+    account_deletion.acquire_destructive_operation.assert_not_called()
+
+
+def test_billing_failure_does_not_arm_the_go_queue_barrier(monkeypatch):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'true')
+    monkeypatch.setattr(account_deletion, 'renew_job_run_lock', lambda _key, _token, *_ttl: True)
+    monkeypatch.setattr(
+        account_deletion,
+        '_cancel_subscription_for_account_deletion',
+        MagicMock(side_effect=account_deletion.DeletionBillingError(None, RuntimeError('billing unavailable'))),
+    )
+    require = MagicMock()
+    monkeypatch.setattr(account_deletion, 'require_committed_erase', require)
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_billing_failed', MagicMock(return_value=True))
+    assert account_deletion.background_wipe_user_data('uid1', erase_claim=('opaque-job-id', 'current-token')) is False
+    require.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_billing_failed.assert_called_once()
+
+
+def test_delayed_inline_wipe_stops_when_existing_heartbeat_finds_an_armed_marker(monkeypatch):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'false')
+    monkeypatch.setattr(account_deletion, 'is_account_deletion_dispatch_enabled', lambda: False)
+    monkeypatch.setattr(account_deletion, 'assert_inline_account_deletion_permitted', lambda: None)
+    tasks = []
+    monkeypatch.setattr(account_deletion, 'submit_with_context', lambda _executor, fn, uid: tasks.append((fn, uid)))
+    account_deletion.enqueue_deletion_wipe('uid1', 'job')
+    monkeypatch.setattr(account_deletion.users_db, 'heartbeat_user_deletion_wipe', lambda _uid: False)
+
+    fn, uid = tasks.pop()
+    assert fn(uid) is False
+    account_deletion.auth.delete_account.assert_not_called()
+    account_deletion.users_db.delete_user_data.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_not_called()
+    account_deletion.finish_destructive_operation.assert_not_called()
+
+
+def test_a_wipe_failing_at_the_play_records_step_names_it_in_failure_telemetry(monkeypatch):
+    """The Play-records step is never hidden behind best-effort failures the derived purge recorded earlier."""
+    emit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'emit_posthog_event', emit)
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'get_existing_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock())
+    monkeypatch.setattr(
+        account_deletion,
+        'purge_derived_user_data',
+        MagicMock(
+            return_value={
+                'required_failures': [],
+                'best_effort_failures': [{'operation': 'speech_profile_audio', 'error': 'x'}],
+            }
+        ),
+    )
+
+    def refuse(uid, since):
+        raise account_deletion.play_publisher.PlayCancelPending(None, 'a' * 64)
+
+    monkeypatch.setattr(account_deletion.play_publisher, 'purge_account_records', refuse)
+    monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock(return_value={'status': 'ok'}))
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
+
+    assert account_deletion.background_wipe_user_data('uid1') is False
+
+    account_deletion.users_db.delete_user_data.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    distinct_id, event, props = emit.call_args.args
+    assert event == 'Account Deletion Wipe Failed'
+    assert props['failed_operations'] == ['speech_profile_audio', 'play_billing_records']
+    assert 'uid1' not in str(props)

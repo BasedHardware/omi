@@ -33,7 +33,7 @@ def routes():
     async def charge(**kwargs):
         rate(**kwargs)
 
-    core = Mock(return_value=[{'id': 'matched'}])
+    core = Mock(return_value=SimpleNamespace(conversations=[{'id': 'matched'}], vectors_ok=True, keyword_ok=False))
     memory_search = Mock(return_value={'memories': [], 'search_coverage': 'eligible_indexed_memories'})
     people = Mock(return_value={'people': []})
     profile = Mock(return_value={'profile': None, 'message': 'No profile'})
@@ -56,7 +56,7 @@ def routes():
             ),
             'database._client': module('database._client', db=object()),
             'utils.mcp_server.handlers.conversations': module(
-                'utils.mcp_server.handlers.conversations', search_conversations_core=core
+                'utils.mcp_server.handlers.conversations', search_conversation_hits=core
             ),
             'utils.mcp_server.helpers': module(
                 'utils.mcp_server.helpers',
@@ -90,6 +90,7 @@ def test_search_is_a_named_route_and_shared_core_receives_utc_dates(routes):
     response = client.get('/v1/dev/user/conversations/search?query=budget&start_date=2026-10-01T00:00:00&limit=20')
     assert response.status_code == 200
     assert response.json()['conversations'][0]['id'] == 'matched'
+    assert response.json()['search_coverage'] == 'summary_vectors_only'
     assert core.call_args.args == ('owner', 'budget')
     assert str(core.call_args.kwargs['start_dt'].tzinfo) == 'UTC'
     assert core.call_args.kwargs['limit'] == 20

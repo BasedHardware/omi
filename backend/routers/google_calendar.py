@@ -5,8 +5,9 @@ Provides endpoints for listing Google Calendar events for the event picker UI
 and surfacing capture gaps (booked meetings with no recorded conversation).
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -16,6 +17,9 @@ import logging
 logger = logging.getLogger(__name__)
 import database.conversations as conversations_db
 import database.users as users_db
+from database import google_calendar_preferences
+from utils.retrieval import google_calendar_selection, google_calendar_catalog_cache
+from utils.retrieval.tools.google_utils import GoogleAPIError
 from utils.conversations.calendar_linking import select_capture_gaps
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times
 from utils.integration_telemetry import (
@@ -31,6 +35,85 @@ from utils.retrieval.tools.calendar_tools import get_google_calendar_events
 from utils.retrieval.tools.google_utils import refresh_google_token
 
 router = APIRouter()
+
+
+class ReadableCalendar(BaseModel):
+    id: str
+    name: str
+    primary: bool
+    available: bool
+
+
+class CalendarSelection(BaseModel):
+    account_id: str
+    calendars: List[ReadableCalendar]
+    selected_ids: List[str]
+    write_calendar_id: str = 'primary'
+
+
+class CalendarSelectionUpdate(BaseModel):
+    account_id: str = Field(min_length=1, max_length=1024)
+    selected_ids: List[Annotated[str, Field(min_length=1, max_length=1024)]] = Field(
+        min_length=1, max_length=google_calendar_selection.MAX_SELECTED
+    )
+
+
+async def _selection_catalog(uid: str) -> dict[str, Any]:
+    # Explicit refresh/save always revalidates live provider access. Hot event
+    # reads use the short-lived metadata cache instead.
+    google_calendar_catalog_cache.invalidate(uid)
+    try:
+        async with asyncio.timeout(20):
+            return await _selection_catalog_with_refresh(uid)
+    except TimeoutError:
+        raise HTTPException(504, 'Calendar list timed out. Please try again.') from None
+
+
+async def _selection_catalog_with_refresh(uid: str) -> dict[str, Any]:
+    token, integration = await run_blocking(db_executor, _get_google_calendar_token, uid)
+    try:
+        return await google_calendar_selection.catalog(uid, token)
+    except GoogleAPIError as error:
+        if error.is_auth_error:
+            token = await refresh_google_token(uid, integration)
+            if token:
+                try:
+                    return await google_calendar_selection.catalog(uid, token)
+                except Exception:
+                    raise HTTPException(502, 'Calendar list unavailable. Please try again.') from None
+            raise HTTPException(401, 'Google Calendar authentication expired. Please reconnect.') from None
+        if error.is_permission_error:
+            raise HTTPException(403, 'Google Calendar list access denied. Please reconnect.') from None
+        raise HTTPException(502, 'Calendar list unavailable. Please try again.') from None
+    except Exception:
+        raise HTTPException(502, 'Calendar list unavailable. Please try again.') from None
+
+
+@router.get('/v1/calendar/google/calendars', response_model=CalendarSelection, tags=['google_calendar'])
+async def list_readable_google_calendars(
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'google_calendar:selection')),
+):
+    return await _selection_catalog(uid)
+
+
+@router.put('/v1/calendar/google/calendars', response_model=CalendarSelection, tags=['google_calendar'])
+async def save_google_calendar_selection(
+    request: CalendarSelectionUpdate,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'google_calendar:selection')),
+):
+    current = await _selection_catalog(uid)
+    if request.account_id != current['account_id']:
+        raise HTTPException(409, 'Google account changed. Reload the calendar list before saving.')
+    readable = {row['id'] for row in current['calendars'] if row['available']}
+    ids = list(dict.fromkeys(request.selected_ids))
+    retained = set(current['selected_ids'])
+    if any(value not in readable and value not in retained for value in ids):
+        raise HTTPException(409, 'A selected calendar is unavailable. Reload and choose readable calendars.')
+    # Store canonical primary identity so a differently named Google account
+    # never inherits this selection. Disconnect does not erase preferences.
+    await run_blocking(db_executor, google_calendar_preferences.save_selection, uid, request.account_id, ids)
+    google_calendar_catalog_cache.invalidate(uid)
+    return {**current, 'selected_ids': ids}
 
 
 class GoogleCalendarEvent(BaseModel):
@@ -148,6 +231,7 @@ async def list_google_calendar_events(
 
     try:
         events = await get_google_calendar_events(
+            uid=uid,
             access_token=access_token,
             time_min=time_min,
             time_max=time_max,
@@ -161,6 +245,7 @@ async def list_google_calendar_events(
             if new_token:
                 try:
                     events = await get_google_calendar_events(
+                        uid=uid,
                         access_token=new_token,
                         time_min=time_min,
                         time_max=time_max,
@@ -219,6 +304,7 @@ async def get_calendar_capture_gaps(
     emit_sync_attempted(telemetry_context)
     try:
         events = await get_google_calendar_events(
+            uid=uid,
             access_token=access_token,
             time_min=start,
             time_max=end,
@@ -231,6 +317,7 @@ async def get_calendar_capture_gaps(
             if new_token:
                 try:
                     events = await get_google_calendar_events(
+                        uid=uid,
                         access_token=new_token,
                         time_min=start,
                         time_max=end,

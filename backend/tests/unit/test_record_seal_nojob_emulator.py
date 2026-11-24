@@ -182,7 +182,9 @@ def test_real_jobs_age_order_numeric_coverage_frozen_horizon_and_cursor(monkeypa
         )
         rest, _, end = cluster.discover_jobs(client, budget=SweepBudget(60), after=cursor)
         assert [path for path, _ in first + rest] == expected and end is None
-        assert cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)[0] == first
+        # A new sweep recomputes ages against wall time; only row selection is stable.
+        repeated, _, _ = cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)
+        assert [path for path, _ in repeated] == [path for path, _ in first]
         # The legacy cursor can still be written and read, and off returns all
         # the same eligible rows in exact Firestore document-name order.
         monkeypatch.setenv('RECORD_SEAL_REPAIR_AGE_ORDER', 'off')

@@ -16,7 +16,6 @@ from google.cloud.firestore_v1.transaction import Transaction
 from google.cloud.firestore_v1.types import BatchGetDocumentsResponse, CommitResponse, Document, Write, WriteResult
 
 from config import conversation_smart_merge as config
-from config.list_projection import STATE_COLLECTION
 from database import smart_merge as smart_merge_db
 from database import smart_merge_audit as audit_db
 from tests.unit.test_conversation_smart_merge import UID, World
@@ -28,8 +27,6 @@ from utils.conversations import smart_merge
 @pytest.fixture
 def sdk_world(monkeypatch):
     monkeypatch.setenv(config.SMART_MERGE_AUDIT_ENV, 'on')
-    # These commits are asserted with the list projection writer's appended writes.
-    monkeypatch.setenv('OMI_LIST_PROJECTION_WRITER_ENABLED', 'true')
     world = World(monkeypatch)
     client = OfflineFirestoreClient(project='synthetic-audit-test')
     api = MagicMock()
@@ -71,7 +68,6 @@ def sdk_world(monkeypatch):
             data = _helpers.decode_dict(write.update.fields, client)
             if Write.pb(write).HasField('update_mask'):
                 # A masked Write without an exists precondition is an upsert.
-                # The real Commit atomically includes new projection rows.
                 after.setdefault(path, {}).update(data)
             else:
                 after[path] = data
@@ -149,7 +145,6 @@ def test_sdk_commit_retry_rechecks_fence_and_commits_once(sdk_world, gate_on_abo
     assert len(test.world.jev_calls) == 1
     assert sum(path == GATE for _, path in test.reads) == 2
     assert sum(path == MARKER for _, path in test.reads) == 2
-    assert len(test.world.store.rows[('users', UID, STATE_COLLECTION, 'conversations')]['version']) == 32
     # A finalization replay never backfills a skipped audit or writes a second one.
     result = smart_merge_db.absorb_conversation(
         UID,

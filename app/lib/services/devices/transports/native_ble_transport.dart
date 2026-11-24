@@ -300,6 +300,10 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   bool hasCharacteristic(String serviceUuid, String characteristicUuid) =>
       _hasCharacteristic(serviceUuid, characteristicUuid);
 
+  /// True once native has reported the GATT table for the current link.
+  /// Until then [hasCharacteristic] cannot tell an absent characteristic.
+  bool get servicesDiscovered => _services.isNotEmpty;
+
   /// A connected pendant can leave a GATT read or write unanswered (and older
   /// native code orphaned a second same-characteristic read). Every awaited
   /// operation is bounded so a capture or sync pass can never wait forever.

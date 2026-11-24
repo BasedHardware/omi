@@ -143,7 +143,7 @@ PY
 }
 
 run_evidence_command test-preflight bash test-preflight.sh
-run_evidence_command backend-test bash test.sh
+run_evidence_command backend-test bash test.sh --all
 run_evidence_command workflow-contracts python3 scripts/check_workflow_contracts.py
 run_evidence_command openapi-public scripts/openapi_runner.sh scripts/export_openapi.py --check ../docs/api-reference/openapi.json
 run_evidence_command openapi-app-client scripts/openapi_runner.sh scripts/export_openapi.py --surface app-client --check ../docs/api-reference/app-client-openapi.json

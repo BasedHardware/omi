@@ -13,6 +13,7 @@ enum UserFacingErrorPresentation {
     case conversations
     case conversationSearch
     case conversationMerge
+    case conversationDeletion
     case tasks
     case memories
     case memoryVisibility
@@ -36,6 +37,7 @@ enum UserFacingErrorPresentation {
       case .conversations: return "load conversations"
       case .conversationSearch: return "search conversations"
       case .conversationMerge: return "merge conversations"
+      case .conversationDeletion: return "delete the conversation"
       case .tasks: return "update tasks"
       case .memories: return "load memories"
       case .memoryVisibility: return "update memory visibility"

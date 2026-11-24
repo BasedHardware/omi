@@ -14,6 +14,8 @@ _SMART_MERGE_FLATTEN_HOSTS = {
     'cloud_run/backend-sync',
     'cloud_run/backend-sync-backfill',
     'cloud_run/backend-integration',
+    # SCA-3120: derives backend-integration's env; its projection follow-ups finish sync bridges.
+    'cloud_run/backend-projection-pump',
 }
 
 _FLAG = 'CONVERSATION_SMART_MERGE_FLATTEN_ENABLED'

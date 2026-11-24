@@ -7,10 +7,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_seams.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
@@ -19,6 +21,23 @@ import '../support/crashlytics_recorder.dart';
 class _RecordingActions extends NoopCaptureExternalActions {
   final processing = <ServerConversation>[];
   final upserted = <ServerConversation>[];
+  ServerConversation? manualFinishRow;
+  bool? manualFinishFailed;
+  ProcessAbsence? manualFinishAbsence;
+
+  @override
+  void onManualFinishStarted(ServerConversation placeholder, String? recordingId,
+      {String? liveConversationId, String? captureId}) {
+    manualFinishRow = placeholder;
+  }
+
+  @override
+  void onManualFinishSettled(ServerConversation placeholder, InProgressProcessOutcome? outcome,
+      {required bool showFailure}) {
+    if (!identical(placeholder, manualFinishRow)) return;
+    manualFinishFailed = outcome?.response?.conversation == null && showFailure;
+    manualFinishAbsence = outcome?.absence;
+  }
 
   @override
   void addProcessingConversation(ServerConversation conversation) {
@@ -195,6 +214,7 @@ void main() {
 
     expect(actions.processing.map((conversation) => conversation.id), ['0']);
     expect(actions.processing.single.status, ConversationStatus.processing);
+    expect(actions.manualFinishRow, isNull, reason: 'a coordinator close must remain silent');
     expect(finalize.isCompleted, isFalse);
     expect(processStarted.isCompleted, isFalse);
 
@@ -217,6 +237,25 @@ void main() {
 
     expect(actions.processing, isEmpty);
     expect(actions.upserted, isEmpty);
+  });
+
+  test('pendant double tap publishes manual finish before the drain and reports an unanswered request', () async {
+    final finalize = Completer<void>();
+    final actions = _RecordingActions();
+    final provider = _provider(actions: actions, finalizeGate: finalize, process: () async => null);
+    addTearDown(provider.dispose);
+    SharedPreferencesUtil().omiButtonActionsEnabled = true;
+    SharedPreferencesUtil().doubleTapAction = 0;
+
+    provider.handleButtonEventForTesting('synthetic-pendant', 2);
+    expect(actions.manualFinishRow, same(actions.processing.single));
+    expect(actions.manualFinishFailed, isNull);
+
+    finalize.complete();
+    await _flushEventQueue();
+    expect(actions.manualFinishFailed, isTrue);
+    expect(actions.manualFinishAbsence, ProcessAbsence.transport);
+    expect(actions.processing, isEmpty);
   });
 
   test('a conversation that changes during the drain removes the skeleton without processing', () async {
@@ -385,6 +424,52 @@ void main() {
     });
 
     expect(phone.stampCalls, 1);
+    expect(outcome.harnessError, isNull);
+    expect(outcome.unhandled, isEmpty);
+    _expectSingleReport('capture_process_now: StateError');
+  });
+
+  test('a failed middle drain cannot let a later server close bypass an unresolved predecessor', () async {
+    final sentinel = StateError('middle-drain-boom');
+    late _GatedPhoneSync phone;
+    late int stampsBeforeFirstDrain;
+    final outcome = await _runInGuardedZone(() async {
+      final firstDrain = Completer<void>();
+      final secondDrain = Completer<void>();
+      final thirdDrain = Completer<void>()..complete();
+      phone = _GatedPhoneSync(firstDrain, laterFinalizeGates: [secondDrain, thirdDrain]);
+      final provider = _provider(
+        actions: _RecordingActions(),
+        finalizeGate: firstDrain,
+        phone: phone,
+        process: () async => null,
+      );
+      try {
+        provider.testSessionStartSeconds = 777;
+        provider.onMessageEventReceived(ConversationProcessingStartedEvent(memory: _conversation(id: 'a')));
+
+        provider.testSessionStartSeconds = 778;
+        final second = provider.forceProcessingCurrentConversation();
+        final expectedFailure = expectLater(second, throwsA(same(sentinel)));
+        secondDrain.completeError(sentinel, StackTrace.fromString('#0      _fail (package:omi/fake.dart:1:1)'));
+        await expectedFailure;
+
+        provider.testSessionStartSeconds = 779;
+        provider.onMessageEventReceived(ConversationProcessingStartedEvent(memory: _conversation(id: 'c')));
+        await _flushEventQueue();
+        stampsBeforeFirstDrain = phone.stampCalls;
+
+        firstDrain.complete();
+        await _flushEventQueue();
+      } finally {
+        if (!firstDrain.isCompleted) firstDrain.complete();
+        if (!secondDrain.isCompleted) secondDrain.complete();
+        provider.dispose();
+      }
+    });
+
+    expect(stampsBeforeFirstDrain, 0, reason: 'the failed middle slot must retain the first close as its predecessor');
+    expect(phone.stampCalls, 2, reason: 'both valid closes stamp after the first drain completes');
     expect(outcome.harnessError, isNull);
     expect(outcome.unhandled, isEmpty);
     _expectSingleReport('capture_process_now: StateError');

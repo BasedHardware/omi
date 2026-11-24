@@ -180,7 +180,9 @@ def apply_wal_audio_coverage(
         return None
 
     try:
-        base_timestamp = Decimal(str(parse_sync_filename_timestamp(wav_path)))
+        # This is an already decoded/admitted source. A later admission-switch
+        # rollback cannot revoke its clock or its exact source-frame proof.
+        base_timestamp = Decimal(str(parse_sync_filename_timestamp(wav_path, enforce_window=False)))
     except ValueError:
         return None
 

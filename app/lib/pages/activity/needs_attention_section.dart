@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 
 import 'package:provider/provider.dart';
 
@@ -9,12 +10,16 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/conversation_link_blocks.dart';
 import 'package:omi/pages/conversations/recording_blocks.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
+import 'package:omi/widgets/freemium_switch_dialog.dart';
 
 /// Work that could not finish, at the top of Activity: conversations the server gave up summarizing
 /// (with Try Again) and recordings that could not be processed (opening Offline Sync, which owns
@@ -39,7 +44,7 @@ class NeedsAttentionSection extends StatelessWidget {
 
   final PendingWorkStore store;
   final List<ServerConversation> failedConversations;
-  final Future<ServerConversation?> Function(String id)? reprocess;
+  final Future<ReprocessResult> Function(String id)? reprocess;
 
   /// Injectable for tests; defaults to the app provider when one is in scope.
   final SyncProvider? syncProvider;
@@ -121,6 +126,8 @@ class NeedsAttentionSection extends StatelessWidget {
                     if (index > 0) Divider(height: 1, thickness: 1, indent: 64, color: OmiColors.surface2),
                     _AttentionRow(
                       key: ValueKey('activity_attention_${item.id}'),
+                      dismissKey: ValueKey('activity_attention_dismiss_${item.id}'),
+                      onDismiss: () => store.dismiss(item),
                       title: item.title ??
                           (item.notesOnly || item.kind == 'conversation_summary_failed'
                               ? l.attentionSummaryFailed
@@ -261,7 +268,7 @@ class _FailedConversationRow extends StatefulWidget {
   const _FailedConversationRow({super.key, required this.conversation, required this.openConversation, this.reprocess});
   final ServerConversation conversation;
   final Future<void> Function(BuildContext, String) openConversation;
-  final Future<ServerConversation?> Function(String)? reprocess;
+  final Future<ReprocessResult> Function(String)? reprocess;
 
   @override
   State<_FailedConversationRow> createState() => _FailedConversationRowState();
@@ -274,13 +281,19 @@ class _FailedConversationRowState extends State<_FailedConversationRow> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final retry = widget.reprocess ?? (String id) async => (await reProcessConversationServer(id)).conversation;
+      final retry = widget.reprocess ?? reProcessConversationServer;
       final result = await retry(widget.conversation.id);
       if (!mounted) return;
-      if (result == null) {
-        OmiFeedback.error(context, context.l10n.somethingWentWrong);
-      } else {
-        context.read<ConversationProvider?>()?.applyConversationReprocessResult(result);
+      switch (result) {
+        case ReprocessSuccess(:final conversation):
+          context.read<ConversationProvider?>()?.applyConversationReprocessResult(conversation);
+        // Not an error: the row shows the server's waiting state, or the not-transcribed status.
+        case ReprocessTranscriptionPending(conversation: final waiting?):
+          context.read<ConversationProvider?>()?.applyConversationReprocessResult(waiting);
+        case ReprocessTranscriptionPending():
+          TranscriptionPendingConversations.mark(widget.conversation.id);
+        default:
+          OmiFeedback.error(context, context.l10n.somethingWentWrong);
       }
     } catch (_) {
       if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
@@ -291,15 +304,45 @@ class _FailedConversationRowState extends State<_FailedConversationRow> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<Map<String, DateTime>>(
+      valueListenable: TranscriptionPendingConversations.ids,
+      builder: (context, _, __) => _row(context),
+    );
+  }
+
+  Widget _row(BuildContext context) {
     final c = widget.conversation;
     final at = (c.startedAt ?? c.createdAt).toLocal();
     final dates = OmiDateFormat.of(context);
-    final hasTitle = !c.isLocked && c.structured.title.trim().isNotEmpty;
+    final l = context.l10n;
+    final held = c.isTranscriptionAllowanceHeld;
+    final admitted = c.isAdmittedForTranscription;
+    final pending = TranscriptionPendingConversations.contains(c.id);
+    final upgradeMinutes = held ? heldRecordingUpgradeLimitMinutes(c, context.watch<UsageProvider?>()) : null;
+    final title = c.structured.title.trim();
+    final hasTitle = !c.isLocked && title.isNotEmpty && !TranscriptionPendingConversations.replacesTitle(c);
+    final status = switch ((held, admitted, pending)) {
+      (true, _, _) => upgradeMinutes == null ? l.waitingForTranscriptionAllowance : l.freeCapTitle(upgradeMinutes),
+      (_, true, _) => l.homeStepTranscribing,
+      (_, _, true) => l.summaryTranscriptionPendingTitle,
+      _ => l.processingFailed,
+    };
     return _AttentionRow(
-      title: hasTitle ? c.structured.title : context.l10n.processingFailed,
-      subtitle: [if (hasTitle) context.l10n.processingFailed, dates.dayHeader(at), dates.time(at)].join(' · '),
+      key: held ? Key('activity_held_${c.id}') : null,
+      title: hasTitle
+          ? c.structured.title
+          : held
+              ? l.summaryTranscriptionPendingTitle
+              : status,
+      subtitle: [if (hasTitle || held) status, dates.dayHeader(at), dates.time(at)].join(' · '),
       busy: _busy,
-      onRetry: _retry,
+      waiting: held,
+      retryLabel: upgradeMinutes != null ? l.upgrade : null,
+      onRetry: upgradeMinutes != null
+          ? () => FreemiumSwitchHandler.openHeldRecordingUpgrade(context, source: 'held_recording')
+          : held || admitted || pending
+              ? null
+              : _retry,
       onTap: () => widget.openConversation(context, c.id),
     );
   }
@@ -313,18 +356,67 @@ class _AttentionRow extends StatelessWidget {
     required this.busy,
     required this.onRetry,
     required this.onTap,
+    this.waiting = false,
     this.retryLabel,
+    this.onDismiss,
+    this.dismissKey,
   });
 
   final String title;
   final String subtitle;
   final bool busy;
+  final bool waiting;
   final VoidCallback? onRetry;
   final VoidCallback? onTap;
   final String? retryLabel;
 
+  /// Server attention rows only: swipe left (or the VoiceOver action) clears the row for good.
+  final VoidCallback? onDismiss;
+  final Key? dismissKey;
+
   @override
   Widget build(BuildContext context) {
+    final row = _row(context);
+    if (onDismiss == null || busy) return row;
+    final label = context.l10n.dismiss;
+    return Semantics(
+      customSemanticsActions: {CustomSemanticsAction(label: label): onDismiss!},
+      child: Dismissible(
+        key: dismissKey ?? UniqueKey(),
+        direction: DismissDirection.endToStart,
+        onDismissed: (_) {
+          OmiHaptics.medium();
+          onDismiss!();
+        },
+        background: Container(
+          color: OmiColors.surface3,
+          padding: const EdgeInsetsDirectional.only(end: 20),
+          alignment: AlignmentDirectional.centerEnd,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(label, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(width: 10),
+              ExcludeSemantics(child: Icon(Icons.close_rounded, color: OmiColors.textPrimary)),
+            ],
+          ),
+        ),
+        child: row,
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context) {
+    final action = busy || onRetry == null
+        ? null
+        : OmiButton.secondary(
+            label: retryLabel ?? context.l10n.tryAgain,
+            onPressed: onRetry,
+            size: OmiButtonSize.compact,
+          );
+    // At the accessibility text sizes a trailing button leaves the title one letter per line: the
+    // action moves under the text instead.
+    final stacked = action != null && MediaQuery.textScalerOf(context).scale(1) >= 1.6;
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -336,7 +428,13 @@ class _AttentionRow extends StatelessWidget {
               height: 36,
               decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
               alignment: Alignment.center,
-              child: Icon(Icons.warning_amber_rounded, size: 18, color: OmiColors.warning),
+              child: ExcludeSemantics(
+                child: Icon(
+                  waiting ? Icons.hourglass_empty : Icons.warning_amber_rounded,
+                  size: 18,
+                  color: waiting ? OmiColors.textSecondary : OmiColors.warning,
+                ),
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -348,6 +446,10 @@ class _AttentionRow extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(subtitle, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
                   ],
+                  if (stacked) ...[
+                    const SizedBox(height: OmiSpacing.xs),
+                    action,
+                  ],
                 ],
               ),
             ),
@@ -356,13 +458,9 @@ class _AttentionRow extends StatelessWidget {
                 padding: EdgeInsetsDirectional.only(start: OmiSpacing.xs, end: OmiSpacing.xs),
                 child: OmiSpinner(size: OmiSpinnerSize.small),
               )
-            else if (onRetry != null)
-              OmiButton.secondary(
-                label: retryLabel ?? context.l10n.tryAgain,
-                onPressed: onRetry,
-                size: OmiButtonSize.compact,
-              )
-            else if (onTap != null)
+            else if (action != null && !stacked)
+              action
+            else if (action == null && onTap != null)
               Icon(Icons.chevron_right, color: OmiColors.textTertiary),
           ],
         ),

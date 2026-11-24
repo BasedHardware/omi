@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path, PureWindowsPath
 
+import pytest
+
 from scripts import inventory_app_client_schemas
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -19,8 +21,15 @@ def test_repo_relative_path_uses_forward_slashes_on_windows(monkeypatch):
     assert inventory_app_client_schemas.repo_relative_path(windows_root / 'app/lib/model.dart') == 'app/lib/model.dart'
 
 
-def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
-    report = inventory_app_client_schemas.build_report(SPEC_PATH)
+@pytest.fixture(scope='module')
+def repository_report():
+    # The immutable checkout scan is shared setup; each test keeps its own
+    # contract assertions over the complete real inventory.
+    return inventory_app_client_schemas.build_report(SPEC_PATH)
+
+
+def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos(repository_report):
+    report = repository_report
 
     generated_backed_paths = {item['path'] for item in report['generated_backed_adapter_files']}
     remaining_manual_paths = {item['path'] for item in report['remaining_manual_dart_json_schema_files']}
@@ -44,6 +53,7 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert 'app/lib/backend/schema/action_item.dart' not in remaining_manual_paths
     assert 'app/lib/backend/schema/folder.dart' not in remaining_manual_paths
     assert 'app/lib/backend/schema/bt_device/bt_device.dart' in local_non_rest_paths
+    assert 'app/lib/backend/schema/audio_custody_event.dart' in local_non_rest_paths
     assert 'app/lib/backend/schema/capture_committed_event.dart' in local_non_rest_paths
     assert (
         'POST',
@@ -407,8 +417,8 @@ def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
     assert re.search(r'app/lib/backend/schema/app\.dart:\d+ \(field_access\)', result.stdout)
 
 
-def test_inventory_openapi_route_response_decode_migration_complete():
-    report = inventory_app_client_schemas.build_report(SPEC_PATH)
+def test_inventory_openapi_route_response_decode_migration_complete(repository_report):
+    report = repository_report
     response_violations = [item for item in report['app_operation_manifest'] if item['raw_response_decode_site_count']]
     assert not response_violations
     voice_operation = next(

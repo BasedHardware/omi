@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-row-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Home, past_due Omi Pro yearly renewal (light): main shows Update only; this branch adds Switch to Monthly with the catalog monthly price, and the confirm sheet (plan, due today, replaced yearly charge).",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-declined-switched-row-gone.png",
+      "platform": "mobile-ios",
+      "description": "Same seeded payer: declined card on Confirm (nothing changed), card works (switched, US$29.99 paid), row gone on Home, still gone after relaunch.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-dark-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Dark: main row vs this branch's row and confirm sheet.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-max-text-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Largest text size, light and dark: main row vs this branch's row (Update first, clear of the Ask bar; Switch to Monthly wraps under it) and sheet (amount stays whole, content scrolls). The Home/Tasks header overflow stripe is on main too.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-locales-de-ja-ar.png",
+      "platform": "mobile-ios",
+      "description": "German, Japanese and Arabic (RTL): row and confirm sheet.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

@@ -21,6 +21,7 @@ import 'package:omi/ui/omi_theme.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -32,6 +33,13 @@ class _NoConnectivityPlatform extends ConnectivityPlatform {
 
   @override
   Stream<List<ConnectivityResult>> get onConnectivityChanged => const Stream.empty();
+}
+
+/// Widget fake async cannot await real filesystem/worker-isolate operations.
+/// Real-file inventory is covered separately; this fixture exercises absence.
+class _UnavailableDocuments extends PathProviderPlatform {
+  @override
+  Future<String?> getApplicationDocumentsPath() async => throw UnsupportedError('fixture documents unavailable');
 }
 
 class _TestDeviceInfoPlatform extends DeviceInfoPlatform {
@@ -253,6 +261,7 @@ void main() {
 
   final mockedChannels = <String>{};
   late RecordingAnalytics analytics;
+  late PathProviderPlatform previousPaths;
 
   void mockBleHostApi(String method, Object? reply) {
     final channel = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.$method';
@@ -287,6 +296,8 @@ void main() {
   });
 
   setUp(() async {
+    previousPaths = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _UnavailableDocuments();
     SharedPreferences.setMockInitialValues({
       'authToken': 'synthetic-bearer',
       'tokenExpirationTime': DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
@@ -314,6 +325,7 @@ void main() {
   });
 
   tearDown(() async {
+    PathProviderPlatform.instance = previousPaths;
     Env.clearApiBaseUrlOverrideForTesting();
     for (final channel in mockedChannels) {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(channel, null);
@@ -365,6 +377,7 @@ void main() {
 
     final json = tester.widget<SelectableText>(find.byType(SelectableText)).data!;
     final bundle = jsonDecode(json) as Map<String, dynamic>;
+    expect(bundle['ring_custody']['local_recording_inventory']['read_result'], 'unavailable');
     expect(bundle['reconnection_count_window'], 1);
     expect(bundle['fail_to_connect_count_window'], 1);
     expect(bundle['reconnection_count'], 3);
@@ -374,6 +387,28 @@ void main() {
     expect(retainedHistory.map((event) => event['ts']), [now - 8 * dayMs, now - 8 * dayMs, now - dayMs, now - dayMs]);
     expect(retainedHistory.map((event) => event['event_type']),
         ['disconnect', 'fail_to_connect', 'disconnect', 'fail_to_connect']);
+    expect(_CannedUpload.requests, 0);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('support bundle preserves an unknown anchor while counting unrecovered drops', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    mockBleHostApi(
+      'getExtendedDeviceDiagnostics',
+      jsonEncode({
+        'disconnect_history_v2': [
+          {'timestamp': now - 1000, 'eventType': 'disconnect', 'timeToReconnectMs': 0},
+        ],
+      }),
+    );
+    await pumpPage(tester);
+    await openSupportDialog(tester);
+
+    final bundle = jsonDecode(tester.widget<SelectableText>(find.byType(SelectableText)).data!) as Map<String, dynamic>;
+    expect(bundle['counters_since'], {'reconnection_count': null, 'fail_to_connect_count': null});
+    expect(bundle['reconnection_count_window'], 1);
+    expect(bundle['reconnection_count'], 3);
     expect(_CannedUpload.requests, 0);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();

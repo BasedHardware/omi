@@ -40,7 +40,26 @@ import { StaleAdapterBindingError } from "../runtime/kernel-types.js";
 type PiMonoConfig = HarnessConfig & {
   onRestart?: (reason: string) => void;
   onDisposed?: () => void;
+  /**
+   * Total wall-clock deadline for a single prompt, in milliseconds. `0`
+   * disables it. Defaults to `OMI_PI_MONO_PROMPT_TIMEOUT_MS` or
+   * `DEFAULT_PI_MONO_PROMPT_TIMEOUT_MS`.
+   *
+   * The kernel's run deadline is the primary bound and covers every adapter;
+   * this is an adapter-level backstop for deployments that disable it. It is a
+   * total deadline, not a no-progress watchdog: a quiet prompt can be healthy
+   * (a long tool call), so silence alone must not be read as death.
+   */
+  promptTimeoutMs?: number;
 };
+
+const DEFAULT_PI_MONO_PROMPT_TIMEOUT_MS = 0;
+
+function parsePositiveInt(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
 
 // Pi-mono RPC command/event types
 interface PiRpcCommand {
@@ -511,6 +530,9 @@ export class PiMonoAdapter implements HarnessAdapter {
   private providerRequestId: string | undefined;
   /** True when a system-prompt change was deferred because a prompt was active */
   private pendingSystemPromptRefresh = false;
+  /** Total prompt deadline backstop for the in-flight prompt. */
+  private readonly promptTimeoutMs: number;
+  private promptDeadlineTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(config: PiMonoConfig, piPath?: string, extensionPath?: string) {
     this.config = config;
@@ -520,6 +542,9 @@ export class PiMonoAdapter implements HarnessAdapter {
       extensionPath ||
       process.env.PI_EXTENSION_PATH ||
       resolveBundledExtension();
+    this.promptTimeoutMs = config.promptTimeoutMs
+      ?? parsePositiveInt(process.env.OMI_PI_MONO_PROMPT_TIMEOUT_MS)
+      ?? DEFAULT_PI_MONO_PROMPT_TIMEOUT_MS;
   }
 
   async start(): Promise<void> {
@@ -629,6 +654,7 @@ export class PiMonoAdapter implements HarnessAdapter {
       this.process = null;
       this.readline = null;
       this.sessions.clear();
+      this.clearPromptDeadline();
       // Reject pending requests
       for (const [, req] of this.pendingRequests) {
         req.reject(new Error(`pi-mono process exited (code ${code})`));
@@ -663,6 +689,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.sessions.clear();
     this.pendingRequests.clear();
     this.activePromptGeneration = 0;
+    this.clearPromptDeadline();
     this.finishPublicWebProgress(this.activePublicWebTurn, "failed");
     this.activePublicWebTurn = null;
     rmSync(this.contextFilePath, { force: true });
@@ -853,10 +880,52 @@ export class PiMonoAdapter implements HarnessAdapter {
     return new Promise<PromptResult>((resolve, reject) => {
       this.pendingRequests.set(generation, {
         sessionId,
-        resolve: (value: unknown) => resolve(value as PromptResult),
-        reject,
+        resolve: (value: unknown) => {
+          this.clearPromptDeadline();
+          resolve(value as PromptResult);
+        },
+        reject: (error: Error) => {
+          this.clearPromptDeadline();
+          reject(error);
+        },
       });
+      if (this.promptTimeoutMs > 0) {
+        this.promptDeadlineTimer = setTimeout(() => {
+          this.promptDeadlineTimer = null;
+          if (this.activePromptGeneration !== generation) return;
+          this.pendingRequests.delete(generation);
+          this.activePromptGeneration = 0;
+          this.finishPublicWebProgress(this.activePublicWebTurn, "failed");
+          this.activePublicWebTurn = null;
+          this.eventHandler = null;
+          this.toolExecutor = null;
+          try {
+            this.sendCommand({ type: "abort" });
+          } catch {
+            // The subprocess may already be gone; the rejection below still
+            // releases the kernel worker.
+          }
+          this.currentAbortController?.abort();
+          reject(new AdapterRuntimeError({
+            code: "adapter_prompt_timeout",
+            failureCode: "timeout",
+            source: "adapter_execution",
+            adapterId: "pi-mono",
+            retryable: false,
+            userMessage: `The agent prompt exceeded its ${Math.round(this.promptTimeoutMs / 1000)}-second deadline and was stopped.`,
+            technicalMessage: `pi-mono prompt exceeded the ${this.promptTimeoutMs}ms deadline`,
+          }));
+        }, this.promptTimeoutMs);
+        this.promptDeadlineTimer.unref?.();
+      }
     });
+  }
+
+  private clearPromptDeadline(): void {
+    if (this.promptDeadlineTimer) {
+      clearTimeout(this.promptDeadlineTimer);
+      this.promptDeadlineTimer = null;
+    }
   }
 
   abort(sessionId: string): void {

@@ -18,7 +18,10 @@ void main() {
   // flags here would trip the binding's start-of-test snapshot if the test body changed them.
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  final walk = demoWalkById(Platform.environment['OMI_DEMO_WALK'] ?? uiCleanupWalk.id);
+  // Host process environment does not propagate into an iOS simulator app.
+  const requestedWalk = String.fromEnvironment('OMI_DEMO_WALK');
+  final walk = demoWalkById(
+      requestedWalk.isNotEmpty ? requestedWalk : Platform.environment['OMI_DEMO_WALK'] ?? uiCleanupWalk.id);
 
   testWidgets('demo walk ${walk.id}', (tester) async {
     auditWalkMode = true;

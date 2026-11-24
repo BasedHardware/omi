@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:omi/backend/http/api/home_feed.dart';
+import 'package:omi/providers/home_feed_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -260,25 +264,40 @@ Episode _liveEpisode() => Episode(
       stateUpdatedAt: _seedNow,
     );
 
+class _CardHistory extends ConversationProvider {
+  _CardHistory() : super(isSignedIn: () => false);
+  int initialReads = 0;
+  @override
+  Future<void> getInitialConversations({bool checkDailySummaries = true}) async {
+    initialReads++;
+    throw StateError('Compact Home must not request raw history');
+  }
+}
+
 /// Home as David sees it: a pendant streaming into a live episode (the live
 /// row), 30 conversations as the list endpoint projects them (two lines each),
 /// and the detail endpoint hydrating an opened one with its full transcript.
 class _Home {
-  _Home({this.background = const {}});
+  _Home({this.background = const {}, this.history});
+  final ConversationProvider? history;
+  int homeEpisodeReads = 0;
 
   /// Conversations whose notes call them background (Episodes M3).
   final Set<int> background;
   DateTime now = _seedNow;
   late final _LiveCapture capture = _LiveCapture();
   late final EpisodeProvider episodes = EpisodeProvider(
-    fetchPage: (from, to, {cursor}) async => const ApiSuccess(EpisodePageRead(enabled: true)),
+    fetchPage: (from, to, {cursor}) async {
+      homeEpisodeReads++;
+      return const ApiSuccess(EpisodePageRead(enabled: true));
+    },
     fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: _liveEpisode())),
     lookup: (_) async => const ApiSuccess(EpisodeRead.disabled),
     wrapUp: (id, {conversationId}) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
     dismiss: (id, itemId) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
     clock: () => now,
   );
-  late final ConversationProvider conversations = ConversationProvider(isSignedIn: () => false)
+  late final ConversationProvider conversations = (history ?? ConversationProvider(isSignedIn: () => false))
     ..conversations = [
       for (var i = 0; i < 30; i++)
         _conversation(i, segmentCount: 2, salience: background.contains(i) ? 'background' : null),
@@ -290,12 +309,16 @@ class _Home {
   ServerConversation hydrated(int i, {int segmentCount = 1500}) => _conversation(i, segmentCount: segmentCount);
 }
 
-Widget _app(_Home home) {
+Widget _app(_Home home,
+    {HomeFeedProvider? feed,
+    bool requestInitialLoad = false,
+    Future<ServerConversation?> Function(String)? detailFetcher}) {
   // Providers wrap the MaterialApp, as lib/main.dart does, so a pushed detail
   // route resolves them too; the detail provider keeps its production proxy.
   return MultiProvider(
     providers: [
       ChangeNotifierProvider<ConversationProvider>.value(value: home.conversations),
+      if (feed != null) ChangeNotifierProvider<HomeFeedProvider>.value(value: feed),
       ChangeNotifierProvider<AppProvider>.value(value: AppProvider()),
       ChangeNotifierProvider<CaptureProvider>.value(value: home.capture),
       ChangeNotifierProvider<EpisodeProvider>.value(value: home.episodes),
@@ -324,9 +347,10 @@ Widget _app(_Home home) {
         ),
       ),
       ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
-        create: (_) => ConversationDetailProvider(),
+        create: (_) => ConversationDetailProvider(fetchConversation: detailFetcher),
         update: (_, app, conversations, previous) =>
-            (previous?..setProviders(app, conversations)) ?? ConversationDetailProvider(),
+            (previous?..setProviders(app, conversations)) ??
+            ConversationDetailProvider(fetchConversation: detailFetcher),
       ),
     ],
     child: MaterialApp(
@@ -338,7 +362,7 @@ Widget _app(_Home home) {
         // while something animates.
         floatingActionButton: const OmiBreathingDot(live: true),
         body: ConversationsPage(
-          requestInitialLoad: false,
+          requestInitialLoad: requestInitialLoad,
           loadRecaps: () async => (items: <DailySummary>[], ok: true),
           pendingWork: PendingWorkStore(
             loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
@@ -437,6 +461,94 @@ void main() {
   tearDown(() {
     AnalyticsManager.resetForTesting();
     VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 500);
+  });
+
+  testWidgets('real Home card API paints and prefetches before footer, then opens hydrated detail', (tester) async {
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final history = _CardHistory();
+    final home = _Home(history: history);
+    home.conversations.conversations = [];
+    home.conversations.groupConversationsByDate();
+    var rawReads = 0;
+    home.conversations.conversationPageFetcherOverride = () async {
+      rawReads++;
+      throw StateError('Raw Home read');
+    };
+    final cursors = <String?>[];
+    final api = HomeFeedApi(
+        baseUrl: 'https://fixture/',
+        send: (request) async {
+          final cursor = Uri.parse(request.url).queryParameters['cursor'];
+          cursors.add(cursor);
+          final offset = cursor == null ? 0 : 20;
+          return http.Response(
+              jsonEncode({
+                'items': [
+                  for (var i = offset; i < offset + 20; i++)
+                    {
+                      'id': 'conversation:conv-$i',
+                      'kind': 'conversation',
+                      'detail_id': 'conv-$i',
+                      'sort_at': _seedNow.subtract(Duration(minutes: i)).toUtc().toIso8601String(),
+                      'started_at': _seedNow.subtract(Duration(minutes: i)).toUtc().toIso8601String(),
+                      'finished_at': _seedNow.subtract(Duration(minutes: i - 1)).toUtc().toIso8601String(),
+                      'title': 'Card $i',
+                      'emoji': 'M',
+                      'preview': 'Server preview $i',
+                      'status': 'completed',
+                      'home_step': null,
+                      'starred': false,
+                      'is_locked': false,
+                      'has_tasks': false,
+                      'member_count': 1,
+                      'sources': ['omi'],
+                      'summary_available': true,
+                      'revision': 'revision:$i',
+                    }
+                ],
+                'next_cursor': cursor == null ? 'next' : null,
+                'has_more': cursor == null,
+                'truncated': false,
+                'generation': 'test-generation',
+              }),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'});
+        });
+    final feed =
+        HomeFeedProvider(fetch: api.page, owner: () => 'test', now: () => _seedNow.add(const Duration(days: 8)));
+    addTearDown(feed.dispose);
+    var detailReads = 0;
+    await tester.pumpWidget(_app(home, feed: feed, requestInitialLoad: true, detailFetcher: (id) async {
+      detailReads++;
+      return home.hydrated(int.parse(id.substring('conv-'.length)));
+    }));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Card 0'), findsOneWidget);
+    expect(find.text('Server preview 0'), findsOneWidget);
+    expect(rawReads, 0);
+    expect(history.initialReads, 0);
+    expect(home.homeEpisodeReads, 0);
+    expect(cursors, [null]);
+    // A card is a seed; opening it must use the existing detail hydration path.
+    await _openAndCloseRow(tester, 'conversation:conv-0');
+    expect(detailReads, greaterThan(0));
+    expect(rawReads, 0);
+    final scrollable = find.byType(CustomScrollView).first;
+    for (var i = 0; i < 12 && cursors.length < 3; i++) {
+      await tester.drag(scrollable, const Offset(0, -500));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(cursors, contains('next'));
+    final position = tester
+        .state<ScrollableState>(find.descendant(of: scrollable, matching: find.byType(Scrollable)).first)
+        .position;
+    expect(position.extentAfter, greaterThan(0), reason: 'continuation starts before the footer');
+    expect(rawReads, 0);
+    await _drainAndUnmount(tester);
   });
 
   testWidgets('a conversation the person just ended shows as a processing row under the live row', (tester) async {

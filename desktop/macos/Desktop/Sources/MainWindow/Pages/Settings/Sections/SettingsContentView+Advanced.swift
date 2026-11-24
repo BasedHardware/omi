@@ -519,7 +519,7 @@ extension SettingsContentView {
           .shellConfirmation(
             isPresented: $isConfirmingAIProfileDelete,
             title: "Delete AI User Profile?",
-            message: "Omi forgets this profile. A new one is generated on next launch, or with Generate Now.",
+            message: "Omi forgets this profile. A new one is generated automatically, or with Generate Now.",
             confirmTitle: "Delete"
           ) {
             deleteCurrentAIProfile()
@@ -560,6 +560,13 @@ extension SettingsContentView {
 
           GlassSeparator()
 
+          if let aiProfileError {
+            Text(aiProfileError)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.errorRed)
+              .accessibilityIdentifier("advanced-aiuserprofile-error")
+          }
+
           if let text = aiProfileText {
             if isEditingAIProfile {
               TextEditor(text: $aiProfileEditText)
@@ -571,25 +578,12 @@ extension SettingsContentView {
               HStack {
                 Button("Cancel") {
                   isEditingAIProfile = false
+                  aiProfileError = nil
                 }
                 .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Button("Save") {
-                  if let id = aiProfileId {
-                    Task {
-                      let success = await AIUserProfileService.shared.updateProfileText(
-                        id: id, newText: aiProfileEditText
-                      )
-                      if success {
-                        aiProfileText = aiProfileEditText
-                        isEditingAIProfile = false
-                      }
-                      // A rejected save used to close the editor anyway, which
-                      // threw the edit away and looked exactly like a save that
-                      // worked. Leave the editor open with the text intact so
-                      // the edit survives and can be retried.
-                    }
-                  }
+                  saveAIProfileEdit()
                 }
                 .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
@@ -633,7 +627,7 @@ extension SettingsContentView {
             }
           } else if !isGeneratingAIProfile {
             Text(
-              "Your AI user profile will be generated automatically on next launch, or click \"Generate Now\" to create it now."
+              "Your AI user profile is generated automatically, or click \"Generate Now\" to create it now."
             )
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
@@ -654,22 +648,16 @@ extension SettingsContentView {
       }
     }
     .task {
-      // Try loading immediately (covers all restarts after first generation)
-      if let profile = await AIUserProfileService.shared.getLatestProfile() {
-        aiProfileId = profile.id
-        aiProfileText = profile.profileText
-        aiProfileGeneratedAt = profile.generatedAt
-        aiProfileDataSourcesUsed = profile.dataSourcesUsed
+      // Read the backend's current profile each time the card opens.
+      if let profile = await AIUserProfileService.shared.fetchProfile() {
+        showAIProfile(profile)
         return
       }
-      // No profile yet — first-ever generation may be in progress, poll briefly
+      // No profile yet. The read asks the backend to generate one, so poll briefly.
       for _ in 0..<6 {
         try? await Task.sleep(nanoseconds: 5_000_000_000)
-        if let profile = await AIUserProfileService.shared.getLatestProfile() {
-          aiProfileId = profile.id
-          aiProfileText = profile.profileText
-          aiProfileGeneratedAt = profile.generatedAt
-          aiProfileDataSourcesUsed = profile.dataSourcesUsed
+        if let profile = await AIUserProfileService.shared.fetchProfile() {
+          showAIProfile(profile)
           return
         }
       }

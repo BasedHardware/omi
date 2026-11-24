@@ -402,9 +402,20 @@ class TestAppsV2LimitBoundary:
 
 
 class _CountDoc:
-    def __init__(self, data):
-        self._data = dict(data)
-        self.id = self._data.get('id')
+    def __init__(self, data, projection=None):
+        self.id = data.get('id')
+        self._data = dict(data) if projection is None else {}
+        for field in projection or ():
+            source, target = data, self._data
+            *parents, leaf = field.split('.')
+            for parent in parents:
+                source = source.get(parent)
+                if not isinstance(source, dict):
+                    break
+                target = target.setdefault(parent, {})
+            else:
+                if leaf in source:
+                    target[leaf] = source[leaf]
 
     def to_dict(self):
         return dict(self._data)
@@ -413,9 +424,13 @@ class _CountDoc:
 def _count_filter_match(data, filt):
     """Firestore comparison semantics: a document missing the field never matches."""
     field = getattr(filt, 'field_path', None)
-    if not field or field not in data:
+    if not field:
         return False
-    actual = data[field]
+    actual = data
+    for part in field.split('.'):
+        if not isinstance(actual, dict) or part not in actual:
+            return False
+        actual = actual[part]
     op = getattr(filt, 'op_string', '==')
     value = getattr(filt, 'value', None)
     if op == '==':
@@ -441,15 +456,21 @@ class _CountQuery:
     changes membership when a ``created_at`` bound already requires the field.
     """
 
-    def __init__(self, docs, record, filters=(), orders=(), limit_count=None):
+    def __init__(self, docs, record, filters=(), orders=(), limit_count=None, projection=None):
         self._docs = docs
         self._record = record
         self._filters = filters
         self._orders = orders
         self._limit_count = limit_count
+        self._projection = projection
 
     def _copy(self, **overrides):
-        params = {'filters': self._filters, 'orders': self._orders, 'limit_count': self._limit_count}
+        params = {
+            'filters': self._filters,
+            'orders': self._orders,
+            'limit_count': self._limit_count,
+            'projection': self._projection,
+        }
         params.update(overrides)
         return _CountQuery(self._docs, self._record, **params)
 
@@ -460,6 +481,9 @@ class _CountQuery:
     def order_by(self, field_path, direction=None):
         name = getattr(direction, 'name', None) or str(direction)
         return self._copy(orders=(*self._orders, (field_path, name)))
+
+    def select(self, fields):
+        return self._copy(projection=tuple(fields))
 
     def limit(self, value):
         return self._copy(limit_count=value)
@@ -472,7 +496,7 @@ class _CountQuery:
         return matched_unordered, docs[: self._limit_count]
 
     def stream(self):
-        return iter(_CountDoc(doc) for doc in self._matched()[1])
+        return iter(_CountDoc(doc, self._projection) for doc in self._matched()[1])
 
     def count(self):
         matched_unordered, docs = self._matched()
@@ -768,3 +792,147 @@ class TestConversationsCountRealHelper:
             record[0]['matched_unordered'] == record[0]['count']
         ), 'created_at ordering must not change membership vs the same range unordered'
         assert result == expected
+
+
+def test_pending_bridge_preserves_user_curated_rows_and_layer_counts_use_aggregates(monkeypatch):
+    from database.conversation_visibility_counts import count_hidden
+    from utils.sync import bridge_pending
+
+    now = bridge_pending.current_time()
+    docs = [
+        {'id': 'starred', 'discarded': False, 'starred': True, 'sync_bridge_pending': {'expires_at': now + 100}},
+        {'id': 'pending', 'discarded': False, 'sync_bridge_pending': {'expires_at': now + 100}},
+        {'id': 'recording', 'discarded': False, 'recording': True},
+        {'id': 'hidden', 'discarded': False, 'home_hidden': True},
+        {'id': 'both', 'discarded': False, 'recording': True, 'home_hidden': True},
+        {'id': 'double-hidden', 'discarded': False, 'recording': True, 'deleted': True},
+    ]
+    for field, value in {
+        'sync_relevance_user_kept': True,
+        'has_photos': True,
+        'photos': [{'base64': 'cGhvdG8='}],
+        'user_title': 'User title',
+        'folder_user_set': True,
+    }.items():
+        docs.append({'id': field, 'discarded': False, field: value, 'sync_bridge_pending': {'expires_at': now + 100}})
+    aggregate_calls = []
+    query = _CountQuery(docs, aggregate_calls)
+    original_stream = _CountQuery.stream
+    streamed_projections = []
+
+    def stream(self):
+        assert not any(
+            f.field_path in {'recording', 'home_hidden'} for f in self._filters
+        ), 'layer count streamed documents'
+        streamed_projections.append((self._filters[0].field_path, self._limit_count, self._projection))
+        return original_stream(self)
+
+    monkeypatch.setattr(_CountQuery, 'stream', stream)
+    assert count_hidden(query, include_discarded=False, hide_home=True) == 5
+    assert len(aggregate_calls) == 3
+    expected_projection = (
+        'discarded',
+        'status',
+        'source',
+        'structured.category',
+        'folder_id',
+        'starred',
+        'created_at',
+        'recording',
+        'home_hidden',
+    )
+    expected_pending_projection = expected_projection + (
+        'sync_bridge_pending',
+        'sync_relevance_user_kept',
+        'has_photos',
+        'photos',
+        'user_title',
+        'folder_user_set',
+    )
+    assert streamed_projections == [
+        ('sync_bridge_pending.expires_at', 1, None),
+        ('deleted', None, expected_projection),
+        ('dream_duplicate_of', None, expected_projection),
+        ('sync_bridge_pending.expires_at', None, expected_pending_projection),
+    ]
+    monkeypatch.setattr(_CountQuery, 'stream', original_stream)
+    assert count_hidden(query, include_discarded=False, hide_home=True, starred=True) == 0
+
+
+@pytest.mark.parametrize('hidden_fields', [{'deleted': True}, {'dream_duplicate_of': 'winner'}])
+def test_projected_hidden_rows_respect_list_filters_and_layer_overlap(hidden_fields):
+    from database.conversation_visibility_counts import count_hidden
+
+    matching = {
+        **hidden_fields,
+        'discarded': False,
+        'status': 'completed',
+        'source': 'omi',
+        'structured': {'category': 'work', 'overview': 'Unused summary'},
+        'folder_id': 'folder-a',
+        'starred': True,
+        'created_at': _T1,
+    }
+    docs = [
+        {**matching, 'id': 'matching'},
+        {**matching, 'id': 'discarded', 'discarded': True},
+        {**matching, 'id': 'unstarred', 'starred': False},
+        {**matching, 'id': 'out-of-range', 'created_at': _T0},
+        {**matching, 'id': 'recording', 'recording': True},
+        {**matching, 'id': 'home-hidden', 'home_hidden': True},
+    ]
+    assert (
+        count_hidden(
+            _CountQuery(docs, []),
+            include_discarded=False,
+            statuses=['completed'],
+            sources=['omi'],
+            categories=['work'],
+            folder_id='folder-a',
+            starred=True,
+            start_date=_T1,
+            end_date=_T2,
+            hide_home=True,
+        )
+        == 3
+    )
+
+
+def test_filtered_hidden_layers_use_bounded_metadata_scan_without_predicate_indexes(monkeypatch):
+    from database.conversation_visibility_counts import count_hidden
+
+    calls = []
+    original = _CountQuery.stream
+
+    def stream(self):
+        if any(f.field_path in {'recording', 'home_hidden'} for f in self._filters):
+            assert self._limit_count == 10001
+            assert all(f.field_path in {'recording', 'home_hidden', 'discarded'} for f in self._filters)
+            calls.append(self._limit_count)
+        return original(self)
+
+    monkeypatch.setattr(_CountQuery, 'stream', stream)
+    docs = [{'id': 'r', 'recording': True, 'discarded': False, 'source': 'omi', 'created_at': _T0}]
+    aggregates = []
+    assert count_hidden(_CountQuery(docs, aggregates), include_discarded=False, sources=['omi'], start_date=_T0) == 1
+    assert calls == [10001] and not aggregates
+
+
+def test_filtered_hidden_layer_false_star_filter_requires_stored_false():
+    from database.conversation_visibility_counts import count_hidden
+
+    docs = [
+        {'id': 'missing', 'recording': True, 'discarded': False},
+        {'id': 'false', 'recording': True, 'discarded': False, 'starred': False},
+    ]
+    assert count_hidden(_CountQuery(docs, []), include_discarded=False, starred=False) == 1
+
+
+def test_filtered_hidden_layer_over_budget_fails_explicitly():
+    from database.conversation_visibility_counts import count_hidden
+    from fastapi import HTTPException
+
+    docs = [{'id': str(i), 'recording': True, 'discarded': False} for i in range(10001)]
+    with pytest.raises(HTTPException) as error:
+        count_hidden(_CountQuery(docs, []), include_discarded=False, sources=['omi'])
+    assert error.value.status_code == 503
