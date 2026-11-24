@@ -377,3 +377,35 @@ def test_a_live_sibling_in_the_window_decides_shared_live_before_the_rest_is_rea
     )
     plan = sources.staging_plan(UID, ['a'], max_checks=1, firestore_client=client)
     assert plan.shared_live == ('job-shared',) and not plan.unchecked
+
+
+def test_upload_that_ended_in_a_failure_state_is_marked_failed_not_running():
+    client = _Client(
+        {
+            f'{LEDGER}/failed': _row('job-failed', new=['a'], status='retryable'),
+            f'{LEDGER}/mixed': _row('job-mixed', new=['a'], status='partial'),
+            f'{LEDGER}/mixed-2': _row('job-mixed', new=['a'], status='completed'),
+            f'{LEDGER}/running': _row('job-running', new=['a'], status='processing'),
+            f'{TOMBSTONES}/a': {},
+        }
+    )
+    plan = sources.staging_plan(UID, ['a'], firestore_client=client)
+    assert plan.in_flight == ('job-failed', 'job-mixed', 'job-running')
+    assert plan.failed == ('job-failed', 'job-mixed')
+    assert sources.staging_sources(UID, ['a'], firestore_client=client).failed == frozenset({'job-failed', 'job-mixed'})
+
+
+def test_plan_reuses_the_passes_ledger_read_without_querying_again():
+    client = _Client(
+        {
+            f'{LEDGER}/shared': _row('job-shared', new=['a'], updated=['b']),
+            f'{LEDGER}/failed': _row('job-failed', new=['a'], status='retryable'),
+            f'{TOMBSTONES}/a': {},
+            f'{CONVERSATIONS}/b': {'status': 'completed'},
+        }
+    )
+    found = sources.staging_sources(UID, ['a'], firestore_client=client)
+    queries, job_queries = len(client.queries), len(client.job_queries)
+    reused = sources.staging_plan(UID, ['a'], fresh=found, firestore_client=client)
+    assert (len(client.queries), len(client.job_queries)) == (queries, job_queries)
+    assert reused == sources.staging_plan(UID, ['a'], firestore_client=client)

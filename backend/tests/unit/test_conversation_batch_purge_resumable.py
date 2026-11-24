@@ -17,7 +17,7 @@ import contextvars
 import threading
 import time
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -716,7 +716,7 @@ def test_retry_after_the_primary_row_is_gone_still_finishes_the_audio(tombstone_
     erase = MagicMock()
     generation = _audio_generation(tombstone_db, audio_job)
     assert purge_jobs.run_audio_erasure_job(audio_job, generation, erase=erase) == 'erased'
-    erase.assert_called_once_with(UID, 'c1', ['donor'], staging={}, settled=[], deleted_siblings=[])
+    erase.assert_called_once_with(UID, 'c1', ['donor'], staging={}, settled=[], deleted_siblings=[], ledger=ANY)
     assert _audio_row(tombstone_db) is None
 
 
@@ -1253,7 +1253,7 @@ def test_siblings_over_the_per_pass_cap_are_recorded_and_continued(tombstone_db,
         {'shared_live': 0, 'deleted_siblings': ['s0', 's1', 's2']},
     ]
 
-    def erase(uid, cid, donors, *, staging, settled, deleted_siblings):
+    def erase(uid, cid, donors, *, staging, settled, deleted_siblings, **_):
         calls.append(list(deleted_siblings))
         return summaries[len(calls) - 1]
 
@@ -1270,3 +1270,13 @@ def test_siblings_over_the_per_pass_cap_are_recorded_and_continued(tombstone_db,
         'erased'
     )
     assert calls == [[], ['s0', 's1']]
+
+
+def test_marker_after_the_obligation_was_discharged_recreates_nothing(tombstone_db, audio_job):
+    erase = MagicMock(return_value={'shared_live': 0})
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'erased'
+    )
+    assert _audio_row(tombstone_db) is None
+    purge_jobs.mark_audio_delete_completed(UID, 'c1')  # the request's marker lands after the runner discharged it
+    assert _audio_row(tombstone_db) is None

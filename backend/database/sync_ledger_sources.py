@@ -30,6 +30,9 @@ CONVERSATION_FIELDS = tuple(
 )
 # Only a completed upload has stopped reading its staging and feeding conversations.
 SETTLED_STATUS = 'completed'
+# An upload whose rows stopped in a failure state reads its staging only if re-driven; with an empty
+# prefix it keeps nothing, so a deletion need not wait on it (``storage.delete_conversation_sync_staging``).
+FAILED_STATUSES = frozenset({'retryable', 'failed', 'partial', 'partial_failure'})
 # Firestore caps array_contains_any at 30 values.
 _ANY_LIMIT = 30
 # Fed siblings classified per pass (at most two batched point reads each, plus redirect hops for an
@@ -64,6 +67,8 @@ class StagingPlan:
     unsettled: tuple[str, ...] = ()
     # Fed siblings (outside the deletion itself) classified deleted, for the obligation to record.
     deleted_siblings: frozenset[str] = frozenset()
+    # Unsettled jobs whose ledger rows all ended completed or in a failure state (none still running).
+    failed: tuple[str, ...] = ()
 
 
 class StagingInFlight(RuntimeError):
@@ -222,6 +227,13 @@ class StagingSources:
     fed: dict[str, list[str]]
     # Jobs whose ledger rows were all seen ``completed``: only these count as settled once the rows expire.
     settled: frozenset[str]
+    # Jobs whose rows all ended completed or failed, at least one failed (see ``FAILED_STATUSES``).
+    failed: frozenset[str] = frozenset()
+
+
+def _failed(rows: Iterable[SyncUpload]) -> bool:
+    statuses = {row.status for row in rows}
+    return bool(statuses & FAILED_STATUSES) and statuses <= FAILED_STATUSES | {SETTLED_STATUS}
 
 
 def staging_sources(
@@ -247,7 +259,7 @@ def staging_sources(
     settled = frozenset(
         job for job, rows in by_job.items() if rows and all(row.status == SETTLED_STATUS for row in rows.values())
     )
-    return StagingSources(fed, settled)
+    return StagingSources(fed, settled, frozenset(job for job, rows in by_job.items() if _failed(rows.values())))
 
 
 def staging_plan(
@@ -258,6 +270,7 @@ def staging_plan(
     settled: Iterable[str] = (),
     known_deleted: Iterable[str] = (),
     max_checks: int = SIBLING_CHECKS_PER_PASS,
+    fresh: StagingSources | None = None,
     firestore_client: Any = None,
 ) -> StagingPlan:
     """Sort the staging directories of the uploads that fed these conversations.
@@ -284,20 +297,36 @@ def staging_plan(
     in ``known_deleted`` (deleted siblings an earlier pass recorded) are read
     per call; a job with an unread sibling and no live one is ``unchecked``.
     ``deleted_siblings`` returns every sibling known deleted, to record.
+
+    ``fresh`` is this pass's ``staging_sources`` read for the same conversations
+    and recorded jobs: when given, the ledger is not queried again.
     """
     conversation_ids = [cid for cid in conversation_ids if cid]
     recorded = {job: list(ids) for job, ids in (recorded or {}).items() if _SAFE_ID.match(str(job))}
     if not uid or (not conversation_ids and not recorded):
         return StagingPlan()
     firestore_client = _client(firestore_client)
-    by_job = _job_rows(uid, conversation_ids, recorded, firestore_client)
-    if not by_job:
-        return StagingPlan()
     settled_jobs = set(settled)
-    fed_by_job = {
-        job: {cid for row in rows.values() for cid in row.conversation_ids} | set(recorded.get(job, ()))
-        for job, rows in by_job.items()
-    }
+    if fresh is not None:
+        jobs = set(fresh.fed) | set(recorded)
+        fed_by_job = {job: set(fresh.fed.get(job, ())) | set(recorded.get(job, ())) for job in jobs}
+        unsettled_jobs = {job for job in jobs if job not in fresh.settled and job not in settled_jobs}
+        failed_jobs = set(fresh.failed)
+    else:
+        by_job = _job_rows(uid, conversation_ids, recorded, firestore_client)
+        jobs = set(by_job)
+        fed_by_job = {
+            job: {cid for row in rows.values() for cid in row.conversation_ids} | set(recorded.get(job, ()))
+            for job, rows in by_job.items()
+        }
+        unsettled_jobs = {
+            job
+            for job, rows in by_job.items()
+            if any(row.status != SETTLED_STATUS for row in rows.values()) or (not rows and job not in settled_jobs)
+        }
+        failed_jobs = {job for job, rows in by_job.items() if _failed(rows.values())}
+    if not jobs:
+        return StagingPlan()
     fed = set().union(*fed_by_job.values())
     deleting = set(conversation_ids)
     known = set(known_deleted) - deleting
@@ -306,9 +335,8 @@ def staging_plan(
     found = _deleted_siblings(uid, checked, deleting, firestore_client)
     live = checked - found
     erasable, shared_live, in_flight, unchecked, unsettled = [], [], [], [], []
-    for job in sorted(by_job):
-        rows = by_job[job].values()
-        if any(row.status != SETTLED_STATUS for row in rows) or (not rows and job not in settled_jobs):
+    for job in sorted(jobs):
+        if job in unsettled_jobs:
             unsettled.append(job)
         if fed_by_job[job] & live:
             shared_live.append(job)
@@ -325,6 +353,7 @@ def staging_plan(
         tuple(unchecked),
         tuple(unsettled),
         frozenset((known | found) & fed),
+        tuple(job for job in in_flight if job in failed_jobs),
     )
 
 

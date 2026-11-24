@@ -1563,6 +1563,8 @@ _add(
             'settled': [(), ('job-1',)],
             'known_deleted': [(), ('conv-2',)],
             'max_checks': [0, 200],
+            # A pass's own ledger read: given, the plan issues no ledger query (only sibling point reads).
+            'fresh': [None],
         },
         setup=_seed_shared_upload,
         patchers=(_sync_stage,),

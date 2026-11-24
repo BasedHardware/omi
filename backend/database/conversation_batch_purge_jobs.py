@@ -184,11 +184,21 @@ def mark_audio_delete_completed(
     Written by the same request right after the primary row is deleted, so a
     completed delete is told apart from one that failed after arming without
     relying on what the row looks like. It also redrives the obligation now: a
-    run that held for the still-visible row is not left on its backoff.
+    run that held for the still-visible row is not left on its backoff. A
+    missing obligation was already discharged (a run erased and deleted it):
+    nothing is written, so no partial document is recreated.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     current = now or _now()
-    audio_job_ref(client, uid, conversation_id).set({'delete_completed_at': current, 'due_at': current}, merge=True)
+    ref = audio_job_ref(client, uid, conversation_id)
+
+    def body(transaction):
+        if not ref.get(transaction=transaction).exists:
+            return False
+        transaction.update(ref, {'delete_completed_at': current, 'due_at': current})
+        return True
+
+    _in_transaction(client, body)
 
 
 def accept_fields(
@@ -849,6 +859,7 @@ def run_audio_erasure_job(
         # and a job's settled state are captured whatever holds this pass.
         from database.sync_ledger_sources import staging_sources
 
+        found = None
         try:
             found = staging_sources(uid, [conversation_id, *donors], extra_jobs=recorded, firestore_client=client)
             recorded, settled = _record_staging(client, job, token, found.fed, found.settled)
@@ -899,6 +910,7 @@ def run_audio_erasure_job(
                 staging=recorded,
                 settled=settled,
                 deleted_siblings=list(row.get('staging_deleted_siblings') or []),
+                ledger=found,
             )
         except LegalHoldActive:
             raise

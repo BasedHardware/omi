@@ -36,11 +36,14 @@ that the audio cleanup is durable: failures are retried, not only logged.
   - In-flight staging (`last_reason=staging_in_flight`) is rechecked hourly for 14 days. After that, the
     obligation is never discharged while the staging is kept: it stays owed as `last_reason=staging_unsettled`,
     is logged at error level as `event=conversation_audio_erasure outcome=staging_unsettled` on every pass, and is
-    rechecked daily.
+    rechecked daily. An upload whose ledger rows all ended completed or in a failure state (`retryable`, `failed`,
+    `partial`, `partial_failure`) with a prefix already empty in every staging bucket keeps nothing and is not
+    waited on; with bytes left it follows the same in-flight then `staging_unsettled` path.
   - The arming request writes `delete_completed_at` on the obligation right after it deletes the primary row (an
     ordinary delete in either cascade mode deletes the row outright; an accepted delete hides it with
     `deleted=True`). With that marker the runner erases without looking at the row, and the marker makes a run that
-    held for the row due at once. A request that fails after arming never writes it.
+    held for the row due at once. A request that fails after arming never writes it. The marker is written in a
+    transaction and only onto an existing obligation: one already discharged is not recreated.
   - Without the marker, if the conversation row is still visible (the delete failed after arming and answered 503), the runner waits
     (`last_reason=conversation_row_live`) instead of erasing the audio. It rechecks after 5 minutes, doubling to
     hourly. After 24 hours (`row_live_since`) it rechecks daily, and those passes count toward the stuck-obligation
@@ -53,7 +56,8 @@ that the audio cleanup is durable: failures are retried, not only logged.
     held obligation can outlive them. The recorded set is used together with any fresh ledger read: its prefixes
     stay owed, and its recorded siblings still count as live. Every pass re-reads the ledger, read-only and before
     any hold (legal hold, switch off, row still visible, storage hold, staging waiting), and merges new siblings and
-    settled state into the record. The record never shrinks. A recorded job also records whether a pass ever saw all its
+    settled state into the record. The record never shrinks. The staging plan of that pass reuses this read instead of
+    querying the ledger again. A recorded job also records whether a pass ever saw all its
     ledger rows `completed` (`staging_settled`). Once its ledger rows expire, only a job recorded as settled counts as
     settled; any other recorded job stays in flight and is held, because a conversation it fed after the record could
     be unknown.

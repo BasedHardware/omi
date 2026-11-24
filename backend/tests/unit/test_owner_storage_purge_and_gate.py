@@ -472,7 +472,7 @@ def test_durable_audio_erasure_runs_every_step_under_the_audio_gate(monkeypatch)
     monkeypatch.setattr(
         storage_mod,
         'delete_privacy_conversation_audio',
-        lambda uid, cid, *, source_ids, strict_staging, recorded_staging, settled_staging, deleted_siblings: erased.append(
+        lambda uid, cid, *, source_ids, strict_staging, recorded_staging, settled_staging, deleted_siblings, ledger: erased.append(
             (uid, cid, source_ids, strict_staging, len(gates))
         )
         or {'shared_live': 0},
@@ -638,3 +638,26 @@ def test_durable_erasure_reenters_the_real_audio_gate_it_already_holds(monkeypat
     assert not any(name.startswith('syncing/u/job-a/') for name in syncing.names)
     gate = client.docs['legal_hold_deletion_gates/u']
     assert gate['kind'] == 'audio_conversation_deletion' and gate['state'] == 'completed'
+
+
+def _failed_upload(monkeypatch, *, empty):
+    from database.sync_ledger_sources import StagingInFlight, StagingPlan
+
+    _private, syncing, derived, _ = _staging_buckets(monkeypatch, [])
+    if empty:
+        for bucket in (syncing, derived):
+            bucket.names = {name for name in bucket.names if not name.startswith('syncing/u/job-a/')}
+    plan = StagingPlan(in_flight=('job-a',), unsettled=('job-a',), failed=('job-a',))
+    monkeypatch.setattr('database.sync_ledger_sources.staging_plan', lambda *args, **kwargs: plan)
+    return StagingInFlight
+
+
+def test_failed_upload_with_an_empty_prefix_keeps_nothing_and_is_not_waited_on(monkeypatch):
+    _failed_upload(monkeypatch, empty=True)
+    assert storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True)['shared_live'] == 0
+
+
+def test_failed_upload_with_bytes_left_stays_in_flight_for_the_unsettled_escalation(monkeypatch):
+    in_flight = _failed_upload(monkeypatch, empty=False)
+    with pytest.raises(in_flight):
+        storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True)
