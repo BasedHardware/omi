@@ -10,7 +10,6 @@ import (
 	"io"
 	"maps"
 	"math"
-	"reflect"
 	"strings"
 )
 
@@ -19,9 +18,12 @@ func measuredResolver(run *observation) map[string]any {
 	if trace == nil || len(trace.Exits) != 1 || len(trace.ClockSeconds) != 2 || run.Started.IsZero() || !run.Finished.After(run.Started) {
 		return nil
 	}
-	diag, _ := documentField(run, "owner_recognition_diagnostics").(map[string]any)
-	current, _ := diag["current_resolver"].(map[string]any)
-	if current == nil || !reflect.DeepEqual(current, diag["first_resolver"]) || !reflect.DeepEqual(trace.Exits[0], current) ||
+	diag, ok := documentField(run, "owner_recognition_diagnostics").(map[string]any)
+	if !ok {
+		return nil
+	}
+	current, ok := diag["current_resolver"].(map[string]any)
+	if !ok || !equalReplayValue(current, diag["first_resolver"]) || !equalReplayValue(trace.Exits[0], current) ||
 		current["uid"] != run.OwnerID || current["conversation"] != run.ConversationID || current["pass"] != "first" ||
 		documentField(run, "private_cloud_sync_enabled") != false {
 		return nil
@@ -60,7 +62,10 @@ func observedSpeakerPayload(run *observation, path string) []byte {
 	if run.SpeakerTrace == nil || len(run.SpeakerTrace.Evidence) != 1 {
 		return nil
 	}
-	doc, _ := run.Derived[path].(map[string]any)
+	doc, ok := run.Derived[path].(map[string]any)
+	if !ok {
+		return nil
+	}
 	envelope, ok := doc["payload"].(string)
 	if len(doc) != 2 || doc["version"] != json.Number("1") || !ok || len(envelope) > 750000 {
 		return nil
@@ -97,7 +102,7 @@ func reviewSpeakerDifferences(diffs []difference, py, goRun *observation) {
 		return
 	}
 	diag := measuredResolver(py)
-	equalTime := diag != nil && reflect.DeepEqual(diag, measuredResolver(goRun))
+	equalTime := diag != nil && equalReplayValue(diag, measuredResolver(goRun))
 	doc := "users/" + py.OwnerID + "/conversations/" + py.ConversationID + "/speaker_evidence/current"
 	evidencePath := "/derived_documents/" + strings.ReplaceAll(doc, "/", "~1") + "/payload"
 	for i, d := range diffs {

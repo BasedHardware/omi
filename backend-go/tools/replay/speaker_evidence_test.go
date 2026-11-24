@@ -151,7 +151,11 @@ func TestFlippedSpeakerAuthenticationTagProducesValueFreeGap(t *testing.T) {
 	setEvidence(t, py, py.OwnerID, marker, 1)
 	setEvidence(t, g, g.OwnerID, marker, 2)
 	doc := mustMap(g.Derived[speakerDoc])
-	raw, err := base64.StdEncoding.Strict().DecodeString(doc["payload"].(string))
+	goPayload, ok := doc["payload"].(string)
+	if !ok {
+		t.Fatal("speaker payload is not a string")
+	}
+	raw, err := base64.StdEncoding.Strict().DecodeString(goPayload)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +183,15 @@ func TestFlippedSpeakerAuthenticationTagProducesValueFreeGap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, value := range []string{marker, doc["payload"].(string), mustMap(py.Derived[speakerDoc])["payload"].(string)} {
+	goPayload, ok = doc["payload"].(string)
+	if !ok {
+		t.Fatal("tampered speaker payload is not a string")
+	}
+	pythonPayload, ok := mustMap(py.Derived[speakerDoc])["payload"].(string)
+	if !ok {
+		t.Fatal("Python speaker payload is not a string")
+	}
+	for _, value := range []string{marker, goPayload, pythonPayload} {
 		if bytes.Contains(reportJSON, []byte(value)) {
 			t.Fatal("speaker payload exposed in report")
 		}
