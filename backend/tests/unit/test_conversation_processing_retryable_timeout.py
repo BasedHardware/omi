@@ -333,7 +333,7 @@ def structuring_seam(monkeypatch):
     )
     monkeypatch.setattr(processing, 'should_discard_conversation', lambda *a, **kw: False)
     monkeypatch.setattr(processing, 'adjacent_conversation', lambda *a: None)
-    monkeypatch.setattr(processing, '_calendar_overlap_retains_conversation', lambda *a: False)
+    monkeypatch.setattr(processing, 'calendar_overlap_retains_conversation', lambda *a: False)
     monkeypatch.setattr(processing, 'rich_notes_inputs', lambda *a, **kw: (None, None, None, None, 0))
     monkeypatch.setattr(processing, 'conversation_known_spellings', lambda *_: [])
     monkeypatch.setattr(processing, 'before_notes', lambda *a, **kw: None)

@@ -89,7 +89,7 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(pc.redis_db, 'get_user_preferred_app', lambda uid: None)
     monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: '')
     monkeypatch.setattr(pc, 'has_structural_wake_word_marker', lambda text: False)
-    monkeypatch.setattr(pc, '_calendar_overlap_retains_conversation', lambda *args: False)
+    monkeypatch.setattr(pc, 'calendar_overlap_retains_conversation', lambda *args: False)
     monkeypatch.setattr(pc, 'conversation_transcripts_for_llm', lambda *args: ('', '', {}))
     # Restored rows may attempt structuring; a minimum must still terminalize
     # visibly, rather than persisting an incoherent discard/keep combination.

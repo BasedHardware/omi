@@ -158,7 +158,7 @@ def test_real_structure_boundary_reaches_real_notes_admission_when_exempt(pc, mo
     paid = MagicMock(side_effect=RuntimeError('notes boundary reached'))
     monkeypatch.setattr(pc, 'get_conversation_notes', paid)
     monkeypatch.setattr(pc, 'should_discard_conversation', lambda *_a, **_k: False)
-    monkeypatch.setattr(pc, '_calendar_overlap_retains_conversation', lambda *_a, **_k: False)
+    monkeypatch.setattr(pc, 'calendar_overlap_retains_conversation', lambda *_a, **_k: False)
     if reason == 'switch_off':
         monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     text = {
@@ -353,7 +353,7 @@ def _notes_boundary(pc, monkeypatch):
     # An English output preference must never enable the word rule on other speech.
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda *_args: 'en')
     monkeypatch.setattr(pc, 'should_discard_conversation', lambda *_a, **_k: False)
-    monkeypatch.setattr(pc, '_calendar_overlap_retains_conversation', lambda *_a, **_k: False)
+    monkeypatch.setattr(pc, 'calendar_overlap_retains_conversation', lambda *_a, **_k: False)
     notes = MagicMock(side_effect=RuntimeError('notes boundary reached'))
     monkeypatch.setattr(pc, 'get_conversation_notes', notes)
     return notes

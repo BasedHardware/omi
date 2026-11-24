@@ -226,7 +226,7 @@ def _run(conversation, *, rows=None, lookup_error=None, trigger=None):
         patch.object(pc, 'track_usage', lambda *args, **kwargs: nullcontext()),
         patch.object(pc.conversations_db, 'get_conversations_finished_after', lookup),
         patch.object(pc, 'should_discard_conversation', discard_gate),
-        patch.object(pc, '_calendar_overlap_retains_conversation', MagicMock(return_value=False)),
+        patch.object(pc, 'calendar_overlap_retains_conversation', MagicMock(return_value=False)),
         # The relevance neighbor lookup shares the finished-after query; this harness
         # pins that duplicate-capture detection never runs inside the content gate.
         patch.object(pc, 'adjacent_conversation', MagicMock(return_value=None)),

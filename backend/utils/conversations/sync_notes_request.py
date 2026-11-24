@@ -52,7 +52,7 @@ def notes_request(
         return None
     texts = [segment.text for segment in conversation.transcript_segments]
     if not any(text.strip() for text in texts) and not user_kept and not is_release_probe_uid(uid):
-        from utils.conversations.process_conversation import _calendar_overlap_retains_conversation
+        from utils.conversations.process_conversation import calendar_overlap_retains_conversation
 
         decision = decide_relevance(
             trigger=ProcessingTrigger.SYNC_UPDATE,
@@ -63,7 +63,7 @@ def notes_request(
             exempt=False,
             trusted_wake_word=False,
             model_discards=None,
-            calendar_retains=lambda: _calendar_overlap_retains_conversation(
+            calendar_retains=lambda: calendar_overlap_retains_conversation(
                 uid, conversation.started_at, conversation.finished_at
             ),
         )
@@ -73,12 +73,16 @@ def notes_request(
     selected_app = selected_summary_app(uid, False, redis_db.get_user_preferred_app)
     minimum = quiet_minimum(uid, conversation, tz=tz, user_kept=user_kept, summary_app_selected=selected_app)
     if minimum is not None:
-        from utils.conversations.process_conversation import _calendar_overlap_retains_conversation
+        from utils.conversations.process_conversation import calendar_overlap_retains_conversation
 
         decision = short_clip_relevance(
-            uid, conversation, ProcessingTrigger.SYNC_UPDATE, _calendar_overlap_retains_conversation
+            uid, conversation, ProcessingTrigger.SYNC_UPDATE, calendar_overlap_retains_conversation
         )
         return {'minimum': _minimum_result(minimum.title, decision)}
+
+    started_at = conversation.started_at
+    if started_at is None:
+        return None
 
     # The normal path can buy an embedding to find related tasks. Leave that
     # work to a separately journaled operation when the empty probe is inconclusive.
@@ -94,17 +98,17 @@ def notes_request(
         uid=uid,
         conversation_id=conversation.id,
         transcript=transcript,
-        started_at=conversation.started_at,
+        started_at=started_at,
         timezone_name=tz,
         language_code=language,
         speaker_map=speaker_map,
-        transcript_segment_ids=[segment.id for segment in conversation.transcript_segments],
+        transcript_segment_ids=[segment.id for segment in conversation.transcript_segments if segment.id],
         known_spellings=conversation_known_spellings(uid),
     )
     messages = one_shot_notes_messages(
         prefix,
         uid,
-        started_at=conversation.started_at,
+        started_at=started_at,
         language_code=language,
         output_language_code=resolve_output_language(uid, language, conversation.transcript_segments),
         tz=tz,
@@ -152,7 +156,7 @@ def _minimum_result(title, decision):
 
 
 def _assess_relevance(uid, conversation, user_kept, plain, transcript, run_model):
-    from utils.conversations.process_conversation import _calendar_overlap_retains_conversation
+    from utils.conversations.process_conversation import calendar_overlap_retains_conversation
     from utils.conversations.relevance_jev import jev_discard_probability, jev_tier_applies, relevance_transcript
 
     segments = conversation.transcript_segments
@@ -193,7 +197,7 @@ def _assess_relevance(uid, conversation, user_kept, plain, transcript, run_model
         exempt=is_release_probe_uid(uid),
         trusted_wake_word=has_wake_word,
         model_discards=model_discards,
-        calendar_retains=lambda: _calendar_overlap_retains_conversation(
+        calendar_retains=lambda: calendar_overlap_retains_conversation(
             uid, conversation.started_at, conversation.finished_at
         ),
         neighbor=lambda: adjacent_conversation(uid, conversation, conversation.id),

@@ -71,7 +71,7 @@ def test_recovery_rule_discard_records_explicit_discard_without_paid_structuring
         patch.object(pc, 'conversation_transcripts_for_llm', return_value=('hmm', 'hmm', {})),
         patch.object(pc, 'has_structural_wake_word_marker', return_value=False),
         patch.object(pc, 'is_release_probe_uid', return_value=False),
-        patch.object(pc, '_calendar_overlap_retains_conversation', return_value=False),
+        patch.object(pc, 'calendar_overlap_retains_conversation', return_value=False),
         patch.object(pc, 'get_conversation_notes') as paid_notes,
     ):
         decisions = []
@@ -118,7 +118,7 @@ def test_recovery_empty_transcript_is_explicit_discard(monkeypatch, isolated_pro
         patch.object(pc, 'conversation_transcripts_for_llm', return_value=('', '', {})),
         patch.object(pc, 'has_structural_wake_word_marker', return_value=False),
         patch.object(pc, 'is_release_probe_uid', return_value=False),
-        patch.object(pc, '_calendar_overlap_retains_conversation', return_value=False),
+        patch.object(pc, 'calendar_overlap_retains_conversation', return_value=False),
         patch.object(pc, 'get_conversation_notes') as paid_notes,
     ):
         structured, discarded = pc._get_structured(
@@ -145,7 +145,7 @@ def test_recovery_calendar_overlap_does_not_take_the_rule_discard(monkeypatch, i
         patch.object(pc, 'conversation_transcripts_for_llm', return_value=('', '', {})),
         patch.object(pc, 'has_structural_wake_word_marker', return_value=False),
         patch.object(pc, 'is_release_probe_uid', return_value=False),
-        patch.object(pc, '_calendar_overlap_retains_conversation', return_value=True),
+        patch.object(pc, 'calendar_overlap_retains_conversation', return_value=True),
         patch.object(pc, 'get_conversation_notes', return_value=Structured()),
         patch.object(pc, 'get_conversation_notes', return_value=Structured(), create=True),
     ):
@@ -246,7 +246,7 @@ def test_quiet_recovery_uses_minimum_only_without_protected_content(
         patch.object(pc, 'conversation_transcripts_for_llm', return_value=(text, text, {})),
         patch.object(pc, 'has_structural_wake_word_marker', return_value=False),
         patch.object(pc, 'is_release_probe_uid', return_value=False),
-        patch.object(pc, '_calendar_overlap_retains_conversation', return_value=False),
+        patch.object(pc, 'calendar_overlap_retains_conversation', return_value=False),
         patch.object(pc, 'get_conversation_notes', return_value=stored) as paid_notes,
         patch.object(pc, 'build_deterministic_minimum_structured', return_value=minimum) as build_minimum,
     ):

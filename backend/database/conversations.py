@@ -1686,7 +1686,7 @@ def persist_processing_result_with_lifecycle(
     terminal_refusal = None
     ledger_stages: tuple[str, ...] = ()
     source_revision = 0
-    family_enabled = _terminal_family_serving(uid)
+    family_enabled = terminal_family_serving(uid)
 
     @firestore.transactional
     def _persist(transaction) -> bool:
@@ -3462,7 +3462,7 @@ def _record_terminal_claim_refusal(family: str, reason: str) -> None:
     ).inc()
 
 
-def _terminal_family_serving(uid: str) -> bool:
+def terminal_family_serving(uid: str) -> bool:
     # The on|off operator surface maps on to the shared serve mode. The shared
     # parser retains its cohort support for a later ramp without changing defaults.
     from config.refactor_modes import default_on
@@ -3578,7 +3578,7 @@ def claim_conversation_status(
             bound_updates = extra_updates_with_bound_client_processing(
                 uid, current, extra_updates, transcript_corrections=corrections
             )
-        family_enabled = _terminal_family_serving(uid)
+        family_enabled = terminal_family_serving(uid)
         updates = claim_conversation_status_in_txn(
             current,
             expected_status=expected_status.value,

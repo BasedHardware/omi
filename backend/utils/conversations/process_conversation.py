@@ -448,7 +448,7 @@ def _get_structured(
             )
         )
         if minimum is not None:
-            decision = short_clip_relevance(uid, conversation, trigger, _calendar_overlap_retains_conversation)
+            decision = short_clip_relevance(uid, conversation, trigger, calendar_overlap_retains_conversation)
             if relevance_observer is not None:
                 relevance_observer(decision)
             if not decision.discard and is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
@@ -611,7 +611,7 @@ def _get_structured(
                 trusted_wake_word=has_wake_word_marker,
                 model_discards=None,
                 occasion_retains=occasion_reason,
-                calendar_retains=lambda: _calendar_overlap_retains_conversation(
+                calendar_retains=lambda: calendar_overlap_retains_conversation(
                     uid, main_conv.started_at, main_conv.finished_at
                 ),
             )
@@ -672,7 +672,7 @@ def _get_structured(
             trusted_wake_word=has_wake_word_marker,
             model_discards=None if live_recap else model_discards,
             occasion_retains=occasion_reason,
-            calendar_retains=lambda: _calendar_overlap_retains_conversation(
+            calendar_retains=lambda: calendar_overlap_retains_conversation(
                 uid, main_conv.started_at, main_conv.finished_at
             ),
             neighbor=lambda: adjacent_conversation(uid, main_conv, conversation_id),
@@ -2446,7 +2446,7 @@ def _store_deferred_conversation(
         conversation,
         trigger,
         user_kept,
-        lambda: _calendar_overlap_retains_conversation(
+        lambda: calendar_overlap_retains_conversation(
             uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
         ),
     )
@@ -2513,7 +2513,7 @@ def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker
     return clear_summary_retryable(strip_client_processing(payload))
 
 
-def _calendar_overlap_retains_conversation(
+def calendar_overlap_retains_conversation(
     uid: str, started_at: Optional[datetime], finished_at: Optional[datetime]
 ) -> bool:
     """Whether a non-declined calendar meeting overlaps [started_at, finished_at].

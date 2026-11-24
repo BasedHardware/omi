@@ -69,15 +69,41 @@ def test_notes_title_evidence_recognizes_provisional_and_owner_titles():
     assert _notes_title_evidence(row, conversation) == {'prior': '', 'valid_prior': '', 'previous_units': 21}
     row['structured'] = {'title': 'Prior plan', 'overview': 'Notes'}
     assert _notes_title_evidence(row, conversation) == {
-        'prior': 'Prior plan', 'valid_prior': 'Prior plan', 'previous_units': 21,
+        'prior': 'Prior plan',
+        'valid_prior': 'Prior plan',
+        'previous_units': 21,
     }
     assert _notes_title_evidence({**row, 'user_title': 'My title'}, conversation) is None
+    for missing_units in (None, True, float('inf')):
+        assert _notes_title_evidence({**row, 'title_content_units': missing_units}, conversation)['previous_units'] == 0
+
+
+def test_ordinary_sync_notes_without_start_decline_paid_planning(monkeypatch):
+    monkeypatch.setattr(sync_notes_request, 'get_conversation_photos', lambda *args, **kwargs: [])
+    monkeypatch.setattr(sync_notes_request.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
+    monkeypatch.setattr(sync_notes_request, 'selected_summary_app', lambda *args: False)
+    monkeypatch.setattr(sync_notes_request, 'quiet_minimum', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        sync_notes_request, 'may_have_recent_dedup_candidates', lambda *args, **kwargs: pytest.fail('must skip dedup')
+    )
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    conversation = Conversation(
+        id='synthetic-missing-start',
+        source='omi',
+        created_at=now,
+        started_at=None,
+        finished_at=now,
+        structured={},
+        transcript_segments=[{'text': 'Synthetic notes', 'start': 0, 'end': 1, 'is_user': True}],
+    )
+
+    assert sync_notes_request.notes_request(None, 'synthetic-owner', conversation, user_kept=False) is None
 
 
 @pytest.mark.parametrize('texts', [[], ['']], ids=['empty-capture', 'transcript-empty-text'])
 def test_empty_ordinary_sync_notes_use_python_discard_rule(monkeypatch, texts):
     monkeypatch.setattr(sync_notes_request, 'get_conversation_photos', lambda *args, **kwargs: [])
-    monkeypatch.setattr(processor, '_calendar_overlap_retains_conversation', lambda *args: False)
+    monkeypatch.setattr(processor, 'calendar_overlap_retains_conversation', lambda *args: False)
     monkeypatch.setattr(
         sync_notes_request, 'one_shot_notes_messages', lambda *args, **kwargs: pytest.fail('discard must skip notes')
     )

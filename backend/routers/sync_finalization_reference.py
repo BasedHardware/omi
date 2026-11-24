@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from math import isfinite
 import os
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
@@ -71,11 +71,9 @@ def _notes_title_evidence(stored: dict, conversation) -> dict | None:
         return None
     raw_title = title_for_stability({**stored, 'transcript_segments': conversation.transcript_segments})
     previous_units = stored.get('title_content_units')
-    return {
-        'prior': raw_title if isinstance(raw_title, str) else '',
-        'valid_prior': valid_title(raw_title),
-        'previous_units': previous_units if type(previous_units) in (int, float) and isfinite(previous_units) else 0,
-    }
+    if not isinstance(previous_units, (int, float)) or isinstance(previous_units, bool) or not isfinite(previous_units):
+        previous_units = 0
+    return {'prior': raw_title, 'valid_prior': valid_title(raw_title), 'previous_units': previous_units}
 
 
 class ReferenceRequest(BaseModel):
@@ -312,8 +310,9 @@ def _read_or_reserve(
         return run_preloaded_transactional(client, claim)[:2]
 
     prior = job_version if reserve and job_version and job_version.updated_at else None
+    txn = client.transaction()
+    result = None
     if prior is not None:
-        txn = client.transaction()
         try:
             result = claim(txn, prior)
         except (FailedPrecondition, NotFound):
@@ -321,9 +320,9 @@ def _read_or_reserve(
         if result is None or result[0] != 'owned':
             # A cached journal cannot authorize a read-only replay or a
             # refusal. Re-read both documents unless the CAS committed.
-            prior = None
-    if prior is None:
-        txn = client.transaction()
+            txn = client.transaction()
+            result = None
+    if result is None:
         result = claim(txn)
     if result[0] == 'owned':
         observed = result[2]
@@ -394,6 +393,8 @@ def _settle(
         if job.get('finalization_engine') != 'go' or any(journal.get(key) != 'reserved' for key in keys):
             return False
         projects_home = req.step in {'effects-episode', 'episode-reconcile'}
+        row = None
+        compose = None
         if projects_home or effects_write is not None:
             ref, row = _current_output_row(client, txn, req, job)
             if row is None and episode is not None and not episode.checked and req.step == 'effects-episode':
@@ -418,7 +419,6 @@ def _settle(
                 from utils.home_feed.projection import stamp
 
                 fields.update(stamp(req.owner, row | fields, 'conversation'))
-            compose = None
             if row is not None and episode is not None and episode.compose_deferral is not None:
                 from database import episodes
 
@@ -431,11 +431,11 @@ def _settle(
                 txn.update(memo_ref, memo_fields)
         # Record the original operation even if a sync append advanced its input.
         # Handback may only proceed after a reservation's outcome is resolved.
-        fields = {f'{RECEIPTS}.{key}': 'settled' for key in keys}
+        job_fields: dict[str, Any] = {f'{RECEIPTS}.{key}': 'settled' for key in keys}
         if req.step.startswith('relevance-'):
-            fields[f'go_sync_reference_relevance.{req.operation}'] = relevance_result
+            job_fields[f'go_sync_reference_relevance.{req.operation}'] = relevance_result
         option = client.write_option(last_update_time=prior.updated_at) if prior is not None else None
-        txn.update(job_ref, fields, option=option)
+        txn.update(job_ref, job_fields, option=option)
         if not projects_home or row is not None:
             return 'compose_needed' if projects_home and compose is False else 'current'
         return 'superseded'
@@ -464,10 +464,8 @@ def _settle(
             for schedule, args, kwargs in episode.schedules:
                 kwargs['collaborators'] = collaborators
                 schedule(*args, **kwargs)
-            if result == 'compose_needed':
-                composer.schedule(
-                    req.owner, episode.compose_deferral[0], collaborators=collaborators, trigger='member_final'
-                )
+            if result == 'compose_needed' and (deferral := episode.compose_deferral) is not None:
+                composer.schedule(req.owner, deferral[0], collaborators=collaborators, trigger='member_final')
         elif result == 'episode_refused':
             episode.refused = True
     return result in {'current', 'compose_needed', 'superseded'}
@@ -630,7 +628,7 @@ def _notes_actions(req, row) -> dict:
 @spelling_context_run
 def _adapt(client, req: ReferenceRequest):
     from database.conversations import (
-        _terminal_family_serving,
+        terminal_family_serving,
         encode_conversation_for_write,
         prepare_conversation_for_read,
     )
@@ -710,7 +708,7 @@ def _adapt(client, req: ReferenceRequest):
             plan['source_projection']['empty_discard_home'] = _empty_discard_home(
                 req.owner, stored, plan['source_projection']
             )
-        plan['terminal_family_enabled'] = _terminal_family_serving(req.owner)
+        plan['terminal_family_enabled'] = terminal_family_serving(req.owner)
         plan['open_loops_enabled'] = open_loops_enabled()
         plan['episode_checked'] = True
         plan['inline_fanout'] = True
