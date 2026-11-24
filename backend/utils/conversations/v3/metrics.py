@@ -36,6 +36,22 @@ for outcome in ('visible', 'hidden'):
     for kind in MANUAL_END_KINDS:
         MANUAL_END_HOME.labels(outcome, kind)
 
+FINISH_NO_POINTER = Counter(
+    'omi_conversations_v3_finish_no_pointer_total',
+    'Finish outcomes after both existing in-progress recording lookups miss',
+    ['outcome'],
+)
+for outcome in (
+    'cut',
+    'already_cut',
+    'requested',
+    'already_requested',
+    'no_live_window',
+    'no_recording',
+    'batch_disabled',
+):
+    FINISH_NO_POINTER.labels(outcome)
+
 BATCH_MANUAL_END = Counter(
     'omi_conversations_v3_batch_manual_end_total',
     'Manual-end requests of audio-only v3 recordings at record admission, by what admission did with them',

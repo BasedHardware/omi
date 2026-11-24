@@ -10,10 +10,14 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
+from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from config import server_batch
+from config.conversations_v3 import SPEECH_LANDED_FIELD
 from database._client import get_firestore_client
 from database.conversations import conversations_collection, prepare_conversation_for_read
+from utils.conversations.v3.live import active
 
 logger = logging.getLogger(__name__)
 
@@ -121,3 +125,55 @@ def live_window(
         if row is not None or left <= 0:
             return row
     return None
+
+
+def request_finish(uid: str, window_id: str, *, now: datetime, firestore_client: Any = None) -> Tuple[str, str]:
+    """Store a cut on the current tail source, fenced by the live window in the same transaction."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    collection = client.collection('users').document(uid).collection(conversations_collection)
+    window_ref = collection.document(window_id)
+
+    @firestore.transactional
+    def commit(tx):
+        window = window_ref.get(transaction=tx).to_dict() or {}
+        end = window.get('finished_at')
+        if not isinstance(end, datetime) or not active([window], now) or window.get('is_locked'):
+            return 'no_live_window', ''
+        members = window.get('v3_recording_ids') or []
+        # The planner appends new contributing recordings in speech order. An
+        # unavailable tail must not move the cut back to a previous recording.
+        cid = members[-1] if isinstance(members, list) and members else None
+        if not isinstance(cid, str) or not cid or '/' in cid or cid in {'.', '..'}:
+            return 'no_recording', ''
+        ref = collection.document(cid)
+        row = ref.get(transaction=tx).to_dict() or {}
+        if (
+            row.get('recording') is not True
+            or row.get('status') != 'completed'
+            or not isinstance(row.get('finished_at'), datetime)
+            # An older overlapping source must not cut through already-visible speech.
+            or row['finished_at'] < end
+            or any(row.get(key) for key in ('deleted', 'discarded', 'is_locked', 'sync_merged_into'))
+            or row.get('data_protection_level') == 'private'
+        ):
+            return 'no_recording', ''
+        if row.get('v3_manual_end'):
+            return 'already_cut', cid
+        if row.get('v3_manual_end_requested'):
+            return 'already_requested', cid
+        if server_batch.owned(row) and not (row.get(SPEECH_LANDED_FIELD) or row.get('record_projection_revision')):
+            if not server_batch.manual_end_marker_enabled():
+                return 'batch_disabled', ''
+            tx.update(ref, {'v3_manual_end_requested': True})
+            return 'requested', cid
+        tx.update(
+            ref,
+            {
+                'v3_manual_end': True,
+                'v3_pending': True,
+                'v3_pending_since': row.get('v3_pending_since') or now,
+            },
+        )
+        return 'cut', cid
+
+    return commit(client.transaction())
