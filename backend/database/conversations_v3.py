@@ -1462,7 +1462,7 @@ def outline_attempt(uid, token, fingerprint, *, key='builder', preemptible=False
         if count >= (1 if preemptible else 2):
             return False
         attempts[fingerprint] = count + 1
-        update = {'outline_attempts': dict(list(attempts.items())[-128:])}
+        update: dict[str, Any] = {'outline_attempts': dict(list(attempts.items())[-128:])}
         if preemptible:
             update['llm_preemptible'] = True
         tx.update(ref, update)

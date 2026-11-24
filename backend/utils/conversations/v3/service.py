@@ -233,6 +233,77 @@ def historical_stretches(eligible, now, *, since, until, internal_end=False):
     return groups
 
 
+def _outline_flex_budget(group, flex_owner_deadline):
+    if flex_owner_deadline is None or not group['finished'] or group['manual_end']:
+        return 0
+    seconds_to_publish = (group['end'] + OUTLINE_PUBLICATION_DEADLINE - datetime.now(timezone.utc)).total_seconds()
+    return int(
+        min(
+            flex_owner_deadline - time.monotonic(),
+            seconds_to_publish - OUTLINE_PUBLICATION_RESERVE_SECONDS,
+        )
+        * 1000
+    )
+
+
+async def _derive_outline(
+    uid, key, token, group, messages, fingerprint, report, *, cohesion, silence_gap, preview_key, flex_owner_deadline
+):
+    keyed = {'key': key} if key != 'builder' else {}
+    budget_ms = _outline_flex_budget(group, flex_owner_deadline)
+    background_attempt = budget_ms >= OUTLINE_MIN_FLEX_BUDGET_SECONDS * 1000 and await run_blocking(
+        db_executor, store.outline_attempt, uid, token, fingerprint, preemptible=True
+    )
+    if not background_attempt and not await run_blocking(
+        db_executor, store.outline_attempt, uid, token, fingerprint, **keyed
+    ):
+        return [{**entry, '_outline_failed': True} for entry in outline.fallback(group)], {}
+
+    metrics.MODEL_CALLS.labels('outline').inc()
+    report['outline_calls'] = report.get('outline_calls', 0) + 1
+    try:
+        if outline_cache_prefix_enabled():
+            # Keep the existing result-cache key across prompt and transport experiments.
+            messages = (
+                outline.messages(group, timezone.utc, cohesion=cohesion, silence_gap=silence_gap, cache_prefix=True)
+                + messages[2:]
+            )
+        if background_attempt:
+            await run_blocking(
+                db_executor,
+                models.require_current_generated_compute,
+                'conversation_v3_outline',
+                uid=uid,
+                provider='openai',
+                allow_byok=False,
+            )
+            content = await models.background_outline(uid, messages, budget_ms=budget_ms)
+        else:
+            content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
+    except RuntimeError as error:
+        if str(error) != 'v3_lease_lifetime_exhausted':
+            raise
+        content = ''
+    finally:
+        if background_attempt:
+            await run_blocking(db_executor, leases.mark_llm_preemptible, uid, key, token, False)
+
+    preview_fields = {}
+    try:
+        entries = outline.parse(content, group)
+        if preview_key and not group['locked']:
+            preview_fields = {'preview_key': preview_key, 'anchors': outline.preview_anchors(group, entries)}
+            await run_blocking(
+                db_executor, store.save_outline, uid, token, fingerprint, entries, key=key, preview=preview_fields
+            )
+        else:
+            await run_blocking(db_executor, store.save_outline, uid, token, fingerprint, entries, **keyed)
+        return entries, preview_fields
+    except (ValueError, KeyError, TypeError):
+        metrics.RECONCILES.labels('outline_fallback').inc()
+        return [{**entry, '_outline_failed': True} for entry in outline.fallback(group)], preview_fields
+
+
 async def reconcile(
     uid,
     *,
@@ -264,8 +335,6 @@ async def reconcile(
     blocked = None
     moved = set()
     deferred: dict[str, datetime] = {}
-    # Live passes call the outline-cache writers exactly as before; only a backfill names its lease.
-    keyed = {'key': key} if derive else {}
     if not on_open and not derive:
         backoff, parked = await run_blocking(db_executor, store.backoff_state, uid)
         if backoff and backoff > datetime.now(timezone.utc):
@@ -274,7 +343,11 @@ async def reconcile(
             await _drain_blocked(uid, parked)
             return 'backoff'
     flex_enabled = background_outline_flex_enabled()
-    flex_owner_deadline = time.monotonic() + OUTLINE_BACKGROUND_BUDGET_SECONDS
+    flex_owner_deadline = (
+        time.monotonic() + OUTLINE_BACKGROUND_BUDGET_SECONDS
+        if background and flex_enabled and not (on_open or derive or internal_end)
+        else None
+    )
     promote = {'promote_llm': True} if on_open and flex_enabled and not derive else {}
     token = await run_blocking(db_executor, leases.acquire, uid, key, **promote)
     if token is None:
@@ -393,82 +466,19 @@ async def reconcile(
                 entries = outline.reuse_preview(group, preview)
                 report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
             elif group['outline_ready'] or on_open:
-                budget_ms = 0
-                if background and flex_enabled and not on_open and not derive and not internal_end:
-                    if group['finished'] and not group['manual_end']:
-                        seconds_to_publish = (
-                            group['end'] + OUTLINE_PUBLICATION_DEADLINE - datetime.now(timezone.utc)
-                        ).total_seconds()
-                        budget_ms = int(
-                            min(
-                                flex_owner_deadline - time.monotonic(),
-                                seconds_to_publish - OUTLINE_PUBLICATION_RESERVE_SECONDS,
-                            )
-                            * 1000
-                        )
-                background_attempt = budget_ms >= OUTLINE_MIN_FLEX_BUDGET_SECONDS * 1000 and await run_blocking(
-                    db_executor, store.outline_attempt, uid, token, fingerprint, preemptible=True
+                entries, preview_fields = await _derive_outline(
+                    uid,
+                    key,
+                    token,
+                    group,
+                    messages,
+                    fingerprint,
+                    report,
+                    cohesion=cohesion,
+                    silence_gap=silence_gap,
+                    preview_key=preview_key,
+                    flex_owner_deadline=flex_owner_deadline,
                 )
-                if background_attempt or await run_blocking(
-                    db_executor, store.outline_attempt, uid, token, fingerprint, **keyed
-                ):
-                    metrics.MODEL_CALLS.labels('outline').inc()
-                    report['outline_calls'] = report.get('outline_calls', 0) + 1
-                    if outline_cache_prefix_enabled():
-                        # Preserve the logical result-cache key across prompt/transport experiments.
-                        messages = (
-                            outline.messages(
-                                group, timezone.utc, cohesion=cohesion, silence_gap=silence_gap, cache_prefix=True
-                            )
-                            + messages[2:]
-                        )
-                    try:
-                        if background_attempt:
-                            try:
-                                await run_blocking(
-                                    db_executor,
-                                    models.require_current_generated_compute,
-                                    'conversation_v3_outline',
-                                    uid=uid,
-                                    provider='openai',
-                                    allow_byok=False,
-                                )
-                                content = await models.background_outline(uid, messages, budget_ms=budget_ms)
-                            finally:
-                                await run_blocking(db_executor, leases.mark_llm_preemptible, uid, key, token, False)
-                        else:
-                            content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
-                    except RuntimeError as error:
-                        if str(error) != 'v3_lease_lifetime_exhausted':
-                            raise
-                        content = ''
-                    try:
-                        entries = outline.parse(content, group)
-                        if preview_key and not group['locked']:
-                            preview_fields = {
-                                'preview_key': preview_key,
-                                'anchors': outline.preview_anchors(group, entries),
-                            }
-                            await run_blocking(
-                                db_executor,
-                                store.save_outline,
-                                uid,
-                                token,
-                                fingerprint,
-                                entries,
-                                key=key,
-                                preview=preview_fields,
-                            )
-                        else:
-                            await run_blocking(
-                                db_executor, store.save_outline, uid, token, fingerprint, entries, **keyed
-                            )
-                    except (ValueError, KeyError, TypeError):
-                        entries = outline.fallback(group)
-                        entries = [{**entry, '_outline_failed': True} for entry in entries]
-                        metrics.RECONCILES.labels('outline_fallback').inc()
-                else:
-                    entries = [{**entry, '_outline_failed': True} for entry in outline.fallback(group)]
             else:
                 # First speech is visible before either the title preview or the outline is ready.
                 entries = [

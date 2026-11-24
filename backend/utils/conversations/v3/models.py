@@ -5,7 +5,7 @@ import json
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from datetime import datetime
-from typing import Callable
+from typing import Any, Callable
 
 from langchain_core.callbacks import BaseCallbackHandler
 from openai import DefaultAsyncHttpxClient
@@ -103,13 +103,17 @@ def notes_client():
 async def summary_model_attempt():
     """Let an explicit open replace only the lease held by a background model call."""
     mode = _notes_mode.get()
-    if mode is None or mode[1] or mode[3] is None:
+    if mode is None:
+        yield
+        return
+    uid, foreground, _, background_lease = mode
+    if foreground or background_lease is None:
         yield
         return
     from database import conversations_v3_leases as leases
     from utils.executors import db_executor, run_blocking
 
-    uid, _, _, (cid, token, closed_at) = mode
+    cid, token, closed_at = background_lease
     feature = 'conversation_v3_summary'
     key = 'summary-' + cid
     with background_flex.background_flex(closed_at, features=frozenset({feature})):
@@ -157,7 +161,7 @@ async def background_outline(uid, messages, *, budget_ms):
         return response.content
 
 
-def _outline_cache_request(messages):
+def _outline_cache_request(messages) -> tuple[Any, dict[str, Any]]:
     if not messages or messages[0] != ('system', OUTLINE_CACHE_PREFIX):
         return messages, {}
     prefix = {
