@@ -1038,7 +1038,18 @@ async def test_background_outline_sends_same_lane_and_explicit_cache_prefix(monk
             'prompt_cache_breakpoint': {'mode': 'explicit'},
         }
         if gateway_timeout:
-            return httpx.Response(502, json={'error': {'failure_class': 'timeout_before_output'}})
+            return httpx.Response(
+                502,
+                json={
+                    'error': {
+                        'message': 'provider request failed',
+                        'type': 'api_error',
+                        'param': None,
+                        'code': 'provider_failure',
+                        'failure_class': 'timeout_before_output',
+                    }
+                },
+            )
         return httpx.Response(
             200,
             json={

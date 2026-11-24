@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from collections.abc import Mapping
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from datetime import datetime
@@ -163,9 +164,12 @@ async def background_outline(uid, messages, *, budget_ms):
                 raise
             return ''
         except APIStatusError as error:
-            if error.status_code != 502 or not isinstance(error.body, dict):
+            if error.status_code != 502 or not isinstance(error.body, Mapping):
                 raise
-            if error.body.get('failure_class') != 'timeout_before_output':
+            # The OpenAI SDK unwraps the standard top-level `error` object
+            # into APIStatusError.body, while alternate clients may retain it.
+            gateway_error = error.body.get('error', error.body)
+            if not isinstance(gateway_error, Mapping) or gateway_error.get('failure_class') != 'timeout_before_output':
                 raise
             # Preserve the builder's outline fallback when the gateway stops
             # after a provider timeout that might already have been billed.
