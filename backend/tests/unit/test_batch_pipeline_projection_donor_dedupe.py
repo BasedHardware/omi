@@ -535,6 +535,106 @@ def test_first_mcp_read_after_canonical_assignment_sees_published_batch(
     assert receipt['transcript_outputs'] == [{'conversation_id': 'live', 'sync_content_revision': revision}]
 
 
+@pytest.mark.parametrize('mode', ['normal', 'erased', 'size_retry', 'oversized'])
+def test_joined_merge_waits_for_predecessor_and_publishes_atomically(batch_projection, monkeypatch, mode):
+    from database.batch_pipeline_store import FirestoreTransaction
+    from tests.unit.test_sync_size_rollover import _RejectingTransaction
+    from utils.mcp_server.handlers.conversations import fetch_conversation_for_detail
+
+    lane = batch_projection
+    result_key = (f'{lane.namespace}_results', 'segment')
+    owner_key_value = owner_key('u')
+    owner_path = (f'{lane.namespace}_owners', owner_key_value)
+    job = lane.client.rows[(f'{lane.namespace}_jobs', 'segment')]
+    job.update(state='result_ready', merge_pending=True)
+    lane.client.rows[owner_path].update(log_tail='previous', log_sequence=1)
+    entry = lane.client.rows.pop(result_key)
+    entry.update(previous_segment_id='previous', committed_at=2000, log_sequence=2)
+    monkeypatch.setattr(FirestoreTransaction, 'check_joined_commit_budget', lambda _view: None)
+
+    def plan(view):
+        staged = view.get('jobs', 'segment')
+        if staged['state'] != 'result_ready':
+            return None
+        owner = view.get('owners', owner_key_value)
+        owner.update(log_tail='segment', log_sequence=2, watermark={'segment_id': 'segment', 'capture_at': 1020})
+        view.put('owners', owner_key_value, owner)
+        view.put('jobs', 'segment', dict(staged, state='committed', merge_pending=False))
+        view.put('results', 'segment', entry)
+        return entry
+
+    assert lane.projector.commit_joined_merge(entry, plan) is None
+    assert result_key not in lane.client.rows and 'watermark' not in lane.client.rows[owner_path]
+    lane.client.rows[owner_path]['projection_watermark'] = 'previous'
+    if mode == 'erased':
+        lane.client.rows[('users', 'u', 'deleted_conversations', 'live')] = {'deleted': True}
+        assert lane.projector.commit_joined_merge(entry, plan) is None
+        assert result_key not in lane.client.rows and 'watermark' not in lane.client.rows[owner_path]
+        return
+
+    get_all = lane.client.get_all
+    monkeypatch.setattr(lane.client, 'get_all', lambda refs, **_: get_all(refs))
+    monkeypatch.setattr(db, 'get_firestore_client', lambda: lane.client)
+    if mode in {'size_retry', 'oversized'}:
+        failures = [True] if mode == 'size_retry' else []
+
+        def transaction():
+            tx = _RejectingTransaction(lane.client, [], lambda _: None)
+            # Fail the first committing write transaction after staging all
+            # its writes. The ordinary assignment backstop replans the target.
+            commit = tx._commit
+
+            def reject_first_assignment():
+                if tx.updates and failures:
+                    assert result_key in lane.client.rows
+                    tx._failures = failures
+                commit()
+
+            tx._commit = reject_first_assignment
+            return tx
+
+        monkeypatch.setattr(lane.client, 'transaction', transaction)
+    if mode == 'oversized':
+
+        def refuse(_view):
+            raise projection.ProjectionBlocked('synthetic transaction capacity refusal')
+
+        monkeypatch.setattr(FirestoreTransaction, 'check_joined_commit_budget', refuse)
+        assert lane.projector.commit_joined_merge(entry, plan) is None
+        assert result_key not in lane.client.rows
+        assert lane.client.rows[owner_path]['projection_watermark'] == 'previous'
+        assert 'watermark' not in lane.client.rows[owner_path]
+        assert lane.client.rows[(f'{lane.namespace}_jobs', 'segment')]['state'] == 'result_ready'
+        return
+    assert lane.projector.commit_joined_merge(entry, plan)['projection_state'] == 'persisted'
+    owner = lane.client.rows[owner_path]
+    assert owner['watermark']['segment_id'] == owner['projection_watermark'] == 'segment'
+    receipt = lane.client.rows[result_key]['projection_parts']['0']
+    target = receipt['conversation_id']
+    if mode == 'size_retry':
+        assert not failures and target != 'live'
+    row = fetch_conversation_for_detail('u', target)
+    assert any('Fresh projected speech' in segment['text'] for segment in row['transcript_segments'])
+    assert receipt['transcript_outputs'][0]['sync_content_revision'] == row['sync_content_revision']
+    assert lane.projector.commit_joined_merge(entry, plan) is None
+    assert lane.client.rows[result_key]['projection_parts']['0'] == receipt
+
+
+def test_joined_commit_budget_counts_native_firestore_writes():
+    from google.cloud.firestore_v1.types import Write
+    from database.batch_pipeline_store import FirestoreTransaction
+
+    transaction = SimpleNamespace(_write_pbs=[Write(delete='test-document')])
+    view = FirestoreTransaction(None, 'test', transaction)
+    view.check_joined_commit_budget()
+    transaction._write_pbs *= 441
+    with pytest.raises(projection.ProjectionBlocked, match='commit budget'):
+        view.check_joined_commit_budget()
+    transaction._write_pbs = [Write(delete='x' * (1024 * 1024))] * 8
+    with pytest.raises(projection.ProjectionBlocked, match='commit budget'):
+        view.check_joined_commit_budget()
+
+
 def test_batch_invalid_live_timing_is_unknown_on_fleet_path(batch_projection, monkeypatch, caplog):
     lane = batch_projection
     monkeypatch.setenv('SYNC_SAFETY_WAL_DEDUPE_ENABLED', 'true')

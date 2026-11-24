@@ -105,11 +105,12 @@ class MemoryStore:
         self.rows = {}
         self.lock = RLock()
 
-    def run(self, body):
+    def run(self, body, *, plan_only=False):
         with self.lock:
             snapshot = deepcopy(self.rows)
             result = body(MemoryTransaction(snapshot))
-            self.rows = snapshot
+            if not plan_only:
+                self.rows = snapshot
             return result
 
     def due(self, state, now, limit):
@@ -375,6 +376,27 @@ def test_lease_expiry_backoff_and_stale_result_fencing():
     assert store.rows['jobs', 'a'] == staged
     assert store.rows.get(('owners', key)) == before_stage
     assert ('results', 'a') not in store.rows
+
+
+@pytest.mark.parametrize('path', ['cpu', 'gpu', 'source_alias', 'source_alias_fallback'])
+def test_joined_merge_never_falls_back_to_unjoined_publication(monkeypatch, path):
+    monkeypatch.setenv('BATCH_PIPELINE_JOINED_MERGE_ENABLED', 'true')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('a'), 0)
+    lease = queue.pull(0)[0]
+    assert queue.complete(WorkResult('a', 'gs://results/a'), lease.token, 1)
+    if path == 'source_alias':
+        store.rows['jobs', 'a']['source_reuse_key'] = 'synthetic'
+    if path == 'source_alias_fallback':
+        store.rows['jobs', 'a']['source_alias_fallback'] = {'source_segment_id': 'synthetic'}
+    writer = Mock(return_value=None)
+    merge = OrderedMerge(store, joined_writer=writer if path != 'gpu' else None, commit_source=path)
+    assert merge.commit_next(lease.item.owner_id, 2) is None
+    assert writer.call_count == int(path == 'cpu')
+    assert store.rows['jobs', 'a']['state'] == 'result_ready'
+    assert ('results', 'a') not in store.rows
+    assert 'watermark' not in store.rows.get(('owners', owner_key(lease.item.owner_id)), {})
 
 
 def test_result_receipt_persists_and_optional_receipt_is_rolling_idempotent():

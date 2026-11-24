@@ -239,10 +239,10 @@ class ProjectionStore:
         self._mirror(binding)
         return receipt
 
-    def check(self, session):
+    def check(self, session, *, staged_merge=None):
         @firestore.transactional
         def read(transaction):
-            session.prepare(transaction)
+            session.prepare(transaction, staged_merge=staged_merge)
 
         self.run(read, policy=session.policy)
 

@@ -1039,7 +1039,38 @@ class Projector:
         self._note_head_blocked(segment_id, error)
         return False
 
-    def assign_parts(self, item, entry, binding, *, finish=True, policy=None, hint=None, job=None):
+    def commit_joined_merge(self, entry, merge_plan):
+        """Assign a staged speech result using the same Firestore commit as ordered merge."""
+        segment_id = entry['segment_id']
+        job = self.store.ref('jobs', segment_id).get().to_dict() or {}
+        if (
+            job.get('state') != 'result_ready'
+            or job.get('result') != entry['result']
+            or job.get('shadow')
+            or not job.get('projection_binding')
+            or not job.get('policy_parts', {}).get('projection')
+            or entry['result'].get('outcome') != 'success'
+        ):
+            return None
+        binding = normalized_binding(job['projection_binding'])
+        item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
+        policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
+        try:
+            preflight = self.store.session(segment_id, binding, self.clock(), policy=policy)
+            self.store.check(preflight, staged_merge=entry)
+            if preflight.job != job:
+                return None
+            return self.assign_parts(item, entry, binding, finish=False, policy=policy, job=job, merge_plan=merge_plan)
+        except (ProjectionBlocked, ProjectionPredecessorPending, BatchPrivacyBlocked, SyncAssignmentConflict):
+            return None
+        except Exception as error:
+            from database._client import is_document_size_limit_error
+
+            if is_document_size_limit_error(error):
+                return None
+            raise
+
+    def assign_parts(self, item, entry, binding, *, finish=True, policy=None, hint=None, job=None, merge_plan=None):
         policy = policy or self.store.policy(item.segment_id)
         from database.conversations import get_closest_conversation_to_timestamps
         from utils.batch_pipeline.context import ResolvedContext, resolve_context, require_repair_manifest
@@ -1066,6 +1097,8 @@ class Projector:
             if binding.record_origin:
                 projection_speech_spans(payload, item.duration_seconds)
             parts = [(item, payload)] if binding.record_origin else split_result(item, payload)
+            if merge_plan is not None and len(parts) != 1:
+                return None
             from utils.capture.batch_coverage import optional_manifest
 
             manifest = None if item.requires_compute_admission else optional_manifest(self, item, hint)
@@ -1086,6 +1119,8 @@ class Projector:
                         manifest = read_context(self.fetch_audio(item))
             require_repair_manifest(item, binding, manifest, self.require_lineage_fence)
         except PAYLOAD_CONTRACT_ERRORS as error:
+            if merge_plan is not None:
+                return None
             if not payload_contract_violation(error):
                 raise
             # The committed result/manifest itself violates the contract: no
@@ -1111,7 +1146,7 @@ class Projector:
             session.total_speech_seconds = float(speech)
             pending_candidate = None
             try:
-                if not (
+                if merge_plan is None and not (
                     hint is not None and hint.successor and not entry.get('projection') and str(index) not in receipts
                 ):
                     self.store.check(session)
@@ -1134,6 +1169,8 @@ class Projector:
                             require_lineage_fence=self.require_lineage_fence,
                         )
                 if not part_payload['words']:
+                    if merge_plan is not None:
+                        return None
                     receipt = session.persist_empty()
                 else:
                     with projection_phase('build', policy):
@@ -1166,9 +1203,31 @@ class Projector:
                     admit_projection(binding.owner_id, incoming, manifest, capture_at=item.capture_at)
                     session.incoming_segment_count = len(incoming['transcript_segments'])
                     receipt_box = []
+                    merge_views = []
+
+                    def prepare(transaction):
+                        if merge_plan is None:
+                            session.prepare(transaction)
+                            return
+                        from database.batch_pipeline_store import FirestoreTransaction
+
+                        view = FirestoreTransaction(self.store.client, self.store.store.namespace, transaction)
+                        if merge_plan(view) != entry:
+                            raise ProjectionBlocked('ordered merge plan changed')
+                        view.validate_writes()
+                        session.prepare(transaction, staged_merge=entry)
+                        if session.job != job:
+                            raise ProjectionBlocked('staged job changed during artifact preparation')
+                        merge_views[:] = [view]
 
                     def persisted(transaction, planned):
+                        if merge_views:
+                            merge_views[0].write_validated()
                         receipt_box[:] = [session.persist(transaction, planned)]
+                        if merge_views:
+                            if not receipt_box[0].get('transcript_outputs'):
+                                raise ProjectionBlocked('joined merge lacks a transcript publication')
+                            merge_views[0].check_joined_commit_budget()
 
                     candidate = None
                     if (
@@ -1183,6 +1242,8 @@ class Projector:
                             if not found:
                                 candidate = get_closest_conversation_to_timestamps(binding.owner_id, *span)
                     if not incoming['transcript_segments']:
+                        if merge_plan is not None:
+                            return None
                         receipt = session.persist_empty()
                     else:
                         from utils.conversations.v3 import triggers as v3_triggers
@@ -1196,7 +1257,7 @@ class Projector:
                                 target_id=context.target_id,
                                 candidate_id=candidate['id'] if candidate else None,
                                 firestore_client=self.store.client,
-                                before_assign=session.prepare,
+                                before_assign=prepare if merge_plan is not None else session.prepare,
                                 validate_plan=session.validate_plan,
                                 after_assign=persisted,
                                 retry_contention=policy.projection_contention,
@@ -1218,19 +1279,31 @@ class Projector:
                         )
                         receipt = receipt_box[0]
                         record_labels(assigned[2])
+                        if merge_plan is not None:
+                            return {**entry, 'projection': dict(receipt), 'projection_state': receipt['state']}
             except ProjectionReplay as replay:
+                if merge_plan is not None:
+                    return None
                 receipt = replay.receipt
             except ProjectionGenerationAmbiguous:
+                if merge_plan is not None:
+                    return None
                 receipt = persist_disposition(session, quarantined=True, hold_reason='ambiguous_generation')
             except SyncAssignmentSuperseded:
+                if merge_plan is not None:
+                    return None
                 receipt = self.supersede(session)
             except SyncAssignmentConflict as error:
+                if merge_plan is not None:
+                    raise
                 if not quarantines_assignment_conflict(error, job, now=self.clock()):
                     raise
                 receipt = persist_disposition(session, quarantined=True, hold_reason='conflict')
                 if receipt.get('state') == 'quarantined':
                     log_conflict_hold(error)
             except BatchPrivacyBlocked as error:
+                if merge_plan is not None:
+                    raise
                 if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
                     if policy.projection_contention:
                         logger.error(
@@ -1241,6 +1314,8 @@ class Projector:
                     raise
                 receipt = persist_disposition(session, privacy_deleted=True)
             except PAYLOAD_CONTRACT_ERRORS as error:
+                if merge_plan is not None:
+                    raise
                 if not payload_contract_violation(error):
                     raise
                 receipt = self._quarantine_payload_contract(item, binding, policy, error, session=session)

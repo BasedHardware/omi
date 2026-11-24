@@ -102,7 +102,7 @@ class Serving:
         self.leader = leader
         self.held_dead_letter = HeldDeadLetter(store, metrics=metrics)
         self.projection_held_dead_letter = ProjectionHeldDeadLetter(store, metrics=metrics)
-        self.merge = OrderedMerge(store, metrics=metrics)
+        self.merge = OrderedMerge(store, metrics=metrics, joined_writer=getattr(projector, 'commit_joined_merge', None))
         self.ready_discovery = ReadyDiscovery(store, 'serving')
         # Held units change only on a recovery or operator settle: scan them
         # at a slow cadence, not every maintenance pass.

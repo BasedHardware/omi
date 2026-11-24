@@ -3,6 +3,7 @@
 from collections import Counter, OrderedDict
 import logging
 import math
+import os
 import threading
 import time
 
@@ -244,10 +245,12 @@ class OrderedMerge:
         commit_source: str = 'ordered_merge',
         head_wait_seconds: float | None = None,
         catch_up_depth: int | None = None,
+        joined_writer=None,
     ):
         self.store = store
         self.metrics = metrics
         self.commit_source = commit_source
+        self.joined_writer = joined_writer
         # None reads BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS on every commit.
         self.head_wait_seconds = head_wait_seconds
         # None reads BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH on every commit.
@@ -454,6 +457,9 @@ class OrderedMerge:
 
         A due ``retry`` row read at the owner's head is promoted before the
         head wait, so it runs (or parks) now instead of blocking newer rows."""
+        joined = os.getenv('BATCH_PIPELINE_JOINED_MERGE_ENABLED', '').lower() in {'on', 'true'}
+        if joined and self.joined_writer is None:
+            return None
         key = owner_key(owner_id)
         started = time.monotonic()
         wait = self._head_wait()
@@ -501,6 +507,8 @@ class OrderedMerge:
             if candidate and candidate['state'] == 'retry':
                 stale[candidate['segment_id']] = candidate
             if candidate and candidate.get('source_alias_fallback') and candidate.get('state') == 'result_ready':
+                if joined:
+                    return None
                 from database.batch_pipeline_source_fallback import merge_ready
 
                 return merge_ready(tx, candidate, now)
@@ -681,6 +689,8 @@ class OrderedMerge:
                 held['catch_up'] = True
                 return None
             job = tx.get('jobs', candidate['segment_id'])
+            if joined and (job.get('source_reuse_key') or job.get('source_alias_fallback')):
+                return None
             markers = merge_markers(job)
             if markers is None:
                 return None
@@ -736,9 +746,15 @@ class OrderedMerge:
             tx.put('owners', key, owner)
             return entry
 
+        def run_commit(plan):
+            if not joined:
+                return self.store.run(plan)
+            entry = self.store.run(plan, plan_only=True)
+            return self.joined_writer(entry, plan) if entry is not None else None
+
         fenced: BatchPrivacyBlocked | None = None
         try:
-            entry = self.store.run(commit)
+            entry = run_commit(commit)
         except BatchPrivacyBlocked as error:
             entry, fenced = None, error
         strict_blocked, strict_catch_up = dict(blocked), bool(held.get('catch_up'))
@@ -766,7 +782,7 @@ class OrderedMerge:
             and time.monotonic() >= self._fresh_tx_retry_at
         ):
             try:
-                entry = self.store.run(lambda tx: commit(tx, tx_fresh=True))
+                entry = run_commit(lambda tx: commit(tx, tx_fresh=True))
                 probe = not gate['determined']
             except _FreshGateReadError as failure:
                 if isinstance(failure.error, FailedPrecondition):
@@ -887,7 +903,7 @@ class OrderedMerge:
                 )
             if fresh is not None:
                 try:
-                    entry = self.store.run(lambda tx: commit(tx, fresh=fresh, skipped=skipped))
+                    entry = run_commit(lambda tx: commit(tx, fresh=fresh, skipped=skipped))
                 except BatchPrivacyBlocked:
                     # A fence on that fresh row refuses only it; the head wait
                     # below still releases the owner's other ready rows.
@@ -904,7 +920,7 @@ class OrderedMerge:
             segment = self._next_release(key, release)
             if segment is not None:
                 try:
-                    entry = self.store.run(lambda tx: commit(tx, exact=segment))
+                    entry = run_commit(lambda tx: commit(tx, exact=segment))
                     if entry is not None and entry['segment_id'] == segment:
                         release.pop(0)  # Committed: the next call need not re-read it.
                 except BatchPrivacyBlocked:
@@ -950,7 +966,7 @@ class OrderedMerge:
             if skip_wait and not (strict_blocked.get('starved') and merge_stale_head_skip(owner_id)):
                 return None
             try:
-                entry = self.store.run(lambda tx: commit(tx, waiter, skip_wait=skip_wait))
+                entry = run_commit(lambda tx: commit(tx, waiter, skip_wait=skip_wait))
             except BatchPrivacyBlocked:
                 # An owner-wide fence (often the reason the head is blocked)
                 # also refuses the successor; strict order commits nothing here.
@@ -973,7 +989,7 @@ class OrderedMerge:
                 # before ready fresh work. The head wait keeps selecting that
                 # stock; reselect fresh in one transaction after the same wait.
                 try:
-                    entry = self.store.run(lambda tx: commit(tx, tx_fresh=True))
+                    entry = run_commit(lambda tx: commit(tx, tx_fresh=True))
                 except BatchPrivacyBlocked:
                     return None
                 except _FreshGateReadError as failure:

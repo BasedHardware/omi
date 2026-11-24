@@ -79,7 +79,7 @@ class Transaction(Protocol):
 
 
 class Store(Protocol):
-    def run(self, body: Callable[[Transaction], T]) -> T: ...
+    def run(self, body: Callable[[Transaction], T], *, plan_only: bool = False) -> T: ...
     def projection_finish_backfill_complete(self) -> bool: ...
     def projection_followup_backfill_complete(self) -> bool: ...
     def projection_outbox_page(self, now: float, limit: int) -> list[outbox.DueObligation]: ...
@@ -258,7 +258,7 @@ class FirestoreTransaction:
             **options,
         )
 
-    def flush(self):
+    def validate_writes(self):
         # Conversation patches set record_lane_owner, a batch-privacy authority
         # field, so the commit-boundary fence appends one token write per owner.
         fence_tokens = len({key.split('/', 1)[0] for table, key in self.patches if table == 'conversations'})
@@ -287,12 +287,29 @@ class FirestoreTransaction:
             )
             if table == 'jobs' and value.get('privacy_generation') is None:
                 value['privacy_generation'] = generation
+
+    def write_validated(self):
         for (table, key), value in self.writes.items():
             self.transaction.set(self._ref(table, key), value)
         for (table, key), fields in self.patches.items():
             self.transaction.update(self._ref(table, key), fields)
         for ref, value in self.external.values():
             self.transaction.set(ref, value)
+
+    def check_joined_commit_budget(self):
+        from google.cloud.firestore_v1.types import Write
+
+        # Reserve headroom for commit framing, index overhead, and privacy
+        # fence writes appended by the Firestore commit hook.
+        writes = self.transaction._write_pbs
+        if len(writes) > 440 or sum(len(Write.serialize(write)) for write in writes) > 8 * 1024 * 1024:
+            from database.batch_pipeline_projection_protocol import ProjectionBlocked
+
+            raise ProjectionBlocked('joined merge exceeds Firestore commit budget')
+
+    def flush(self):
+        self.validate_writes()
+        self.write_validated()
 
 
 class FirestoreStore:
@@ -357,7 +374,7 @@ class FirestoreStore:
         self._require_stage()
         return self._client if self._client is not None else get_data_plane_firestore_client()
 
-    def run(self, body, *, before_attempt=None):
+    def run(self, body, *, before_attempt=None, plan_only=False):
         client = self.client
         last_view: list[FirestoreTransaction] = []
 
@@ -367,14 +384,15 @@ class FirestoreStore:
             _note_direct_reads(view)
             last_view[:] = [view]
             result = body(view)
-            view.flush()
+            if not plan_only:
+                view.flush()
             return result
 
         if before_attempt is None:
             result = self._run_committed(client, commit, last_view)
         else:
             result = self._run_committed(client, commit, last_view, before_attempt=before_attempt)
-        for key, priority in sorted(last_view[0].hinted_activations) if last_view else ():
+        for key, priority in sorted(last_view[0].hinted_activations) if last_view and not plan_only else ():
             try:
                 reseed_hinted_activation(client, self.namespace, key, priority)
             except Exception as error:  # Best effort: the admission already committed.

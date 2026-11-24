@@ -358,7 +358,16 @@ class ProjectionSession:
                 # it. Reconcile its receipt, while later input parts still owe
                 # their own assignments. Never authorize input deletion here.
 
-    def prepare(self, transaction, *, replay=True, privacy_deleted=False, privacy_refusal=None, privacy_replay=False):
+    def prepare(
+        self,
+        transaction,
+        *,
+        replay=True,
+        privacy_deleted=False,
+        privacy_refusal=None,
+        privacy_replay=False,
+        staged_merge=None,
+    ):
         if privacy_deleted and privacy_refusal is not None:
             raise ProjectionBlocked('privacy dispositions must be distinct')
         self._privacy_refusal_transaction = None
@@ -371,6 +380,15 @@ class ProjectionSession:
         self._followup_privacy_failed = False
         self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
         self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
+        if staged_merge is not None:
+            if (
+                self.entry
+                or self.job.get('state') != 'result_ready'
+                or self.job.get('merge_pending') is not True
+                or self.job.get('result') != staged_merge['result']
+            ):
+                raise ProjectionBlocked('staged merge changed before assignment')
+            self.entry = staged_merge
         assert_delivery_claim(self.segment_id, self.entry)
         owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
         self.ledger = self.ledger_ref.get(transaction=transaction).to_dict() or {}
