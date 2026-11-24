@@ -124,6 +124,10 @@ def _google_view(publisher: PublisherClient, token: str) -> tuple[bool, bool]:
         resource = publisher.get_subscription(config.package_name(), token)
     except PurchaseNotFound:
         return False, False
+    return _google_view_of(resource)
+
+
+def _google_view_of(resource: dict) -> tuple[bool, bool]:
     state = str(resource.get('subscriptionState') or '')
     if state in _CHARGEABLE_STATES:
         return True, False
@@ -138,6 +142,57 @@ def _expires_in_future(resource: dict) -> bool:
         return datetime.fromisoformat(str(expiry).replace('Z', '+00:00')) > datetime.now(timezone.utc)
     except ValueError:
         return False
+
+
+class PlayStateUnavailable(RuntimeError):
+    """Google could not be read for a purchase stored as chargeable; checkout must refuse and ask for a retry."""
+
+
+# Stored states that can still charge or be restored, so checkout re-reads Google before refusing.
+_TERMINAL_STATES = frozenset(
+    {'SUBSCRIPTION_STATE_EXPIRED', 'SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED', 'NOT_FOUND'}
+)
+
+
+def _stored_may_charge(record: dict, now: int) -> bool:
+    state = record.get('state')
+    if state in _TERMINAL_STATES:
+        return False
+    if state == 'SUBSCRIPTION_STATE_CANCELED':
+        expiry = record.get('expiry_time')
+        return not isinstance(expiry, (int, float)) or expiry > now
+    return True  # chargeable, pending, or unknown
+
+
+def recoverable_play_purchase(uid: str, publisher: Optional[PublisherClient] = None) -> Optional[str]:
+    """Google's state for a purchase of ``uid`` that Google can still charge or the user can restore, else None.
+
+    Covers every purchase bound to ``uid``, not only the current pointer. Each one stored as chargeable is
+    re-read from Google once and the fresh state is stored: a purchase Google has ended never blocks.
+    Raises ``PlayStateUnavailable`` when Google cannot be read for one of them.
+    """
+    now = int(datetime.now(timezone.utc).timestamp())
+    for key, record in play_db.purchases_for_uid(uid):
+        if not _stored_may_charge(record, now):
+            continue
+        token = record.get('purchase_token')
+        if not token:
+            raise PlayStateUnavailable(key[:12])
+        try:
+            publisher = publisher or default_publisher()
+            resource = publisher.get_subscription(config.package_name(), token)
+        except PurchaseNotFound:
+            play_db.update_purchase(key, {'state': 'NOT_FOUND', 'next_check_at': None, 'updated_at': now})
+            continue
+        except Exception as error:
+            logger.warning('play_billing admission read failed: %s purchase=%s', type(error).__name__, key[:12])
+            raise PlayStateUnavailable(key[:12]) from None
+        state = str(resource.get('subscriptionState') or '')
+        play_db.update_purchase(key, {'state': state, 'updated_at': now})
+        chargeable, restorable = _google_view_of(resource)
+        if chargeable or restorable:
+            return state
+    return None
 
 
 def _status_code(error: BaseException) -> Optional[int]:

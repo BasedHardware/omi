@@ -26,7 +26,12 @@ from database.account_deletion_marker import account_deletion_blocks_user_work
 from models.users import PlanType, Subscription, SubscriptionStatus
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.play_publisher import GooglePublisher, PublisherClient, PurchaseNotFound, default_publisher
-from utils.notification_dispatch import NotificationIntent, NotificationKind, dispatch_notification
+from utils.notification_dispatch import (
+    NotificationDispatchStatus,
+    NotificationIntent,
+    NotificationKind,
+    dispatch_notification,
+)
 from utils.stripe import TERMINAL_SUBSCRIPTION_STATUSES
 from utils.subscription import get_plan_limits, is_paid_plan
 
@@ -303,53 +308,64 @@ def _clear_pending(uid: str, token_hash: str) -> None:
 
 
 CONFLICT_FIELD = 'stripe_conflict_at'
+CONFLICT_NOTIFIED_FIELD = 'stripe_conflict_notified_at'
+DOUBLE_CHARGE_LOG = 'play_billing_double_charge uid=%s purchase=%s state=%s'
 
 
-def _stop_play_for_stripe_conflict(
-    uid: str, token_hash: str, state: PlayState, token: str, publisher: PublisherClient
-) -> None:
-    """Play recovered next to a live Stripe subscription: keep Stripe, stop Google from charging again.
+def _paid_stripe_subscription_ids(uid: str) -> list[str]:
+    """Recurring Stripe subscriptions (``sub_``) Stripe itself reports active or trialing for ``uid``.
 
-    The Play charge that already happened is recorded for a manual refund
-    (backend/docs/runbooks/play-billing-double-charge.md). Stripe is never touched.
+    Stricter than ``_live_stripe_subscription``: a stored row, a one-time ``pi_`` grant, an ended
+    subscription or an ``incomplete`` one is never reported as a double charge.
     """
-    now = int(time.time())
-    first = not (play_db.get_purchase(token_hash) or {}).get(CONFLICT_FIELD)
-    if not first and not state.auto_renewing:
-        return  # recorded and stopped earlier; Google will not charge again
-    if first:
-        play_db.update_purchase(token_hash, {CONFLICT_FIELD: now})
-    logger.error(
-        'play_billing_double_charge uid=%s purchase=%s state=%s auto_renewing=%s action=%s',
-        uid,
-        token_hash[:12],
-        state.state,
-        state.auto_renewing,
-        'cancel_play' if state.auto_renewing else 'already_stopped',
-    )
-    if not state.auto_renewing:
-        return  # auto-renew already off at Google: nothing to cancel
+    customer_id = users_db.get_stripe_customer_id(uid)
+    if not customer_id:
+        return []
+    ids = []
     try:
-        publisher.cancel(config.package_name(), token)
-    except PurchaseNotFound:
-        return  # gone at Google: nothing left to charge
+        for sub in stripe.Subscription.list(customer=customer_id, status='all', limit=100).auto_paging_iter():
+            data = sub.to_dict()
+            metadata = data.get('metadata') or {}
+            if metadata.get('app_id') or metadata.get('uid') not in (None, uid):
+                continue
+            if str(data.get('id') or '').startswith('sub_') and data.get('status') in ('active', 'trialing'):
+                ids.append(data['id'])
     except Exception as error:
-        logger.warning('play_billing conflict cancel failed: %s', type(error).__name__)
-        raise PlayBillingError(503, 'play_unavailable', 'Google Play is unavailable. Try again.') from None
-    play_db.update_purchase(token_hash, {'auto_renewing': False, 'stripe_conflict_cancelled_at': now})
-    if first:
-        try:
-            dispatch_notification(
-                NotificationIntent(
-                    user_id=uid,
-                    title='You already have Omi Pro',
-                    body='You pay for Omi Pro by card, so we stopped Google Play from charging you again.',
-                    source='play_billing_double_billing',
-                    kind=NotificationKind.BILLING_CONFLICT,
-                )
+        logger.warning('play_billing stripe conflict check unavailable: %s', type(error).__name__)
+    return ids
+
+
+def _record_stripe_conflict(uid: str, token_hash: str, state: PlayState) -> None:
+    """Play is live next to a paid Stripe subscription. Nothing is cancelled: a person fixes it.
+
+    Logs ``play_billing_double_charge`` every time (an alert watches it), stamps the first time it was seen,
+    and tells the user once; a failed notice is sent again on the next observation.
+    Runbook: backend/docs/runbooks/play-billing-double-charge.md.
+    """
+    stripe_ids = _paid_stripe_subscription_ids(uid)
+    if not stripe_ids:
+        logger.warning('play_billing Stripe overlap not confirmed as a paid subscription uid=%s', uid)
+        return
+    logger.error(DOUBLE_CHARGE_LOG, uid, token_hash[:12], state.state)
+    play_db.mark_once(token_hash, CONFLICT_FIELD, int(time.time()))
+    if (play_db.get_purchase(token_hash) or {}).get(CONFLICT_NOTIFIED_FIELD):
+        return
+    try:
+        outcome = dispatch_notification(
+            NotificationIntent(
+                user_id=uid,
+                title='You already have Omi Pro',
+                body='You are billed for Omi Pro by card and by Google Play. We will cancel one and refund it.',
+                source='play_billing_double_billing',
+                kind=NotificationKind.BILLING_CONFLICT,
             )
-        except Exception:
-            logger.warning('play_billing double charge notice not sent for uid=%s', uid)
+        )
+    except Exception:
+        outcome = None
+    if outcome is not None and outcome.status == NotificationDispatchStatus.DISPATCHED:
+        play_db.mark_once(token_hash, CONFLICT_NOTIFIED_FIELD, int(time.time()))
+    else:
+        logger.warning('play_billing double charge notice not sent for uid=%s', uid)
 
 
 def _settle(uid: str, token_hash: str, state: PlayState, token: str, publisher: PublisherClient, *, fresh: bool) -> str:
@@ -366,7 +382,7 @@ def _settle(uid: str, token_hash: str, state: PlayState, token: str, publisher: 
         if _live_stripe_subscription(uid):
             if fresh or not state.acknowledged:
                 raise PlayBillingError(*_STRIPE_ACTIVE)
-            _stop_play_for_stripe_conflict(uid, token_hash, state, token, publisher)
+            _record_stripe_conflict(uid, token_hash, state)
             return 'stripe_conflict'
         if pointer and pointer != token_hash and _holds_live_paid_row(uid):
             return 'not_current'  # a newer Play token owns the live row
@@ -427,6 +443,7 @@ def verify_and_bind(uid: str, purchase_token: str, product_id: str, publisher: O
     owner = play_db.bind_purchase(token_hash, uid, _record(state, purchase_token, now, revoked_through=through))
     if owner != uid:
         raise PlayBillingError(*_OWNED_ELSEWHERE)
+    play_db.set_user_fields(uid, {play_db.BOUND_FIELD: True})
     outcome = _settle(uid, token_hash, state, purchase_token, publisher, fresh=fresh)
     if outcome == 'active':
         return VerifyResult('active', play_subscription(replace(state, acknowledged=True), now))
@@ -514,6 +531,7 @@ def apply_token(
             return 'unbound'
         if play_db.bind_purchase(token_hash, uid, record) != uid:
             return 'unbound'
+        play_db.set_user_fields(uid, {play_db.BOUND_FIELD: True})
         fresh = True
     else:
         play_db.update_purchase(token_hash, record)

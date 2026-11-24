@@ -1,6 +1,7 @@
-"""Play Billing money guards: one billing agreement per user while the other can still recover, an
-existing Stripe + Play conflict converges on Stripe, Play builds never start a new Stripe charge, and a
-malformed build header routes to Stripe. With the switch off every response is byte-identical."""
+"""Play Billing money guards: no new Stripe agreement while a Google Play one can still charge or recover, a
+Stripe + Play overlap is logged and recorded for a person (never cancelled automatically), Play builds never
+start a new Stripe charge or get a Marketplace payment link, and malformed build headers route to Stripe.
+A buyer with no Play history gets exactly today's checkout, with no new read or failure mode."""
 
 import os
 from types import SimpleNamespace
@@ -28,13 +29,17 @@ from tests.unit.test_play_billing import (  # noqa: E402,F401
     resource,
     subscribed,
 )
-from utils import play_billing  # noqa: E402
+from utils import play_billing, play_publisher  # noqa: E402
+from utils.notification_dispatch import NotificationDispatchOutcome, NotificationDispatchStatus  # noqa: E402
 
 ON_HOLD = 'SUBSCRIPTION_STATE_ON_HOLD'
+HOLD_REASON = 'You have a Google Play subscription on hold. Fix the payment in Google Play.'
+UNAVAILABLE_REASON = 'We could not check your Google Play subscription. Try again in a minute.'
 
 
 @pytest.fixture(scope='module', autouse=True)
 def _warm_imports():
+    import routers.apps  # noqa: F401
     import routers.monthly_switch  # noqa: F401
     import routers.payment  # noqa: F401
     import routers.retention_offer  # noqa: F401
@@ -44,9 +49,10 @@ def _warm_imports():
 
 @pytest.fixture
 def real_play_reads(env, monkeypatch):
-    """The real play_subscriptions readers over the fake store."""
-    monkeypatch.setattr(play_db, 'get_user_fields', env.store.get_user_fields)
-    monkeypatch.setattr(play_db, 'get_purchase', env.store.get_purchase)
+    """The real play_subscriptions readers and Google re-read over the fake store and fake Google."""
+    for name in ('get_user_fields', 'get_purchase', 'purchases_for_uid', 'update_purchase'):
+        monkeypatch.setattr(play_db, name, getattr(env.store, name))
+    monkeypatch.setattr(play_publisher, '_default', env.publisher)
     return env
 
 
@@ -56,21 +62,46 @@ def _stripe_row(sub_id='sub_card'):
     ).model_dump()
 
 
-# ---- 1. no second agreement while Play can still recover ----------------------------------
+def _admission(world, monkeypatch):
+    """The real checkout admission, with today's Stripe-side reads answered as for a Free reader."""
+    from utils import subscription as sub
+
+    monkeypatch.setattr(sub.users_db, 'get_user_valid_subscription', world.users.get_user_valid_subscription)
+    monkeypatch.setattr(sub, '_has_active_stripe_subscription', lambda uid: False)
+    monkeypatch.setattr(sub, 'find_active_paid_subscription_for_user', lambda uid: None)
+    monkeypatch.setattr(sub, 'configured_ladder_prices', lambda: set())
+    return lambda: sub.can_user_make_payment(UID, 'price_pro')
+
+
+# ---- B. no second agreement while any owned Play purchase can still charge or recover --------
+
+
+@pytest.mark.parametrize(
+    'state,expiry,allowed',
+    [
+        ('SUBSCRIPTION_STATE_ACTIVE', NOW + DAY, False),
+        ('SUBSCRIPTION_STATE_IN_GRACE_PERIOD', NOW + DAY, False),
+        (ON_HOLD, NOW - DAY, False),
+        ('SUBSCRIPTION_STATE_PAUSED', NOW - DAY, False),
+        ('SUBSCRIPTION_STATE_CANCELED', NOW + DAY, False),
+        ('SUBSCRIPTION_STATE_PENDING', NOW + DAY, False),
+        ('SUBSCRIPTION_STATE_EXPIRED', NOW - DAY, True),
+    ],
+)
+def test_checkout_admission_follows_google(subscribed, real_play_reads, monkeypatch, state, expiry, allowed):
+    subscribed.publisher.resources[TOKEN] = resource(state, expiry=expiry)
+    _notify(2)
+    assert _admission(subscribed, monkeypatch)()[0] is allowed
 
 
 @pytest.mark.parametrize('state', [ON_HOLD, 'SUBSCRIPTION_STATE_PAUSED'])
 def test_stripe_checkout_is_refused_while_play_is_on_hold(subscribed, real_play_reads, monkeypatch, state):
     from routers import payment
-    from utils import subscription as subscription_utils
 
     subscribed.publisher.resources[TOKEN] = resource(state)
     assert _notify(5) == 'revoked'
-    assert _row(subscribed).plan == PlanType.basic  # access gone, pointer and token kept
-    monkeypatch.setattr(subscription_utils.users_db, 'get_user_valid_subscription', lambda *a, **k: _row(subscribed))
-    allowed, reason = subscription_utils.can_user_make_payment(UID, 'price_any')
-    assert allowed is False and reason == 'You have a Google Play subscription on hold. Fix the payment in Google Play.'
-
+    assert _row(subscribed).plan == PlanType.basic  # access gone, Google can still recover it
+    _admission(subscribed, monkeypatch)
     monkeypatch.setattr(payment, '_validate_price_id', lambda price: None)
     monkeypatch.setattr(payment, 'management_binding', lambda price: None)
     app = FastAPI()
@@ -79,10 +110,92 @@ def test_stripe_checkout_is_refused_while_play_is_on_hold(subscribed, real_play_
     response = TestClient(app).post('/v1/payments/checkout-session', json={'price_id': 'price_any'})
     assert response.status_code == 400
     # Old clients read ``detail`` as a string and show it.
-    assert response.json() == {'detail': reason, 'code': 'play_subscription_on_hold'}
+    assert response.json() == {'detail': HOLD_REASON, 'code': 'play_subscription_on_hold'}
 
 
-def test_prepaid_redemption_is_refused_while_play_is_on_hold(subscribed, real_play_reads, monkeypatch):
+def test_a_noncurrent_purchase_on_hold_blocks_checkout(subscribed, real_play_reads, monkeypatch):
+    subscribed.publisher.resources[TOKEN] = resource(ON_HOLD)
+    _notify(5)
+    old = play_db.token_key('expired-current')
+    subscribed.store.docs[old] = {'uid': UID, 'state': 'SUBSCRIPTION_STATE_EXPIRED'}
+    subscribed.store.users[UID][play_db.USER_POINTER_FIELD] = old
+    assert _admission(subscribed, monkeypatch)() == (False, HOLD_REASON)
+
+
+def test_a_purchase_first_bound_on_hold_by_a_notification_blocks_checkout(env, real_play_reads, monkeypatch):
+    env.store.remember_account(play_billing.obfuscated_account_id(UID), UID)
+    env.publisher.resources[TOKEN] = resource(ON_HOLD)
+    assert _notify(5) == 'inactive'
+    assert play_db.USER_POINTER_FIELD not in env.store.users[UID]  # never granted
+    assert _admission(env, monkeypatch)() == (False, HOLD_REASON)
+
+
+def test_a_stale_canceled_record_is_rechecked_and_blocks_when_google_restored_it(
+    subscribed, real_play_reads, monkeypatch
+):
+    subscribed.publisher.resources[TOKEN] = resource('SUBSCRIPTION_STATE_CANCELED', expiry=NOW + DAY, renew=False)
+    _notify(12)
+    subscribed.publisher.resources[TOKEN] = resource('SUBSCRIPTION_STATE_ACTIVE')
+    assert _admission(subscribed, monkeypatch)()[0] is False
+
+
+def test_a_stale_hold_is_refreshed_and_never_blocks_once_google_ended_it(subscribed, real_play_reads, monkeypatch):
+    subscribed.publisher.resources[TOKEN] = resource(ON_HOLD, expiry=NOW - DAY)
+    _notify(5)
+    subscribed.publisher.resources[TOKEN] = resource('SUBSCRIPTION_STATE_EXPIRED', expiry=NOW - DAY)
+    assert _admission(subscribed, monkeypatch)() == (True, 'User can make payment')
+    assert subscribed.store.docs[play_db.token_key(TOKEN)]['state'] == 'SUBSCRIPTION_STATE_EXPIRED'
+
+
+def test_a_purchase_stopped_by_account_deletion_never_blocks(subscribed, real_play_reads, monkeypatch):
+    subscribed.publisher.resources[TOKEN] = resource(ON_HOLD, expiry=NOW - DAY)
+    _notify(5)
+    subscribed.store.docs[play_db.token_key(TOKEN)].update(
+        {'auto_renewing': False, 'account_deletion_confirmed_at': NOW}
+    )
+    subscribed.publisher.resources[TOKEN] = resource(
+        'SUBSCRIPTION_STATE_CANCELED',
+        renew=False,
+        expiry=NOW - DAY,
+        canceledStateContext={'developerInitiatedCancellation': {}},
+    )
+    assert _admission(subscribed, monkeypatch)()[0] is True
+
+
+def test_refund_only_with_a_future_renewal_still_blocks(subscribed, real_play_reads, monkeypatch):
+    _notify(12)
+    assert _row(subscribed).plan == PlanType.basic
+    assert _admission(subscribed, monkeypatch)()[0] is False
+
+
+def test_google_unreadable_for_a_chargeable_purchase_refuses_with_a_retry(subscribed, real_play_reads, monkeypatch):
+    from routers import payment
+
+    subscribed.publisher.resources[TOKEN] = resource(ON_HOLD)
+    _notify(5)
+    subscribed.publisher.fail = RuntimeError('timeout')
+    assert _admission(subscribed, monkeypatch)() == (False, UNAVAILABLE_REASON)
+    monkeypatch.setattr(payment, '_validate_price_id', lambda price: None)
+    monkeypatch.setattr(payment, 'management_binding', lambda price: None)
+    app = FastAPI()
+    app.include_router(payment.router)
+    app.dependency_overrides[payment.auth.get_current_user_uid] = lambda: UID
+    response = TestClient(app, raise_server_exceptions=False).post(
+        '/v1/payments/checkout-session', json={'price_id': 'price_any'}
+    )
+    assert response.status_code == 400
+    assert response.json() == {'detail': UNAVAILABLE_REASON, 'code': 'play_check_unavailable'}
+
+
+def test_the_guard_holds_after_a_rollback_to_stripe(subscribed, real_play_reads, monkeypatch):
+    monkeypatch.setenv('ANDROID_BILLING', 'stripe')
+    monkeypatch.delenv('ANDROID_PLAY_BILLING_MIN_BUILD', raising=False)
+    subscribed.publisher.resources[TOKEN] = resource(ON_HOLD)
+    _notify(5)
+    assert _admission(subscribed, monkeypatch)() == (False, HOLD_REASON)
+
+
+def test_prepaid_redemption_follows_the_same_admission(subscribed, real_play_reads, monkeypatch):
     from utils import prepaid_code_redemption as redemption
 
     subscribed.publisher.resources[TOKEN] = resource(ON_HOLD)
@@ -90,12 +203,10 @@ def test_prepaid_redemption_is_refused_while_play_is_on_hold(subscribed, real_pl
     monkeypatch.setattr(redemption.users_db, 'get_existing_user_subscription', lambda uid: _row(subscribed))
     monkeypatch.setattr(redemption, '_open_stripe_subscriptions', lambda *a: pytest.fail('Play hold decides first'))
     assert redemption._has_live_plan(UID, NOW) is True
-
-
-def test_an_expired_play_purchase_does_not_block_stripe(subscribed, real_play_reads):
-    subscribed.publisher.resources[TOKEN] = resource('SUBSCRIPTION_STATE_EXPIRED', expiry=NOW - DAY)
-    _notify(13)
-    assert play_db.chargeable_play_state(UID) is None
+    subscribed.publisher.fail = RuntimeError('timeout')
+    with pytest.raises(redemption.PrepaidCodeError) as error:
+        redemption._has_live_plan(UID, NOW)
+    assert error.value.status_code == 503
 
 
 def _stripe_list(env, subs):
@@ -104,7 +215,7 @@ def _stripe_list(env, subs):
 
 
 @pytest.mark.parametrize('status', ['unpaid', 'incomplete', 'paused', 'past_due', 'trialing', 'active'])
-def test_every_non_terminal_stripe_state_counts_as_live(env, status):
+def test_every_non_terminal_stripe_state_refuses_a_new_play_purchase(env, status):
     _stripe_list(env, [{'status': status, 'metadata': {'uid': UID}}])
     assert play_billing._live_stripe_subscription(UID) is True
 
@@ -116,19 +227,18 @@ def test_ended_stripe_subscriptions_do_not_count(env, status):
 
 
 def test_a_live_stripe_subscription_past_the_first_page_is_found(env):
-    marketplace = [{'status': 'active', 'metadata': {'app_id': f'app_{i}'}} for i in range(10)]
+    # 101 records: a page of 100 marketplace subscriptions, then the user's own.
+    marketplace = [{'status': 'active', 'metadata': {'app_id': f'app_{i}'}} for i in range(100)]
     _stripe_list(env, marketplace + [{'status': 'active', 'metadata': {'uid': UID}}])
     assert play_billing._live_stripe_subscription(UID) is True
 
 
-# ---- 2. an existing conflict converges on Stripe -------------------------------------------
+# ---- A. an existing overlap is logged and recorded, never cancelled -------------------------
 
 
-class CancellingPublisher:
-    def __init__(self, base, fail=None):
+class NoCancelPublisher:
+    def __init__(self, base):
         self.base = base
-        self.cancelled = []
-        self.fail = fail
 
     def get_subscription(self, package_name, token):
         return self.base.get_subscription(package_name, token)
@@ -137,11 +247,11 @@ class CancellingPublisher:
         return self.base.acknowledge(package_name, product_id, token)
 
     def cancel(self, package_name, token):
-        if self.fail:
-            raise self.fail
-        self.cancelled.append((package_name, token))
-        acked = self.base.resources[token]['acknowledgementState']
-        self.base.resources[token] = resource('SUBSCRIPTION_STATE_CANCELED', renew=False, acknowledgementState=acked)
+        pytest.fail('Google is never cancelled automatically')
+
+
+def _dispatched():
+    return NotificationDispatchOutcome(status=NotificationDispatchStatus.DISPATCHED)
 
 
 @pytest.fixture
@@ -150,51 +260,96 @@ def conflict(subscribed, monkeypatch):
     subscribed.publisher.resources[TOKEN] = resource(ON_HOLD)
     assert _notify(5) == 'revoked'
     subscribed.users.rows[UID] = _stripe_row()
+    _stripe_list(subscribed, [{'id': 'sub_card', 'status': 'active', 'metadata': {'uid': UID}}])
     subscribed.users.writes.clear()
     recovered = resource(expiry=NOW + 30 * DAY, acknowledgementState='ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED')
     subscribed.publisher.resources[TOKEN] = recovered
-    publisher = CancellingPublisher(subscribed.publisher)
-    monkeypatch.setattr(play_billing, '_publisher', publisher)
-    notices = []
-    monkeypatch.setattr(play_billing, 'dispatch_notification', lambda intent: notices.append(intent))
+    monkeypatch.setattr(play_billing, '_publisher', NoCancelPublisher(subscribed.publisher))
+    state = SimpleNamespace(env=subscribed, notices=[], outcomes=[])
+
+    def dispatch(intent):
+        state.notices.append(intent)
+        outcome = state.outcomes.pop(0) if state.outcomes else _dispatched()
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(play_billing, 'dispatch_notification', dispatch)
     for name in ('cancel', 'modify', 'delete'):
         monkeypatch.setattr(
             play_billing.stripe.Subscription, name, lambda *a, **k: pytest.fail('Stripe is never touched')
         )
-    return SimpleNamespace(env=subscribed, publisher=publisher, notices=notices)
+    return state
 
 
-def test_play_recovery_next_to_stripe_cancels_play_once_and_keeps_stripe(conflict, caplog):
+def _double_charge_lines(caplog):
+    return [r.getMessage() for r in caplog.records if r.getMessage().startswith('play_billing_double_charge ')]
+
+
+def test_play_recovery_next_to_stripe_keeps_both_and_records_it_once(conflict, caplog, monkeypatch):
+    key = play_db.token_key(TOKEN)
     assert _notify(1) == 'stripe_conflict'  # SUBSCRIPTION_RECOVERED
-    assert conflict.publisher.cancelled == [('com.friend.ios', TOKEN)]
-    doc = conflict.env.store.docs[play_db.token_key(TOKEN)]
-    assert doc[play_billing.CONFLICT_FIELD] and doc['auto_renewing'] is False
+    first_seen = conflict.env.store.docs[key][play_billing.CONFLICT_FIELD]
     assert _row(conflict.env).stripe_subscription_id == 'sub_card' and conflict.env.users.writes == []
-    lines = [r.getMessage() for r in caplog.records if 'play_billing_double_charge' in r.getMessage()]
-    assert lines == [
-        f'play_billing_double_charge uid={UID} purchase={play_db.token_key(TOKEN)[:12]} '
-        'state=SUBSCRIPTION_STATE_ACTIVE auto_renewing=True action=cancel_play'
+    assert _double_charge_lines(caplog) == [
+        f'play_billing_double_charge uid={UID} purchase={key[:12]} state=SUBSCRIPTION_STATE_ACTIVE'
     ]
     assert TOKEN not in caplog.text
     assert [n.source for n in conflict.notices] == ['play_billing_double_billing']
 
-    # The cancel's own notification and later reconciles converge: no second cancel, log or notice.
-    assert _notify(3) == 'stripe_conflict'
+    # Every later observation logs again (an alert watches the line); the stamp and the notice stay single.
+    monkeypatch.setattr(play_billing.time, 'time', lambda: NOW + 3600)
+    assert _notify(2) == 'stripe_conflict'
     assert play_billing.reconcile_due() in ({}, {'stripe_conflict': 1})
-    assert len(conflict.publisher.cancelled) == 1 and len(conflict.notices) == 1
-    assert sum('play_billing_double_charge' in r.getMessage() for r in caplog.records) == 1
+    assert len(_double_charge_lines(caplog)) >= 2
+    assert conflict.env.store.docs[key][play_billing.CONFLICT_FIELD] == first_seen
+    assert len(conflict.notices) == 1
     assert _row(conflict.env).stripe_subscription_id == 'sub_card'
 
 
-def test_a_failed_conflict_cancel_is_recorded_and_retried(conflict):
-    conflict.publisher.fail = RuntimeError('timeout')
-    with pytest.raises(play_billing.PlayBillingError) as error:
-        _notify(1)
-    assert error.value.http_status == 503  # Pub/Sub redelivers
-    assert conflict.env.store.docs[play_db.token_key(TOKEN)][play_billing.CONFLICT_FIELD]
-    conflict.publisher.fail = None
+@pytest.mark.parametrize('failure', [RuntimeError('fcm down'), 'failed'])
+def test_a_failed_notice_is_sent_on_the_next_observation(conflict, failure):
+    if failure == 'failed':
+        failure = NotificationDispatchOutcome(status=NotificationDispatchStatus.FAILED)
+    conflict.outcomes.append(failure)
+    key = play_db.token_key(TOKEN)
     assert _notify(1) == 'stripe_conflict'
-    assert len(conflict.publisher.cancelled) == 1
+    assert conflict.env.store.docs[key][play_billing.CONFLICT_FIELD]
+    assert not conflict.env.store.docs[key].get(play_billing.CONFLICT_NOTIFIED_FIELD)
+    assert _notify(2) == 'stripe_conflict'
+    assert conflict.env.store.docs[key][play_billing.CONFLICT_NOTIFIED_FIELD]
+    assert _notify(2) == 'stripe_conflict'
+    assert len(conflict.notices) == 2
+
+
+def test_a_stale_play_snapshot_never_clears_the_conflict_stamp(conflict):
+    key = play_db.token_key(TOKEN)
+    _notify(1)
+    stamp = conflict.env.store.docs[key][play_billing.CONFLICT_FIELD]
+    snapshot = play_billing.read_state(conflict.env.publisher.resources[TOKEN])
+    conflict.env.store.update_purchase(key, play_billing._record(snapshot, TOKEN, NOW))
+    assert conflict.env.store.docs[key][play_billing.CONFLICT_FIELD] == stamp
+
+
+@pytest.mark.parametrize('kind', ['one_time_org', 'stale_canceled_stripe', 'incomplete_stripe'])
+def test_no_double_charge_is_reported_without_a_paid_recurring_stripe_subscription(
+    subscribed, caplog, monkeypatch, kind
+):
+    if kind == 'one_time_org':
+        subscribed.users.rows[UID] = Subscription(
+            plan=PlanType.unlimited_v2, current_period_end=NOW + DAY, stripe_subscription_id='pi_org_payment'
+        ).model_dump()
+    elif kind == 'stale_canceled_stripe':
+        subscribed.users.rows[UID] = _stripe_row()
+        _stripe_list(subscribed, [{'id': 'sub_card', 'status': 'canceled', 'metadata': {'uid': UID}}])
+    else:
+        _stripe_list(subscribed, [{'id': 'sub_new', 'status': 'incomplete', 'metadata': {'uid': UID}}])
+    subscribed.publisher.resources[TOKEN]['acknowledgementState'] = 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED'
+    monkeypatch.setattr(play_billing, '_publisher', NoCancelPublisher(subscribed.publisher))
+    monkeypatch.setattr(play_billing, 'dispatch_notification', lambda intent: pytest.fail('no notice'))
+    assert _notify(2) == 'stripe_conflict'  # still never granted over the other row
+    assert _double_charge_lines(caplog) == []
+    assert play_billing.CONFLICT_FIELD not in subscribed.store.docs[play_db.token_key(TOKEN)]
 
 
 # ---- 3. Play builds never start a new Stripe charge ----------------------------------------
@@ -338,25 +493,144 @@ def test_a_play_build_keeps_stripe_management(routes):
     assert stay.status_code == 400 and stay.json() != REFUSED
 
 
-ALL_CALLS = CHARGE_CALLS + [
-    ('get', '/v1/payments/yearly-switch', None),
-    ('post', '/v1/payments/customer-portal', None),
+# ---- C. a buyer with no Play history gets today's checkout, with no new dependency ----------
+
+# Pinned from origin/main (670cfef604) running this exact harness: the response every no-history buyer gets.
+BASE_CHECKOUT = (200, 'application/json', b'{"url":"https://checkout.stripe.com/c/pay/cs_1","session_id":"cs_1"}')
+NO_HISTORY_CLIENTS = [
+    {'X-App-Platform': 'ios', 'X-App-Build': '1624'},
+    {'X-App-Platform': 'web'},
+    {'X-App-Platform': 'macos', 'X-App-Build': '9999'},
+    {'X-App-Platform': 'windows', 'X-App-Build': '9999'},
+    {'X-App-Platform': 'android', 'X-App-Build': '1616', 'X-App-Version': '1.0.573'},
+    {'X-App-Platform': 'android', 'X-App-Build': '1624'},  # qualifies for the Play build gate, switch off
 ]
 
 
-@pytest.mark.parametrize('build', ['1617', '1624', '9999'])
-def test_switch_off_responses_are_byte_identical(routes, build):
-    from routers import monthly_switch, payment
+@pytest.fixture
+def real_checkout(routes, monkeypatch):
+    """The checkout route through the REAL can_user_make_payment for a Free reader with no Play history."""
+    from routers import payment
+    from utils import subscription as sub
 
-    headers = {'X-App-Platform': 'android', 'X-App-Build': build}
-    _env(routes, PROD_OFF)
-    today = [_call(routes, m, p, b, headers).content for m, p, b in ALL_CALLS]
-    # Today's code: the guard does not exist.
-    routes.monkeypatch.setattr(payment, 'play_client_refusal', lambda request, uid: None)
-    routes.monkeypatch.setattr(monthly_switch, 'play_client_refusal', lambda request, uid: None)
-    routes.monkeypatch.setattr(config, 'client_uses_play', lambda *a, **k: False)
-    before = [_call(routes, m, p, b, headers).content for m, p, b in ALL_CALLS]
-    assert today == before
+    monkeypatch.setattr(payment.subscription_utils, 'can_user_make_payment', REAL_CAN_PAY)
+    monkeypatch.setattr(sub.users_db, 'get_user_valid_subscription', lambda *a, **k: Subscription())
+    monkeypatch.setattr(sub, '_has_active_stripe_subscription', lambda uid: False)
+    monkeypatch.setattr(sub, 'find_active_paid_subscription_for_user', lambda uid: None)
+    monkeypatch.setattr(sub, 'configured_ladder_prices', lambda: set())
+    reads = []
+    monkeypatch.setattr(sub.play_subscriptions_db, 'get_user_fields', lambda uid: reads.append(uid) or {})
+    routes.reads = reads
+    routes.client = TestClient(routes.client.app, raise_server_exceptions=False)
+    return routes
+
+
+def _response(response):
+    return response.status_code, response.headers.get('content-type'), response.content
+
+
+@pytest.mark.parametrize('headers', NO_HISTORY_CLIENTS)
+def test_no_history_checkout_matches_main(real_checkout, headers):
+    _env(real_checkout, PROD_OFF)
+    response = _call(real_checkout, 'post', '/v1/payments/checkout-session', {'price_id': 'price_pro'}, headers)
+    assert _response(response) == BASE_CHECKOUT
+    assert real_checkout.reads == [UID]  # the one Play-fields read main already made
+
+
+def _boom(*args, **kwargs):
+    raise RuntimeError('added dependency down')
+
+
+@pytest.mark.parametrize('headers', NO_HISTORY_CLIENTS)
+def test_no_history_checkout_survives_every_added_dependency_failing(real_checkout, monkeypatch, headers):
+    _env(real_checkout, PROD_OFF)
+    monkeypatch.setattr(play_db, 'purchases_for_uid', _boom)
+    monkeypatch.setattr(play_db, 'get_purchase', _boom)
+    monkeypatch.setattr(play_publisher, 'default_publisher', _boom)
+    monkeypatch.setattr(play_publisher, 'recoverable_play_purchase', _boom)
+    monkeypatch.setattr(config.rollout_cohorts, 'in_rollout_cohort', _boom)
+    monkeypatch.setattr(config.rollout_cohorts, 'cohort_admits', _boom)
+    response = _call(real_checkout, 'post', '/v1/payments/checkout-session', {'price_id': 'price_pro'}, headers)
+    assert _response(response) == BASE_CHECKOUT
+
+
+def test_a_play_history_buyer_is_checked_against_google(real_checkout, monkeypatch):
+    from utils import subscription as sub
+
+    _env(real_checkout, PROD_OFF)
+    monkeypatch.setattr(sub.play_subscriptions_db, 'get_user_fields', lambda uid: {play_db.BOUND_FIELD: True})
+    monkeypatch.setattr(play_publisher, 'recoverable_play_purchase', lambda uid: ON_HOLD)
+    response = _call(
+        real_checkout, 'post', '/v1/payments/checkout-session', {'price_id': 'price_pro'}, {'X-App-Platform': 'ios'}
+    )
+    assert response.status_code == 400 and response.json()['code'] == 'play_subscription_on_hold'
+    monkeypatch.setattr(play_publisher, 'recoverable_play_purchase', lambda uid: None)  # ended at Google
+    response = _call(
+        real_checkout, 'post', '/v1/payments/checkout-session', {'price_id': 'price_pro'}, {'X-App-Platform': 'ios'}
+    )
+    assert _response(response) == BASE_CHECKOUT
+
+
+def test_a_failing_cohort_lookup_never_fails_a_qualifying_android_checkout(real_checkout, monkeypatch):
+    _env(real_checkout, PROD_OFF)
+    monkeypatch.setattr(config.rollout_cohorts, 'valid_uid', _boom)
+    response = _call(real_checkout, 'post', '/v1/payments/checkout-session', {'price_id': 'price_pro'}, ANDROID_PLAY)
+    assert _response(response) == BASE_CHECKOUT
+
+
+# ---- E. Marketplace: no Stripe payment link for a Play build ---------------------------------
+
+
+@pytest.fixture
+def app_detail(monkeypatch):
+    from models.app import App
+    from routers import apps
+
+    for name in list(os.environ):
+        if name.startswith(('ANDROID_', 'PLAY_')):
+            monkeypatch.delenv(name)
+    monkeypatch.setattr(config.rollout_cohorts, 'in_rollout_cohort', lambda uid, name: False)
+    stored = {'id': 'paid-app', 'uid': 'dev', 'name': 'Paid', 'approved': True, 'private': False}
+    monkeypatch.setattr(apps, 'get_available_app_by_id_with_reviews', lambda app_id, uid: dict(stored))
+    monkeypatch.setattr(
+        apps,
+        '_safe_app_from_dict',
+        lambda data: App.model_construct(
+            **data, payment_link='https://buy.stripe.com/x', is_paid=True, thumbnails=[], is_user_paid=False
+        ),
+    )
+    monkeypatch.setattr(apps, 'get_is_user_paid_app', lambda app_id, uid: False)
+    monkeypatch.setattr(apps, 'authorize_app_setup', lambda app, uid: {'payment_link': app.payment_link})
+    return lambda headers=None: apps.get_app_details(
+        'paid-app', uid=UID, http_request=SimpleNamespace(headers=headers or {})
+    )
+
+
+def test_a_play_build_gets_no_marketplace_payment_link(app_detail, monkeypatch):
+    for key, value in PLAY.items():
+        monkeypatch.setenv(key, value)
+    assert app_detail(ANDROID_PLAY)['payment_link'] is None
+
+
+@pytest.mark.parametrize(
+    'headers',
+    [
+        {'X-App-Platform': 'ios', 'X-App-Build': '1624'},
+        {'X-App-Platform': 'android', 'X-App-Build': '1623'},
+        {'X-App-Platform': 'macos'},
+        {},
+    ],
+)
+def test_other_clients_keep_the_marketplace_payment_link(app_detail, monkeypatch, headers):
+    for key, value in PLAY.items():
+        monkeypatch.setenv(key, value)
+    assert app_detail(headers)['payment_link'] == f'https://buy.stripe.com/x?client_reference_id=uid_{UID}'
+
+
+def test_switch_off_keeps_the_marketplace_payment_link(app_detail, monkeypatch):
+    for key, value in PROD_OFF.items():
+        monkeypatch.setenv(key, value)
+    assert app_detail(ANDROID_PLAY)['payment_link'] == f'https://buy.stripe.com/x?client_reference_id=uid_{UID}'
 
 
 # ---- 4. a malformed build header routes to Stripe ------------------------------------------
@@ -386,3 +660,30 @@ def test_malformed_build_header_on_checkout_is_not_a_500(routes):
         {'X-App-Platform': 'android', 'X-App-Build': b'\xb9\xb2\xb3'},  # latin-1 superscripts: isdigit, not int
     )
     assert response.status_code == 200
+
+
+@pytest.mark.parametrize('build', ['9' * 10, '9' * 5000])
+def test_an_oversized_build_header_routes_to_stripe(build):
+    assert config.client_uses_play('android', build, UID, environ=PLAY) is False
+
+
+def test_an_oversized_minimum_admits_nobody():
+    environ = {**PLAY, 'ANDROID_PLAY_BILLING_MIN_BUILD': '9' * 5000}
+    assert config.min_play_build(environ) is None
+    assert config.client_uses_play('android', '1624', UID, environ=environ) is False
+
+
+def test_an_oversized_build_header_on_checkout_is_not_a_500(routes):
+    _env(routes, PLAY)
+    routes.client = TestClient(routes.client.app, raise_server_exceptions=False)
+    response = _call(
+        routes,
+        'post',
+        '/v1/payments/checkout-session',
+        {'price_id': 'price_pro'},
+        {'X-App-Platform': 'android', 'X-App-Build': '9' * 5000},
+    )
+    assert response.status_code == 200
+
+
+from utils.subscription import can_user_make_payment as REAL_CAN_PAY  # noqa: E402

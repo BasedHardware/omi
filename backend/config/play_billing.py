@@ -44,10 +44,14 @@ def android_billing_mode(environ: Optional[Mapping[str, str]] = None) -> str:
     return 'play' if (_env(environ).get(ANDROID_BILLING_ENV) or '').strip().lower() == 'play' else 'stripe'
 
 
+# Android version codes fit in 9 digits; longer input is malformed (and int() refuses over 4300 digits).
+_MAX_BUILD_DIGITS = 9
+
+
 def _build_number(value: Optional[str]) -> Optional[int]:
     """ASCII digits only: ``str.isdigit()`` also accepts digits ``int()`` cannot parse (e.g. superscripts)."""
     raw = value.strip() if isinstance(value, str) else ''
-    if not raw or not raw.isascii() or not raw.isdigit():
+    if not raw or len(raw) > _MAX_BUILD_DIGITS or not raw.isascii() or not raw.isdigit():
         return None
     return int(raw)
 
@@ -58,14 +62,14 @@ def min_play_build(environ: Optional[Mapping[str, str]] = None) -> Optional[int]
 
 
 def user_in_play_cohort(uid: Optional[str], environ: Optional[Mapping[str, str]] = None) -> bool:
-    if not isinstance(uid, str) or not rollout_cohorts.valid_uid(uid):
-        return False
-    if rollout_cohorts.cohort_admits(uid, _env(environ).get(COHORT_ENV)):
-        return True
     try:
-        return rollout_cohorts.in_rollout_cohort(uid, ROLLOUT_COHORT)
+        if not isinstance(uid, str) or not rollout_cohorts.valid_uid(uid):
+            return False
+        if rollout_cohorts.cohort_admits(uid, _env(environ).get(COHORT_ENV)):
+            return True
+        return bool(rollout_cohorts.in_rollout_cohort(uid, ROLLOUT_COHORT))
     except Exception:
-        # Unknown membership keeps today's Stripe flow.
+        # Unknown membership keeps today's Stripe flow; it can never fail the request.
         return False
 
 

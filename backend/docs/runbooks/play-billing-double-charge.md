@@ -1,31 +1,46 @@
 # Play Billing: double charge (Stripe and Google Play)
 
-A user can pay twice when a Google Play subscription on hold or paused recovers after they already bought Omi Pro
-through Stripe. Since this guard, new Stripe checkout is refused while a Play purchase can still recover, so this
-should only come from older data or a race.
+A user can be billed twice when a Google Play subscription on hold or paused recovers after they already
+bought Omi Pro through Stripe. New Stripe checkout is refused while any Play purchase the user owns can still
+charge or recover, so this should only come from older data or a race.
 
-When it happens, `utils/play_billing.py` (`_stop_play_for_stripe_conflict`) keeps the Stripe subscription the user
-has access through, developer-cancels the Play subscription so Google never charges again, records
-`stripe_conflict_at` (and `stripe_conflict_cancelled_at`) on the `play_subscription_purchases` document, and sends the
-user a `play_billing_double_billing` notification. It does not refund the Play charge. That is manual.
+The backend never cancels or refunds either side on its own. When a Play purchase is live next to a paid
+recurring Stripe subscription, `utils/play_billing.py` (`_record_stripe_conflict`) keeps both, logs the line
+below, stamps `stripe_conflict_at` (first time seen, never overwritten) on the `play_subscription_purchases`
+document, and sends the user one `play_billing_double_billing` notification (`stripe_conflict_notified_at`
+is set only after it was sent; a failed send is retried on the next observation). A person fixes it.
 
-## Find them
+## Alert and log filter
 
-The line is logged at ERROR once per purchase, and again on each retry of a failed cancel. The backend logs in
-text mode, so Cloud Logging stores it in `textPayload`:
+Every time the conflict is observed (each Play notification and each reconcile, at least daily) this ERROR
+line is logged. Its text is stable; the Cloud Monitoring alert matches it:
+
+```
+play_billing_double_charge uid=<uid> purchase=<first 12 hex of the purchase document id> state=<Google state>
+```
 
 ```
 severity>=ERROR AND (textPayload:"play_billing_double_charge" OR jsonPayload.message:"play_billing_double_charge")
 ```
 
-Each line has `uid=`, `purchase=` (the first 12 hex characters of the purchase document id, the SHA-256 of the
-token, never the token), `state=` and `action=` (`cancel_play`, or `already_stopped` when auto-renew was already off).
-A failed cancel logs `play_billing conflict cancel failed` at WARNING; Pub/Sub and the reconcile job retry it.
+The purchase id is the SHA-256 of the token, never the token. The line is only logged when Stripe itself lists
+a recurring `sub_` subscription for the user that is `active` or `trialing`. A one-time `pi_` grant, a stale
+local row, an ended or an `incomplete` Stripe subscription logs only
+`play_billing Stripe overlap not confirmed as a paid subscription` at WARNING and needs no action.
 
-## What to do
+## Confirm it is real
 
-1. Find the purchase: the `play_subscription_purchases` document for `uid` whose id starts with `purchase=` and has
-   `stripe_conflict_at`.
-2. In Play Console, open the order for that purchase and refund the latest Play charge (refund only; access already
-   comes from Stripe). The subscription is already cancelled, so Google does not charge again.
-3. Never cancel or refund the user's Stripe subscription to fix this.
+1. Stripe: the customer has a recurring subscription (`sub_...`) with status `active` or `trialing` and a paid
+   latest invoice (or a trial). Not a one-time `pi_` payment, not `incomplete`, not `canceled`.
+2. Firestore: the `play_subscription_purchases` document for the uid whose id starts with `purchase=` has
+   `stripe_conflict_at`. In Play Console, the order for that purchase is active and was charged.
+3. If either side is not really paying, stop: it is not a double charge.
+
+## Fix it
+
+1. Pick the agreement to keep. Ask the user if unclear. Default: keep the one with the later purchase date
+   (the one they chose most recently).
+2. Keeping Stripe: in Play Console, cancel the Play subscription and refund its latest charge.
+3. Keeping Play: in Stripe, cancel the Stripe subscription now and refund its latest invoice. The Stripe
+   webhook removes the Stripe row; the next Play notification or reconcile grants Play.
+4. Reply to the user with what was cancelled and refunded.

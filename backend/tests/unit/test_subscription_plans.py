@@ -144,7 +144,11 @@ def test_can_pay_basic_stale_defers_plan_change_until_cancellation_ends(monkeypa
     monkeypatch.setattr(
         sub,
         "play_subscriptions_db",
-        SimpleNamespace(pending_play_purchase=lambda uid: False, chargeable_play_state=lambda uid: None),
+        SimpleNamespace(
+            get_user_fields=lambda uid: {},
+            pending_play_purchase=lambda uid, fields=None: False,
+            has_play_history=lambda fields: False,
+        ),
     )
     # No active (non-canceling) subscription, so the basic branch proceeds.
     monkeypatch.setattr(sub, "_has_active_stripe_subscription", lambda uid: False)
@@ -183,7 +187,11 @@ def _mock_new_buyer(monkeypatch, subscription_module):
     monkeypatch.setattr(
         sub,
         "play_subscriptions_db",
-        SimpleNamespace(pending_play_purchase=lambda uid: False, chargeable_play_state=lambda uid: None),
+        SimpleNamespace(
+            get_user_fields=lambda uid: {},
+            pending_play_purchase=lambda uid, fields=None: False,
+            has_play_history=lambda fields: False,
+        ),
     )
     monkeypatch.setattr(sub, "_has_active_stripe_subscription", lambda uid: False)
     monkeypatch.setattr(sub, "find_active_paid_subscription_for_user", lambda uid: None)

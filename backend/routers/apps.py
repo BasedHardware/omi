@@ -22,6 +22,8 @@ from ulid import ULID
 from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPException, Header, Query, Request
 from fastapi.responses import HTMLResponse
 
+from config import play_billing as play_billing_config
+
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import _clamp_review_score, fetch_app_chat_tools_from_manifest
 from utils.executors import (
@@ -1268,7 +1270,11 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.get('/v1/apps/{app_id}', tags=['v1'], response_model=App)
-def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_app_details(
+    app_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+):
     app = get_available_app_by_id_with_reviews(app_id, uid)
     app = _safe_app_from_dict(app)
     if not app:
@@ -1282,8 +1288,17 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     # is user paid
     app.is_user_paid = get_is_user_paid_app(app.id, uid)
 
-    # payment link
-    if app.payment_link:
+    # payment link. A Google Play build never gets one: its Stripe link would be an outside digital purchase.
+    # The app already shows a paid app with no link as not purchasable.
+    if (
+        app.payment_link
+        and http_request
+        and play_billing_config.client_uses_play(
+            http_request.headers.get('X-App-Platform'), http_request.headers.get('X-App-Build'), uid
+        )
+    ):
+        app.payment_link = None
+    elif app.payment_link:
         app.payment_link = f'{app.payment_link}?client_reference_id=uid_{uid}'
 
     # Generate thumbnail URLs if thumbnails exist

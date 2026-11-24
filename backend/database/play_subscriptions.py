@@ -19,6 +19,9 @@ COLLECTION = 'play_subscription_purchases'
 USER_POINTER_FIELD = 'play_current_purchase'
 PENDING_FIELD = 'play_pending_purchase'
 CUSTOMER_FIELD = 'play_billing_customer'
+# Set when any Play purchase is bound to the user, even one that never granted access (bound on hold).
+BOUND_FIELD = 'play_purchase_bound'
+HISTORY_FIELDS = (USER_POINTER_FIELD, PENDING_FIELD, CUSTOMER_FIELD, BOUND_FIELD)
 ACCOUNTS = 'play_billing_accounts'
 # When account deletion last confirmed Google can no longer charge this purchase.
 DELETION_CONFIRMED_FIELD = 'account_deletion_confirmed_at'
@@ -74,7 +77,7 @@ def due_for_reconcile(now: int, limit: int, *, firestore_client: Optional[Any] =
 def get_user_fields(uid: str, *, firestore_client: Optional[Any] = None) -> dict:
     """The Play fields on ``users/{uid}`` (pointer, pending token, customer flag)."""
     client = firestore_client or _client.get_firestore_client()
-    snapshot = client.collection('users').document(uid).get([USER_POINTER_FIELD, PENDING_FIELD, CUSTOMER_FIELD])
+    snapshot = client.collection('users').document(uid).get(list(HISTORY_FIELDS))
     if not snapshot.exists:
         return {}
     return snapshot.to_dict() or {}
@@ -127,32 +130,37 @@ def is_play_customer(uid: str) -> bool:
     return bool(get_user_fields(uid).get(CUSTOMER_FIELD))
 
 
-def pending_play_purchase(uid: str) -> bool:
+def pending_play_purchase(uid: str, fields: Optional[Mapping[str, Any]] = None) -> bool:
     """A Play purchase for this uid is still waiting for Google to clear the payment."""
-    key = get_user_fields(uid).get(PENDING_FIELD)
+    key = (get_user_fields(uid) if fields is None else fields).get(PENDING_FIELD)
     if not key:
         return False
     return (get_purchase(key) or {}).get('state') == 'SUBSCRIPTION_STATE_PENDING'
 
 
-# Google can still charge these after access ended (hold, pause) or while a refunded period still renews.
-CHARGEABLE_STATES = frozenset(
-    {
-        'SUBSCRIPTION_STATE_ACTIVE',
-        'SUBSCRIPTION_STATE_IN_GRACE_PERIOD',
-        'SUBSCRIPTION_STATE_ON_HOLD',
-        'SUBSCRIPTION_STATE_PAUSED',
-    }
-)
+def has_play_history(fields: Mapping[str, Any]) -> bool:
+    """The user doc shows a Play purchase was ever bound or granted. No history: no Play reads at all."""
+    return any(fields.get(name) for name in HISTORY_FIELDS)
 
 
-def chargeable_play_state(uid: str) -> Optional[str]:
-    """State of the user's current Play purchase when Google can still charge or recover it, else None."""
-    key = get_user_fields(uid).get(USER_POINTER_FIELD)
-    if not key:
-        return None
-    state = (get_purchase(key) or {}).get('state')
-    return state if state in CHARGEABLE_STATES else None
+def purchases_for_uid(uid: str, *, firestore_client: Optional[Any] = None) -> list[tuple[str, dict]]:
+    """(key, record) for every purchase document bound to ``uid``."""
+    client = firestore_client or _client.get_firestore_client()
+    return [
+        (snapshot.id, snapshot.to_dict() or {})
+        for snapshot in client.collection(COLLECTION).where('uid', '==', uid).stream()
+    ]
+
+
+def mark_once(token_hash: str, field: str, value: Any, *, firestore_client: Optional[Any] = None) -> bool:
+    """Write ``field`` only when it is not set yet. Returns True when this call wrote it."""
+    client = firestore_client or _client.get_firestore_client()
+    ref = client.collection(COLLECTION).document(token_hash)
+    snapshot = ref.get()
+    if snapshot.exists and (snapshot.to_dict() or {}).get(field):
+        return False
+    ref.set({field: value}, merge=True)
+    return True
 
 
 def purchase_keys_for_uid(uid: str, *, firestore_client: Optional[Any] = None) -> list[str]:

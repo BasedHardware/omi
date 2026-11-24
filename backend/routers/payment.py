@@ -832,8 +832,9 @@ def create_checkout_session_endpoint(
         _validate_price_id(request.price_id)
         # Check if user can make a new payment
         can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
-        if not can_pay and reason == subscription_utils.PLAY_ON_HOLD_REASON:
-            return JSONResponse(status_code=400, content={'detail': reason, 'code': 'play_subscription_on_hold'})
+        if not can_pay and reason in subscription_utils.PLAY_REFUSAL_CODES:
+            code = subscription_utils.PLAY_REFUSAL_CODES[reason]
+            return JSONResponse(status_code=400, content={'detail': reason, 'code': code})
         if not can_pay:
             raise HTTPException(status_code=400, detail=reason)
 
