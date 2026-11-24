@@ -29,7 +29,7 @@ def is_provider(job: dict) -> bool:
 
 
 def release_fence(owner: dict) -> tuple[str | None, float | None] | None:
-    if owner.get('token') or (owner.get('active') and owner.get('draining')):
+    if owner.get('token') or (owner.get('draining') and owner.get('active') is not False):
         return None
     return owner.get('generation'), owner.get('cutoff')
 
@@ -106,7 +106,7 @@ def _park(tx, job: dict, now: float) -> None:
     owner = tx.get(OWNERS, key)
     if not owner:
         owner = {'owner_key': key, 'owner_id': job['owner_id'], 'check_at': now, 'revision': 0}
-    if owner.get('draining') and not owner.get('active') and not owner.get('token'):
+    if owner.get('draining') and owner.get('active') is False and not owner.get('token'):
         # Older controllers could leave a finished, exactly-full page marked draining.
         owner.update(draining=False, after=None)
     owner.update(active=True, revision=owner['revision'] + 1, check_at=min(now, owner['check_at']))

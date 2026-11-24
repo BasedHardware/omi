@@ -309,12 +309,12 @@
       "expression": "f'{namespace}_jobs'",
       "collection_pattern": "batch_pipeline_*_jobs",
       "owner": "Pipeline allowance parking (SCA-2195)",
-      "unit": "hourly leader-only allowance-held COUNT at <=1M held rows",
-      "reads_per_unit_budget": 1000,
-      "reads_per_day_budget": 48000,
+      "unit": "hourly leader-only allowance-held counts at up to 1M held rows",
+      "reads_per_unit_budget": 2000,
+      "reads_per_day_budget": 96000,
       "basis": "planning-bound",
-      "source": "SCA-2195: COUNT only, no row fetches, <=24 samples/day/environment = <=48000 index-read units/day for two environments; no per-scrape query. Revisit planning envelope above 1M stock.",
-      "reviewed": "2026-11-14"
+      "source": "SCA-2195 and SCA-4089: total and provider-only COUNT, no row fetches, at most 24 samples/day/environment. Plan for both counts scanning 1M indexed rows each across prod and dev. Recheck the observed count cost and revisit the envelope above 1M held rows.",
+      "reviewed": "2026-11-24"
     },
     {
       "site": "backend/database/batch_pipeline_admission_view.py",
@@ -339,6 +339,18 @@
       "basis": "planning-bound",
       "source": "SCA-2195: one hold-counter read in the existing job-erasure transaction plus its shadow refresh. Reserve eight incremental reads/job for two attempts and counter refresh overhead; one 1M-job purge/day plans 8M reads. Other job/queue/control/privacy reads retain their existing family budgets. No recurring scan; only allowance_held jobs read this counter. More retries, repeated bulk purges or over 1M/day require remeasurement before accepting this planning envelope.",
       "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/batch_pipeline_recovery.py",
+      "expression": "f'{namespace}_{allowance_hold.OWNERS}'",
+      "collection_pattern": "batch_pipeline_*_allowance_holds",
+      "owner": "Goal: Pipeline (SCA-4089)",
+      "unit": "allowance-held job whose privacy fence is revoked",
+      "reads_per_unit_budget": 8,
+      "reads_per_day_budget": 8000000,
+      "basis": "planning-bound",
+      "source": "SCA-4089 moves the owner-count read from a follow-up transaction into the privacy revocation transaction. One counter point read per attempt after the privacy fence rejects an allowance-held row. Reserve eight reads for two attempts plus shadow refresh and a stress envelope of 1M revocations/day, matching the existing allowance purge counter budget. Existing job and privacy reads are outside this counter budget.",
+      "reviewed": "2026-11-24"
     },
     {
       "site": "backend/database/batch_pipeline_delivered_share.py",
