@@ -25,6 +25,21 @@ class MobileBatchBuffer {
 
   static RandomAccessFile _openAppend(File file) => file.openSync(mode: FileMode.append);
 
+  static const defaultMaxFileSeconds = 60;
+
+  /// Longest file this buffer writes before sealing it. Applies from the next
+  /// frame, so an open file longer than a newly lowered cap seals at once.
+  int get maxFileSeconds => _maxFileSeconds;
+  int _maxFileSeconds = defaultMaxFileSeconds;
+  set maxFileSeconds(int seconds) {
+    if (seconds > 0 && seconds <= defaultMaxFileSeconds) _maxFileSeconds = seconds;
+  }
+
+  /// [maxFiles] counts files at the default length. A shorter cap writes
+  /// proportionally more files for the same audio, so the limit scales with it
+  /// and the buffer admits the same span of capture either way.
+  int get _fileLimit => maxFiles * defaultMaxFileSeconds ~/ _maxFileSeconds;
+
   // One process-wide revision also covers observers recreated for the same
   // directory. It invalidates disk snapshots, never supplies custody proof.
   static int _journalRevision = 0;
@@ -120,7 +135,7 @@ class MobileBatchBuffer {
     int? Function()? observeLiveOrdinal,
   }) {
     if (failed ||
-        (_writer == null && _files >= maxFiles) ||
+        (_writer == null && _files >= _fileLimit) ||
         uid.isEmpty ||
         !codec.isOpusSupported() ||
         _bytes + payload.length + 4 > maxBytes) {
@@ -139,7 +154,7 @@ class MobileBatchBuffer {
       }
       if (_writer == null) {
         // A codec/origin change can seal an existing writer above.
-        if (_files >= maxFiles) return false;
+        if (_files >= _fileLimit) return false;
         final token = const Uuid().v4().replaceAll('-', '');
         final start = now.microsecondsSinceEpoch / 1000000;
         final name = 'audio_omimobilebatch${token}_${codec}_16000_1_fs${codec.getFrameSize()}_$start.bin';
@@ -200,7 +215,7 @@ class MobileBatchBuffer {
         _writer!.flushSync();
         if (liveContext != null) _checkpointJournal();
       }
-      if (_chunkFrames >= codec.getFramesPerSecond() * 60) seal();
+      if (_chunkFrames >= codec.getFramesPerSecond() * _maxFileSeconds) seal();
       return true;
     } on FileSystemException {
       failed = true;

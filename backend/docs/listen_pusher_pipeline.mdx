@@ -7238,6 +7238,15 @@ empty_asr_attempt (raw GPU failures, may repeat). Commit sources distinguish
 `gpu_pump` from CPU `ordered_merge`; aggregate across both processes.
 `omi_batch_pipeline_projected_segments_total{authority=batch|legacy|abstained}`
 counts newly persisted survivors, not input words or complete conversations.
+`omi_batch_pipeline_recovery_recognizer_outcomes_total{modulate,soniox,speech,language_guarded,result}`
+adds one sample per committed recovery settlement, read from the unit's own
+recognizer receipts in the settling transaction. `modulate` and `soniox` are
+`words|empty|error|refused|started|not_called`; `speech` buckets the held VAD
+census as `none` (below the silence threshold), `under_2s`, `2s_or_more` or
+`unmeasured`; `result` is `words|silence|no_recoverable_speech|failed_held`.
+It shows how often our detectors measured speech while both recognizers
+returned nothing, and each recognizer's answers on their own. It records
+disagreement, not which side was right.
 No telemetry reads are added. Counters can miss a lost commit reply or process
 exit; they do not replace durable receipts. Projection completion establishes
 canonical persistence and enrichment scheduling, not completed summary/client display.
@@ -9279,6 +9288,34 @@ intact; only strict-VAD silence may complete without words. Operator redrive
 uses the same boundary. Previously persisted results reconcile without another
 provider call. The switch does not enable new batch admission or bypass a
 recovery policy, allowance, consent or privacy fence.
+
+`BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED` (default off, read per call
+on the CPU recovery roles) narrows that boundary for one case. When Modulate
+and the second recovery provider both return a validated empty answer for the
+same unit, the unit settles `no_recoverable_speech` with both
+`recognizer_receipts` and the existing two-provider or second-chance evidence,
+so its upload completes like any other empty result. A provider error, a
+refusal, a missing receipt or words from either recognizer keep it
+`failed_held`. Language-guarded units keep their own rule, and the
+single-recognizer padded-empty path is unchanged. The switch adds no provider
+call and needs `BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED`; the shadow
+lane reports the same outcome. Units already `failed_held` are not revisited.
+
+`BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED` (default off, read per
+call on the CPU recovery roles) is the same rule for language-guarded units
+(`unsupported_language`: Parakeet never ran). When Modulate and the
+independent Soniox call both return a validated empty answer for a guarded
+unit whose strict VAD found speech, the unit settles `no_recoverable_speech`
+with both `recognizer_receipts` and the language-guard evidence. The two
+switches are independent: neither opens the other's case. The settlement
+fence accepts a guarded `no_recoverable_speech` result only while this switch
+is on and the job holds both empty receipts, which is the evidence the
+operator terminal disposition already requires. A provider error, words, a
+missing receipt or a refused Soniox call keep the unit `failed_held`; a
+guarded unit above the 60-second independent ceiling is never asked of Soniox,
+so it stays held. The sub-threshold silence rule is unchanged. The settlement
+counter reports these closes as `language_guarded="true"`,
+`result="no_recoverable_speech"`.
 
 Recovery exception boundaries, including the async independent Soniox call,
 emit `event=batch_recovery_stage_failure` with bounded stage/reason and the
