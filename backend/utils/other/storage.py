@@ -2802,15 +2802,17 @@ def delete_privacy_conversation_audio(uid: str, conversation_id: str, *, source_
                 audio_packs.delete_conversation(canonical, uid, cid)
     # Merge donors' prefixes hold audio that now belongs to this conversation.
     # Sync staging is keyed by upload, so every prefix is attempted before a block is raised.
-    owned = list(dict.fromkeys([conversation_id, *(source_ids or [])]))
+    owned: List[str] = []
+    for cid in [conversation_id, *(source_ids or [])]:
+        if cid not in owned:
+            owned.append(cid)
     blocked: dict[tuple[str, str, int], str] = {}
     unverified = 0
-    for purge, arg in [
-        *((delete_conversation_audio_files, cid) for cid in owned),
-        (delete_conversation_sync_staging, owned),
-    ]:
+    steps: List[Tuple[Callable[..., Any], Any]] = [(delete_conversation_audio_files, cid) for cid in owned]
+    steps.append((delete_conversation_sync_staging, owned))
+    for purge, target in steps:
         try:
-            purge(uid, arg)
+            purge(uid, target)
         except StoragePrefixPurgeBlocked as error:
             blocked.update(error.objects)
             unverified += error.unverified

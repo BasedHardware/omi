@@ -59,10 +59,10 @@ def _upload(snapshot: Any) -> SyncUpload:
 
 
 def uploads_for_conversations(
-    uid: str, conversation_ids: Iterable[str], *, firestore_client: Any = None
+    uid: str, conversation_ids: Iterable[str | None], *, firestore_client: Any = None
 ) -> list[SyncUpload]:
     """Every ledger row that lists any of ``conversation_ids``; read errors propagate."""
-    ids = sorted({cid for cid in conversation_ids if isinstance(cid, str) and cid})
+    ids = sorted({cid for cid in conversation_ids if cid})
     if not uid or not ids:
         return []
     try:
@@ -122,6 +122,6 @@ def owed_batch_segments(
     }
     owed: dict[str, set[str]] = {}
     for upload in uploads:
-        if upload.conversation_ids <= deleted:
+        if upload.batch_namespace and upload.conversation_ids <= deleted:
             owed.setdefault(upload.batch_namespace, set()).update(upload.batch_segment_ids)
     return owed
