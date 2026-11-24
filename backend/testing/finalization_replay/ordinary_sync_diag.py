@@ -217,6 +217,10 @@ def _observe_sync(state, run, leaves, url):
         leaves.enter_context(patch.object(episode_timeline, 'attach_recorded', attach_recorded))
         leaves.enter_context(patch.object(episode_attach_memo, 'complete', complete))
     try:
+        if state.replay_side == 'python' and state.case['name'] == UNREADABLE:
+            # The route drives its own durable outbox. The direct callback
+            # harness's BYOK and provider setup does not belong to its meter.
+            return run(state)
         return reference_module.run_reference(state, leaves, url)
     finally:
         for future in futures:

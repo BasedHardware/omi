@@ -6,7 +6,8 @@ deterministic virtual-clock model has the semantics that caused two stalls in 12
 - **Rate limits:** a token bucket (``max_dispatches_per_second``, ``max_burst_size``) and
   ``max_concurrent_dispatches``.
 - **Retry policy:** ``min_backoff``·2^k up to ``max_doublings``, capped at ``max_backoff``; a task
-  is dropped after ``max_attempts``. Any non-2xx is retried, including 409.
+  is dropped after ``max_attempts`` unless configured for unlimited attempts (-1).
+  Any non-2xx is retried, including 409.
 - **Named-task dedupe:** creating an existing name is ``already_exists``, never a second task.
 - **System throttle (AIMD):** every ``adjust_interval_s`` the queue looks at the last
   ``window_s`` of responses. Any 429/503, or a *fast* 5xx share (latency < ``fast_s``) above

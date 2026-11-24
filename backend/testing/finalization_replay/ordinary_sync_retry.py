@@ -94,7 +94,10 @@ def retry_to_park(state, worker_backend):
         patch.object(enrichment, 'time', clock),
         patch.object(age_gate, 'time', clock),
     ):
-        outbox.mark(state.uid, state.cid, original.get('language') or 'en', now=epoch, snapshot_summary=True)
+        # Match the Go replay's admission boundary. Meter dispatches, including
+        # the terminal park, after the synthetic obligation has been admitted.
+        with suspend_meter():
+            outbox.mark(state.uid, state.cid, original.get('language') or 'en', now=epoch, snapshot_summary=True)
         max_age = age_gate.max_age_seconds()
         if max_age <= 0:
             raise RuntimeError('unreadable replay requires a configured age cap')
