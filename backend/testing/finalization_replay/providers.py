@@ -83,7 +83,7 @@ def provider_server():
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(raw)))
             if key:
-                self.send_header('X-Omi-Idempotency-Key', key)
+                self.send_header('X-Omi-Idempotency-Key', key.replace('\r', '').replace('\n', ''))
             self.end_headers()
             self.wfile.write(raw)
 

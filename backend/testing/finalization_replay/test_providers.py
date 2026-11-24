@@ -55,12 +55,17 @@ def test_wire_usage_uses_content_and_counts_idempotent_completion_once():
 
         expected = {'prompt_tokens': _tokens('The synthetic agenda.'), 'completion_tokens': _tokens(state.notes)}
         expected['total_tokens'] = sum(expected.values())
-        key = {'Idempotency-Key': 'same-paid-operation'}
+        key = 'same.paid_operation:01'
+        operations = '/chat/completions/operations'
+        headers = {'Idempotency-Key': key}
         assert post('/chat/completions', body)['usage'] == expected
-        assert post('/chat/completions/operations', body, key)['usage'] == expected
-        assert post('/chat/completions/operations', body, key)['usage'] == expected
-        with urlopen(f"{root}/chat/completions/operations/{key['Idempotency-Key']}", timeout=2) as replay:
-            assert replay.headers['X-Omi-Idempotency-Key'] == key['Idempotency-Key']
+        request = Request(root + operations, json.dumps(body).encode(), headers)
+        with urlopen(request, timeout=2) as committed:
+            assert committed.headers['X-Omi-Idempotency-Key'] == key
+            assert json.load(committed)['usage'] == expected
+        assert post(operations, body, headers)['usage'] == expected
+        with urlopen(f'{root}{operations}/{key}', timeout=2) as replay:
+            assert replay.headers['X-Omi-Idempotency-Key'] == key
             assert json.load(replay)['usage'] == expected
         assert post('/embeddings', {'model': 'openai-embeddings', 'input': [123, 456]})['usage']['total_tokens'] == 2
 
