@@ -17,6 +17,10 @@ import 'package:omi/utils/firmware_update_battery.dart';
 import 'package:omi/utils/firmware_update_hold.dart';
 import 'firmware_update_dialog.dart';
 
+/// Test seam for the count of recordings still only on the pendant.
+@visibleForTesting
+int Function()? debugUnsyncedDeviceRecordings;
+
 class FirmwareUpdate extends StatefulWidget {
   final BtDevice? device;
   final bool isRollback;
@@ -73,9 +77,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       isConfirmedCurrent = false;
     });
 
-    final bootloaderSha256 = await readConnectedBootloaderSha256(device.id);
-    if (!mounted) return;
     if (widget.isRollback) {
+      final bootloaderSha256 = await readConnectedBootloaderSha256(device.id);
       final answered = await _answered(
           () => getStableVersion(deviceModelNumber: device.modelNumber, bootloaderSha256: bootloaderSha256));
       if (!answered) return _failCheck();
@@ -106,6 +109,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         });
         return;
       }
+      final bootloaderSha256 = await readConnectedBootloaderSha256(device.id);
       final answered = await _answered(() => getLatestVersion(
             deviceModelNumber: device.modelNumber,
             firmwareRevision: device.firmwareRevision,
@@ -430,12 +434,16 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       onUpdateStart: () async {
         // Battery, charging and unsynced recordings may have changed while a confirmation was open.
         if (!mounted || _batteryBlocksUpdate(deviceProvider)) return;
-        if (_unsyncedDeviceRecordings() > 0) return;
+        if (await _recordingsBlockUpdate()) return;
         deviceProvider.setFirmwareUpdateInProgress(true);
         if (await downloadFirmware()) {
           if (!mounted) return;
           // Downloading can take time; check again before handing off to the bootloader.
           if (_batteryBlocksUpdate(deviceProvider)) {
+            deviceProvider.resetFirmwareUpdateState();
+            return;
+          }
+          if (await _recordingsBlockUpdate()) {
             deviceProvider.resetFirmwareUpdateState();
             return;
           }
@@ -448,6 +456,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   /// Recordings the app knows are still only on the pendant. An update restarts the pendant; if it
   /// then needed service those recordings would be stranded, so they are synced first.
   int _unsyncedDeviceRecordings() {
+    final debugCount = debugUnsyncedDeviceRecordings;
+    if (debugCount != null) return debugCount();
     try {
       return Provider.of<SyncProvider>(context, listen: false).missingWalsOnDevice.length;
     } on ProviderNotFoundException {
@@ -456,6 +466,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   }
 
   Future<bool> _recordingsBlockUpdate() async {
+    if (!mounted) return true;
     if (_unsyncedDeviceRecordings() == 0) return false;
     await showOmiAlert(
       context,

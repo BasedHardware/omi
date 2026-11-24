@@ -1645,7 +1645,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Fetch latest stable version for rollback comparison
         String? latestStableFirmwareVersion;
         try {
-          var stableDetails = await getStableFirmwareVersion(deviceModelNumber: pairedDevice?.modelNumber ?? '') ?? {};
+          var stableDetails = await getStableFirmwareVersion(
+                  deviceModelNumber: pairedDevice?.modelNumber ?? '',
+                  bootloaderSha256: await readConnectedBootloaderSha256(pairedDevice?.id ?? '')) ??
+              {};
           if (!_isCurrent(generation) || !_isCurrentFirmwareCheckSession(checkSession)) {
             Logger.debug('Discarding stable firmware result from a stale device session');
             return false;

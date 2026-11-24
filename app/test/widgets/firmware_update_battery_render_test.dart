@@ -187,6 +187,38 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
+  testWidgets('recordings still on the pendant block the update before the sheet opens', (tester) async {
+    var pending = 2;
+    debugUnsyncedDeviceRecordings = () => pending;
+    addTearDown(() => debugUnsyncedDeviceRecordings = null);
+    final provider = _DeviceProvider(batteryLevel: 80);
+    await pumpPage(tester, provider);
+    await tester.tap(find.byKey(const Key('firmware_update_start')));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text(en.firmwareSyncRecordingsFirstTitle), findsOneWidget);
+    expect(find.byKey(const Key('firmware_update_sheet_start')), findsNothing);
+    expect(provider.updateStarts, 0);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('recordings that appear while the sheet is open block the start with the same message', (tester) async {
+    var pending = 0;
+    debugUnsyncedDeviceRecordings = () => pending;
+    addTearDown(() => debugUnsyncedDeviceRecordings = null);
+    final provider = _DeviceProvider(batteryLevel: 80);
+    await pumpPage(tester, provider);
+    await tester.tap(find.byKey(const Key('firmware_update_start')));
+    await tester.pumpAndSettle();
+    pending = 1;
+    await tester.tap(find.byKey(const Key('firmware_update_sheet_start')));
+    await tester.pumpAndSettle();
+    expect(find.text(en.firmwareSyncRecordingsFirstTitle), findsOneWidget);
+    expect(provider.updateStarts, 0);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   testWidgets('a hold for an older release does not hide a newer one', (tester) async {
     final holds = await FirmwareUpdateHold.load();
     await holds.hold(deviceId: 'fixture-pendant', version: '3.0.0');
