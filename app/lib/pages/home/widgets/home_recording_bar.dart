@@ -103,7 +103,7 @@ class _HomeRecordingBarState extends State<HomeRecordingBar> {
     setState(() => _busy = true);
     OmiHaptics.medium();
     final home = Navigator.of(context).context;
-    final outcome = await finishLiveCapture(capture, episodes: context.read<EpisodeProvider?>());
+    final outcome = await finishLiveCapture(context, capture, episodes: context.read<EpisodeProvider?>());
     if (outcome is! FinishFailed) PlatformManager.instance.analytics.phoneMicRecordingStopped();
     if (mounted) setState(() => _busy = false);
     if (!home.mounted) return;

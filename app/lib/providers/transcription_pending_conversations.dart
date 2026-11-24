@@ -32,11 +32,17 @@ class TranscriptionPendingConversations {
   /// backend/tests/unit/test_transcription_pending_retry.py. The hold projection applies only to
   /// rows with no stored or user title, so on such a row this text is never a title someone gave it.
   static const serverHoldTitle = "Couldn't transcribe";
+  static const serverTranscribingTitle = 'Transcribing…';
 
-  /// Whether the status stands in for the title: the row is marked and its title is only
-  /// [serverHoldTitle].
-  static bool replacesTitle(ServerConversation conversation) =>
-      contains(conversation.id) && conversation.structured.title.trim() == serverHoldTitle;
+  /// Whether a server status placeholder should give way to the current recording state.
+  static bool replacesTitle(ServerConversation conversation, {String? title}) {
+    final value = (title ?? conversation.structured.title).trim();
+    if (conversation.isTranscriptionAllowanceHeld && value == serverTranscribingTitle) return true;
+    return value == serverHoldTitle &&
+        (conversation.isTranscriptionAllowanceHeld ||
+            conversation.isAdmittedForTranscription ||
+            contains(conversation.id));
+  }
 
   static Timer? _expiry;
 
@@ -66,7 +72,8 @@ class TranscriptionPendingConversations {
   /// step) proves nothing, so the status stays.
   static void observe(ServerConversation conversation) {
     final step = conversation.homeStep;
-    if ((step != null && step != 'failed') ||
+    if (conversation.isAdmittedForTranscription ||
+        (step != null && step != 'failed') ||
         conversation.transcriptSegments.isNotEmpty ||
         conversation.summaryRetryable) {
       unmark(conversation.id);

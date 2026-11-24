@@ -979,3 +979,32 @@ def test_unprotected_wipe_heartbeat_refuses_armed_generation_without_writing():
     ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
     assert users_db._heartbeat_user_deletion_wipe_txn.to_wrap(txn, ref) is False
     assert not (txn._sets or txn._updates)
+
+
+def test_restore_and_a_new_intent_start_the_failed_admission_record_from_zero():
+    # A first deletion failed its admission cancel 5 times and went overdue, then finished and was restored.
+    marker = {
+        'uid': 'uid1',
+        'wipe_status': 'pending_deletion',
+        'wipe_due_at': datetime.now(timezone.utc) + timedelta(days=1),
+        'grace_actions_complete': True,
+        'grace_actions_failed_attempts': 5,
+        'grace_actions_last_failed_at': datetime.now(timezone.utc),
+        'grace_actions_overdue': True,
+    }
+    result, updates = _run_restore(marker)
+    assert result == 'restored'
+    marker = {**marker, **updates[0][1]}
+    assert marker['grace_actions_failed_attempts'] == 0 and marker['grace_actions_overdue'] is False
+    assert marker['grace_actions_last_failed_at'] is None
+
+    # The account is deleted again: the merged intent write resets the record even if a restore never ran.
+    stale = {**marker, 'grace_actions_failed_attempts': 5, 'grace_actions_overdue': True}
+    result, sets, _ = _run_mark_grace(stale, datetime.now(timezone.utc) + timedelta(days=14))
+    assert result['mode'] == 'created'
+    fields, kwargs = sets[0][1], sets[0][2]
+    assert kwargs.get('merge') is True
+    merged = {**stale, **fields}
+    assert merged['grace_actions_failed_attempts'] == 0
+    assert merged['grace_actions_overdue'] is False
+    assert merged['grace_actions_last_failed_at'] is None

@@ -2205,6 +2205,12 @@
     "authFailedToRetrieveToken": "Nepodařilo se získat Firebase token, zkuste to prosím znovu.",
     "authUnexpectedErrorFirebase": "Neočekávaná chyba při přihlašování, chyba Firebase, zkuste to prosím znovu.",
     "authUnexpectedError": "Neočekávaná chyba při přihlašování, zkuste to prosím znovu",
+    "accountSignInMethods": "Způsoby přihlášení",
+    "accountAddSignInMethod": "Přidat způsob přihlášení",
+    "accountAddSignInMethodDetails": "Přidejte způsob přihlášení k tomuto účtu Omi. Tarif, nahrávky a integrace zůstanou u tohoto účtu.",
+    "accountSignInConflictTitle": "Tento způsob přihlášení je spojen s jiným účtem",
+    "accountSignInConflictDetails": "Stále jste přihlášeni k tomuto účtu. Každý účet Omi si zachovává svůj tarif, nahrávky a integrace.",
+    "accountSignInMethodAdded": "Způsob přihlášení byl přidán",
     "authFailedToLinkGoogle": "Propojení s Google se nezdařilo, zkuste to prosím znovu.",
     "authFailedToLinkApple": "Propojení s Apple se nezdařilo, zkuste to prosím znovu.",
     "onboardingBluetoothRequired": "K připojení k zařízení je vyžadováno oprávnění Bluetooth.",
@@ -4382,6 +4388,7 @@
     "processingNewestFirst": "Nejprve zpracujeme nejnovější nahrávky do výše dostupného limitu. Zbytek zůstane čekat.",
     "processingAction": "Zpracovat čekající nahrávky",
     "processingProgress": "Zpracovávání čekajících nahrávek…",
+    "waitingForTranscriptionAllowance": "Čeká se na dostupný limit přepisu",
     "processingDeferred": "Čeká na zpracování",
     "processingCount": "{count, plural, =1{1 čekající konverzace} other{{count} čekajících konverzací}}",
     "playbackPartialAudioSaved": "Uloženo {saved} z {total} zvuku",
@@ -4750,5 +4757,11 @@
     "playRenewalTerms": "Automaticky se obnovuje za uvedenou cenu, dokud ho nezrušíte. Spravovat nebo zrušit ho můžete kdykoli v Google Play.",
     "playPaidAppUnavailable": "Na Androidu není k dispozici",
     "pageNotAvailableInApp": "Tato stránka není v aplikaci dostupná.",
-    "shopOrderPlacedCheckEmail": "Objednávka byla odeslána. Potvrzení najdete v e-mailu."
+    "shopOrderPlacedCheckEmail": "Objednávka byla odeslána. Potvrzení najdete v e-mailu.",
+    "prepaidCodeEntry": "Máte kód?",
+    "prepaidCodeTitle": "Uplatnit kód",
+    "prepaidCodeFieldHint": "Zadejte svůj kód",
+    "prepaidCodeRedeem": "Uplatnit",
+    "prepaidCodeRedeemed": "Kód uplatněn",
+    "prepaidCodeResult": "{reason, select, invalid{Tento kód není platný. Zkontrolujte ho a zkuste to znovu.} used{Tento kód už byl použit.} expired{Platnost tohoto kódu vypršela.} hasPlan{Už máte plán. Váš kód nebyl použit. Uplatněte ho, až váš plán skončí.} notPrepaid{Tento kód zde nelze uplatnit. Použijte ho při výběru plánu.} notEligible{Tento kód nelze použít v tomto účtu.} rateLimited{Příliš mnoho pokusů. Zkuste to později.} other{Něco se pokazilo. Zkuste to znovu.}}"
 }

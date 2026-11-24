@@ -7116,6 +7116,26 @@ class AppLocalizationsTa extends AppLocalizations {
   String get authUnexpectedError => 'உள்நுழைய அப்பாவமற்ற பிழை, மீண்டும் முயற்சிக்கவும்';
 
   @override
+  String get accountSignInMethods => 'உள்நுழைவு முறைகள்';
+
+  @override
+  String get accountAddSignInMethod => 'உள்நுழைவு முறையைச் சேர்';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'இந்த Omi கணக்கில் உள்நுழைய மற்றொரு முறையைச் சேர்க்கவும். உங்கள் திட்டம், பதிவுகள் மற்றும் ஒருங்கிணைப்புகள் இந்தக் கணக்கிலேயே இருக்கும்.';
+
+  @override
+  String get accountSignInConflictTitle => 'இந்த உள்நுழைவு முறை வேறொரு கணக்குடன் இணைக்கப்பட்டுள்ளது';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'நீங்கள் இன்னும் இந்தக் கணக்கில்தான் உள்நுழைந்துள்ளீர்கள். ஒவ்வொரு Omi கணக்கிலும் அதற்குரிய திட்டம், பதிவுகள் மற்றும் ஒருங்கிணைப்புகள் இருக்கும்.';
+
+  @override
+  String get accountSignInMethodAdded => 'உள்நுழைவு முறை சேர்க்கப்பட்டது';
+
+  @override
   String get authFailedToLinkGoogle => 'Google உடன் இணைக்க தோல்வியுற்றது, மீண்டும் முயற்சிக்கவும்.';
 
   @override
@@ -14459,6 +14479,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get processingProgress => 'உங்கள் காத்திருக்கும் பதிவுகள் செயலாக்கப்படுகின்றன…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'ஒலியை எழுத்தாக்குவதற்கான ஒதுக்கீட்டுக்காகக் காத்திருக்கிறது';
+
+  @override
   String get processingDeferred => 'செயலாக்கத்திற்குக் காத்திருக்கிறது';
 
   @override
@@ -15873,4 +15896,38 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'ஆர்டர் செய்யப்பட்டது. உறுதிப்படுத்தலுக்கு உங்கள் மின்னஞ்சலைப் பாருங்கள்.';
+
+  @override
+  String get prepaidCodeEntry => 'குறியீடு உள்ளதா?';
+
+  @override
+  String get prepaidCodeTitle => 'குறியீட்டைப் பயன்படுத்து';
+
+  @override
+  String get prepaidCodeFieldHint => 'உங்கள் குறியீட்டை உள்ளிடவும்';
+
+  @override
+  String get prepaidCodeRedeem => 'பயன்படுத்து';
+
+  @override
+  String get prepaidCodeRedeemed => 'குறியீடு பயன்படுத்தப்பட்டது';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'இந்தக் குறியீடு செல்லாது. சரிபார்த்து மீண்டும் முயலவும்.',
+        'used': 'இந்தக் குறியீடு ஏற்கனவே பயன்படுத்தப்பட்டது.',
+        'expired': 'இந்தக் குறியீடு காலாவதியானது.',
+        'hasPlan':
+            'உங்களிடம் ஏற்கனவே ஒரு திட்டம் உள்ளது. உங்கள் குறியீடு பயன்படுத்தப்படவில்லை. திட்டம் முடிந்ததும் அதைப் பயன்படுத்தவும்.',
+        'notPrepaid': 'இந்தக் குறியீட்டை இங்கே பயன்படுத்த முடியாது. திட்டத்தைத் தேர்ந்தெடுக்கும்போது பயன்படுத்தவும்.',
+        'notEligible': 'இந்தக் கணக்கில் இந்தக் குறியீட்டைப் பயன்படுத்த முடியாது.',
+        'rateLimited': 'அதிக முயற்சிகள். பின்னர் மீண்டும் முயலவும்.',
+        'other': 'ஏதோ தவறு நடந்தது. மீண்டும் முயலவும்.',
+      },
+    );
+    return '$_temp0';
+  }
 }

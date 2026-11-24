@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "Načini prijave",
+    "accountAddSignInMethod": "Dodaj način prijave",
+    "accountAddSignInMethodDetails": "Dodajte način prijave na ovaj Omi račun. Vaš paket, snimke i integracije ostaju na ovom računu.",
+    "accountSignInConflictTitle": "Ovaj način prijave povezan je s drugim računom",
+    "accountSignInConflictDetails": "I dalje ste prijavljeni na ovaj račun. Svaki Omi račun zadržava svoj paket, snimke i integracije.",
+    "accountSignInMethodAdded": "Način prijave dodan je",
     "authFailedToLinkGoogle": "Povezivanje s Google-om nije uspjelo, molim vas pokušajte ponovno.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "Prvo ćemo obraditi najnovije snimke do dostupne kvote. Ostale ostaju na čekanju.",
     "processingAction": "Obradi snimke na čekanju",
     "processingProgress": "Obrada vaših snimki na čekanju…",
+    "waitingForTranscriptionAllowance": "Čeka se dostupna kvota za transkripciju",
     "processingDeferred": "Čeka obradu",
     "processingCount": "{count, plural, =1{1 razgovor na čekanju} other{{count} razgovora na čekanju}}",
     "playbackPartialAudioSaved": "Spremljeno {saved} od {total} zvuka",
@@ -12307,5 +12314,11 @@
     "playRenewalTerms": "Automatski se obnavlja po prikazanoj cijeni dok ne otkažete. Upravljajte ili otkažite bilo kada na Google Playu.",
     "playPaidAppUnavailable": "Nije dostupno na Androidu",
     "pageNotAvailableInApp": "Ova stranica nije dostupna u aplikaciji.",
-    "shopOrderPlacedCheckEmail": "Narudžba je poslana. Potvrdu potražite u e-pošti."
+    "shopOrderPlacedCheckEmail": "Narudžba je poslana. Potvrdu potražite u e-pošti.",
+    "prepaidCodeEntry": "Imate kôd?",
+    "prepaidCodeTitle": "Iskoristite kôd",
+    "prepaidCodeFieldHint": "Unesite svoj kôd",
+    "prepaidCodeRedeem": "Iskoristi",
+    "prepaidCodeRedeemed": "Kôd je iskorišten",
+    "prepaidCodeResult": "{reason, select, invalid{Ovaj kôd nije valjan. Provjerite ga i pokušajte ponovno.} used{Ovaj kôd je već iskorišten.} expired{Ovaj kôd je istekao.} hasPlan{Već imate plan. Vaš kôd nije iskorišten. Iskoristite ga kada vam plan istekne.} notPrepaid{Ovaj kôd ne može se iskoristiti ovdje. Iskoristite ga kada odaberete plan.} notEligible{Ovaj kôd ne može se koristiti na ovom računu.} rateLimited{Previše pokušaja. Pokušajte kasnije.} other{Nešto nije u redu. Pokušajte ponovno.}}"
 }

@@ -82,6 +82,7 @@ class FakeStore:
     USER_POINTER_FIELD = play_db.USER_POINTER_FIELD
     PENDING_FIELD = play_db.PENDING_FIELD
     CUSTOMER_FIELD = play_db.CUSTOMER_FIELD
+    DELETION_CONFIRMED_FIELD = play_db.DELETION_CONFIRMED_FIELD
 
     @property
     def pointers(self):
@@ -103,6 +104,9 @@ class FakeStore:
 
     def update_purchase(self, key, fields):
         self.docs.setdefault(key, {}).update({k: v for k, v in fields.items() if k != 'uid'})
+
+    def purchase_keys_for_uid(self, uid):
+        return [key for key, doc in self.docs.items() if doc.get('uid') == uid]
 
     def due_for_reconcile(self, now, limit):
         rows = [dict(v, _key=k) for k, v in self.docs.items() if v.get('next_check_at') and v['next_check_at'] <= now]

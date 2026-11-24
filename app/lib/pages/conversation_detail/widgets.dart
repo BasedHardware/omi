@@ -207,11 +207,13 @@ class ReprocessDiscardedWidget extends StatelessWidget {
 /// notice once the server said a summary retry cannot help. The held detail copy carries no
 /// Home step and is not retryable, so the not-transcribed answer itself must open the slot;
 /// otherwise the tab would offer "Generate Summary", which can only be answered 409 again.
-bool summaryRetrySlotApplies(ServerConversation conversation) =>
-    TranscriptionPendingConversations.contains(conversation.id) ||
-    (isFailedConversation(conversation) && !conversation.discarded && !conversation.isLocked) ||
-    conversation.showsSummaryRetry ||
-    (conversation.status == ConversationStatus.failed && !conversation.discarded && !conversation.isLocked);
+bool summaryRetrySlotApplies(ServerConversation conversation) {
+  if (conversation.isTranscriptionAllowanceHeld || conversation.isAdmittedForTranscription) return false;
+  return TranscriptionPendingConversations.contains(conversation.id) ||
+      (isFailedConversation(conversation) && !conversation.discarded && !conversation.isLocked) ||
+      conversation.showsSummaryRetry ||
+      (conversation.status == ConversationStatus.failed && !conversation.discarded && !conversation.isLocked);
+}
 
 /// "Summary failed" with Retry, for a row the server marked retryable: its summary pass failed on
 /// a transient error, so a reprocess can still succeed. Success replaces the conversation, which
@@ -274,7 +276,7 @@ class _SummaryWaitingNotice extends StatelessWidget {
           const SizedBox(height: OmiSpacing.xs),
           Text(
             body,
-            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+            style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
             textAlign: TextAlign.center,
           ),
           if (actionLabel != null && onAction != null) ...[
@@ -534,28 +536,30 @@ class GetAppsWidgets extends StatelessWidget {
           final failure = redesign ? provider.summaryFailure : null;
           final selection = provider.getDisplayedSummarySelection();
           if (selection.kind == ConversationSummaryKind.empty) {
-            if (failure != null) return SliverToBoxAdapter(child: SummaryFailureCard(failure: failure));
             final conversation = provider.conversation;
-            // Held by the free plan's monthly minutes: a retry cannot transcribe it, Upgrade can.
-            final usage = context.watch<UsageProvider?>();
-            if (heldByFreeAllowance(conversation, usage)) {
+            if (conversation.isTranscriptionAllowanceHeld) {
               final l = context.l10n;
+              final upgradeMinutes = heldRecordingUpgradeLimitMinutes(conversation, context.watch<UsageProvider?>());
               return SliverToBoxAdapter(
                 child: _SummaryWaitingNotice(
                   key: const Key('conversation_detail_held_recording'),
                   title: l.summaryTranscriptionPendingTitle,
-                  body: l.freeCapTitle(((usage?.subscription?.transcriptionSecondsLimit ?? 0) / 60).round()),
-                  actionLabel: l.upgrade,
-                  onAction: () =>
-                      FreemiumSwitchHandler.openHeldRecordingUpgrade(context, source: 'held_recording_detail'),
+                  body: upgradeMinutes == null ? l.waitingForTranscriptionAllowance : l.freeCapTitle(upgradeMinutes),
+                  actionLabel: upgradeMinutes == null ? null : l.upgrade,
+                  onAction: upgradeMinutes == null
+                      ? null
+                      : () => FreemiumSwitchHandler.openHeldRecordingUpgrade(context, source: 'held_recording_detail'),
                 ),
               );
+            }
+            if (failure != null && !conversation.isAdmittedForTranscription) {
+              return SliverToBoxAdapter(child: SummaryFailureCard(failure: failure));
             }
             // A failed processing pass can be retried the same way as a failed summary.
             if (summaryRetrySlotApplies(conversation)) {
               return const SliverToBoxAdapter(child: SummaryRetryWidget());
             }
-            if (conversation.status == ConversationStatus.processing) {
+            if (conversation.isAdmittedForTranscription || conversation.status == ConversationStatus.processing) {
               return SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.only(top: 18.0),

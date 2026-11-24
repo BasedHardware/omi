@@ -111,6 +111,13 @@ overlay:
         EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
         CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
         QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+        # SCA-4019: a phone/pendant socket drop holds its mobile server-batch capture open for the
+        # 120 s reconnect grace instead of finalizing it, so a resumed recording stays one
+        # conversation. The producer drain releases the recording-session lease and persists a
+        # deadline, so the quiet check seals a held row at the deadline (the Nov 16 no-exit hold
+        # cannot recur). Activation gate met: every listen pod has run this code since 2026-11-22.
+        # Rollback: set 'false' on backend-listen and backend-sync in one config train.
+        LISTEN_BATCH_RECONNECT_ENABLED: {value: 'true', category: rollout}
         BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
@@ -592,8 +599,6 @@ overlay:
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         - DREAM_AGENT_PAID_PERCENT
-        # SCA-3555 preserves the serving revision, where poll backoff has no percent key.
-        - SYNC_POLL_BACKOFF_PERCENT
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -723,7 +728,9 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          # SCA-3504: client job-status GETs are served by backend. Rollback sets enabled to false.
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
           # Read-only referral campaign preview for Nik's three accounts (#24560). Claims, attribution and
           # grants stay off until OMI_REFERRAL_CAMPAIGN_ENABLED. Rollback: drop this key.
           OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS:
@@ -955,6 +962,9 @@ overlay:
             value: price_1TuIa81F8wnoWYvw0iX0j5M8
           STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
             value: price_1TuIap1F8wnoWYvwHWq0EvNU
+          # No-card prepaid Pro code redemption: cohort = only members of the prepaid-code-redeem rollout
+          # cohort (one internal test account). Rollback: set 'off' and deploy.
+          PREPAID_CODE_REDEEM: {value: 'cohort', category: rollout}
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
@@ -1104,6 +1114,10 @@ overlay:
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+          # SCA-4019: the quiet-check reconciler and finalization jobs read the same reconnect
+          # protocol as listen, so a drained hold seals at its producer deadline. Keep this equal
+          # to backend-listen; rollback sets 'false' on both in one config train.
+          LISTEN_BATCH_RECONNECT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}

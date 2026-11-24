@@ -10,6 +10,7 @@ from utils.generated_compute import require_generated_compute, generated_compute
 import asyncio
 import hashlib
 import os
+import time
 from concurrent.futures import Future
 from contextlib import ExitStack, nullcontext
 from threading import Lock
@@ -55,6 +56,7 @@ from utils.other.storage import (
     get_app_thumbnail_url,
 )
 from utils.screen_frames.store import delete_conversation_screen_frames
+from utils.log_sanitizer import sanitize
 from models.calendar_context import CalendarMeetingContext
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -1248,6 +1250,7 @@ def get_conversations(
     # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
     # legacy sync piece there would duplicate them.
     show_held = default_home and not conversations_v3_enabled(uid)
+    read_started = time.monotonic()
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
@@ -1272,6 +1275,7 @@ def get_conversations(
         show_held=show_held,
     )
 
+    read_done = time.monotonic()
     conversations = home_membership.project_list(
         uid,
         conversations,
@@ -1284,9 +1288,14 @@ def get_conversations(
     if response is not None:
         list_page_headers.apply(response, page)
     _heal_locked_conversations_if_eligible(uid, conversations)
+    admissions = transcribing_hold.read_admissions(uid, conversations, budget=budget)
     conversations = [
         historical_projection.project(
-            transcribing_hold.project(home_step.project(row, show_held=show_held), home_list=True)
+            transcribing_hold.project(
+                home_step.project(row, show_held=show_held),
+                home_list=True,
+                admission=admissions.get(row.get('id')),
+            )
         )
         for row in conversations
     ]
@@ -1294,6 +1303,21 @@ def get_conversations(
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
+    # Read meter: what one list page cost. Counts and timings only, never the owner or the query.
+    logger.info(
+        'conversation_list_read home=%s paged=%s limit=%d docs=%s storage_rows=%s hidden=%s rows=%d '
+        'truncated=%s read_ms=%d total_ms=%d',
+        default_home,
+        'cursor' if cursor else ('offset' if offset else 'first'),
+        limit,
+        getattr(budget, 'docs_scanned', None),
+        page.get('storage_rows'),
+        page.get('hidden_rows'),
+        len(conversations),
+        budget.truncated,
+        (read_done - read_started) * 1000,
+        (time.monotonic() - read_started) * 1000,
+    )
     return conversations
 
 
@@ -1434,7 +1458,10 @@ def get_conversation_by_id(
     conversation.pop(v3_policy.LIVE_SUMMARY_FIELD, None)
     if preview:
         conversation['live_summary'] = preview
-    return present_generated_note_sections(historical_projection.project(transcribing_hold.project(conversation)))
+    admission = transcribing_hold.read_admissions(uid, [conversation]).get(conversation.get('id'))
+    return present_generated_note_sections(
+        historical_projection.project(transcribing_hold.project(conversation, admission=admission))
+    )
 
 
 @router.patch(
@@ -1876,6 +1903,21 @@ def erase_accepted_conversation(uid: str, conversation_id: str, audio_source_ids
         func(*args, **kwargs)
 
 
+def _delete_privacy_audio_after_response(uid: str, conversation_id: str, *, source_ids: List[str]) -> None:
+    from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked, StoragePrefixPurgeError
+
+    try:
+        delete_privacy_conversation_audio(uid, conversation_id, source_ids=source_ids)
+    except StoragePrefixPurgeError as error:
+        logger.error(
+            'event=conversation_audio_purge uid=%s conversation_id=%s outcome=%s reason=%s',
+            uid,
+            conversation_id,
+            'blocked' if isinstance(error, StoragePrefixPurgeBlocked) else 'failed',
+            sanitize(error),
+        )
+
+
 def _delete_conversation_under_gate(
     conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client, *, record_event=True
 ):
@@ -1945,7 +1987,8 @@ def _delete_conversation_under_gate(
             except Exception as error:
                 raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
             source_ids = (raw or {}).get('sync_merged_from', [])
-        background_tasks.add_task(delete_privacy_conversation_audio, uid, conversation_id, source_ids=source_ids)
+        purge_audio = _delete_privacy_audio_after_response if record_event else delete_privacy_conversation_audio
+        background_tasks.add_task(purge_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation
     # content, not cascade-only derived data, so this runs unconditionally

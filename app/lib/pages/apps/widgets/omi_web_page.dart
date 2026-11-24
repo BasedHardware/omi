@@ -43,11 +43,19 @@ typedef WebNavigationPolicy = WebNavigation Function(Uri? current, Uri target);
 /// [passes] reads its result. Until it passes the page stays behind the loading state; if it fails
 /// the reader sees "not available" with Close.
 class WebPageCheck {
-  const WebPageCheck({required this.appliesTo, required this.script, required this.passes});
+  const WebPageCheck({
+    required this.appliesTo,
+    required this.script,
+    required this.passes,
+    this.timeout = const Duration(seconds: 5),
+  });
 
   final bool Function(Uri page) appliesTo;
   final String script;
   final bool Function(Object? result) passes;
+
+  /// A check that has not answered by then fails, so a hung page never stays behind the spinner.
+  final Duration timeout;
 }
 
 /// A pushed page that shows one web page in the app (referral program, an app's home page).
@@ -146,9 +154,9 @@ class _OmiWebPageState extends State<OmiWebPage> {
             if (check != null && uri != null && check.appliesTo(uri)) {
               Object? result;
               try {
-                result = await _controller.runJavaScriptReturningResult(check.script);
+                result = await _controller.runJavaScriptReturningResult(check.script).timeout(check.timeout);
               } catch (_) {
-                result = null; // A page the check cannot read is not shown.
+                result = null; // A page the check cannot read in time is not shown.
               }
               if (!mounted) return;
               if (!check.passes(result)) {

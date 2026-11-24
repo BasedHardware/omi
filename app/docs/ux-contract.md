@@ -352,9 +352,10 @@ rules cover what happens after it is tapped. Guards: `silent-catch`, `generic-er
 primary action (Finish: `test/widgets/finish_outcome_test.dart`).
 
 1. **A finishing action lands on its result.** Finish, Save, Submit and Import open the thing they
-   made, in a processing state until it is ready. The app never sends the reader Home as the
-   answer; Home is their choice. Finish from every entry point (the live page, Home's Wrap Up, the
-   record button) returns one typed `FinishOutcome` (`lib/services/capture/finish_outcome.dart`)
+   made, in a processing state until it is ready. On Home v3, the Processing row under Today
+   is the visible result of a manual finish until the conversation card takes its place. For
+   other finishing actions, opening Home is the reader's choice. Finish from the live page,
+   Home's Wrap Up or the record button returns one typed `FinishOutcome` (`lib/services/capture/finish_outcome.dart`)
    and is presented by `presentFinishOutcome`, so no caller can receive a bare null.
 2. **A failure is never a value.** A request that failed is not "empty", "up to date", "Free plan"
    or "no change". A function a page calls separates *nothing there* from *could not find out*,

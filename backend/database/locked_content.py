@@ -6,6 +6,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
 from .memory_collections import MemoryCollections
+from utils.other.request_deadline import RequestDeadlineExceeded, request_deadline_remaining_seconds
 
 
 def unlock_query_rows(
@@ -22,18 +23,27 @@ def unlock_query_rows(
         query = query.select([]).limit(limit)
     batch = database.batch()
     count = total = 0
-    for doc in query.stream():
+
+    def timeout_kwargs() -> dict[str, float]:
+        remaining = request_deadline_remaining_seconds()
+        if remaining is None:
+            return {}
+        if remaining <= 0.0:
+            raise RequestDeadlineExceeded('request budget expired during locked-content page')
+        return {'timeout': remaining}
+
+    for doc in query.stream(**timeout_kwargs()):
         batch.update(doc.reference, update)
         count += 1
         total += 1
         if count == 499:
-            batch.commit()
+            batch.commit(**timeout_kwargs())
             if on_commit:
                 on_commit()
             batch = database.batch()
             count = 0
     if count:
-        batch.commit()
+        batch.commit(**timeout_kwargs())
         if on_commit:
             on_commit()
     if limit is not None and total == 0 and on_commit:

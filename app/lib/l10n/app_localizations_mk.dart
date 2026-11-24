@@ -7092,6 +7092,26 @@ class AppLocalizationsMk extends AppLocalizations {
   String get authUnexpectedError => 'Неочекувана грешка при пријава, ве молиме обидете се повторно';
 
   @override
+  String get accountSignInMethods => 'Начини на најавување';
+
+  @override
+  String get accountAddSignInMethod => 'Додај начин на најавување';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Додај начин за најавување на оваа сметка на Omi. Твојот план, снимките и интеграциите остануваат на оваа сметка.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ова најавување е поврзано со друга сметка';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Сè уште си најавен на оваа сметка. Секоја сметка на Omi ги задржува својот план, снимките и интеграциите.';
+
+  @override
+  String get accountSignInMethodAdded => 'Начинот на најавување е додаден';
+
+  @override
   String get authFailedToLinkGoogle => 'Неуспешно поврзување со Google, ве молиме обидете се повторно.';
 
   @override
@@ -14424,6 +14444,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get processingProgress => 'Обработка на вашите снимки на чекање…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Се чека достапна квота за транскрипција';
+
+  @override
   String get processingDeferred => 'Чека обработка';
 
   @override
@@ -15833,4 +15856,37 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'Нарачката е направена. Потврдата ќе ја најдете во е-поштата.';
+
+  @override
+  String get prepaidCodeEntry => 'Имате код?';
+
+  @override
+  String get prepaidCodeTitle => 'Искористете код';
+
+  @override
+  String get prepaidCodeFieldHint => 'Внесете го вашиот код';
+
+  @override
+  String get prepaidCodeRedeem => 'Искористи';
+
+  @override
+  String get prepaidCodeRedeemed => 'Кодот е искористен';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Овој код не е важечки. Проверете го и обидете се повторно.',
+        'used': 'Овој код е веќе искористен.',
+        'expired': 'Овој код е истечен.',
+        'hasPlan': 'Веќе имате план. Вашиот код не е искористен. Искористете го кога ќе заврши вашиот план.',
+        'notPrepaid': 'Овој код не може да се искористи тука. Искористете го кога ќе изберете план.',
+        'notEligible': 'Овој код не може да се користи на оваа сметка.',
+        'rateLimited': 'Премногу обиди. Обидете се подоцна.',
+        'other': 'Нешто тргна наопаку. Обидете се повторно.',
+      },
+    );
+    return '$_temp0';
+  }
 }

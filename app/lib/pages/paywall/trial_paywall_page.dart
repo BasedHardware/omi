@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
+import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
 import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -167,7 +168,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     final usage = context.read<UsageProvider>();
     setState(() => _busy = true);
     try {
-      await usage.fetchSubscription().timeout(const Duration(seconds: 4));
+      await usage.fetchSubscription(fresh: true).timeout(const Duration(seconds: 4));
     } catch (_) {
       return;
     } finally {
@@ -227,6 +228,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     // At accessibility text sizes the pinned footer would fill the screen, so the cancel note and the
     // code hint scroll with the page there; at every other size they stay pinned under the button.
     final notesScroll = MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+    final canRedeemCode = context.select<UsageProvider, bool>((usage) => usage.canRedeemPrepaidCode);
     final playBilled = context.select<UsageProvider, bool>((usage) => usage.playBilledPurchaser);
     final notes = [
       // Google Play readers: renewal at the shown price, managed and cancelled in Google Play (Terms and
@@ -242,7 +244,19 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
       const SizedBox(height: 4),
       // Shopify buyers with an included year land here, not on the plans sheet with
       // its code field; their code goes in Stripe Checkout's promotion code box (not on Google Play).
-      if (!playBilled)
+      // Server switch on: redeem a prepaid code right here, no card. Never for a Play-billed reader.
+      if (canRedeemCode)
+        PrepaidCodeEntry(
+          center: true,
+          style: _Paper.label(size: 13, color: _Paper.textSecondary),
+          // Redeemed: the reader is Pro now, so close the paywall the way a restored purchase does.
+          onRedeemed: () {
+            if (!mounted || _dismissed) return;
+            _dismissed = true;
+            Navigator.of(context).pop(true);
+          },
+        )
+      else if (!playBilled)
         Text(
           l10n.paywallTrialCodeHint,
           key: const Key('trial_paywall_code_hint'),
@@ -308,6 +322,11 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
               final selected = _yearly ? (yearly ?? monthly) : (monthly ?? yearly);
               // Google Play readers: Play's own trial length for the selected plan, never the constant.
               final trialDays = (usage.playBilledPurchaser ? selected?.trialDays : null) ?? TrialPaywallPage.trialDays;
+              // Until Play's offer has loaded (or when it failed) a Play reader sees no trial length,
+              // date or timeline: there is no Play trial to describe yet. The same holds on Android
+              // while the billing provider is still unknown: the reader may turn out to be Play-billed.
+              final playTrialUnknown = (widget.offer == null && usage.billingProviderUnknown) ||
+                  (usage.playBilledPurchaser && selected?.trialDays == null);
               final currency = selected?.currency ?? 'usd';
               final zero = formatBillingPrice(0, currency);
               final yearlySaving = yearly != null && monthly != null && monthly.amountMinor * 12 > yearly.amountMinor
@@ -342,27 +361,37 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                         const SizedBox(height: 14),
                         _Dots(count: slides.length, current: _slide),
                         const SizedBox(height: 22),
-                        _Card(
-                          child: Column(
-                            children: [
-                              _TimelineRow(
-                                icon: Icons.lock_open_rounded,
-                                title: l10n.paywallTrialTodayTitle,
-                                body: l10n.paywallTrialTodayBody,
-                                date: onDay(0),
-                                emphasis: _TimelineEmphasis.first,
-                              ),
-                              _TimelineRow(
-                                icon: Icons.check_circle_outline_rounded,
-                                title: l10n.paywallTrialInDaysTitle(trialDays),
-                                body: selected?.trialLabel(context, trialDays) ?? l10n.paywallTrialEndsBody,
-                                date: onDay(trialDays),
-                                emphasis: _TimelineEmphasis.plain,
-                                last: true,
-                              ),
-                            ],
+                        if (playTrialUnknown)
+                          loading
+                              ? const Padding(
+                                  key: Key('trial_paywall_timeline_pending'),
+                                  padding: EdgeInsets.symmetric(horizontal: 16),
+                                  child: _Skeleton(height: 120),
+                                )
+                              : const SizedBox.shrink()
+                        else
+                          _Card(
+                            key: const Key('trial_paywall_timeline'),
+                            child: Column(
+                              children: [
+                                _TimelineRow(
+                                  icon: Icons.lock_open_rounded,
+                                  title: l10n.paywallTrialTodayTitle,
+                                  body: l10n.paywallTrialTodayBody,
+                                  date: onDay(0),
+                                  emphasis: _TimelineEmphasis.first,
+                                ),
+                                _TimelineRow(
+                                  icon: Icons.check_circle_outline_rounded,
+                                  title: l10n.paywallTrialInDaysTitle(trialDays),
+                                  body: selected?.trialLabel(context, trialDays) ?? l10n.paywallTrialEndsBody,
+                                  date: onDay(trialDays),
+                                  emphasis: _TimelineEmphasis.plain,
+                                  last: true,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
                         const SizedBox(height: 16),
                         _Card(
                           child: Column(
@@ -921,7 +950,7 @@ class _Dots extends StatelessWidget {
 }
 
 class _Card extends StatelessWidget {
-  const _Card({required this.child});
+  const _Card({super.key, required this.child});
 
   final Widget child;
 

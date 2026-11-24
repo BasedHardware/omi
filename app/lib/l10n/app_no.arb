@@ -2223,6 +2223,12 @@
     "authFailedToRetrieveToken": "Kunne ikke hente Firebase-token, vennligst prøv igjen.",
     "authUnexpectedErrorFirebase": "Uventet feil under pålogging, Firebase-feil, vennligst prøv igjen.",
     "authUnexpectedError": "Uventet feil under pålogging, vennligst prøv igjen",
+    "accountSignInMethods": "Innloggingsmetoder",
+    "accountAddSignInMethod": "Legg til en innloggingsmetode",
+    "accountAddSignInMethodDetails": "Legg til en måte å logge på denne Omi-kontoen. Abonnementet, opptakene og integrasjonene dine blir værende på denne kontoen.",
+    "accountSignInConflictTitle": "Denne innloggingen tilhører en annen konto",
+    "accountSignInConflictDetails": "Du er fortsatt logget på denne kontoen. Hver Omi-konto beholder sitt eget abonnement, sine opptak og sine integrasjoner.",
+    "accountSignInMethodAdded": "Innloggingsmetoden er lagt til",
     "authFailedToLinkGoogle": "Kunne ikke koble til Google, vennligst prøv igjen.",
     "authFailedToLinkApple": "Kunne ikke koble til Apple, vennligst prøv igjen.",
     "onboardingBluetoothRequired": "Bluetooth-tillatelse kreves for å koble til enheten din.",
@@ -4382,6 +4388,7 @@
     "processingNewestFirst": "Vi behandler de nyeste opptakene først, så langt kvoten rekker. Resten vil fortsatt vente.",
     "processingAction": "Behandle ventende opptak",
     "processingProgress": "Behandler ventende opptak…",
+    "waitingForTranscriptionAllowance": "Venter på ledig transkripsjonskvote",
     "processingDeferred": "Venter på behandling",
     "processingCount": "{count, plural, =1{1 samtale venter} other{{count} samtaler venter}}",
     "playbackPartialAudioSaved": "{saved} av {total} lyd lagret",
@@ -4750,5 +4757,11 @@
     "playRenewalTerms": "Fornyes automatisk til prisen som vises, til du sier opp. Administrer eller si opp når som helst i Google Play.",
     "playPaidAppUnavailable": "Ikke tilgjengelig på Android",
     "pageNotAvailableInApp": "Denne siden er ikke tilgjengelig i appen.",
-    "shopOrderPlacedCheckEmail": "Bestillingen er sendt. Sjekk e-posten din for bekreftelsen."
+    "shopOrderPlacedCheckEmail": "Bestillingen er sendt. Sjekk e-posten din for bekreftelsen.",
+    "prepaidCodeEntry": "Har du en kode?",
+    "prepaidCodeTitle": "Løs inn en kode",
+    "prepaidCodeFieldHint": "Skriv inn koden din",
+    "prepaidCodeRedeem": "Løs inn",
+    "prepaidCodeRedeemed": "Koden er løst inn",
+    "prepaidCodeResult": "{reason, select, invalid{Denne koden er ikke gyldig. Sjekk den og prøv igjen.} used{Denne koden er allerede brukt.} expired{Denne koden har utløpt.} hasPlan{Du har allerede et abonnement. Koden din ble ikke brukt. Løs den inn når abonnementet ditt slutter.} notPrepaid{Denne koden kan ikke løses inn her. Bruk den når du velger et abonnement.} notEligible{Denne koden kan ikke brukes på denne kontoen.} rateLimited{For mange forsøk. Prøv igjen senere.} other{Noe gikk galt. Prøv igjen.}}"
 }

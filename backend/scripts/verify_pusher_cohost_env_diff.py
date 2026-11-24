@@ -386,6 +386,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
             # Reconnect admission is local to the /v4/listen runtime; pusher does not open client listen sockets.
             "LISTEN_RECONNECT_BUDGET_PER_MIN",
+            # The mobile batch reconnect protocol is local to the /v4/listen runtime and the
+            # backend-sync quiet-check reconciler; pusher never opens client listen sockets.
+            "LISTEN_BATCH_RECONNECT_ENABLED",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MCP_OAUTH_CLIENTS_JSON",
             "MEMORY_TYPESENSE_COLLECTION",
