@@ -627,10 +627,11 @@ def test_provider_b08_replay(h, monkeypatch, second_check, release_mode):
         assert wakes == []
         return
 
-    assert controller.tick(150) == 1
+    assert controller.tick(150, page_size=1) == 1
     assert controller.tick(151) == 0
     assert h.store.run(gpu_state) == gpu_before
-    assert h.store.run(lambda tx: tx.get(OWNERS, owner))['held_count'] == 0
+    hold_owner = h.store.run(lambda tx: tx.get(OWNERS, owner))
+    assert hold_owner['held_count'] == 0 and not hold_owner.get('draining')
     assert get(h, segment)['compute_decision'] == {'outcome': 'unattempted'}
     assert get(h, segment)['merge_pending'] is True
     reopened = h.store.run(lambda tx: tx.get(TABLE, segment))
@@ -835,3 +836,31 @@ def test_concurrent_provider_rollback_ticks_issue_one_wake(h, monkeypatch):
     outbox = h.store.run(lambda tx: tx.get(TABLE, claim.row_id))
     wake.assert_called_once_with(claim.row_id, outbox['task_token'])
     assert h.store.run(lambda tx: tx.get(OWNERS, owner_key(claim.owner_id)))['held_count'] == 0
+
+
+def test_provider_can_park_after_legacy_exact_page_drain(h, monkeypatch):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED', 'true')
+    claim = admit_provider(h)
+    owner = owner_key(claim.owner_id)
+    h.store.run(
+        lambda tx: tx.put(
+            OWNERS,
+            owner,
+            {
+                'owner_key': owner,
+                'owner_id': claim.owner_id,
+                'active': False,
+                'held_count': 0,
+                'draining': True,
+                'after': [99, 'already-released'],
+                'generation': 'old',
+                'cutoff': 110,
+                'revision': 1,
+                'check_at': 115,
+            },
+        )
+    )
+    worker = stage(h.store, Artifacts(), Vendor(), allowed=lambda *_: (False, 'allowance_exhausted'), now=125)
+    assert worker.run(claim.row_id, claim=claim).reason == 'allowance_held'
+    current = h.store.run(lambda tx: tx.get(OWNERS, owner))
+    assert current['held_count'] == 1 and not current['draining'] and current['after'] is None

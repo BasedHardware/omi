@@ -196,9 +196,9 @@ class AllowanceHolds:
                 row = tx.get(OWNERS, key)
                 if row.get('token') != token:
                     return
-                more = len(segments) == page_size
                 if not row.get('held_count'):
                     row['active'] = False
+                more = row['active'] and len(segments) == page_size
                 row.update(
                     after=after, draining=more, token='', lease_until=0.0, check_at=now if more else now + CHECK_SECONDS
                 )
