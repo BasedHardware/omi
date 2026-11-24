@@ -36,6 +36,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
+from database import batch_pipeline_allowance_hold as allowance_hold
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 from database import batch_pipeline_projection_outbox as outbox
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
@@ -591,6 +592,12 @@ class PostgresStore:
                     'lease_until': 0.0,
                     'privacy_blocked_at': now,
                 }
+                if job['state'] == allowance_hold.STATE:
+                    key = job['owner_key']
+                    owner = tx.get(allowance_hold.OWNERS, key)
+                    if owner:
+                        allowance_hold.decrement(owner)
+                        tx.put(allowance_hold.OWNERS, key, owner)
                 if job['state'] in PROVIDER_STATES:
                     revoked['merge_pending'] = False
                 tx.store.write_doc(tx.conn, 'jobs', segment_id, revoked)

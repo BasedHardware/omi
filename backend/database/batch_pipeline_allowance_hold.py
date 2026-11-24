@@ -19,8 +19,16 @@ def intake_enabled() -> bool:
     return enabled() and kill_switch('BATCH_ALLOWANCE_INTAKE_PARK_ENABLED', log=False)
 
 
+def provider_enabled() -> bool:
+    return enabled() and kill_switch('BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED', log=False)
+
+
+def is_provider(job: dict) -> bool:
+    return (job.get('stt_route') or {}).get('stt_route') == 'provider'
+
+
 def release_fence(owner: dict) -> tuple[str | None, float | None] | None:
-    if owner.get('token') or owner.get('draining'):
+    if owner.get('token') or (owner.get('draining') and owner.get('active') is not False):
         return None
     return owner.get('generation'), owner.get('cutoff')
 
@@ -45,7 +53,7 @@ def eligible(job: dict) -> bool:
         decision.get('outcome') == 'held'
         and decision.get('reason') == EXHAUSTED
         and not job.get('result')
-        and (job.get('stt_route') or {}).get('stt_route') != 'provider'
+        and not is_provider(job)
     )
 
 
@@ -62,10 +70,19 @@ def park(tx, job: dict, now: float, *, at_intake: bool = False) -> bool:
         }
     if not eligible(job) or job.get('token') or job.get('lease_until', 0) > now:
         return False
+    record_park(tx, job, now)
+    return True
+
+
+def record_park(tx, job: dict, now: float) -> None:
+    """Record a caller-validated allowance hold and its owner index entry."""
     key = job['owner_key']
     owner = tx.get(OWNERS, key)
     if not owner:
         owner = {'owner_key': key, 'owner_id': job['owner_id'], 'check_at': now, 'revision': 0}
+    if owner.get('draining') and owner.get('active') is False and not owner.get('token'):
+        # Older controllers could leave a finished, exactly-full page marked draining.
+        owner.update(draining=False, after=None)
     owner.update(active=True, revision=owner['revision'] + 1, check_at=min(now, owner['check_at']))
     owner['held_count'] = owner.get('held_count', 0) + 1
     # Keep an in-progress generation pass/cursor. New holds cannot restart it.
@@ -74,7 +91,11 @@ def park(tx, job: dict, now: float, *, at_intake: bool = False) -> bool:
         job['allowance_retry_started_at'] = job.pop('retry_started_at')
     tx.put(OWNERS, key, owner)
     tx.put('jobs', job['segment_id'], job)
-    return True
+
+
+def decrement(owner: dict) -> None:
+    owner['held_count'] = max(0, owner.get('held_count', 0) - 1)
+    owner['active'] = owner['held_count'] > 0
 
 
 def restore_retry(job: dict, now: float) -> None:

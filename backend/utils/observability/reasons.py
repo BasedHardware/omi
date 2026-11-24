@@ -373,6 +373,7 @@ class RetryReason(StrEnum):
 
 
 class ConsumerReason(StrEnum):
+    ALLOWANCE_HELD = 'allowance_held'
     UNKNOWN = 'unknown'
     PROCESSED = 'processed'
     NOT_DUE = 'not_due'

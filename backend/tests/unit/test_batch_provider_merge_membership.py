@@ -634,7 +634,7 @@ async def test_drains_run_at_most_the_configured_number_at_once():
 
 
 class AsyncStubStage(StubStage):
-    async def run_async(self, segment_id, run_sync):
+    async def run_async(self, segment_id, run_sync, *, claim=None):
         return self.run(segment_id)
 
 

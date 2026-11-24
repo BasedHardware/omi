@@ -848,7 +848,7 @@ class StubStage:
     def __init__(self, outcome):
         self.outcome, self.seen = outcome, []
 
-    def run(self, segment_id):
+    def run(self, segment_id, *, claim=None):
         self.seen.append(segment_id)
         return self.outcome
 
@@ -889,6 +889,7 @@ def _claim(segment_id='p1', row_id='p1'):
     'unit,status,call',
     [
         (provider_stt.UnitOutcome('done', 'processed'), 200, ('ack', 'processed')),
+        (provider_stt.UnitOutcome('done', 'allowance_held'), 200, None),
         (provider_stt.UnitOutcome('deferred', 'not_due', 260.0), 200, ('defer', 260.0, 'not_due')),
         (provider_stt.UnitOutcome('discarded', 'privacy_blocked'), 200, ('ack', 'privacy_blocked')),
         (provider_stt.UnitOutcome('retry', 'dependency_warming'), 409, ('release', 'dependency_warming')),
@@ -904,7 +905,7 @@ def test_push_delivery_maps_stage_outcomes_onto_contract_d(unit, status, call):
     response = http_response(run_delivery('p1', 'wake', consumer=consumer, outbox=outbox))
     assert response.status_code == status
     assert outbox.calls[0] == ('claim_key', 'p1', 'wake', 1800.0)
-    assert outbox.calls[-1] == call
+    assert outbox.calls[1:] == ([call] if call else [])
     assert stage.seen == ['p1']
 
 

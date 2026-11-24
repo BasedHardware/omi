@@ -12,7 +12,8 @@ import uuid
 
 from config.referral_campaign import GRANT_FIELD, campaign_enabled
 from database._client import get_data_plane_firestore_client
-from database.batch_pipeline_allowance_hold import STATE, OWNERS, enabled, restore_retry
+from database.batch_pipeline_allowance_hold import STATE, OWNERS, decrement, enabled, is_provider, restore_retry
+from database.outbox_provider_stt import FirestoreProviderSttOutbox
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.referral_campaign import effective_subscription_payload
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -48,11 +49,12 @@ def generation(snapshot: dict, now: float) -> str:
 
 
 class AllowanceHolds:
-    def __init__(self, store, entitlement):
+    def __init__(self, store, entitlement, *, provider_wake=None):
         self.store = store
         # Returns (generation, eligible). Resolver failures raise, leaving the
         # generation unacknowledged, so a transport fault cannot strand a month.
         self.entitlement = entitlement
+        self.provider_wake = provider_wake or FirestoreProviderSttOutbox().wake
 
     @read_origin('job:batch_allowance_hold:tick')
     def tick(self, now: float, *, owners: int = 20, page_size: int = 100) -> int:
@@ -64,21 +66,22 @@ class AllowanceHolds:
                 def rollback(tx):
                     job = tx.get('jobs', segment)
                     if job.get('state') != STATE:
-                        return False
+                        return None
                     key = job['owner_key']
                     owner = tx.get(OWNERS, key)
-                    restore_retry(job, now)
+                    wake = self._release(tx, job, now, rollback=True)
                     if owner:
-                        owner['held_count'] = max(0, owner.get('held_count', 0) - 1)
-                        owner['active'] = owner['held_count'] > 0
+                        decrement(owner)
                         tx.put(OWNERS, key, owner)
-                    tx.put('jobs', segment, job)
-                    return True
+                    return (wake,)
 
                 try:
-                    released += self.store.run(rollback)
+                    outcome = self.store.run(rollback)
+                    if outcome is not None:
+                        released += 1
+                        self._wake(segment, outcome[0])
                 except BatchPrivacyBlocked:
-                    self._revoke(segment, now)
+                    self.store.quarantine_fenced(segment, now)
             return released
         released = 0
         for key in self.store.allowance_owners(now, owners):
@@ -90,22 +93,35 @@ class AllowanceHolds:
                 )
         return released
 
-    def _revoke(self, segment: str, now: float) -> None:
-        if not self.store.quarantine_fenced(segment, now):
+    @staticmethod
+    def _release(tx, job: dict, now: float, *, rollback: bool = False) -> str | None:
+        if is_provider(job):
+            restore_retry(job, now)
+            job.update(
+                state='provider_pending',
+                compute_decision={'outcome': 'unattempted'},
+                provider_allowance_released_at=now,
+            )
+            tx.put('jobs', job['segment_id'], job)
+            return FirestoreProviderSttOutbox.reopen_in_transaction(tx, job, now)
+        if rollback:
+            restore_retry(job, now)
+            tx.put('jobs', job['segment_id'], job)
+        else:
+            Scheduler.release_allowance_in_transaction(tx, job, now)
+        return None
+
+    def _wake(self, segment: str, token: str | None) -> None:
+        if token is None:
             return
-
-        def retire(tx):
-            job = tx.get('jobs', segment)
-            key = job.get('owner_key')
-            if not key:
-                return
-            owner = tx.get(OWNERS, key)
-            if owner:
-                owner['held_count'] = max(0, owner.get('held_count', 0) - 1)
-                owner['active'] = owner['held_count'] > 0
-                tx.put(OWNERS, key, owner)
-
-        self.store.run(retire)
+        try:
+            self.provider_wake(segment, token)
+        except Exception as error:
+            # The committed outbox can be re-woken by the provider outbox sweep.
+            logging.getLogger(__name__).warning(
+                'event=batch_provider_stt action=allowance_release_wake outcome=failed exception_type=%s',
+                type(error).__name__,
+            )
 
     def _owner(self, key: str, now: float, page_size: int) -> int:
         token = uuid.uuid4().hex
@@ -160,28 +176,29 @@ class AllowanceHolds:
                     # A new refusal in this generation must not be reoffered
                     # indefinitely while a large owner's earlier page drains.
                     if job['allowance_held_at'] > owner['cutoff']:
-                        return cursor, False
-                    Scheduler.release_allowance_in_transaction(tx, job, now)
+                        return cursor, False, None
+                    wake = self._release(tx, job, now)
                     row['held_count'] = max(0, row.get('held_count', 0) - 1)
                     tx.put(OWNERS, key, row)
-                    return cursor, True
+                    return cursor, True, wake
 
                 try:
                     outcome = self.store.run(release)
                 except BatchPrivacyBlocked:
-                    self._revoke(segment, now)
+                    self.store.quarantine_fenced(segment, now)
                     outcome = None
                 if outcome:
-                    after, changed = outcome
+                    after, changed, wake = outcome
+                    self._wake(segment, wake)
                     released += changed
 
             def finish(tx):
                 row = tx.get(OWNERS, key)
                 if row.get('token') != token:
                     return
-                more = len(segments) == page_size
                 if not row.get('held_count'):
                     row['active'] = False
+                more = row['active'] and len(segments) == page_size
                 row.update(
                     after=after, draining=more, token='', lease_until=0.0, check_at=now if more else now + CHECK_SECONDS
                 )

@@ -2,6 +2,7 @@
 
 from typing import Any
 from google.cloud import firestore
+from database import batch_pipeline_allowance_hold as allowance_hold
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 from database.batch_pipeline_shadow_hook import mirror_refresh
 
@@ -22,8 +23,8 @@ def quarantine_fenced(client: Any, namespace: str, segment_id: str, now: float) 
     @firestore.transactional
     def revoke(transaction):
         job = reference.get(transaction=transaction).to_dict() or {}
-        if job.get('state') not in {'leased', 'retry', 'allowance_held'} | PROVIDER_STATES:
-            return False
+        if job.get('state') not in {'leased', 'retry', allowance_hold.STATE} | PROVIDER_STATES:
+            return None
         try:
             assert_batch_write_allowed(
                 client,
@@ -34,16 +35,24 @@ def quarantine_fenced(client: Any, namespace: str, segment_id: str, now: float) 
             )
         except BatchPrivacyBlocked:
             update = {'state': 'privacy_blocked', 'token': '', 'lease_until': 0.0, 'privacy_blocked_at': now}
+            allowance_key = None
+            if job['state'] == allowance_hold.STATE:
+                allowance_key = job['owner_key']
+                owner_ref = client.collection(f'{namespace}_{allowance_hold.OWNERS}').document(allowance_key)
+                owner = owner_ref.get(transaction=transaction).to_dict()
+                if owner:
+                    allowance_hold.decrement(owner)
+                    transaction.set(owner_ref, owner)
             if job['state'] in PROVIDER_STATES:
                 update['merge_pending'] = False
             transaction.update(reference, update)
-            return True
-        return False
+            return [('jobs', segment_id)] + ([(allowance_hold.OWNERS, allowance_key)] if allowance_key else [])
+        return None
 
-    revoked = revoke(client.transaction())
-    if revoked:
-        mirror_refresh(namespace, [('jobs', segment_id)])  # A2 shadow: no-op unless shadow mode
-    return revoked
+    touched = revoke(client.transaction())
+    if touched:
+        mirror_refresh(namespace, touched)  # A2 shadow: no-op unless shadow mode
+    return bool(touched)
 
 
 # Drainer cause 2 (privacy-lane ruling faf00e, 2026-11-07): the ONLY fields a

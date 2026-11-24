@@ -53,7 +53,10 @@ def entries():
             domains={'self': stores, 'owner_key': [None, 'synthetic-owner-hash'], 'after': [None, [1.0, 'previous']]},
             neutrals={'limit': (100, 'page bound only')},
         ),
-        DriverEntry('database.batch_pipeline_store.allowance_held_count', domains={'namespace': namespaces}),
+        DriverEntry(
+            'database.batch_pipeline_store.allowance_held_count',
+            domains={'namespace': namespaces, 'provider_only': [False, True]},
+        ),
         DriverEntry('database.batch_pipeline_allowance_migration.counts', domains={'store': stores}),
         DriverEntry(
             'database.batch_pipeline_allowance_migration.apply_page',

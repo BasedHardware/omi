@@ -1,19 +1,27 @@
 """Allowance parking/release on the shared sim, Firestore and Postgres matrix."""
 
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock
 from threading import Barrier, Lock
 import time
 
 import pytest
-from google.api_core.exceptions import Aborted
+from google.api_core.exceptions import Aborted, NotFound
 
 from testing.store_fixtures import store_backend  # noqa: F401
 from database import batch_pipeline_allowance_migration as migration
 from database import batch_pipeline_store as store_module
 from database.batch_pipeline_allowance_migration import KEY, apply_page, counts
 from database.batch_pipeline_intake import admit
+from database.outbox import Claim, OutboxKind
+from database.outbox_provider_stt import TABLE, FirestoreProviderSttOutbox
+from tests.unit.test_batch_provider_stt import Artifacts, JA, Vendor, stage
+from utils.batch_pipeline.provider_stt_admission import enqueue_in_transaction, resolve_route
+from utils.conversations.transcribing_hold import _admission
+from config.batch_pipeline import scheduler_control_key
 from config.policy import BatchUnitPolicy
 from utils.batch_pipeline.allowance_hold import AllowanceHolds
+from utils.batch_pipeline.input_retention import LIFECYCLE_DAYS, STAGING_BUCKET, staged_enqueue
 from database.batch_pipeline_allowance_hold import IntakeRefusal, OWNERS, STATE, park
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, WorkResult, Priority
 from utils.batch_pipeline.merge import OrderedMerge
@@ -535,3 +543,324 @@ def test_migration_rpc_envelope_keeps_fences_and_batches_only_job_owner(h, monke
     assert calls['batch_get_documents'].call_count == row_reads + 2
     assert calls['commit'].call_count == 2
     assert calls['run_query'].call_count == 1
+
+
+def admit_provider(h, segment='provider-unit', now=100, route=JA, *, audio_uri=None):
+    uid = h.uid('owner')
+    item = WorkItem(
+        segment, uid, now - 10, audio_uri or f'gs://synthetic/{segment}', 5, Priority.FRESH, privacy_generation=0
+    )
+
+    def enqueue_provider(tx, item, now, *, policy):
+        return enqueue_in_transaction(tx, item, now, route=route, policy=policy)
+
+    binding = ProjectionBinding(uid, f'bp_{segment}', f'content-{segment}', (segment,), language='ja')
+    assert (
+        admit(
+            h.store,
+            [item],
+            binding,
+            now,
+            namespace=h.namespace,
+            policy=BatchUnitPolicy(batch_enabled=True),
+            enqueue=enqueue_provider,
+        )['outcome']
+        == 'batch'
+    )
+
+    def claim_legacy_row(tx):
+        job = tx.get('jobs', segment)
+        token = FirestoreProviderSttOutbox.reopen_in_transaction(tx, job, now)
+        row = tx.get(TABLE, segment)
+        # Represents today's deferred stock on its regular recheck after the claim.
+        row.update(deferred_reason='not_due', lease_token='old-lease', lease_until=now + 1800, attempts=4)
+        tx.put(TABLE, segment, row)
+        return Claim(OutboxKind.PROVIDER_STT, segment, 'old-lease', token, 4, now + 1800, job['owner_id'], {}, None)
+
+    return h.store.run(claim_legacy_row)
+
+
+@pytest.mark.parametrize('second_check', [False, True])
+@pytest.mark.parametrize('release_mode', ['grant', 'rollback', 'revocation'])
+def test_provider_b08_replay(h, monkeypatch, second_check, release_mode):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED', 'true')
+    claim = admit_provider(h)
+    segment = claim.row_id
+    owner = owner_key(claim.owner_id)
+    artifacts, vendor = Artifacts(), Vendor()
+    denial = (False, 'allowance_exhausted')
+    allowed = Mock(side_effect=[True, denial] if second_check else [denial])
+    assert (
+        stage(h.store, artifacts, vendor, allowed=allowed, now=125).run(segment, claim=claim).reason == 'allowance_held'
+    )
+    held = get(h, segment)
+    assert (held['state'], held['merge_pending']) == (STATE, False)
+    assert held['compute_decision'] == {'outcome': 'held', 'reason': 'allowance_exhausted', 'at': 125}
+    assert held['audio_uri'] == f'gs://synthetic/{segment}' and held['enqueued_at'] == 100
+    assert _admission([held], 125, 300) == 'allowance_held'
+    assert h.store.run(lambda tx: tx.get(TABLE, segment))['closed_reason'] == 'allowance_held'
+    assert h.store.allowance_owners(125, 20) == [owner]
+    assert h.store.allowance_page(owner, None, 100) == [segment]
+    assert artifacts.fetches == int(second_check) and vendor.calls == 0
+    assert h.store.run(lambda tx: tx.get(OWNERS, owner))['held_count'] == 1
+
+    def gpu_state(tx):
+        return tx.get('control', scheduler_control_key(owner)), tx.get('queues', f'{int(Priority.FRESH)}_{owner}')
+
+    def wake(row, token):
+        # A wake must observe the released job and its outbox after commit.
+        assert get(h, row)['state'] == 'provider_pending'
+        assert h.store.run(lambda tx: tx.get(TABLE, row))['task_token'] == token
+        wakes.append((row, token))
+
+    gpu_before = h.store.run(gpu_state)
+    wakes = []
+    controller = AllowanceHolds(h.store, lambda *_: ('granted', True), provider_wake=wake)
+    if release_mode == 'rollback':
+        monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')
+    if release_mode == 'revocation':
+        h.customer.block_privacy(claim.owner_id)
+        assert controller.tick(150) == 0
+        assert get(h, segment)['state'] == 'privacy_blocked'
+        assert h.store.run(lambda tx: tx.get(TABLE, segment))['state'] == 'closed'
+        assert h.store.run(lambda tx: tx.get(OWNERS, owner))['held_count'] == 0
+        assert wakes == []
+        return
+
+    assert controller.tick(150, page_size=1) == 1
+    assert controller.tick(151) == 0
+    assert h.store.run(gpu_state) == gpu_before
+    hold_owner = h.store.run(lambda tx: tx.get(OWNERS, owner))
+    assert hold_owner['held_count'] == 0 and not hold_owner.get('draining')
+    assert get(h, segment)['compute_decision'] == {'outcome': 'unattempted'}
+    assert get(h, segment)['merge_pending'] is True
+    reopened = h.store.run(lambda tx: tx.get(TABLE, segment))
+    token = reopened['task_token']
+    assert wakes == [(segment, token)] and token != claim.wake_token
+    assert reopened['state'] == 'open' and reopened['due_at'] == reopened['woken_at'] == 150
+    assert reopened['lease_token'] is None and reopened['lease_until'] == 0
+
+    worker = stage(h.store, artifacts, vendor, now=151)
+    assert worker.run(segment, claim=claim).reason == 'superseded'
+    assert vendor.calls == 0
+
+    current = claim_provider_release(h, claim)
+    assert worker.run(segment, claim=current).reason == 'processed'
+    assert worker.run(segment, claim=current).reason == 'superseded'
+    assert vendor.calls == 1
+    assert len(get(h, segment)['provider_attempts']) == 1
+
+
+def claim_provider_release(h, claim):
+    def claim_release(tx):
+        row = tx.get(TABLE, claim.row_id)
+        row.update(lease_token='release-lease', lease_until=row['due_at'] + 1800)
+        tx.put(TABLE, claim.row_id, row)
+        return Claim(
+            OutboxKind.PROVIDER_STT,
+            claim.row_id,
+            row['lease_token'],
+            row['task_token'],
+            1,
+            row['lease_until'],
+            claim.owner_id,
+            {'segment_id': claim.row_id},
+            None,
+        )
+
+    return h.store.run(claim_release)
+
+
+def test_provider_parked_older_unit_rejoins_merge_after_later_byok(h, monkeypatch):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED', 'true')
+    old = admit_provider(h, 'older')
+    later = admit_provider(h, 'byok', now=110, route=resolve_route('ja', byok=True))
+    artifacts, vendor = Artifacts(), Vendor()
+    denied = Mock(return_value=(False, 'allowance_exhausted'))
+    worker = stage(h.store, artifacts, vendor, allowed=denied, now=130)
+    assert worker.run(old.row_id, claim=old).reason == 'allowance_held'
+    assert worker.run(later.row_id, claim=later).reason == 'processed'
+    assert denied.call_count == 1 and vendor.calls == 1
+
+    merge = OrderedMerge(h.store)
+    first = merge.commit_next(old.owner_id, 131)
+    assert first['segment_id'] == later.row_id
+    controller = AllowanceHolds(h.store, lambda *_: ('granted', True), provider_wake=Mock())
+    assert controller.tick(150) == 1
+    assert (
+        stage(h.store, artifacts, vendor, now=151).run(old.row_id, claim=claim_provider_release(h, old)).reason
+        == 'processed'
+    )
+    second = merge.commit_next(old.owner_id, 152)
+    assert second['segment_id'] == old.row_id
+    assert second['log_sequence'] == first['log_sequence'] + 1
+
+
+@pytest.mark.parametrize(
+    'changes,denial',
+    [
+        ({'provider_intent': {'settled_at': 120}}, 'allowance_exhausted'),
+        ({'provider_attempts': [{'attempt': 1}]}, 'allowance_exhausted'),
+        ({'result': {'result_uri': 'synthetic'}}, 'allowance_exhausted'),
+        ({}, 'budget_exhausted'),
+        ({}, 'allowance_unavailable'),
+    ],
+)
+def test_provider_funding_defers_without_parking_ineligible_rows(h, monkeypatch, changes, denial):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED', 'true')
+    claim = admit_provider(h)
+    segment = claim.row_id
+    h.store.run(lambda tx: tx.put('jobs', segment, {**tx.get('jobs', segment), **changes}))
+    artifacts, vendor = Artifacts(), Vendor()
+    worker = stage(h.store, artifacts, vendor, allowed=lambda *_: (False, denial), now=125)
+    assert worker.run(segment, claim=claim).outcome == 'deferred'
+    assert get(h, segment)['state'] == 'provider_pending'
+    assert h.store.run(lambda tx: tx.get(TABLE, segment))['state'] == 'open'
+    assert h.store.allowance_owners(125, 20) == []
+    assert artifacts.fetches == vendor.calls == 0
+
+
+def test_provider_allowance_release_can_recover_before_commit_and_after_wake_loss(h, monkeypatch):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED', 'true')
+    claim = admit_provider(h)
+    segment = claim.row_id
+    worker = stage(h.store, Artifacts(), Vendor(), allowed=lambda *_: (False, 'allowance_exhausted'), now=125)
+    assert worker.run(segment, claim=claim).reason == 'allowance_held'
+    wake = Mock(side_effect=RuntimeError('injected lost wake'))
+    controller = AllowanceHolds(h.store, lambda *_: ('granted', True), provider_wake=wake)
+    reopen = FirestoreProviderSttOutbox.reopen_in_transaction
+
+    def fail_before_commit(tx, job, now):
+        reopen(tx, job, now)
+        raise RuntimeError('injected failure before commit')
+
+    with monkeypatch.context() as patch:
+        patch.setattr(FirestoreProviderSttOutbox, 'reopen_in_transaction', staticmethod(fail_before_commit))
+        assert controller.tick(150) == 0
+    assert get(h, segment)['state'] == STATE
+    assert h.store.run(lambda tx: tx.get(TABLE, segment))['task_token'] == claim.wake_token
+    wake.assert_not_called()
+
+    assert controller.tick(271) == 1
+    row = h.store.run(lambda tx: tx.get(TABLE, segment))
+    assert row['state'] == 'open' and row['task_token'] != claim.wake_token
+    wake.assert_called_once_with(segment, row['task_token'])
+    assert controller.tick(272) == 0
+    if h.name == 'emulator':
+        rewakes = []
+        outbox = FirestoreProviderSttOutbox(
+            h.store.client,
+            privacy_blocked=lambda *_: False,
+            collection=f'{h.namespace}_{TABLE}',
+            create_wake=lambda *args: rewakes.append(args),
+        )
+        assert outbox.sweep(now=900).rewoken == 1
+        assert len(rewakes) == 1 and rewakes[0][0] == segment
+
+
+def test_provider_writer_defaults_off(h, monkeypatch):
+    monkeypatch.delenv('BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED', raising=False)
+    claim = admit_provider(h)
+    stage_runner = stage(h.store, Artifacts(), Vendor(), allowed=lambda *_: (False, 'allowance_exhausted'), now=125)
+    assert stage_runner.run(claim.row_id, claim=claim).outcome == 'deferred'
+    assert get(h, claim.row_id)['state'] == 'provider_pending'
+    assert h.store.allowance_owners(125, 20) == []
+
+
+def test_provider_allowance_does_not_extend_staged_audio_lifetime(h, monkeypatch):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED', 'true')
+    uri = f'gs://{STAGING_BUCKET}/synthetic/expired.wav'
+    claim = admit_provider(h, audio_uri=uri)
+    segment = claim.row_id
+    worker = stage(h.store, Artifacts(), Vendor(), allowed=lambda *_: (False, 'allowance_exhausted'), now=125)
+    assert worker.run(segment, claim=claim).reason == 'allowance_held'
+    assert staged_enqueue(get(h, segment)) == 100
+
+    after_expiry = 100 + LIFECYCLE_DAYS * 86400 + 1
+    assert AllowanceHolds(h.store, lambda *_: ('new-period', True), provider_wake=Mock()).tick(after_expiry) == 1
+    released = get(h, segment)
+    assert released['audio_uri'] == uri and staged_enqueue(released) == 100
+    artifacts = Artifacts()
+    artifacts.fetch_audio = Mock(side_effect=NotFound('staging object expired'))
+    vendor = Vendor()
+    with pytest.raises(NotFound):
+        stage(h.store, artifacts, vendor, now=after_expiry).run(segment, claim=claim_provider_release(h, claim))
+    assert vendor.calls == 0 and 'provider_intent' not in get(h, segment)
+
+
+def test_purge_debits_parked_provider_once(h, monkeypatch):
+    if h.name != 'emulator':
+        pytest.skip('Production purge runs against Firestore')
+    from database.batch_pipeline_purge import _delete_job
+    from database.batch_pipeline_store import allowance_held_count
+
+    monkeypatch.setenv('BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED', 'true')
+    claim = admit_provider(h)
+    segment, owner = claim.row_id, owner_key(claim.owner_id)
+    worker = stage(h.store, Artifacts(), Vendor(), allowed=lambda *_: (False, 'allowance_exhausted'), now=125)
+    assert worker.run(segment, claim=claim).reason == 'allowance_held'
+    assert allowance_held_count(h.store.client, h.namespace, provider_only=True) == 1
+    snapshot = h.store.client.collection(f'{h.namespace}_jobs').document(segment).get()
+    for _ in range(2):
+        _delete_job(h.store.client, h.namespace, snapshot, retain_ordering=True)
+        assert h.store.run(lambda tx: tx.get(OWNERS, owner))['held_count'] == 0
+    assert allowance_held_count(h.store.client, h.namespace, provider_only=True) == 0
+    assert not get(h, segment)
+    assert h.store.run(lambda tx: tx.get(TABLE, segment))['state'] == 'closed'
+    wake = Mock()
+    assert AllowanceHolds(h.store, lambda *_: ('granted', True), provider_wake=wake).tick(150) == 0
+    wake.assert_not_called()
+
+
+def test_concurrent_provider_rollback_ticks_issue_one_wake(h, monkeypatch):
+    if h.name == 'sim':
+        pytest.skip('Concurrent release requires a transactional backend')
+    monkeypatch.setenv('BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED', 'true')
+    claim = admit_provider(h)
+    worker = stage(h.store, Artifacts(), Vendor(), allowed=lambda *_: (False, 'allowance_exhausted'), now=125)
+    assert worker.run(claim.row_id, claim=claim).reason == 'allowance_held'
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')
+    both_selected = Barrier(2)
+    page = h.store.allowance_page
+
+    def stale_page(*args):
+        candidates = page(*args)
+        both_selected.wait(timeout=10)
+        return candidates
+
+    monkeypatch.setattr(h.store, 'allowance_page', stale_page)
+    wake = Mock()
+    controller = AllowanceHolds(h.store, Mock(), provider_wake=wake)
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        assert sorted(workers.map(controller.tick, (150, 150))) == [0, 1]
+    outbox = h.store.run(lambda tx: tx.get(TABLE, claim.row_id))
+    wake.assert_called_once_with(claim.row_id, outbox['task_token'])
+    assert h.store.run(lambda tx: tx.get(OWNERS, owner_key(claim.owner_id)))['held_count'] == 0
+
+
+def test_provider_can_park_after_legacy_exact_page_drain(h, monkeypatch):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED', 'true')
+    claim = admit_provider(h)
+    owner = owner_key(claim.owner_id)
+    h.store.run(
+        lambda tx: tx.put(
+            OWNERS,
+            owner,
+            {
+                'owner_key': owner,
+                'owner_id': claim.owner_id,
+                'active': False,
+                'held_count': 0,
+                'draining': True,
+                'after': [99, 'already-released'],
+                'generation': 'old',
+                'cutoff': 110,
+                'revision': 1,
+                'check_at': 115,
+            },
+        )
+    )
+    worker = stage(h.store, Artifacts(), Vendor(), allowed=lambda *_: (False, 'allowance_exhausted'), now=125)
+    assert worker.run(claim.row_id, claim=claim).reason == 'allowance_held'
+    current = h.store.run(lambda tx: tx.get(OWNERS, owner))
+    assert current['held_count'] == 1 and not current['draining'] and current['after'] is None

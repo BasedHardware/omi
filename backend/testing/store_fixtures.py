@@ -49,6 +49,7 @@ _BATCH_TABLES = (
     'pull_claims',
     'merge_holds',
     'allowance_holds',
+    'provider_stt_outbox',
 )
 
 
