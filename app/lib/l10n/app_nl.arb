@@ -4622,7 +4622,6 @@
     "capturePendantDisconnectedShort": "Omi maakt vanzelf opnieuw verbinding",
     "forYou": "Voor jou",
     "stopThese": "Deze stoppen",
-    "meetingActionItemsTitle": "Actiepunten",
     "addToTasks": "Toevoegen aan Taken",
     "showInTranscript": "In transcript tonen",
     "tentativeTaskDueDate": "Vervaldatum rond {date}",
@@ -4763,5 +4762,8 @@
     "prepaidCodeFieldHint": "Voer je code in",
     "prepaidCodeRedeem": "Inwisselen",
     "prepaidCodeRedeemed": "Code ingewisseld",
-    "prepaidCodeResult": "{reason, select, invalid{Deze code is ongeldig. Controleer hem en probeer het opnieuw.} used{Deze code is al gebruikt.} expired{Deze code is verlopen.} hasPlan{Je hebt al een abonnement. Je code is niet gebruikt. Wissel hem in als je abonnement afloopt.} notPrepaid{Deze code kan hier niet worden ingewisseld. Gebruik hem wanneer je een abonnement kiest.} notEligible{Deze code kan niet op dit account worden gebruikt.} rateLimited{Te veel pogingen. Probeer het later opnieuw.} other{Er ging iets mis. Probeer het opnieuw.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Deze code is ongeldig. Controleer hem en probeer het opnieuw.} used{Deze code is al gebruikt.} expired{Deze code is verlopen.} hasPlan{Je hebt al een abonnement. Je code is niet gebruikt. Wissel hem in als je abonnement afloopt.} notPrepaid{Deze code kan hier niet worden ingewisseld. Gebruik hem wanneer je een abonnement kiest.} notEligible{Deze code kan niet op dit account worden gebruikt.} rateLimited{Te veel pogingen. Probeer het later opnieuw.} other{Er ging iets mis. Probeer het opnieuw.}}",
+    "playStripeBilledOnWeb": "Gefactureerd via omi.me. Annuleer hier op elk moment.",
+    "playStripeBilledOnWebShort": "Gefactureerd via omi.me.",
+    "playStripeUpdateCardToGetPlanBack": "Werk je kaart bij op omi.me om {plan} terug te krijgen."
 }

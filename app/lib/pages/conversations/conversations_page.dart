@@ -954,12 +954,12 @@ class _ConversationsPageState extends State<ConversationsPage>
               (_) => unawaited(convoProvider.forceRefreshConversations().then<void>((_) {}, onError: (Object _) {})));
         }
         final terminalFinish = manualFinish == null ? null : v3!.finishTerminalMatch(convoProvider.conversations);
-        final finishHandedOff = v3Home &&
+        final finishHandedOff = convoProvider.showsPendingFinishOnHome &&
             manualFinish != null &&
             v3!.finishHasSuccessor(
                 convoProvider.groupedConversations.values.expand((rows) => rows).where(shownOnV3Home));
         final finishSettled = finishHandedOff || terminalFinish != null;
-        final showManualFinish = v3Home && manualFinish != null && !finishSettled;
+        final showManualFinish = convoProvider.showsPendingFinishOnHome && manualFinish != null && !finishSettled;
         if (manualFinish != null && finishSettled) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) v3!.acknowledgeManualFinish(manualFinish);

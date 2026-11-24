@@ -77,6 +77,16 @@ void main() {
     expect(closed, isTrue);
   });
 
+  testWidgets('a reader who already pays outside Google Play closes the page without a purchase', (tester) async {
+    Object? closed = 'unset';
+    await _open(tester,
+        checkout: (_, __, ___) async => PaywallCheckoutOutcome.alreadyPaid, onClosed: (result) => closed = result);
+    await tester.tap(find.byKey(const Key('outline_paywall_cta')));
+    await tester.pumpAndSettle();
+    expect(find.byType(OutlinePaywallPage), findsNothing);
+    expect(closed, isFalse);
+  });
+
   testWidgets('selecting monthly sends the monthly price and a cancelled checkout keeps the page', (tester) async {
     final sent = <String>[];
     Object? closed = 'unset';

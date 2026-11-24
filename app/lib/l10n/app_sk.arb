@@ -4622,7 +4622,6 @@
     "capturePendantDisconnectedShort": "Omi sa znova pripojí sám",
     "forYou": "Pre vás",
     "stopThese": "Zastaviť tieto",
-    "meetingActionItemsTitle": "Akčné položky",
     "addToTasks": "Pridať do úloh",
     "showInTranscript": "Zobraziť prepis",
     "tentativeTaskDueDate": "Termín približne {date}",
@@ -4763,5 +4762,8 @@
     "prepaidCodeFieldHint": "Zadajte svoj kód",
     "prepaidCodeRedeem": "Uplatniť",
     "prepaidCodeRedeemed": "Kód uplatnený",
-    "prepaidCodeResult": "{reason, select, invalid{Tento kód nie je platný. Skontrolujte ho a skúste to znova.} used{Tento kód už bol použitý.} expired{Platnosť tohto kódu vypršala.} hasPlan{Už máte plán. Váš kód nebol použitý. Uplatnite ho, keď váš plán skončí.} notPrepaid{Tento kód tu nemožno uplatniť. Použite ho pri výbere plánu.} notEligible{Tento kód nemožno použiť v tomto účte.} rateLimited{Príliš veľa pokusov. Skúste to neskôr.} other{Niečo sa pokazilo. Skúste to znova.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Tento kód nie je platný. Skontrolujte ho a skúste to znova.} used{Tento kód už bol použitý.} expired{Platnosť tohto kódu vypršala.} hasPlan{Už máte plán. Váš kód nebol použitý. Uplatnite ho, keď váš plán skončí.} notPrepaid{Tento kód tu nemožno uplatniť. Použite ho pri výbere plánu.} notEligible{Tento kód nemožno použiť v tomto účte.} rateLimited{Príliš veľa pokusov. Skúste to neskôr.} other{Niečo sa pokazilo. Skúste to znova.}}",
+    "playStripeBilledOnWeb": "Účtované cez omi.me. Zrušiť môžete kedykoľvek tu.",
+    "playStripeBilledOnWebShort": "Účtované cez omi.me.",
+    "playStripeUpdateCardToGetPlanBack": "Aktualizujte kartu na omi.me a získajte {plan} späť."
 }

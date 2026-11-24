@@ -15387,9 +15387,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get stopThese => 'Спри тези';
 
   @override
-  String get meetingActionItemsTitle => 'Елементи за действие';
-
-  @override
   String get addToTasks => 'Добави в Задачи';
 
   @override
@@ -15874,5 +15871,16 @@ class AppLocalizationsBg extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Таксува се чрез omi.me. Откажете оттук по всяко време.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Таксува се чрез omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Обновете картата си на omi.me, за да върнете $plan.';
   }
 }

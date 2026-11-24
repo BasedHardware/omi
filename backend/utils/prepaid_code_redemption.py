@@ -20,12 +20,15 @@ import stripe
 
 from config import prepaid_code_redeem as prepaid_config
 from database import promotion_redemptions as redemptions_db
+from database import play_subscriptions as play_subscriptions_db
 from database import users as users_db
 from models.users import PlanType, SubscriptionStatus
 from utils import play_stripe_guard
 from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
 from utils.subscription import (
+    PLAY_CHECK_UNAVAILABLE_REASON,
+    play_admission_refusal,
     get_paid_plan_definitions,
     get_plan_display_name,
     is_paid_plan,
@@ -142,8 +145,14 @@ def _has_live_plan(uid: str, now: int, own_promotion_code_id: Optional[str] = No
     """A live Play row, a live paid stored row, or any Stripe subscription that can still bill.
     With ``own_promotion_code_id`` (a resumed redemption), the prepaid subscription this same code
     created is not counted, so the reader's own half-finished plan never blocks its resume."""
-    current = users_db.get_existing_user_subscription(uid)
+    # One read for the stored plan and the Play history fields: a buyer with no Play history reads nothing more.
+    current, play_fields = users_db.get_existing_user_subscription_and_fields(uid, play_subscriptions_db.HISTORY_FIELDS)
     if play_stripe_guard.live_play_row(current):
+        return True
+    play_refusal = play_admission_refusal(uid, play_fields)
+    if play_refusal == PLAY_CHECK_UNAVAILABLE_REASON:
+        raise PrepaidCodeError(503, TRY_AGAIN)
+    if play_refusal:
         return True
     other_open, own_ids = _open_stripe_subscriptions(uid, own_promotion_code_id)
     if other_open:

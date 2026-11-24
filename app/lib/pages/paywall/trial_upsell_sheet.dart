@@ -74,6 +74,7 @@ class TrialUpsellContentState extends State<TrialUpsellContent> {
             );
       if (!mounted) return;
       if (outcome == PaywallCheckoutOutcome.purchased) Navigator.of(context).pop(true);
+      if (outcome == PaywallCheckoutOutcome.alreadyPaid) Navigator.of(context).pop(false);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

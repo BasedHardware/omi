@@ -146,9 +146,11 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                 trialDays: trialDays,
               );
       final outcome = await start(context, price, offer.tierId);
-      if (mounted && !_dismissed && outcome == PaywallCheckoutOutcome.purchased) {
+      if (mounted &&
+          !_dismissed &&
+          (outcome == PaywallCheckoutOutcome.purchased || outcome == PaywallCheckoutOutcome.alreadyPaid)) {
         _dismissed = true;
-        Navigator.of(context).pop(true);
+        Navigator.of(context).pop(outcome == PaywallCheckoutOutcome.purchased);
       }
       return outcome;
     } finally {
@@ -210,6 +212,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
         // A pending Play payment has not been paid yet; the closed enum has no pending value.
         PaywallCheckoutOutcome.failed ||
         PaywallCheckoutOutcome.pending ||
+        PaywallCheckoutOutcome.alreadyPaid ||
         null =>
           PaywallMonthlyFallbackAcceptedOutcome.failed,
       },

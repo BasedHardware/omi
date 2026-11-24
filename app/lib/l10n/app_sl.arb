@@ -12179,7 +12179,6 @@
     "capturePendantDisconnectedShort": "Omi se bo sam znova povezal",
     "forYou": "Za vas",
     "stopThese": "Ustavi te",
-    "meetingActionItemsTitle": "Dejanja",
     "addToTasks": "Dodaj med opravila",
     "showInTranscript": "Pokaži prepis",
     "tentativeTaskDueDate": "Rok približno {date}",
@@ -12320,5 +12319,8 @@
     "prepaidCodeFieldHint": "Vnesite svojo kodo",
     "prepaidCodeRedeem": "Unovči",
     "prepaidCodeRedeemed": "Koda unovčena",
-    "prepaidCodeResult": "{reason, select, invalid{Ta koda ni veljavna. Preverite jo in poskusite znova.} used{Ta koda je že bila uporabljena.} expired{Tej kodi je potekla veljavnost.} hasPlan{Že imate paket. Vaša koda ni bila uporabljena. Unovčite jo, ko se vaš paket konča.} notPrepaid{Te kode ni mogoče unovčiti tukaj. Uporabite jo, ko izberete paket.} notEligible{Te kode ni mogoče uporabiti v tem računu.} rateLimited{Preveč poskusov. Poskusite pozneje.} other{Prišlo je do napake. Poskusite znova.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Ta koda ni veljavna. Preverite jo in poskusite znova.} used{Ta koda je že bila uporabljena.} expired{Tej kodi je potekla veljavnost.} hasPlan{Že imate paket. Vaša koda ni bila uporabljena. Unovčite jo, ko se vaš paket konča.} notPrepaid{Te kode ni mogoče unovčiti tukaj. Uporabite jo, ko izberete paket.} notEligible{Te kode ni mogoče uporabiti v tem računu.} rateLimited{Preveč poskusov. Poskusite pozneje.} other{Prišlo je do napake. Poskusite znova.}}",
+    "playStripeBilledOnWeb": "Obračunano prek omi.me. Prekličite tukaj kadar koli.",
+    "playStripeBilledOnWebShort": "Obračunano prek omi.me.",
+    "playStripeUpdateCardToGetPlanBack": "Posodobite kartico na omi.me, da dobite {plan} nazaj."
 }

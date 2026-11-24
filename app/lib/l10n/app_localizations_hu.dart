@@ -15395,9 +15395,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get stopThese => 'Ezek leállítása';
 
   @override
-  String get meetingActionItemsTitle => 'Teendők';
-
-  @override
   String get addToTasks => 'Hozzáadás a feladatokhoz';
 
   @override
@@ -15881,5 +15878,16 @@ class AppLocalizationsHu extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Számlázás az omi.me-n keresztül. Itt bármikor lemondhatod.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Számlázás az omi.me-n keresztül.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Frissítsd a kártyádat az omi.me oldalon, hogy visszakapd a(z) $plan csomagot.';
   }
 }

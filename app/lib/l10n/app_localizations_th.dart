@@ -15262,9 +15262,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get stopThese => 'หยุดรายการแบบนี้';
 
   @override
-  String get meetingActionItemsTitle => 'รายการที่ต้องทำ';
-
-  @override
   String get addToTasks => 'เพิ่มไปยังงาน';
 
   @override
@@ -15748,5 +15745,16 @@ class AppLocalizationsTh extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'เรียกเก็บเงินผ่าน omi.me ยกเลิกได้ที่นี่ทุกเมื่อ';
+
+  @override
+  String get playStripeBilledOnWebShort => 'เรียกเก็บเงินผ่าน omi.me';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'อัปเดตบัตรของคุณที่ omi.me เพื่อรับ $plan คืน';
   }
 }

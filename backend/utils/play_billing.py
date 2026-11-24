@@ -26,6 +26,13 @@ from database.account_deletion_marker import account_deletion_blocks_user_work
 from models.users import PlanType, Subscription, SubscriptionStatus
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.play_publisher import GooglePublisher, PublisherClient, PurchaseNotFound, default_publisher
+from utils.notification_dispatch import (
+    NotificationDispatchStatus,
+    NotificationIntent,
+    NotificationKind,
+    dispatch_notification,
+)
+from utils.stripe import TERMINAL_SUBSCRIPTION_STATUSES
 from utils.subscription import get_plan_limits, is_paid_plan
 
 logger = logging.getLogger(__name__)
@@ -238,16 +245,16 @@ def _live_stripe_subscription(uid: str) -> bool:
     if not customer_id:
         return False
     try:
-        subs = stripe.Subscription.list(customer=customer_id, limit=10)
+        # Every page and every state Stripe can still bill or recover (unpaid, incomplete, paused too).
+        for sub in stripe.Subscription.list(customer=customer_id, status='all', limit=100).auto_paging_iter():
+            data = sub.to_dict()
+            if (data.get('metadata') or {}).get('app_id'):
+                continue
+            if data.get('status') not in TERMINAL_SUBSCRIPTION_STATUSES:
+                return True
     except Exception as error:
         logger.warning('play_billing stripe check unavailable: %s', type(error).__name__)
         raise PlayBillingError(503, 'billing_check_unavailable', 'Could not verify billing. Try again.') from None
-    for sub in subs.data:
-        data = sub.to_dict()
-        if (data.get('metadata') or {}).get('app_id'):
-            continue
-        if data.get('status') in ('active', 'trialing', 'past_due'):
-            return True
     return False
 
 
@@ -300,6 +307,79 @@ def _clear_pending(uid: str, token_hash: str) -> None:
         play_db.set_user_fields(uid, {play_db.PENDING_FIELD: None})
 
 
+CONFLICT_FIELD = 'stripe_conflict_at'
+CONFLICT_NOTIFIED_FIELD = 'stripe_conflict_notified_at'
+CONFLICT_NOTICE_CLAIM_FIELD = 'stripe_conflict_notice_claimed_at'
+NOTICE_CLAIM_SECONDS = 600
+DOUBLE_CHARGE_LOG = 'play_billing_double_charge uid=%s purchase=%s state=%s'
+
+
+def _paid_stripe_subscription_ids(uid: str) -> list[str]:
+    """Recurring Stripe subscriptions (``sub_``) Stripe itself reports active or trialing for ``uid``.
+
+    Stricter than ``_live_stripe_subscription``: a stored row, a one-time ``pi_`` grant, an ended
+    subscription or an ``incomplete`` one is never reported as a double charge.
+    """
+    customer_id = users_db.get_stripe_customer_id(uid)
+    if not customer_id:
+        return []
+    ids = []
+    try:
+        for sub in stripe.Subscription.list(customer=customer_id, status='all', limit=100).auto_paging_iter():
+            data = sub.to_dict()
+            metadata = data.get('metadata') or {}
+            if metadata.get('app_id') or metadata.get('uid') not in (None, uid):
+                continue
+            if str(data.get('id') or '').startswith('sub_') and data.get('status') in ('active', 'trialing'):
+                ids.append(data['id'])
+    except Exception as error:
+        logger.warning('play_billing stripe conflict check unavailable: %s', type(error).__name__)
+    return ids
+
+
+def _record_stripe_conflict(uid: str, token_hash: str, state: PlayState) -> None:
+    """Play is live next to a paid Stripe subscription. Nothing is cancelled: a person fixes it.
+
+    Logs ``play_billing_double_charge`` every time (an alert watches it), stamps the first time it was seen,
+    and tells the user once; a failed notice is sent again on the next observation.
+    Runbook: backend/docs/runbooks/play-billing-double-charge.md.
+    """
+    stripe_ids = _paid_stripe_subscription_ids(uid)
+    if not stripe_ids:
+        logger.warning('play_billing Stripe overlap not confirmed as a paid subscription uid=%s', uid)
+        return
+    logger.error(DOUBLE_CHARGE_LOG, uid, token_hash[:12], state.state)
+    now = int(time.time())
+    play_db.mark_once(token_hash, CONFLICT_FIELD, now)
+    if (play_db.get_purchase(token_hash) or {}).get(CONFLICT_NOTIFIED_FIELD):
+        return
+    # One sender at a time: claim the notice atomically; an abandoned claim expires and is retried.
+    if not play_db.compare_and_set(
+        token_hash,
+        CONFLICT_NOTICE_CLAIM_FIELD,
+        now,
+        lambda claimed: not claimed or claimed < now - NOTICE_CLAIM_SECONDS,
+    ):
+        return
+    try:
+        outcome = dispatch_notification(
+            NotificationIntent(
+                user_id=uid,
+                title='You already have Omi Pro',
+                body='You are billed for Omi Pro by card and by Google Play. We will cancel one and refund it.',
+                source='play_billing_double_billing',
+                kind=NotificationKind.BILLING_CONFLICT,
+            )
+        )
+    except Exception:
+        outcome = None
+    if outcome is not None and outcome.status == NotificationDispatchStatus.DISPATCHED and (outcome.delivered or 0) > 0:
+        play_db.mark_once(token_hash, CONFLICT_NOTIFIED_FIELD, now)
+        return
+    logger.warning('play_billing double charge notice not delivered for uid=%s', uid)
+    play_db.compare_and_set(token_hash, CONFLICT_NOTICE_CLAIM_FIELD, None, lambda claimed: claimed == now)
+
+
 def _settle(uid: str, token_hash: str, state: PlayState, token: str, publisher: PublisherClient, *, fresh: bool) -> str:
     """Project Google's state for a token already bound to ``uid``: grant, hold pending, or remove.
 
@@ -314,9 +394,7 @@ def _settle(uid: str, token_hash: str, state: PlayState, token: str, publisher: 
         if _live_stripe_subscription(uid):
             if fresh or not state.acknowledged:
                 raise PlayBillingError(*_STRIPE_ACTIVE)
-            logger.error(
-                'play_billing double billing: live Stripe row and Play token for uid=%s token=%s', uid, token_hash[:12]
-            )
+            _record_stripe_conflict(uid, token_hash, state)
             return 'stripe_conflict'
         if pointer and pointer != token_hash and _holds_live_paid_row(uid):
             return 'not_current'  # a newer Play token owns the live row
@@ -374,6 +452,8 @@ def verify_and_bind(uid: str, purchase_token: str, product_id: str, publisher: O
     if fresh and state.has_access(now) and _live_stripe_subscription(uid):
         raise PlayBillingError(*_STRIPE_ACTIVE)
     play_db.remember_account(expected_account, uid)
+    # History marker first: checkout must never see a bound purchase without it (a marker alone is harmless).
+    play_db.mark_play_history(uid)
     owner = play_db.bind_purchase(token_hash, uid, _record(state, purchase_token, now, revoked_through=through))
     if owner != uid:
         raise PlayBillingError(*_OWNED_ELSEWHERE)
@@ -462,10 +542,12 @@ def apply_token(
             play_db.record_unbound(token_hash, record)
             logger.warning('play_billing notification for a token with no known owner; recorded, not granted')
             return 'unbound'
+        play_db.mark_play_history(uid)  # before the bind: see verify_and_bind
         if play_db.bind_purchase(token_hash, uid, record) != uid:
             return 'unbound'
         fresh = True
     else:
+        play_db.mark_play_history(uid)  # repairs a marker an earlier attempt never wrote
         play_db.update_purchase(token_hash, record)
     if revoked or not paid_after_refund(state, through):
         _clear_pending(uid, token_hash)

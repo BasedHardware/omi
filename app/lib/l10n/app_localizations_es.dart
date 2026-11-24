@@ -15380,9 +15380,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get stopThese => 'Dejar de recibir esto';
 
   @override
-  String get meetingActionItemsTitle => 'Acciones pendientes';
-
-  @override
   String get addToTasks => 'Añadir a Tareas';
 
   @override
@@ -15869,5 +15866,16 @@ class AppLocalizationsEs extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Se factura a través de omi.me. Cancélalo aquí cuando quieras.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Se factura a través de omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Actualiza tu tarjeta en omi.me para recuperar $plan.';
   }
 }

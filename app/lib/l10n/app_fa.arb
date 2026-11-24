@@ -12179,7 +12179,6 @@
     "capturePendantDisconnectedShort": "Omi خودش دوباره وصل می‌شود",
     "forYou": "برای شما",
     "stopThese": "توقف این موارد",
-    "meetingActionItemsTitle": "موارد اقدام",
     "addToTasks": "افزودن به وظایف",
     "showInTranscript": "نمایش رونوشت",
     "tentativeTaskDueDate": "سررسید حدود {date}",
@@ -12320,5 +12319,8 @@
     "prepaidCodeFieldHint": "کد خود را وارد کنید",
     "prepaidCodeRedeem": "استفاده",
     "prepaidCodeRedeemed": "کد اعمال شد",
-    "prepaidCodeResult": "{reason, select, invalid{این کد معتبر نیست. آن را بررسی کنید و دوباره امتحان کنید.} used{این کد قبلاً استفاده شده است.} expired{این کد منقضی شده است.} hasPlan{شما از قبل یک طرح دارید. کد شما استفاده نشد. پس از پایان طرحتان از آن استفاده کنید.} notPrepaid{این کد اینجا قابل استفاده نیست. هنگام انتخاب طرح از آن استفاده کنید.} notEligible{این کد در این حساب قابل استفاده نیست.} rateLimited{تلاش‌های زیادی انجام شد. بعداً دوباره امتحان کنید.} other{مشکلی پیش آمد. لطفاً دوباره امتحان کنید.}}"
+    "prepaidCodeResult": "{reason, select, invalid{این کد معتبر نیست. آن را بررسی کنید و دوباره امتحان کنید.} used{این کد قبلاً استفاده شده است.} expired{این کد منقضی شده است.} hasPlan{شما از قبل یک طرح دارید. کد شما استفاده نشد. پس از پایان طرحتان از آن استفاده کنید.} notPrepaid{این کد اینجا قابل استفاده نیست. هنگام انتخاب طرح از آن استفاده کنید.} notEligible{این کد در این حساب قابل استفاده نیست.} rateLimited{تلاش‌های زیادی انجام شد. بعداً دوباره امتحان کنید.} other{مشکلی پیش آمد. لطفاً دوباره امتحان کنید.}}",
+    "playStripeBilledOnWeb": "صورتحساب از طریق omi.me. هر زمان از اینجا لغو کنید.",
+    "playStripeBilledOnWebShort": "صورتحساب از طریق omi.me.",
+    "playStripeUpdateCardToGetPlanBack": "برای بازگرداندن {plan}، کارت خود را در omi.me به‌روزرسانی کنید."
 }

@@ -15365,9 +15365,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get stopThese => 'Zaustavi ovo';
 
   @override
-  String get meetingActionItemsTitle => 'Stavke za uraditi';
-
-  @override
   String get addToTasks => 'Dodaj u zadatke';
 
   @override
@@ -15851,5 +15848,16 @@ class AppLocalizationsBs extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Naplaćuje se putem omi.me. Otkažite ovdje bilo kada.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Naplaćuje se putem omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Ažurirajte karticu na omi.me da vratite $plan.';
   }
 }
