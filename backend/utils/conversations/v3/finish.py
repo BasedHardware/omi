@@ -36,6 +36,10 @@ def _acknowledge(uid, window, outcome, recording_id):
     if outcome in {'cut', 'consumed'}:
         triggers.enqueue_pending(uid, manual_end_id=recording_id)
     conversation = deserialize_conversation(window)
-    conversation.status = ConversationStatus.processing
-    conversation.tile_state = 'transcribing' if outcome in {'requested', 'already_requested'} else 'writing'
+    if outcome in {'resolved_empty', 'already_empty'}:
+        conversation.status = ConversationStatus.completed
+        conversation.tile_state = 'done'
+    else:
+        conversation.status = ConversationStatus.processing
+        conversation.tile_state = 'transcribing' if outcome in {'requested', 'already_requested'} else 'writing'
     return CreateConversationResponse(conversation=conversation, messages=[])

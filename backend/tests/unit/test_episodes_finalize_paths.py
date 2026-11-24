@@ -26,14 +26,13 @@ os.environ.setdefault(
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 
 from config import episodes as config
-from config.record_audio import record_identity
-from database.sync_ledger import sync_content_ledger_ref
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.conversations.v3 import finish as v3_finish
-from utils.conversations.v3.live import FINISH_WINDOW_FIELD
+from utils.conversations.v3.live import FINISH_FIELDS, FINISH_WINDOW_FIELD
+from tests.unit.test_batch_pipeline_projection import native_finish_completion
 from utils.conversations import finalizer
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.episodes import finalize as episode_finalize
@@ -485,7 +484,9 @@ def v3_finish_route(conv, monkeypatch):
     read_document = StrictFirestoreDocument.get
 
     def read_finish_fields(ref, *args, field_paths=None, **kwargs):
-        if field_paths == store.LIVE_FIELDS:
+        if ref.path == paths['window'] and kwargs.get('transaction') is not None:
+            assert field_paths == FINISH_FIELDS
+        if field_paths in (store.LIVE_FIELDS, FINISH_FIELDS):
             snapshot = read_document(ref, *args, **kwargs)
             return type(snapshot)(
                 {key: value for key, value in (snapshot.to_dict() or {}).items() if key in field_paths}
@@ -590,37 +591,83 @@ def test_finish_without_pointer_keeps_404_without_a_live_window(v3_finish_route)
 
 
 @pytest.mark.parametrize('unit_count', [1, 2])
-def test_finish_waits_for_whole_batch_and_repeat_after_projection_cuts(v3_finish_route, unit_count):
+def test_first_finish_after_whole_batch_uses_real_completion_ledger(v3_finish_route, monkeypatch, unit_count):
     client, db, paths, enqueued = v3_finish_route
     latest = db.rows[paths['latest']]
-    latest.update(record_lane_owner='batch_live_v1', server_batch_only=True)
-    content, _ = record_identity(_UID, 'latest')
-    ledger_path = sync_content_ledger_ref(db, _UID, content).path
-    segments = [f'segment-{i}' for i in range(unit_count)]
-    db.rows[ledger_path] = {
-        'status': 'processing',
-        'dispatch_protocol': 'batch_v1',
-        'job_id': 'bp_' + content,
-        'batch_pipeline': {'segment_ids': segments},
-    }
+    latest.update(record_lane_owner='batch_live_v1', server_batch_only=True, record_projection_revision=1)
+    complete, ledger_path, _ = native_finish_completion(monkeypatch, db, _UID, 'latest', unit_count)
+    assert complete(datetime.now(timezone.utc).timestamp())['outcome'] == 'success'
+    assert 'processed_segment_ids' not in db.rows[ledger_path]
 
-    assert client.post('/v1/conversations', json={}).status_code == 200
-    assert latest['v3_manual_end_requested'] is True
-    assert latest[FINISH_WINDOW_FIELD] == 'window'
-    latest['record_projection_revision'] = 1
-    assert client.post('/v1/conversations', json={}).status_code == 200
-    assert not db.transactions[-1].updates and not enqueued
-
-    db.rows[ledger_path].update(
-        status='completed',
-        processed_segment_ids=segments,
-        result={'outcome': 'success', 'updated_memories': ['latest']},
-    )
     assert client.post('/v1/conversations', json={}).status_code == 200
     assert latest['v3_manual_end'] and latest['v3_pending']
     assert client.post('/v1/conversations', json={}).status_code == 200
     assert not db.transactions[-1].updates
     assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+
+
+def test_repeat_finish_after_whole_single_unit_projection_cuts(v3_finish_route, monkeypatch):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    latest.update(record_lane_owner='batch_live_v1', server_batch_only=True)
+    complete, _, _ = native_finish_completion(monkeypatch, db, _UID, 'latest', 1)
+    assert client.post('/v1/conversations', json={}).status_code == 200
+    assert latest['v3_manual_end_requested']
+    latest['record_projection_revision'] = 1
+    assert client.post('/v1/conversations', json={}).status_code == 200
+    assert not db.transactions[-1].updates and not enqueued
+
+    assert complete(datetime.now(timezone.utc).timestamp())['outcome'] == 'success'
+    assert client.post('/v1/conversations', json={}).status_code == 200
+    assert latest['v3_manual_end'] and latest['v3_pending']
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+
+
+@pytest.mark.parametrize(
+    'unit_count,empty_outcome,other_content',
+    [
+        (1, 'silence', False),
+        (1, 'no_recoverable_speech', True),
+        (2, 'silence', True),
+    ],
+)
+def test_silent_whole_batch_resolves_deferred_finish(
+    v3_finish_route, monkeypatch, unit_count, empty_outcome, other_content
+):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    latest.update(record_lane_owner='batch_live_v1', server_batch_only=True, has_content=False)
+    if not other_content:
+        db.rows[paths['window']]['v3_recording_ids'] = ['latest']
+    complete, ledger, _ = native_finish_completion(
+        monkeypatch, db, _UID, 'latest', unit_count, empty_outcome=empty_outcome
+    )
+    request = {'live_conversation_id': 'window'}
+    assert client.post('/v1/conversations', json=request).json()['conversation']['tile_state'] == 'transcribing'
+    assert latest['v3_manual_end_requested']
+    assert complete(datetime.now(timezone.utc).timestamp()) is not None
+    assert 'processed_segment_ids' not in db.rows[ledger]
+    assert 'record_projection_revision' not in latest
+    response = client.post('/v1/conversations', json=request)
+    assert response.status_code == 200
+    assert not db.transactions[-1].updates
+    if other_content:
+        assert latest['v3_manual_end'] and latest['v3_pending']
+        assert response.json()['conversation']['tile_state'] == 'writing'
+        assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    else:
+        assert latest['v3_manual_end_requested'] is False and 'v3_manual_end' not in latest
+        assert response.json()['conversation']['status'] == 'completed'
+        assert response.json()['conversation']['tile_state'] == 'done'
+        assert not enqueued
+
+
+def test_batch_manual_end_switch_disables_deferred_finish(v3_finish_route, monkeypatch):
+    client, db, paths, enqueued = v3_finish_route
+    db.rows[paths['latest']].update(record_lane_owner='batch_live_v1', server_batch_only=True)
+    monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'off')
+    assert client.post('/v1/conversations', json={}).status_code == 404
+    assert not db.transactions[-1].updates and not enqueued
 
 
 def test_finish_uses_explicit_owned_live_window(v3_finish_route, monkeypatch):

@@ -1222,33 +1222,74 @@ def test_committed_transcript_signals_episode_before_playback_or_enrichment(bind
     assert events == ['commit', 'signal', 'finish']
 
 
-def test_full_multi_unit_completion_consumes_late_v3_finish_once(monkeypatch):
+def native_finish_completion(monkeypatch, db, uid, cid, unit_count, *, empty_outcome=None):
+    """Supply ready sibling fixtures; use the real completion transaction and ledger writer."""
     from contextlib import nullcontext
-    from datetime import datetime, timezone
 
     from config.record_audio import record_identity
     from database import batch_pipeline_projection as completion
-    from utils.conversations.v3.live import FINISH_WINDOW_FIELD
 
-    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
-    monkeypatch.delenv('CONVERSATIONS_V3_BATCH_MANUAL_END', raising=False)
     monkeypatch.setattr(completion, 'writing', lambda *_: nullcontext())
     monkeypatch.setattr(completion, 'record_notes_eager_enabled', lambda: False)
     monkeypatch.setattr(completion.capture_end, 'enabled', lambda: False)
-    enqueue = Mock()
-    monkeypatch.setattr(completion.v3_triggers, 'enqueue_pending', enqueue)
-
-    uid, cid, namespace = 'synthetic-owner', 'capture', 'synthetic'
+    namespace = 'synthetic'
     content, first = record_identity(uid, cid)
     binding = ProjectionBinding(
         uid,
         'bp_' + content,
         content,
-        (first, 'second'),
+        (first, *(f'second-{i}' for i in range(unit_count - 1))),
         target_conversation_id=cid,
         record_origin=True,
         native_record=True,
     )
+    ledger = sync_content_ledger_ref(db, uid, content)
+    db.rows[ledger.path] = {
+        'status': 'processing',
+        'dispatch_protocol': 'batch_v1',
+        'job_id': binding.job_id,
+        'batch_pipeline': {'segment_ids': list(binding.segment_ids)},
+    }
+    for sid in binding.segment_ids:
+        db.rows[f'{namespace}_jobs', sid] = {'projection_binding': asdict(binding), 'duration_seconds': 3.0}
+        db.rows[f'{namespace}_results', sid] = {
+            'result': {'outcome': empty_outcome or 'success'},
+            'projection': {
+                'state': 'ready',
+                'conversation_id': None if empty_outcome else cid,
+                'created': False,
+                'speech_seconds': 0.0 if empty_outcome else 1.0,
+            },
+        }
+
+    store = _ledger_completion_store(db)
+    session = Mock(job={}, ledger_ref=ledger)
+    session.prepare.side_effect = lambda tx, **_: setattr(session, 'ledger', ledger.get(transaction=tx).to_dict())
+    monkeypatch.setattr(store, 'session', lambda *a, **k: session)
+    monkeypatch.setattr(store, '_observe_transcription', Mock())
+    monkeypatch.setattr(store, '_settle_allowance', Mock())
+    monkeypatch.setattr(store, 'run', lambda operation, **_: operation(db.transaction()))
+    accounting = {'seconds': 0.0 if empty_outcome else float(unit_count), 'updates': {}}
+
+    def complete(now):
+        return store.complete(first, binding, now, accounting)
+
+    return complete, ledger.path, [db.rows[f'{namespace}_results', sid]['projection'] for sid in binding.segment_ids]
+
+
+@pytest.mark.parametrize('marker_mode', ['on', 'off'])
+def test_full_multi_unit_completion_consumes_late_v3_finish_once(monkeypatch, marker_mode):
+    from datetime import datetime, timezone
+
+    from database import batch_pipeline_projection as completion
+    from utils.conversations.v3.live import FINISH_WINDOW_FIELD
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
+    monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', marker_mode)
+    enqueue = Mock()
+    monkeypatch.setattr(completion.v3_triggers, 'enqueue_pending', enqueue)
+
+    uid, cid = 'synthetic-owner', 'capture'
     path = ('users', uid, 'conversations', cid)
     db = StrictFirestore(
         {
@@ -1262,36 +1303,23 @@ def test_full_multi_unit_completion_consumes_late_v3_finish_once(monkeypatch):
             }
         }
     )
-    ledger = sync_content_ledger_ref(db, uid, content)
-    db.rows[ledger.path] = {'status': 'processing', 'dispatch_protocol': 'batch_v1', 'job_id': binding.job_id}
-    for sid in binding.segment_ids:
-        db.rows[f'{namespace}_jobs', sid] = {'projection_binding': asdict(binding), 'duration_seconds': 3.0}
-        db.rows[f'{namespace}_results', sid] = {
-            'projection': {'state': 'ready', 'conversation_id': cid, 'created': False, 'speech_seconds': 1.0}
-        }
-    second = db.rows[f'{namespace}_results', 'second']['projection']
-    second['state'] = 'persisted'
-
-    store = _ledger_completion_store(db)
-    session = Mock(job={}, ledger_ref=ledger)
-    session.prepare.side_effect = lambda tx, **_: setattr(session, 'ledger', ledger.get(transaction=tx).to_dict())
-    monkeypatch.setattr(store, 'session', lambda *a, **k: session)
-    monkeypatch.setattr(store, '_observe_transcription', Mock())
-    monkeypatch.setattr(store, '_settle_allowance', Mock())
-    monkeypatch.setattr(store, 'run', lambda operation, **_: operation(db.transaction()))
-    accounting = {'seconds': 2.0, 'updates': {}}
-
-    assert store.complete(first, binding, 2, accounting) is None
+    complete, ledger_path, receipts = native_finish_completion(monkeypatch, db, uid, cid, 2)
+    receipts[1]['state'] = 'persisted'
+    assert complete(2) is None
     assert 'v3_manual_end' not in db.rows[path]
     assert not db.transactions[-1].updates
     enqueue.assert_not_called()
 
-    second['state'] = 'ready'
+    receipts[1]['state'] = 'ready'
     db.rows[path]['record_projection_revision'] = 2
-    assert store.complete(first, binding, 3, accounting)['outcome'] == 'success'
-    assert db.rows[path]['v3_manual_end'] and db.rows[path]['v3_pending']
-    assert db.rows[ledger.path]['status'] == 'completed'
-    enqueue.assert_called_once_with(uid, manual_end_id=cid)
-    assert store.complete(first, binding, 4, accounting)['outcome'] == 'success'
+    assert complete(3)['outcome'] == 'success'
+    assert db.rows[ledger_path]['status'] == 'completed'
+    if marker_mode == 'on':
+        assert db.rows[path]['v3_manual_end'] and db.rows[path]['v3_pending']
+        enqueue.assert_called_once_with(uid, manual_end_id=cid)
+    else:
+        assert db.rows[path]['v3_manual_end_requested'] and 'v3_manual_end' not in db.rows[path]
+        enqueue.assert_not_called()
+    assert complete(4)['outcome'] == 'success'
     assert not db.transactions[-1].updates
-    enqueue.assert_called_once()
+    assert enqueue.call_count == int(marker_mode == 'on')

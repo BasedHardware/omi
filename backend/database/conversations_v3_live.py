@@ -8,7 +8,7 @@ its identity, title, times, state and the visibility flags.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, TypeGuard
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -18,7 +18,7 @@ from config.record_audio import record_identity
 from database._client import get_firestore_client
 from database.conversations import conversations_collection, prepare_conversation_for_read
 from database.sync_ledger import sync_content_ledger_ref
-from utils.conversations.v3.live import FINISH_WINDOW_FIELD, active
+from utils.conversations.v3.live import FINISH_FIELDS, FINISH_WINDOW_FIELD, active, has_finish_content
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ def live_window(
     return None
 
 
-def _valid_document_id(value: Any) -> bool:
+def _valid_document_id(value: Any) -> TypeGuard[str]:
     return (
         isinstance(value, str)
         and 0 < len(value) <= 256
@@ -175,18 +175,26 @@ def _native_projection_state(client, tx, uid, cid):
     if ledger.get('status') == 'processing':
         return 'pending'
     result = ledger.get('result') or {}
-    segments = (ledger.get('batch_pipeline') or {}).get('segment_ids') or []
+    # Completion is written only after the native binding's sibling ready checks.
     if (
         ledger.get('status') == 'completed'
-        and segments
-        and set(segments) == set(ledger.get('processed_segment_ids') or [])
-        and result.get('outcome') == 'success'
+        and (ledger.get('batch_pipeline') or {}).get('segment_ids')
         and not any(
             result.get(k) for k in ('reason_code', 'failed_segments', 'superseded_segments', 'deleted_output_segments')
         )
-        and cid in (result.get('new_memories') or []) + (result.get('updated_memories') or [])
     ):
-        return 'complete'
+        if result.get('outcome') == 'expected_silence' or (
+            result.get('no_recoverable_speech_segments')
+            and (
+                result.get('no_recoverable_speech_segments') == result.get('total_segments')
+                or not (result.get('new_memories') or result.get('updated_memories'))
+            )
+        ):
+            return 'empty'
+        if result.get('outcome') == 'success' and cid in (
+            (result.get('new_memories') or []) + (result.get('updated_memories') or [])
+        ):
+            return 'complete'
     return 'unavailable'
 
 
@@ -198,7 +206,7 @@ def request_finish(uid: str, window_id: str, *, now: datetime, firestore_client:
 
     @firestore.transactional
     def commit(tx):
-        window = window_ref.get(transaction=tx).to_dict() or {}
+        window = window_ref.get(transaction=tx, field_paths=FINISH_FIELDS).to_dict() or {}
         if not _is_finishable_window(window, now):
             return 'no_live_window', ''
         members = window.get('v3_recording_ids') or []
@@ -215,9 +223,13 @@ def request_finish(uid: str, window_id: str, *, now: datetime, firestore_client:
             or not isinstance(row.get('finished_at'), datetime)
             # An older overlapping source must not cut through already-visible speech.
             or row['finished_at'] < window['finished_at']
-            or any(row.get(key) for key in ('deleted', 'discarded', 'is_locked', 'sync_merged_into'))
+            or any(row.get(key) for key in ('deleted', 'is_locked', 'sync_merged_into'))
             or row.get('data_protection_level') == 'private'
         ):
+            return 'no_recording', ''
+        if row.get(FINISH_WINDOW_FIELD) == window_id and row.get('v3_manual_end_requested') is False:
+            return 'already_empty', cid
+        if row.get('discarded'):
             return 'no_recording', ''
         if row.get('v3_manual_end'):
             return 'already_cut', cid
@@ -234,6 +246,11 @@ def request_finish(uid: str, window_id: str, *, now: datetime, firestore_client:
                     return 'already_requested', cid
                 tx.update(ref, {'v3_manual_end_requested': True, FINISH_WINDOW_FIELD: window_id})
                 return 'requested', cid
+            if (state == 'empty' or row.get('has_content') is False) and not has_finish_content(row, window, cid):
+                if row.get('v3_manual_end_requested') and row.get(FINISH_WINDOW_FIELD) == window_id:
+                    tx.update(ref, {'v3_manual_end_requested': False})
+                    return 'resolved_empty', cid
+                return 'already_empty', cid
         tx.update(
             ref,
             {

@@ -44,6 +44,8 @@ FINISH_NO_POINTER = Counter(
 for outcome in (
     'cut',
     'already_cut',
+    'already_empty',
+    'resolved_empty',
     'requested',
     'already_requested',
     'no_live_window',

@@ -527,7 +527,8 @@ def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_
     if manual_end and (
         prior.get(FINISH_WINDOW_FIELD) == cid
         or any(
-            recordings[rid].get(FINISH_WINDOW_FIELD) == cid and recordings[rid].get('v3_manual_end') for rid in claims
+            recordings.get(rid, {}).get(FINISH_WINDOW_FIELD) == cid and recordings.get(rid, {}).get('v3_manual_end')
+            for rid in row['v3_recording_ids']
         )
     ):
         row[FINISH_WINDOW_FIELD] = cid
