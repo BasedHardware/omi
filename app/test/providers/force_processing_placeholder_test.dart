@@ -239,6 +239,27 @@ void main() {
     expect(actions.upserted, isEmpty);
   });
 
+  for (final status in [ConversationStatus.processing, ConversationStatus.in_progress]) {
+    test('Process Now tracks an exact recording as closed only after acceptance (${status.name})', () async {
+      final provider = _provider(
+        actions: _RecordingActions(),
+        finalizeGate: Completer<void>()..complete(),
+        process: () async => CreateConversationResponse(
+          messages: [],
+          conversation: _conversation(id: 'recording-1', status: status),
+        ),
+      );
+      addTearDown(provider.dispose);
+
+      expect(provider.hasClosedServerRecording('recording-1'), isFalse);
+      await provider.forceProcessingCurrentConversation(manualFinish: true);
+      await _flushEventQueue();
+
+      expect(provider.hasClosedServerRecording('recording-1'), status == ConversationStatus.processing);
+      expect(provider.hasClosedServerRecording('recording-2'), isFalse);
+    });
+  }
+
   test('pendant double tap publishes manual finish before the drain and reports an unanswered request', () async {
     final finalize = Completer<void>();
     final actions = _RecordingActions();
