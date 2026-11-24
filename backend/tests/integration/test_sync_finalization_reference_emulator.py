@@ -242,9 +242,7 @@ def test_minimum_finalizes_attach_memo_against_stored_title(claim, monkeypatch):
     assert conversations.prepare_conversation_for_read(stored, req.owner)['structured']['title'] != 'Stored minimum'
     key = episode_attach_memo.current_key(req.owner, stored)
     assert key
-    link.set(
-        {'episode_id': episode_id, 'attach_owner_id': episode_id, 'attach_revision': key, 'attach_completed': key}
-    )
+    link.set({'episode_id': episode_id, 'attach_owner_id': episode_id, 'attach_revision': key, 'attach_completed': key})
 
     def reconcile(_uid, _cid, episode_row, *, collaborators, **_kwargs):
         collaborators.finalized_memo(episode_row)

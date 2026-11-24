@@ -435,15 +435,12 @@ def agentic_notes_payload(**kwargs: Any) -> Optional[dict[str, Any]]:
 
 def notes_mount() -> Mount:
     return Mount(
-        instructions=_conversation_notes_static_instructions('')
-        + """
+        instructions=_conversation_notes_static_instructions('') + """
 Calendar invitees are expected participants only. Screen-shown names are observed
 listing data only. Neither establishes attendance or binds an audio cluster to a
 person. Attribute speech only from the original speaker map or direct evidence.
 Do not infer attendance, absence, or a no-show from either listing.
-"""
-        + '\n\n'
-        + ACTION_ITEM_EXTRACTION_RULES,
+""" + '\n\n' + ACTION_ITEM_EXTRACTION_RULES,
         schema=StructuredExtraction,
         budget=Budget(turns=1, tool_calls=0, deadline_seconds=capped_deadline_seconds(NOTES_LOOP_DEADLINE_SECONDS)),
     )

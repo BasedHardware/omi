@@ -41,10 +41,13 @@ def check_status_route(state, job_id, output):
                 return Response(200, json=projection, request=client.build_request('POST', url))
 
             with (
-                patch.dict(os.environ, {
-                    'SYNC_EPISODE_INTAKE_ORIGIN': 'https://workerd.replay.invalid',
-                    'WORKER_EPISODE_INTAKE_AUDIENCE': 'fixture',
-                }),
+                patch.dict(
+                    os.environ,
+                    {
+                        'SYNC_EPISODE_INTAKE_ORIGIN': 'https://workerd.replay.invalid',
+                        'WORKER_EPISODE_INTAKE_AUDIENCE': 'fixture',
+                    },
+                ),
                 patch.object(workerd_finalization_status, 'identity_token', lambda _: 'replay-only'),
                 patch.object(workerd_finalization_status, 'httpx', SimpleNamespace(post=deliver)),
             ):
@@ -54,6 +57,13 @@ def check_status_route(state, job_id, output):
             assert result['job_id'] == job_id
             assert tuple(result[field] for field in ('status', 'terminal', 'retryable', 'attempt_count')) == expected
             assert set(result) == {
-                'job_id', 'status', 'terminal', 'retryable', 'attempt_count',
-                'task_retry_count', 'meeting_treatment_eligible', 'terminal_outcome', 'fanout_status',
+                'job_id',
+                'status',
+                'terminal',
+                'retryable',
+                'attempt_count',
+                'task_retry_count',
+                'meeting_treatment_eligible',
+                'terminal_outcome',
+                'fanout_status',
             }
