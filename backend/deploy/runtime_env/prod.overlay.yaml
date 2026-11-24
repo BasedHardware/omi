@@ -653,6 +653,7 @@ overlay:
             secret: PLAY_ACCOUNT_ID_HMAC_KEY
             version: latest
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'off', category: ops_kill}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
