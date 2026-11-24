@@ -183,6 +183,14 @@ class _LiveCapture extends ChangeNotifier implements CaptureProvider {
   @override
   List<TranscriptSegment> get segments => const [];
   @override
+  Iterable<String> get locallyReceivedSegmentIds => const [];
+  @override
+  bool get isPhoneMicBatchRecording => false;
+  @override
+  String? get liveCaptureSource => 'omi';
+  @override
+  String? get activeRecordingId => null;
+  @override
   bool get pendantCaptureVerified => true;
   @override
   bool get localPreviewAdmitted => true;
