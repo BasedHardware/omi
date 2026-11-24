@@ -561,6 +561,7 @@ def replace_conversation_source_firestore(
     deletion_gate_token: str | None = None,
     require_deletion_gate: bool = True,
     db_client: Any = db,
+    prepare_publication: Callable[[Any], Callable[[], None]] | None = None,
 ) -> ConversationSourceReplacementResult:
     """Atomically replace every active item sourced from one conversation.
 
@@ -586,6 +587,7 @@ def replace_conversation_source_firestore(
         writes,
         deletion_gate_token,
         require_deletion_gate,
+        prepare_publication,
     )
 
 
@@ -1484,6 +1486,7 @@ def _replace_conversation_source_firestore_transaction(
     writes: List[CanonicalApplyWrite],
     deletion_gate_token: str | None,
     require_deletion_gate: bool,
+    prepare_publication: Callable[[Any], Callable[[], None]] | None = None,
 ) -> ConversationSourceReplacementResult:
     collections = MemoryCollections(uid=uid)
     if writes or not require_deletion_gate:
@@ -1500,6 +1503,7 @@ def _replace_conversation_source_firestore_transaction(
             kind="explicit_memory_deletion",
             token=deletion_gate_token,
         )
+    finish_publication = prepare_publication(transaction) if prepare_publication is not None else None
     control_ref = db_client.document(collections.memory_apply_control_state)
     control_snapshot = control_ref.get(transaction=transaction)
     if getattr(control_snapshot, "exists", False):
@@ -1566,6 +1570,8 @@ def _replace_conversation_source_firestore_transaction(
                 receipt_is_current = False
                 break
         if receipt_is_current:
+            if finish_publication is not None:
+                finish_publication()
             return ConversationSourceReplacementResult(
                 control_state=control,
                 retracted_memory_ids=receipt.retracted_memory_ids,
@@ -1922,6 +1928,8 @@ def _replace_conversation_source_firestore_transaction(
         results=[replacement_apply_result, *results],
     )
     mutation_count += 1  # committed replacement receipt
+    if finish_publication is not None:
+        mutation_count += 2  # source obligation and canonical revision
     if not writes:
         mutation_count += len(tombstoned_items)  # opaque anti-resurrection receipts
     if mutation_count > _MAX_FIRESTORE_TRANSACTION_MUTATIONS:
@@ -1931,6 +1939,8 @@ def _replace_conversation_source_firestore_transaction(
 
     # No writes occur before the complete source/control/operation validation
     # and mutation preflight above.
+    if finish_publication is not None:
+        finish_publication()
     for evidence in tombstoned_evidence.values():
         evidence_ref = db_client.document(f"{collections.memory_evidence}/{evidence.evidence_id}")
         transaction.set(evidence_ref, firestore_data(evidence))

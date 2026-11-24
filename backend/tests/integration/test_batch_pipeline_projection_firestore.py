@@ -318,6 +318,197 @@ def test_worker_publishes_authorized_recording_detail_without_promoting(lane, mo
     assert not promotions and not lane.tasks and not lane.published
 
 
+@pytest.mark.parametrize('outcome', ['concurrent', 'rerouted', 'erased', 'revised', 'lost_reply', 'no_memory'])
+def test_worker_catches_up_published_memories_before_chat_retrieval(lane, monkeypatch, outcome):
+    import asyncio
+    from dataclasses import asdict
+    from datetime import datetime, timezone
+
+    from database import memory_apply_store, recording_transcript_publication as publication
+    from database.memory_collections import MemoryCollections
+    from models.chat import PageContext
+    from routers import conversations as app
+    from utils.conversations import process_conversation as process
+    from utils.llm.memories import CanonicalL1MemoryCandidate
+    from utils.memory import pre_chat_catch_up, read_resilience
+    from utils.memory.chat_memory_adapter import list_default_chat_memories_decision_text
+    from utils.retrieval import graph
+    from utils.sync import assignment
+
+    monkeypatch.setattr(read_resilience, '_retry_allowance', read_resilience.RetryAllowance())
+    monkeypatch.setenv('OMI_PRE_CHAT_MEMORY_CATCH_UP_ENABLED', 'on')
+    monkeypatch.setenv('OMI_DEFERRED_TRANSCRIPT_READS_ENABLED', 'on')
+    monkeypatch.setenv('BATCH_PIPELINE_JOINED_MERGE_ENABLED', 'off')
+    monkeypatch.setattr(pre_chat_catch_up, 'get_data_plane_firestore_client', lambda: lane.client)
+    recording_id = 'synthetic-deferred-recording'
+    rows = lane.user.collection('conversations')
+    recording = rows.document(recording_id)
+    start = datetime.fromtimestamp(1000, timezone.utc)
+    recording.set(
+        {
+            'id': recording_id,
+            'recording': True,
+            'deferred': True,
+            'status': 'processing',
+            'source': 'omi',
+            'created_at': start,
+            'started_at': start,
+            'finished_at': datetime.fromtimestamp(1030, timezone.utc),
+            'structured': {},
+            'transcript_segments': [],
+            'data_protection_level': 'standard',
+        }
+    )
+    if outcome == 'rerouted':
+        estimate = assignment._stored_document_bytes
+
+        def full_recording(ref, *args):
+            return assignment.SYNC_CONVERSATION_BYTE_BUDGET + 1 if ref.id == recording_id else estimate(ref, *args)
+
+        monkeypatch.setattr(assignment, '_stored_document_bytes', full_recording)
+    original_text = (
+        'We moved the project review to Thursday because our vendor will deliver the parts on Wednesday '
+        'and we need a full afternoon to test the prototype before the team signs off on the release'
+    )
+    revised_text = original_text.replace('Thursday', 'Friday')
+    words = original_text.split()
+    lane.payload.update(
+        words=[{'word': word, 'timestamp': [i / 4, (i + 1) / 4]} for i, word in enumerate(words)],
+        speech_seconds=len(words) / 4,
+    )
+    batch = lane.seed()
+    sid = batch.ids[0]
+    lane.projector.store.ref('jobs', sid).update(
+        {'projection_binding': asdict(replace(batch.binding, target_conversation_id=recording_id))}
+    )
+    lane.finish(batch)
+
+    def lose_assignment_reply(*_):
+        raise ConnectionError('synthetic lost assignment reply')
+
+    monkeypatch.setattr(lane.conversations, '_sync_conversation_search_index', lose_assignment_reply)
+    with pytest.raises(ConnectionError, match='synthetic lost assignment reply'):
+        lane.projector.project(sid)
+    binding = recording.get().to_dict()[publication.FIELD]
+    cid = binding['conversation_id']
+    assert (cid != recording_id) == (outcome == 'rerouted')
+    assert recording.get().to_dict()[publication.MEMORY_PENDING]
+
+    monkeypatch.setattr(process, 'get_user_name', lambda _: 'Sam')
+    monkeypatch.setattr(process.users_db, 'get_user_language_preference', lambda _: 'en')
+    monkeypatch.setattr(process.notification_db, 'get_user_time_zone', lambda _: 'UTC')
+    monkeypatch.setattr(process, 'conversation_known_spellings', lambda _: [])
+    monkeypatch.setattr(process, 'rich_roster_inputs', lambda *_: (None, False))
+
+    def unexpected(*_args, **_kwargs):
+        pytest.fail('memory catch-up started a summary or FIRST_OPEN path')
+
+    monkeypatch.setattr(process, '_get_structured', unexpected)
+    monkeypatch.setattr(app, 'open_recording', unexpected)
+    monkeypatch.setattr(app, '_enrich_deferred_conversation', unexpected)
+
+    calls = []
+    provider_entered = threading.Event()
+    peer_waiting = threading.Event()
+    original_claim = pre_chat_catch_up.claim_recording
+
+    def observe_claim(*args):
+        claim = original_claim(*args)
+        if claim[1]:
+            peer_waiting.set()
+        return claim
+
+    monkeypatch.setattr(pre_chat_catch_up, 'claim_recording', observe_claim)
+
+    def extract(_uid, source_id, segments, **_):
+        assert source_id == cid
+        quote = segments[0].text
+        calls.append(quote)
+        provider_entered.set()
+        if len(calls) == 1:
+            if outcome == 'concurrent':
+                assert peer_waiting.wait(5)
+            elif outcome == 'erased':
+                lane.user.collection('deleted_conversations').document(recording_id).set({'deleted': True})
+            elif outcome == 'revised':
+                revision = binding['sync_content_revision'] + 1
+                updated = segments[0].model_dump()
+                updated['text'] = revised_text
+                patch = lane.conversations.encode_conversation_for_write(
+                    lane.uid, {'id': cid, 'transcript_segments': [updated]}, 'standard'
+                )
+                rows.document(cid).update(
+                    {
+                        **patch,
+                        'sync_content_revision': revision,
+                        publication.FIELD: {**binding, 'sync_content_revision': revision},
+                    }
+                )
+        if outcome == 'no_memory':
+            return []
+        return [CanonicalL1MemoryCandidate(content=quote, evidence_quotes=[quote], about='the project')]
+
+    monkeypatch.setattr(process, 'extract_canonical_l1_memory_candidates', extract)
+    if outcome == 'lost_reply':
+        replace_source = memory_apply_store._replace_conversation_source_firestore_transaction
+
+        def lose_memory_reply(*args, **kwargs):
+            replace_source(*args, **kwargs)
+            raise ConnectionError('synthetic lost memory commit reply')
+
+        monkeypatch.setattr(memory_apply_store, '_replace_conversation_source_firestore_transaction', lose_memory_reply)
+
+    scopes = []
+    collections = MemoryCollections(uid=lane.uid)
+
+    async def retrieve(_uid, *_args, context, **_kwargs):
+        scopes.append(context.id if context else None)
+        answer = list_default_chat_memories_decision_text(uid=lane.uid, limit=10, db_client=lane.client)
+        yield answer.text
+
+    async def metadata(*_args, **_kwargs):
+        return '', 'UTC'
+
+    monkeypatch.setattr(graph, 'execute_agentic_chat_stream', retrieve)
+    monkeypatch.setattr(graph, '_current_prompt_metadata', metadata)
+    context = PageContext(type='conversation', id=recording_id) if outcome == 'rerouted' else None
+
+    async def chat(page=context):
+        return [chunk async for chunk in graph.execute_chat_stream(lane.uid, [], context=page)][0]
+
+    async def run_chats():
+        if outcome == 'concurrent':
+            first = asyncio.create_task(chat())
+            assert await asyncio.to_thread(provider_entered.wait, 5)
+            results = await asyncio.gather(first, chat())
+        else:
+            first_page = PageContext(type='conversation', id=cid) if outcome == 'rerouted' else context
+            results = [await chat(first_page)]
+        return [*results, await chat()]
+
+    results = asyncio.run(run_chats())
+    items = list(lane.client.collection(collections.memory_items).stream())
+    if outcome in {'erased', 'no_memory'}:
+        assert not items
+        assert len(calls) == 1
+        assert all(original_text not in text for text in results)
+        if outcome == 'no_memory':
+            assert not recording.get().to_dict()[publication.MEMORY_PENDING]
+    else:
+        expected = revised_text if outcome == 'revised' else original_text
+        assert all(expected in text for text in results)
+        assert len(items) == 1 and items[0].to_dict()['content'] == expected
+        assert len(list(lane.client.collection(collections.memory_source_replacements).stream())) == 1
+        assert calls == ([original_text, expected] if outcome == 'revised' else [expected])
+        assert rows.document(cid).get().to_dict()[publication.MEMORY_REVISION] == binding['sync_content_revision'] + (
+            outcome == 'revised'
+        )
+        assert not recording.get().to_dict()[publication.MEMORY_PENDING]
+    if outcome == 'rerouted':
+        assert scopes == [cid, cid]
+    assert not lane.tasks and not lane.published
+
+
 def test_replay_has_one_assignment_one_enrichment_version_and_durable_before_client(lane):
     batch = lane.seed()
     lane.finish(batch)

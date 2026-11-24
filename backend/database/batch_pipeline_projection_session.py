@@ -503,7 +503,17 @@ class ProjectionSession:
         ref = self.client.collection('users').document(uid).collection('conversations').document(cid)
         row = ref.get(
             transaction=transaction,
-            field_paths=['id', 'owner_uid', 'recording', 'source', 'client_device_id', 'is_locked', 'sync_merged_into'],
+            field_paths=[
+                'id',
+                'owner_uid',
+                'recording',
+                'source',
+                'client_device_id',
+                'is_locked',
+                'sync_merged_into',
+                'deferred',
+                'processing_deferred',
+            ],
         ).to_dict()
         if (
             recording_publication.belongs_to(row, uid, cid)
@@ -513,7 +523,7 @@ class ProjectionSession:
             and bool(row.get('is_locked')) == self.binding.is_locked
         ):
             self.guard(transaction, [cid])
-            self.recording_source = (ref, row.get('sync_merged_into'))
+            self.recording_source = (ref, row)
 
     def validate_plan(self, transaction, planned):
         # encode is still in assignment's read-only planning phase.
@@ -526,20 +536,31 @@ class ProjectionSession:
         # An unaccepted source hint cannot become an alias for the winning output.
         source_id = None
         if self.recording_source is not None:
-            ref, redirect = self.recording_source
+            ref, source = self.recording_source
             destination = publication[0]['conversation_id']
-            if redirect == destination or any(cid == ref.id for cid, _ in self._validated_transcript_revisions):
-                writer.update(ref, {recording_publication.FIELD: publication[0]})
+            if source.get('sync_merged_into') == destination or any(
+                cid == ref.id for cid, _ in self._validated_transcript_revisions
+            ):
+                writer.update(ref, self._recording_publication_fields(source, publication[0]))
                 source_id = ref.id
         recording_outputs = [
-            output
+            (row, output)
             for (row, _), output in zip(outputs, publication, strict=True)
             if row.get('recording') and row['id'] != source_id
         ]
         if recording_outputs:
             rows = self.client.collection('users').document(self.binding.owner_id).collection('conversations')
-            for output in recording_outputs:
-                writer.update(rows.document(output['conversation_id']), {recording_publication.FIELD: output})
+            for row, output in recording_outputs:
+                writer.update(rows.document(output['conversation_id']), self._recording_publication_fields(row, output))
+
+    @staticmethod
+    def _recording_publication_fields(recording, output):
+        return {
+            recording_publication.FIELD: output,
+            recording_publication.MEMORY_PENDING: bool(
+                recording.get('deferred') or recording.get('processing_deferred')
+            ),
+        }
 
     def persist(
         self,

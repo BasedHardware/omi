@@ -62,6 +62,7 @@ from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.product_metrics import extract_app_build, record_product_event
 from utils.other import endpoints as auth
+from utils.memory.pre_chat_catch_up import before_chat
 from utils.retrieval.tools.perplexity_tools import WEB_SEARCH_RETRIEVAL_APPENDIX
 from utils.subscription import enforce_desktop_chat_quota
 
@@ -1852,6 +1853,12 @@ async def _chat_completions_unobserved(
             gateway_payload = {}
         await run_blocking(db_executor, enforce_desktop_chat_quota, uid, platform=x_app_platform)
         await _meter_server_request(uid, request_id=request_id)
+        if (
+            _uses_managed_chat_agent(body)
+            and _managed_lane_id(body) == CHAT_AGENT_AUTO_LANE_ID
+            and not _is_thinking_escalation(body)
+        ):
+            await before_chat(uid)
     except HTTPException:
         raise
     except RuntimeError as exc:

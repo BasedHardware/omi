@@ -388,8 +388,14 @@ def _prepare_conversation_for_write(
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
 
-    data.pop(recording_publication.FIELD, None)
-    data.pop(recording_publication.RESOLVED_RECORDING_ID, None)
+    for field in (
+        recording_publication.FIELD,
+        recording_publication.RESOLVED_RECORDING_ID,
+        recording_publication.MEMORY_PENDING,
+        recording_publication.MEMORY_LEASE,
+        recording_publication.MEMORY_REVISION,
+    ):
+        data.pop(field, None)
 
     # Partial writes cannot certify an entire legacy row. Explicit prepare
     # reconciles them; full creates/processing results get compact content now.
@@ -723,7 +729,13 @@ def prepare_conversation_for_read(
         return None
 
     data = copy.deepcopy(conversation_data)
-    data.pop(recording_publication.FIELD, None)
+    for field in (
+        recording_publication.FIELD,
+        recording_publication.MEMORY_PENDING,
+        recording_publication.MEMORY_LEASE,
+        recording_publication.MEMORY_REVISION,
+    ):
+        data.pop(field, None)
     # Separate encrypted card data must not leak into hydrated detail or be
     # replayed as stale projection metadata by a logical-state writer.
     for field in DISPLAY_FIELDS:

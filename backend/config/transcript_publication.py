@@ -19,3 +19,9 @@ def ready_for_discovery(row: dict) -> bool:
     return row.get('status') != 'processing' or bool(
         row.get('deferred') or row.get('processing_deferred') or row.get('has_content')
     )
+
+
+def pre_chat_memory_catch_up_enabled() -> bool:
+    return (
+        deferred_transcript_reads_enabled() and os.getenv('OMI_PRE_CHAT_MEMORY_CATCH_UP_ENABLED', 'off').lower() == 'on'
+    )

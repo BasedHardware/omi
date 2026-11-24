@@ -4612,6 +4612,8 @@ class MemoryService:
         uid: str,
         conversation_id: str,
         items: List[Dict[str, Any]],
+        *,
+        prepare_publication: Callable[[Any], Callable[[], None]] | None = None,
     ) -> Dict[str, Any]:
         self.ensure_canonical_mutation_ready(uid)
         # This wrapper is the conversation-extraction entry (finalize and
@@ -4624,7 +4626,10 @@ class MemoryService:
             items,
             db_client=self.db_client,
             empty_set_intent="extraction",
+            **({"prepare_publication": prepare_publication} if prepare_publication is not None else {}),
         )
+        if prepare_publication is not None:
+            self._invalidate_prompt_cache(uid)
         retracted = list(result.get("retracted_memory_ids") or [])
         if retracted:
             self._write_historical_overrides(uid, retracted, MemoryItemStatus.tombstoned)

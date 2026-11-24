@@ -8,19 +8,21 @@ from database.conversation_revisions import firestore_revision_datetime
 
 FIELD = 'published_recording_transcript'
 RESOLVED_RECORDING_ID = '_published_recording_id'
+MEMORY_PENDING = 'published_recording_memory_pending'
+MEMORY_LEASE = 'published_recording_memory_lease'
+MEMORY_REVISION = 'published_recording_memory_revision'
 
 
 def belongs_to(row, uid, cid):
     return bool(row and row.get('id', cid) == cid and row.get('owner_uid', uid) == uid)
 
 
-def read_snapshot(client, uid, recording_id, *, field_paths=None):
+def read_snapshot(client, uid, recording_id, *, field_paths=None, transaction=None):
     """Read the mapping, erasure authority and exact transcript revision together."""
     owner = client.collection('users').document(uid)
     conversations = owner.collection('conversations')
     tombstones = owner.collection('deleted_conversations')
 
-    @firestore.transactional
     def read(transaction):
         source = (
             conversations.document(recording_id)
@@ -78,4 +80,8 @@ def read_snapshot(client, uid, recording_id, *, field_paths=None):
             row['updated_at'] = updated_at
         return row
 
-    return run_transactional(client, read, initial_transaction=client.transaction(read_only=True))
+    if transaction is not None:
+        return read(transaction)
+    return run_transactional(
+        client, firestore.transactional(read), initial_transaction=client.transaction(read_only=True)
+    )

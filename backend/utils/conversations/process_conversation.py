@@ -1152,7 +1152,7 @@ def _parity_accepted_memories(memories: List[MemoryDB]) -> list[dict[str, Any]]:
     ]
 
 
-def _sweep_owned_writer_mode(uid: str) -> Optional[str]:
+def _sweep_owned_writer_mode(uid: str, *, db_client: Any = None) -> Optional[str]:
     """Writer mode when a non-compatibility authority owns memory formation.
 
     A ledger-cutover (or transitioning) user must not pay for eager
@@ -1167,7 +1167,8 @@ def _sweep_owned_writer_mode(uid: str) -> Optional[str]:
         from models.memory_apply import WriterMode
         from utils.memory.memory_system import ensure_canonical_apply_control_state
 
-        db_client = getattr(db_client_module, 'db', None)
+        if db_client is None:
+            db_client = getattr(db_client_module, 'db', None)
         control = ensure_canonical_apply_control_state(uid, db_client=db_client)
         writer_mode = getattr(control, 'writer_mode', WriterMode.compatibility)
         if writer_mode != WriterMode.compatibility:
@@ -1177,20 +1178,17 @@ def _sweep_owned_writer_mode(uid: str) -> Optional[str]:
     return None
 
 
-@spelling_context_run
-@conversation_scope
-def extract_memories(uid: str, conversation: Conversation) -> None:
-    """Extract one conversation's memories through the selected memory system.
-
-    Finalization workers and legacy async callers share this admission boundary.
-    """
-    if is_server_minimum(conversation) or exclude_from_derived(uid, conversation, consumer='memories'):
-        return
+def _admit_memory_extraction(
+    uid: str, conversation: Conversation, *, db_client: Any, pending_summary: bool = False
+) -> Conversation | None:
+    if (not pending_summary and is_server_minimum(conversation)) or exclude_from_derived(
+        uid, conversation, consumer='memories'
+    ):
+        return None
     # The deployment-wide capability fence is mandatory even when this
     # account's non-compatibility writer delegates formation to the sweep.
     # Otherwise a reused release-probe principal could skip the exact static
     # configuration contract that Pusher qualification is meant to exercise.
-    db_client = getattr(db_client_module, 'db', None)
     MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
     if serving_for('SPEAKER_EVIDENCE_MODE', uid) and conversation.source != ConversationSource.external_integration:
         owner_segments = confident_owner_segments(conversation.transcript_segments)
@@ -1198,13 +1196,25 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
         if not owner_segments:
             # No new memory and no empty replacement of earlier memories. A
             # later confident resolution/manual correction may retry normally.
-            return
+            return None
         # Quote grounding and the L1 fingerprint must see this same owner-only
         # input. Never mutate the retained transcript or the notes/task input.
         conversation = conversation.model_copy(update={'transcript_segments': owner_segments})
-    if l1_admission.skip(uid, conversation):
+    if l1_admission.skip(uid, conversation, **({'pending_summary': True} if pending_summary else {})):
         # Noise or short owner speech: nothing to remember, nothing written.
+        return None
+    return conversation
+
+
+@spelling_context_run
+@conversation_scope
+def extract_memories(uid: str, conversation: Conversation) -> None:
+    """Extract one conversation's memories through the selected memory system."""
+    db_client = getattr(db_client_module, 'db', None)
+    admitted = _admit_memory_extraction(uid, conversation, db_client=db_client)
+    if admitted is None:
         return
+    conversation = admitted
     sweep_owned_mode = _sweep_owned_writer_mode(uid)
     if sweep_owned_mode is not None:
         logger.info(
@@ -1645,18 +1655,24 @@ def _rejected_memory_examples_for_l1(uid: str, *, db_client: Any) -> Tuple[str, 
 
 
 def _extract_memories_canonical(
-    uid: str, conversation: Conversation, *, db_client: Any, parity_capture: SurfaceParityCapture | None = None
+    uid: str,
+    conversation: Conversation,
+    *,
+    db_client: Any,
+    parity_capture: SurfaceParityCapture | None = None,
+    publish_memories: Callable[[list[dict]], None] | None = None,
 ) -> ConversationMemoryExtractionResult:
     """Universal canonical extraction with one atomic source replacement."""
     from config.sync_reprocess import dedupe_enabled
     from utils.conversations import llm_input_dedupe
 
+    dedupe = publish_memories is None and dedupe_enabled()
     l1_digest = None
     source = source_for_conversation(conversation)
     memory_service = MemoryService(db_client=db_client)
 
     language = users_db.get_user_language_preference(uid)
-    if dedupe_enabled():
+    if dedupe:
         # Prevent the extractor's None fallback from resolving a second,
         # potentially different preference after we fingerprint the input.
         language = language or 'en'
@@ -1682,7 +1698,7 @@ def _extract_memories_canonical(
             # Resolve hidden profile/date inputs once, then pass those exact
             # values to both the fingerprint and the extractor.
             external_kwargs = {}
-            if dedupe_enabled():
+            if dedupe:
                 from utils.llm.memories import get_prompt_memories
                 from utils.llm.temporal import current_date_for_uid
 
@@ -1690,7 +1706,7 @@ def _extract_memories_canonical(
                 external_kwargs = {'user_name': prompt_name, 'memories_str': prompt_memories}
                 content_date = content_date or current_date_for_uid(uid)
             known_spellings = conversation_known_spellings(uid)
-            if dedupe_enabled():
+            if dedupe:
                 l1_digest, matched = llm_input_dedupe.l1_input(
                     uid,
                     conversation,
@@ -1755,7 +1771,7 @@ def _extract_memories_canonical(
                 desktop_meeting_capture=prompt_desktop_capture,
             )
         rejected_examples = _rejected_memory_examples_for_l1(uid, db_client=db_client)
-        if dedupe_enabled() and prompt_prefix is not None:
+        if dedupe and prompt_prefix is not None:
             l1_digest, matched = llm_input_dedupe.l1_input(
                 uid,
                 conversation,
@@ -1975,6 +1991,9 @@ def _extract_memories_canonical(
             sensitivity_labels,
         ) in parsed_memories
     ]
+    if publish_memories is not None:
+        publish_memories(replacement_payloads)
+        return ConversationMemoryExtractionResult(count=len(parsed_memories), source=source, path=PATH_CANONICAL)
     memory_service.replace_conversation_memories(
         uid,
         conversation.id,
@@ -2071,6 +2090,22 @@ def _extract_memories_canonical(
 
     record_usage(uid, memories_created=len(parsed_memories))
     return ConversationMemoryExtractionResult(count=len(parsed_memories), source=source, path=PATH_CANONICAL)
+
+
+@spelling_context_run
+@conversation_scope
+def extract_published_memories(
+    uid: str, conversation: Conversation, *, db_client: Any, publish_memories: Callable[[list[dict]], None]
+) -> None:
+    """Run the ordinary memory admission and grounding for a fenced publication."""
+    admitted = _admit_memory_extraction(uid, conversation, db_client=db_client, pending_summary=True)
+    if admitted is None:
+        publish_memories([])
+        return
+    if _sweep_owned_writer_mode(uid, db_client=db_client) is not None:
+        return
+    with track_usage(uid, Features.MEMORIES):
+        _extract_memories_canonical(uid, admitted, db_client=db_client, publish_memories=publish_memories)
 
 
 def _extract_memories_inner(

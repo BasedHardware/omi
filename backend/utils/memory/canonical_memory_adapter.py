@@ -955,7 +955,7 @@ def read_canonical_scan_page(
     interrupted = False
     snapshots: List[Any] = []
     incomplete_boundaries: List[Optional[Tuple[int, int, str]]] = []
-    for query in ([] if candidate_snapshots is not None else queries):
+    for query in [] if candidate_snapshots is not None else queries:
         query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).order_by('__name__')
         if start_after is not None:
             cursor_time, cursor_memory_id = start_after
@@ -2417,6 +2417,7 @@ def replace_conversation_sourced_memories(
     conflict_backoff_seconds: Sequence[float] = _REPLACEMENT_CONFLICT_BACKOFF_SECONDS,
     empty_set_intent: str = "retraction",
     claim_destructive_gate: bool = True,
+    prepare_publication: Callable[[Any], Callable[[], None]] | None = None,
 ) -> Dict[str, Any]:
     """Atomically replace one conversation's complete canonical memory set.
 
@@ -2627,6 +2628,7 @@ def replace_conversation_sourced_memories(
                 ),
                 require_deletion_gate=bool(not items and claim_destructive_gate),
                 db_client=client,
+                **({"prepare_publication": prepare_publication} if prepare_publication is not None else {}),
             )
             break
         except DestructiveOperationInProgress as exc:

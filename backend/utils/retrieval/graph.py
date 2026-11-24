@@ -24,6 +24,7 @@ from utils.journey_metrics_contract import ClientKind
 from utils.llm.shaped_agent import route_for_uid
 from utils.messaging.projection import surface_runtime
 from utils.messaging.context import preparation_scope
+from utils.memory.pre_chat_catch_up import before_chat
 from utils.llm.chat import get_current_datetime_block, get_user_timezone
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
@@ -247,6 +248,8 @@ async def execute_chat_stream(
     if callback_data is None:
         callback_data = {}
     logger.info(f'execute_chat_stream app: {app.id if app else "<none>"}')
+    setup_deadline_at = asyncio.get_running_loop().time() + AGENT_STREAM_SETUP_TIMEOUT_SECONDS
+    context = await before_chat(uid, context)
     # Start before router metadata and agentic prompt/tools; the model consumes
     # only ready components. Old/shadow routing starts no context IO.
     scope = nullcontext()
@@ -259,7 +262,6 @@ async def execute_chat_stream(
     async with scope:
         # One absolute setup deadline covers router metadata and agentic prompt/tool
         # load so the SSE body cannot stay silent for two stacked 25s budgets.
-        setup_deadline_at = asyncio.get_running_loop().time() + AGENT_STREAM_SETUP_TIMEOUT_SECONDS
         try:
             async with asyncio.timeout(max(0.0, setup_deadline_at - asyncio.get_running_loop().time())):
                 current_datetime_block, tz = await _current_prompt_metadata(uid, platform, client_tz=client_tz)

@@ -79,13 +79,13 @@ def owner_word_count(segments: Sequence[Any] | None) -> int | None:
     return total if identified else None
 
 
-def skip_reason(conversation: Any) -> str | None:
+def skip_reason(conversation: Any, *, pending_summary: bool = False) -> str | None:
     """The reason to skip this conversation's L1 call, or None to extract."""
     if not noise_skip_enabled():
         return None
     if _curated(conversation):
         return None
-    if is_server_minimum(conversation):
+    if not pending_summary and is_server_minimum(conversation):
         return NOISE
     if _value(_field(conversation, 'content_kind')) in ('media', 'noise'):
         return NOISE
@@ -104,9 +104,9 @@ def skip_reason(conversation: Any) -> str | None:
     return None
 
 
-def skip(uid: str, conversation: Any) -> bool:
+def skip(uid: str, conversation: Any, *, pending_summary: bool = False) -> bool:
     """Count, log and report whether this conversation's L1 call must be skipped."""
-    reason = skip_reason(conversation)
+    reason = skip_reason(conversation, pending_summary=pending_summary)
     if reason is None:
         return False
     SKIPPED.labels(reason=reason_label(ReasonFamily.MEMORY_L1, reason, MemoryL1Reason)).inc()

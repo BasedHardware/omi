@@ -215,7 +215,16 @@ class StrictFirestoreDocument:
                     'starred',
                     'folder_user_set',
                 ],
-                ['id', 'owner_uid', 'source', 'client_device_id', 'is_locked', 'sync_merged_into'],
+                [
+                    'id',
+                    'owner_uid',
+                    'source',
+                    'client_device_id',
+                    'is_locked',
+                    'sync_merged_into',
+                    'deferred',
+                    'processing_deferred',
+                ],
                 ['manual_speaker_assignments', 'manual_speaker_assignments_compressed'],
                 [
                     'deleted',
