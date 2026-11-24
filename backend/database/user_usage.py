@@ -10,14 +10,15 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db, get_firestore_client
-from . import monthly_usage_totals
+from . import firestore_snapshot_query, monthly_usage_totals
+from .firestore_document_probe import call_site
 from .firestore_read_origin import read_origin
 from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from .firestore_index_registry import HOURLY_USAGE_UTC_DAY_QUERY
 from .llm_usage import nest_usage_fields, resolve_usage_plan_id
 from .usage_units import hourly_shadow, normalize_plan_usage
 from models.user_usage import UsageStats
-from utils.read_cache_shadow import ShadowSkipped, compare_cached_month
+from .monthly_usage_observation import ShadowSkipped, observe_cached_month
 
 logger = logging.getLogger(__name__)
 
@@ -617,7 +618,7 @@ def _s4_month_cache(since=False):
                 seconds=ttl('FSR_USAGE_MONTH_TTL_SECONDS', 60),
                 cacheable=_s4_valid_month_stats,
                 metadata=metadata,
-                on_hit_with_metadata=lambda value, source: compare_cached_month(
+                on_hit_with_metadata=lambda value, source: observe_cached_month(
                     uid, date, start_date, value, db, source
                 ),
             )
@@ -644,10 +645,7 @@ def read_hourly_usage_for_shadow(uid, date, start_date, timeout, *, read_time, f
     limit = 745
     query = query.limit(limit)
     with read_origin('job:usage_month_total_shadow'):
-        from database.firestore_document_probe import call_site
-        from database.firestore_snapshot_query import stream_at_read_time
-
-        rows = stream_at_read_time(query, read_time, timeout=timeout, caller=call_site())
+        rows = firestore_snapshot_query.stream_at_read_time(query, read_time, timeout=timeout, caller=call_site())
         stats, count = _aggregate_stats_with_count(rows)
         record_firestore_read(FirestoreReadFamily.LISTEN_MONTHLY_USAGE, FirestoreReadMode.BOUNDED, count)
     if count >= limit:

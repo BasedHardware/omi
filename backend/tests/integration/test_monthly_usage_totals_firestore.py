@@ -453,9 +453,11 @@ def test_deletion_inventory_cannot_miss_a_racing_cold_seed(lane, monkeypatch):
 def test_shadow_observes_served_snapshot_after_atomic_hourly_write(lane, monkeypatch):
     from unittest.mock import Mock
 
-    from database import free_allowance_leases as ledger
+    from database import free_allowance_leases as ledger, monthly_usage_observation
     from utils import executors, read_cache_shadow as shadow
 
+    monkeypatch.setattr(monthly_usage_observation, '_observer', None)
+    shadow.install_month_shadow()
     client, uid, _ = lane
     pending, metric = [], Mock()
     monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))

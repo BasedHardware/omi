@@ -133,6 +133,11 @@ class Ref:
 
 @pytest.fixture
 def env(monkeypatch):
+    from database import monthly_usage_observation
+    from utils.read_cache_shadow import install_month_shadow
+
+    monkeypatch.setattr(monthly_usage_observation, '_observer', None)
+    install_month_shadow()
     monkeypatch.setenv('OMI_USAGE_MONTH_TOTAL_SHADOW_RATE', '0')
     store = Store()
     redis = fakeredis.FakeRedis()

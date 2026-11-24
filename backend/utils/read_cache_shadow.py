@@ -10,7 +10,12 @@ from collections.abc import Mapping
 
 from prometheus_client import Counter
 
+from database import user_usage
+from database.firestore_document_probe import firestore_metrics_service_name
+from database.fsr_read_cache import fresh_reads
+from database.monthly_usage_observation import ShadowSkipped, install_monthly_usage_observer
 from database.monthly_usage_totals import FIELDS as USAGE_FIELDS, usage_month_epoch
+from utils import executors
 from utils.episodes.metrics import reuse_or_create
 
 SHADOW = reuse_or_create(
@@ -26,10 +31,6 @@ MONTH_SHADOW = reuse_or_create(
     ['service', 'epoch', 'path', 'outcome', 'delta_bucket'],
 )
 READ_TIMEOUT_SECONDS = 5.0
-
-
-class ShadowSkipped(Exception):
-    """A bounded shadow read cannot produce a complete comparable value."""
 
 
 def _canonical(cache, value):
@@ -73,8 +74,6 @@ def compare_hit(cache, cached, fetch, *, sample=None):
 
         def compare():
             try:
-                from database.fsr_read_cache import fresh_reads
-
                 expected = _canonical(cache, cached)
                 with fresh_reads():
                     actual = _canonical(cache, fetch(READ_TIMEOUT_SECONDS))
@@ -95,22 +94,19 @@ def compare_hit(cache, cached, fetch, *, sample=None):
 
 
 def _submit(compare, skipped):
-    from utils.executors import ExecutorSaturatedError, read_cache_shadow_executor, submit_with_context
-
     try:
-        submit_with_context(read_cache_shadow_executor, compare)
-    except ExecutorSaturatedError:
+        executors.submit_with_context(executors.read_cache_shadow_executor, compare)
+    except executors.ExecutorSaturatedError:
         skipped()
 
 
-def compare_cached_month(uid, date, start_date, expected, client, metadata):
-    source = metadata if isinstance(metadata, Mapping) else {}
-    compare_month('cache_hit', uid, date, start_date, expected, client, source.get('read_time'), source.get('epoch'))
+def install_month_shadow() -> None:
+    """Bind the shared worker when a serving process starts."""
+    install_monthly_usage_observer(compare_month)
 
 
 def compare_month(path, uid, date, start_date, served, client, read_time, epoch):
     """Sample the exact value and cutoff served, without a fresh read on the caller."""
-    from database.firestore_document_probe import firestore_metrics_service_name
 
     def record(outcome, bucket='none'):
         try:
@@ -153,11 +149,9 @@ def compare_month(path, uid, date, start_date, served, client, read_time, epoch)
 
         def compare():
             try:
-                from database.user_usage import read_hourly_usage_for_shadow
-
                 actual = _canonical(
                     'usage_month',
-                    read_hourly_usage_for_shadow(
+                    user_usage.read_hourly_usage_for_shadow(
                         uid, date, start_date, READ_TIMEOUT_SECONDS, firestore_client=client, read_time=read_time
                     ),
                 )

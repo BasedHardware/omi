@@ -19,6 +19,7 @@ from config.firestore_read_levers import lever_enabled
 from database._client import get_firestore_client
 from database.firestore_read_origin import read_origin
 from database.legal_holds import DestructiveOperationInProgress, external_write_fence
+from database.monthly_usage_observation import observe_monthly_usage
 from utils.observability.fallback import record_fallback
 
 FIELDS = ('transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds')
@@ -158,12 +159,7 @@ def establish_verified_month(uid: str, date: datetime, *, firestore_client: Any 
 
 
 def observe_verified_month(uid: str, date: datetime, data: Any, read_time: Any, firestore_client: Any) -> None:
-    try:
-        from utils.read_cache_shadow import compare_month
-
-        compare_month('free_allowance', uid, date, None, data['totals'], firestore_client, read_time, data['epoch'])
-    except Exception:
-        pass
+    observe_monthly_usage('free_allowance', uid, date, None, data['totals'], firestore_client, read_time, data['epoch'])
 
 
 def _month_rows(user_ref: Any, date: datetime, transaction: Any) -> Any:
@@ -230,15 +226,9 @@ def _rebuild(
 
 
 def _observe_total(uid, date, start_date, stats, client, read_time, epoch, metadata):
-    # Keep even import or instrumentation failures outside the serving decision.
-    try:
-        from utils.read_cache_shadow import compare_month
-
-        if metadata is not None and isinstance(read_time, datetime):
-            metadata.update(read_time=read_time, epoch=epoch)
-        compare_month('total_uncached', uid, date, start_date, stats, client, read_time, epoch)
-    except Exception:
-        pass
+    if metadata is not None and isinstance(read_time, datetime):
+        metadata.update(read_time=read_time, epoch=epoch)
+    observe_monthly_usage('total_uncached', uid, date, start_date, stats, client, read_time, epoch)
 
 
 @read_origin('job:usage_month_total_read')
