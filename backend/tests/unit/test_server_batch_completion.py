@@ -251,6 +251,13 @@ def test_natural_end_stores_no_manual_end_request(trigger):
     assert 'v3_manual_end_requested' not in row and 'v3_manual_end' not in row
 
 
+def test_a_legacy_force_process_job_counts_as_a_user_finish():
+    stored = {**capture(), 'recording': True}
+    db = StrictFirestore({ROW: stored, JOB_ROW: {**job(), 'force_process': True}})
+    assert complete(db, stored) == 'completed'
+    assert db.rows[ROW]['v3_manual_end_requested'] is True
+
+
 def test_legacy_capture_stores_no_manual_end_request():
     db = StrictFirestore({ROW: capture(), JOB_ROW: {**job(), 'processing_trigger': 'client_finalize'}})
     assert complete(db) == 'completed'
@@ -265,12 +272,14 @@ def test_manual_end_kill_switch(monkeypatch):
 @pytest.mark.parametrize(
     'row,expected',
     [
-        ({'recording': True, 'v3_manual_end_requested': True}, True),
-        ({'recording': True}, False),
-        ({'recording': True, 'v3_manual_end_requested': True, 'v3_manual_end': True}, False),
-        ({'recording': True, 'v3_manual_end_requested': True, 'deleted': True}, False),
-        ({'recording': True, 'v3_manual_end_requested': True, 'discarded': True}, False),
-        ({'v3_manual_end_requested': True}, False),
+        ({'recording': True, 'v3_manual_end_requested': True, 'finished_at': NOW}, True),
+        # The cut is materialised from finished_at; without it the marker would be inert.
+        ({'recording': True, 'v3_manual_end_requested': True}, False),
+        ({'recording': True, 'finished_at': NOW}, False),
+        ({'recording': True, 'v3_manual_end_requested': True, 'finished_at': NOW, 'v3_manual_end': True}, False),
+        ({'recording': True, 'v3_manual_end_requested': True, 'finished_at': NOW, 'deleted': True}, False),
+        ({'recording': True, 'v3_manual_end_requested': True, 'finished_at': NOW, 'discarded': True}, False),
+        ({'v3_manual_end_requested': True, 'finished_at': NOW}, False),
     ],
 )
 def test_promotion_writes_the_cut_once_and_marks_nothing_pending(monkeypatch, row, expected):

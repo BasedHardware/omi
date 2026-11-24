@@ -60,7 +60,12 @@ from models.conversation_continuity import continuation_timeout
 from utils.conversations.backfill_stats import same_timestamp_revision
 from utils.account_cutover.fence import background_job_should_skip_account
 from utils.conversations.terminal_relevance import stamp_terminal_decision
-from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, is_recovery_trigger
+from utils.conversations.processing_trigger import (
+    PROCESSING_MODES,
+    ProcessingTrigger,
+    is_recovery_trigger,
+    trigger_for_finalization_job,
+)
 from utils.conversations.lifecycle_clocks import speech_clock
 from utils.conversations.recovery import (
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
@@ -1105,6 +1110,14 @@ def mark_finalization_completed(
     )
 
 
+def _is_client_finalize(job: Mapping[str, Any]) -> bool:
+    """The user ended this capture. Uses the documented resolver, so a legacy force_process job counts."""
+    try:
+        return trigger_for_finalization_job(job) is ProcessingTrigger.CLIENT_FINALIZE
+    except ValueError:
+        return False
+
+
 def _complete_server_batch_capture_txn(
     transaction: Any,
     job_ref: Any,
@@ -1185,9 +1198,7 @@ def _complete_server_batch_capture_txn(
     stamp_terminal_decision(terminal, path='lifecycle_terminal')
     manual_end_update: dict[str, Any] = (
         {'v3_manual_end_requested': True}
-        if current.get('recording') is True
-        and job.get('processing_trigger') == ProcessingTrigger.CLIENT_FINALIZE.value
-        and server_batch.manual_end_marker_enabled()
+        if current.get('recording') is True and _is_client_finalize(job) and server_batch.manual_end_marker_enabled()
         else {}
     )
     transaction.update(

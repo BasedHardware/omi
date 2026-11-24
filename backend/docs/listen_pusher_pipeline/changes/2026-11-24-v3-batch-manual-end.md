@@ -29,26 +29,37 @@ Rollback: `CONVERSATIONS_V3_BATCH_MANUAL_END=off` on `backend` and `backend-inte
 `CONVERSATIONS_V3_FAST_FINISH` (default `cohort`, the empty `v3-fast-finish`
 rollout cohort). After admission commits, `utils/conversations/v3/fast_finish.py`
 transcribes every unit of the recording once through the prerecorded provider
-for its language, stores the cut, and writes the result with
-`update_conversation_segments`. That write marks the recording pending and wakes
-reconcile, so notes start without the batch merge and delivery wait.
+for its language and writes the result with `update_conversation_segments`. That
+write marks the recording pending and wakes reconcile, so notes start without
+the batch merge and delivery wait.
 
+- The cut: a single-unit recording is already cut by admission. For several
+  units the pass stores the cut (`changed(manual_end=True)`) only after the
+  whole-recording transcript is written, so a failed or refused write never
+  leaves a cut on a partial transcript.
 - The batch record projection owns the canonical transcript. `replace_record`
   replaces the provisional segments inside each unit span, and the writer
   refuses the fast write once `record_projection_revision` is set.
-- The row is re-read just before the write: a delete, discard, lock or
-  canonical projection during the provider call wins.
-- The outer provisional lines are stretched to the audio span, so the batch
-  transcript's first and last lines stay inside the locked window.
+- The row is re-read before any audio is sent to the provider and again just
+  before the write: a delete, discard, lock, privacy change or canonical
+  projection wins.
+- Each unit's first and last provisional line is padded by at most two seconds
+  and never past that unit's audio, so the batch transcript's edge lines stay
+  inside the locked window and every provisional line keeps its midpoint
+  inside the unit that replaces it.
 - Provisional segments carry no speaker number, so canonical speaker numbering
   starts where it would have.
-- Skipped: recordings over 20 minutes, partial records, custom STT, locked,
-  discarded and private rows. One pass per recording per process.
+- Bounds: recordings up to 20 minutes and 8 units (one provider request per
+  unit), one pass per recording and two passes at a time per process. Partial
+  records, custom STT, locked, discarded and private rows are skipped.
+- `CONVERSATIONS_V3_BATCH_MANUAL_END=off` also stops the pass: without a stored
+  manual-end request there is nothing for it to act on.
 
 Known limits, to settle before `on`: notes written from the provisional
 transcript are not rewritten when the canonical one lands; a recording with
-speech groups more than five minutes apart has inner window edges that are not
-stretched; there is no concurrency cap on passes.
+speech groups more than five minutes apart inside one unit has inner window
+edges that are not padded; a multi-unit recording that the pass skips or fails
+keeps the silence and lock timers.
 
 Readback: `omi_conversations_v3_batch_manual_end_total{outcome}`,
 `omi_conversations_v3_fast_finish_total{outcome}` and

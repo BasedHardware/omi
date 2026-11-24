@@ -444,9 +444,9 @@
     {
       "path": "utils/batch_pipeline/live.py",
       "function": "_manual_finish_admitted",
-      "kind": "asyncio.ensure_future",
+      "kind": "start_background_task",
       "count": 1,
-      "why": "Manual-finish first transcript (SCA-3024), at most one per recording per process and only for owners admitted by CONVERSATIONS_V3_FAST_FINISH: a best-effort early provider transcript written after record admission has committed. Losing it at SIGKILL loses only the early transcript; the admitted batch job still owns and delivers the canonical one, and a single-unit recording's manual-end cut is stored before the task starts."
+      "why": "Manual-finish first transcript (SCA-3024), at most one per recording and two at a time per process, only for owners admitted by CONVERSATIONS_V3_FAST_FINISH: a best-effort early provider transcript started after record admission has committed. Losing it at SIGKILL loses only the early transcript; the admitted batch job still owns and delivers the canonical one, a single-unit recording's manual-end cut is stored before the task starts, and a multi-unit cut is stored only after the transcript write."
     }
   ]
 }

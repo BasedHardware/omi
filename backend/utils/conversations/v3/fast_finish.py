@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 
 # One provider request and one in-memory PCM buffer per finish: 20 min of 16 kHz mono is 38 MB.
 MAX_SECONDS = 1200.0
+# One provider request per unit; units split at an audio gap over 30 s.
+MAX_UNITS = 8
+# How far a unit's first and last provisional line may reach toward that unit's audio bounds.
+EDGE_PAD_SECONDS = 2.0
 SAMPLE_RATE = 16000
 
 OUTCOMES = Counter(
@@ -52,6 +56,8 @@ for _outcome in (
     'audio_error',
     'provider_error',
     'write_error',
+    'cut_error',
+    'error',
 ):
     OUTCOMES.labels(_outcome)
 
@@ -127,14 +133,15 @@ def run(
     write=None,
     transcribe=None,
     refresh=None,
-    promote=None,
+    cut=None,
 ) -> str:
     """Transcribe ``units`` and write them as provisional segments. Returns the counted outcome; never raises.
 
     Runs on a worker thread: the cohort read is synchronous there (on the event loop a cold
-    membership cache answers False). ``refresh`` re-reads the row just before the write, so a
-    delete, discard, lock or canonical projection during the provider call wins. ``promote`` stores
-    the manual-end cut before the transcript write wakes the builder.
+    membership cache answers False). ``refresh`` re-reads the row before any audio leaves for the
+    provider and again just before the write, so a delete, discard, lock, privacy change or
+    canonical projection wins. ``cut`` stores the manual end only after the whole-recording
+    transcript is written: a cut without it would lock a partial window on a multi-unit recording.
     """
     try:
         outcome = _run(
@@ -146,22 +153,25 @@ def run(
             write=write,
             transcribe=transcribe or _transcribe,
             refresh=refresh,
-            promote=promote,
+            cut=cut,
         )
     except Exception as error:
-        logger.warning('event=v3_fast_finish outcome=write_error exception_type=%s', type(error).__name__)
-        outcome = 'write_error'
+        logger.warning('event=v3_fast_finish outcome=error exception_type=%s', type(error).__name__)
+        outcome = 'error'
     OUTCOMES.labels(outcome).inc()
     logger.info('event=v3_fast_finish outcome=%s units=%s', outcome, len(units))
     return outcome
 
 
-def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, promote) -> str:
+def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, cut) -> str:
     if not enabled(uid):
         return 'not_enabled'
+    if refresh is not None:
+        # Admission read this row before staging. Nothing is sent to the provider on a stale grant.
+        row = refresh()
     if not eligible(row):
         return 'ineligible'
-    if not units or sum(duration for _, duration, _ in units) > MAX_SECONDS:
+    if not units or len(units) > MAX_UNITS or sum(duration for _, duration, _ in units) > MAX_SECONDS:
         return 'too_long'
     origin = row['started_at'].timestamp()
     segments: list[dict[str, Any]] = []
@@ -174,15 +184,23 @@ def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, 
     SECONDS.labels('audio').observe(time.monotonic() - started)
     started = time.monotonic()
     try:
-        for start, _, pcm in audio:
+        for start, duration, pcm in audio:
             shift = start - origin
-            for segment in transcribe(pcm, row.get('language')):
+            lines = sorted(transcribe(pcm, row.get('language')), key=lambda line: (line['start'], line['end']))
+            for segment in lines:
                 segment['start'] += shift
                 segment['end'] += shift
                 # The batch projection allocates speaker numbers after every stored integer id, covered
                 # rows included. Provisional rows keep their label and claim no number.
                 segment['speaker_id'] = None
-                segments.append(segment)
+            if lines:
+                # A locked window keeps the bounds of the lines it was built from, and the batch
+                # transcript's edge lines can sit a little outside them. Pad this unit's outer lines,
+                # never past its own audio: the batch projection replaces a line by its midpoint,
+                # which must stay inside the unit it came from.
+                lines[0]['start'] = max(shift, lines[0]['start'] - EDGE_PAD_SECONDS)
+                lines[-1]['end'] = min(shift + duration, lines[-1]['end'] + EDGE_PAD_SECONDS)
+            segments.extend(lines)
     except Exception as error:
         logger.warning('event=v3_fast_finish outcome=provider_error exception_type=%s', type(error).__name__)
         return 'provider_error'
@@ -190,19 +208,10 @@ def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, 
     if not segments:
         return 'empty'
     segments.sort(key=lambda segment: (segment['start'], segment['end']))
-    # A locked window keeps the bounds of the lines it was built from, and the batch transcript's
-    # first and last lines can sit a few hundred milliseconds outside them. Stretch the outer
-    # provisional lines to the audio they came from so those canonical lines stay inside.
-    first_audio = min(start for start, _, _ in audio) - origin
-    last_audio = max(start + duration for start, duration, _ in audio) - origin
-    segments[0]['start'] = min(segments[0]['start'], first_audio)
-    segments[-1]['end'] = max(segments[-1]['end'], last_audio)
     if refresh is not None and not eligible(refresh()):
         return 'superseded'
     started = time.monotonic()
     try:
-        if promote is not None:
-            promote()
         if write is None:
             from database.conversations import update_conversation_segments as write
         # False: the canonical record already projected (or the row is gone); the batch transcript wins.
@@ -211,4 +220,13 @@ def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, 
         logger.warning('event=v3_fast_finish outcome=write_error exception_type=%s', type(error).__name__)
         return 'write_error'
     SECONDS.labels('write').observe(time.monotonic() - started)
-    return 'written' if written is not False else 'superseded'
+    if written is False:
+        return 'superseded'
+    if cut is not None:
+        try:
+            cut()
+        except Exception as error:
+            # The transcript is stored; without the cut the window follows the silence and lock timers.
+            logger.warning('event=v3_fast_finish outcome=cut_error exception_type=%s', type(error).__name__)
+            return 'cut_error'
+    return 'written'

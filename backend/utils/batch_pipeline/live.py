@@ -59,7 +59,7 @@ from utils.batch_pipeline.language_receipt import admission as language_admissio
 from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
 from config.record_seal_rules import overlap_trim_enabled
 from config.record_seal_repair import fresh_enabled as fresh_seal_repair_enabled
-from utils.executors import db_executor, storage_executor, run_blocking
+from utils.executors import db_executor, storage_executor, run_blocking, start_background_task
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
 from utils.sync.stage import current_stage
@@ -374,6 +374,8 @@ _FAST_FINISH_TASKS: set = set()
 # retried or re-run; one provider transcription per recording is enough.
 _FAST_FINISH_STARTED: dict[str, None] = {}
 _FAST_FINISH_STARTED_MAX = 4096
+# Each pass holds a recording's PCM in memory and a storage thread for a provider call.
+_FAST_FINISH_MAX_ACTIVE = 2
 
 
 async def _manual_finish_admitted(store, uid, conversation_id, current, units, client, key) -> None:
@@ -381,58 +383,71 @@ async def _manual_finish_admitted(store, uid, conversation_id, current, units, c
 
     A single batch unit projects as one transcript, so its cut is safe to store now. Several units
     project one at a time; cutting on the first would lock a partial window, so those keep the
-    silence and lock timers unless the first-transcript pass, which covers every unit at once,
-    takes the recording. Never raises and never delays admission's result.
+    silence and lock timers unless the first-transcript pass writes every unit at once, and only
+    then does that pass store the cut. Never raises and never delays admission's result.
     """
     from config.server_batch import manual_end_marker_enabled
     from database import conversations_v3
-    from utils.conversations.v3 import fast_finish, metrics as v3_metrics
+    from utils.conversations.v3 import fast_finish, metrics as v3_metrics, triggers as v3_triggers
 
     try:
         if not current.get('recording') or not current.get('v3_manual_end_requested'):
             return
         if not manual_end_marker_enabled():
             return
-
-        def promote():
-            return conversations_v3.promote_manual_end(uid, conversation_id, firestore_client=store.client)
-
-        if len(units) == 1:
+        single = len(units) == 1
+        if single:
             # Stored before any detached work, so losing the process cannot lose a single-unit cut.
-            promoted = await run_blocking(db_executor, promote)
+            promoted = await run_blocking(
+                db_executor, conversations_v3.promote_manual_end, uid, conversation_id, firestore_client=store.client
+            )
             v3_metrics.BATCH_MANUAL_END.labels('promoted' if promoted else 'not_promoted').inc()
-        if fast_finish.eligible(current) and conversation_id not in _FAST_FINISH_STARTED:
-            _FAST_FINISH_STARTED[conversation_id] = None
-            while len(_FAST_FINISH_STARTED) > _FAST_FINISH_STARTED_MAX:
-                _FAST_FINISH_STARTED.pop(next(iter(_FAST_FINISH_STARTED)))
-            allowed = {private_cloud_sync_bucket, derived_audio_bucket()}
-            # The manifest and attestation hold the same reference dicts; reading adds metadata to them.
-            copied = [(start, duration, [dict(ref) for ref in refs]) for start, duration, refs in units]
+        if (
+            not fast_finish.eligible(current)
+            or conversation_id in _FAST_FINISH_STARTED
+            or len(_FAST_FINISH_TASKS) >= _FAST_FINISH_MAX_ACTIVE
+        ):
+            if not single:
+                v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
+            return
+        _FAST_FINISH_STARTED[conversation_id] = None
+        while len(_FAST_FINISH_STARTED) > _FAST_FINISH_STARTED_MAX:
+            _FAST_FINISH_STARTED.pop(next(iter(_FAST_FINISH_STARTED)))
+        allowed = {private_cloud_sync_bucket, derived_audio_bucket()}
+        # The manifest and attestation hold the same reference dicts; reading adds metadata to them.
+        copied = [(start, duration, [dict(ref) for ref in refs]) for start, duration, refs in units]
 
-            def read(ref):
-                return read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True)
+        def read(ref):
+            return read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True)
 
-            def refresh():
-                snapshot = (
-                    store.client.collection('users').document(uid).collection('conversations').document(conversation_id)
-                )
-                return snapshot.get().to_dict() or {}
+        def refresh():
+            snapshot = (
+                store.client.collection('users').document(uid).collection('conversations').document(conversation_id)
+            )
+            return snapshot.get().to_dict() or {}
 
-            def run():
-                outcome = fast_finish.run(uid, conversation_id, current, copied, read, refresh=refresh, promote=promote)
-                if outcome == 'written':
-                    v3_metrics.BATCH_MANUAL_END.labels('fast_finish').inc()
-                elif len(copied) > 1:
-                    v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
+        def cut():
+            # Sets the cut and wakes the builder again; the transcript write's own wake may have
+            # run before the cut existed.
+            v3_triggers.changed(uid, conversation_id, manual_end=True)
 
-            # Detached on purpose: admission must not wait for a provider call. Losing it at
-            # SIGKILL loses only the early transcript; the admitted batch job still delivers.
-            task = asyncio.ensure_future(run_blocking(storage_executor, run))
-            # The loop holds tasks weakly; keep this one until it settles.
-            _FAST_FINISH_TASKS.add(task)
-            task.add_done_callback(_FAST_FINISH_TASKS.discard)
-        elif len(units) > 1:
-            v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
+        def run():
+            outcome = fast_finish.run(
+                uid, conversation_id, current, copied, read, refresh=refresh, cut=None if single else cut
+            )
+            if outcome == 'written':
+                v3_metrics.BATCH_MANUAL_END.labels('fast_finish').inc()
+            elif not single:
+                v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
+
+        async def detached():
+            await run_blocking(storage_executor, run)
+
+        # Detached on purpose: admission must not wait for a provider call. Losing it at
+        # SIGKILL loses only the early transcript; the admitted batch job still delivers.
+        task = start_background_task(detached(), name='v3_fast_finish')
+        _FAST_FINISH_TASKS.add(task)
+        task.add_done_callback(_FAST_FINISH_TASKS.discard)
     except Exception as error:
         logger.warning('event=v3_manual_finish_admission outcome=error exception_type=%s', type(error).__name__)
         try:

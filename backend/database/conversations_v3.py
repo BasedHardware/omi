@@ -595,6 +595,8 @@ def promote_manual_end(uid, cid, *, firestore_client=None):
         if (
             not row.get('recording')
             or not row.get('v3_manual_end_requested')
+            # The cut is materialised from finished_at; without it the marker would be inert.
+            or not row.get('finished_at')
             or row.get('v3_manual_end')
             or row.get('deleted')
             or row.get('discarded')
