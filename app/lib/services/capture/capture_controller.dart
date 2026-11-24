@@ -897,7 +897,7 @@ class CaptureController extends ChangeNotifier
   }
 
   /// Whether the capture has seen the server close this exact recording.
-  bool hasClosedServerRecording(String recordingId) => _seenConversationCloses.contains(recordingId);
+  bool hasClosedServerRecording(String recordingId) => _closedServerRecordings.contains(recordingId);
 
   // Identifies a conversation boundary within a continuous recording. This is
   // presentation/action identity, not another capture authorization generation.
@@ -1045,6 +1045,7 @@ class CaptureController extends ChangeNotifier
 
   final Map<String, _ConversationClose> _pendingConversationCloses = {};
   final Set<String> _seenConversationCloses = {};
+  final Set<String> _closedServerRecordings = {};
   final Set<_ConversationClose> _admittedConversationCloses = {};
   final Set<_ConversationClose> _pendingProcessCloses = {};
   int _conversationCustodyEpoch = 0;
@@ -4450,9 +4451,11 @@ class CaptureController extends ChangeNotifier
         close.bind(conversationId);
         _pendingProcessCloses.remove(close);
         if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
-        if (saved != null && saved.status != ConversationStatus.in_progress) {
-          _rememberConversationClose(saved.id);
-          if (saved.id == verifiedLiveServerRecordingId) notifyListeners();
+        if (saved != null) {
+          // Always remembered: a later processing-started event for this id must not cut again.
+          final closed = saved.status != ConversationStatus.in_progress;
+          _rememberConversationClose(saved.id, closed: closed);
+          if (closed && saved.id == verifiedLiveServerRecordingId) notifyListeners();
         }
         if (showManualFinish) actions.onManualFinishSettled(placeholder, outcome, showFailure: !confirmedProcessing);
         await OptimisticProcessingPlaceholder.applyProcessResult(
