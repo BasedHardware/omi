@@ -1033,6 +1033,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "feature-flag-deadlines.yml/notify": {
+      "budget_p50_minutes": 5,
+      "display_name": "notify",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": "github.repository == 'BasedHardware/omi'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "One daily checkout, registry scan and GitHub issue sync. No PR runs.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "firestore_read_reconcile.yml/reconcile": {
       "budget_p50_minutes": 10,
       "display_name": "reconcile",
@@ -4597,6 +4615,18 @@
             }
           }
         }
+      }
+    },
+    "feature-flag-deadlines.yml": {
+      "name": "Feature Flag Deadlines",
+      "owner": "CI maintainers",
+      "rationale": "Daily escalation for feature flags approaching their main gate deadline.",
+      "triggers": {
+        "schedule": [
+          {
+            "cron": "11 0 * * *"
+          }
+        ]
       }
     },
     "firestore_read_reconcile.yml": {

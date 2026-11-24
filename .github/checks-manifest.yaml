@@ -124,7 +124,7 @@ checks:
     reason: "The 2026-09-24 inventory found an incorrect notes-v2 default and missing calendar, memory and JIT gates in the handwritten catalog; code reads and deploy declarations now require reviewed registry entries and a deterministic rendered doc"
   - id: feature-flag-registry-fixtures
     command: ["python3", "scripts/test_check_feature_flag_registry.py"]
-    triggers: ["config/feature-flags.yaml", "scripts/feature_flag_registry.py", "scripts/check_feature_flag_registry.py", "scripts/test_check_feature_flag_registry.py", "scripts/git_test_env.py", "scripts/render_feature_flag_registry.py", ".github/scripts/run_checks.py", ".github/checks-manifest.yaml"]
+    triggers: ["config/feature-flags.yaml", "scripts/feature_flag_registry.py", "scripts/check_feature_flag_registry.py", "scripts/test_check_feature_flag_registry.py", "scripts/report_feature_flag_deadlines.py", "scripts/git_test_env.py", "scripts/render_feature_flag_registry.py", ".github/workflows/feature-flag-deadlines.yml", ".github/scripts/run_checks.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Registry extraction, uniqueness, date warnings, retirement and rendered-doc drift must remain covered by hermetic fixtures"
   - id: posthog-flag-sync-fixtures
