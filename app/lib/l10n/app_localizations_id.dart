@@ -15838,4 +15838,15 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Perangkat Anda sudah menggunakan versi firmware terbaru yang didukung';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Sinkronkan rekaman Anda terlebih dahulu';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan.';
 }

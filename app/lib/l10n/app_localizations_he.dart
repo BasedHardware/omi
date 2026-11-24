@@ -15710,4 +15710,14 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'המכשיר שלך כבר נמצא בגרסת הקושחה החדשה ביותר הנתמכת עבורו';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'סנכרן תחילה את ההקלטות שלך';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.';
 }

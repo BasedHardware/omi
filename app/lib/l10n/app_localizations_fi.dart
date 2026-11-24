@@ -15829,4 +15829,14 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Laiteellasi on jo uusin tuettu laiteohjelmistoversio';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Synkronoi nauhoituksesi ensin';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.';
 }

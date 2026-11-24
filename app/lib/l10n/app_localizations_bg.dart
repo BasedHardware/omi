@@ -15875,4 +15875,15 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Вашето устройство вече работи с най-новата поддържана версия на фърмуера';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Първо синхронизирайте записите си';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Някои записи все още са на устройството. Оставете ги да приключат със синхронизирането към телефона, след което започнете актуализацията.';
 }

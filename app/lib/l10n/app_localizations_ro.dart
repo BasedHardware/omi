@@ -15889,4 +15889,15 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Dispozitivul tău are deja cea mai recentă versiune de firmware acceptată';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Sincronizează mai întâi înregistrările';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Unele înregistrări sunt încă pe dispozitivul tău. Lasă-le să termine de sincronizat cu telefonul tău, apoi pornește actualizarea.';
 }

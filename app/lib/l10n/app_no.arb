@@ -4763,5 +4763,8 @@
     "prepaidCodeFieldHint": "Skriv inn koden din",
     "prepaidCodeRedeem": "Løs inn",
     "prepaidCodeRedeemed": "Koden er løst inn",
-    "prepaidCodeResult": "{reason, select, invalid{Denne koden er ikke gyldig. Sjekk den og prøv igjen.} used{Denne koden er allerede brukt.} expired{Denne koden har utløpt.} hasPlan{Du har allerede et abonnement. Koden din ble ikke brukt. Løs den inn når abonnementet ditt slutter.} notPrepaid{Denne koden kan ikke løses inn her. Bruk den når du velger et abonnement.} notEligible{Denne koden kan ikke brukes på denne kontoen.} rateLimited{For mange forsøk. Prøv igjen senere.} other{Noe gikk galt. Prøv igjen.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Denne koden er ikke gyldig. Sjekk den og prøv igjen.} used{Denne koden er allerede brukt.} expired{Denne koden har utløpt.} hasPlan{Du har allerede et abonnement. Koden din ble ikke brukt. Løs den inn når abonnementet ditt slutter.} notPrepaid{Denne koden kan ikke løses inn her. Bruk den når du velger et abonnement.} notEligible{Denne koden kan ikke brukes på denne kontoen.} rateLimited{For mange forsøk. Prøv igjen senere.} other{Noe gikk galt. Prøv igjen.}}",
+    "firmwareNewestSupportedForDevice": "Enheten din har allerede den nyeste støttede fastvareversjonen",
+    "firmwareSyncRecordingsFirstTitle": "Synkroniser opptakene dine først",
+    "firmwareSyncRecordingsFirstMessage": "Noen opptak ligger fortsatt på enheten din. La dem fullføre synkroniseringen til telefonen din, og start deretter oppdateringen."
 }

@@ -8,10 +8,13 @@ import 'package:omi/pages/home/firmware_mixin.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/devices/firmware_device_session.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/firmware_update_battery.dart';
+import 'package:omi/utils/firmware_update_hold.dart';
 import 'firmware_update_dialog.dart';
 
 class FirmwareUpdate extends StatefulWidget {
@@ -39,6 +42,18 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   // Store reference to provider for safe disposal
   DeviceProvider? _deviceProvider;
 
+  @override
+  bool get holdsReleaseNotInstalled => !widget.isRollback;
+
+  @override
+  void onReleaseHeld() {
+    if (!mounted) return;
+    setState(() {
+      shouldUpdate = false;
+      isConfirmedCurrent = true;
+    });
+  }
+
   /// Asks the server which firmware is current. A check that got no answer shows an error state
   /// with Try Again, never "Your device is up to date" (ux-contract §17.2).
   /// A lookup that throws (a malformed answer) is a failed check, never an endless spinner (D1).
@@ -58,8 +73,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       isConfirmedCurrent = false;
     });
 
+    final bootloaderSha256 = await readConnectedBootloaderSha256(device.id);
+    if (!mounted) return;
     if (widget.isRollback) {
-      final answered = await _answered(() => getStableVersion(deviceModelNumber: device.modelNumber));
+      final answered = await _answered(
+          () => getStableVersion(deviceModelNumber: device.modelNumber, bootloaderSha256: bootloaderSha256));
       if (!answered) return _failCheck();
       final stableVersion = latestFirmwareDetails['version']?.toString();
       final alreadyStable = DeviceUtils.isValidFirmwareVersion(device.firmwareRevision) &&
@@ -94,15 +112,20 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             hardwareRevision: device.hardwareRevision,
             manufacturerName: device.manufacturerName,
             serialNumber: device.serialNumber,
+            bootloaderSha256: bootloaderSha256,
           ));
       if (!answered) return _failCheck();
       final result = await checkFirmwareUpdate(currentFirmware: widget.device!.firmwareRevision);
       // An answer with no usable release (empty, draft, unparsable) is as inconclusive as no answer.
       if (result.status == FirmwareUpdateCheck.releaseUnavailable) return _failCheck();
+      // This pendant already took this release and kept its firmware: it is on the newest it supports.
+      final held = result.status == FirmwareUpdateCheck.updateAvailable &&
+          (await FirmwareUpdateHold.load()).isHeld(deviceId: device.id, version: result.version);
       if (mounted) {
         setState(() {
-          shouldUpdate = result.status == FirmwareUpdateCheck.updateAvailable;
-          isConfirmedCurrent = result.status == FirmwareUpdateCheck.upToDate;
+          isHeldRelease = held;
+          shouldUpdate = result.status == FirmwareUpdateCheck.updateAvailable && !held;
+          isConfirmedCurrent = result.status == FirmwareUpdateCheck.upToDate || held;
           // An unreadable device revision gets no Try Again: a re-check would reuse the same revision.
           updateMessage = switch (result.status) {
             FirmwareUpdateCheck.currentVersionUnknown => context.l10n.unableToDetermineFirmwareVersion,
@@ -387,6 +410,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   Future<void> _startUpdate() async {
     final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
     if (_batteryBlocksUpdate(deviceProvider)) return;
+    if (await _recordingsBlockUpdate()) return;
+    if (!mounted) return;
     var targetVersion = latestFirmwareDetails['version']?.toString() ?? '';
     if (targetVersion.startsWith('3.0.17')) {
       final confirmed = await showOmiConfirm(
@@ -403,8 +428,9 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       context: context,
       steps: otaUpdateSteps,
       onUpdateStart: () async {
-        // Battery and charging may have changed while a confirmation was open.
+        // Battery, charging and unsynced recordings may have changed while a confirmation was open.
         if (!mounted || _batteryBlocksUpdate(deviceProvider)) return;
+        if (_unsyncedDeviceRecordings() > 0) return;
         deviceProvider.setFirmwareUpdateInProgress(true);
         if (await downloadFirmware()) {
           if (!mounted) return;
@@ -417,6 +443,26 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         }
       },
     );
+  }
+
+  /// Recordings the app knows are still only on the pendant. An update restarts the pendant; if it
+  /// then needed service those recordings would be stranded, so they are synced first.
+  int _unsyncedDeviceRecordings() {
+    try {
+      return Provider.of<SyncProvider>(context, listen: false).missingWalsOnDevice.length;
+    } on ProviderNotFoundException {
+      return 0;
+    }
+  }
+
+  Future<bool> _recordingsBlockUpdate() async {
+    if (_unsyncedDeviceRecordings() == 0) return false;
+    await showOmiAlert(
+      context,
+      title: context.l10n.firmwareSyncRecordingsFirstTitle,
+      message: context.l10n.firmwareSyncRecordingsFirstMessage,
+    );
+    return true;
   }
 
   bool _batteryBlocksUpdate(DeviceProvider provider) =>
@@ -448,7 +494,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
               children: [
                 Flexible(
                   child: Text(
-                    widget.isRollback ? context.l10n.alreadyOnStableFirmware : context.l10n.yourDeviceIsUpToDate,
+                    widget.isRollback
+                        ? context.l10n.alreadyOnStableFirmware
+                        : isHeldRelease
+                            ? context.l10n.firmwareNewestSupportedForDevice
+                            : context.l10n.yourDeviceIsUpToDate,
                     style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                   ),
                 ),

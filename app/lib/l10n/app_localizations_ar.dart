@@ -15736,4 +15736,14 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'جهازك يعمل بالفعل بأحدث إصدار مدعوم من البرنامج الثابت';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'مزامنة تسجيلاتك أولاً';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'لا تزال بعض التسجيلات على جهازك. دعها تكمل المزامنة إلى هاتفك، ثم ابدأ التحديث.';
 }

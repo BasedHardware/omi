@@ -15848,4 +15848,15 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Jūsų įrenginyje jau yra naujausia palaikoma aparatinės programinės įrangos versija';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Pirmiausia sinchronizuokite savo įrašus';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Kai kurie įrašai dar yra jūsų įrenginyje. Leiskite jiems užbaigti sinchronizavimą į telefoną, tada pradėkite atnaujinimą.';
 }

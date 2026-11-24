@@ -15591,4 +15591,13 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'お使いのデバイスは、すでにサポートされている最新のファームウェアバージョンで動作しています';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'まず録音を同期してください';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage => '一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。';
 }

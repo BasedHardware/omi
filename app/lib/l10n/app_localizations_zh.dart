@@ -15567,4 +15567,13 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => '您的设备已处于所支持的最新固件版本';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => '请先同步录音';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage => '部分录音仍存储在您的设备上。请等待它们同步到手机完成后，再开始更新。';
 }

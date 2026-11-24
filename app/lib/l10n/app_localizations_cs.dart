@@ -15823,4 +15823,14 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Vaše zařízení už používá nejnovější podporovanou verzi firmwaru';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Nejprve synchronizujte své nahrávky';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.';
 }

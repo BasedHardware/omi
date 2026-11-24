@@ -15852,4 +15852,14 @@ class AppLocalizationsSl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Vaša naprava že uporablja najnovejšo podprto različico firmwareja';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Najprej sinhronizirajte posnetke';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Nekateri posnetki so še na vaši napravi. Počakajte, da se dokonča sinhroniziranje s telefonom, nato pa začnite posodobitev.';
 }

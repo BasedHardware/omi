@@ -15834,4 +15834,14 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Cihazınız zaten desteklenen en yeni firmware sürümünü kullanıyor';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Önce kayıtlarınızı senkronize edin';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.';
 }

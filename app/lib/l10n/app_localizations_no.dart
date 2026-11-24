@@ -15829,4 +15829,14 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Enheten din har allerede den nyeste støttede fastvareversjonen';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Synkroniser opptakene dine først';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Noen opptak ligger fortsatt på enheten din. La dem fullføre synkroniseringen til telefonen din, og start deretter oppdateringen.';
 }

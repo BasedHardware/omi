@@ -15882,4 +15882,14 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Az eszközödön már a legújabb támogatott firmware-verzió fut';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Először szinkronizáld a felvételeidet';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.';
 }

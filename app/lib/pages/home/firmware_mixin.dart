@@ -21,6 +21,7 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/analytics/firmware_update_telemetry.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/firmware_install_verification.dart';
+import 'package:omi/utils/firmware_update_hold.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/manifest/manifest.dart';
 
@@ -48,10 +49,13 @@ Future<Map?> Function({
 /// The `not_installed` failure copy. On CV1 pendants with the stock bootloader the staged image is
 /// erased at boot, so retrying cannot install it and repeated updates are discouraged
 /// (`omi/firmware/docs/cv1-manufacturing-and-field-recovery.md`): CV1 points to support instead.
+bool isOmiCv1Device(BtDevice? device) =>
+    device != null &&
+    device.type == DeviceType.omi &&
+    DeviceUtils.isOmiCv1(modelNumber: device.modelNumber, deviceName: device.name);
+
 String firmwareNotInstalledMessage(AppLocalizations l10n, BtDevice? device, String observedVersion) {
-  final cv1 = device != null &&
-      device.type == DeviceType.omi &&
-      DeviceUtils.isOmiCv1(modelNumber: device.modelNumber, deviceName: device.name);
+  final cv1 = isOmiCv1Device(device);
   return cv1
       ? l10n.firmwareUpdateNotInstalledCv1Message(observedVersion)
       : l10n.firmwareUpdateNotInstalledMessage(observedVersion);
@@ -75,6 +79,14 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   /// Set when the last attempt failed; cleared when a new attempt starts. The page shows a failed
   /// state with the cause, Try Again and Contact Support instead of silently resetting.
   FirmwareUpdateFailure? updateFailure;
+
+  /// The offered release uploaded but this pendant kept its firmware, so it is held for this device
+  /// and the page presents the current firmware as the newest it supports.
+  bool isHeldRelease = false;
+
+  /// Whether an upload that does not install holds the release for this device. Forward updates
+  /// only: a rollback that does not install must not hold the forward release.
+  bool get holdsReleaseNotInstalled => false;
 
   void _fail(FirmwareUpdateFailure failure) {
     if (!mounted) return;
@@ -395,19 +407,37 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       case FirmwareInstallOutcome.noReconnect:
         attempt.failed(failureClass: 'no_reconnect');
     }
+    final targetVersion = latestFirmwareDetails['version']?.toString() ?? '';
+    final held = result.outcome == FirmwareInstallOutcome.notInstalled &&
+        holdsReleaseNotInstalled &&
+        isOmiCv1Device(device) &&
+        targetVersion.isNotEmpty;
+    final holds = await FirmwareUpdateHold.load();
+    if (held) {
+      await holds.hold(deviceId: device.id, version: targetVersion);
+    } else if (result.outcome == FirmwareInstallOutcome.installed) {
+      await holds.clear(device.id);
+    }
     if (!mounted) return;
     setState(() {
       isVerifying = false;
       isInstalling = false;
       observedFirmwareVersion = result.observedVersion;
       isInstalled = result.outcome == FirmwareInstallOutcome.installed;
-      updateFailure = switch (result.outcome) {
-        FirmwareInstallOutcome.installed => null,
-        FirmwareInstallOutcome.notInstalled => FirmwareUpdateFailure.notInstalled,
-        FirmwareInstallOutcome.noReconnect => FirmwareUpdateFailure.noReconnect,
-      };
+      isHeldRelease = held;
+      updateFailure = held
+          ? null
+          : switch (result.outcome) {
+              FirmwareInstallOutcome.installed => null,
+              FirmwareInstallOutcome.notInstalled => FirmwareUpdateFailure.notInstalled,
+              FirmwareInstallOutcome.noReconnect => FirmwareUpdateFailure.noReconnect,
+            };
     });
+    if (held) onReleaseHeld();
   }
+
+  /// Called after an update that did not install was recorded as held for this device.
+  void onReleaseHeld() {}
 
   /// Returns false when the check itself failed (no answer): the caller shows an error state, never
   /// "up to date".
@@ -417,14 +447,25 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     required String hardwareRevision,
     required String manufacturerName,
     String? serialNumber,
+    String? bootloaderSha256,
   }) async {
-    final details = await (debugLatestFirmwareLookup ?? getLatestFirmwareVersion)(
-      deviceModelNumber: deviceModelNumber,
-      firmwareRevision: firmwareRevision,
-      hardwareRevision: hardwareRevision,
-      manufacturerName: manufacturerName,
-      serialNumber: serialNumber,
-    );
+    final debugLookup = debugLatestFirmwareLookup;
+    final details = debugLookup != null
+        ? await debugLookup(
+            deviceModelNumber: deviceModelNumber,
+            firmwareRevision: firmwareRevision,
+            hardwareRevision: hardwareRevision,
+            manufacturerName: manufacturerName,
+            serialNumber: serialNumber,
+          )
+        : await getLatestFirmwareVersion(
+            deviceModelNumber: deviceModelNumber,
+            firmwareRevision: firmwareRevision,
+            hardwareRevision: hardwareRevision,
+            manufacturerName: manufacturerName,
+            serialNumber: serialNumber,
+            bootloaderSha256: bootloaderSha256,
+          );
     latestFirmwareDetails = details ?? {};
     if (details == null) return false;
     if (latestFirmwareDetails['ota_update_steps'] != null) {
@@ -437,8 +478,9 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   }
 
   /// Returns false when the check itself failed (no answer).
-  Future<bool> getStableVersion({required String deviceModelNumber}) async {
-    final details = await getStableFirmwareVersion(deviceModelNumber: deviceModelNumber);
+  Future<bool> getStableVersion({required String deviceModelNumber, String? bootloaderSha256}) async {
+    final details =
+        await getStableFirmwareVersion(deviceModelNumber: deviceModelNumber, bootloaderSha256: bootloaderSha256);
     latestFirmwareDetails = details ?? {};
     if (details == null) return false;
     if (latestFirmwareDetails['ota_update_steps'] != null) {

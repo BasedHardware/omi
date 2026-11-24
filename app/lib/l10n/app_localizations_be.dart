@@ -15859,4 +15859,14 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Ваша прылада ўжо працуе на найноўшай падтрыманай версіі прашыўкі';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Спачатку сінхранізуйце свае запісы';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Некаторыя запісы ўсё яшчэ на вашай прыладзе. Дайце ім завяршыць сінхранізацыю на тэлефон, а потым пачніце абнаўленне.';
 }

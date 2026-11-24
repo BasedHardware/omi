@@ -15865,4 +15865,14 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Je apparaat heeft al de nieuwste ondersteunde firmwareversie';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Synchroniseer eerst je opnames';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.';
 }

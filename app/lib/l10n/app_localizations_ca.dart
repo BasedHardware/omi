@@ -15903,4 +15903,15 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'El vostre dispositiu ja té la versió més recent de firmware compatible';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Primer sincronitzeu els enregistraments';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l\'actualització.';
 }

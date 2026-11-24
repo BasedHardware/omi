@@ -15749,4 +15749,14 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'อุปกรณ์ของคุณใช้เฟิร์มแวร์เวอร์ชันล่าสุดที่รองรับอยู่แล้ว';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'ซิงค์ไฟล์บันทึกเสียงของคุณก่อน';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต';
 }

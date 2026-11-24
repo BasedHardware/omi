@@ -27770,6 +27770,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{reason, select, invalid{This code isn\'t valid. Check it and try again.} used{This code has already been used.} expired{This code has expired.} hasPlan{You already have a plan. Your code was not used. Redeem it after your plan ends.} notPrepaid{This code can\'t be redeemed here. Use it when you choose a plan.} notEligible{This code can\'t be used on this account.} rateLimited{Too many tries. Try again later.} other{Something went wrong. Please try again.}}'**
   String prepaidCodeResult(String reason);
+
+  /// Calm status line on the firmware update page when this pendant has taken the newest firmware release as far as it can. Shown instead of 'Your device is up to date'. Must not sound like an error.
+  ///
+  /// In en, this message translates to:
+  /// **'Your device is already on its newest supported firmware version'**
+  String get firmwareNewestSupportedForDevice;
+
+  /// Dialog title shown when the user starts a firmware update while recordings are still stored only on the pendant.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync your recordings first'**
+  String get firmwareSyncRecordingsFirstTitle;
+
+  /// Dialog body explaining that recordings must finish syncing from the pendant to the phone before the firmware update can start.
+  ///
+  /// In en, this message translates to:
+  /// **'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.'**
+  String get firmwareSyncRecordingsFirstMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

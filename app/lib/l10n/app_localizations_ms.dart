@@ -15861,4 +15861,15 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Peranti anda sudah menggunakan versi firmware terbaharu yang disokong';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Segerakkan rakaman anda terlebih dahulu';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.';
 }

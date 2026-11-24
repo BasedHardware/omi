@@ -15815,4 +15815,14 @@ class AppLocalizationsDa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Din enhed kører allerede den nyeste understøttede firmwareversion';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Synkroniser dine optagelser først';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen.';
 }

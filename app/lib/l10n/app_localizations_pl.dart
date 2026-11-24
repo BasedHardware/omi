@@ -15869,4 +15869,15 @@ class AppLocalizationsPl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Twoje urządzenie ma już najnowszą obsługiwaną wersję oprogramowania układowego';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Najpierw zsynchronizuj nagrania';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Niektóre nagrania wciąż znajdują się na urządzeniu. Poczekaj, aż zostaną zsynchronizowane z telefonem, a następnie rozpocznij aktualizację.';
 }

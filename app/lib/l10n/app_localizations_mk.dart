@@ -15889,4 +15889,14 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Вашиот уред веќе ја користи најновата поддржана верзија на фирмверот';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Прво синхронизирајте ги вашите записи';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Некои записи се уште се на вашиот уред. Оставете ги да ја завршат синхронизацијата со телефонот, а потоа започнете со ажурирањето.';
 }

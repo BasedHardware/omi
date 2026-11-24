@@ -15836,4 +15836,14 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'آپ کا ڈیوائس پہلے ہی سپورٹ شدہ تازہ ترین فرم ویئر ورژن پر ہے';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'پہلے اپنی ریکارڈنگز سنک کریں';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔';
 }

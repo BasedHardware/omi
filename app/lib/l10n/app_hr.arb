@@ -12320,5 +12320,8 @@
     "prepaidCodeFieldHint": "Unesite svoj kôd",
     "prepaidCodeRedeem": "Iskoristi",
     "prepaidCodeRedeemed": "Kôd je iskorišten",
-    "prepaidCodeResult": "{reason, select, invalid{Ovaj kôd nije valjan. Provjerite ga i pokušajte ponovno.} used{Ovaj kôd je već iskorišten.} expired{Ovaj kôd je istekao.} hasPlan{Već imate plan. Vaš kôd nije iskorišten. Iskoristite ga kada vam plan istekne.} notPrepaid{Ovaj kôd ne može se iskoristiti ovdje. Iskoristite ga kada odaberete plan.} notEligible{Ovaj kôd ne može se koristiti na ovom računu.} rateLimited{Previše pokušaja. Pokušajte kasnije.} other{Nešto nije u redu. Pokušajte ponovno.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Ovaj kôd nije valjan. Provjerite ga i pokušajte ponovno.} used{Ovaj kôd je već iskorišten.} expired{Ovaj kôd je istekao.} hasPlan{Već imate plan. Vaš kôd nije iskorišten. Iskoristite ga kada vam plan istekne.} notPrepaid{Ovaj kôd ne može se iskoristiti ovdje. Iskoristite ga kada odaberete plan.} notEligible{Ovaj kôd ne može se koristiti na ovom računu.} rateLimited{Previše pokušaja. Pokušajte kasnije.} other{Nešto nije u redu. Pokušajte ponovno.}}",
+    "firmwareNewestSupportedForDevice": "Tvoj uređaj je već na najnovijoj podržanoj verziji firmvera",
+    "firmwareSyncRecordingsFirstTitle": "Prvo sinkroniziraj svoje snimke",
+    "firmwareSyncRecordingsFirstMessage": "Neke snimke još su na tvojem uređaju. Pričekaj da se sinkroniziraju na tvoj telefon, a zatim pokreni ažuriranje."
 }

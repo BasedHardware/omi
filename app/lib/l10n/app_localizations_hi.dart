@@ -15806,4 +15806,14 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'आपका डिवाइस पहले से ही नवीनतम समर्थित फर्मवेयर संस्करण पर है';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'पहले अपनी रिकॉर्डिंग सिंक करें';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'कुछ रिकॉर्डिंग अभी भी आपके डिवाइस पर हैं। उन्हें आपके फ़ोन पर सिंक होने दें, फिर अपडेट शुरू करें।';
 }

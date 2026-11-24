@@ -15807,4 +15807,14 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Your device is already on its newest supported firmware version';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Sync your recordings first';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.';
 }
