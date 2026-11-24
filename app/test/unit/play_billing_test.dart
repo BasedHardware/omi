@@ -163,10 +163,49 @@ void main() {
     expect((await answer(200, 'not json')).retryable, isTrue);
   });
 
+  test('a token store error ends the purchase as failed instead of leaving it open', () async {
+    billing = PlayBilling(platform: () => platform, verify: server.call, store: _BrokenTokenStore());
+    final offers = (await billing.loadOffers(playConfig))!;
+    platform.onLaunch = [playPurchase(PurchaseStatus.purchased)];
+    final result = await billing.purchase(offer: offers.monthly!, withTrial: false, obfuscatedAccountId: 'a');
+    expect(result.outcome, PlayPurchaseOutcome.failed);
+    expect(billing.busy, isFalse);
+  });
+
+  test('a cleanup error after the server granted the plan still reports the purchase', () async {
+    final failing = _FailingCleanupStore();
+    billing = PlayBilling(platform: () => platform, verify: server.call, store: failing);
+    final offers = (await billing.loadOffers(playConfig))!;
+    platform.onLaunch = [playPurchase(PurchaseStatus.purchased)];
+    final result = await billing.purchase(offer: offers.monthly!, withTrial: false, obfuscatedAccountId: 'a');
+    expect(result.outcome, PlayPurchaseOutcome.purchased);
+    expect(billing.busy, isFalse);
+    expect(failing.tokens.single['token'], 'purchase-token'); // sent once more on the next launch
+  });
+
   test('manage subscription opens Play subscription center for omi_pro', () {
     expect(
       playManageSubscriptionUri('omi_pro').toString(),
       'https://play.google.com/store/account/subscriptions?sku=omi_pro&package=com.friend.ios',
     );
   });
+}
+
+class _BrokenTokenStore implements PlayPendingTokenStore {
+  @override
+  Future<List<Map<String, String>>> read() async => throw StateError('store unavailable');
+
+  @override
+  Future<void> write(List<Map<String, String>> value) async => throw StateError('store unavailable');
+}
+
+/// Stores the token, then fails every later write.
+class _FailingCleanupStore extends MemoryTokenStore {
+  var _writes = 0;
+
+  @override
+  Future<void> write(List<Map<String, String>> value) async {
+    if (++_writes > 1) throw StateError('store unavailable');
+    await super.write(value);
+  }
 }
