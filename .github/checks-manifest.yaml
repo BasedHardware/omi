@@ -1811,6 +1811,11 @@ checks:
     triggers: ["plugins/uber_call/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the backend forwards geolocation as free-form JSON, so pydantic does not coerce the values inside it; a coordinate arriving as a list or object reached float(), which raises TypeError rather than the ValueError call_uber handles, so the documented 400 for a bad geolocation became an unhandled 500"
+  - id: github-app-agentic-completion-tests
+    command: ["python3", "plugins/omi-github-app/test_claude_code_agentic.py"]
+    triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#25955: the agentic runner discarded the IMPLEMENTATION_COMPLETE check, so a run that ended unfinished or hit the iteration cap committed and pushed the partial tree as success"
   - id: github-app-client-tests
     command: ["python3", "plugins/omi-github-app/test_github_client.py"]
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]

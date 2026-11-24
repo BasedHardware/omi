@@ -15864,7 +15864,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Rēķins tiek izrakstīts caur omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Atjauniniet karti omi.me, lai atgūtu $plan.';
+  String playStripePlanPaused(String plan) {
+    return 'Jūsu $plan plāns ir apturēts.';
   }
 }

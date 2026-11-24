@@ -217,6 +217,7 @@ class ConversationProvider extends ChangeNotifier {
   /// The server's resume point after the last loaded page, when its cursor is enabled; the next page
   /// sends it alongside the offset, and an older server ignores it.
   String? _conversationServerCursor;
+  String? _conversationServerMode;
   final Set<String> _conversationServerLoadedIds = {};
 
   /// The server-side filters the paging position above belongs to, and whether it has moved past the
@@ -437,6 +438,7 @@ class ConversationProvider extends ChangeNotifier {
     _conversationServerOffset = 0;
     _conversationServerHasMore = false;
     _conversationServerCursor = null;
+    _conversationServerMode = null;
     _conversationServerLoadedIds.clear();
     _conversationPagingKey = null;
     _conversationPagedDeeper = false;
@@ -939,6 +941,7 @@ class ConversationProvider extends ChangeNotifier {
       _conversationServerHasMore = result.page
           .more(storageCount: result.storageCount, pageSize: _conversationPageSize, truncated: result.truncated);
       _conversationServerCursor = result.page.nextCursor;
+      _conversationServerMode = result.page.homeMode;
       _conversationPagingKey = pagingKey;
       _conversationPagedDeeper = false;
     }
@@ -1054,6 +1057,10 @@ class ConversationProvider extends ChangeNotifier {
         return false;
       }
     }
+    return _fetchConversations(restoreMergeWatches: restoreMergeWatches);
+  }
+
+  Future<bool> _fetchConversations({required bool restoreMergeWatches}) async {
     if (restoreMergeWatches) _restoreMergeWatches();
     loadMoreFailed = false;
     final generation = _sessionGeneration;
@@ -1138,7 +1145,9 @@ class ConversationProvider extends ChangeNotifier {
     );
     final pageHasMore = result.page
         .more(storageCount: result.storageCount, pageSize: _conversationPageSize, truncated: result.truncated);
-    if (_conversationPagedDeeper && _conversationPagingKey == pagingKey) {
+    if (_conversationPagedDeeper &&
+        _conversationPagingKey == pagingKey &&
+        _conversationServerMode == result.page.homeMode) {
       // Same filters, older pages already loaded and still on screen: keep the deeper position.
       // Restarting at page two would re-read every page the reader already has before any new row.
       _recordServerPageIds(result.items, result.storageCount);
@@ -1147,6 +1156,7 @@ class ConversationProvider extends ChangeNotifier {
       _conversationServerOffset = _recordServerPageIds(result.items, result.storageCount);
       _conversationServerHasMore = pageHasMore;
       _conversationServerCursor = result.page.nextCursor;
+      _conversationServerMode = result.page.homeMode;
       _conversationPagingKey = pagingKey;
       _conversationPagedDeeper = false;
     }
@@ -1503,6 +1513,7 @@ class ConversationProvider extends ChangeNotifier {
 
     final pageOffset = _conversationServerOffset;
     final pageCursor = _conversationServerCursor;
+    final homeMode = _conversationServerMode;
     final typedApi = _conversationApi;
     late final _HomePage pageResult;
     if (conversationPageFetcherOverride != null) {
@@ -1516,7 +1527,7 @@ class ConversationProvider extends ChangeNotifier {
         typed: null
       );
     } else if (typedApi != null) {
-      pageResult = await _getTypedHomePage(typedApi, pageOffset, pageCursor, startDate, endDate);
+      pageResult = await _getTypedHomePage(typedApi, pageOffset, pageCursor, homeMode, startDate, endDate);
     } else {
       var storageCount = 0;
       var page = const ConversationPageHeaders();
@@ -1526,6 +1537,7 @@ class ConversationProvider extends ChangeNotifier {
         onPageHeaders: (headers) => page = headers,
         offset: pageOffset,
         cursor: pageCursor,
+        homeMode: homeMode,
         includeDiscarded: showDiscardedConversations,
         startDate: startDate,
         endDate: endDate,
@@ -1557,6 +1569,10 @@ class ConversationProvider extends ChangeNotifier {
       return false;
     }
     loadMoreFailed = false;
+    if (homeMode == 'indexed' && pageResult.page.homeMode != homeMode) {
+      // A gate rollback or an older backend invalidated the indexed continuation.
+      return _fetchConversations(restoreMergeWatches: false);
+    }
     final newConversations = pageResult.items;
     _conversationServerOffset += _recordServerPageIds(newConversations, pageResult.storageCount);
     _conversationServerHasMore = pageResult.page

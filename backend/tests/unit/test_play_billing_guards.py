@@ -961,7 +961,8 @@ def test_prepaid_redemption_for_a_no_history_buyer_matches_main_with_added_reads
     monkeypatch.setattr(prepaid_route.redemption, '_has_live_plan', base)
     assert _redeem(prepaid_route) == head
     assert head[0] == 200
-    assert head_reads == prepaid_route.reads == ['user']
+    # The second read is the Play re-check right before the Stripe create (same document, no Google call here).
+    assert head_reads == prepaid_route.reads == ['user', 'user']
 
 
 def test_prepaid_redemption_for_a_play_history_buyer_on_hold_or_unreadable(prepaid_route, monkeypatch):

@@ -44,3 +44,27 @@ local row, an ended or an `incomplete` Stripe subscription logs only
 3. Keeping Play: in Stripe, cancel the Stripe subscription now and refund its latest invoice. The Stripe
    webhook removes the Stripe row; the next Play notification or reconcile grants Play.
 4. Reply to the user with what was cancelled and refunded.
+
+## Prepaid code next to Google Play
+
+A reader redeemed a prepaid or bundle code (a $0 Stripe subscription carrying the `prepaid_code_redemption`
+marker) while a Google Play purchase landed on the same account. Redemption re-reads Google right before it
+creates the subscription, so this needs a narrow race. Nothing is cancelled or refunded automatically: the
+prepaid subscription charges nothing, and cancelling it would destroy the included term without returning the
+single-use code. The user is not notified. The Stripe webhook and every Play notification or reconcile log:
+
+```
+prepaid_code_play_overlap uid=<uid> purchase=<first 12 hex of the purchase document id> code=<promotion code id>
+```
+
+```
+severity>=ERROR AND (textPayload:"prepaid_code_play_overlap" OR jsonPayload.message:"prepaid_code_play_overlap")
+```
+
+Fix it: the reader has an included term AND is paying Google.
+
+1. Play Console: cancel the Google Play subscription for that purchase and refund its latest charge.
+2. The prepaid term stands. Leave the Stripe subscription alone.
+3. Once Google reports the purchase revoked, resend the prepaid subscription's latest
+   `customer.subscription.*` event from the Stripe dashboard so the prepaid plan is stored again.
+4. Reply to the user: the Google Play purchase was refunded and their included term runs to its end date.
