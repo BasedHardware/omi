@@ -18,7 +18,6 @@ from database.firestore_transaction_retry import (
     FirestoreAborted,
     FirestoreContentionExhausted,
     equal_jitter_delay,
-    transaction_with_safe_rollback,
 )
 from database.google_credentials import (
     customer_data_service_account,
@@ -582,9 +581,7 @@ def run_transactional(
     for attempt in range(1, max(1, attempts) + 1):
         try:
             transaction = (
-                initial_transaction
-                if attempt == 1 and initial_transaction is not None
-                else transaction_with_safe_rollback(client.transaction())
+                initial_transaction if attempt == 1 and initial_transaction is not None else client.transaction()
             )
             with transaction_body():
                 result = transactional_callable(transaction, *args, **kwargs)
