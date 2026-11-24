@@ -306,6 +306,7 @@ class ConversationsV3Provider extends ChangeNotifier {
         a.structured.title == b.structured.title &&
         a.v3?.tileState == b.v3?.tileState &&
         a.v3?.homeHidden == b.v3?.homeHidden &&
+        listEquals(a.v3?.recordingIds, b.v3?.recordingIds) &&
         a.startedAt == b.startedAt &&
         a.finishedAt == b.finishedAt &&
         a.transcriptSegments.length == b.transcriptSegments.length;

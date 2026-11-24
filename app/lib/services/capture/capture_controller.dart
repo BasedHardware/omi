@@ -858,6 +858,10 @@ class CaptureController extends ChangeNotifier
   /// conversation so the pipeline can be joined without timing heuristics.
   String? get activeRecordingId => _recordingTelemetry.recordingId;
 
+  /// Live segments received by this capture, excluding account-wide snapshot-only segments.
+  Iterable<String> get locallyReceivedSegmentIds =>
+      segments.map((segment) => segment.id).where(_segmentArrivals.containsKey);
+
   ({String uid, String? recordingId, CaptureSessionToken? token})? _liveSocketIdentity;
 
   bool get _canReuseTranscriptionSocket {
@@ -1231,13 +1235,15 @@ class CaptureController extends ChangeNotifier
   Future<void>? _processInFlight;
   Future<InProgressProcessOutcome>? _lastProcessRequest;
   bool _firstCaptureProcess = false;
+  String? _finishLiveConversationId;
 
   /// Finish through the coordinator and return that exact Process Now answer, with why it has no
   /// conversation when it has none (transport, not found, empty). Throws [StateError] when this
   /// finish made no request (a phone Transcribe Later recording).
-  Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
+  Future<InProgressProcessOutcome> finishCaptureWithOutcome({String? liveConversationId}) async {
     _lastProcessRequest = null;
     _firstCaptureProcess = true;
+    _finishLiveConversationId = liveConversationId;
     try {
       await finishCapture();
       final request = _lastProcessRequest;
@@ -1245,6 +1251,7 @@ class CaptureController extends ChangeNotifier
       return await request;
     } finally {
       _firstCaptureProcess = false;
+      _finishLiveConversationId = null;
     }
   }
 
@@ -5069,7 +5076,7 @@ class CaptureController extends ChangeNotifier
         };
 
   Future<void> _processConversationBody() async {
-    await forceProcessingCurrentConversation();
+    await forceProcessingCurrentConversation(liveConversationId: _finishLiveConversationId);
     await _processInFlight;
   }
 }

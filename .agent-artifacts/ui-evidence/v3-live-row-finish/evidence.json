@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-live-finish.png",
+      "platform": "mobile-ios",
+      "description": "Home v3 shows Finish for a live window owned through its recording ID before local segments arrive.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-placeholder-finish.png",
+      "platform": "mobile-ios",
+      "description": "Home v3 shows the same Finish control while this phone streams before a server window is visible.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-home-finish-processing.png",
+      "platform": "mobile-ios",
+      "description": "Processing replaces the live row after tapping Finish on Home.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

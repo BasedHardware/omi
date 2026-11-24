@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/home/home_navigation.dart';
+import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
@@ -44,7 +45,7 @@ class LiveConversationEndButton extends StatefulWidget {
 }
 
 class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
-  bool _ended = false;
+  final _finish = LiveFinishLatch();
   // Failure count when a successful close latched End; a later unsuccessful settlement releases it.
   int? _latchedFailures;
 
@@ -67,10 +68,10 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
       (capture) => capture != null && _owns(conversation, capture, v3Feedback),
     );
     final failures = context.select<ConversationsV3Provider?, int>((v3) => v3?.finishFailures ?? 0);
-    if (_ended && _latchedFailures != null && failures != _latchedFailures) {
+    if (_latchedFailures != null && failures != _latchedFailures) {
       _latchedFailures = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _ended = false;
+        _finish.release();
         if (mounted) widget.onEndSuppressionChanged?.call(false);
       });
     }
@@ -95,12 +96,10 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
             child: InkWell(
               borderRadius: OmiRadius.pillAll,
               onTap: () async {
-                if (_ended) return;
-                HapticFeedback.mediumImpact();
                 final capture = context.read<CaptureProvider>();
                 // Checked again at the tap: the capture may have moved on since the last build.
-                if (!_owns(conversation, capture, v3Feedback)) return;
-                _ended = true;
+                if (!_owns(conversation, capture, v3Feedback) || !_finish.tryStart()) return;
+                HapticFeedback.mediumImpact();
                 final setEndSuppressed = widget.onEndSuppressionChanged;
                 setEndSuppressed?.call(true);
                 final v3 = context.read<ConversationsV3Provider?>();
@@ -120,7 +119,7 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                 } finally {
                   // A closed window with a published finish stays latched; only a failed close restores End.
                   if (!(closed && started)) {
-                    _ended = false;
+                    _finish.release();
                     if (_owns(conversation, capture, v3Feedback)) setEndSuppressed?.call(false);
                   } else {
                     _latchedFailures = failuresAtTap;
