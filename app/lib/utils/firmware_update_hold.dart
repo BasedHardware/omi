@@ -48,6 +48,10 @@ class FirmwareUpdateHold {
   /// The held release for [deviceId], if any.
   String? heldVersion(String deviceId) => deviceId.isEmpty ? null : _read()[deviceId];
 
+  /// Whether [version] is held for [deviceId]: the pendant already took it and kept its firmware.
+  static Future<bool> heldFor(String deviceId, String version) async =>
+      (await load()).isHeld(deviceId: deviceId, version: version);
+
   /// True when [version] is the release held for [deviceId].
   bool isHeld({required String deviceId, required String version}) {
     final held = heldVersion(deviceId);
