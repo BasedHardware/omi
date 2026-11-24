@@ -244,6 +244,55 @@ class WorkflowContractTests(unittest.TestCase):
             CHECKER.validate(root),
         )
 
+    def test_workerd_helm_requires_admission_and_identity_binding(self) -> None:
+        cases = (
+            (
+                "(inputs.mode == 'workerd-install' || inputs.mode == 'workerd-rollback') &&",
+                "(inputs.mode == 'workerd-install' || inputs.mode == 'deploy') &&",
+                "workerd helm must run only for normal admitted main-ref production install or rollback",
+            ),
+            (
+                'if [[ "$identity" != "$EXPECTED_IDENTITY" ]]; then',
+                'if false; then',
+                'workerd helm must retain if [[ "$identity" != "$EXPECTED_IDENTITY" ]]; then',
+            ),
+            (
+                '--ref "$ADMITTED_SHA" --verify-image "$REPOSITORY" --check-worktree)"',
+                '--ref "$ADMITTED_SHA")"',
+                'workerd helm must retain --ref "$ADMITTED_SHA" --verify-image "$REPOSITORY" --check-worktree)"',
+            ),
+            (
+                "version: v4.2.4",
+                "version: latest",
+                "workerd helm must retain version: v4.2.4",
+            ),
+            (
+                "if: failure() && inputs.mode == 'workerd-install' && steps.install.outcome != 'skipped'",
+                "if: false",
+                "workerd helm must retain if: failure() && inputs.mode == 'workerd-install' && steps.install.outcome != 'skipped'",
+            ),
+        )
+        for old, new, error in cases:
+            with self.subTest(error=error):
+                root = self.fixture_root()
+                self.mutate(root, CHECKER.MANUAL_WORKFLOW_PATH, old, new)
+                self.assertIn(error, CHECKER.validate(root))
+
+    def test_workerd_helm_migrates_before_install(self) -> None:
+        root = self.fixture_root()
+        path = root / CHECKER.MANUAL_WORKFLOW_PATH
+        text = path.read_text(encoding="utf-8")
+        start = text.index("      - name: Install chart\n")
+        end = self._step_end(text, start)
+        step = text[start:end]
+        text = text[:start] + text[end:]
+        before = text.index("      - name: Run migration Job\n")
+        path.write_text(text[:before] + step + text[before:], encoding="utf-8")
+        self.assertIn(
+            "workerd helm must verify the identity, then migrate, then install",
+            CHECKER.validate(root),
+        )
+
     def test_current_workflows_are_valid(self) -> None:
         self.assertEqual(CHECKER.validate(), [])
 
@@ -624,8 +673,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only')\n",
-            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only') || true\n",
+            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only' || github.event.inputs.mode == 'workerd-install' || github.event.inputs.mode == 'workerd-rollback')\n",
+            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only' || github.event.inputs.mode == 'workerd-install' || github.event.inputs.mode == 'workerd-rollback') || true\n",
         )
         self.assertIn("manual source admission must use exactly the main-ref deploy condition", CHECKER.validate(root))
 

@@ -11,6 +11,9 @@
 #                        in the same GitHub Environment as deploy, so the prod
 #                        registry keeps the prod approval and WIF binding.
 #   workerd-image-only  Publish only the admitted prod workerd image.
+#   workerd-install     Migrate and helm-install prod workerd at workerd_digest from the admitted
+#                       SHA. Refuses unless release-identity.sh prints exactly workerd_identity.
+#   workerd-rollback    helm rollback prod workerd to workerd_helm_revision.
 #   repair-traffic-only  Restore Cloud Run traffic to the serving revisions.
 #   recover-pump-cap    SCA-3318 one-time service-level cap correction on the dark pump.
 
@@ -65,6 +68,8 @@ on:
           - deploy
           - build-only
           - workerd-image-only
+          - workerd-install
+          - workerd-rollback
           - repair-traffic-only
           - operator-qualify-publish
           - recover-pump-cap
@@ -106,6 +111,18 @@ on:
         default: ''
       pump_recovery_etag:
         description: 'SCA-3318 cap recovery only. Fresh Cloud Run v2 service etag from Release readback.'
+        required: false
+        default: ''
+      workerd_digest:
+        description: 'workerd-install only. sha256 digest of gcr.io/based-hardware/workerd to install.'
+        required: false
+        default: ''
+      workerd_identity:
+        description: 'workerd-install only. Exact release-identity.sh JSON object the RELEASE_GO names.'
+        required: false
+        default: ''
+      workerd_helm_revision:
+        description: 'workerd-rollback only. Helm revision of prod-omi-workerd to restore.'
         required: false
         default: ''
       # Break-glass: the eligibility proof requires a *successful* Release
@@ -196,6 +213,8 @@ jobs:
       github.event.inputs.mode == 'deploy' ||
       github.event.inputs.mode == 'build-only' ||
       github.event.inputs.mode == 'workerd-image-only' ||
+      github.event.inputs.mode == 'workerd-install' ||
+      github.event.inputs.mode == 'workerd-rollback' ||
       github.event.inputs.mode == 'recover-pump-cap'
     runs-on: ubuntu-latest
     steps:
@@ -247,9 +266,9 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
-          if [[ "$WORKFLOW_MODE" == workerd-image-only ]]; then
+          if [[ "$WORKFLOW_MODE" == workerd-* ]]; then
             if [[ "$DEPLOY_ENVIRONMENT" != prod || "$SKIP_ELIGIBILITY" == true || "$BREAK_GLASS_LOCK" == true ]]; then
-              echo 'workerd-image-only requires prod and normal release admission.' >&2
+              echo "$WORKFLOW_MODE requires prod and normal release admission." >&2
               exit 1
             fi
           fi
@@ -453,7 +472,7 @@ jobs:
     needs: validate-production-boundary
     if: >-
       github.ref == 'refs/heads/main' &&
-      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only')
+      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only' || github.event.inputs.mode == 'workerd-install' || github.event.inputs.mode == 'workerd-rollback')
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       actions: 'read'
@@ -912,6 +931,165 @@ jobs:
             echo "- Image: \`$repository@$digest\`"
             echo "- Release identity: \`backend-go/deploy/workerd/release-identity.sh --digest $digest --ref $ADMITTED_SHA --verify-image $repository --check-worktree\` plus the same \`-f\` files as the install"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # SCA-3883: the CI route for the workerd chart (no direct Helm, permission audit K3).
+  # workerd-install binds to the release identity the RELEASE_GO names: it refuses unless
+  # release-identity.sh, run here on the admitted checkout with the pinned helm, prints
+  # exactly workerd_identity. It migrates first, then installs, then checks rollout and
+  # /ready, and helm-rolls back to the prior revision if any post-install check fails.
+  workerd-helm:
+    name: Install or roll back prod workerd
+    needs: [validate-production-boundary, firestore_readiness]
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (inputs.mode == 'workerd-install' || inputs.mode == 'workerd-rollback') &&
+      inputs.environment == 'prod' &&
+      needs.firestore_readiness.outputs.break_glass == 'false'
+    environment: prod
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NAMESPACE: prod-omi-backend
+      RELEASE: prod-omi-workerd
+      REPOSITORY: gcr.io/based-hardware/workerd
+    steps:
+      - name: Checkout admitted workerd source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          persist-credentials: false
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+          # The release identity binds the helm version; change it only with a new identity.
+          version: v4.2.4
+
+      - name: Google Auth (WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker --quiet
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Record current release
+        id: before
+        run: |
+          set -euo pipefail
+          revision="$(helm -n "$NAMESPACE" history "$RELEASE" --max 1 -o json | jq -r '.[-1].revision')"
+          [[ "$revision" =~ ^[0-9]+$ ]] || { echo "::error::Cannot read the current $RELEASE revision." >&2; exit 1; }
+          image="$(kubectl -n "$NAMESPACE" get "deployment/$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          { echo "### Prod workerd before"; echo "- Helm revision: \`$revision\`"; echo "- Image: \`$image\`"; } >> "$GITHUB_STEP_SUMMARY"
+          helm -n "$NAMESPACE" history "$RELEASE" --max 5
+
+      - name: Verify release identity
+        if: inputs.mode == 'workerd-install'
+        env:
+          ADMITTED_SHA: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          WORKERD_DIGEST: ${{ inputs.workerd_digest }}
+          EXPECTED_IDENTITY: ${{ inputs.workerd_identity }}
+        run: |
+          set -euo pipefail
+          [[ "$WORKERD_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo '::error::workerd_digest must be sha256:<64 hex>.' >&2; exit 1; }
+          identity="$(bash backend-go/deploy/workerd/release-identity.sh --digest "$WORKERD_DIGEST" \
+            --ref "$ADMITTED_SHA" --verify-image "$REPOSITORY" --check-worktree)"
+          { echo "### Workerd release identity"; echo '```'; echo "$identity"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$identity" != "$EXPECTED_IDENTITY" ]]; then
+            echo "::error::Release identity differs from workerd_identity; refusing to install." >&2
+            printf 'computed: %s\nexpected: %s\n' "$identity" "$EXPECTED_IDENTITY" >&2
+            exit 1
+          fi
+
+      - name: Run migration Job
+        if: inputs.mode == 'workerd-install'
+        env:
+          WORKERD_DIGEST: ${{ inputs.workerd_digest }}
+        run: |
+          set -euo pipefail
+          chart=backend-go/deploy/workerd
+          job="$RELEASE-migrate"
+          if kubectl -n "$NAMESPACE" get "job/$job" >/dev/null 2>&1; then
+            kubectl -n "$NAMESPACE" delete "job/$job" --wait=true
+          fi
+          helm template "$RELEASE" "$chart" --namespace "$NAMESPACE" -f "$chart/values-prod.yaml" \
+            --set-string "image.digest=$WORKERD_DIGEST" --set migration.enabled=true \
+            --show-only templates/migration.yaml | kubectl -n "$NAMESPACE" create -f -
+          if ! kubectl -n "$NAMESPACE" wait --for=condition=complete "job/$job" --timeout=5m; then
+            kubectl -n "$NAMESPACE" describe "job/$job" || true
+            kubectl -n "$NAMESPACE" logs "job/$job" --tail=50 || true
+            echo "::error::Workerd migration did not complete; the Deployment is unchanged." >&2
+            exit 1
+          fi
+          echo "- Migration: \`job/$job\` complete" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install chart
+        id: install
+        if: inputs.mode == 'workerd-install'
+        env:
+          WORKERD_DIGEST: ${{ inputs.workerd_digest }}
+        run: |
+          set -euo pipefail
+          chart=backend-go/deploy/workerd
+          helm upgrade --install "$RELEASE" "$chart" --namespace "$NAMESPACE" \
+            -f "$chart/values-prod.yaml" --set-string "image.digest=$WORKERD_DIGEST"
+
+      - name: Roll back to requested revision
+        id: rollback
+        if: inputs.mode == 'workerd-rollback'
+        env:
+          REVISION: ${{ inputs.workerd_helm_revision }}
+        run: |
+          set -euo pipefail
+          [[ "$REVISION" =~ ^[0-9]+$ ]] || { echo '::error::workerd_helm_revision must be a Helm revision number.' >&2; exit 1; }
+          helm -n "$NAMESPACE" rollback "$RELEASE" "$REVISION" --wait --timeout 5m
+
+      - name: Verify rollout and readiness
+        id: verify
+        run: |
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" rollout status "deployment/$RELEASE" --timeout=5m
+          kubectl -n "$NAMESPACE" port-forward "deployment/$RELEASE" 18080:8080 >"$RUNNER_TEMP/pf.log" 2>&1 &
+          pf=$!
+          trap 'kill "$pf" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 20); do curl -fsS -m 3 http://127.0.0.1:18080/ready >/dev/null 2>&1 && break; sleep 1; done
+          curl -fsS -m 5 http://127.0.0.1:18080/ready
+          image="$(kubectl -n "$NAMESPACE" get "deployment/$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          ready="$(kubectl -n "$NAMESPACE" get "deployment/$RELEASE" -o jsonpath='{.status.readyReplicas}/{.spec.replicas}')"
+          revision="$(helm -n "$NAMESPACE" history "$RELEASE" --max 1 -o json | jq -r '.[-1].revision')"
+          {
+            echo "### Prod workerd after (${{ inputs.mode }})"
+            echo "- Helm revision: \`$revision\` (before: \`${{ steps.before.outputs.revision }}\`)"
+            echo "- Image: \`$image\`"
+            echo "- Ready: \`$ready\`, \`/ready\` 200"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore prior revision after a failed install
+        if: failure() && inputs.mode == 'workerd-install' && steps.install.outcome != 'skipped'
+        env:
+          REVISION: ${{ steps.before.outputs.revision }}
+        run: |
+          set -euo pipefail
+          helm -n "$NAMESPACE" rollback "$RELEASE" "$REVISION" --wait --timeout 5m
+          kubectl -n "$NAMESPACE" rollout status "deployment/$RELEASE" --timeout=5m
+          echo "- **Install failed; restored Helm revision \`$REVISION\`.**" >> "$GITHUB_STEP_SUMMARY"
 
   # Plan B B2 release train: build-only also publishes every role image
   # (backend/Dockerfile.roles targets and listen-edge) from the admitted SHA,
