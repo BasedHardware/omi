@@ -259,6 +259,15 @@ def _resume(uid: str, promo: dict, claim: dict) -> dict:
     return _result(ends_at, months)
 
 
+def _release_before_create(promotion_code_id: str, uid: str) -> None:
+    """Free a claim taken before any Stripe create. If the release fails the claim stays with this reader,
+    and their retry resumes it (`_resume`), so the code is never lost to a third state."""
+    try:
+        redemptions_db.release(promotion_code_id)
+    except Exception as error:
+        logger.error(f"Prepaid code claim release failed for {uid}: {type(error).__name__}")
+
+
 def redeem_prepaid_code(uid: str, raw_code: str) -> dict:
     code = normalize_code(raw_code)
     if not code:
@@ -296,10 +305,15 @@ def redeem_prepaid_code(uid: str, raw_code: str) -> dict:
     try:
         play_now = _play_live(uid)[0]
     except PrepaidCodeError:
-        redemptions_db.release(promo['id'])
+        _release_before_create(promo['id'], uid)
         raise
+    except Exception as error:
+        # A storage read failed. Nothing was created, so free the code and ask the reader to retry.
+        logger.error(f"Prepaid code re-check failed for {uid}: {type(error).__name__}")
+        _release_before_create(promo['id'], uid)
+        raise PrepaidCodeError(503, TRY_AGAIN) from error
     if play_now:
-        redemptions_db.release(promo['id'])
+        _release_before_create(promo['id'], uid)
         raise PrepaidCodeError(409, HAS_PLAN)
 
     try:
