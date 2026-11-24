@@ -637,8 +637,30 @@ def test_client_session_id_stale_claim_is_deleted_and_reprocessed(monkeypatch):
     process.assert_called_once()
 
 
-def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch):
+@pytest.mark.parametrize(
+    'stored_projection',
+    [
+        pytest.param(
+            {
+                'schema_version': 1,
+                'transcript_sha256': '0' * 64,
+                'structure': {'title': 'Local summary'},
+                'provenance': {
+                    'model_id': 'local-model',
+                    'runtime': 'mlx',
+                    'device_class': 'mac',
+                    'generated_at': NOW.isoformat(),
+                },
+            },
+            id='valid-display-projection',
+        ),
+        pytest.param({'legacy': 'unparseable'}, id='incompatible-display-projection'),
+    ],
+)
+def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch, stored_projection):
     row = {}
+    process_kwargs = []
+    persisted_payloads = []
 
     def create(_uid, payload, *, idempotent):
         assert idempotent and not row
@@ -657,7 +679,8 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch):
         row['status'] = ConversationStatus.processing
         return True
 
-    def process(_uid, _language, conversation, **_kwargs):
+    def process(_uid, _language, conversation, **kwargs):
+        process_kwargs.append(kwargs)
         if processor.call_count == 1:
             raise conversation_processing_http_exception(RequestDeadlineExceeded('budget spent'))
         assert conversation.id == row['id']
@@ -669,14 +692,19 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch):
     create_claim = MagicMock(side_effect=create)
     delete = MagicMock()
     event = MagicMock()
+    bind_projection = MagicMock(return_value=False)
+
+    def persist(_uid, data):
+        persisted_payloads.append(dict(data))
+        row.update(data)
+
     monkeypatch.setattr(conversations_db, 'get_conversation', lambda *_args, **_kwargs: dict(row) or None)
     monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
+    monkeypatch.setattr(conversations_db, 'bind_client_processing', bind_projection)
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', create_claim)
     monkeypatch.setattr(developer.lifecycle_service, 'rollback_processing_admission', rollback)
     monkeypatch.setattr(developer.lifecycle_service, 'admit_processing', admit)
-    monkeypatch.setattr(
-        developer.lifecycle_service, 'persist_processed_conversation', lambda _uid, data: row.update(data)
-    )
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persist)
     monkeypatch.setattr(developer, 'process_conversation', processor)
     monkeypatch.setattr(developer, 'record_product_event', event)
 
@@ -688,6 +716,7 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch):
     assert raise_site_of(cut.value) == 'request_budget_exhausted'
     assert row['status'] == ConversationStatus.in_progress
     event.assert_not_called()
+    row['client_processing'] = dict(stored_projection)
 
     response = developer._create_conversation_from_segments(
         'uid1',
@@ -703,6 +732,12 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch):
     assert row['status'] == ConversationStatus.completed
     create_claim.assert_called_once()
     delete.assert_not_called()
+    assert len(process_kwargs) == 2
+    assert 'client_projection' not in process_kwargs[1]
+    assert len(persisted_payloads) == 1
+    assert 'client_processing' not in persisted_payloads[0]
+    assert row['client_processing'] == stored_projection
+    bind_projection.assert_not_called()
     event.assert_called_once_with('conversation_created', client_kind='ios', app_build='12574', uid='uid1')
 
 

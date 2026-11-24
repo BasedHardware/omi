@@ -2158,7 +2158,12 @@ def _ingest_conversation_from_segments(
                 existing_conversation.get('status') == ConversationStatus.in_progress
                 and metadata.get('from_segments_client_session_id') == request.client_session_id
             ):
-                resumable_conversation = OmiConversation.model_validate(existing_conversation)
+                # The persisted client projection is display data, not retry
+                # input. Strip it before model validation so a stale projection
+                # cannot prevent admission and transcript reuse.
+                resumable_conversation = OmiConversation.model_validate(
+                    strip_client_processing(dict(existing_conversation))
+                )
             elif _is_stale_from_segments_claim(
                 existing_conversation, request.client_session_id, datetime.now(timezone.utc)
             ):
@@ -2191,7 +2196,11 @@ def _ingest_conversation_from_segments(
     # Bind before any persist so the ingest-owner mutation can stamp the
     # projection onto the processing row. The coordinator's generic persists
     # never write this field.
-    client_projection = _accepted_client_projection(request, transcript_segments)
+    # A resumed keyed retry uses the persisted transcript, so a projection
+    # attached to the retry request is not bound to the conversation being resumed.
+    client_projection = (
+        None if resumable_conversation is not None else _accepted_client_projection(request, transcript_segments)
+    )
 
     # Keep original desktop segment IDs before client compaction. Only a bounded,
     # validated metadata payload enters the existing conversation write.
