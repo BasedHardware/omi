@@ -246,7 +246,7 @@ def _reachable_503_sites() -> dict[str, HTTPException]:
         'conversation_processing_retryable': gateway_error_contract.conversation_processing_http_exception(
             TimeoutError('slow')
         ),
-        'notes_deadline_exceeded': gateway_error_contract.conversation_processing_http_exception(
+        'request_budget_exhausted': gateway_error_contract.conversation_processing_http_exception(
             RequestDeadlineExceeded('spent')
         ),
         'auth_deadline_exceeded': _auth_deadline_503(),

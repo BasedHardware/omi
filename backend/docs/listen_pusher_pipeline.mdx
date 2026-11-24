@@ -39,6 +39,31 @@ summary leases, counters, rollout, rollback and deletion criteria.
 to restore classification-based hiding for derived media and recognized background
 on subsequent projections. The manual-end marker and classification remain stored.
 
+`CONVERSATIONS_V3_BATCH_MANUAL_END` defaults to `on`. A user finish of an audio-only
+v3 recording (server-batch capture, no transcript yet) stores `v3_manual_end_requested` in the
+terminal transaction. Record admission promotes it to `v3_manual_end` for a single-unit
+recording, or when the fast first transcript covers the whole recording. Set it to `off` on
+`backend` and `backend-integration` to restore the silence and lock timers for later finishes.
+
+`CONVERSATIONS_V3_FINISH_NO_POINTER` defaults to `on`. When the existing in-progress
+recording lookup misses, an authenticated v3 owner's Finish can acknowledge the
+live derived window in the existing processing response. An optional
+`live_conversation_id` selects an owner-visible live window when eligible. A
+transaction rechecks its live state and persists the cut or deferred batch
+request on its recording. A multi-unit batch request can cut only after the full
+native binding has projected. Set the switch to `off` on the API service to restore the lookup-miss 404.
+
+`CONVERSATIONS_V3_FAST_FINISH` defaults to `cohort` (the `v3-fast-finish` rollout cohort, empty
+until a member is added). For a member, or for every v3 owner with `on`, a manually
+finished v3 recording of up to 20 minutes is transcribed once through the prerecorded provider
+when record admission stages its sealed audio, and written as a provisional transcript that the
+batch record projection later replaces.
+
+`CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800. A transcript line
+starting at or after that elapsed time starts a separate v3 stretch. Set the
+value to `0` or `off` to disable the cap. See the
+[v3 runbook](./runbooks/conversations-v3.md) for bounds and rollout readback.
+
 `CONVERSATIONS_V3_LIVE_TITLE=on` is the default for v3 builder runtimes.
 Set it to `off` to stop new automatic title previews. An open, untitled derived
 row becomes eligible after 180 seconds of transcribed speech, with overlapping

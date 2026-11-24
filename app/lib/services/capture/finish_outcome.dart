@@ -45,6 +45,11 @@ final class FinishProcessing extends FinishOutcome {
   final String recordingId;
 }
 
+/// The server has no active recording pointer. Home waits for a matching result.
+final class FinishAwaitingResult extends FinishOutcome {
+  const FinishAwaitingResult();
+}
+
 /// Nothing new since the last Finish (or the server had already saved it: [alreadySaved]).
 final class FinishNothingNew extends FinishOutcome {
   const FinishNothingNew({this.alreadySaved = false});

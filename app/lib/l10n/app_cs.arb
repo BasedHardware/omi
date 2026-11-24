@@ -4622,7 +4622,6 @@
     "capturePendantDisconnectedShort": "Omi se znovu připojí sám",
     "forYou": "Pro vás",
     "stopThese": "Zastavit tyto",
-    "meetingActionItemsTitle": "Akční položky",
     "addToTasks": "Přidat do úkolů",
     "showInTranscript": "Zobrazit přepis",
     "tentativeTaskDueDate": "Termín přibližně {date}",
@@ -4764,6 +4763,9 @@
     "prepaidCodeRedeem": "Uplatnit",
     "prepaidCodeRedeemed": "Kód uplatněn",
     "prepaidCodeResult": "{reason, select, invalid{Tento kód není platný. Zkontrolujte ho a zkuste to znovu.} used{Tento kód už byl použit.} expired{Platnost tohoto kódu vypršela.} hasPlan{Už máte plán. Váš kód nebyl použit. Uplatněte ho, až váš plán skončí.} notPrepaid{Tento kód zde nelze uplatnit. Použijte ho při výběru plánu.} notEligible{Tento kód nelze použít v tomto účtu.} rateLimited{Příliš mnoho pokusů. Zkuste to později.} other{Něco se pokazilo. Zkuste to znovu.}}",
+    "playStripeBilledOnWeb": "Účtováno přes omi.me. Zrušit můžete kdykoli zde.",
+    "playStripeBilledOnWebShort": "Účtováno přes omi.me.",
+    "playStripeUpdateCardToGetPlanBack": "Aktualizujte kartu na omi.me a získejte {plan} zpět.",
     "firmwareNewestSupportedForDevice": "Vaše zařízení už používá nejnovější podporovanou verzi firmwaru",
     "firmwareSyncRecordingsFirstTitle": "Nejprve synchronizujte své nahrávky",
     "firmwareSyncRecordingsFirstMessage": "Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci."

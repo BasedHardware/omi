@@ -12179,7 +12179,6 @@
     "capturePendantDisconnectedShort": "Omi आपोआप पुन्हा कनेक्ट होईल",
     "forYou": "तुमच्यासाठी",
     "stopThese": "हे थांबवा",
-    "meetingActionItemsTitle": "करावयाच्या गोष्टी",
     "addToTasks": "टास्कमध्ये जोडा",
     "showInTranscript": "ट्रान्सक्रिप्टमध्ये दाखवा",
     "tentativeTaskDueDate": "अंदाजे अंतिम तारीख {date}",
@@ -12321,6 +12320,9 @@
     "prepaidCodeRedeem": "रिडीम करा",
     "prepaidCodeRedeemed": "कोड रिडीम झाला",
     "prepaidCodeResult": "{reason, select, invalid{हा कोड वैध नाही. तपासा आणि पुन्हा प्रयत्न करा.} used{हा कोड आधीच वापरला गेला आहे.} expired{या कोडची मुदत संपली आहे.} hasPlan{तुमच्याकडे आधीच प्लॅन आहे. तुमचा कोड वापरला गेला नाही. प्लॅन संपल्यावर तो रिडीम करा.} notPrepaid{हा कोड येथे रिडीम करता येत नाही. प्लॅन निवडताना तो वापरा.} notEligible{हा कोड या खात्यावर वापरता येत नाही.} rateLimited{खूप प्रयत्न झाले. नंतर पुन्हा प्रयत्न करा.} other{काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.}}",
+    "playStripeBilledOnWeb": "omi.me द्वारे बिल केले जाते. येथे कधीही रद्द करा.",
+    "playStripeBilledOnWebShort": "omi.me द्वारे बिल केले जाते.",
+    "playStripeUpdateCardToGetPlanBack": "{plan} परत मिळवण्यासाठी omi.me वर तुमचे कार्ड अपडेट करा.",
     "firmwareNewestSupportedForDevice": "तुमचे डिव्हाइस आधीच सर्वात नवीन समर्थित फर्मवेअर आवृत्तीवर आहे",
     "firmwareSyncRecordingsFirstTitle": "आधी तुमची रेकॉर्डिंग सिंक करा",
     "firmwareSyncRecordingsFirstMessage": "काही रेकॉर्डिंग अजून तुमच्या डिव्हाइसवर आहेत. त्या तुमच्या फोनवर पूर्णपणे सिंक होऊ द्या, नंतर अपडेट सुरू करा."

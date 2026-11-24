@@ -96,9 +96,9 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
       if (outcome == PaywallCheckoutOutcome.failed && _notice == null) {
         setState(() => _notice = context.l10n.anErrorOccurredTryAgain);
       }
-      if (outcome == PaywallCheckoutOutcome.purchased) {
+      if (outcome == PaywallCheckoutOutcome.purchased || outcome == PaywallCheckoutOutcome.alreadyPaid) {
         _dismissed = true;
-        Navigator.of(context).pop(true);
+        Navigator.of(context).pop(outcome == PaywallCheckoutOutcome.purchased);
       }
     } finally {
       if (mounted) setState(() => _busy = false);

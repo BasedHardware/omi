@@ -4622,7 +4622,6 @@
     "capturePendantDisconnectedShort": "Omi se va reconecta singur",
     "forYou": "Pentru tine",
     "stopThese": "Oprește acestea",
-    "meetingActionItemsTitle": "Elemente de acțiune",
     "addToTasks": "Adaugă la Sarcini",
     "showInTranscript": "Afișează transcrierea",
     "tentativeTaskDueDate": "Scadență aproximativă {date}",
@@ -4764,6 +4763,9 @@
     "prepaidCodeRedeem": "Folosește",
     "prepaidCodeRedeemed": "Cod folosit",
     "prepaidCodeResult": "{reason, select, invalid{Acest cod nu este valid. Verifică-l și încearcă din nou.} used{Acest cod a fost deja folosit.} expired{Acest cod a expirat.} hasPlan{Ai deja un plan. Codul tău nu a fost folosit. Folosește-l după ce planul tău se încheie.} notPrepaid{Acest cod nu poate fi folosit aici. Folosește-l când alegi un plan.} notEligible{Acest cod nu poate fi folosit în acest cont.} rateLimited{Prea multe încercări. Încearcă mai târziu.} other{Ceva nu a funcționat. Încearcă din nou.}}",
+    "playStripeBilledOnWeb": "Facturat prin omi.me. Anulează aici oricând.",
+    "playStripeBilledOnWebShort": "Facturat prin omi.me.",
+    "playStripeUpdateCardToGetPlanBack": "Actualizează cardul pe omi.me ca să recuperezi {plan}.",
     "firmwareNewestSupportedForDevice": "Dispozitivul tău are deja cea mai recentă versiune de firmware acceptată",
     "firmwareSyncRecordingsFirstTitle": "Sincronizează mai întâi înregistrările",
     "firmwareSyncRecordingsFirstMessage": "Unele înregistrări sunt încă pe dispozitivul tău. Lasă-le să termine de sincronizat cu telefonul tău, apoi pornește actualizarea."

@@ -1035,13 +1035,24 @@ def tests_for_changed_paths(
 def focused_tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> list[str]:
     """Keep known affected contracts even when another path requires broad CI.
 
-    Contracts precede directly changed tests so a bounded local run cannot lose
-    them to a large test-only diff. Each group is stable and deduplicated. This
-    is only pre-push feedback; the ordinary selector retains full-suite fallbacks.
+    Prioritized regressions come first, then other affected contracts, then
+    directly changed tests. Each group is stable and deduplicated. The ordinary
+    CI selector retains its full-suite fallbacks.
     """
     selected, _ = tests_for_changed_paths(changed_paths, all_tests, allow_full_suite=False)
-    changed_tests = {normalize_changed_path(path).removeprefix('backend/') for path in changed_paths}
-    return sorted(set(selected) - changed_tests) + sorted(set(selected) & changed_tests)
+    normalized_paths = {normalize_changed_path(path) for path in changed_paths}
+    changed_tests = {path.removeprefix('backend/') for path in normalized_paths}
+    priority_tests: set[str] = set()
+    if 'backend/utils/other/list_budget.py' in normalized_paths:
+        # CI finds these transitively. Keep them within the pre-push cap even
+        # when the listing change also selects many other affected contracts.
+        priority_tests = {
+            'tests/unit/test_pending_bridge_read_budget.py',
+            'tests/unit/test_retired_list_projection.py',
+        }.intersection(all_tests)
+
+    remaining = set(selected) - priority_tests
+    return sorted(priority_tests) + sorted(remaining - changed_tests) + sorted(remaining & changed_tests)
 
 
 def rotation_slice(test: str, total: int) -> int:

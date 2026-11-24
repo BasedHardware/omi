@@ -10,7 +10,10 @@ from utils.generated_compute import require_generated_compute, generated_compute
 import asyncio
 import hashlib
 import os
+import time
+from concurrent.futures import Future
 from contextlib import ExitStack, nullcontext
+from threading import Lock
 
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks, Header
@@ -30,6 +33,8 @@ import database.users as users_db
 from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
 from database import conversation_tombstones
 from database.legal_holds import (
+    DestructiveGateTakeover,
+    DestructiveOperationInProgress,
     LegalHoldActive,
     LegalHoldAuthorityUnavailable,
     assert_account_deletion_permitted,
@@ -38,6 +43,7 @@ from database.legal_holds import (
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from config import historical_tier
+from config import play_billing as play_billing_config
 from utils.conversations import historical_projection, home_step, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
@@ -181,6 +187,7 @@ from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
 from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
 from utils.conversations.v3 import live as v3_live, policy as v3_policy
+from utils.conversations.v3.finish import finish_live_window
 from database import conversations_v3_live, conversations_v3_processing
 from utils.conversations import list_page_headers
 
@@ -300,7 +307,17 @@ def _emit_speaker_identity_confirmed(
     )
 
 
-def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
+def _assert_detail_visible(conversation: dict, include_discarded: bool | None) -> None:
+    # Omitted keeps the historical detail default (show a stored discard).
+    # Noise and pending live bridges require explicit archive opt-in.
+    show_discarded = True if include_discarded is None else include_discarded
+    if hidden_from_default_detail(conversation) and include_discarded is not True:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded, presentation=True):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+
+def _enrich_deferred_conversation(uid: str, conversation: dict, *, include_discarded: bool | None = None) -> dict:
     """First open of a lazily-deferred desktop conversation. The LLM enrichment (summary, action
     items, memories, embeddings, app results) takes ~10s, so we run it in the BACKGROUND and return
     the conversation immediately: the client gets an instant open (transcript already present) and
@@ -309,8 +326,15 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     and first heartbeat. On enrichment failure the flag is re-armed and status reset to completed
     so the next open retries cleanly instead of spinning."""
     conversation_id = conversation.get('id')
+    admitted_at = datetime.now(timezone.utc)
+
+    def _current_detail() -> dict:
+        current = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
+        _assert_detail_visible(current, include_discarded)
+        return current
+
     try:
-        reacquired = lifecycle_service.reacquire_deferred_processing(uid, conversation_id)
+        reacquired = lifecycle_service.reacquire_deferred_processing(uid, conversation_id, admitted_at)
     except Exception as e:
         logger.error(f"lazy enrich reacquire failed uid={uid} conv={conversation_id}: {e}")
         # A reacquire that RAISED is a broken dependency, not a lost fence.
@@ -319,18 +343,23 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         record_lazy_desktop_deferral(event='enrich_reacquire_error')
         return conversation
     if not reacquired:
-        # The row was terminalized or discarded before reacquisition. A stale
-        # processor must not persist derived side effects after ownership loss.
+        # Another opener can already be enriching this row. Read its state
+        # before replying so a stale completed snapshot cannot stop polling.
         record_lazy_desktop_deferral(event='enrich_lost_ownership')
-        return conversation
+        return _current_detail()
+
+    submission_accepted: Future[bool] = Future()
 
     def _run_enrichment():
+        if not submission_accepted.result():
+            return
         # Counted here, not before the submit: a rejected submit (shut-down
         # pool during a deploy) would otherwise leave a start with no terminal.
         record_lazy_desktop_deferral(event='enrich_started')
         try:
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
+            conv_obj.status = ConversationStatus.processing
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
                 enriched = process_conversation(
                     uid,
@@ -371,9 +400,48 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
                     conversation_id,
                 )
 
-    submit_with_context(postprocess_executor, _run_enrichment)
-    # Return immediately — still status=processing, no summary yet; the client polls for completion.
+    recovery_lock = Lock()
+    recovery_attempted = False
+
+    def _recover_unstarted_enrichment(reason: str) -> None:
+        nonlocal recovery_attempted
+        with recovery_lock:
+            if recovery_attempted:
+                return
+            recovery_attempted = True
+            try:
+                lifecycle_service.recover_deferred_processing_failure(
+                    uid, conversation_id, expected_admitted_at=admitted_at
+                )
+            except Exception as error:
+                logger.error(
+                    'unstarted lazy enrich recovery failed reason=%s error_type=%s', reason, type(error).__name__
+                )
+
+    def _on_enrichment_done(work: Future[None]) -> None:
+        if work.cancelled():
+            _recover_unstarted_enrichment('cancelled')
+
+    try:
+        work = submit_with_context(postprocess_executor, _run_enrichment)
+    except Exception as error:
+        # A pool can enqueue a callback and then fail to start a worker. The
+        # rejected callback must never enrich after this claim is released.
+        submission_accepted.set_result(False)
+        logger.error('lazy enrich submission failed error_type=%s', type(error).__name__)
+        _recover_unstarted_enrichment('rejected')
+        return _current_detail()
+    work.add_done_callback(_on_enrichment_done)
+    if work.cancelled():
+        submission_accepted.set_result(False)
+        # Cancellation becomes visible before the executor runs its callbacks.
+        _recover_unstarted_enrichment('cancelled')
+        return _current_detail()
+    # The claim may have reopened a completed/deferred row. Return the admitted
+    # processing state so the client follows it through enrichment or retry.
+    conversation['status'] = 'processing'
     conversation['deferred'] = False
+    submission_accepted.set_result(True)
     return conversation
 
 
@@ -610,6 +678,9 @@ def process_in_progress_conversation(
 ):
     conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
+        response = finish_live_window(uid, request.live_conversation_id if request else None)
+        if response is not None:
+            return response
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
 
     if is_listen_finalization_dispatch_enabled() and not byok.has_byok_keys():
@@ -1186,6 +1257,7 @@ def get_conversations(
     # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
     # legacy sync piece there would duplicate them.
     show_held = default_home and not conversations_v3_enabled(uid)
+    read_started = time.monotonic()
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
@@ -1210,6 +1282,7 @@ def get_conversations(
         show_held=show_held,
     )
 
+    read_done = time.monotonic()
     conversations = home_membership.project_list(
         uid,
         conversations,
@@ -1237,6 +1310,21 @@ def get_conversations(
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
+    # Read meter: what one list page cost. Counts and timings only, never the owner or the query.
+    logger.info(
+        'conversation_list_read home=%s paged=%s limit=%d docs=%s storage_rows=%s hidden=%s rows=%d '
+        'truncated=%s read_ms=%d total_ms=%d',
+        default_home,
+        'cursor' if cursor else ('offset' if offset else 'first'),
+        limit,
+        getattr(budget, 'docs_scanned', None),
+        page.get('storage_rows'),
+        page.get('hidden_rows'),
+        len(conversations),
+        budget.truncated,
+        (read_done - read_started) * 1000,
+        (time.monotonic() - read_started) * 1000,
+    )
     return conversations
 
 
@@ -1345,21 +1433,17 @@ def get_conversation_by_id(
             )
         if conversation.get('source') != 'omi':
             raise HTTPException(status_code=404, detail="Conversation not found")
-    # Omitted keeps the historical detail default (show a stored discard).
-    # Noise and pending live bridges stay out of the default detail response;
-    # the web permalink omits this flag, while explicit archive reads opt in.
-    show_discarded = True if include_discarded is None else include_discarded
-    if hidden_from_default_detail(conversation) and include_discarded is not True:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded, presentation=True):
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    _assert_detail_visible(conversation, include_discarded)
     # Home lifecycle probes also read details; only a detail-page open escalates notes.
     if request is not None and request.headers.get('X-Omi-Recording-Detail') == '1':
         open_recording(uid, conversation)
     # A desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
-    if conversation.get('deferred') and not conversation.get('processing_deferred'):
-        conversation = _enrich_deferred_conversation(uid, conversation)
+    polling = request is not None and request.query_params.get('status_poll') == '1'
+    if not polling and conversation.get('deferred') and not conversation.get('processing_deferred'):
+        conversation = _enrich_deferred_conversation(uid, conversation, include_discarded=include_discarded)
+        if source is not None and conversation.get('source') != source:
+            raise HTTPException(status_code=404, detail="Conversation not found")
     if include_translations is True:
         try:
             conversation, translation_status, next_cursor = translate_open_page(uid, conversation, translation_cursor)
@@ -1899,19 +1983,17 @@ def _delete_conversation_under_gate(
                 logger.error(
                     'event=conversation_delete action=task_vectors outcome=error exception_type=%s', type(e).__name__
                 )
-        # Snapshot retained bridge donors before shared metadata cleanup removes them.
-        # A previous lake-purge attempt may already have removed the transcript blob.
-        source_ids = []
-        if os.getenv('BUCKET_CANONICAL_AUDIO'):
-            try:
-                raw = conversations_db.get_conversation_raw_snapshot(
-                    uid, conversation_id, field_paths=['sync_merged_from']
-                )
-            except Exception as error:
-                raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
-            source_ids = (raw or {}).get('sync_merged_from', [])
-        purge_audio = _delete_privacy_audio_after_response if record_event else delete_privacy_conversation_audio
-        background_tasks.add_task(purge_audio, uid, conversation_id, source_ids=source_ids)
+
+    # Audio is primary content like the transcript, so both cascade modes erase it.
+    # Snapshot merge donors before shared metadata cleanup removes them: their
+    # prefixes and sync uploads hold this conversation's audio.
+    try:
+        raw = conversations_db.get_conversation_raw_snapshot(uid, conversation_id, field_paths=['sync_merged_from'])
+    except Exception as error:
+        raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
+    source_ids = [source for source in (raw or {}).get('sync_merged_from') or [] if isinstance(source, str)]
+    purge_audio = _delete_privacy_audio_after_response if record_event else delete_privacy_conversation_audio
+    background_tasks.add_task(purge_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation
     # content, not cascade-only derived data, so this runs unconditionally
@@ -2166,6 +2248,10 @@ def _assign_manual_speaker(
             background_tasks=background_tasks,
             **({"time_range": time_range} if time_range is not None else {}),
         )
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as error:
+        # The write fence stays exclusive; while a destructive operation owns the
+        # account gate the edit is retryable, not a server fault (#SCA-4074).
+        raise account_gate_busy_http_exception() from error
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except PermissionError as error:
@@ -2830,7 +2916,11 @@ async def _search_conversation_page(
     response_model=ConversationSuggestedAppsResponse,
     tags=['conversations'],
 )
-async def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def get_conversation_suggested_apps(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+):
     conversation_data = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
     conversation = deserialize_conversation(conversation_data)
 
@@ -2846,6 +2936,11 @@ async def get_conversation_suggested_apps(conversation_id: str, uid: str = Depen
 
     hydrated = await asyncio.gather(*(hydrate(app_id) for app_id in conversation.suggested_summarization_apps))
     suggested_apps = [app for app in hydrated if app is not None]
+    # A Google Play build gets no Stripe payment link (config.play_billing.hide_payment_links).
+    if http_request and play_billing_config.hide_payment_links(http_request.headers, uid):
+        for app in suggested_apps:
+            if app.payment_link:
+                app.payment_link = None
 
     return {"suggested_apps": [app.model_dump() for app in suggested_apps], "conversation_id": conversation_id}
 
@@ -3037,7 +3132,9 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
             from utils.executors import start_background_task
 
             work = start_background_task(
-                reconcile(uid, on_open=True, conversation_id=conversation_id), name='v3-reconcile-open'
+                reconcile(uid, on_open=True, conversation_id=conversation_id),
+                name='v3-reconcile-open',
+                bounded_provider_failure=True,
             )
             await asyncio.wait_for(asyncio.shield(work), timeout=8)
         except Exception as exc:

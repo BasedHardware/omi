@@ -122,7 +122,7 @@ func TestCheckpointRefusesAnIncompleteReceipt(t *testing.T) {
 func TestDeclarationListsEveryStepAndCause(t *testing.T) {
 	t.Parallel()
 	kind := batchunit.Declaration("vendor_down")
-	if kind.Name != batchunit.Kind || len(kind.Formats) != 1 || kind.Formats[0] != batchunit.Format {
+	if kind.Name != batchunit.Kind || len(kind.Formats) != 2 || kind.Formats[0] != batchunit.Format {
 		t.Errorf("unexpected declaration: %+v", kind)
 	}
 	for _, step := range []string{batchunit.StepSpeech, batchunit.StepStored} {

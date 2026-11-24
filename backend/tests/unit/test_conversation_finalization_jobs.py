@@ -2019,10 +2019,12 @@ def test_reacquire_deferred_processing_reopens_a_failed_retry_terminal():
     retryable = _Ref('retryable', {'status': 'completed', 'deferred': True})
     discarded = _Ref('discarded', {'status': 'completed', 'deferred': True, 'discarded': True})
     failed = _Ref('failed', {'status': 'failed', 'deferred': True})
+    deleted = _Ref('deleted', {'status': 'completed', 'deferred': True, 'deleted': True})
 
     assert jobs._reacquire_deferred_processing_txn(transaction, retryable, now) is True
     assert jobs._reacquire_deferred_processing_txn(transaction, discarded, now) is False
     assert jobs._reacquire_deferred_processing_txn(transaction, failed, now) is False
+    assert jobs._reacquire_deferred_processing_txn(transaction, deleted, now) is False
     assert transaction.updates == [
         (retryable, {'status': 'processing', 'deferred': False, 'processing_admitted_at': now})
     ]
@@ -2045,6 +2047,21 @@ def test_recover_deferred_processing_failure_atomically_rearms_retry():
         assert patch['deferred'] is True
         assert patch['relevance_decision']['reason'] == 'deferred_retry_default'
     assert len(transaction.updates) == 2
+
+
+def test_rejected_deferred_submissions_rearm_only_the_same_live_claim():
+    transaction = _Transaction()
+    admitted_at = _now()
+    claimed = {'status': 'processing', 'deferred': False, 'processing_admitted_at': admitted_at}
+    original = _Ref('original', claimed)
+    deleted = _Ref('deleted', {**claimed, 'deleted': True})
+    newer = _Ref('newer', {**claimed, 'processing_admitted_at': admitted_at + timedelta(seconds=1)})
+    completed = _Ref('completed', {**claimed, 'status': 'completed'})
+
+    assert terminal_title.recover_deferred_processing_failure_txn(transaction, original, admitted_at)
+    for fenced in (deleted, newer, completed):
+        assert not terminal_title.recover_deferred_processing_failure_txn(transaction, fenced, admitted_at)
+    assert [ref for ref, _ in transaction.updates] == [original]
 
 
 def test_advance_cursor_succeeds_when_generation_matches():

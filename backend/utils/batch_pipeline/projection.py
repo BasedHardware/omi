@@ -1189,6 +1189,9 @@ class Projector:
                             'start': item.capture_at,
                             'end': item.capture_at + item.duration_seconds,
                             **({'preserve_existing': True} if binding.partial_record else {}),
+                            'whole_native_record': (
+                                binding.native_record and not binding.partial_record and len(binding.segment_ids) == 1
+                            ),
                         }
                     if (binding.record_origin or policy.require_live_target) and context.target_id:
                         incoming['_batch_require_live_target'] = True

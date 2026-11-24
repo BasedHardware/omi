@@ -112,6 +112,27 @@ v3 reconcile (`backend` for on-open rebuilds, `backend-sync`, `backend-sync-back
 to restore classification-based hiding for manually ended media and recognized
 background on subsequent projections. The service reads the switch and passes it to
 the pure planner. Previously written rows keep their stored visibility until rebuilt.
+A mobile capture is audio-only when the user finishes it: the transcript is produced by the
+batch pipeline afterwards. The finalization worker closes such a recording through
+`complete_server_batch_capture`, which stores `v3_manual_end_requested` for a `client_finalize` job.
+Record admission promotes the request to `v3_manual_end` when the recording is a single batch unit,
+so the window is cut and locked when its one transcript lands. A recording of several units (an
+audio gap over 30 s, or over an hour) projects one unit at a time; cutting on the first would lock
+a partial window, so it keeps the silence and lock timers unless the fast first transcript below
+takes it. `omi_conversations_v3_batch_manual_end_total{outcome}` counts `promoted`, `fast_finish`,
+`multi_unit_deferred`, `not_promoted` and `error`. Set `CONVERSATIONS_V3_BATCH_MANUAL_END=off` on
+`backend` (finalization worker) and `backend-integration` (record admission) to stop both the
+request and the promotion for later finishes. Stored markers remain.
+`CONVERSATIONS_V3_FAST_FINISH` (default `cohort`: members of the `v3-fast-finish` rollout cohort,
+added with `scripts/rollout_cohort.py --add`, no roll; `on` for every v3 owner; `off`) adds a first
+transcript for a manually finished recording. When batch record admission stages the sealed audio,
+`utils/conversations/v3/fast_finish.py` transcribes it once through the prerecorded provider for the
+recording's language and writes the result with `update_conversation_segments`. That write marks the
+recording pending and wakes reconcile, and the stored manual end cuts the window, so notes start
+without waiting for the batch merge and delivery. The batch record projection later replaces the
+provisional segments; once `record_projection_revision` is set the fast write is refused. Recordings
+over 20 minutes, partial records, custom STT, locked rows and private rows are skipped. Read
+`omi_conversations_v3_fast_finish_total{outcome}` and `omi_conversations_v3_fast_finish_seconds{stage}`.
 Five minutes of placed-speech silence is a hard window boundary. An outline's
 `resumes_previous` may undo a topic split within that interval, never rejoin
 windows across the silence boundary, even with the same people. Short socket
@@ -149,6 +170,17 @@ A lock delay shorter than the silence threshold can finalize an initial card
 while later speech still belongs to the same outline stretch. Later speech
 gets its own continuation. Reconciliation can merge settled cards when the
 outline and the loaded source claims cover the complete merge.
+
+`CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800 (three hours).
+The first transcript line whose recorded start reaches the limit starts a new
+stretch. The earlier live stretch locks and enters normal processing, and the
+successor owns the live row. This boundary applies with either cohesion setting
+and in historical planning. Values from 120 to 10800 set a shorter or equal
+limit. Invalid values use 10800. To roll back, set
+`CONVERSATIONS_V3_MAX_WINDOW_SECONDS=0` on builder and backfill runners
+(`off` is also accepted). Stored windows and claims retain their existing
+ownership. Track `omi_conversations_v3_window_cap_cuts_total` and verify that
+live windows stay within three hours plus the configured lock delay.
 
 A silence gap above 300 seconds also switches on sit-down cutting:
 - The outline sees pauses of 2 minutes or more as `---- N min without speech ----`

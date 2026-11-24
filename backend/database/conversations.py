@@ -21,6 +21,7 @@ import copy
 import hashlib
 import json
 import logging
+import os
 import uuid
 import zlib
 from collections.abc import Mapping
@@ -1080,11 +1081,16 @@ class _PageFill:
     would charge every full page one more read to save that rare request.
     """
 
-    def __init__(self, conversations_ref, *, limit, budget, visible):
+    def __init__(self, conversations_ref, *, limit, budget, visible, scout=None):
         self.conversations_ref = conversations_ref
         self.limit = limit
         self.budget = budget
         self.visible = visible
+        # Lean refills (see :class:`_Scout`); None keeps full-document refills.
+        self.scout = scout if scout is not None and hasattr(conversations_ref, 'select') else None
+        # Hidden rows of the first, full window that the scout's flags alone would have caught.
+        self.scout_hits = 0
+        self.hydrated = 0
         self.rows: List[Dict[str, Any]] = []
         self.last_doc = None
         self.consumed = 0
@@ -1112,6 +1118,8 @@ class _PageFill:
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not self.visible(conversation):
                     self.skipped += 1
+                    if self.scout is not None and conversation is not None and self.scout.hidden(conversation):
+                        self.scout_hits += 1
                     if self.skipped >= self.cap:
                         self.has_more = True
                         return
@@ -1134,11 +1142,116 @@ class _PageFill:
                 missing + self.cap - self.skipped,
                 missing if refill == 1 else max(missing, 2 * batch_limit),
             )
+            # Refill lean only where the scout's flags explain most of what this page hid so far
+            # (recordings, hidden windows, tombstones). A run hidden for reasons only the full
+            # predicate sees would make every row a candidate and pay a second read for each.
+            if self.scout is not None and self.scout_hits * 2 >= self.skipped:
+                self._run_lean(batch_limit)
+                return
             query = self.conversations_ref.start_after(self.last_doc).limit(batch_limit)
+
+    def _run_lean(self, batch_limit):
+        """Refill through a hidden run without downloading the hidden rows.
+
+        A refill only happens once a page met hidden rows. From there each batch
+        streams a few visibility fields per row, and only rows that may be
+        visible are then read in full and put through the complete predicate.
+        Every scanned row still counts as one read, but a hidden recording no
+        longer ships its document body to be thrown away.
+
+        Candidates not yet read in full are never counted as consumed: a budget
+        cut rewinds to just before the first of them, so the next request starts
+        there and no visible row is skipped.
+        """
+        scout_ref = self.conversations_ref.select(self.scout.fields)
+        while True:
+            fetched = 0
+            pending: List[Any] = []
+            rewind = None
+            stop = False
+            try:
+                for doc in budgeted_stream_iter(scout_ref.start_after(self.last_doc).limit(batch_limit), self.budget):
+                    fetched += 1
+                    if self.scout.hidden(doc.to_dict() or {}):
+                        self.consumed += 1
+                        self.last_doc = doc
+                        self.skipped += 1
+                        if self.skipped >= self.cap:
+                            stop = True
+                            break
+                        continue
+                    if rewind is None:
+                        rewind = (self.consumed, self.last_doc)
+                    self.consumed += 1
+                    self.last_doc = doc
+                    pending.append(doc)
+                    if len(self.rows) + len(pending) >= self.limit:
+                        stop = True
+                        break
+                self._hydrate(pending)
+            except ListReadBudgetExhausted:
+                if rewind is not None:
+                    self.consumed, self.last_doc = rewind
+                raise
+            if len(self.rows) >= self.limit or self.skipped >= self.cap:
+                # A full page, or the hidden-row cap: more may follow.
+                self.has_more = True
+                return
+            if not stop and fetched < batch_limit:
+                return
+            missing = self.limit - len(self.rows)
+            batch_limit = min(missing + self.cap - self.skipped, max(missing, 2 * batch_limit))
+
+    def _hydrate(self, pending):
+        if not pending:
+            return
+        snapshots = {
+            snapshot.id: snapshot
+            for snapshot in budgeted_get_all(
+                db, [doc.reference for doc in pending], self.budget, field_paths=self.scout.hydrate_fields
+            )
+        }
+        self.hydrated += len(pending)
+        for doc in pending:
+            snapshot = snapshots.get(doc.id)
+            conversation = document_data_with_revision(snapshot) if snapshot is not None else None
+            if conversation is None or not self.visible(conversation):
+                self.skipped += 1
+                continue
+            self.rows.append(conversation)
 
 
 def _visibility(**options):
     return lambda conversation: is_visible_conversation(conversation, **options)
+
+
+class _Scout:
+    """The cheap first look a lean refill takes at a row.
+
+    ``hidden`` mirrors the leading clauses of :func:`is_visible_conversation`
+    that need only stored flags: raw recordings, ``home_hidden`` v3 windows and
+    tombstones. Measured 2026-11-24 on a v3 owner, those were 3,016 of the newest
+    4,000 rows the Home query matched. It may only ever say hidden for a row the
+    full predicate also hides; every other row is read in full and judged there.
+    """
+
+    def __init__(self, *, sort_field, include_recordings, hide_home, hydrate_fields=None):
+        self.fields = sorted({sort_field, 'recording', 'home_hidden', 'deleted'})
+        self.include_recordings = include_recordings
+        self.hide_home = hide_home
+        self.hydrate_fields = hydrate_fields
+
+    def hidden(self, row: Mapping[str, Any]) -> bool:
+        return bool(
+            (row.get('recording') and not self.include_recordings)
+            or (self.hide_home and row.get('home_hidden'))
+            or row.get('deleted')
+        )
+
+
+def _lean_skip_enabled() -> bool:
+    """Kill switch for lean hidden-run refills: on unless set off."""
+    return os.getenv('OMI_LIST_LEAN_SKIP_ENABLED', 'true').strip().lower() not in {'0', 'false', 'off', 'no'}
 
 
 def _collect_cursor_conversation_page(
@@ -1154,6 +1267,7 @@ def _collect_cursor_conversation_page(
     capture_only=False,
     show_held=False,
     report=None,
+    scout=None,
 ):
     """Bound the scan by page size plus the hidden-row allowance.
 
@@ -1171,9 +1285,10 @@ def _collect_cursor_conversation_page(
             capture_only=capture_only,
             show_held=show_held,
         ),
+        scout=scout,
     ).run(conversations_ref.start_after(bookmark).limit(limit), limit)
     if report is not None:
-        report.update(storage_rows=fill.consumed, has_more=fill.has_more)
+        report.update(storage_rows=fill.consumed, has_more=fill.has_more, hidden_rows=fill.skipped)
     return fill.rows, fill.last_doc
 
 
@@ -1194,6 +1309,7 @@ def _collect_visible_conversation_page(
     hide_home: bool = False,
     capture_only: bool = False,
     show_held: bool = False,
+    hydrate_fields: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Page visible rows.
 
@@ -1225,10 +1341,23 @@ def _collect_visible_conversation_page(
         show_held=show_held,
     )
 
-    def finish(rows, last_doc, *, storage_rows, has_more):
+    # Only budgeted list routes refill lean; internal full-document callers keep their reads.
+    scout = (
+        _Scout(
+            sort_field=sort_field,
+            include_recordings=include_recordings,
+            hide_home=hide_home,
+            hydrate_fields=hydrate_fields,
+        )
+        if budget is not None and not include_discarded and _lean_skip_enabled()
+        else None
+    )
+
+    def finish(rows, last_doc, *, storage_rows, has_more, hidden_rows=0):
         if cursor_page is not None:
             cursor_page['storage_rows'] = storage_rows
             cursor_page['has_more'] = has_more
+            cursor_page['hidden_rows'] = hidden_rows
         if cursor_enabled and cursor_page is not None:
             cursor_page['next_cursor'] = None
             if last_doc is not None:
@@ -1268,6 +1397,7 @@ def _collect_visible_conversation_page(
                 capture_only=capture_only,
                 show_held=show_held,
                 bookmark=BookmarkDict({sort_field: stamp, '__name__': doc_id}),
+                scout=scout,
             )
             return finish(rows, last_doc, **report)
 
@@ -1302,10 +1432,12 @@ def _collect_visible_conversation_page(
             # Nothing was read, so there is no position to resume from; a retry
             # would pay the same charge and stop here again.
             return finish([], None, storage_rows=0, has_more=False)
-    fill = _PageFill(conversations_ref, limit=limit, budget=budget, visible=visible).run(
+    fill = _PageFill(conversations_ref, limit=limit, budget=budget, visible=visible, scout=scout).run(
         conversations_ref.limit(limit).offset(offset), limit
     )
-    return finish(fill.rows, fill.last_doc, storage_rows=fill.consumed, has_more=fill.has_more)
+    return finish(
+        fill.rows, fill.last_doc, storage_rows=fill.consumed, has_more=fill.has_more, hidden_rows=fill.skipped
+    )
 
 
 def _drop_summary_memo(uid: str) -> None:
@@ -2375,6 +2507,7 @@ def get_conversations_without_photos(
     instead of pretending to be complete.
     """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    hydrate_fields: Optional[List[str]] = None
     if list_fields_only and indexed_list_reads_enabled():
         # The archive list contract permits omitted transcript detail. Exclude
         # the large blob before download/decompression and correction-overlay
@@ -2409,6 +2542,7 @@ def get_conversations_without_photos(
             }
         )
         conversations_ref = conversations_ref.select(sorted(fields))
+        hydrate_fields = sorted(fields)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if sources:
@@ -2456,6 +2590,7 @@ def get_conversations_without_photos(
         uid=uid,
         cursor=cursor,
         cursor_page=cursor_page,
+        hydrate_fields=hydrate_fields,
         cursor_filters=dict(
             statuses=statuses,
             sources=sources,
@@ -3268,7 +3403,11 @@ def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict
         primary_row = primary_ref.get(transaction=transaction).to_dict()
         secondary_row = secondary_ref.get(transaction=transaction).to_dict()
         for row, expected in ((primary_row, primary), (secondary_row, secondary)):
-            if not row or row.get('discarded') or row.get('deleted') or row.get('status') != 'completed':
+            if (
+                not row
+                or any(row.get(field) for field in ('discarded', 'deleted', 'deferred'))
+                or row.get('status') != 'completed'
+            ):
                 return False
             compared = lifecycle_clocks.overlap_fields(uid, row)
             if any(
@@ -4240,8 +4379,15 @@ def update_conversation_segments(
     live_capture_proofs: Optional[Dict[str, CaptureWindowProof]] = None,
     segment_update_fields: Optional[tuple[str, ...]] = None,
     owner_recognition_diagnostics: Optional[dict] = None,
+    require_row: Optional[Callable[[dict], bool]] = None,
+    guard: Optional[Callable[[Any], None]] = None,
 ):
     """Merge live speech transactionally against the current receipt and pinned timeline.
+
+    ``require_row`` is judged on the stored row inside the write transaction; a False answer
+    writes nothing and returns False, so a caller's earlier read cannot go stale.
+    ``guard`` is called with the transaction after that check and before any write, so its
+    reads join this transaction's conflict set; an exception from it writes nothing and propagates.
 
     Field-only writes preserve stored text/spans. Live writes return the durable
     merge and clear any hash-bound client projection that the new transcript
@@ -4275,6 +4421,10 @@ def update_conversation_segments(
             # The durable record owns the finalized capture. A delayed socket
             # flush cannot append its provisional twin after projection.
             return False
+        if require_row is not None and not require_row(current):
+            return False
+        if guard is not None:
+            guard(transaction)
         doc_level = current.get('data_protection_level') or data_protection_level or 'standard'
         receipt = decode_manual_speaker_assignments(
             uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))

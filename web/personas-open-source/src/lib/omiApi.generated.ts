@@ -4490,6 +4490,7 @@ export interface ProactivityTarget {
 export interface ProcessConversationRequest {
   calendar_meeting_context?: CalendarMeetingContext | null;
   client_processing?: unknown | null;
+  live_conversation_id?: string | null;
 }
 
 export interface ProcessingBacklog {

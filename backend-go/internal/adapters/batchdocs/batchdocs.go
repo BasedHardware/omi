@@ -48,9 +48,11 @@ var errConflict = errors.New("batchdocs: unit already has a result from another 
 
 // record is the stored document. The field names are a wire contract with every reader.
 type record struct {
-	Operation  string    `firestore:"operation"`
-	Transcript string    `firestore:"transcript"`
-	StoredAt   time.Time `firestore:"stored_at"`
+	CaptureAt   time.Time `firestore:"capture_at"`
+	LateCapture bool      `firestore:"late_capture"`
+	Operation   string    `firestore:"operation"`
+	Transcript  string    `firestore:"transcript"`
+	StoredAt    time.Time `firestore:"stored_at"`
 }
 
 // Results writes transcriptions to Firestore.
@@ -72,7 +74,7 @@ func (r Results) Put(
 	if err != nil {
 		return batchunit.Receipt{}, queue.Classify(err, queue.Fail(CauseStoreRejected))
 	}
-	next := record{Operation: req.Operation, Transcript: sealed, StoredAt: r.Clock.Now()}
+	next := record{CaptureAt: req.CaptureAt, LateCapture: req.LateCapture, Operation: req.Operation, Transcript: sealed, StoredAt: r.Clock.Now()}
 	err = r.Docs.Fenced(ctx, g, req.Owner, func(tx *docstore.Tx) error {
 		var existing record
 		found, getErr := tx.Get(doc, &existing)

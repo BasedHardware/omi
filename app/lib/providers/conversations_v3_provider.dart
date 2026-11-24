@@ -86,14 +86,8 @@ class ConversationsV3Provider extends ChangeNotifier {
     _suppressListening = true;
     _finishCaptureId = captureId;
     _finishRecordingId = recordingId;
-    // End supplies the exact ended conversation; infer from the cached live row only without it.
-    final live = _live;
-    if (liveConversationId != null) {
-      _finishLiveId = liveConversationId;
-    } else if (live != null &&
-        (live.id == recordingId || (recordingId != null && live.v3?.recordingIds.contains(recordingId) == true))) {
-      _finishLiveId = live.id;
-    }
+    _finishLiveId = liveConversationId;
+    _bindFinishToLive();
     _armFinishExpiry();
     _finishDeadline = Timer(const Duration(minutes: 20), () {
       _reconcileOnHome = _finishAccepted;
@@ -103,9 +97,11 @@ class ConversationsV3Provider extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool settleManualFinish(ServerConversation row, ServerConversation? result) {
+  bool settleManualFinish(ServerConversation row, ServerConversation? result, {bool alreadyClosed = false}) {
     if (!finishFeedbackEnabled || !identical(_finishRow, row)) return false;
-    if (result == null || result.discarded || result.status == ConversationStatus.in_progress) {
+    final accepted =
+        result == null ? alreadyClosed : !result.discarded && result.status != ConversationStatus.in_progress;
+    if (!accepted) {
       _finishFailures++;
       _clearManualFinish();
     } else {
@@ -113,15 +109,31 @@ class ConversationsV3Provider extends ChangeNotifier {
       _finishExpired = false;
       _suppressListening = true;
       _finishExpiry?.cancel();
-      _finishRecordingId = result.id;
-      if (result.v3?.recording != true) {
-        _finishLiveId = result.id;
-      } else if (_live?.v3?.recordingIds.contains(result.id) == true) {
-        _finishLiveId ??= _live!.id;
+      if (result != null) {
+        _finishRecordingId = result.id;
+        if (result.v3?.recording != true) {
+          _finishLiveId = result.id;
+        }
+      } else if (row is OptimisticProcessingConversation) {
+        // A 404 has no active recording pointer and cannot confirm that a summary exists.
+        _finishRecordingId ??= row.targetConversationId;
       }
+      _bindFinishToLive();
     }
     notifyListeners();
     return true;
+  }
+
+  // Only infer the window from a matching source when Finish did not name it.
+  void _bindFinishToLive() {
+    final live = _live;
+    final recordingId = _finishRecordingId;
+    if (_finishLiveId == null &&
+        live != null &&
+        recordingId != null &&
+        (live.id == recordingId || live.v3?.recordingIds.contains(recordingId) == true)) {
+      _finishLiveId = live.id;
+    }
   }
 
   /// A visible successor can take over the row while its summary is pending.
@@ -152,7 +164,8 @@ class ConversationsV3Provider extends ChangeNotifier {
           (_finishAccepted &&
               _finishLiveId == null &&
               _finishRecordingId != null &&
-              (row.v3?.recordingIds.contains(_finishRecordingId) == true ||
+              (row.id == _finishRecordingId ||
+                  row.v3?.recordingIds.contains(_finishRecordingId) == true ||
                   row.v3?.recordingPieces.any(
                         (piece) => piece.recordingId == _finishRecordingId,
                       ) ==
@@ -266,13 +279,7 @@ class ConversationsV3Provider extends ChangeNotifier {
       case ApiSuccess(:final data):
         _v3 = data.v3;
         _live = data.v3 ? data.conversation : null;
-        // A finish accepted before the first read: bind the late live window of its recording.
-        if (_finishRow != null &&
-            _finishLiveId == null &&
-            _finishRecordingId != null &&
-            _live?.v3?.recordingIds.contains(_finishRecordingId) == true) {
-          _finishLiveId = _live!.id;
-        }
+        if (_finishRow != null) _bindFinishToLive();
         if (_live != null &&
             _live!.id != _finishLiveId &&
             (_finishRecordingId == null || _live!.v3?.recordingIds.contains(_finishRecordingId) != true)) {
@@ -306,6 +313,7 @@ class ConversationsV3Provider extends ChangeNotifier {
         a.structured.title == b.structured.title &&
         a.v3?.tileState == b.v3?.tileState &&
         a.v3?.homeHidden == b.v3?.homeHidden &&
+        listEquals(a.v3?.recordingIds, b.v3?.recordingIds) &&
         a.startedAt == b.startedAt &&
         a.finishedAt == b.finishedAt &&
         a.transcriptSegments.length == b.transcriptSegments.length;
@@ -341,6 +349,29 @@ class ConversationsV3Provider extends ChangeNotifier {
         final tile = c.v3?.tileState;
         return tile == ConversationTileState.transcribing || tile == ConversationTileState.writing;
       });
+
+  /// How long a row may sit mid-pipeline and still drive Home's periodic re-read. An older stuck
+  /// row updates on pull-to-refresh and when the app reopens; it must not keep the list re-reading.
+  static const pendingRefreshWindow = Duration(hours: 1);
+
+  /// The rows of [conversations] mid-pipeline whose last activity is within [pendingRefreshWindow].
+  static Iterable<ServerConversation> recentlyMidPipeline(Iterable<ServerConversation> conversations, DateTime now) =>
+      conversations.where((c) {
+        final tile = c.v3?.tileState;
+        if (tile != ConversationTileState.transcribing && tile != ConversationTileState.writing) return false;
+        return now.difference(c.finishedAt ?? c.startedAt ?? c.createdAt) < pendingRefreshWindow;
+      });
+
+  /// Where a bounded re-read of recent rows starts: the earliest creation among [touched] (rows known
+  /// to be changing), never later than [pendingRefreshWindow] ago and never earlier than a day ago.
+  static DateTime recentRefreshSince(Iterable<DateTime> touched, DateTime now) {
+    var since = now.subtract(pendingRefreshWindow);
+    for (final at in touched) {
+      if (at.isBefore(since)) since = at;
+    }
+    final floor = now.subtract(const Duration(days: 1));
+    return (since.isBefore(floor) ? floor : since).subtract(const Duration(minutes: 2));
+  }
 
   void unwatch() {
     if (_watchers > 0) _watchers--;
