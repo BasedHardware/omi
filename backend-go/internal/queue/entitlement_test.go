@@ -144,7 +144,7 @@ func TestGrantRacesPaidIntakeAndExpiry(t *testing.T) {
 	if err := s.HoldCondition(ctx, "owner", Entitlement, 1); err != nil {
 		t.Fatal(err)
 	}
-	n := demo("capture", "owner")
+	n := inLane(demo("capture", "owner"), "lane", time.Now())
 	n.AudioDuration = time.Second
 	n.CustodyDeadline = time.Now().Add(-time.Second)
 	enqueue(t, ctx, s, n)
@@ -164,7 +164,7 @@ func TestGrantRacesPaidIntakeAndExpiry(t *testing.T) {
 		}
 	}
 	expired, err := s.Get(ctx, "capture")
-	if err != nil || expired.Outcome == nil || *expired.Outcome != TerminalExpiredUnfunded || expired.Attempts != 0 {
+	if err != nil || expired.Outcome == nil || *expired.Outcome != TerminalExpiredUnfunded || expired.Ordered || expired.Attempts != 0 {
 		t.Fatalf("expiry at release: %+v %v", expired, err)
 	}
 	r := claim(t, ctx, s)

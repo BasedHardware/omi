@@ -65,6 +65,8 @@ type Results interface {
 // Accounts answers whether an owner's work may be admitted or run.
 type Accounts interface {
 	// Admissible checks the account fence and returns the current funding observation.
+	// An exhausted observation requires a positive generation. An invalid source
+	// response returns an error so intake can retry without inventing a fence.
 	Admissible(ctx context.Context, a queue.Admitting, owner string) (queue.EntitlementSnapshot, error)
 	// Runnable returns nil when owner's work may run now. For an owner who is being deleted
 	// it returns a queue.Classified error whose outcome is queue.Hold, so nothing is paid

@@ -90,6 +90,10 @@ func routeError(w http.ResponseWriter, err error, conflict string) {
 		refusal(w, 410, "user_erased")
 	case errors.Is(err, queue.ErrAbsent):
 		refusal(w, 404, "not_found")
+	case errors.Is(err, queue.ErrHoldMetadata):
+		refusal(w, http.StatusUnprocessableEntity, "held_unit_requires_custody_deadline_and_positive_duration")
+	case errors.Is(err, batchunit.ErrInvalid):
+		refusal(w, http.StatusBadRequest, "invalid_batch_unit")
 	case errors.Is(err, queue.ErrState):
 		refusal(w, 409, conflict)
 	case errors.As(err, &f) && f.Cause == wire.CauseAccountDeleting:

@@ -24,14 +24,20 @@ type EntitlementSnapshot struct {
 	Exhausted  bool
 }
 
+// ErrHoldMetadata means a paid intake requiring a funding hold omitted its custody inputs.
+var ErrHoldMetadata = fmt.Errorf("%w: held intake requires custody deadline and positive duration", ErrState)
+
 type fundingWait struct {
 	conditionDeadline, timedDeadline *time.Time
 	timedGeneration                  int64
 }
 
 func (cfg Config) fundingWait(n NewJob, generation int64) (fundingWait, error) {
-	if n.CustodyDeadline.IsZero() || n.AudioDuration <= 0 || n.Gated || n.Initializing {
-		return fundingWait{}, fmt.Errorf("%w: held intake requires custody deadline and duration on a plain job", ErrState)
+	if n.CustodyDeadline.IsZero() || n.AudioDuration <= 0 {
+		return fundingWait{}, ErrHoldMetadata
+	}
+	if n.Gated || n.Initializing {
+		return fundingWait{}, fmt.Errorf("%w: held intake requires a plain job", ErrState)
 	}
 	if cfg.TimeOnlyEntitlementHold {
 		return fundingWait{timedDeadline: &n.CustodyDeadline, timedGeneration: generation}, nil
@@ -121,7 +127,8 @@ state=CASE WHEN custody_deadline<=statement_timestamp() THEN 'completed' ELSE 'r
 outcome=CASE WHEN custody_deadline<=statement_timestamp() THEN 'expired_unfunded' END,
 ready_at=CASE WHEN custody_deadline>statement_timestamp() THEN greatest(run_at,statement_timestamp()) END,
 owed_since=statement_timestamp(),
-order_key=held_order_key,held_order_key=NULL,custody_deadline=NULL,updated_at=statement_timestamp()
+order_key=CASE WHEN custody_deadline>statement_timestamp() THEN held_order_key END,
+held_order_key=NULL,custody_deadline=NULL,updated_at=statement_timestamp()
 WHERE uid=$1 AND custody_deadline IS NOT NULL RETURNING state),
 tally AS (SELECT count(*) FILTER (WHERE state='ready') AS released,
                  count(*) FILTER (WHERE state='completed') AS expired FROM settled),
@@ -146,7 +153,7 @@ type EntitlementReader func(context.Context, Admitting, string) (EntitlementSnap
 // Claiming a check advances its timer before the external read so replicas share the work.
 func (s *Store) CheckEntitlements(ctx context.Context, read EntitlementReader) error {
 	if _, err := s.pool.Exec(ctx, `WITH expired AS (UPDATE queue_jobs SET state='completed',outcome='expired_unfunded',
-custody_deadline=NULL,held_order_key=NULL,timed_deadline=NULL,timed_generation=0,
+custody_deadline=NULL,held_order_key=NULL,order_key=NULL,timed_deadline=NULL,timed_generation=0,
 ready_at=NULL,lease_until=NULL,lane_head=false,updated_at=statement_timestamp()
 WHERE outcome IS NULL AND (custody_deadline<=statement_timestamp() OR timed_deadline<=statement_timestamp()) RETURNING 1),
 tally AS (SELECT count(*) AS n FROM expired)
