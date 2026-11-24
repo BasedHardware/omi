@@ -65,6 +65,14 @@ class FirestoreReadSite(StrEnum):
     EPISODE_FINALIZATION_MOMENT_FENCE = 'episode_finalization_moment_fence'
     EPISODE_FINALIZATION_CLOSE_FENCE = 'episode_finalization_close_fence'
     EPISODE_FINALIZATION_MEMO_FENCE = 'episode_finalization_memo_fence'
+    EPISODE_FINALIZATION_UPDATE_FENCE_ACCOUNT = 'episode_finalization_update_fence_account'
+    EPISODE_FINALIZATION_UPDATE_FENCE_TOMBSTONE = 'episode_finalization_update_fence_tombstone'
+    EPISODE_FINALIZATION_MOMENT_FENCE_ACCOUNT = 'episode_finalization_moment_fence_account'
+    EPISODE_FINALIZATION_MOMENT_FENCE_TOMBSTONE = 'episode_finalization_moment_fence_tombstone'
+    EPISODE_FINALIZATION_CLOSE_FENCE_ACCOUNT = 'episode_finalization_close_fence_account'
+    EPISODE_FINALIZATION_CLOSE_FENCE_TOMBSTONE = 'episode_finalization_close_fence_tombstone'
+    EPISODE_FINALIZATION_MEMO_FENCE_ACCOUNT = 'episode_finalization_memo_fence_account'
+    EPISODE_FINALIZATION_MEMO_FENCE_TOMBSTONE = 'episode_finalization_memo_fence_tombstone'
     UNATTRIBUTED = 'unattributed'
 
 
