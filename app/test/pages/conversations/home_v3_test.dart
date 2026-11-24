@@ -231,6 +231,12 @@ class _LiveCapture extends CaptureProvider {
   String? endedLiveId;
 
   int finishCalls = 0;
+  String? finishedRecordingId;
+  String recordingToProcess = 'rec-1';
+  final closedRecordingIds = <String>{};
+
+  @override
+  bool hasClosedServerRecording(String recordingId) => closedRecordingIds.contains(recordingId);
   int phoneStopCalls = 0;
 
   @override
@@ -244,12 +250,13 @@ class _LiveCapture extends CaptureProvider {
   @override
   Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
     finishCalls++;
+    finishedRecordingId = recordingToProcess;
     onManualEnd?.call(null);
     return InProgressProcessOutcome(
       response: CreateConversationResponse(
         messages: const [],
         conversation: _conversation(
-          'rec-1',
+          recordingToProcess,
           _now,
           '',
           v3: const ConversationV3Fields(recording: true, tileState: ConversationTileState.transcribing),
@@ -389,8 +396,8 @@ class _Home {
   Future<ServerConversation?> detailRead(String id) async {
     detailReads++;
     await detailBarrier?.future;
-    if (id != 'live-1' || detailFails) return null;
-    return _conversation('live-1', _now.subtract(const Duration(minutes: 20)), liveTitle,
+    if (id != liveId || detailFails) return null;
+    return _conversation(id, liveStart, liveTitle,
         lastSpeech: _now.subtract(const Duration(minutes: 9)),
         segments: detailSegments,
         v3: ConversationV3Fields(
@@ -399,6 +406,7 @@ class _Home {
 
   /// False once the conversation in progress has closed.
   bool liveOpen = true;
+  String liveId = 'live-1';
 
   /// The server's title for the conversation in progress; empty until the server names it.
   String liveTitle = 'Launch checklist';
@@ -465,7 +473,7 @@ class _Home {
           v3: v3,
           conversation: v3 && liveOpen
               ? _conversation(
-                  'live-1', liveStart, liveTitle,
+                  liveId, liveStart, liveTitle,
                   // The server's finished_at for an open window is its last speech: 11 minutes in.
                   lastSpeech: _now.subtract(const Duration(minutes: 9)),
                   segments: _liveSoFar,
@@ -484,7 +492,9 @@ class _Home {
   void publishManualEnds() {
     capture.onManualEnd = (id) {
       final pending = OptimisticProcessingPlaceholder.conversation();
-      conversationsV3.startManualFinish(pending, 'rec-1', liveConversationId: id, captureId: capture.activeRecordingId);
+      final sourceId = capture.verifiedLiveServerRecordingId ?? capture.recordingToProcess;
+      conversationsV3.startManualFinish(pending, capture.hasClosedServerRecording(sourceId) ? null : sourceId,
+          liveConversationId: id, captureId: capture.activeRecordingId);
       return pending;
     };
     capture.onDrainFailed = (row) => conversationsV3.settleManualFinish(row, null);
@@ -1697,6 +1707,110 @@ void main() {
         debugDefaultTargetPlatformOverride = null;
       });
     });
+
+    for (final placeholder in [false, true]) {
+      testWidgets('the next live ${placeholder ? 'placeholder' : 'server row'} can finish while Home shows Processing',
+          (tester) async {
+        await withClock(Clock.fixed(_now), () async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+          addTearDown(() => debugDefaultTargetPlatformOverride = null);
+          final palette = OmiColors.active;
+          addTearDown(() => OmiColors.active = palette);
+          OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+          final home =
+              await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+          home.capture
+            ..verifiedLiveServerRecordingId = 'rec-1'
+            ..keepVerifiedAfterClose = true;
+          home.publishManualEnds();
+          Future<bool> openRoute(String route, {bool Function()? canOpen}) async => false;
+          HomeNavigation.register(openRoute);
+          addTearDown(() => HomeNavigation.unregister(openRoute));
+
+          await tester.tap(find.byKey(const ValueKey('live-1')));
+          await settleDetailTab(tester);
+          await tester.tap(endButton);
+          await settleDetailTab(tester);
+          final firstFinish = home.conversationsV3.finishRow!;
+          expect(home.capture.endedLiveId, 'live-1');
+          expect(
+              home.conversationsV3.settleManualFinish(
+                firstFinish,
+                _conversation('rec-1', _now, '', v3: const ConversationV3Fields(recording: true)),
+              ),
+              isTrue);
+          home.capture.closedRecordingIds.add('rec-1');
+          expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+
+          // The pendant keeps its client capture ID. Home reads the successor before
+          // the socket delivers its new conversation_session event.
+          home.liveId = 'live-2';
+          home.liveTitle = '';
+          home.liveStart = _now.subtract(const Duration(minutes: 10));
+          home.liveRecordingIds = ['rec-2'];
+          final nextLine = _said('next-line', 'The sound check starts at five.', 0, 2);
+          home.detailSegments = [nextLine];
+          home.capture
+            ..recordingToProcess = 'rec-2'
+            ..segments = [nextLine]
+            ..segmentsFromSocket = false
+            ..ping();
+          await home.conversationsV3.refresh();
+          await settleDetailTab(tester);
+
+          if (placeholder) {
+            // When there is no visible server window, the ongoing local capture still
+            // opens its own page. This time the socket has announced the successor.
+            home.liveOpen = false;
+            home.capture
+              ..segments = []
+              ..verifiedLiveServerRecordingId = 'rec-2'
+              ..ping();
+            await home.conversationsV3.refresh();
+            await settleDetailTab(tester);
+          }
+          final nextRow = placeholder ? find.byType(V3LivePlaceholderRow) : find.byKey(const ValueKey('live-2'));
+          expect(nextRow, findsOneWidget);
+          expect(find.descendant(of: nextRow, matching: find.text('Listening')), findsOneWidget);
+          expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+          if (!placeholder) {
+            await tester.drag(nextRow, const Offset(-200, 0));
+            await settleDetailTab(tester);
+            expect(visibleHomeFinish, findsNothing);
+            await shoot(tester, '004-mobile-ios-listening-and-processing');
+          }
+          await tester.tap(nextRow);
+          await settleDetailTab(tester);
+          await tester.pump(const Duration(milliseconds: 500));
+          expect(placeholder ? find.byType(LiveEpisodePage) : find.byType(ConversationDetailPage), findsOneWidget);
+          final action = placeholder ? finishButton : endButton;
+          if (!placeholder) {
+            expect(action, findsNothing, reason: 'the account-wide transcript alone cannot prove ownership');
+            home.capture
+              ..segmentsFromSocket = true
+              ..ping();
+            await settleDetailTab(tester);
+          }
+          expect(action.hitTestable(), findsOneWidget);
+          await shoot(
+              tester, placeholder ? '006-mobile-ios-next-placeholder-finish' : '005-mobile-ios-next-detail-end');
+          await tester.tap(action);
+          await settleDetailTab(tester);
+          expect(home.conversationsV3.finishRow, isNotNull);
+          expect(home.conversationsV3.finishRow, isNot(same(firstFinish)));
+          if (placeholder) {
+            expect(home.capture.finishCalls, 1);
+            expect(home.capture.finishedRecordingId, 'rec-2');
+            expect(home.capture.endCalls, 1);
+          } else {
+            expect(home.capture.endCalls, 2);
+            expect(home.capture.endedLiveId, 'live-2');
+          }
+          await _dispose(tester, home);
+          debugDefaultTargetPlatformOverride = null;
+        });
+      });
+    }
 
     testWidgets('manual finish replaces the live row until its summary is listed', (tester) async {
       await withClock(Clock.fixed(_now), () async {

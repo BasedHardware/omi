@@ -1,5 +1,5 @@
 // V3 (recordings and conversations) outcomes, audit 2026-11-19 (v3-audit.md) and David's rulings of
-// the same day: X5, X6, X7, X9, X10, X11, X14, X17, the Home row status line and swipe-to-Finish.
+// the same day: X5, X6, X7, X9, X10, X11, X14, X17, the Home row status line and swipe behavior.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -13,7 +13,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/activity/activity_bell_button.dart';
 import 'package:omi/pages/activity/past_processing_section.dart';
@@ -28,7 +27,6 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
-import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -104,7 +102,7 @@ class _Wal implements IWalService {
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 
-/// This phone is capturing the live conversation (its segment `s1`); Finish answers [answer].
+/// The active capture ID matches the live row's source recording.
 class _Capture extends CaptureProvider {
   _Capture()
       : super(
@@ -117,39 +115,13 @@ class _Capture extends CaptureProvider {
           bleListeners: _NoopBle(),
           inProgressConversationLoader: () async {},
           localSegmentStore: LocalSegmentStore.disabled(),
-        ) {
-    segments = [
-      TranscriptSegment(
-          id: 's1',
-          text: 'Synthetic speech.',
-          speaker: 'SPEAKER_00',
-          isUser: true,
-          personId: null,
-          start: 0,
-          end: 4,
-          translations: []),
-    ];
-  }
-
-  CreateConversationResponse? answer;
-  var finishes = 0;
+        );
 
   @override
-  String? activeRecordingId;
+  String get activeRecordingId => 'capture-1';
 
   @override
-  String? get liveCaptureSource => 'omi';
-
-  // s1 arrived over this phone's own socket: the ownership evidence the live row's swipe needs.
-  @override
-  Iterable<String> get locallyReceivedSegmentIds => segments.map((segment) => segment.id);
-
-  @override
-  Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
-    finishes++;
-    final reply = answer;
-    return InProgressProcessOutcome(response: reply, absence: reply == null ? ProcessAbsence.transport : null);
-  }
+  String get liveCaptureSource => 'omi';
 }
 
 void main() {
@@ -475,53 +447,22 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
     }
 
-    testWidgets('swipe left on the live row reveals Finish; a tap finishes once; a failure says so', (tester) async {
+    testWidgets('a live row this phone is capturing does not swipe or expose Finish', (tester) async {
       final capture = _Capture();
       addTearDown(capture.dispose);
-      await pumpRow(tester, _decoded('live'), capture: capture);
-      final finishButton = find.byKey(const ValueKey('conversation_swipe_finish'));
-      double finishOpacity() =>
-          tester.widget<Opacity>(find.ancestor(of: finishButton, matching: find.byType(Opacity)).first).opacity;
-      expect(finishOpacity(), 0, reason: 'no button on the row at rest');
-
-      // A long swipe opens the row; it never fires Finish on its own.
-      await swipe(tester, -600);
-      expect(capture.finishes, 0);
-      expect(finishOpacity(), greaterThan(0.9));
+      await pumpRow(
+          tester,
+          _decoded('live', extra: {
+            'v3_recording_ids': [capture.activeRecordingId],
+          }),
+          capture: capture);
+      final card = find.byKey(const ValueKey('conversation_card'));
+      final rest = tester.getRect(card);
+      await swipe(tester, -200);
+      expect(tester.getRect(card), rest);
+      expect(find.text('Finish'), findsNothing);
+      expect(find.byKey(const ValueKey('conversation_swipe_finish')), findsNothing);
       expect(find.byKey(const ValueKey('conversation_swipe_delete')), findsNothing);
-
-      await tester.tap(find.byKey(const ValueKey('conversation_swipe_finish')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(capture.finishes, 1);
-      expect(find.text("Didn't go through. Your audio is safe."), findsOneWidget);
-      expect(find.byType(ConversationListItem), findsOneWidget, reason: 'the row stays live');
-      await tester.pump(const Duration(seconds: 9));
-      await tester.pumpWidget(const SizedBox());
-    });
-
-    testWidgets('a pendant window owned only by its active capture ID finishes through Process Now', (tester) async {
-      // No line, photo or preview yet and no verified server ID: the window lists this phone's
-      // active capture ID, which is the only ownership evidence.
-      final capture = _Capture()
-        ..segments = []
-        ..activeRecordingId = 'capture-1';
-      addTearDown(capture.dispose);
-      final live = _decoded('live', extra: {
-        'transcript_segments': const <Map<String, dynamic>>[],
-        'v3_recording_ids': ['capture-1'],
-      });
-      expect(live.v3?.recordingIds, ['capture-1']);
-      await pumpRow(tester, live, capture: capture);
-      await swipe(tester, -600);
-      expect(find.byKey(const ValueKey('conversation_swipe_finish')), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('conversation_swipe_finish')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(capture.finishes, 1, reason: 'Process Now is sent, not the stop-only path');
-      expect(find.text("Didn't go through. Your audio is safe."), findsOneWidget,
-          reason: 'the request was made; its transport failure is reported, not "nothing new"');
-      await tester.pump(const Duration(seconds: 9));
       await tester.pumpWidget(const SizedBox());
     });
 

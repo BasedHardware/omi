@@ -21,6 +21,27 @@
       "description": "After End on the live detail, Home shows the Processing row.",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-listening-and-processing.png",
+      "platform": "mobile-ios",
+      "description": "Home shows Listening and Processing together. A left swipe leaves the Listening row in place.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-next-detail-end.png",
+      "platform": "mobile-ios",
+      "description": "End Conversation is available on the next live detail while the previous finish is processing.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-next-placeholder-finish.png",
+      "platform": "mobile-ios",
+      "description": "Finish is available on the next local capture page opened from the Listening placeholder.",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }

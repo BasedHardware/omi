@@ -896,6 +896,9 @@ class CaptureController extends ChangeNotifier
     return socket.liveRecording?.recordingId;
   }
 
+  /// Whether the capture has seen the server close this exact recording.
+  bool hasClosedServerRecording(String recordingId) => _seenConversationCloses.contains(recordingId);
+
   // Identifies a conversation boundary within a continuous recording. This is
   // presentation/action identity, not another capture authorization generation.
   int _systemSurfaceConversationRevision = 0;
@@ -4410,7 +4413,8 @@ class CaptureController extends ChangeNotifier
     try {
       // Publish the skeleton before waiting for disk, preserving immediate Process Now feedback.
       if (showManualFinish) {
-        actions.onManualFinishStarted(placeholder, sourceId,
+        final openSourceId = sourceId != null && hasClosedServerRecording(sourceId) ? null : sourceId;
+        actions.onManualFinishStarted(placeholder, openSourceId,
             liveConversationId: liveConversationId, captureId: recordingSessionId);
       }
       actions.addProcessingConversation(placeholder);
@@ -4441,11 +4445,15 @@ class CaptureController extends ChangeNotifier
       _processInFlight = request.then((_) {}, onError: (_) {});
       request.then<void>((outcome) async {
         // Bind before any asynchronous publication and before awaiting the ordered stamp slot.
-        final conversationId = outcome.response?.conversation?.id;
+        final saved = outcome.response?.conversation;
+        final conversationId = saved?.id;
         close.bind(conversationId);
         _pendingProcessCloses.remove(close);
         if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
-        if (conversationId != null) _rememberConversationClose(conversationId);
+        if (saved != null && saved.status != ConversationStatus.in_progress) {
+          _rememberConversationClose(saved.id);
+          if (saved.id == verifiedLiveServerRecordingId) notifyListeners();
+        }
         if (showManualFinish) actions.onManualFinishSettled(placeholder, outcome, showFailure: !confirmedProcessing);
         await OptimisticProcessingPlaceholder.applyProcessResult(
           result: outcome.response,
@@ -4458,7 +4466,6 @@ class CaptureController extends ChangeNotifier
           removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
         );
         if (close.sessionStartSeconds > 0 && conversationId != null) {
-          final saved = outcome.response?.conversation;
           if (saved != null && close.phone is LocalWalSyncImpl) {
             await _confirmSessionTranscript(close.sessionStartSeconds, saved, close.segmentArrivals,
                 close: close, needsRepair: close.needsRepair, allowTranscriptCoverageFallback: close.customStt);

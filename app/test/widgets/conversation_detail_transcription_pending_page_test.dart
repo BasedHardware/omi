@@ -197,6 +197,9 @@ class _LiveCapture extends ChangeNotifier implements CaptureProvider {
   @override
   String? get verifiedLiveServerRecordingId => SharedPreferencesUtil().uid == ownerUid ? recordingId : null;
   @override
+  bool hasClosedServerRecording(String recordingId) => false;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
