@@ -635,12 +635,14 @@
     },
     "CONVERSATION_MERGE_BEFORE_PROCESSING": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "CONVERSATION_OCCASION_RELEVANCE_ENABLED": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "CONVERSATION_SPEAKER_ANCHOR_SECONDS": {
@@ -683,7 +685,8 @@
     },
     "EPISODE_CARRY_ON_SESSION_END": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "EPISODE_COMPOSER_REUSE": {
@@ -714,22 +717,26 @@
     },
     "EPISODE_HARD_CAP_ACROSS_CONVERSATIONS": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "EPISODE_LIVE_TIMER_START_ENABLED": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "EPISODE_MOMENT_OUTPUT_VALIDATOR": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "EPISODE_RECORDED_TIME_ENABLED": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "FIRESTORE_EMULATOR_HOST": {
@@ -742,7 +749,8 @@
     },
     "HOME_HIDE_BELOW_FLOOR_ROWS": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED": {
@@ -780,7 +788,8 @@
     },
     "LATE_AUDIO_SYNC_INTAKE_ENABLED": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "LISTEN_LIVE_TAIL_CATCHUP_RATE": {
@@ -1219,7 +1228,8 @@
     },
     "SYNC_PROCESSING_HOLD_ENABLED": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28"
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850"
     },
     "SYNC_PROCESSING_QUIET_SECONDS": {
       "owner": "lifecycle-owner (SCA-1766)",
