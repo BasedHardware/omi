@@ -24,12 +24,20 @@ The [empty-ASR contract](../../listen_pusher_pipeline.mdx) documents the switch.
 Rollback: unset it on the CPU recovery roles; later settlements stay held and
 completed results stay completed.
 
-Production readback before enabling (2026-11-24, six hours of recovery logs):
-406 held settlements with `reason=empty_asr`, about 0.2% of units admitted in
-the same period. Of the sampled second-provider calls in that window, 41
-returned empty, 24 returned words and 7 failed. The logs do not separate
-language-guarded units, so the share this switch would close is at most that
-figure.
+Production readback before enabling (2026-11-24, job records over the last
+seven days, language-guarded units excluded):
+
+- Units held after two validated empty answers are about 0.13% of batch units
+  and about 0.12% of batch audio. They are 55% of all held units.
+- Roughly a third of the accounts with recording activity in the week have at
+  least one. This share is approximate: the account count and the activity
+  count come from different systems.
+- Our detectors measured speech in 9% of their audio. 76% of these units carry
+  under two seconds of measured speech and 10% carry five seconds or more.
+- 22% of them have been held for more than seven days.
+- In six hours of recovery logs, the second provider returned empty for 57% of
+  sampled calls, words for 33% and failed for 10%. A failure keeps the unit
+  held and is not covered by this switch.
 
 Readout: `omi_batch_pipeline_recovery_recognizer_outcomes_total` (behind the
 existing `BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED`, no new switch) counts
