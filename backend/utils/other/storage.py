@@ -2800,4 +2800,47 @@ def delete_privacy_conversation_audio(uid: str, conversation_id: str, *, source_
             conversation_ids.extend(source_ids or [])
             for cid in set(conversation_ids):
                 audio_packs.delete_conversation(canonical, uid, cid)
-    delete_conversation_audio_files(uid, conversation_id)
+    # Merge donors' prefixes hold audio that now belongs to this conversation.
+    # Sync staging is keyed by upload, so every prefix is attempted before a block is raised.
+    owned = list(dict.fromkeys([conversation_id, *(source_ids or [])]))
+    blocked: dict[tuple[str, str, int], str] = {}
+    unverified = 0
+    for purge, arg in [
+        *((delete_conversation_audio_files, cid) for cid in owned),
+        (delete_conversation_sync_staging, owned),
+    ]:
+        try:
+            purge(uid, arg)
+        except StoragePrefixPurgeBlocked as error:
+            blocked.update(error.objects)
+            unverified += error.unverified
+    if blocked:
+        raise StoragePrefixPurgeBlocked(blocked, unverified=unverified)
+
+
+def delete_conversation_sync_staging(uid: str, conversation_ids: List[str]) -> int:
+    """Purge the raw sync uploads (``syncing/{uid}/{job_id}/``) that fed these conversations.
+
+    Staging is keyed by upload job and its bucket has no lifecycle delete, so
+    without this the raw audio of a deleted conversation is kept forever. The
+    sync content ledger maps conversations to jobs; held objects stay and raise.
+    """
+    from database.sync_ledger_sources import staging_job_ids
+
+    job_ids = staging_job_ids(uid, conversation_ids)
+    if not job_ids:
+        return 0
+    deleted = 0
+    blocked: dict[tuple[str, str, int], str] = {}
+    unverified = 0
+    for name in dict.fromkeys(filter(None, (syncing_local_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()))):
+        bucket = _get_storage_client().bucket(name)
+        for job_id in job_ids:
+            try:
+                deleted += _delete_owner_bucket_prefix(bucket, f'syncing/{uid}/{job_id}/')
+            except StoragePrefixPurgeBlocked as error:
+                blocked.update(error.objects)
+                unverified += error.unverified
+    if blocked:
+        raise StoragePrefixPurgeBlocked(blocked, unverified=unverified)
+    return deleted

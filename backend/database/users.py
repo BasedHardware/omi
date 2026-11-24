@@ -2714,6 +2714,12 @@ def write_ai_user_profile_if_unchanged(uid: str, expected_text: str, profile: di
     return written
 
 
+# Written by the retired Dream state pass (a96ada8922); nothing reads it, so forget removes it too.
+LEGACY_AI_USER_PROFILE_FIELDS = ('ai_user_profile_v2',)
+
+
 def delete_ai_user_profile(uid: str) -> None:
-    db.collection('users').document(uid).update({'ai_user_profile': firestore.DELETE_FIELD})
+    db.collection('users').document(uid).update(
+        {field: firestore.DELETE_FIELD for field in ('ai_user_profile', *LEGACY_AI_USER_PROFILE_FIELDS)}
+    )
     invalidate(_USER_AI_PROFILE_CACHE, uid)
