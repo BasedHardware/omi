@@ -311,7 +311,12 @@ class _OmiButtonState extends State<OmiButton> {
         foregroundColor: WidgetStatePropertyAll(colors.foreground),
         overlayColor: WidgetStatePropertyAll(colors.foreground.withValues(alpha: 0.12)),
         elevation: const WidgetStatePropertyAll(0),
-        padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: horizontalPadding)),
+        // A label that may wrap keeps space above and below its lines. One line still fits inside the
+        // minimum height, so single-line buttons are unchanged.
+        padding: WidgetStatePropertyAll(EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: widget.maxLines == null ? (compact ? OmiSpacing.xs : OmiSpacing.sm) : 0,
+        )),
         minimumSize: WidgetStatePropertyAll(Size(widget.width ?? visualHeight, visualHeight)),
         fixedSize: widget.width != null ? WidgetStatePropertyAll(Size(widget.width!, visualHeight)) : null,
         shape: WidgetStatePropertyAll(

@@ -23,8 +23,8 @@ import 'package:omi/services/pending_work/pending_work_store.dart';
 const _maxText = TextScaler.linear(3.1);
 const _phone = Size(402, 874);
 
-void _usePhone(WidgetTester tester) {
-  tester.view.physicalSize = _phone;
+void _usePhone(WidgetTester tester, [Size size = _phone]) {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -45,10 +45,34 @@ Widget _app(Widget home, {List<ChangeNotifierProvider> providers = const []}) {
   return providers.isEmpty ? app : MultiProvider(providers: providers, child: app);
 }
 
-void _expectOnScreen(WidgetTester tester, Finder finder) {
+void _expectOnScreen(WidgetTester tester, Finder finder, [Size size = _phone]) {
   final rect = tester.getRect(finder);
   expect(rect.top, greaterThanOrEqualTo(0), reason: '$finder starts above the screen');
-  expect(rect.bottom, lessThanOrEqualTo(_phone.height), reason: '$finder ends below the screen');
+  expect(rect.bottom, lessThanOrEqualTo(size.height), reason: '$finder ends below the screen');
+}
+
+/// The label sits inside its button with room above and below.
+void _expectLabelPadded(WidgetTester tester, Finder button, String label) {
+  final outer = tester.getRect(button);
+  final text = tester.getRect(find.descendant(of: button, matching: find.text(label)));
+  expect(text.top - outer.top, greaterThanOrEqualTo(8), reason: '"$label" touches the top of its button');
+  expect(outer.bottom - text.bottom, greaterThanOrEqualTo(8), reason: '"$label" touches the bottom of its button');
+}
+
+Future<void> _pumpSignIn(WidgetTester tester, Size size, {required bool apple}) async {
+  _usePhone(tester, size);
+  final auth = _StoreAuth();
+  addTearDown(auth.dispose);
+  await tester.pumpWidget(_app(
+    Scaffold(body: AuthComponent(onSignIn: () {}, debugShowAppleSignIn: apple)),
+    providers: [ChangeNotifierProvider<AuthenticationProvider>.value(value: auth)],
+  ));
+  await tester.pump();
+  expect(tester.takeException(), isNull);
+  if (apple) _expectOnScreen(tester, find.widgetWithText(ElevatedButton, 'Sign in with Apple'), size);
+  _expectOnScreen(tester, find.widgetWithText(ElevatedButton, 'Sign in with Google'), size);
+  _expectOnScreen(
+      tester, find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().contains('Terms of Use')), size);
 }
 
 class _StoreAuth extends AuthenticationProvider {
@@ -81,6 +105,15 @@ void main() {
     _expectOnScreen(tester, find.widgetWithText(ElevatedButton, 'Sign in with Google'));
   });
 
+  testWidgets('sign-in on an iPhone SE: Apple, Google and the legal line all fit', (tester) async {
+    await _pumpSignIn(tester, const Size(375, 667), apple: true);
+    _expectLabelPadded(tester, find.widgetWithText(ElevatedButton, 'Sign in with Apple'), 'Sign in with Apple');
+  });
+
+  testWidgets('sign-in on an Android-size phone: Google and the legal line fit', (tester) async {
+    await _pumpSignIn(tester, const Size(360, 800), apple: false);
+  });
+
   testWidgets('consent: both button labels wrap instead of cutting off, on screen', (tester) async {
     _usePhone(tester);
     final auth = AuthenticationProvider(initializeListeners: false);
@@ -97,6 +130,8 @@ void main() {
     }
     _expectOnScreen(tester, find.byKey(const Key('ai_consent_agree')));
     _expectOnScreen(tester, find.byKey(const Key('ai_consent_use_different_account')));
+    _expectLabelPadded(tester, find.byKey(const Key('ai_consent_agree')), 'Agree & Continue');
+    _expectLabelPadded(tester, find.byKey(const Key('ai_consent_use_different_account')), 'Use a Different Account');
   });
 
   testWidgets('home: Home and Tasks fit the header and Tasks stays tappable', (tester) async {
