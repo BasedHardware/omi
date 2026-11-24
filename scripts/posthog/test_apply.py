@@ -30,7 +30,7 @@ CONFIG = {
 
 
 def live_fn(fid, name, **inputs):
-    return {'id': fid, 'name': name, 'type': 'transformation',
+    return {'id': fid, 'name': name, 'type': 'transformation', 'enabled': True,
             'inputs': {k: {'order': i, 'value': v, 'bytecode': ['_H']} for i, (k, v) in enumerate(inputs.items())}}
 
 
@@ -154,6 +154,36 @@ class ApplyDiff(unittest.TestCase):
                     contextlib.redirect_stdout(out):
                 self.assertEqual(apply.main(['drift', '--config', str(config)]), 1)
             self.assertIn('wedge inputs.randomSampling: True -> False', out.getvalue())
+
+    def test_apply_blocks_all_writes_on_missing_or_wrong_sampler_enablement(self):
+        for state in ('disabled', 'unknown', 'missing'):
+            with self.subTest(state=state), tempfile.TemporaryDirectory() as tmp:
+                functions, listing, schemas = in_sync()
+                if state == 'disabled':
+                    functions['keep']['enabled'] = False
+                elif state == 'unknown':
+                    del functions['keep']['enabled']
+                else:
+                    del functions['keep']
+                # Other eligible changes must not be applied before the operator resolves the gate.
+                functions['wedge']['inputs']['percentage']['value'] = 100
+                schemas['raw']['should_sync'] = True
+                config = Path(tmp) / 'posthog.json'
+                config.write_text(json.dumps(CONFIG))
+                out, err = io.StringIO(), io.StringIO()
+                with mock.patch.dict(os.environ, {'POSTHOG_PERSONAL_API_KEY': 'fixture'}), \
+                        mock.patch.object(apply, 'Client') as client, \
+                        mock.patch.object(apply, 'fetch', return_value=(functions, listing, schemas)), \
+                        contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    self.assertEqual(apply.main(['apply', '--config', str(config), '--snapshot-dir', tmp]), 1)
+                client.return_value.patch.assert_not_called()
+                self.assertIn('apply blocked before PATCH', err.getvalue())
+                self.assertEqual(len(list(Path(tmp).glob('posthog-before-*/hog_function-wedge.json'))), 1)
+                if state == 'missing':
+                    self.assertIn('keep exists: None', out.getvalue())
+                else:
+                    self.assertIn('keep enabled:', out.getvalue())
+                    self.assertIn('manual release gate', out.getvalue())
 
     def test_apply_requires_snapshot_dir_and_key(self):
         with mock.patch.dict(os.environ, {'POSTHOG_PERSONAL_API_KEY': 'k'}), contextlib.redirect_stderr(io.StringIO()):

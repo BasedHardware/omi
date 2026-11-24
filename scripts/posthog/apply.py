@@ -3,10 +3,9 @@
 
   plan   print the differences; exit 0
   drift  print the differences; exit 1 when there are any (run daily)
-  apply  write the live before-state to --snapshot-dir, then PATCH only the
-         differing hog function inputs and names and warehouse should_sync;
-         enabled, execution_order and untracked functions are reported and
-         leave apply exiting 1
+  apply  snapshot live state and require sampler enablement to match the plan
+         before any PATCH. Reconcile differing inputs, names and warehouse
+         should_sync. Execution order and untracked functions require manual repair.
 
 Stdlib only. The key comes from POSTHOG_PERSONAL_API_KEY and is never printed.
 Hog function inputs are read from the detail endpoint; the list endpoint omits them.
@@ -94,10 +93,11 @@ def diff(config, live_functions, live_list, live_schemas):
             continue
         if live.get('name') != fn['name']:
             changes.append({'target': fn['id'], 'field': 'name', 'live': live.get('name'), 'desired': fn['name']})
-        # Reported, never PATCHed: apply changes only inputs, names and should_sync.
-        for field in ('enabled', 'execution_order'):
-            if field in fn and field in live and live[field] != fn[field]:
-                changes.append({'target': fn['id'], 'field': field, 'live': live[field], 'desired': fn[field]})
+        # Require a boolean enablement readback for every managed sampler.
+        if live.get('enabled') is not fn['enabled']:
+            changes.append({'target': fn['id'], 'field': 'enabled', 'live': live.get('enabled'), 'desired': fn['enabled']})
+        if 'execution_order' in fn and 'execution_order' in live and live['execution_order'] != fn['execution_order']:
+            changes.append({'target': fn['id'], 'field': 'execution_order', 'live': live['execution_order'], 'desired': fn['execution_order']})
         for key, want in desired_inputs(fn).items():
             have = live_value(live, key)
             if key == 'randomSampling':
@@ -128,7 +128,10 @@ def describe(change):
         return f"{change['target']} {change['field']}: -{len(removed)} {removed} +{len(added)} {added}"
     if change['field'] == 'untracked':
         return f"{change['target']} untracked live transformation {live!r}: add it to posthog.json or delete it"
-    return f"{change['target']} {change['field']}: {live!r} -> {want!r}"
+    detail = f"{change['target']} {change['field']}: {live!r} -> {want!r}"
+    if change['field'] == 'enabled':
+        return f'{detail} (manual release gate: verify and reconcile in PostHog, then rerun plan)'
+    return detail
 
 
 def fetch(client, config):
@@ -206,6 +209,10 @@ def main(argv=None):
         (snap / f'hog_function-{fid}.json').write_text(json.dumps(live, indent=1) + '\n')
     (snap / 'warehouse-schemas.json').write_text(json.dumps(live_schemas, indent=1) + '\n')
     print(f'before-state written to {snap}')
+    managed_ids = {fn['id'] for fn in config['functions'] if fn['kind'] != 'unmanaged'}
+    if any(c['target'] in managed_ids and c['field'] in ('enabled', 'exists') for c in changes):
+        print('apply blocked before PATCH: verify all managed samplers and reconcile enablement, then rerun plan', file=sys.stderr)
+        return 1
     project = config['project_id']
     for (kind, target), body in patch_bodies(config, live_functions, changes).items():
         if kind == 'fn':

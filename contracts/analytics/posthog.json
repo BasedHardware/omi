@@ -413,8 +413,7 @@
    },
    {
     "source_id": "01a0e94f-760d-0000-7ad7-252a71bcb061",
-    "schema_id": null,
-    "status": "pending",
+    "schema_id": "01a20b47-efdb-0000-2289-a86b1a97dd46",
     "name": "gcp_cost_daily",
     "should_sync": true,
     "sync_type": "full_refresh",
@@ -425,7 +424,7 @@
      "sJAgpHUX",
      "NyQ5Gcsz"
     ],
-    "note": "Daily view gcp_billing_export.gcp_cost_daily (day x service, ~28 rows/day since 2026-04). Created by David; add schema_id once PostHog lists it."
+    "note": "Daily view gcp_billing_export.gcp_cost_daily (day x service, ~28 rows/day since 2026-04). Created by David and synced daily since 2026-11-24."
    }
   ],
   "unmanaged": {

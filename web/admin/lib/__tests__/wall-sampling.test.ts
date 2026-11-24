@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
@@ -63,9 +64,42 @@ describe("readers of sampled product events (SCA-3665)", () => {
     );
     expect(route).toContain("${SAMPLE_PCT_SQL} as m_pct");
     expect(route).toContain("sumIf(100 / mem_pct, memories_in_window > 0)");
-    expect(route).toContain(
-      "round(sum(${SAMPLE_WEIGHT_SQL}))) as saved_conversations"
-    );
+    const template = route.split("// 16. Memory Created")[1].split("`")[1];
+    const sql = template
+      .replace("${SAMPLE_PCT_SQL}", SAMPLE_PCT_SQL)
+      .replace("${SAMPLE_WEIGHT_SQL}", SAMPLE_WEIGHT_SQL)
+      .replace("${os}", "")
+      .replace("toDate(now()) - interval ${days} day", "'2026-11-23'")
+      .replace("toDate(now())", "'2026-11-25'")
+      .replace(/properties\.(\w+)/g, "$1");
+    const code = `
+import json, sqlite3, sys
+db = sqlite3.connect(":memory:")
+db.executescript("""
+CREATE TABLE events (timestamp TEXT, person_id TEXT, distinct_id TEXT, event TEXT,
+    omi_sample_pct REAL, memory_result TEXT, memory_discarded INTEGER);
+INSERT INTO events VALUES
+    ('2026-11-23 01:00:00', 'a', 'a', 'Memory Created', NULL, 'saved', NULL),
+    ('2026-11-23 02:00:00', 'a', 'a', 'Memory Created', 2, 'saved', NULL),
+    ('2026-11-23 03:00:00', NULL, 'b', 'Memory Created', 2, 'saved', NULL),
+    ('2026-11-23 04:00:00', NULL, 'b', 'Memory Created', 2, 'saved', NULL),
+    ('2026-11-23 05:00:00', NULL, 'b', 'Memory Created', NULL, 'discarded', NULL),
+    ('2026-11-24 01:00:00', 'a', 'a', 'Memory Created', 2, 'saved', NULL);
+""")
+db.create_function("toDate", 1, lambda v: v[:10])
+db.create_function("toInt64", 1, int)
+db.create_function("toFloat", 1, lambda v: v)
+db.create_function("greatest", 2, max)
+print(json.dumps(db.execute(sys.stdin.read()).fetchall()))
+`;
+    const rows = execFileSync("python3", ["-c", code], {
+      input: sql,
+      encoding: "utf8",
+    });
+    expect(JSON.parse(rows)).toEqual([
+      ["2026-11-23", 51, 151],
+      ["2026-11-24", 50, 50],
+    ]);
     expect(SAMPLE_WEIGHT_SQL).toBe(`100 / ${SAMPLE_PCT_SQL}`);
   });
 });

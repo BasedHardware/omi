@@ -509,7 +509,7 @@ export async function GET(request: NextRequest) {
       ),
 
       // 16. Memory Created is sampled per distinct ID (2% since 2026-11-23):
-      // counts are weighted, creators scaled by the day's largest rate.
+      // Weight saves per row and each creator once at their highest rate that day.
       // Meaningful capture proxy: unique people with a successfully
       // saved/reconciled conversation. Flutter supplies saved/discarded;
       // macOS has no result field and its Memory Created event is already the
@@ -520,16 +520,24 @@ export async function GET(request: NextRequest) {
         host,
         `
         SELECT
-          toDate(timestamp) as day,
-          toInt64(round(uniq(COALESCE(person_id, distinct_id)) * 100 / max(${SAMPLE_PCT_SQL}))) as conversation_creators,
-          toInt64(round(sum(${SAMPLE_WEIGHT_SQL}))) as saved_conversations
-        FROM events
-        WHERE event = 'Memory Created'
-          AND (properties.memory_result IS NULL OR properties.memory_result = 'saved')
-          AND (properties.memory_discarded IS NULL OR properties.memory_discarded = false)
-          AND timestamp >= toDate(now()) - interval ${days} day
-          AND toDate(timestamp) < toDate(now())
-          ${os}
+          day,
+          toInt64(round(sum(100 / creator_pct))) as conversation_creators,
+          toInt64(round(sum(weighted_saves))) as saved_conversations
+        FROM (
+          SELECT
+            toDate(timestamp) as day,
+            COALESCE(person_id, distinct_id) as actor,
+            max(${SAMPLE_PCT_SQL}) as creator_pct,
+            sum(${SAMPLE_WEIGHT_SQL}) as weighted_saves
+          FROM events
+          WHERE event = 'Memory Created'
+            AND (properties.memory_result IS NULL OR properties.memory_result = 'saved')
+            AND (properties.memory_discarded IS NULL OR properties.memory_discarded = false)
+            AND timestamp >= toDate(now()) - interval ${days} day
+            AND toDate(timestamp) < toDate(now())
+            ${os}
+          GROUP BY day, actor
+        )
         GROUP BY day
         ORDER BY day
       `

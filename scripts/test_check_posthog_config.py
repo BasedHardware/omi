@@ -77,6 +77,11 @@ class CheckPostHogConfig(unittest.TestCase):
         found = errors(doc, today=dt.date(2027, 2, 1))  # after expiry the $500 budget applies
         self.assertTrue(found and all('budget' in e for e in found), found)
 
+    def test_managed_sampler_declares_boolean_enablement(self):
+        doc = passing()
+        del doc['functions'][1]['enabled']
+        self.assertOneError(doc, 'wedge: enabled must be a boolean')
+
     def test_sample_function_declares_a_boolean_mode(self):
         doc = passing()
         doc['functions'][1]['randomSampling'] = 'false'

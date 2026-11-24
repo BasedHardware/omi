@@ -170,10 +170,13 @@ To change sampling:
    schema full-refreshes more than 1M rows per run. It also prints the
    estimate at flags = 0.
 3. After merge, the release owner runs `scripts/posthog/apply.py plan`, then
-   `apply --snapshot-dir DIR` from `main`. `apply.py drift` exits 1 on any
-   difference, including a transformation that is not in the file. Nothing in
-   this repository schedules it yet; the release owner runs it after each apply
-   and a daily schedule is a follow-up on SCA-3665.
+   `apply --snapshot-dir DIR` from `main`. A missing managed sampler, a missing
+   enablement readback, or an `enabled` mismatch blocks all patches. Release
+   verifies and restores sampler enablement to the reviewed value in PostHog,
+   then reruns the plan for the same rollout step before applying it. Apply
+   saves the before-state even when blocked by this gate. `apply.py drift`
+   exits 1 on every difference. The release owner runs it after each apply.
+   A daily schedule is tracked in SCA-3665.
 
 Keep-list membership exempts an event from the 2% default; a later sampler in
 the file can still sample it. `$` events (except `$rageclick`) and names
@@ -241,14 +244,17 @@ weight by `omi_sample_pct`:
   100/pct; one with foreground or MCP activity counts once. Saved creators,
   cohort `captured` and device-funnel `conv1`/`conv7` weight each person by
   100/pct of the rows that show the outcome.
-- `viral-metrics` activation and saved conversations.
+- `viral-metrics` weights activation per signup, saved conversations per row,
+  and each conversation creator once per day at their highest saved-row rate.
 - Omi TV weekly growth population uses the same weights as the activity
   snapshot. Weeks touching November 23, 2026 UTC or later omit growth
   transitions, quick ratio, stickiness and the L1–L7 distribution because the
   sampled capture stream lacks the days and transitions needed for those measures.
 - BigQuery's `daily-1` Omi TV reader serves historical windows ending at or
   before November 23, 2026 00:00 UTC. Later windows use HogQL, even if BigQuery
-  reports full coverage. Deploy the updated admin reader before step A.
+  reports full coverage. The writer skips scheduled dates and rejects
+  backfills on and after the cutoff. Deploy the updated admin reader before
+  step A.
 
 Activation's two-day rule, retention curves, established users, capture-source
 segments and the saved insights listed in PR #26119 still read low for people

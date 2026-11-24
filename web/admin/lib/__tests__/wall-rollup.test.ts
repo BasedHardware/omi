@@ -11,7 +11,7 @@ import {
 import { preferRollup, readRollup } from "../wall-rollup";
 import { rollupSql, RollupRequest } from "../wall-rollup-sql";
 import { assembleSeries, legJobs, SeriesSources } from "../wall-series";
-import { datesForRun } from "../../jobs/omi-tv-rollup/writer";
+import { datesForRun, writeDay } from "../../jobs/omi-tv-rollup/writer";
 import type { WallPayload } from "../wall-metrics";
 
 const key = "test-only-secret-of-at-least-32-bytes";
@@ -143,6 +143,24 @@ it("daily repair is capped and explicit backfills always extract exactly one day
   expect(datesForRun(end, new Set(), day)).toEqual([day]);
   expect(() => datesForRun(end, new Set(), "2026-10-13")).toThrow();
 });
+it("excludes sampled days from scheduled repairs and explicit coverage writes", async () => {
+  const now = new Date("2026-11-26T00:00Z");
+  expect(datesForRun(now, new Set())).toEqual(["2026-11-12", "2026-11-13"]);
+  expect(datesForRun(new Date("2026-12-08T00:00Z"), new Set())).toEqual([]);
+  expect(() => datesForRun(now, new Set(), "2026-11-23")).toThrow(
+    "daily-1 coverage excludes sampled days"
+  );
+  expect(datesForRun(now, new Set(), "2026-11-22")).toEqual(["2026-11-22"]);
+  const extract = vi.fn();
+  const dataset = vi.fn();
+  const db = { dataset } as unknown as Parameters<typeof writeDay>[0];
+  await expect(writeDay(db, "2026-11-23", extract)).rejects.toThrow(
+    "daily-1 coverage excludes sampled days"
+  );
+  expect(extract).not.toHaveBeenCalled();
+  expect(dataset).not.toHaveBeenCalled();
+});
+
 it("requires every receipt for the exact version and key epoch, otherwise uses existing HogQL", async () => {
   vi.stubEnv("OMI_TV_ROLLUP_ENABLED", "1");
   vi.stubEnv("CRON_SECRET", key);
@@ -190,6 +208,16 @@ it("uses HogQL for windows touching capture sampling even with BigQuery enabled"
     )
   ).toBeNull();
   expect(query).not.toHaveBeenCalled();
+
+  // The cutoff is exclusive on reads. A window ending at midnight is historical.
+  vi.stubEnv("CRON_SECRET", key);
+  query.mockResolvedValueOnce([[{ covered: 14, rows: ['[0,"ios",12]'] }]]);
+  const lastHistorical = await readRollup(
+    { ...request, end: new Date("2026-11-23T00:00Z") },
+    { query }
+  );
+  expect(lastHistorical?.[0]).toEqual([0, "ios", 12]);
+  expect(query).toHaveBeenCalledOnce();
 });
 
 it("caps the rollup status lookup at one second and keeps filling the cache", async () => {
@@ -308,7 +336,6 @@ it("all PostHog legs can choose rollups; v2 snapshot wins the last point and spl
 
 it("publishes a day and receipt atomically, and never issues replacement SQL after a failed load", async () => {
   const { Writable } = await import("stream");
-  const { writeDay } = await import("../../jobs/omi-tv-rollup/writer");
   vi.stubEnv("CRON_SECRET", key);
   const data = {
     rows: [anonymize(day, feature(), key)],
