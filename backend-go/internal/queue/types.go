@@ -70,12 +70,16 @@ const (
 	TerminalSuccess Terminal = "success"
 	// TerminalFailure means the job parked on a failure.
 	TerminalFailure Terminal = "failure"
+	// TerminalExpiredUnfunded means custody ended while the owner was out of allowance.
+	TerminalExpiredUnfunded Terminal = "expired_unfunded"
 	// TerminalFenced means the job's subject left the workflow; nothing more was done.
 	TerminalFenced Terminal = "fenced"
 )
 
 // Terminals lists every terminal outcome.
-func Terminals() []Terminal { return []Terminal{TerminalSuccess, TerminalFailure, TerminalFenced} }
+func Terminals() []Terminal {
+	return []Terminal{TerminalSuccess, TerminalFailure, TerminalFenced, TerminalExpiredUnfunded}
+}
 
 // Errors a caller can match with errors.Is.
 var (
@@ -145,6 +149,9 @@ type Job struct {
 	Initializing bool
 	// Ordered is true for a job in an ordered lane.
 	Ordered bool
+	// CaptureAt and LateCapture identify a paid kind's position relative to committed work at claim.
+	CaptureAt   time.Time
+	LateCapture bool
 
 	budgetAllowed   bool
 	intent          *Cause
@@ -175,6 +182,11 @@ type NewJob struct {
 	// OrderAt and SortKey order a lane, then Key breaks ties. SortKey defaults to Key.
 	OrderAt time.Time
 	SortKey string
+	// FundingExempt identifies BYOK or already-paid work of a paid-processing kind.
+	FundingExempt bool
+	// CustodyDeadline comes from the existing retention policy. It is required to park a unit.
+	CustodyDeadline time.Time
+	AudioDuration   time.Duration
 	// RunAt delays the job. Zero means now.
 	RunAt time.Time
 }
@@ -184,6 +196,8 @@ type NewJob struct {
 type Kind struct {
 	// Name is the kind's name in job rows and metric labels.
 	Name string
+	// PaidProcessing opts intake into the owner entitlement condition.
+	PaidProcessing bool
 	// Formats lists the Meta and Checkpoint versions this binary can run. A job in a format
 	// that is not listed is left for a replica that lists it.
 	Formats []int
@@ -254,6 +268,8 @@ type Handler interface {
 // Observer receives the queue's events for metrics. Implementations must not block. Every
 // kind, step and cause it receives is declared, or is the literal "unknown".
 type Observer interface {
+	// EntitlementReleased measures source change to durable release, once per funded owner event.
+	EntitlementReleased(time.Duration)
 	// Outcome records a terminal result.
 	Outcome(kind string, outcome Terminal, cause Cause)
 	// Retry records a failed attempt that will be tried again.

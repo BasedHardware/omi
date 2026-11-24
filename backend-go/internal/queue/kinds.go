@@ -18,8 +18,9 @@ type registry struct {
 }
 
 type declared struct {
-	formats []int
-	steps   []string
+	paidProcessing bool
+	formats        []int
+	steps          []string
 }
 
 func newRegistry(cfg Config, kinds []Kind) (registry, error) {
@@ -35,7 +36,7 @@ func newRegistry(cfg Config, kinds []Kind) (registry, error) {
 		if _, dup := r.kinds[k.Name]; dup {
 			return registry{}, fmt.Errorf("%w: kind %q is declared twice", ErrConfig, k.Name)
 		}
-		r.kinds[k.Name] = declared{formats: slices.Clone(k.Formats), steps: slices.Clone(k.Steps)}
+		r.kinds[k.Name] = declared{paidProcessing: k.PaidProcessing, formats: slices.Clone(k.Formats), steps: slices.Clone(k.Steps)}
 		for _, c := range k.Causes {
 			r.causes[c] = struct{}{}
 		}

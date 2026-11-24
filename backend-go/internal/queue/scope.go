@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/BasedHardware/omi/backend-go/internal/platform/pg"
@@ -111,8 +112,10 @@ const insertJob = `WITH tenant AS (
  ON CONFLICT DO NOTHING
 ), j AS (
  INSERT INTO queue_jobs AS q (job_key,uid,kind,subject,meta,budget_allowed,gated,initializing,order_key,
-                        order_at,order_sub_us,order_sort,state,step,ready_at,run_at,blocked_since,format)
- SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18
+                        order_at,order_sub_us,order_sort,state,step,ready_at,run_at,blocked_since,format,
+                        custody_deadline,held_order_key,audio_seconds)
+ SELECT $1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $19::timestamptz IS NULL THEN $9 END,$10,$11,$12,$13,$14,$15,$16,$17,$18,
+        $19,CASE WHEN $19 IS NOT NULL THEN $9 END,$20
  ON CONFLICT DO NOTHING
  RETURNING ` + rawColumns + `
 )
@@ -124,20 +127,38 @@ func (sc *Scope) Enqueue(ctx context.Context, n NewJob) (Job, bool, error) {
 	if err := sc.admissible(n); err != nil {
 		return Job{}, false, err
 	}
-	now := sc.store.clock.Now()
+	if sc.store.kinds.kinds[n.Kind].paidProcessing && !n.FundingExempt {
+		return sc.enqueuePaid(ctx, n)
+	}
+	job, inserted, err := sc.store.insert(ctx, sc.conn, n, nil)
+	if err == nil && inserted {
+		sc.store.signal()
+	}
+	return job, inserted, err
+}
+
+type jobReader interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func (s *Store) insert(ctx context.Context, db jobReader, n NewJob, deadline *time.Time) (Job, bool, error) {
+	now := s.clock.Now()
 	n = withDefaults(n, now)
-	state, due, since := initialSchedule(n, now, sc.store.cfg.GateTimeout)
-	j, err := scan(sc.conn.QueryRow(ctx, insertJob, n.Key, n.Tenant, n.Kind, n.Subject, n.Meta, n.BudgetAllowed,
+	state, due, since := initialSchedule(n, now, s.cfg.GateTimeout)
+	readyAt := &due
+	if deadline != nil {
+		state, readyAt = StateWaiting, nil
+	}
+	j, err := scan(db.QueryRow(ctx, insertJob, n.Key, n.Tenant, n.Kind, n.Subject, n.Meta, n.BudgetAllowed,
 		n.Gated, n.Initializing, n.OrderKey, n.OrderAt, n.OrderAt.Nanosecond()%1000, n.SortKey, state, n.Step,
-		due, n.RunAt, since, n.Format))
+		readyAt, n.RunAt, since, n.Format, deadline, n.AudioDuration.Seconds()))
 	if errors.Is(err, ErrAbsent) {
-		existing, getErr := sc.Get(ctx, n.Key)
+		existing, getErr := scan(db.QueryRow(ctx, "SELECT "+columns+" FROM queue_jobs j WHERE uid=$1 AND job_key=$2", n.Tenant, n.Key))
 		return existing, false, getErr
 	}
 	if err != nil {
 		return Job{}, false, err
 	}
-	sc.store.signal()
 	return j, true, nil
 }
 

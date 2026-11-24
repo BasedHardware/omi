@@ -3,6 +3,7 @@ package batchunit
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
@@ -13,6 +14,10 @@ import (
 
 // Request identifies one transcription.
 type Request struct {
+	Route       Route
+	BYOK        bool
+	CaptureAt   time.Time
+	LateCapture bool
 	// Operation is the stable identity of the paid call, from Guarded.Operation. Every
 	// retry, takeover and later binary sends the same value.
 	Operation string
@@ -60,7 +65,7 @@ type Results interface {
 // Accounts answers whether an owner's work may be admitted or run.
 type Accounts interface {
 	// Admissible returns nil when work may be admitted for owner.
-	Admissible(ctx context.Context, a queue.Admitting, owner string) error
+	Admissible(ctx context.Context, a queue.Admitting, owner string) (queue.EntitlementSnapshot, error)
 	// Runnable returns nil when owner's work may run now. For an owner who is being deleted
 	// it returns a queue.Classified error whose outcome is queue.Hold, so nothing is paid
 	// for and the owner's other units are not tried one by one.

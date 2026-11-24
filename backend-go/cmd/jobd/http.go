@@ -33,6 +33,7 @@ func (a *api) routes() http.Handler {
 	m.HandleFunc("GET /healthz", a.health)
 	m.HandleFunc("POST /v1/conversations/{cid}/end", a.admit)
 	m.HandleFunc("POST /v1/batch/{owner}/units", a.batch)
+	m.HandleFunc("POST /v1/batch/{owner}/entitlement-changed", a.entitlementChanged)
 	m.HandleFunc("GET /v1/jobs/{id}", a.get)
 	m.HandleFunc("POST /v1/jobs/{id}/resume", a.resume)
 	m.HandleFunc("GET /v1/admin/parked", a.parked)
@@ -151,13 +152,38 @@ func (a *api) admit(w http.ResponseWriter, r *http.Request) {
 	respond(w, 202, jobID{id})
 }
 
+// entitlementChanged accepts an owner notification. Only the account source supplies authority.
+func (a *api) entitlementChanged(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	if !validID(owner) {
+		refusal(w, 400, "invalid_request")
+		return
+	}
+	ctx := r.Context()
+	err := a.store.Tenant(ctx, owner, func(sc *queue.Scope) error {
+		fact, err := a.units.Accounts.Admissible(ctx, sc.Admitting(), owner)
+		if err != nil {
+			return err
+		}
+		return sc.ObserveEntitlement(ctx, fact)
+	})
+	if err != nil {
+		routeError(w, err, "")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // unitWire is the kit's JSON shape for a batch unit. The kit sends the input inline; the
 // kind takes a reference, so the input is put in the kit store first and the unit points at it.
 type unitWire struct {
-	ID      string    `json:"unit_id"`
-	Input   *string   `json:"input"`
-	OrderAt time.Time `json:"order_at"`
-	RunAt   time.Time `json:"run_at"`
+	CustodyDeadline time.Time       `json:"custody_deadline"`
+	DurationSeconds float64         `json:"duration_seconds"`
+	Route           batchunit.Route `json:"route"`
+	ID              string          `json:"unit_id"`
+	Input           *string         `json:"input"`
+	OrderAt         time.Time       `json:"order_at"`
+	RunAt           time.Time       `json:"run_at"`
 }
 
 func (a *api) batch(w http.ResponseWriter, r *http.Request) {
@@ -179,7 +205,7 @@ func (a *api) batch(w http.ResponseWriter, r *http.Request) {
 		routeError(w, err, "")
 		return
 	}
-	unit := batchunit.Unit{ID: data.ID, Source: batchunit.Source{Ref: ref, Version: 1}, OrderAt: data.OrderAt, RunAt: data.RunAt}
+	unit := batchunit.Unit{Route: data.Route, CustodyDeadline: data.CustodyDeadline, AudioDuration: time.Duration(data.DurationSeconds * float64(time.Second)), ID: data.ID, Source: batchunit.Source{Ref: ref, Version: 1}, OrderAt: data.OrderAt, RunAt: data.RunAt}
 	j, err := a.units.Admit(ctx, owner, unit)
 	if err != nil {
 		routeError(w, err, "")

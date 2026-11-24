@@ -52,3 +52,9 @@ Postgres through `internal/queue/queuetest`, in `service_test.go`.
 
 `stored` and `Receipt` are what old rows mean. To change either, add a new `Format`, declare both
 formats in `Declaration` until no job in the old one remains, and decode by `Job.Format`.
+
+## Batch-shadow funding inputs
+
+Intake supplies the custody deadline and audio duration from the existing retention record. The account adapter returns a positive, monotonically increasing generation for every change between exhausted and funded, including grants and effective period boundaries. An unversioned account leaves the stored observation intact. BYOK and paid-result recovery are trusted intake dispositions. The speech adapter receives the frozen route and BYOK flag. Recovery calls only `Recover`.
+
+The conformance binary accepts an owner notification at `POST /v1/batch/{owner}/entitlement-changed` and rereads the account authority. It also checks due owners once an hour and sweeps custody deadlines once a minute. Duplicate observations cannot release a second time. A serving billing adapter must supply the source change timestamp for the release histogram. The batch-shadow target is p99 at or below 60 seconds from funding change to committed release.

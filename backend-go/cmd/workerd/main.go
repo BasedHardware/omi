@@ -94,7 +94,7 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 		store.Close()
 		return errors.New("could not start queue workers")
 	}
-	registry.MustRegister(newStrandedCollector(workers))
+	registry.MustRegister(newStrandedCollector(workers), newCustomerWaitCollector(store))
 
 	return serve(ctx, cfg, store, workers, registry, func(ctx context.Context) {
 		maintenance.run(ctx, logger)

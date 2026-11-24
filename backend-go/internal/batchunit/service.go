@@ -32,8 +32,14 @@ func (s *Service) Admit(ctx context.Context, owner string, unit Unit) (queue.Job
 	}
 	var admitted queue.Job
 	err = s.Queue.Tenant(ctx, owner, func(sc *queue.Scope) error {
-		if admitErr := s.Accounts.Admissible(ctx, sc.Admitting(), owner); admitErr != nil {
+		fact, admitErr := s.Accounts.Admissible(ctx, sc.Admitting(), owner)
+		if admitErr != nil {
 			return fmt.Errorf("admit unit: %w", admitErr)
+		}
+		if fact.Generation != 0 || fact.Exhausted {
+			if observeErr := sc.ObserveEntitlement(ctx, fact); observeErr != nil {
+				return observeErr
+			}
 		}
 		enqueued, inserted, enqueueErr := sc.Enqueue(ctx, job)
 		if enqueueErr != nil {
@@ -54,7 +60,7 @@ func (s *Service) Work(ctx context.Context, r *queue.Run) queue.Outcome {
 		s.Observer.Transcribed(true)
 		return queue.Done()
 	}
-	source, err := Input(job.Meta)
+	input, err := processingInput(job.Meta)
 	if err != nil {
 		return queue.Fail(CauseInputUnreadable)
 	}
@@ -63,8 +69,12 @@ func (s *Service) Work(ctx context.Context, r *queue.Run) queue.Outcome {
 		if runErr := s.Accounts.Runnable(ctx, g, job.Tenant); runErr != nil {
 			return runErr
 		}
-		req := request(g, job, source)
-		transcript, callErr := s.Speech.Transcribe(ctx, g, req)
+		req := request(g, job, input)
+		transcribe := s.Speech.Transcribe
+		if input.AlreadyPaid {
+			transcribe = s.Speech.Recover
+		}
+		transcript, callErr := transcribe(ctx, g, req)
 		if callErr != nil {
 			return callErr
 		}
@@ -97,13 +107,13 @@ func (s *Service) Exhausted(ctx context.Context, r *queue.Reconcile) queue.Resol
 		s.Observer.Transcribed(true)
 		return queue.Resolved()
 	}
-	source, err := Input(job.Meta)
+	input, err := processingInput(job.Meta)
 	if err != nil {
 		return queue.Park()
 	}
 	var receipt Receipt
 	err = r.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
-		req := request(g, job, source)
+		req := request(g, job, input)
 		transcript, callErr := s.Speech.Recover(ctx, g, req)
 		if callErr != nil {
 			return callErr
@@ -128,6 +138,6 @@ func (s *Service) Exhausted(ctx context.Context, r *queue.Reconcile) queue.Resol
 	return queue.Resolved()
 }
 
-func request(g queue.Guarded, job queue.Job, source Source) Request {
-	return Request{Operation: g.Operation(StepSpeech), Owner: job.Tenant, UnitID: job.Subject, Source: source}
+func request(g queue.Guarded, job queue.Job, input routedInput) Request {
+	return Request{CaptureAt: job.CaptureAt, LateCapture: job.LateCapture, Operation: g.Operation(StepSpeech), Owner: job.Tenant, UnitID: job.Subject, Route: input.Route, BYOK: input.BYOK, Source: Source(input.stored)}
 }
