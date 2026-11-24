@@ -1,0 +1,58 @@
+package main
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+	"time"
+)
+
+func taskProofRun(id string) *observation {
+	start := time.Date(2026, 11, 24, 13, 0, 0, 0, time.UTC)
+	stamp := map[string]any{"$timestamp": start.Add(time.Second).Format(time.RFC3339Nano)}
+	owner, cid := "replay-kept-with-effects", "kept-with-effects"
+	segments := []any{"segment-1"}
+	item := map[string]any{"created_at": stamp, "capture_owner": "user", "description": "Send the meeting notes", "source_segment_ids": segments}
+	task := map[string]any{"source": "conversation", "owner": "user", "conversation_id": cid, "description": item["description"], "created_at": stamp, "updated_at": stamp,
+		"provenance": []any{map[string]any{"scope": "canonical", "kind": "conversation", "id": cid, "transcript_segment_ids": segments}}}
+	return &observation{OwnerID: owner, ConversationID: cid, Started: start, Finished: start.Add(time.Minute),
+		Document: map[string]any{"id": cid, "structured": map[string]any{"action_items": []any{item}}},
+		Derived:  map[string]any{"users/" + owner + "/action_items/" + id: task},
+		Effects: map[string]any{"other_vectors": []any{map[string]any{"namespace": "ns4", "record": map[string]any{
+			"id": owner + "-ai-" + id, "values": []any{json.Number("0.5")}, "metadata": map[string]any{"uid": owner, "action_item_id": id, "created_at": json.Number("1795525202")}}}}},
+	}
+}
+
+func TestOnlySameAuthorizedTaskAndVectorMayPair(t *testing.T) {
+	a, b := strings.Repeat("A", 20), strings.Repeat("B", 20)
+	for _, change := range []string{"", "orphan", "wrong owner", "clock", "payload", "provenance", "embedding", "extra task", "extra vector"} {
+		py, goRun := taskProofRun(a), taskProofRun(b)
+		taskPath := "users/" + goRun.OwnerID + "/action_items/" + b
+		task := goRun.Derived[taskPath].(map[string]any)
+		vec := singleObject(goRun.Effects["other_vectors"])["record"].(map[string]any)
+		meta := vec["metadata"].(map[string]any)
+		switch change {
+		case "orphan":
+			meta["action_item_id"] = a
+		case "wrong owner":
+			meta["uid"] = "other"
+		case "clock":
+			meta["created_at"] = json.Number("0")
+		case "payload":
+			task["completed"] = true
+		case "provenance":
+			singleObject(task["provenance"])["id"] = "other"
+		case "embedding":
+			vec["values"] = []any{json.Number("0.25")}
+		case "extra task":
+			goRun.Derived[taskPath+"X"] = task
+		case "extra vector":
+			goRun.Effects["other_vectors"] = append(goRun.Effects["other_vectors"].([]any), vec)
+		}
+		diffs := []difference{{Path: "/effects/other_vectors/0/record/id", Kind: "different_value"}}
+		reviewSingleTaskBinding(diffs, py, goRun)
+		if (diffs[0].Reason != "") != (change == "") {
+			t.Errorf("mutation %q produced reason %q", change, diffs[0].Reason)
+		}
+	}
+}
