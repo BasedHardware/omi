@@ -30,8 +30,9 @@ type providerTokenCall struct {
 }
 
 type speakerTrace struct {
-	Exits    []map[string]any `json:"exits"`
-	Evidence []string         `json:"evidence"`
+	ClockSeconds []json.Number    `json:"resolver_clock_seconds,omitempty"`
+	Exits        []map[string]any `json:"exits"`
+	Evidence     []string         `json:"evidence"`
 }
 
 type observation struct {

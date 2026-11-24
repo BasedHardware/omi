@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"maps"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +22,11 @@ func captureRun(t *testing.T, elapsed string, nonce byte) *observation {
 	run.OwnerID = "replay-c"
 	exit := map[string]any{"uid": run.OwnerID, "conversation": "c", "pass": "first", "reason": "private_cloud_disabled", "status": "capture", "elapsed_seconds": json.Number(elapsed)}
 	run.Document = map[string]any{"private_cloud_sync_enabled": false, "speaker_resolution": map[string]any{"status": "capture"}, "owner_recognition_diagnostics": map[string]any{"current_resolver": maps.Clone(exit), "first_resolver": maps.Clone(exit)}}
-	run.SpeakerTrace = &speakerTrace{Exits: []map[string]any{exit}}
+	duration, err := strconv.ParseFloat(elapsed, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.SpeakerTrace = &speakerTrace{Exits: []map[string]any{exit}, ClockSeconds: []json.Number{"10", json.Number(strconv.FormatFloat(10+duration, 'f', -1, 64))}}
 	setEvidence(t, run, run.OwnerID, "capture", nonce)
 	return run
 }
@@ -39,7 +45,11 @@ func setEvidence(t *testing.T, run *observation, uid, label string, nonce byte) 
 
 func TestSpeakerClockRequiresRunAndWriteWitness(t *testing.T) {
 	tests := map[string]func(*observation){
-		"valid":                   nil,
+		"valid":             nil,
+		"missing entry":     func(r *observation) { r.SpeakerTrace.ClockSeconds = r.SpeakerTrace.ClockSeconds[1:] },
+		"extra reading":     func(r *observation) { r.SpeakerTrace.ClockSeconds = append(r.SpeakerTrace.ClockSeconds, "10.3") },
+		"reversed interval": func(r *observation) { r.SpeakerTrace.ClockSeconds = []json.Number{"11", "10"} },
+		"rounded exit and stored duration agree but interval differs": func(r *observation) { r.SpeakerTrace.ClockSeconds[1] = "10.200501" },
 		"no measurement":          func(r *observation) { r.SpeakerTrace = nil },
 		"multiple measurements":   func(r *observation) { r.SpeakerTrace.Exits = append(r.SpeakerTrace.Exits, r.SpeakerTrace.Exits[0]) },
 		"wrong account":           func(r *observation) { r.OwnerID = "different" },
@@ -84,16 +94,16 @@ func TestSpeakerCiphertextRequiresEqualAuthenticatedBuilderBytes(t *testing.T) {
 	tests := map[string]func(*observation){
 		"valid":                   nil,
 		"wrong key":               func(r *observation) { setEvidence(t, r, "foreign", "capture", 4) },
-		"different builder bytes": func(r *observation) { setEvidence(t, r, r.OwnerID, "different", 4) },
+		"different builder bytes": func(r *observation) { setEvidence(t, r, r.OwnerID, "capturE", 4) },
 		"builder mismatch":        func(r *observation) { r.SpeakerTrace.Evidence[0] = "incorrect" },
 		"missing builder":         func(r *observation) { r.SpeakerTrace = nil },
 		"second builder": func(r *observation) {
 			r.SpeakerTrace.Evidence = append(r.SpeakerTrace.Evidence, r.SpeakerTrace.Evidence[0])
 		},
-		"version":        func(r *observation) { mustMap(r.Derived[speakerDoc])["version"] = json.Number("2") },
-		"extra field":    func(r *observation) { mustMap(r.Derived[speakerDoc])["raw"] = "extra" },
-		"wrong document": func(r *observation) { r.Derived["other"] = r.Derived[speakerDoc]; delete(r.Derived, speakerDoc) },
-		"tampered":       func(r *observation) { mustMap(r.Derived[speakerDoc])["payload"] = "invalid" },
+		"version":          func(r *observation) { mustMap(r.Derived[speakerDoc])["version"] = json.Number("2") },
+		"extra field":      func(r *observation) { mustMap(r.Derived[speakerDoc])["raw"] = "extra" },
+		"wrong document":   func(r *observation) { r.Derived["other"] = r.Derived[speakerDoc]; delete(r.Derived, speakerDoc) },
+		"invalid encoding": func(r *observation) { mustMap(r.Derived[speakerDoc])["payload"] = "invalid" },
 		"invalid compression": func(r *observation) {
 			mustMap(r.Derived[speakerDoc])["payload"] = sealReplayValue(t, r.OwnerID, "Zg==", 1)
 		},
@@ -114,10 +124,64 @@ func TestSpeakerCiphertextRequiresEqualAuthenticatedBuilderBytes(t *testing.T) {
 			reviewSpeakerDifferences(diffs, py, g)
 			for i, d := range diffs {
 				want := mutate == nil && i == 0
-				if (d.Reason == "speaker_evidence_ciphertext") != want {
+				if i == 0 && mutate != nil && d.FailureReason != "speaker_envelope_unverified" {
+					t.Fatalf("missing gap for %s", d.Path)
+				}
+				if (d.Reason == "encrypted_envelope") != want {
 					t.Fatalf("unexpected reason %q at %s", d.Reason, d.Path)
 				}
 			}
 		})
+	}
+}
+
+func TestSpeakerClockAcceptsOnlyStoredRounding(t *testing.T) {
+	py, g := captureRun(t, "0.4", 1), captureRun(t, "0.2", 2)
+	g.SpeakerTrace.ClockSeconds = []json.Number{"10", "10.200499"}
+	diff := []difference{{Kind: "different_value", Path: clockPath}}
+	reviewSpeakerDifferences(diff, py, g)
+	if diff[0].Reason != "replay_clock" {
+		t.Fatalf("valid rounded duration refused: %+v", diff[0])
+	}
+}
+
+func TestFlippedSpeakerAuthenticationTagProducesValueFreeGap(t *testing.T) {
+	py, g := captureRun(t, "0.4", 1), captureRun(t, "0.2", 2)
+	const marker = "synthetic-private-payload-marker"
+	setEvidence(t, py, py.OwnerID, marker, 1)
+	setEvidence(t, g, g.OwnerID, marker, 2)
+	doc := mustMap(g.Derived[speakerDoc])
+	raw, err := base64.StdEncoding.Strict().DecodeString(doc["payload"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw[len(raw)-1] ^= 1
+	doc["payload"] = base64.StdEncoding.EncodeToString(raw)
+	result, err := compare([]replayCase{{Name: "c", Python: py, Go: g}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := "/derived_documents/" + strings.ReplaceAll(speakerDoc, "/", "~1") + "/payload"
+	found := false
+	for _, d := range result.Cases[0].Differences {
+		if d.Path == path {
+			found = true
+			if d.Reason != "" || d.FailureReason != "speaker_envelope_unverified" {
+				t.Fatalf("unexpected classification: %+v", d)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("missing tampered-envelope difference")
+	}
+	stripReportValues(&result)
+	reportJSON, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{marker, doc["payload"].(string), mustMap(py.Derived[speakerDoc])["payload"].(string)} {
+		if bytes.Contains(reportJSON, []byte(value)) {
+			t.Fatal("speaker payload exposed in report")
+		}
 	}
 }

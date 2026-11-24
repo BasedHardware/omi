@@ -94,6 +94,25 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
         token_row = enriched['cases'][0]['differences'][3]
         self.assertEqual(token_row['failure_reason'], 'home_dirty_receipt_missing')
 
+    def test_unverified_speaker_envelope_is_a_value_free_go_gap(self):
+        path = '/derived_documents/users~1replay-c~1conversations~1c~1speaker_evidence~1current/payload'
+        report = {
+            'unexplained_differences': 1,
+            'cases': [
+                {
+                    'name': 'c',
+                    'differences': [
+                        {'path': path, 'kind': 'different_value', 'failure_reason': 'speaker_envelope_unverified'}
+                    ],
+                }
+            ],
+        }
+        result = enrich(report)
+        row = result['cases'][0]['differences'][0]
+        self.assertEqual(row['label'], 'go_gap')
+        self.assertEqual(set(row), {'path', 'kind', 'failure_reason', 'family', 'label'})
+        self.assertEqual(result['diagnostic']['unexplained_gate']['go_gap_rows'], 1)
+
     def test_unreadable_park_requires_terminal_custody_and_excuses_only_the_status(self):
         report = {
             'unexplained_differences': 2,

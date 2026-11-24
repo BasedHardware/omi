@@ -16,7 +16,7 @@ import (
 
 func measuredResolver(run *observation) map[string]any {
 	trace := run.SpeakerTrace
-	if trace == nil || len(trace.Exits) != 1 || run.Started.IsZero() || !run.Finished.After(run.Started) {
+	if trace == nil || len(trace.Exits) != 1 || len(trace.ClockSeconds) != 2 || run.Started.IsZero() || !run.Finished.After(run.Started) {
 		return nil
 	}
 	diag, _ := documentField(run, "owner_recognition_diagnostics").(map[string]any)
@@ -37,6 +37,15 @@ func measuredResolver(run *observation) map[string]any {
 	seconds, ok := current["elapsed_seconds"].(json.Number)
 	n, err := seconds.Float64()
 	if !ok || err != nil || math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || n > run.Finished.Sub(run.Started).Seconds()+0.0005 {
+		return nil
+	}
+	// Stored durations are rounded to the nearest millisecond. Each side
+	// must agree with its own unrounded monotonic entry and exit readings.
+	entry, entryErr := trace.ClockSeconds[0].Float64()
+	exit, exitErr := trace.ClockSeconds[1].Float64()
+	interval := exit - entry
+	if entryErr != nil || exitErr != nil || !(entry >= 0 && exit >= entry) ||
+		!(math.Abs(n-interval) <= 0.0005) || math.Round(n*1000)/1000 != n {
 		return nil
 	}
 	stable := maps.Clone(current)
@@ -81,7 +90,7 @@ func observedSpeakerPayload(run *observation, path string) []byte {
 	return payload
 }
 
-// Proposed for the synthetic capture-only corpus. A trace is emitted by the
+// Approved for the synthetic capture-only corpus. A trace is emitted by the
 // actual resolver and evidence builder independently of the stored result.
 func reviewSpeakerDifferences(diffs []difference, py, goRun *observation) {
 	if py.ConversationID == "" || strings.ContainsAny(py.ConversationID, "/~") || py.OwnerID != "replay-"+py.ConversationID || goRun.OwnerID != py.OwnerID || goRun.ConversationID != py.ConversationID {
@@ -103,7 +112,9 @@ func reviewSpeakerDifferences(diffs []difference, py, goRun *observation) {
 		case evidencePath:
 			p := observedSpeakerPayload(py, doc)
 			if p != nil && bytes.Equal(p, observedSpeakerPayload(goRun, doc)) {
-				diffs[i].Reason = "speaker_evidence_ciphertext"
+				diffs[i].Reason = "encrypted_envelope"
+			} else {
+				diffs[i].FailureReason = "speaker_envelope_unverified"
 			}
 		}
 	}
