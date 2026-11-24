@@ -479,6 +479,10 @@
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
   },
+  "backend/scripts/backfill_home_visibility_index.py:collection": {
+    "policy": "operator",
+    "reason": "Owner-scoped Home index migration reads only the two visibility flags and their derived index bit."
+  },
   "backend/scripts/backfill_notes_v2_default_emoji.py:collection": {
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
