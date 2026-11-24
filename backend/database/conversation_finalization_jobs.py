@@ -679,8 +679,12 @@ def _create_or_get_finalization_intent_txn(
         if not is_recovery_trigger(trigger) and not _conversation_has_finalization_content(
             uid, loaded, conversation_ref, transaction
         ):
-            intent = _no_finalization_intent('no_content')
-            return intent
+            # A finish inside the first 60 s archive window: the live session still holds the audio.
+            if trigger is not ProcessingTrigger.CLIENT_FINALIZE or not server_batch.user_finish_admits(
+                uid, loaded, now
+            ):
+                intent = _no_finalization_intent('no_content')
+                return intent
 
         # The lifecycle service owns this pure decision, but it is evaluated while
         # Firestore holds the conversation transaction snapshot. A late disconnect

@@ -3,10 +3,13 @@
 import math
 import os
 from collections.abc import Mapping
+from datetime import datetime, timezone
 
+from config import listen_reconnect
 from config.audio_outbox import enabled as audio_outbox_enabled
 from config.policy import cohort_bucket
 from config.policy.batch import parse_percent
+from config.rollout_cohorts import in_rollout_cohort
 from config.stt_provider_policy import (
     MODULATE_SUPPORTED_LANGUAGES,
     PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL,
@@ -138,6 +141,45 @@ def has_audio(capture: Mapping) -> bool:
         and math.isfinite(end)
         and start < end
     )
+
+
+def live_audio_uncommitted(capture: Mapping) -> bool:
+    """A live capture holding audio whose first archive window has not committed yet.
+
+    The listen session marks ``server_batch_audio_received`` at the first frame and writes
+    ``has_content`` only when a 60-second archive window commits. Until then the audio lives in the
+    session, which commits it with the next frame after the row leaves ``in_progress``, or at teardown.
+
+    A row with a reconnect producer is excluded: its archive writes are fenced once the row leaves
+    ``in_progress``, so the session could not commit the audio an early finish depends on.
+    """
+    return bool(
+        owned(capture)
+        and capture.get('server_batch_audio_received') is True
+        and capture.get('server_batch_audio_closed') is not True
+        and not has_audio(capture)
+        and not listen_reconnect.producer(capture)
+    )
+
+
+# A repeated or retried finish must not cut the seconds-old successor recording.
+EARLY_FINISH_MIN_AGE_SECONDS = 10.0
+
+
+def user_finish_admits(uid: str, capture: Mapping, now: datetime) -> bool:
+    """A user finish inside the first archive window is a real finish, not an empty recording.
+
+    Rolls out with the fast first transcript: the same switch and the same ``v3-fast-finish`` cohort.
+    """
+    created = capture.get('created_at')
+    if not live_audio_uncommitted(capture) or not isinstance(created, datetime) or not manual_end_marker_enabled():
+        return False
+    if (now - (created if created.tzinfo else created.replace(tzinfo=timezone.utc))).total_seconds() < (
+        EARLY_FINISH_MIN_AGE_SECONDS
+    ):
+        return False
+    mode = os.getenv('CONVERSATIONS_V3_FAST_FINISH', 'cohort').strip().lower()
+    return mode == 'on' or (mode == 'cohort' and in_rollout_cohort(uid, 'v3-fast-finish'))
 
 
 def proven_empty(capture: Mapping) -> bool:
