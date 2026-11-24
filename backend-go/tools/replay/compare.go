@@ -17,20 +17,31 @@ type admission struct {
 	OwnKey bool   `json:"own_key"`
 }
 
+// providerTokenCall retains counts from the loopback fixture without provider text.
+type providerTokenCall struct {
+	Feature   string `json:"feature"`
+	Input     int    `json:"input"`
+	Output    int    `json:"output"`
+	Embedding bool   `json:"embedding"`
+}
+
 type observation struct {
-	QueueFanout      string         `json:"queue_fanout_key"`
-	UpdatedAtChanged bool           `json:"updated_at_changed"`
-	Admitted         *admission     `json:"admitted"`
-	Started          time.Time      `json:"started_at"`
-	Finished         time.Time      `json:"finished_at"`
-	ProviderCalls    []string       `json:"provider_calls"`
-	Effects          map[string]any `json:"effects"`
-	Status           string         `json:"status"`
-	Document         any            `json:"conversation"`
-	Derived          map[string]any `json:"derived_documents"`
-	Webhooks         []any          `json:"webhooks"`
-	Cost             replayCost     `json:"cost"`
-	GoEvidence       map[string]any `json:"go_evidence,omitempty"`
+	ProviderTokenCalls *[]providerTokenCall `json:"provider_token_calls,omitempty"`
+	QueueFanout        string               `json:"queue_fanout_key"`
+	UpdatedAtChanged   bool                 `json:"updated_at_changed"`
+	Admitted           *admission           `json:"admitted"`
+	Started            time.Time            `json:"started_at"`
+	Finished           time.Time            `json:"finished_at"`
+	ProviderCalls      []string             `json:"provider_calls"`
+	Effects            map[string]any       `json:"effects"`
+	Status             string               `json:"status"`
+	Document           any                  `json:"conversation"`
+	Home               map[string]any       `json:"home,omitempty"`
+	NotesPromptHashes  []string             `json:"notes_prompt_sha256,omitempty"`
+	Derived            map[string]any       `json:"derived_documents"`
+	Webhooks           []any                `json:"webhooks"`
+	Cost               replayCost           `json:"cost"`
+	GoEvidence         map[string]any       `json:"go_evidence,omitempty"`
 }
 
 type tokenUsage struct {
@@ -80,11 +91,13 @@ type difference struct {
 
 type caseReport struct {
 	replayCase
-	PythonStatus string         `json:"python_status,omitempty"`
-	GoStatus     string         `json:"go_status,omitempty"`
-	Differences  []difference   `json:"differences"`
-	Cost         costPair       `json:"cost"`
-	GoEvidence   map[string]any `json:"go_evidence,omitempty"`
+	PythonTokenCalls *[]providerTokenCall `json:"python_provider_token_calls,omitempty"`
+	GoTokenCalls     *[]providerTokenCall `json:"go_provider_token_calls,omitempty"`
+	PythonStatus     string               `json:"python_status,omitempty"`
+	GoStatus         string               `json:"go_status,omitempty"`
+	Differences      []difference         `json:"differences"`
+	Cost             costPair             `json:"cost"`
+	GoEvidence       map[string]any       `json:"go_evidence,omitempty"`
 }
 
 type report struct {
@@ -105,6 +118,10 @@ type costRow struct {
 }
 
 func compare(cases []replayCase) (report, error) {
+	return compareCorpus(cases, false)
+}
+
+func compareCorpus(cases []replayCase, approvedCaptureEnd bool) (report, error) {
 	out := report{Version: 1, Cases: make([]caseReport, 0, len(cases)), CostRows: make([]costRow, 0, len(cases))}
 	seen := make(map[string]bool)
 	for _, c := range cases {
@@ -116,11 +133,13 @@ func compare(cases []replayCase) (report, error) {
 		if c.Python != nil {
 			entry.PythonStatus = c.Python.Status
 			entry.Cost.Python = c.Python.Cost
+			entry.PythonTokenCalls = c.Python.ProviderTokenCalls
 		}
 		if c.Go != nil {
 			entry.GoStatus = c.Go.Status
 			entry.Cost.Go = c.Go.Cost
 			entry.GoEvidence = c.Go.GoEvidence
+			entry.GoTokenCalls = c.Go.ProviderTokenCalls
 		}
 		out.CostRows = append(out.CostRows, costRow{Case: c.Name, Python: entry.Cost.Python, Go: entry.Cost.Go})
 		switch {
@@ -135,7 +154,11 @@ func compare(cases []replayCase) (report, error) {
 		default:
 			entry.Differences = compareObservations(c.Python, c.Go)
 			matched := true
-			for _, diff := range entry.Differences {
+			for i := range entry.Differences {
+				diff := &entry.Differences[i]
+				if !approvedCaptureEnd || !approvedIdentityDifference(c.Name, diff.Path) {
+					diff.Reason = ""
+				}
 				if diff.Reason == "" {
 					matched = false
 					out.Unexplained++

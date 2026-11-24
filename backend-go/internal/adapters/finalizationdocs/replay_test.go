@@ -34,13 +34,13 @@ func TestF35SyncRevisionQuietBoundaryAndRedispatchLimit(t *testing.T) {
 		if job["dispatch_generation"] != i+1 || job["worker_claim_count"] != int64(0) {
 			t.Fatalf("unexpected redispatch accounting: %v", job)
 		}
-		if err := store.Begin(t.Context(), g, claim); !errors.Is(err, queue.ErrLease) {
+		if _, err := store.Begin(t.Context(), g, claim); !errors.Is(err, queue.ErrLease) {
 			t.Fatalf("stale claim: %v", err)
 		}
 		claim.Epoch++
 		due := start.Add(time.Duration(i) * 30 * time.Second)
 		store.Clock = clock.Fixed{T: due.Add(-time.Microsecond)}
-		if err := store.Begin(t.Context(), g, claim); !errors.Is(err, errSyncWait) {
+		if _, err := store.Begin(t.Context(), g, claim); !errors.Is(err, errSyncWait) {
 			t.Fatalf("early claim: %v", err)
 		}
 		store.Clock = clock.Fixed{T: due}
@@ -105,7 +105,7 @@ func TestF35ManualRedrivePreservesGrantAndRejectsPriorEpoch(t *testing.T) {
 		job["attempt_count"] != int64(0) || job["worker_claim_count"] != int64(0) || job["task_retry_count"] != int64(0) {
 		t.Fatalf("incorrect redrive state: %v", job)
 	}
-	if earlier := store.Begin(t.Context(), g, claim); !errors.Is(earlier, queue.ErrLease) {
+	if _, earlier := store.Begin(t.Context(), g, claim); !errors.Is(earlier, queue.ErrLease) {
 		t.Fatalf("old epoch reclaimed redrive: %v", earlier)
 	}
 	claim.Epoch++

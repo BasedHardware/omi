@@ -261,6 +261,16 @@ def _run_scheduled(uid: str) -> None:
         _automatic_slots.release()
 
 
+def refresh_for_finalization(uid: str) -> str:
+    """Run the same bounded automatic work before a durable finalization settles."""
+    if not _automatic_slots.acquire(blocking=False):
+        return 'busy'
+    try:
+        return refresh_if_stale(uid)
+    finally:
+        _automatic_slots.release()
+
+
 def schedule_refresh(uid: str, profile: Optional[dict] = None, *, known: bool = False) -> bool:
     """Queue an automatic refresh if the profile looks stale and a process slot is free.
 

@@ -84,6 +84,7 @@ from config.episodes import (
 from database import conversations as conversations_db
 from database import episodes as episodes_db
 from database.episode_finalization_fence import EpisodeFinalizationDeleted
+from database import episode_write_fence
 from utils.conversations.recorded_time import conversation_span
 from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
 from utils.episodes import compose_wait, composer_context, metrics, policy, transcript_receipts
@@ -1043,7 +1044,23 @@ def _first_member_title(uid: str, episode: Mapping[str, Any], c: Any) -> str:
     return ''
 
 
-def defer_late_compose(uid: str, episode: Mapping[str, Any], c: Any) -> bool:
+def empty_discard_deferral(episode: Mapping[str, Any]) -> dict[str, Any]:
+    """Fold the usual late-compose stamp into a discard of the last retained member."""
+    if (
+        policy.is_live(episode)
+        or _retained_ids(episode)
+        or not episode_late_compose_enabled()
+        or not episode_composer_enabled()
+        or not is_late(episode)
+        or is_deferred(episode)
+        or episode.get('composed_fingerprint')
+        and not needs_compose(episode, opened=True)
+    ):
+        return {}
+    return {'compose_deferred_at': datetime.now(timezone.utc), 'compose_opened_deferred_at': None}
+
+
+def defer_late_compose(uid: str, episode: Mapping[str, Any], c: Any, *, stage_finalization: bool = False) -> bool:
     """Defer a late episode's compose to its first open. Returns whether it is deferred.
 
     A failed stamp falls through to today's behavior (compose at finalize), so a write
@@ -1069,6 +1086,13 @@ def defer_late_compose(uid: str, episode: Mapping[str, Any], c: Any) -> bool:
             # The row reads as the first member's summary until the composer replaces it.
             **({'title': fallback} if fallback else {}),
         }
+
+    if (
+        stage_finalization
+        and not episode.get('composed_fingerprint')
+        and episode_write_fence.stage_compose_deferral(uid, str(episode['id']), stamp(episode))
+    ):
+        return True
 
     try:
         result = _write(
@@ -1831,8 +1855,12 @@ def schedule(
     so an episode still waiting on a member is not re-read on every list request. ``trigger`` is
     the bounded origin label (close|read|member_final|settle) carried to the compose metric.
     """
-    if not episode_composer_enabled() or not episode_id:
+    if not episode_composer_enabled() or not episode_id or episode_write_fence.refused():
         return False
+    if episode_write_fence.defer_schedule(
+        schedule, uid, episode_id, collaborators=collaborators, throttle=throttle, trigger=trigger
+    ):
+        return True
     key = (uid, str(episode_id))
     now = time.monotonic()
     with _inflight_lock:
@@ -1929,6 +1957,9 @@ def after_finalized(
     return outcome
 
 
+_UNKNOWN_EPISODE = object()
+
+
 def schedule_for_conversation(
     uid: str,
     conversation_id: str,
@@ -1936,13 +1967,15 @@ def schedule_for_conversation(
     collaborators: Any = None,
     row: Optional[Mapping[str, Any]] = None,
     transcript_updated: bool = False,
+    episode: Any = _UNKNOWN_EPISODE,
 ) -> None:
     if not episode_composer_enabled():
         return
     try:
         c = collaborators
         client = getattr(c, 'firestore_client', None)
-        episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=client)
+        if episode is _UNKNOWN_EPISODE:
+            episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=client)
         if episode and not policy.is_live(episode):
             if transcript_updated and (
                 conversation_id not in _retained_ids(episode)
@@ -1984,7 +2017,8 @@ def schedule_for_conversation(
                 }
             # An already composed partial episode must catch up even when the original capture is old.
             catch_up = transcript_updated and episode.get('composed_fingerprint')
-            if not catch_up and defer_late_compose(uid, episode, c or SimpleNamespace(firestore_client=None)):
+            stage = {'stage_finalization': True} if episode_write_fence.active() else {}
+            if not catch_up and defer_late_compose(uid, episode, c or SimpleNamespace(firestore_client=None), **stage):
                 return
             if episode_compose_settle_enabled():
                 c = c or SimpleNamespace(firestore_client=None, people_names=None)

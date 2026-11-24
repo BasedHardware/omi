@@ -31,3 +31,36 @@ func TestF32TombstoneRefusesLoadAndNotesOrHomeWrites(t *testing.T) {
 		t.Fatal("notes or Home receipts changed while deletion was pending")
 	}
 }
+
+func TestSyncNotesRecoveryKeepsBindingAndPaidCallKeepsDeletionFence(t *testing.T) {
+	t.Parallel()
+	for _, marker := range []struct {
+		name, path string
+		data       map[string]any
+		want       error
+	}{
+		{"account", "account_deletions/" + owner, map[string]any{"wipe_status": "pending"}, docstore.ErrOwnerDeleting},
+		{"conversation", "users/" + owner + "/deleted_conversations/recovery", map[string]any{"conversation_id": "recovery"}, docstore.ErrMissing},
+	} {
+		t.Run(marker.name, func(t *testing.T) {
+			t.Parallel()
+			b, s, g := open(t)
+			ref := seed(t, b, "recovery", map[string]any{
+				"status": "processing", "finalization_engine": "go", "finalization_job_id": "current",
+				"finalization_revision": int64(1), "sync_content_revision": int64(2),
+			})
+			if _, err := b.Raw.Doc(marker.path).Set(t.Context(), marker.data); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.CheckSyncNotesRecoverySource(t.Context(), g, ref, "current", 1); err != nil {
+				t.Fatalf("read-only receipt lookup source check: %v", err)
+			}
+			if err := s.CheckSyncNotesRecoverySource(t.Context(), g, ref, "stale", 1); !errors.Is(err, docstore.ErrMissing) {
+				t.Fatalf("stale recovery binding: %v", err)
+			}
+			if err := s.CheckLive(t.Context(), g, ref, "current", 1, 2); !errors.Is(err, marker.want) {
+				t.Fatalf("paid call deletion fence: got %v, want %v", err, marker.want)
+			}
+		})
+	}
+}

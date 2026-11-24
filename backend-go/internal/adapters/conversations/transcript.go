@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/BasedHardware/omi/backend-go/internal/finalization"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
@@ -18,6 +19,9 @@ func (s Store) decode(ctx context.Context, g queue.Guarded, ref Ref, row map[str
 	if err != nil {
 		return Conversation{}, err
 	}
+	syncRevision := field[int64](row, "sync_content_revision")
+	syncMinimum := syncRevision > 0 && field[string](row, "finalization_engine") == "go" &&
+		syncRevision == field[int64](row, finalization.SyncMinimumRevisionField)
 	structured := field[map[string]any](row, "structured")
 	sections, integrity := readNotesSections(structured["sections"])
 	outputHash := ""
@@ -30,9 +34,18 @@ func (s Store) decode(ctx context.Context, g queue.Guarded, ref Ref, row map[str
 		FinalizationStatus:   FinalizationStatus(field[string](row, "finalization_status")),
 		FinalizationJobID:    field[string](row, "finalization_job_id"),
 		FinalizationRevision: field[int64](row, "finalization_revision"),
-		SyncContentRevision:  field[int64](row, "sync_content_revision"),
+		SyncContentRevision:  syncRevision,
+		SyncMinimumApplied:   syncMinimum,
 		ProtectionLevel:      field[string](row, "data_protection_level"),
 		Discarded:            field[bool](row, "discarded"),
+		RecordingLayer:       field[bool](row, "recording") || field[bool](row, "v3_derived"),
+		NoDerivedEffects:     field[bool](row, "terminal_no_derived_effects"),
+		UntrustedCapture:     field[string](row, "capture_time_trust") == "untrusted",
+		PendingMinimum:       finalizerMinimum(row, structured, sections),
+		BatchOwned:           batchOwned(field[string](row, "record_lane_owner")),
+		HasAudio:             len(field[[]any](row, "audio_files")) != 0,
+		HasPhotos:            len(field[[]any](row, "photos")) != 0,
+		AppPlatform:          field[string](row, "client_platform"),
 		Title:                effectiveTitle(row, field[string](structured, "title")),
 		Overview:             effectiveOverview(row, field[string](structured, "overview")),
 		Sections:             sections, NotesInputHash: field[string](row, notesInputHashField), NotesOutputHash: outputHash,
@@ -101,4 +114,8 @@ func stripIdentitySidecars(segments []json.RawMessage) ([]json.RawMessage, error
 		segments[i] = plain
 	}
 	return segments, nil
+}
+
+func batchOwned(owner string) bool {
+	return owner == "batch_live_v1" || owner == "batch_sync_v1"
 }

@@ -61,7 +61,7 @@ def _run(state):
     return status
 
 
-def run_reference(state, stack, url):
+def run_reference(state, stack, url, *, run=_run):
     from database import redis_db, vector_db
     from models.users import WebhookType
     from utils import app_integrations, webhooks
@@ -99,7 +99,7 @@ def run_reference(state, stack, url):
     def invoke():
         if state.user.get().to_dict()['byok']['active']:
             set_validated_byok_keys({'openai': 'replay-only-vendor-key'}, state.uid)
-        return _run(state)
+        return run(state)
 
     try:
         return copy_context().run(invoke)

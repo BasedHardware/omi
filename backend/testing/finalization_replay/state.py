@@ -63,6 +63,8 @@ class CaseState:
         self.go_evidence = {}
         self._metrics_lock = Lock()
         self.cost_measured = False
+        self.replay_token_calls = []
+        self.notes_prompt_hashes = []
         self.started_at = None
 
     def record_provider_call(self, feature, prompt, completion):

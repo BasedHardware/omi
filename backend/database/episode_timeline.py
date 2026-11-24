@@ -8,6 +8,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from config.episodes import MAX_EPISODE_SECONDS, CLOSE_GAP_SECONDS
+from database import episode_write_fence
 from database._client import get_firestore_client, run_transactional
 from database import episodes, episode_attach_memo, episode_batch_pending, transcript_pointer
 from database.episode_finalization_fence import require_not_deleted
@@ -111,6 +112,7 @@ def _attach_recorded_window(
     pending_at: datetime | None = None,
     deadline_floor: datetime | None = None,
     detach_from: str | None = None,
+    writes_follow=False,
 ) -> dict[str, Any]:
     client = firestore_client if firestore_client is not None else get_firestore_client()
 
@@ -144,6 +146,8 @@ def _attach_recorded_window(
             if expected_episode_id is not None and existing.get('id') != expected_episode_id:
                 raise episodes.EpisodeConflict('recorded_owner_changed')
             if started >= existing['started_at'] + timedelta(seconds=MAX_EPISODE_SECONDS):
+                if writes_follow:
+                    episode_write_fence.check(transaction, client, uid)
                 return {**existing, '_window_end': finished}
         if existing is None and selected:
             snapshot = root.collection('episodes').document(selected['id']).get(transaction=transaction)
@@ -232,6 +236,7 @@ def _attach_recorded_window(
         if existing and episodes.retained_bounds_changed(existing, result):
             result = episodes.retained_bounds(transaction, client, uid, existing, result)
         check_window(transaction, client, uid, result, rows=rows, fence_row=revision)
+        episode_write_fence.check(transaction, client, uid, memberships=members)
         transaction.set(root.collection('episodes').document(result['id']), episodes.seal(uid, result))
         episodes.write_memberships(transaction, client, uid, result['id'], members, datetime.now(timezone.utc))
         if pending_patch:
@@ -383,9 +388,11 @@ def attach_recorded(
             or getattr(attach_row.get('source'), 'value', attach_row.get('source')) != source
         ):
             key = None
+        source_snapshot = None
         if key:
             current = client.collection('users').document(uid).collection('conversations').document(conversation_id)
-            if episode_attach_memo.current_key(uid, current.get(transaction=transaction).to_dict()) != key:
+            source_snapshot = current.get(transaction=transaction)
+            if episode_attach_memo.current_key(uid, source_snapshot.to_dict()) != key:
                 key = None
         cached = []
 
@@ -420,6 +427,8 @@ def attach_recorded(
             deadline_floor=deadline_floor,
             detach_from=detach_from,
             admission=admission,
+            writes_follow=bool(key or detach),
+            source_snapshot=source_snapshot if episode_write_fence.active() else None,
         )
         if isinstance(canonical, str):
             return canonical
@@ -439,6 +448,7 @@ def attach_recorded(
             firestore_client=client,
             transaction=transaction,
             candidates=reuse_candidates,
+            writes_follow=bool(key or detach),
             fence_row=revision,
             pending_at=pending_at,
             deadline_floor=deadline_floor,
@@ -482,6 +492,7 @@ def detach_recorded(
             return False
         member = links.document(conversation_id).get(transaction=transaction).to_dict() or {}
         ref, result = plan
+        episode_write_fence.check(transaction, client, uid)
         transaction.set(ref, episodes.seal(uid, result))
         transaction.update(root.collection('conversations').document(conversation_id), {'episode_id': None})
         transaction.set(
@@ -542,6 +553,7 @@ def resume_recorded(uid, episode_id, at, *, expected_version, choose: Callable, 
             'wrap_up_requested_at': None,
             'state_version': expected_version + 1,
         }
+        episode_write_fence.check(transaction, client, uid)
         transaction.set(ref, episodes.seal(uid, result))
         transaction.set(links.document('current'), {'episode_id': episode_id, 'updated_at': datetime.now(timezone.utc)})
         if last_closed.get('episode_id') == episode_id:

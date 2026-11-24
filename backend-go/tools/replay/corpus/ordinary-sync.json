@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "ordinary-sync-kept",
+      "document": {"status": "completed", "sync_content_revision": 1, "sync_relevance": "keep"},
+      "recording": {"duration_s": 48, "segments": [
+        {"text": "We agreed during the planning session that the accessibility review will include the mobile settings flow and the episode list. I will write the checklist and send it to the team on Thursday afternoon."},
+        {"text": "Please record that the release is pending the review, and ask Morgan to check the larger text sizes in the emulator. We can publish afterward if the tests pass."}
+      ]},
+      "notes": {"title": "Accessibility review plan", "overview": "The team will review larger text before release."},
+      "apps": ["ordinary-fixture"],
+      "memories": ["I own the accessibility checklist."]
+    },
+    {
+      "name": "ordinary-sync-owner-kept-es",
+      "document": {
+        "status": "completed", "sync_content_revision": 1, "sync_relevance": "keep", "language": "es",
+        "sync_relevance_user_kept": true, "user_title": "Lista de revisión",
+        "user_overview": "La revisión de accesibilidad es el jueves."
+      },
+      "recording": {"duration_s": 45, "segments": [
+        {"text": "El jueves revisaremos la accesibilidad de la aplicación móvil. Morgan preparará la lista de pantallas y comprobará si se pueden leer con el tamaño de texto más grande."},
+        {"text": "Revisaremos también la navegación con el teclado y enviaremos el informe al equipo antes de publicar. La pantalla de configuración es la primera prioridad."}
+      ]},
+      "responses": {"conv-structure": {
+        "title": "Revisión de accesibilidad", "overview": "El equipo prepara una revisión.",
+        "sections": [{"heading": "Prioridad", "body_markdown": "Comprobar la pantalla de configuración.", "kind": "main", "source_segment_ids": ["segment-0"]}]
+      }}
+    },
+    {
+      "name": "ordinary-sync-minimum",
+      "document": {"status": "completed", "sync_content_revision": 1, "sync_relevance": "keep", "summary_title_provenance": "server_minimum"},
+      "recording": {"duration_s": 8, "segments": [{"text": "Morgan will send the revised checklist tomorrow."}]}
+    },
+    {
+      "name": "ordinary-sync-fragment",
+      "document": {"status": "completed", "sync_content_revision": 1, "sync_relevance": "keep"},
+      "recording": {"duration_s": 3, "segments": [{"text": "Thank you."}]}
+    }
+  ]
+}

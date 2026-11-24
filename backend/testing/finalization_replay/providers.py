@@ -1,12 +1,51 @@
 """Local HTTP provider responses shared by the Python and Go replay drivers."""
 
 from contextlib import contextmanager
+from functools import lru_cache
+from hashlib import sha256
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import socket
-from threading import Thread
+from threading import Lock, Thread
 from unittest.mock import patch
 from urllib.parse import urlsplit
+
+
+@lru_cache(maxsize=1)
+def _encoding():
+    import tiktoken
+
+    return tiktoken.get_encoding('cl100k_base')
+
+
+def _tokens(text):
+    return len(_encoding().encode_ordinary(text))
+
+
+def _message_tokens(message):
+    content = message.get('content')
+    if isinstance(content, list):
+        if any(part.get('type') != 'text' for part in content):
+            raise ValueError('unsupported replay message content')
+        content = ''.join(part['text'] for part in content)
+    count = _tokens(content or '')
+    if message.get('tool_calls'):
+        count += _tokens(json.dumps(message['tool_calls'], ensure_ascii=False, sort_keys=True))
+    return count
+
+
+def _embeddings(values):
+    if isinstance(values, str):
+        values = [values]
+    if values and all(type(value) is int for value in values):
+        values = [values]
+    return values, sum(_tokens(value) if isinstance(value, str) else len(value) for value in values)
+
+
+def _record_tokens(state, feature, prompt, completion, *, embedding=False):
+    # Store usage only. Never retain prompt contents in the replay report.
+    calls = vars(state).setdefault('replay_token_calls', [])
+    calls.append({'feature': feature, 'input': prompt, 'output': completion, 'embedding': embedding})
 
 
 def response(state, feature):
@@ -35,24 +74,56 @@ def provider_server():
         def log_message(self, _format, *_args):
             pass
 
-        def do_POST(self):
-            try:
-                body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-                path = urlsplit(self.path).path
-                result = self.server.dispatch(path, body, self.headers)
-                status = 503 if path == f"/receive/{self.server.state.case.get('unavailable_app')}" else 200
-            except Exception as error:
-                self.server.errors.append(type(error).__name__)
-                result, status = {'error': {'message': 'unknown replay provider request'}}, 400
+        def _reply(self, status, result, key=None):
             raw = json.dumps(result).encode()
             self.send_response(status)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(raw)))
+            if key:
+                self.send_header('X-Omi-Idempotency-Key', key)
             self.end_headers()
             self.wfile.write(raw)
 
+        def do_GET(self):
+            prefix = '/v1/chat/completions/operations/'
+            key = self.path.removeprefix(prefix)
+            if self.path.startswith(prefix) and key in self.server.operations:
+                self._reply(200, self.server.operations[key], key)
+                return
+            self._reply(404, {'error': {'code': 'idempotency_not_found'}})
+
+        def do_POST(self):
+            key = None
+            try:
+                body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                path = urlsplit(self.path).path
+                if path == '/internal/finalization/sync-reference' and self.server.reference is not None:
+                    response_status, result = self.server.reference(body, self.headers)
+                    self._reply(response_status, result)
+                    return
+                if path == '/v1/chat/completions/operations':
+                    key = self.headers['Idempotency-Key']
+                    if not key:
+                        raise ValueError('missing replay operation identity')
+                    with self.server.operation_lock:
+                        if key not in self.server.operations:
+                            self.server.operations[key] = self.server.dispatch(
+                                '/v1/chat/completions', body, self.headers
+                            )
+                        result = self.server.operations[key]
+                else:
+                    result = self.server.dispatch(path, body, self.headers)
+                status = 503 if path == f"/receive/{self.server.state.case.get('unavailable_app')}" else 200
+            except Exception as error:
+                self.server.errors.append(type(error).__name__)
+                result, status = {'error': {'message': 'unknown replay provider request'}}, 400
+            self._reply(status, result, key if status == 200 else None)
+
     with ThreadingHTTPServer(('127.0.0.1', 0), Handler) as server:
         server.errors = []
+        server.operations = {}
+        server.operation_lock = Lock()
+        server.reference = None
 
         def dispatch(path, body, headers):
             state = server.state
@@ -61,13 +132,17 @@ def provider_server():
                 state.webhook(path.removeprefix('/receive/'), key, body)
                 return {}
             if path == '/v1/embeddings':
-                state.record_embedding_request(body.get('input', []))
+                feature = body['model'].removeprefix('omi:auto:')
+                values, prompt = _embeddings(body['input'])
+                state.record_embedding_request(values)
+                _record_tokens(state, feature, prompt, 0, embedding=True)
                 return {
                     'object': 'list',
                     'data': [
                         {'object': 'embedding', 'index': i, 'embedding': [0.125, 0.25, 0.5]}
-                        for i, _ in enumerate(body['input'])
+                        for i, _ in enumerate(values)
                     ],
+                    'usage': {'prompt_tokens': prompt, 'total_tokens': prompt},
                 }
             if path != '/v1/chat/completions':
                 raise ValueError('unknown replay gateway endpoint')
@@ -75,8 +150,25 @@ def provider_server():
             fixture = response(state, feature)
             if fixture is None:
                 raise ValueError('missing replay response')
-            completion = fixture if isinstance(fixture, str) else json.dumps(fixture, ensure_ascii=False)
-            prompt_tokens, completion_tokens = state.record_provider_call(feature, body.get('messages', []), completion)
+            if feature == 'conv-structure':
+                messages = []
+                for message in body.get('messages', []):
+                    content = message['content']
+                    if isinstance(content, list) and all(
+                        isinstance(part, dict) and part.keys() == {'type', 'text'} and part['type'] == 'text'
+                        for part in content
+                    ):
+                        # Transport wrappers encode text parts or the same bare string.
+                        content = ''.join(part['text'] for part in content)
+                    messages.append({'role': message['role'], 'text': content})
+                state.notes_prompt_hashes.append(sha256(json.dumps(messages, sort_keys=True).encode()).hexdigest())
+            completion = fixture if isinstance(fixture, str) else json.dumps(fixture)
+            prompt_tokens = sum(_message_tokens(message) for message in body['messages'])
+            if body.get('tools'):
+                prompt_tokens += _tokens(json.dumps(body['tools'], ensure_ascii=False, sort_keys=True))
+            completion_tokens = _tokens(completion)
+            state.record_provider_call(feature, body.get('messages', []), completion)
+            _record_tokens(state, feature, prompt_tokens, completion_tokens)
             return {
                 'id': 'replay-response',
                 'object': 'chat.completion',
@@ -88,7 +180,7 @@ def provider_server():
                         'finish_reason': 'stop',
                         'message': {
                             'role': 'assistant',
-                            'content': fixture if isinstance(fixture, str) else json.dumps(fixture),
+                            'content': completion,
                         },
                     }
                 ],

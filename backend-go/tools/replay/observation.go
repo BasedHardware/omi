@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -13,8 +14,14 @@ func compareObservations(python, goRun *observation) []difference {
 	compareValue(&diffs, "/status", python.Status, goRun.Status)
 	compareValue(&diffs, "/conversation", python.Document, goConversation(goRun, python))
 	compareFanout(&diffs, python, goRun)
+	if python.Home != nil || goRun.Home != nil {
+		compareObject(&diffs, "/home", python.Home, goRun.Home)
+	}
 	compareObject(&diffs, "/derived_documents", python.Derived, goRun.Derived)
 	compareObject(&diffs, "/effects", python.Effects, goRun.Effects)
+	if !slices.Equal(python.NotesPromptHashes, goRun.NotesPromptHashes) {
+		addDifference(&diffs, "/notes_prompt_sha256", "different_value")
+	}
 	compareObject(&diffs, "/provider_calls", countProviderCalls(python.ProviderCalls), countProviderCalls(goRun.ProviderCalls))
 	compareObject(&diffs, "/webhooks", webhookGroups(python), webhookGroups(goRun))
 	for i := range diffs {
@@ -136,17 +143,11 @@ func validateBinding(diffs *[]difference, side string, run *observation, goSide 
 }
 
 func allowedDifference(path string, python, goRun *observation) string {
-	switch path {
-	case "/conversation/updated_at/$timestamp":
-		if timestampInWindow(python) && timestampInWindow(goRun) {
-			return "both writes occurred within their observed replay windows"
-		}
-	case "/conversation/finalization_job_id":
-		if python.Admitted != nil && goRun.Admitted != nil && python.Admitted.Job != "" && goRun.Admitted.Job != "" &&
-			documentField(python, "finalization_job_id") == python.Admitted.Job &&
-			documentField(goRun, "finalization_job_id") == goRun.Admitted.Job {
-			return "both stored identifiers bind to their own admitted queue job"
-		}
+	if path == "/conversation/finalization_job_id" && python.Admitted != nil && goRun.Admitted != nil &&
+		python.Admitted.Job != "" && goRun.Admitted.Job != "" &&
+		documentField(python, "finalization_job_id") == python.Admitted.Job &&
+		documentField(goRun, "finalization_job_id") == goRun.Admitted.Job {
+		return "both stored identifiers bind to their own admitted queue job"
 	}
 	if webhookMatches(path, python) && webhookMatches(path, goRun) {
 		return "both webhook keys bind to their own admitted fanout"
@@ -193,6 +194,30 @@ func unported(path string) bool {
 		if strings.HasPrefix(path, "/derived_documents/users~1") && strings.Contains(path, "~1"+collection+"~1") {
 			return true
 		}
+	}
+	return false
+}
+
+// approvedIdentityDifference limits the binding proofs to the sixteen paths
+// approved by the pipeline lead for the pinned capture-end corpus (SCA-3551).
+func approvedIdentityDifference(name, path string) bool {
+	switch path {
+	case "/conversation/finalization_job_id":
+		switch name {
+		case "kept-with-effects", "word-floor", "unicode-transcript", "compressed-standard",
+			"enhanced-compressed", "own-key-resume", "last-attempt-webhook":
+			return true
+		}
+	case "/fanout_key":
+		switch name {
+		case "kept-with-effects", "unicode-transcript", "compressed-standard",
+			"enhanced-compressed", "own-key-resume", "last-attempt-webhook":
+			return true
+		}
+	case "/webhooks/audit/0/idempotency_key", "/webhooks/fixture/0/idempotency_key":
+		return name == "kept-with-effects"
+	case "/webhooks/unavailable-fixture/0/idempotency_key":
+		return name == "last-attempt-webhook"
 	}
 	return false
 }

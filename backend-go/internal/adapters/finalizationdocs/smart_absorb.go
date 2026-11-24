@@ -21,7 +21,7 @@ func (s Store) Absorb(ctx context.Context, g queue.Guarded, claim finalization.C
 	if plan.SurvivorID == "" || plan.SurvivorID == claim.Intent.Ref.ID {
 		return result, finalization.ErrInvalid
 	}
-	err := s.withJob(ctx, g, claim, func(tx *docstore.Tx, _ docstore.Ref, job document, now time.Time) error {
+	err := s.withJob(ctx, g, claim, func(tx *docstore.Tx, _ docstore.Ref, job document, now time.Time, _ boundReader) error {
 		if !owns(job, claim) || !field[time.Time](job, "lease_expires_at").After(now) || field[string](job, "fanout_status") != "pending" {
 			return queue.ErrLease
 		}

@@ -36,6 +36,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	python := flags.String("python", "", "backend Python interpreter (defaults to the backend virtualenv)")
 	jobd := flags.String("jobd", "", "compiled conformance jobd binary")
 	commit := flags.String("commit", "", "40-character source commit SHA recorded with the unexplained-difference count")
+	workerdTest := flags.String("workerd-test", "", "compiled cmd/workerd test binary for an ordinary-sync replay")
 	testKey := flags.String("test-key-file", "", "optional private replay key file")
 	includeValues := flags.Bool("include-values", false, "include full observations in the report")
 	if err := flags.Parse(args); errors.Is(err, flag.ErrHelp) {
@@ -55,7 +56,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			return failure(stderr, err)
 		}
 	}
-	if corpusPath == "" || *output == "" || *jobd == "" || len(*commit) != 40 || flags.NArg() != 0 {
+	if corpusPath == "" || *output == "" || (*jobd == "") == (*workerdTest == "") || len(*commit) != 40 || flags.NArg() != 0 {
 		flags.Usage()
 		return 2
 	}
@@ -81,7 +82,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if interpreter == "" {
 		interpreter = filepath.Join(input.backend, ".venv", "bin", "python")
 	}
-	result, err := invoke(ctx, interpreter, *jobd, *testKey, input, stderr)
+	binary, module := *jobd, "testing.finalization_replay.driver"
+	if *workerdTest != "" {
+		binary, module = *workerdTest, "testing.finalization_replay.serving"
+	}
+	result, err := invoke(ctx, interpreter, module, binary, *testKey, input, stderr)
 	if err != nil {
 		return failure(stderr, err)
 	}
@@ -131,8 +136,8 @@ func summarize(stdout io.Writer, result report) error {
 	return err
 }
 
-func invoke(ctx context.Context, python, jobd, testKey string, input replayInput, stderr io.Writer) (report, error) {
-	args := []string{"-B", "-m", "testing.finalization_replay.driver", jobd, testKey}
+func invoke(ctx context.Context, python, module, binary, testKey string, input replayInput, stderr io.Writer) (report, error) {
+	args := []string{"-B", "-m", module, binary, testKey}
 	cmd := exec.CommandContext(ctx, python, args...)
 	cmd.Env = []string{
 		"PATH=" + os.Getenv("PATH"),
@@ -153,6 +158,9 @@ func invoke(ctx context.Context, python, jobd, testKey string, input replayInput
 	cases, err := decodeCases(raw)
 	if err != nil {
 		return report{}, err
+	}
+	if module == "testing.finalization_replay.driver" && approvedSyntheticCorpus("conformance-gaps.json", input.corpus) {
+		return compareCorpus(cases, true)
 	}
 	return compare(cases)
 }

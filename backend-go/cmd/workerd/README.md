@@ -84,6 +84,12 @@ For the serving sync producer, set `SYNC_EPISODE_INTAKE_ORIGIN` to the private H
 workerd origin and `WORKER_EPISODE_INTAKE_AUDIENCE` to the same audience used by
 workerd. The Python episode hook selects the owner and completes its recovery notes first.
 
+The Python conversation finalization status route uses the same origin, audience
+and caller identity for Go-owned ordinary-sync jobs. Before opening admission,
+verify that the Python API can call `POST /internal/finalization/status` on
+workerd. The private route returns queue state and failed attempts for the bound
+job. The public route keeps its existing response fields.
+
 ## Private account erase listener
 
 The erase listener is off by default. Configure `ERASE_PORT` on a distinct private port,
@@ -99,3 +105,20 @@ the listener's acceptance and acknowledgement conditions.
 
 The endpoint depends on Lane B's queue-only operation and read-only marker reader. See
 [the deletion rollout](../../docs/account-deletion-erase.md) for activation and rollback.
+
+## Offline ordinary-finalization replay
+
+The oracle invokes the test-only `TestOrdinarySyncReplay` entry point from a
+`go test -c ./cmd/workerd` binary. Set `OMI_ORDINARY_SYNC_REPLAY=1` in that
+process and invoke only that test. Its stdin JSON contains `Project`, `Origin`,
+`Key`, `Owner`, and `Conversation`. The oracle seeds the synthetic
+`sync_update` admission and its conversation in the same `demo-sync-replay-*`
+Firestore emulator project before invoking the test.
+
+The emulator address, disposable Postgres URL and synthetic provider origin
+must use numeric IPv4 loopback addresses with explicit ports. Postgres requires
+`sslmode=disable`. The HTTP origin serves the local reference, fake gateway and
+integration recipient. The test emits `ORDINARY_SYNC_RESULT` and
+`ORDINARY_SYNC_CAUSE` as separate lines using the registered queue vocabulary.
+The oracle reads the resulting state and effects from the emulator. This entry
+point is absent from the serving binary and its HTTP routes.

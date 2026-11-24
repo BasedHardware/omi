@@ -159,7 +159,7 @@ not fetch conversations or read production keys.
 | --- | --- |
 | Nested fields, arrays, numeric values, missing fields and escaped paths compare deterministically | `TestCompareReportsNestedDiffsAndKeepsPresence` |
 | Object, array, scalar and null mismatches produce a report | `TestCompareDifferencesWithIncompatibleJSONShapes` |
-| Job IDs and fanout keys must match admission, and generated timestamps must be inside the replay window | `TestCompareOnlyExcusesVerifiedBindingsAndClocks` |
+| Only approved job IDs and fanout keys can differ with verified bindings. Clock differences remain visible | `TestCompareOnlyExcusesVerifiedIdentityBindings` |
 | Missing evidence or driver errors cannot yield a pass | `TestCompareRejectsInvalidEvidence`, `TestCompareCountsExecutionErrors` |
 | Ten completed, failed, discarded and missing-row admissions across both paths produce zero unexplained differences | `test.sh` with `corpus/admission-parity.json` |
 | Forty active-worker cases persist notes, reach the memory and vector sinks, deliver webhooks, resume seeded own-key jobs and cover the mapped F01/F02/F04/F08/F09/F14/F17/F32 surfaces; Python also runs its canonical memory, app, task, folder, goal and developer-webhook code | `test.sh` with `corpus/conformance-gaps.json` and `case-map.json` |
@@ -178,3 +178,32 @@ or rollback durability; the shadow plan covers these behaviors. Separate cases a
 post-finalization erase removes the Go owner document and queue rows, and that malformed
 enhanced ciphertext produces a typed `transcript_unreadable` dead-letter without reaching
 note generation.
+
+## Ordinary-sync serving replay
+
+Build the test-only entry point in cmd/workerd to run the real worker handler and
+adapters against the same source rows as Python's ordinary sync callback:
+
+```sh
+work=$(mktemp -d)
+go build -o "$work/replay" ./tools/replay
+go test -c -o "$work/workerd.test" ./cmd/workerd
+./scripts/with-postgres.sh ./scripts/with-firestore.sh "$work/replay" \
+  -workerd-test "$work/workerd.test" -corpus tools/replay/corpus/ordinary-sync.json \
+  -output "$work/ordinary-sync.json"
+```
+
+The driver runs each engine in its own Python process and Firestore project.
+Both start after the same intake and client-capability setup. The Go side seeds
+a bound intent and dispatches it to the workerd handler. Producer admission stays
+closed. Provider responses and the webhook recipient are synthetic. The Go side
+uses the real Python reference receiver, keyed gateway client, queue, document
+stores and delivery receipts. Only service authentication and network leaves are
+substituted. The report compares stored fields, decrypted Home display and
+membership presence, changed documents, model counts, vector payloads and
+deliveries. Decryption supplies an additional observation and does not change
+the strict comparison of stored fields.
+
+The capture-end baseline retains exactly sixteen approved fixture paths with
+individually verified bindings. Those exceptions cover stored job IDs, fanout
+keys and webhook idempotency keys. The ordinary-sync corpus has no exceptions.

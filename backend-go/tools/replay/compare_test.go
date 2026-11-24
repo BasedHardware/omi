@@ -78,7 +78,7 @@ func TestCompareDifferencesWithIncompatibleJSONShapes(t *testing.T) {
 	}
 }
 
-func TestCompareOnlyExcusesVerifiedBindingsAndClocks(t *testing.T) {
+func TestCompareOnlyExcusesVerifiedIdentityBindings(t *testing.T) {
 	t.Parallel()
 	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	build := func(job, fanout string, stamp time.Time) *observation {
@@ -106,8 +106,12 @@ func TestCompareOnlyExcusesVerifiedBindingsAndClocks(t *testing.T) {
 		if diff.Path == "/fanout_key" {
 			fanoutCompared = true
 		}
-		if diff.Reason == "" {
-			t.Fatalf("verified binding and timestamp drift: %v", diff)
+		if diff.Path == "/conversation/updated_at/$timestamp" {
+			if diff.Reason != "" {
+				t.Fatalf("clock difference wrongly excused: %v", diff)
+			}
+		} else if diff.Reason == "" {
+			t.Fatalf("verified identity difference: %v", diff)
 		}
 	}
 	if !fanoutCompared {
@@ -204,5 +208,30 @@ func TestObservationsRequireExplicitEffectObjects(t *testing.T) {
 	}
 	if result, err := compare(cases); err != nil || result.Matched != 1 {
 		t.Fatalf("explicit empty objects must match: matches=%d, err=%v", result.Matched, err)
+	}
+}
+
+func TestApprovedIdentityPathsCannotWaiveOtherCases(t *testing.T) {
+	t.Parallel()
+	makeSide := func(job, fanout string, storeFanout bool) *observation {
+		doc := map[string]any{"finalization_job_id": job}
+		if storeFanout {
+			doc["fanout_key"] = fanout
+		}
+		return &observation{
+			Status: "completed", Admitted: &admission{Job: job, Fanout: fanout}, QueueFanout: fanout,
+			Document: doc, Effects: map[string]any{}, Derived: map[string]any{},
+		}
+	}
+	makeCase := func(name string) replayCase {
+		return replayCase{Name: name, Python: makeSide("python-job", "python-key", false), Go: makeSide("go-job", "go-key", true)}
+	}
+	result, err := compareCorpus([]replayCase{makeCase("kept-with-effects"), makeCase("ordinary-sync-kept")}, true)
+	if err != nil || result.Expected != 2 || result.Unexplained != 2 || result.Matched != 1 {
+		t.Fatalf("identity allowance widened beyond the pinned cases: %+v, %v", result, err)
+	}
+	result, err = compare([]replayCase{makeCase("kept-with-effects")})
+	if err != nil || result.Expected != 0 || result.Unexplained != 2 {
+		t.Fatalf("a case name inherited approvals in another corpus: %+v, %v", result, err)
 	}
 }

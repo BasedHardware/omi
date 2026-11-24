@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/BasedHardware/omi/backend-go/internal/finalization"
+	"github.com/BasedHardware/omi/backend-go/internal/finalization/rules"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
@@ -24,16 +26,40 @@ var (
 // Begin mirrors a SQL claim in Firestore. A job attached from the Python outbox
 // must be in generation one or a successor recorded by Go, with no live foreign lease. Deployments
 // must cut over dispatch ownership before using this adapter.
-func (s Store) Begin(ctx context.Context, g queue.Guarded, claim finalization.Claim) error {
-	return s.withJob(ctx, g, claim, func(tx *docstore.Tx, ref docstore.Ref, job document, now time.Time) error {
+func (s Store) Begin(ctx context.Context, g queue.Guarded, claim finalization.Claim) (bool, error) {
+	reconcile, _, err := s.beginJob(ctx, g, claim)
+	return reconcile, err
+}
+
+// BeginSync claims ordinary sync and returns the source read by that transaction.
+// Decode the document only after a successful commit, outside the transaction.
+func (s Store) BeginSync(ctx context.Context, g queue.Guarded, claim finalization.Claim) (bool, map[string]any, error) {
+	if !s.SyncOnly {
+		return false, nil, finalization.ErrInvalid
+	}
+	return s.beginJob(ctx, g, claim)
+}
+
+func (s Store) beginJob(ctx context.Context, g queue.Guarded, claim finalization.Claim) (bool, map[string]any, error) {
+	var reconcile bool
+	var source document
+	err := s.withJob(ctx, g, claim, func(tx *docstore.Tx, ref docstore.Ref, job document, now time.Time, bound boundReader) error {
+		source = nil
+		reconcile = !s.SyncOnly || field[string](job, "fanout_status") == completed
 		if terminal(job) != finalization.TerminalPending {
+			reconcile = true
 			return nil
 		}
 		if stop, err := waitForSync(tx, ref, job, claim, now); stop || err != nil {
+			reconcile = stop
 			return err
+		}
+		if s.SyncOnly && !reconcile {
+			source = bound().row
 		}
 		return begin(tx, ref, job, claim, now)
 	})
+	return reconcile, source, err
 }
 
 func begin(tx *docstore.Tx, ref docstore.Ref, job document, claim finalization.Claim, now time.Time) error {
@@ -79,8 +105,16 @@ func begin(tx *docstore.Tx, ref docstore.Ref, job document, claim finalization.C
 	})
 }
 
+type boundSnapshot struct {
+	ref docstore.Ref
+	row document
+	err error
+}
+
+type boundReader func() boundSnapshot
+
 func (s Store) withJob(ctx context.Context, g queue.Guarded, claim finalization.Claim,
-	fn func(*docstore.Tx, docstore.Ref, document, time.Time) error,
+	fn func(*docstore.Tx, docstore.Ref, document, time.Time, boundReader) error,
 ) error {
 	ref, err := docstore.Doc(jobs, claim.Intent.JobID)
 	if err != nil || claim.Epoch <= 0 {
@@ -100,13 +134,41 @@ func (s Store) withJob(ctx context.Context, g queue.Guarded, claim finalization.
 		if readErr != nil || intent != claim.Intent {
 			return queue.ErrLease
 		}
+		// The owner fence and the operation use the same transactional
+		// snapshots. A Firestore transaction retry gets a fresh reader.
+		bound := sync.OnceValue(func() boundSnapshot {
+			conversation, row, bindErr := boundConversation(tx, claim)
+			return boundSnapshot{ref: conversation, row: row, err: bindErr}
+		})
+		if s.SyncOnly {
+			if ownerErr := requireSyncOwner(bound, job, claim); ownerErr != nil {
+				return ownerErr
+			}
+		}
 		if gen := dispatchGeneration(job); gen > 1 && field[int64](job, goGeneration) != gen {
 			return queue.Classify(errForeignGeneration, queue.Fence(CauseForeignLease))
 		}
-		return fn(tx, ref, job, now)
+		return fn(tx, ref, job, now, bound)
 	})
 	if _, ok := errors.AsType[queue.Classified](err); ok {
 		return err
 	}
 	return classify(err)
+}
+
+func requireSyncOwner(bound boundReader, job document, claim finalization.Claim) error {
+	if claim.Intent.Trigger != rules.SyncUpdate || claim.Intent.RequiresBYOK || field[string](job, "finalization_engine") != "go" {
+		return queue.Classify(finalization.ErrStale, queue.Fence(finalization.CauseStale))
+	}
+	snapshot := bound()
+	if snapshot.err != nil {
+		return snapshot.err
+	}
+	row := snapshot.row
+	epoch := field[int64](job, "finalization_owner_epoch")
+	if epoch <= 0 || field[string](row, "finalization_engine") != "go" ||
+		field[int64](row, "finalization_owner_epoch") != epoch {
+		return queue.Classify(finalization.ErrStale, queue.Fence(finalization.CauseStale))
+	}
+	return nil
 }

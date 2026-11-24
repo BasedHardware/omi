@@ -305,6 +305,19 @@ func (c Codec) Encode(uid string, format Format, raw, nonce []byte) (Transcript,
 	return Transcript{}, ErrUnreadable
 }
 
+// ProtectJSON stores a derived JSON blob in the Python compressed format.
+// Enhanced storage seals the lowercase hex representation of the zlib bytes.
+func (c Codec) ProtectJSON(uid string, raw []byte, enhanced bool) (any, error) {
+	compressed, err := deflate(raw)
+	if err != nil {
+		return nil, err
+	}
+	if enhanced {
+		return c.Seal(uid, []byte(hex.EncodeToString(compressed)))
+	}
+	return compressed, nil
+}
+
 func deflate(raw []byte) ([]byte, error) {
 	var out bytes.Buffer
 	z := zlib.NewWriter(&out)

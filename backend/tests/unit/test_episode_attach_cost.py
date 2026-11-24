@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from config import episode_attach as flags
-from database import episode_attach_memo, episode_timeline, episodes
+from database import episode_attach_memo, episode_timeline, episode_write_fence, episodes
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreTransaction, StrictFirestoreDocument
 from tests.unit.test_episode_live_integrity import lane, row, T0, assert_timeline  # noqa: F401
 from utils.conversations.episode_attach_key import content_key, process_snapshot, should_schedule
@@ -87,6 +87,36 @@ def test_wal_revision_change_conservatively_falls_through(lane):
     updated = {**member, 'sync_content_revision': 19}
     assert content_key(updated) != content_key(member)
     assert service._attach_synced('u', 'same', updated, c) == 'recorded'
+
+
+def test_recorded_repartition_reuses_reads_in_its_transaction(lane, monkeypatch):
+    store, c, _ = lane
+    member = seed(store)
+    assert service._attach_synced('u', 'same', member, c) == 'recorded'
+    source_path = ('users', 'u', 'conversations', 'same')
+    link_path = ('users', 'u', 'episode_links', 'same')
+    owner_id = store.rows[link_path]['episode_id']
+    source = {**store.rows[source_path], 'recorded_end': member['recorded_end'] + timedelta(seconds=10)}
+    store.rows[source_path] = source
+    reads = []
+    get = StrictFirestoreDocument.get
+
+    def counted(ref, *args, **kwargs):
+        reads.append((kwargs.get('transaction'), ref.path))
+        return get(ref, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', counted)
+    guard = Mock(source_id='same')
+    with episode_write_fence.use(guard):
+        assert service._attach_synced('u', 'same', source, c) == 'recorded'
+    timeline = ('users', 'u', 'episode_links', 'recorded_timeline')
+    attach_tx = next(tx for tx, path in reads if path == timeline)
+    assert attach_tx is not None
+    attach_reads = [path for tx, path in reads if tx is attach_tx]
+    for path in (source_path, link_path, ('users', 'u', 'episodes', owner_id)):
+        assert attach_reads.count(path) == 1
+    guard.assert_any_call(attach_tx, store, 'u', 'same', source)
+    assert_timeline(store)
 
 
 @pytest.mark.parametrize('change', ['span', 'text', 'new_member', 'discard', 'delete', 'donor'])

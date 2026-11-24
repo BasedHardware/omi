@@ -166,6 +166,38 @@ func classifyMarkerRead(err error) error {
 	return classify(err)
 }
 
+// ReadGuarded reads one document for an active tenant guard. It does not check
+// deletion authority and must never authorize a write or an external effect.
+func (s *Store) ReadGuarded(ctx context.Context, live Live, owner, collection, id string, dst any) (bool, error) {
+	if live.Tenant() != owner {
+		return false, ErrOwnerMismatch
+	}
+	if err := live.Err(); err != nil {
+		return false, err
+	}
+	ref, err := Doc("users", owner, collection, id)
+	if err != nil {
+		return false, err
+	}
+	snapshots, err := s.client.GetAll(ctx, []*firestore.DocumentRef{s.client.Doc(ref.path)})
+	if err != nil {
+		return false, classifyMarkerRead(err)
+	}
+	if err := live.Err(); err != nil {
+		return false, err
+	}
+	if len(snapshots) != 1 || snapshots[0] == nil {
+		return false, &CallError{Kind: KindRejected, Code: "UnexpectedSnapshotCount"}
+	}
+	if !snapshots[0].Exists() {
+		return false, nil
+	}
+	if err := snapshots[0].DataTo(dst); err != nil {
+		return false, &CallError{Kind: KindRejected, Code: "Undecodable"}
+	}
+	return true, nil
+}
+
 // Tx is one fenced transaction. Its methods are valid only inside the callback.
 type Tx struct {
 	store *Store
@@ -224,6 +256,14 @@ func (t *Tx) Create(ref Ref, value any) error {
 func (t *Tx) Set(ref Ref, value any) error {
 	return t.tx.Set(t.store.client.Doc(ref.path), value)
 }
+
+// Merge writes the supplied fields, creating the document if absent.
+func (t *Tx) Merge(ref Ref, fields map[string]any) error {
+	return t.tx.Set(t.store.client.Doc(ref.path), fields, firestore.MergeAll)
+}
+
+// DeleteField removes the named field when passed as a value to Update.
+const DeleteField = firestore.Delete
 
 // Update changes the named fields of an existing document. The transaction fails with
 // ErrMissing if there is none, so an update can never bring back a deleted document.

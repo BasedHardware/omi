@@ -8,6 +8,7 @@ from google.cloud import firestore
 
 from config import episode_live_members as live
 from config.episodes import CLOSE_GAP_SECONDS, MAX_EPISODE_SECONDS, MAX_MOMENTS, MAX_PROVISIONAL_ITEMS
+from database import episode_write_fence
 from database import episodes, episode_timeline, episode_batch_pending
 from database.transcript_pointer import run_preloaded_transactional
 from utils.conversations.fragment_visibility import is_relevance_discarded
@@ -261,6 +262,7 @@ def place(
             transaction, client, uid, cid, pending_at, deadline_floor=deadline_floor
         )
         # All reads above; topology, reverse links and Home invalidation commit together.
+        episode_write_fence.check(transaction, client, uid, source_id=cid, source_row=row)
         if removed:
             transaction.set(collection.document(removed['id']), episodes.seal(uid, removed))
         if previous:

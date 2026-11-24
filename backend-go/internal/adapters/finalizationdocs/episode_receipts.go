@@ -138,6 +138,13 @@ func (s Store) CommitEpisodeNotes(ctx context.Context, a queue.Admitting, speech
 		return err
 	}
 	return classify(s.Docs.Fenced(ctx, a, speech.Member.Owner, func(tx *docstore.Tx) error {
+		deleted, err := conversationTombstoned(tx, speech.Member)
+		if err != nil {
+			return err
+		}
+		if deleted {
+			return finalization.ErrStale
+		}
 		d, err := loadEpisodeSpeech(tx, speech)
 		if err != nil {
 			return err

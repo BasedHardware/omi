@@ -35,7 +35,7 @@ func healthHandler(stopping <-chan struct{}, ready func(context.Context) error, 
 		}
 	})
 	if intake != nil {
-		mux.Handle("POST "+episodeIntakePath, intake)
+		mux.Handle("/internal/finalization/", intake)
 	}
 	return mux
 }

@@ -66,14 +66,18 @@ func (h episodeIntakeEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 func (h episodeIntakeEndpoint) authorized(ctx context.Context, header string) bool {
+	return authorizedWorkerCaller(ctx, header, h.audience, h.caller, h.validate)
+}
+
+func authorizedWorkerCaller(ctx context.Context, header, audience, caller string, validate func(context.Context, string, string) (*idtoken.Payload, error)) bool {
 	token, ok := strings.CutPrefix(header, "Bearer ")
 	if !ok || token == "" {
 		return false
 	}
-	p, err := h.validate(ctx, token, h.audience)
+	p, err := validate(ctx, token, audience)
 	return err == nil && p != nil &&
 		(p.Issuer == "https://accounts.google.com" || p.Issuer == "accounts.google.com") &&
-		p.Claims["email"] == h.caller && p.Claims["email_verified"] == true
+		p.Claims["email"] == caller && p.Claims["email_verified"] == true
 }
 
 func validIntakeID(id string) bool {

@@ -34,6 +34,7 @@ from config.episodes import (
     episode_output_language_pinned,
 )
 from config.refactor_modes import serving_for, shadow_or_serve
+from database import episode_write_fence
 from database.auth import get_user_name
 from utils.episodes.moment_render import render_segments
 from utils.llm.notes_packet import get_evidence
@@ -311,6 +312,7 @@ def _usage(reply: Any) -> tuple[int, int]:
 
 
 def _invoke_and_parse(uid: str, messages: list[tuple[str, str]], invoke, known_item_ids: Sequence[str]) -> ModelResult:
+    episode_write_fence.before_paid()
     started = time.monotonic()
     try:
         reply = (invoke or invoke_model)(uid, messages)
@@ -432,6 +434,7 @@ def boundary_state(
 
 def ask_same_occasion(state: str, *, ask=None) -> Optional[float]:
     """P(the new speech continues the episode), or None when Jev has no answer."""
+    episode_write_fence.before_paid()
     try:
         answers = (ask or ask_jev)(
             state, BOUNDARY_QUESTIONS, lane=JEV_LANE, timeout_seconds=JEV_TIMEOUT_SECONDS, max_attempts=1
@@ -482,6 +485,7 @@ def f_boundary_state(previous: str, new: str) -> str:
 
 def ask_same_occasion_f(state: str, *, ask=None) -> Optional[float]:
     """Variant F: P(same occasion) on its own Jev lane, so its errors and timeouts are measured apart."""
+    episode_write_fence.before_paid()
     try:
         answers = (ask or ask_jev)(
             state, BOUNDARY_QUESTIONS, lane=F_JOIN_JEV_LANE, timeout_seconds=F_JOIN_TIMEOUT_SECONDS, max_attempts=1

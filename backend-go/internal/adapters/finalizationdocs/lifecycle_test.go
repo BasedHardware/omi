@@ -24,7 +24,7 @@ func admitted(t *testing.T) (Store, docstoretest.Bench, queue.Guarded, finalizat
 
 func beginClaim(t *testing.T, store Store, g queue.Guarded, claim finalization.Claim) {
 	t.Helper()
-	if err := store.Begin(t.Context(), g, claim); err != nil {
+	if _, err := store.Begin(t.Context(), g, claim); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -48,7 +48,7 @@ func TestF06TakeoverAndForeignLeaseFenceOldEpochs(t *testing.T) {
 	// shard counter that another dispatcher would update in its own claim.
 	delete(job, "projection_generation")
 	put(t, bench, path, job)
-	if err := store.Begin(t.Context(), g, claim); !errors.Is(err, errForeignLease) {
+	if _, err := store.Begin(t.Context(), g, claim); !errors.Is(err, errForeignLease) {
 		t.Fatalf("accepted live foreign lease: %v", err)
 	}
 	job["lease_expires_at"] = time.Unix(1999, 0)
@@ -78,7 +78,7 @@ func TestF06NewerDispatchGenerationRefusesTheEarlierQueueIntent(t *testing.T) {
 	job := read(t, bench, path)
 	job["dispatch_generation"] = int64(2)
 	put(t, bench, path, job)
-	if err := store.Begin(t.Context(), g, claim); !errors.Is(err, errForeignGeneration) {
+	if _, err := store.Begin(t.Context(), g, claim); !errors.Is(err, errForeignGeneration) {
 		t.Fatalf("began stale queue intent: %v", err)
 	}
 	if read(t, bench, path)["status"] != queued {
@@ -115,7 +115,7 @@ func TestF15AndF38CommitWinsAndTerminalProjectionIsExactlyOnce(t *testing.T) {
 	if err != nil || fanout.State != finalization.FanoutAcquired || fanout.Key == "" || fanout.Conversation.Notes.Title != "Latest title" {
 		t.Fatalf("claim did not return the committed snapshot: %+v %v", fanout, err)
 	}
-	if err := store.CompleteFanout(t.Context(), g, claim, true); err != nil {
+	if _, err := store.CompleteFanout(t.Context(), g, claim, true); err != nil {
 		t.Fatal(err)
 	}
 	claim.Epoch++

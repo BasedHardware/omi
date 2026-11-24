@@ -465,5 +465,6 @@ func syntheticDigests() map[string]string {
 		"admission-parity.json": "3d9d4ffec0a1053bbca24f481f0c776d5c5acc97ebc3b18020b369e7b313e9ab",
 		"conformance-gaps.json": "63c7b644b63985ae1f9434f7c0d6e6730fbb52b388572a56235e479aab53a160",
 		"held-out.json":         "a1ae0f2357f1f4debc04be7fb09487da966c8660e90738ae4b225f4948193ce9",
+		"ordinary-sync.json":    "bb633ddedb71f33387049dc48571150e325f56174da55efb99fe122c3e9dcbc2",
 	}
 }
