@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -209,7 +210,7 @@ func TestF32TombstoneBeforeNotesFencesGatewayDispatch(t *testing.T) {
 }
 
 // Exercise the worker with Python-generated ciphertext, matching the legacy callback guard.
-func TestPL745WrongKeyTranscriptPreservesCiphertext(t *testing.T) {
+func TestPL745ForeignOwnerTranscriptPreservesCiphertext(t *testing.T) {
 	t.Parallel()
 	h, runtime, job, bench := gatewayTestJob(t)
 	const path = "users/gateway-owner/conversations/gateway-conversation"
@@ -233,6 +234,16 @@ func TestPL745WrongKeyTranscriptPreservesCiphertext(t *testing.T) {
 	// reads the ciphertext under gateway-owner, not its encryption owner.
 	clk := clock.System{}
 	codec := crypt.New("conversation adapter synthetic fixture key")
+	cipherWire, encodeErr := json.Marshal(ciphertext)
+	if encodeErr != nil {
+		t.Fatal(encodeErr)
+	}
+	segments, decodeErr := codec.Decode("conversation-fixture-owner", crypt.Transcript{
+		Segments: cipherWire, Compressed: true,
+	})
+	if decodeErr != nil || len(segments) == 0 {
+		t.Fatalf("fixture must decode for its original owner: %v", decodeErr)
+	}
 	wireFinalizationDocuments(runtime.family, finalizationdocs.Store{Docs: bench.Store, Clock: clk, Codec: codec}, nil, true)
 	doc := bench.Raw.Doc(path)
 	original, err := doc.Get(t.Context())
@@ -240,6 +251,8 @@ func TestPL745WrongKeyTranscriptPreservesCiphertext(t *testing.T) {
 		t.Fatal(err)
 	}
 	fields := original.Data()
+	notes := map[string]any{"title": "Existing title", "overview": "Existing notes"}
+	fields["structured"] = notes
 	fields["transcript_segments"] = ciphertext
 	fields["transcript_segments_compressed"] = true
 	fields["data_protection_level"] = row["data_protection_level"]
@@ -256,7 +269,8 @@ func TestPL745WrongKeyTranscriptPreservesCiphertext(t *testing.T) {
 	// Include retry exhaustion so the terminal write must preserve custody too.
 	h.Start(workerdHandlers(runtime.family))
 	outcome := h.Settled(job.Key)
-	if outcome.Reason == nil || *outcome.Reason != conversations.CauseUnreadable {
+	if outcome.Outcome == nil || *outcome.Outcome != queue.TerminalFailure ||
+		outcome.Reason == nil || *outcome.Reason != conversations.CauseUnreadable {
 		t.Fatalf("expected an unreadable-transcript disposition, got %+v", outcome)
 	}
 	stored, err := doc.Get(t.Context())
@@ -264,9 +278,10 @@ func TestPL745WrongKeyTranscriptPreservesCiphertext(t *testing.T) {
 		t.Fatal(err)
 	}
 	fields = stored.Data()
+	storedNotes, hasNotes := fields["structured"].(map[string]any)
 	if fields["transcript_segments"] != ciphertext || fields["transcript_segments_compressed"] != true ||
 		fields["data_protection_level"] != row["data_protection_level"] || fields["discarded"] == true ||
-		fields["go_finalization_notes_input_hash"] != nil {
+		fields["go_finalization_notes_input_hash"] != nil || !hasNotes || !maps.Equal(storedNotes, notes) {
 		t.Fatal("finalization changed transcript custody or committed summary work")
 	}
 }
