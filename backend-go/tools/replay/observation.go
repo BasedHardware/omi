@@ -19,10 +19,20 @@ func compareObservations(python, goRun *observation) []difference {
 
 func compareObservationsForRun(python, goRun *observation, pythonTokens, goTokens map[string]int) ([]difference, map[string]attachMemoCheck) {
 	diffs := []difference{}
+	terminalChecks := terminalMemoChecks(python, goRun)
 	compareValue(&diffs, "/status", python.Status, goRun.Status)
 	compareValue(&diffs, "/conversation", python.Document, goConversation(goRun, python))
 	compareDerivedDocuments(&diffs, python, goRun)
-	terminalChecks := terminalMemoChecks(python, goRun)
+	if terminalChecks != nil {
+		filtered := diffs[:0]
+		for _, diff := range diffs {
+			if episodeAttachMemoField(diff.Path, python) && episodeAttachMemoField(diff.Path, goRun) {
+				continue
+			}
+			filtered = append(filtered, diff)
+		}
+		diffs = filtered
+	}
 	if terminalChecks == nil {
 		validateGoAttachMemoEvidence(&diffs, goRun)
 	}

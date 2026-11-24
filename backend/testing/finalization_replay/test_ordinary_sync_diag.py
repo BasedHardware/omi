@@ -304,6 +304,54 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
         self.assertEqual(enriched['diagnostic']['label_counts']['go_gap'], 3)
         self.assertEqual(enriched['diagnostic']['label_counts']['unlabelled'], 2)
 
+    def test_invalid_go_attach_memo_evidence_is_go_gap_by_default(self):
+        cases = []
+        for name, reason in (
+            ('empty-capture', 'completed_key_mismatch'),
+            ('transcript-empty-text', 'completed_key_mismatch'),
+            ('unreadable-ciphertext-dead-letters', 'owner_binding_mismatch'),
+        ):
+            differences = []
+            case = {'name': name, 'differences': differences}
+            if name == 'unreadable-ciphertext-dead-letters':
+                case.update(
+                    {
+                        'python_status': 'parked',
+                        'go_status': 'failure',
+                        'go_ciphertext_kept': True,
+                        'python_retry': {
+                            'outcome': 'parked',
+                            'reason': 'age_gate_72h',
+                            'ciphertext_kept': True,
+                            'attempts': 2,
+                            'callback_pending_attempts': 1,
+                        },
+                    }
+                )
+                differences.append({'path': '/status', 'kind': 'different_value'})
+            differences.append(
+                {
+                    'path': f'/go/derived_documents/users~1replay-{name}~1episode_links~1{name}/attach_memo_evidence',
+                    'kind': 'invalid_binding',
+                    'failure_reason': reason,
+                }
+            )
+            cases.append(case)
+        report = {'unexplained_differences': 4, 'cases': cases}
+
+        enriched = enrich(report)
+        labels = [
+            next(
+                difference['label']
+                for difference in case['differences']
+                if difference['path'].endswith('/attach_memo_evidence')
+            )
+            for case in enriched['cases']
+        ]
+        self.assertEqual(labels, ['go_gap', 'go_gap', 'go_gap'])
+        self.assertEqual(enriched['diagnostic']['label_counts']['go_gap'], 3)
+        self.assertEqual(enriched['diagnostic']['label_counts'].get('unlabelled', 0), 0)
+
 
 if __name__ == '__main__':
     unittest.main()

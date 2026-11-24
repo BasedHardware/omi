@@ -399,8 +399,19 @@ def enrich(report: dict) -> dict:
                     '/conversation/finalization_job_id',
                     '/go/episode_attach_memo',
                 }
+                or (
+                    difference.get('kind') == 'invalid_binding'
+                    and difference.get('path', '').startswith('/go/derived_documents/')
+                    and '~1episode_links~1' in difference.get('path', '')
+                    and difference.get('path', '').endswith('/attach_memo_evidence')
+                )
                 or difference.get('failure_reason') == 'go_attach_memo_invalid'
-                or difference.get('failure_reason') in {'profile_refresh_proof_failed', 'task_vector_proof_failed'}
+                or difference.get('failure_reason')
+                in {
+                    'profile_refresh_proof_failed',
+                    'task_vector_proof_failed',
+                    'terminal_attach_memo_present',
+                }
             ):
                 label = 'go_gap'
             elif is_reviewed_go_gap_row(difference, case.get('name', '')):

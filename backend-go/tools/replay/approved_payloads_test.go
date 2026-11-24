@@ -381,16 +381,19 @@ func TestTerminalEpisodeMemoShape(t *testing.T) {
 				if !deadLetter {
 					obs.Status = "discarded"
 					mustMap(obs.Document)["discarded"] = true
-					link["attach_owner_id"] = "episode"
-					for _, f := range fields[:3] {
-						link[f] = nil
-					}
 				}
 			}
 			if deadLetter {
 				python.Status, goRun.Status = "parked", "failure"
 				goRun.GoEvidence = map[string]any{"job": map[string]any{"state": "dead_letter", "cause": "conversation_unreadable"}}
-				mustMap(goRun.Document)["finalization_status"] = "dead_letter"
+			} else {
+				// Python's established discard invalidation leaves a null sentinel;
+				// the Go terminal link must carry no memo fields at all.
+				pythonLink := mustMap(python.Derived[path])
+				pythonLink["attach_owner_id"] = "episode"
+				for _, field := range fields[:3] {
+					pythonLink[field] = nil
+				}
 			}
 
 			verify := func(t *testing.T, invalidSide string) {
@@ -407,37 +410,66 @@ func TestTerminalEpisodeMemoShape(t *testing.T) {
 						hasUnexplainedAt(entry.Differences, "/"+side+"/episode_attach_memo") != invalid {
 						t.Fatalf("%s memo check %+v, expected invalid side %q", side, check, invalidSide)
 					}
+					if invalid && side == "go" && check.FailureReason != "terminal_attach_memo_present" {
+						t.Fatalf("unexpected Go terminal memo failure: %+v", check)
+					}
 				}
 				for _, d := range entry.Differences {
 					if strings.HasSuffix(d.Path, "/attach_memo_evidence") {
 						t.Fatalf("live memo proof was applied to terminal output: %+v", d)
 					}
+					if episodeAttachMemoField(d.Path, python) && episodeAttachMemoField(d.Path, goRun) {
+						t.Fatalf("terminal memo placeholders leaked into value comparison: %+v", d)
+					}
 				}
 			}
 			verify(t, "")
-			for _, side := range []string{"python", "go"} {
-				obs := python
-				if side == "go" {
-					obs = goRun
-				}
-				link := mustMap(obs.Derived[path])
+			pythonLink := mustMap(python.Derived[path])
+			if !deadLetter {
+				original := map[string]any{}
 				for _, field := range fields {
-					original, present := link[field]
-					t.Run(side+"/"+field, func(t *testing.T) {
-						link[field] = "stale"
-						verify(t, side)
-						if deadLetter {
-							link[field] = nil // a stored null is still a surviving field
-						} else {
-							delete(link, field) // discarded stamps must be present, including explicit nulls
-						}
-						verify(t, side)
-					})
-					if present {
-						link[field] = original
-					} else {
-						delete(link, field)
+					if value, present := pythonLink[field]; present {
+						original[field] = value
+						delete(pythonLink, field)
 					}
+				}
+				verify(t, "") // Python may also represent discarded_without_memo with every field absent.
+				for field, value := range original {
+					pythonLink[field] = value
+				}
+			}
+
+			goLink := mustMap(goRun.Derived[path])
+			for _, field := range fields {
+				for _, value := range []any{nil, "stale"} {
+					t.Run("go/"+field+"/present", func(t *testing.T) {
+						goLink[field] = value
+						verify(t, "go")
+						delete(goLink, field)
+					})
+				}
+			}
+
+			if deadLetter {
+				for _, field := range fields {
+					t.Run("python/"+field+"/present", func(t *testing.T) {
+						pythonLink[field] = nil
+						verify(t, "python")
+						delete(pythonLink, field)
+					})
+				}
+			} else {
+				for _, field := range fields {
+					original, present := pythonLink[field]
+					t.Run("python/"+field+"/invalid", func(t *testing.T) {
+						pythonLink[field] = "stale"
+						verify(t, "python")
+						if present {
+							pythonLink[field] = original
+						} else {
+							delete(pythonLink, field)
+						}
+					})
 				}
 			}
 		})
