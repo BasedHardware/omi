@@ -14,7 +14,7 @@ from uuid import uuid4
 from google.cloud import firestore
 import httpx
 
-from config.plan_catalog_generated import PAID_PLAN_IDS
+from config.plan_catalog import PAID_PLAN_IDS
 from config.refactor_modes import default_on
 from database import legal_holds, support_actions
 from database.account_deletion_marker import account_deletion_document, account_deletion_firestore_client
