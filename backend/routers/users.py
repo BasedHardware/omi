@@ -1375,8 +1375,7 @@ def get_user_subscription_endpoint(
         held = response.held_audio
         audio = {'count': held.count, 'seconds': held.seconds} if held else {'count': 0, 'seconds': 0}
         response.processing_backlog = processing_backlog.snapshot(uid, allowance=funded, audio=audio)
-    uses_play = play_billing_config.client_uses_play(x_app_platform, x_app_build, uid)
-    if uses_play:
+    if uses_play := play_billing_config.client_uses_play(x_app_platform, x_app_build, uid):
         response.play_billing = PlayBillingConfig.model_validate(play_billing_config.client_config_payload(uid))
         try:
             play_subscriptions_db.remember_account_once(response.play_billing.obfuscated_account_id, uid)
@@ -1388,8 +1387,8 @@ def get_user_subscription_endpoint(
 
 def _apply_prepaid_code_switch(response: UserSubscriptionResponse, uid: str, *, uses_play: bool = False) -> None:
     """Only the ability to redeem follows the switch. A stored prepaid plan keeps its `prepaid` marker
-    either way, so a redeemed reader never sees Resubscribe when the switch or cohort changes.
-    A Google Play build can always redeem: a code is its only way to activate a prepaid plan."""
+    either way, so a redeemed reader never sees Resubscribe when the switch or cohort changes. A Play build always can.
+    """
     if uses_play or prepaid_code_config.enabled_for(uid):
         response.prepaid_code_redeem = True
 
