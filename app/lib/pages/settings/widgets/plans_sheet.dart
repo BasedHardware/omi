@@ -607,7 +607,7 @@ class _PlansSheetState extends State<PlansSheet> {
               newPlan: targetPlan,
               billingInterval: billingInterval,
             );
-            await provider.fetchSubscription();
+            await provider.fetchSubscription(fresh: true);
             await provider.loadAvailablePlans();
           }
           // Otherwise, this is a new subscription requiring checkout
@@ -616,7 +616,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
             if (checkoutResult == true) {
               // Checkout completion is not local entitlement proof; refresh the backend-owned state.
-              await provider.fetchSubscription();
+              await provider.fetchSubscription(fresh: true);
               if (mounted) OmiFeedback.confirm(context, l10n.subscriptionSuccessfulCharged);
               PlatformManager.instance.analytics.upgradeSucceeded(
                 previousPlan: currentSub.plan.wireName,
@@ -716,7 +716,7 @@ class _PlansSheetState extends State<PlansSheet> {
       // The user may have paid an overdue invoice or recovered a canceled plan inside the portal,
       // so refresh subscription state on return instead of leaving the UI showing Free until a
       // manual reload.
-      await provider.fetchSubscription();
+      await provider.fetchSubscription(fresh: true);
       await provider.loadAvailablePlans();
     } else if (mounted) {
       OmiFeedback.error(context, l10n.couldNotOpenPaymentSettings);

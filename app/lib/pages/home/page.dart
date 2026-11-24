@@ -5,7 +5,6 @@
 // state rather than the stored flag (the OS may have revoked a granted
 // permission), and the static FGS call here stays an App UI handoff -- capture
 // ownership belongs to CaptureSessionOwner (app/lib/services/capture/OWNERSHIP.md).
-import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/on_device/on_device_runner.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
@@ -41,6 +40,7 @@ import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/home/home_widgets_publisher.dart';
+import 'package:omi/pages/home/plan_refresh_on_resume.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/search/global_search.dart';
@@ -413,10 +413,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         // Heal phone-mic sessions that went silent while another app played
         // audio (Stage Manager / YouTube) without an AVAudioSession interrupt.
         captureProvider.onAppResumed();
-        // The plan may have changed in Google Play or the Stripe portal while the app was away.
-        unawaited(context.read<UsageProvider>().refreshOnResume(
-              signedIn: context.read<AuthenticationProvider>().isSignedIn(),
-            ));
         _scheduleHomeWidgetFreshness(context.read<ActionItemsProvider>());
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
@@ -1008,7 +1004,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     // post-frame callbacks still fire after them, so neither of those proves
     // success. A later Home then truthfully classifies as cold_start.
     BackgroundInterruptProcessLaunch.mark();
-    return content;
+    return PlanRefreshOnResume(child: content);
   }
 
   /// Chat opens as a sheet that rises over Home (see chat_route.dart); the mic opens it listening.

@@ -215,7 +215,7 @@ class UsageProvider with ChangeNotifier {
   /// A purchase paid for in an earlier session whose server confirmation never arrived.
   Future<void> _deliverPendingPlayTokens() async {
     try {
-      if (await playBillingService.deliverPendingTokens()) await fetchSubscription();
+      if (await playBillingService.deliverPendingTokens()) await fetchSubscription(fresh: true);
     } catch (e) {
       // Try again on the next subscription read.
       _playPendingSent = false;
@@ -423,6 +423,7 @@ class UsageProvider with ChangeNotifier {
     _playManageFollowUp = null;
     _openedPlayManage = false;
     _lastResumeRefreshAt = null;
+    _freshFetch = null;
     _isProcessingBacklog = false;
     TranscriptionAllowanceCache.clear();
     _subscription = null;
@@ -464,43 +465,62 @@ class UsageProvider with ChangeNotifier {
 
   Future<void>? _subscriptionFetch;
 
-  static const resumeRefreshInterval = Duration(seconds: 30);
+  static const resumeRefreshInterval = Duration(minutes: 2);
   static const playManageFollowUpDelay = Duration(seconds: 5);
   DateTime? _lastResumeRefreshAt;
   bool _openedPlayManage = false;
   Timer? _playManageFollowUp;
+  Future<void>? _freshFetch;
 
   /// The reader is leaving for Google Play's subscription page; the next resume reads twice.
   void markOpenedPlayManage() => _openedPlayManage = true;
 
+  /// Google Play's subscription page did not open, so the next resume is an ordinary one.
+  void clearOpenedPlayManage() => _openedPlayManage = false;
+
   /// The app came back to the foreground: the plan may have changed in Google Play or the Stripe
-  /// portal. At most one read per [resumeRefreshInterval]; none when signed out. After Play's
-  /// subscription page, one more read [playManageFollowUpDelay] later, because the server learns
-  /// of the change from Play's notification a few seconds after the reader returns.
+  /// portal. At most one successful read per [resumeRefreshInterval]; none when signed out or while
+  /// a Play purchase is being confirmed (its sheet closing is not a return, and the purchase reads
+  /// on its own). After Play's subscription page, one more read [playManageFollowUpDelay] later,
+  /// because the server learns of the change from Play's notification a few seconds after the
+  /// reader returns.
   Future<void> refreshOnResume({required bool signedIn}) async {
     final fromPlay = _openedPlayManage;
     _openedPlayManage = false;
     if (!signedIn) return;
+    if (playBilling != null && playBillingService.busy) return;
     final now = _now();
     final last = _lastResumeRefreshAt;
     if (!fromPlay && last != null && now.difference(last) < resumeRefreshInterval) return;
-    _lastResumeRefreshAt = now;
     final generation = _sessionGeneration;
     await fetchSubscription();
-    if (!fromPlay || generation != _sessionGeneration) return;
+    if (generation != _sessionGeneration) return;
+    if (!_subscriptionReadFailed) _lastResumeRefreshAt = now;
+    if (!fromPlay) return;
     _playManageFollowUp?.cancel();
     _playManageFollowUp = Timer(playManageFollowUpDelay, () {
       _playManageFollowUp = null;
-      unawaited(fetchSubscription());
+      unawaited(fetchSubscription(fresh: true));
     });
   }
 
   /// Fetches the subscription; concurrent callers share the request in flight instead of
   /// returning before it lands (the after-sign-up paywall gate awaits this right after sign-in,
   /// while AppShell's own fetch is usually still running).
-  Future<void> fetchSubscription() {
+  ///
+  /// [fresh]: the server just changed (a purchase, cancel, code, plan switch). A read already in
+  /// flight may have started before that change and carry the old plan, so wait for it and then
+  /// read once more; fresh callers arriving meanwhile share that one later read.
+  Future<void> fetchSubscription({bool fresh = false}) {
     final inflight = _subscriptionFetch;
-    if (inflight != null) return inflight;
+    if (inflight != null) {
+      if (!fresh) return inflight;
+      final generation = _sessionGeneration;
+      return _freshFetch ??= inflight.then((_) async {
+        _freshFetch = null;
+        if (generation == _sessionGeneration) await fetchSubscription();
+      });
+    }
     final completer = Completer<void>();
     _subscriptionFetch = completer.future;
     _fetchSubscription().whenComplete(() {
@@ -523,7 +543,7 @@ class UsageProvider with ChangeNotifier {
       final restored = await playBillingService.restore(obfuscatedAccountId: config.obfuscatedAccountId);
       if (restored.outcome != PlayPurchaseOutcome.purchased) _lastPlayRestoreRefusal = restored.code;
     }
-    await fetchSubscription();
+    await fetchSubscription(fresh: true);
     final plan = _subscription?.subscription.plan;
     if (_error != null || plan == null) return RestoreOutcome.failed;
     return plan.isPaid ? RestoreOutcome.paid : RestoreOutcome.free;
@@ -765,15 +785,8 @@ class UsageProvider with ChangeNotifier {
         return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
       }
       if (result is ApiSuccess<bool> && result.data) {
-        // Finish any pre-application read before requesting post-application truth.
-        final pending = _subscriptionFetch;
-        if (pending != null) {
-          await pending;
-        }
-        if (generation != _sessionGeneration) {
-          return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
-        }
-        await fetchSubscription(); // also replaces authoritative allowance cache
+        // A pre-application read may be in flight: fresh waits for it, then reads post-application truth.
+        await fetchSubscription(fresh: true); // also replaces authoritative allowance cache
         if (generation != _sessionGeneration) {
           return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
         }
@@ -821,7 +834,7 @@ class UsageProvider with ChangeNotifier {
     try {
       final success = await cancelSubscription(reason: reason, reasonDetails: reasonDetails);
       if (success) {
-        await fetchSubscription();
+        await fetchSubscription(fresh: true);
         await loadAvailablePlans();
       }
       return success;
@@ -845,7 +858,7 @@ class UsageProvider with ChangeNotifier {
     try {
       final result = await upgradeSubscription(priceId: priceId, promotionCode: promotionCode);
       if (result != null && result['error'] != true) {
-        await fetchSubscription();
+        await fetchSubscription(fresh: true);
         await loadAvailablePlans();
       }
       return result;

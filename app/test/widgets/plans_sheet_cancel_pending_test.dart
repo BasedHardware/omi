@@ -34,7 +34,7 @@ class _Usage extends UsageProvider {
   Future<void> loadAvailablePlans() async {}
 
   @override
-  Future<void> fetchSubscription() async {
+  Future<void> fetchSubscription({bool fresh = false}) async {
     if (!clearCancelOnFetch || subscription == null) return;
     final current = subscription!;
     debugSetSubscription(

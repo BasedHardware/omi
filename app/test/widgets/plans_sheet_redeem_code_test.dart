@@ -58,7 +58,8 @@ class _Usage extends UsageProvider {
   // These cases count the reads a code causes; the sheet's own opening read is covered elsewhere.
   bool skipReads = false;
   @override
-  Future<void> fetchSubscription() => skipReads ? Future.value() : super.fetchSubscription();
+  Future<void> fetchSubscription({bool fresh = false}) =>
+      skipReads ? Future.value() : super.fetchSubscription(fresh: fresh);
   @override
   Future<void> loadAvailablePlans() async {}
   @override
