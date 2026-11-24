@@ -94,7 +94,7 @@ class CountingLog(ResultLog):
         super().__init__(**kwargs)
         self.prechecks = 0
 
-    def check(self, session, *, precheck=True):
+    def check(self, session, *, precheck=True, speculative=False):
         self.prechecks += int(precheck)
         return super().check(session)
 

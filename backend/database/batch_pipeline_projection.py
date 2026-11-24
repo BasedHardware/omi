@@ -239,10 +239,10 @@ class ProjectionStore:
         self._mirror(binding)
         return receipt
 
-    def check(self, session):
+    def check(self, session, *, speculative=False):
         @firestore.transactional
         def read(transaction):
-            session.prepare(transaction)
+            session.prepare(transaction, speculative=speculative)
 
         self.run(read, policy=session.policy)
 

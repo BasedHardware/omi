@@ -282,6 +282,10 @@ async def test_actual_sdk_surfaces_and_composed_hooks_preserve_results(monkeypat
 @pytest.mark.parametrize('asynchronous', [False, True])
 async def test_bulk_uses_atomic_source_token_pairs_and_preserves_partial_status(monkeypatch, asynchronous):
     calls = []
+    invalidations = []
+    monkeypatch.setenv('REDIS_DB_HOST', 'synthetic')
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    monkeypatch.setattr(fence, '_invalidate_tokenless', lambda paths: invalidations.append((len(calls), paths)))
 
     def commit(client, request=None, **kwargs):
         assert len(request.writes) == 4  # source, Home receipt/control, privacy token
@@ -322,6 +326,7 @@ async def test_bulk_uses_atomic_source_token_pairs_and_preserves_partial_status(
         client.commit = lambda **kwargs: fence._wrap_commit(commit)(client, **kwargs)
         result = fence._wrap_bulk(bulk)(client, request=request)
     assert [c[0] for c in calls] == ['atomic', 'atomic', 'bulk']
+    assert invalidations == [(1, {TOKEN})]
     assert [s.code for s in result.status] == [0, 0, 9]
     assert [r.update_time.timestamp() if r.update_time else 0 for r in result.write_results] == [101, 202, 0]
 
@@ -467,3 +472,24 @@ async def test_mixed_account_bulk_erasure_never_recreates_erased_subtree(asynchr
     # The ContextVar scope must reset after the batch, even for the same uid.
     restored, _ = fence.augment_commit({'writes': [sources[0]]})
     assert any(w.update.name == f'{ROOT}/users/u/episode_links/home_feed_control' for w in restored.writes)
+
+
+def test_recording_permission_deduped_post_commit_invalidation(monkeypatch):
+    calls = []
+    monkeypatch.setenv('REDIS_DB_HOST', 'synthetic')
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    monkeypatch.setattr(fence, '_invalidate_tokenless', lambda paths: calls.append(paths))
+
+    def commit(client, request=None):
+        calls.append('commit')
+        assert request.writes[-1].update.name == TOKEN
+        return CommitResponse(write_results=[WriteResult() for _ in request.writes])
+
+    permission = Write(
+        update=Document(name=f'{ROOT}/users/u', fields={'store_recording_permission': {'boolean_value': True}}),
+        update_mask={'field_paths': ['store_recording_permission']},
+        current_document={'exists': True},
+    )
+    request = CommitRequest(writes=[permission, Write(delete=f'{ROOT}/users/u/deleted_conversations/c')])
+    assert len(fence._wrap_commit(commit)(None, request=request).write_results) == 2
+    assert calls == ['commit', {TOKEN}]
