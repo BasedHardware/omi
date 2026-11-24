@@ -12179,7 +12179,6 @@
     "capturePendantDisconnectedShort": "Omi će se sam ponovno povezati",
     "forYou": "Za vas",
     "stopThese": "Zaustavi ovo",
-    "meetingActionItemsTitle": "Stavke za poduzeti",
     "addToTasks": "Dodaj u zadatke",
     "showInTranscript": "Prikaži transkript",
     "tentativeTaskDueDate": "Rok oko {date}",
@@ -12320,5 +12319,8 @@
     "prepaidCodeFieldHint": "Unesite svoj kôd",
     "prepaidCodeRedeem": "Iskoristi",
     "prepaidCodeRedeemed": "Kôd je iskorišten",
-    "prepaidCodeResult": "{reason, select, invalid{Ovaj kôd nije valjan. Provjerite ga i pokušajte ponovno.} used{Ovaj kôd je već iskorišten.} expired{Ovaj kôd je istekao.} hasPlan{Već imate plan. Vaš kôd nije iskorišten. Iskoristite ga kada vam plan istekne.} notPrepaid{Ovaj kôd ne može se iskoristiti ovdje. Iskoristite ga kada odaberete plan.} notEligible{Ovaj kôd ne može se koristiti na ovom računu.} rateLimited{Previše pokušaja. Pokušajte kasnije.} other{Nešto nije u redu. Pokušajte ponovno.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Ovaj kôd nije valjan. Provjerite ga i pokušajte ponovno.} used{Ovaj kôd je već iskorišten.} expired{Ovaj kôd je istekao.} hasPlan{Već imate plan. Vaš kôd nije iskorišten. Iskoristite ga kada vam plan istekne.} notPrepaid{Ovaj kôd ne može se iskoristiti ovdje. Iskoristite ga kada odaberete plan.} notEligible{Ovaj kôd ne može se koristiti na ovom računu.} rateLimited{Previše pokušaja. Pokušajte kasnije.} other{Nešto nije u redu. Pokušajte ponovno.}}",
+    "playStripeBilledOnWeb": "Naplaćuje se putem omi.me. Otkažite ovdje bilo kada.",
+    "playStripeBilledOnWebShort": "Naplaćuje se putem omi.me.",
+    "playStripePlanPaused": "Vaš plan {plan} je pauziran."
 }

@@ -44,22 +44,32 @@ def android_billing_mode(environ: Optional[Mapping[str, str]] = None) -> str:
     return 'play' if (_env(environ).get(ANDROID_BILLING_ENV) or '').strip().lower() == 'play' else 'stripe'
 
 
-def min_play_build(environ: Optional[Mapping[str, str]] = None) -> Optional[int]:
-    raw = (_env(environ).get(MIN_BUILD_ENV) or '').strip()
-    if not raw.isdigit() or int(raw) <= 0:
+# Android version codes fit in 9 digits; longer input is malformed (and int() refuses over 4300 digits).
+_MAX_BUILD_DIGITS = 9
+
+
+def _build_number(value: Optional[str]) -> Optional[int]:
+    """ASCII digits only: ``str.isdigit()`` also accepts digits ``int()`` cannot parse (e.g. superscripts)."""
+    raw = value.strip() if isinstance(value, str) else ''
+    if not raw or len(raw) > _MAX_BUILD_DIGITS or not raw.isascii() or not raw.isdigit():
         return None
     return int(raw)
 
 
+def min_play_build(environ: Optional[Mapping[str, str]] = None) -> Optional[int]:
+    minimum = _build_number(_env(environ).get(MIN_BUILD_ENV))
+    return minimum if minimum else None
+
+
 def user_in_play_cohort(uid: Optional[str], environ: Optional[Mapping[str, str]] = None) -> bool:
-    if not isinstance(uid, str) or not rollout_cohorts.valid_uid(uid):
-        return False
-    if rollout_cohorts.cohort_admits(uid, _env(environ).get(COHORT_ENV)):
-        return True
     try:
-        return rollout_cohorts.in_rollout_cohort(uid, ROLLOUT_COHORT)
+        if not isinstance(uid, str) or not rollout_cohorts.valid_uid(uid):
+            return False
+        if rollout_cohorts.cohort_admits(uid, _env(environ).get(COHORT_ENV)):
+            return True
+        return bool(rollout_cohorts.in_rollout_cohort(uid, ROLLOUT_COHORT))
     except Exception:
-        # Unknown membership keeps today's Stripe flow.
+        # Unknown membership keeps today's Stripe flow; it can never fail the request.
         return False
 
 
@@ -75,10 +85,25 @@ def client_uses_play(
     if account_id_key(environ) is None:
         return False  # without the account-id secret no purchase could be bound safely
     minimum = min_play_build(environ)
-    build = app_build.strip() if isinstance(app_build, str) else ''
-    if minimum is None or not build.isdigit() or int(build) < minimum:
+    build = _build_number(app_build)
+    if minimum is None or build is None or build < minimum:
         return False
     return android_billing_mode(environ) == 'play' or user_in_play_cohort(uid, environ)
+
+
+def hide_payment_links(headers: Optional[Mapping[str, str]], uid: Optional[str]) -> bool:
+    """True when app responses for this request must carry no Stripe payment link (a Google Play build).
+
+    The one projection rule for every response that serialises an app's ``payment_link``.
+    """
+    if headers is None:
+        return False
+    return client_uses_play(headers.get('X-App-Platform'), headers.get('X-App-Build'), uid)
+
+
+# Refusal for a new Stripe charge from a client that must buy through Google Play.
+USE_GOOGLE_PLAY = 'use_google_play'
+USE_GOOGLE_PLAY_MESSAGE = 'Subscribe with Google Play in the app.'
 
 
 def package_name(environ: Optional[Mapping[str, str]] = None) -> str:

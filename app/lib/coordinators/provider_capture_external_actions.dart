@@ -119,6 +119,9 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   void onLiveFinalized() => episodeProvider?.onLiveFinalized();
 
   @override
+  bool get v3FinishFeedbackEnabled => conversationsV3?.finishFeedbackEnabled ?? false;
+
+  @override
   void onManualFinishStarted(
     ServerConversation placeholder,
     String? recordingId, {
@@ -136,14 +139,14 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   }) {
     final v3 = conversationsV3;
     final result = outcome?.response?.conversation;
-    if (v3 == null || !v3.settleManualFinish(placeholder, result)) return;
-    if (showFailure) {
+    final alreadyClosed = outcome?.absence == ProcessAbsence.notFound;
+    if (v3 == null || !v3.settleManualFinish(placeholder, result, alreadyClosed: alreadyClosed)) return;
+    if (showFailure && !alreadyClosed) {
       final l10n = globalNavigatorKey.currentContext?.l10n;
       if (l10n != null) {
         if (outcome?.absence == ProcessAbsence.emptyBody || result?.discarded == true) {
           AppSnackbar.showSnackbar(l10n.discardedOnlyRecording);
         } else if (result == null) {
-          // A 404 has no active recording. It does not establish whether a summary exists yet.
           AppSnackbar.showSnackbarError(l10n.finishFailed);
         } else if (result.status == ConversationStatus.in_progress) {
           AppSnackbar.showSnackbar(l10n.finishAudioNotReceived);
@@ -151,12 +154,11 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
       }
     }
     unawaited(v3.refreshAfterManualFinish().catchError((Object _) {}));
-    unawaited(
-      conversationProvider.forceRefreshConversations().then<void>(
-            (_) {},
-            onError: (Object _) {},
-          ),
-    );
+    // A 404 leaves the pending row on Home. Reload once, with transient filters already cleared.
+    final refresh = alreadyClosed && !conversationProvider.showsPendingFinishOnHome
+        ? conversationProvider.resetToDefaultHome()
+        : conversationProvider.forceRefreshConversations();
+    unawaited(refresh.catchError((Object _) {}));
   }
 
   @override

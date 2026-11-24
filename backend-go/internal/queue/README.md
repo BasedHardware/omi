@@ -19,6 +19,7 @@ own causes, and the queue supplies everything about when and whether work runs.
 | Give an external operation a stable identity | `Guarded.Operation` |
 | Order work per key | `NewJob.OrderKey`, `OrderAt`, `SortKey` |
 | Delay work | `NewJob.RunAt`, `Yield` with a delay |
+| Hold new platform-funded units pending an owner entitlement change | `Kind.PaidProcessing`, `HoldCondition`, `Release`, `CheckEntitlements` |
 | Keep a whole tenant off the schedule | `Hold` |
 | Run only when a caller presents a secret | `NewJob.Gated`, `Workers.Resume` |
 | Inspect and redrive | `Store.Get`, `Store.Parked`, `Store.Redrive`, `Store.Stats`, `Store.Stranded` |
@@ -32,6 +33,7 @@ against Postgres, each test in its own database (`internal/platform/pgtest`).
 
 | Rule | Where it is decided | Test |
 | --- | --- | --- |
+| Held paid admissions have no due time or active lane slot. One owner check covers both routes. A release settles expired units and rejoins the rest in capture order. | `Scope.enqueuePaid`, `Scope.ObserveEntitlement`, `Store.CheckEntitlements` | `TestEntitlementOwnerReplay`, `TestGrantRacesPaidIntakeAndExpiry`, `TestEraseWhileEntitlementHeld` |
 | Drain stops intake while running handlers can renew and save | `Workers.Drain` | `TestDrainLetsRunningHandlerSaveAndFinish` |
 | At the deadline, drain refunds each still-owned claim once, preserving its checkpoint, terminal intent, and secret requirement | `Store.releaseClaims` | `TestDrainDeadlineRefundsWorkAndReconciliationForAnotherReplica` |
 | Enqueue is idempotent on the key; the first enqueue fixes the input | `Scope.Enqueue` | `TestEnqueueIdempotencyProperty` |

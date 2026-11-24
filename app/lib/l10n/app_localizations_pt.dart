@@ -15364,9 +15364,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get stopThese => 'Parar estes';
 
   @override
-  String get meetingActionItemsTitle => 'Itens de ação';
-
-  @override
   String get addToTasks => 'Adicionar às tarefas';
 
   @override
@@ -15852,5 +15849,16 @@ class AppLocalizationsPt extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Cobrado pelo omi.me. Cancele aqui quando quiser.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Cobrado pelo omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Seu plano $plan está pausado.';
   }
 }

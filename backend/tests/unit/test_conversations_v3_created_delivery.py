@@ -477,3 +477,18 @@ async def test_the_builder_drain_delivers_settled_notes(strict, delivery, monkey
     monkeypatch.setattr(service, 'pending_processing', lambda uid: [])
     await service.drain_processing('synthetic')
     assert [cid for _, cid, _ in delivery.sent] == ['c']
+
+
+def test_no_pointer_finish_counts_only_the_accepted_windows_first_settlement(strict, monkeypatch):
+    from utils.conversations.v3.live import FINISH_WINDOW_FIELD
+
+    counter = Mock()
+    monkeypatch.setattr(writers.metrics, 'FINISH_NO_POINTER', counter)
+    strict.rows[C] = derived(
+        manual_end=True, v3_process_pending=True, kind='conversation', **{FINISH_WINDOW_FIELD: 'c'}
+    )
+    settle(strict, notes=False)
+    strict.rows[C]['v3_process_pending'] = True
+    settle(strict, notes=False)
+    counter.labels.assert_called_once_with('settled')
+    counter.labels.return_value.inc.assert_called_once_with()

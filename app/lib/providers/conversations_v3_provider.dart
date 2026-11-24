@@ -53,11 +53,25 @@ class ConversationsV3Provider extends ChangeNotifier {
   ServerConversation? _finishRow;
   String? _finishRecordingId;
   String? _finishLiveId;
+  // An accepted finish that reached its deadline: Home reads the list once.
+  bool _reconcileOnHome = false;
+
+  // Counts manual finishes the server did not accept, so a latched End can be retried.
+  int _finishFailures = 0;
+  int get finishFailures => _finishFailures;
+
+  bool takeHomeReconcile() {
+    final due = _reconcileOnHome;
+    _reconcileOnHome = false;
+    return due;
+  }
+
   bool _suppressListening = false;
   String? _finishCaptureId;
   bool _finishAccepted = false;
   bool _finishExpired = false;
   Timer? _finishExpiry;
+  Timer? _finishDeadline;
 
   bool get finishFeedbackEnabled => v3 && !const bool.fromEnvironment('OMI_V3_FINISH_FEEDBACK_OFF');
   ServerConversation? get finishRow => finishFeedbackEnabled && !_finishExpired ? _finishRow : null;
@@ -72,56 +86,90 @@ class ConversationsV3Provider extends ChangeNotifier {
     _suppressListening = true;
     _finishCaptureId = captureId;
     _finishRecordingId = recordingId;
-    final live = _live;
-    if (live != null &&
-        (live.id == liveConversationId ||
-            live.id == recordingId ||
-            (recordingId != null && live.v3?.recordingIds.contains(recordingId) == true))) {
-      _finishLiveId = live.id;
-    }
+    _finishLiveId = liveConversationId;
+    _bindFinishToLive();
     _armFinishExpiry();
+    _finishDeadline = Timer(const Duration(minutes: 20), () {
+      _reconcileOnHome = _finishAccepted;
+      _clearManualFinish(keepClosedLive: _finishAccepted);
+      notifyListeners();
+    });
     notifyListeners();
   }
 
-  bool settleManualFinish(ServerConversation row, ServerConversation? result) {
+  bool settleManualFinish(ServerConversation row, ServerConversation? result, {bool alreadyClosed = false}) {
     if (!finishFeedbackEnabled || !identical(_finishRow, row)) return false;
-    if (result == null || result.discarded || result.status == ConversationStatus.in_progress) {
+    final accepted =
+        result == null ? alreadyClosed : !result.discarded && result.status != ConversationStatus.in_progress;
+    if (!accepted) {
+      _finishFailures++;
       _clearManualFinish();
     } else {
       _finishAccepted = true;
       _finishExpired = false;
       _suppressListening = true;
       _finishExpiry?.cancel();
-      _finishRecordingId = result.id;
-      if (result.v3?.recording != true) {
-        _finishLiveId = result.id;
-      } else if (_live?.v3?.recordingIds.contains(result.id) == true) {
-        _finishLiveId ??= _live!.id;
+      if (result != null) {
+        _finishRecordingId = result.id;
+        if (result.v3?.recording != true) {
+          _finishLiveId = result.id;
+        }
+      } else if (row is OptimisticProcessingConversation) {
+        // A 404 has no active recording pointer and cannot confirm that a summary exists.
+        _finishRecordingId ??= row.targetConversationId;
       }
+      _bindFinishToLive();
     }
     notifyListeners();
     return true;
   }
 
-  /// Home supplies visible successors and failed conversations separately.
+  // Only infer the window from a matching source when Finish did not name it.
+  void _bindFinishToLive() {
+    final live = _live;
+    final recordingId = _finishRecordingId;
+    if (_finishLiveId == null &&
+        live != null &&
+        recordingId != null &&
+        (live.id == recordingId || live.v3?.recordingIds.contains(recordingId) == true)) {
+      _finishLiveId = live.id;
+    }
+  }
+
+  /// A visible successor can take over the row while its summary is pending.
   bool finishHasSuccessor(Iterable<ServerConversation> visibleRows) => _matchesFinish(visibleRows);
 
-  bool finishHasFailedMatch(Iterable<ServerConversation> failedRows) => _finishAccepted && _matchesFinish(failedRows);
+  ServerConversation? finishTerminalMatch(Iterable<ServerConversation> rows) {
+    if (!_finishAccepted) return null;
+    for (final row in rows) {
+      if (row.v3?.recording == true) continue;
+      final terminal = switch (row.v3?.tileState) {
+        ConversationTileState.done || ConversationTileState.failed => true,
+        null => row.status == ConversationStatus.completed ||
+            row.status == ConversationStatus.failed ||
+            row.homeStep == 'failed',
+        _ => false,
+      };
+      if (terminal && _matchesFinishRow(row)) return row;
+    }
+    return null;
+  }
 
-  bool _matchesFinish(Iterable<ServerConversation> rows) => rows.any(
-        (row) =>
-            row.v3?.tileState != ConversationTileState.live &&
-            row.status != ConversationStatus.in_progress &&
-            (row.id == _finishLiveId ||
-                (_finishAccepted &&
-                    _finishLiveId == null &&
-                    _finishRecordingId != null &&
-                    (row.v3?.recordingIds.contains(_finishRecordingId) == true ||
-                        row.v3?.recordingPieces.any(
-                              (piece) => piece.recordingId == _finishRecordingId,
-                            ) ==
-                            true))),
-      );
+  bool _matchesFinish(Iterable<ServerConversation> rows) => rows.any(_matchesFinishRow);
+
+  bool _matchesFinishRow(ServerConversation row) =>
+      row.v3?.tileState != ConversationTileState.live &&
+      row.status != ConversationStatus.in_progress &&
+      (row.id == _finishLiveId ||
+          (_finishAccepted &&
+              _finishLiveId == null &&
+              _finishRecordingId != null &&
+              (row.id == _finishRecordingId ||
+                  row.v3?.recordingIds.contains(_finishRecordingId) == true ||
+                  row.v3?.recordingPieces.any(
+                        (piece) => piece.recordingId == _finishRecordingId,
+                      ) ==
+                      true)));
 
   bool acknowledgeManualFinish(ServerConversation row) {
     if (!_finishAccepted || !identical(finishRow, row)) return false;
@@ -141,6 +189,7 @@ class ConversationsV3Provider extends ChangeNotifier {
 
   void _clearManualFinish({bool keepClosedLive = false}) {
     _finishExpiry?.cancel();
+    _finishDeadline?.cancel();
     _finishRow = null;
     _finishRecordingId = null;
     if (!keepClosedLive) {
@@ -230,6 +279,7 @@ class ConversationsV3Provider extends ChangeNotifier {
       case ApiSuccess(:final data):
         _v3 = data.v3;
         _live = data.v3 ? data.conversation : null;
+        if (_finishRow != null) _bindFinishToLive();
         if (_live != null &&
             _live!.id != _finishLiveId &&
             (_finishRecordingId == null || _live!.v3?.recordingIds.contains(_finishRecordingId) != true)) {
@@ -263,6 +313,7 @@ class ConversationsV3Provider extends ChangeNotifier {
         a.structured.title == b.structured.title &&
         a.v3?.tileState == b.v3?.tileState &&
         a.v3?.homeHidden == b.v3?.homeHidden &&
+        listEquals(a.v3?.recordingIds, b.v3?.recordingIds) &&
         a.startedAt == b.startedAt &&
         a.finishedAt == b.finishedAt &&
         a.transcriptSegments.length == b.transcriptSegments.length;
@@ -298,6 +349,29 @@ class ConversationsV3Provider extends ChangeNotifier {
         final tile = c.v3?.tileState;
         return tile == ConversationTileState.transcribing || tile == ConversationTileState.writing;
       });
+
+  /// How long a row may sit mid-pipeline and still drive Home's periodic re-read. An older stuck
+  /// row updates on pull-to-refresh and when the app reopens; it must not keep the list re-reading.
+  static const pendingRefreshWindow = Duration(hours: 1);
+
+  /// The rows of [conversations] mid-pipeline whose last activity is within [pendingRefreshWindow].
+  static Iterable<ServerConversation> recentlyMidPipeline(Iterable<ServerConversation> conversations, DateTime now) =>
+      conversations.where((c) {
+        final tile = c.v3?.tileState;
+        if (tile != ConversationTileState.transcribing && tile != ConversationTileState.writing) return false;
+        return now.difference(c.finishedAt ?? c.startedAt ?? c.createdAt) < pendingRefreshWindow;
+      });
+
+  /// Where a bounded re-read of recent rows starts: the earliest creation among [touched] (rows known
+  /// to be changing), never later than [pendingRefreshWindow] ago and never earlier than a day ago.
+  static DateTime recentRefreshSince(Iterable<DateTime> touched, DateTime now) {
+    var since = now.subtract(pendingRefreshWindow);
+    for (final at in touched) {
+      if (at.isBefore(since)) since = at;
+    }
+    final floor = now.subtract(const Duration(days: 1));
+    return (since.isBefore(floor) ? floor : since).subtract(const Duration(minutes: 2));
+  }
 
   void unwatch() {
     if (_watchers > 0) _watchers--;

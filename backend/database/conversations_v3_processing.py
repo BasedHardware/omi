@@ -1,6 +1,7 @@
 """Conversation summary persistence and content-scoped retry fences."""
 
 from database import conversations_v3_leases as leases
+from utils.conversations.v3.live import FINISH_WINDOW_FIELD
 from utils.conversations.v3 import metrics
 
 import hashlib
@@ -246,7 +247,7 @@ def settle_processing(
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
             raise Conflict('processing_source_changed')
         if not row or not python_owns_finalization(row):
-            return False, False, None
+            return False, False, None, False
         if not skipped and not row.get('deleted') and row.get('sync_content_revision') != revision:
             decoded = store.decode_row(uid, snapshot)
             if not content_hash or processing_hash(decoded) != content_hash:
@@ -299,11 +300,13 @@ def settle_processing(
                 **({'v3_manual_end_home_counted': True} if manual_visibility is not None else {}),
             },
         )
-        return armed, settled, manual_visibility
+        return armed, settled, manual_visibility, manual_visibility is not None and row.get(FINISH_WINDOW_FIELD) == cid
 
-    armed, settled, manual_visibility = settle(client.transaction())
+    armed, settled, manual_visibility, finish_settled = settle(client.transaction())
     if manual_visibility is not None:
         metrics.MANUAL_END_HOME.labels(*manual_visibility).inc()
+    if finish_settled:
+        metrics.FINISH_NO_POINTER.labels('settled').inc()
     if settled and word_floor_outcomes is not None:
         metrics.observe_word_floor(*word_floor_outcomes)
     return armed

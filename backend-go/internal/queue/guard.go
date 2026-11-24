@@ -39,7 +39,12 @@ func (g Guarded) Tenant() string { return g.lease.tenant }
 // The derivation is part of the durable contract with every remote system. Never change
 // it; a different derivation needs a new method and a new job format that selects it.
 func (g Guarded) Operation(name string) string {
-	sum := sha256.Sum256([]byte(g.lease.key + "\x00" + name))
+	return OperationID(g.lease.key, name)
+}
+
+// OperationID derives the same stable identity at intake for checking a stored receipt.
+func OperationID(jobKey, name string) string {
+	sum := sha256.Sum256([]byte(jobKey + "\x00" + name))
 	return "op_" + hex.EncodeToString(sum[:20])
 }
 

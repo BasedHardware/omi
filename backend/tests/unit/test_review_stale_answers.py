@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from database import review_store as store, review_changes, task_intelligence_control
+from database.legal_holds import DestructiveOperationInProgress
 from models.agent_tools import HarnessQuestion
 from models.review import AgentProposalItem, EntitySummary, ReviewItem, ReviewItemV2, SamePersonItem
 from models.dream_edit import Term
@@ -559,3 +560,26 @@ def test_missing_entity_is_not_on_the_terminal_allowlist(harness):
     response = answer(client, item_id)
     assert response.status_code == 409, response.text
     assert_released(client, item_id)
+
+
+def test_destructive_gate_releases_the_offered_answer_for_retry(harness, monkeypatch):
+    """A live account gate writes nothing: the answer is released and the 409 is retryable."""
+    client, _ = harness
+    item_id = offer(client)
+
+    def gate_busy(*args, **kwargs):
+        raise DestructiveOperationInProgress('external data write blocked by destructive operation')
+
+    monkeypatch.setattr(review_changes, 'merge_review_entities', gate_busy)
+    response = answer(client, item_id)
+    assert response.status_code == 409, response.text
+    assert response.json() == {'detail': 'account_gate_busy'}
+    assert response.headers['Retry-After'] == '2'
+    row = store.user(UID).collection('review_answers').document(store.safe_id(item_id)).get().to_dict()
+    assert row['state'] == 'offered'
+    assert store.remaining_today(UID) == 3
+    assert proposal(item_id).get().to_dict()['status'] == 'pending'
+
+    monkeypatch.setattr(review_changes, 'merge_review_entities', Mock())
+    assert answer(client, item_id).status_code == 200
+    assert proposal(item_id).get().to_dict()['status'] == 'resolved'

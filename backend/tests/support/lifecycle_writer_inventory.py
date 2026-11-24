@@ -1,6 +1,11 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Finish projects processing into the HTTP response. Only the v3 builder stores window status.
+    'utils/conversations/v3/finish.py': [
+        ('_acknowledge', 'status', 'ConversationStatus.completed', ('status',)),
+        ('_acknowledge', 'status', 'ConversationStatus.processing', ('status',)),
+    ],
     'database/batch_summary_debt.py': [
         ('arm_projection_summary', 'summary_due_at', "candidate['summary_due_at']", ('summary_due_at',)),
         (
@@ -425,7 +430,20 @@ FIELD_SITES = {
             'enqueue.commit',
             'state',
             "'holding'",
-            ('bytes', 'files', 'first_accept_at', 'id', 'key', 'members', 'release_by', 'scan_at', 'seconds', 'state'),
+            (
+                'bytes',
+                'files',
+                'first_accept_at',
+                'id',
+                'key',
+                'members',
+                'profile',
+                'release_by',
+                'scan_at',
+                'seconds',
+                'state',
+                'window_seconds',
+            ),
         ),
         (
             'enqueue.commit',
@@ -1676,6 +1694,9 @@ FIELD_SITES = {
             ('client_mutation_id', 'conversation', 'conversation_id', 'status'),
         ),
     ],
+    'database/conversation_parked_status.py': [
+        ('settle_in_transaction', 'status', "'completed'", ('status',)),
+    ],
     'database/conversation_processing_recovery.py': [
         ('_complete_orphan_conversation_txn', 'status', "'completed'", ('status',)),
         ('_complete_unstampable_orphan_conversation_txn', 'status', "'completed'", ('status',)),
@@ -1723,6 +1744,9 @@ FIELD_SITES = {
             ),
         ),
         ('ensure_quiet_check_progress.repair', 'status', "'quiet_done'", ('reconcile_after_at', 'status')),
+    ],
+    'database/conversation_tombstones.py': [
+        ('accept_deletion.body', 'status', "'completed'", ('status',)),
     ],
     'database/conversation_terminal_title.py': [
         (
@@ -3405,6 +3429,7 @@ FIELD_SITES = {
     ],
     'utils/conversations/process_conversation.py': [
         ('_store_budget_waiting', 'status', 'ConversationStatus.completed', ('status',)),
+        ('_store_deferred_conversation', 'status', 'ConversationStatus.completed', ('status',)),
         ('_store_deferred_conversation', 'status', 'ConversationStatus.processing', ('status',)),
         ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
         ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
@@ -4810,6 +4835,8 @@ FIELD_SITES = {
 # Unclassified sites remain visible pending the typed-outcome redesign.
 KNOWN_TERMINAL_WRITERS = {
     'conversation': {
+        # A terminal-empty acknowledgement is an HTTP projection, with no conversation status write.
+        ('utils/conversations/v3/finish.py', '_acknowledge'): 'response_only',
         (
             'database/conversations_v3.py',
             'commit_projection.commit',
@@ -4842,6 +4869,7 @@ KNOWN_TERMINAL_WRITERS = {
             '_terminalize_exhausted_requeued_job_txn',
         ): 'known_extra_writer: dead_letter',
         ('database/conversation_merge_jobs.py', 'finish_recovery.commit'): 'unclassified',
+        ('database/conversation_tombstones.py', 'accept_deletion.body'): 'known_extra_writer: deletion_tombstone',
         (
             'database/conversation_processing_recovery.py',
             '_complete_orphan_conversation_txn',
@@ -4873,6 +4901,7 @@ KNOWN_TERMINAL_WRITERS = {
         ('utils/conversations/lifecycle.py', 'fail_and_discard_processing'): 'owner',
         ('utils/conversations/lifecycle.py', 'transition'): 'owner',
         ('utils/conversations/process_conversation.py', '_store_budget_waiting'): 'unclassified',
+        ('utils/conversations/process_conversation.py', '_store_deferred_conversation'): 'owner',
         ('utils/conversations/process_conversation.py', 'process_conversation'): 'unclassified',
         ('scripts/staging/replay.py', 'StagingFirestoreSeeder.seed_capture'): 'unclassified',
         ('utils/dream_canary.py', 'seed'): 'unclassified',

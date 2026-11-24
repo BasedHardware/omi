@@ -14,7 +14,6 @@ import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/home_feed.dart';
 import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/pages/episodes/episode_page.dart';
-import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -28,7 +27,6 @@ import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/pages/paywall/value_moment_paywall.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/held_audio/processing_backlog_view.dart';
-import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/conversation_task_presence_provider.dart';
@@ -530,14 +528,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     child: Semantics(
                       selected: isSelectionMode ? isSelected : null,
                       child: _SwipeDeleteRow(
-                        // The live row this phone is capturing swipes open to Finish instead (no
-                        // button on the row itself); any other live row does not swipe.
-                        finish: !isSelectionMode && _isLive && _phoneOwnsCapture(context)
-                            ? () => _finishFromRow(context)
-                            : null,
                         enabled: !isSelectionMode &&
                             !isMerging &&
-                            (!_isLive || _phoneOwnsCapture(context)) &&
+                            !_isLive &&
                             widget.homeEpisode == null &&
                             widget.homeCard?.kind != 'episode',
                         // One delete path (D5): confirm unless opted out, then Undo. The confirm
@@ -795,29 +788,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
   /// The same length the detail page shows (`OmiDuration.compact`, hub audit #15).
   bool get _isLive => conversationIsLiveIn(context, widget.conversation);
 
-  /// Whether this phone is capturing the live conversation, so it can end it: the conversation holds
-  /// a segment this phone captured (a v3 window copies its recordings' segments, ids included).
-  bool _phoneOwnsCapture(BuildContext context) {
-    final conversation = widget.conversation;
-    return context.select<CaptureProvider?, bool>((capture) {
-      if (capture == null) return false;
-      final captured = {for (final segment in capture.segments) segment.id};
-      return captured.isNotEmpty && conversation.transcriptSegments.any((segment) => captured.contains(segment.id));
-    });
-  }
-
-  /// Swipe → Finish: the live page's Finish path (one typed outcome), then its result opens. A
-  /// failure leaves the row live and says so in a toast.
-  Future<void> _finishFromRow(BuildContext context) async {
-    final capture = context.read<CaptureProvider>();
-    final episodes = context.read<EpisodeProvider?>();
-    HapticFeedback.mediumImpact();
-    final outcome = await finishLiveCapture(context, capture, episodes: episodes);
-    if (!context.mounted) return;
-    presentFinishOutcome(context, outcome,
-        entry: FinishEntry.home, onRetry: () => retryFinishFromHome(context, capture));
-  }
-
   /// A v3 row that is not done shows one quiet line where its time goes: "Listening · 11m",
   /// "Transcribing…" or "Writing summary…". It cross-fades in place as the conversation moves on.
   Widget _buildMetaOrStatus(BuildContext context) {
@@ -867,17 +837,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
 /// pops from the button. A swipe past [_askAt] of the row's width opens the row and asks straight
 /// away, as the old swipe-to-delete did. Tapping the open card, swiping it back or scrolling the list
 /// closes it. Once [confirm] says yes, the card slides away and [onDeleted] runs.
-///
-/// With [finish] set (the live row this phone captures) the same swipe reveals Finish instead, in
-/// neutral colours: a tap runs it once, and a long swipe only opens the row, never fires it.
 class _SwipeDeleteRow extends StatefulWidget {
-  const _SwipeDeleteRow(
-      {required this.enabled, required this.confirm, required this.onDeleted, required this.child, this.finish});
+  const _SwipeDeleteRow({required this.enabled, required this.confirm, required this.onDeleted, required this.child});
 
   final bool enabled;
-
-  /// Ends the live capture; when set the row reveals Finish, not delete.
-  final Future<void> Function()? finish;
 
   /// Asks to delete; [anchor] is the delete button's rect on screen.
   final Future<bool> Function(Rect anchor) confirm;
@@ -893,12 +856,7 @@ class _SwipeDeleteRowState extends State<_SwipeDeleteRow> with SingleTickerProvi
   static const double _inset = 16;
 
   /// How far the card rests open: the button and the air on either side of it.
-  static const double _deleteOpen = _button + 2 * _inset;
-
-  /// Finish carries its word, so its pill is wider than the round delete button.
-  static const double _finishWidth = 96;
-  double get _open => widget.finish != null ? _finishWidth + 2 * _inset : _deleteOpen;
-  bool _finishing = false;
+  static const double _open = _button + 2 * _inset;
 
   /// Past this share of the row's width, letting go asks straight away.
   static const double _askAt = 0.4;
@@ -953,26 +911,13 @@ class _SwipeDeleteRowState extends State<_SwipeDeleteRow> with SingleTickerProvi
   void _onDragEnd(DragEndDetails details) {
     if (_asking) return;
     final velocity = _rtl ? details.primaryVelocity! : -details.primaryVelocity!;
-    if (widget.finish == null && _offset.value >= _width * _askAt) {
+    if (_offset.value >= _width * _askAt) {
       _settle(_open);
       _ask();
       return;
     }
     final open = velocity > 300 || (velocity > -300 && _offset.value > _open / 2);
     _settle(open ? _open : 0);
-  }
-
-  /// Finish runs once per tap; the row closes and the outcome says what happened.
-  Future<void> _runFinish() async {
-    final finish = widget.finish;
-    if (finish == null || _finishing) return;
-    _finishing = true;
-    unawaited(_settle(0));
-    try {
-      await finish();
-    } finally {
-      _finishing = false;
-    }
   }
 
   Future<void> _ask() async {
@@ -1005,64 +950,41 @@ class _SwipeDeleteRowState extends State<_SwipeDeleteRow> with SingleTickerProvi
           onHorizontalDragEnd: widget.enabled ? _onDragEnd : null,
           child: Stack(
             children: [
-              Positioned.fill(
-                child: Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: Padding(
-                    padding: const EdgeInsetsDirectional.only(end: _inset),
-                    child: AnimatedBuilder(
-                      animation: _offset,
-                      builder: (context, child) {
-                        final t = Curves.easeOut.transform((_offset.value / _open).clamp(0.0, 1.0));
-                        return Opacity(
-                          opacity: t,
-                          child: Transform.scale(scale: 0.6 + 0.4 * t, child: child),
-                        );
-                      },
-                      child: widget.finish != null
-                          ? Semantics(
-                              button: true,
-                              label: context.l10n.finish,
-                              excludeSemantics: true,
-                              child: GestureDetector(
-                                key: _buttonKey,
-                                behavior: HitTestBehavior.opaque,
-                                onTap: _runFinish,
-                                child: Container(
-                                  key: const ValueKey('conversation_swipe_finish'),
-                                  width: _finishWidth,
-                                  height: _button,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.pillAll),
-                                  child: Text(context.l10n.finish,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: OmiType.subhead
-                                          .copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w600)),
-                                ),
-                              ),
-                            )
-                          : Semantics(
-                              button: true,
-                              label: context.l10n.delete,
-                              child: GestureDetector(
-                                key: _buttonKey,
-                                behavior: HitTestBehavior.opaque,
-                                onTap: _ask,
-                                child: Container(
-                                  key: const ValueKey('conversation_swipe_delete'),
-                                  width: _button,
-                                  height: _button,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(color: OmiColors.danger, shape: BoxShape.circle),
-                                  child: const FaIcon(FontAwesomeIcons.trashCan, size: 17, color: Colors.white),
-                                ),
-                              ),
+              if (widget.enabled)
+                Positioned.fill(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Padding(
+                      padding: const EdgeInsetsDirectional.only(end: _inset),
+                      child: AnimatedBuilder(
+                        animation: _offset,
+                        builder: (context, child) {
+                          final t = Curves.easeOut.transform((_offset.value / _open).clamp(0.0, 1.0));
+                          return Opacity(
+                            opacity: t,
+                            child: Transform.scale(scale: 0.6 + 0.4 * t, child: child),
+                          );
+                        },
+                        child: Semantics(
+                          button: true,
+                          label: context.l10n.delete,
+                          child: GestureDetector(
+                            key: _buttonKey,
+                            behavior: HitTestBehavior.opaque,
+                            onTap: _ask,
+                            child: Container(
+                              key: const ValueKey('conversation_swipe_delete'),
+                              width: _button,
+                              height: _button,
+                              decoration: BoxDecoration(color: OmiColors.danger, shape: BoxShape.circle),
+                              child: const FaIcon(FontAwesomeIcons.trashCan, size: 17, color: Colors.white),
                             ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
               AnimatedBuilder(
                 animation: _offset,
                 builder: (context, child) => Transform.translate(

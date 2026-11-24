@@ -83,6 +83,7 @@ from config.episodes import (
 )
 from database import conversations as conversations_db
 from database import episodes as episodes_db
+from database.episode_finalization_fence import EpisodeFinalizationDeleted
 from utils.conversations.recorded_time import conversation_span
 from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
 from utils.episodes import compose_wait, composer_context, metrics, policy, transcript_receipts
@@ -789,6 +790,8 @@ def compose(
     started = time.monotonic()
     try:
         outcome = _compose(uid, episode_id, c, force=force, background=background, service=service, trigger=trigger)
+    except EpisodeFinalizationDeleted:
+        outcome = 'skipped_deleted'
     except Exception as error:  # Never break finalization or reads.
         logger.warning('event=episode_compose outcome=error exception_type=%s', type(error).__name__)
         outcome = 'error'
@@ -911,6 +914,7 @@ def _write(
                 updates=payload,
                 firestore_client=c.firestore_client,
                 expected_member_revisions=expected_member_revisions,
+                finalizing_conversation_id=getattr(c, 'finalizing_conversation_id', None),
             )
             return 'written'
         except episodes_db.EpisodeConflict as error:
@@ -1647,6 +1651,8 @@ def _observe_evidence(
         if outcome != 'written':
             raise ComposeFailed('settle_state_conflict')
         return episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or dict(episode)
+    except EpisodeFinalizationDeleted:
+        raise
     except Exception as error:
         logger.warning('event=episode_compose_settle outcome=bypassed exception_type=%s', type(error).__name__)
         record_fallback(
@@ -2040,6 +2046,8 @@ def schedule_for_conversation(
                     if changed:
                         _observe_evidence(uid, episode, c, evidence)
             schedule(uid, str(episode['id']), collaborators=collaborators, trigger='member_final')
+    except EpisodeFinalizationDeleted:
+        return
     except Exception as error:
         logger.warning('event=episode_compose_schedule outcome=error exception_type=%s', type(error).__name__)
 

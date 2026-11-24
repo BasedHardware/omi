@@ -57,6 +57,12 @@ class _Client:
         return self.buckets[name]
 
 
+@pytest.fixture(autouse=True)
+def _no_sync_uploads(monkeypatch):
+    # Sync staging lookups read the owner's ledger; these fakes have none unless a test says so.
+    monkeypatch.setattr('database.sync_ledger_sources.staging_job_ids', lambda *args, **kwargs: [])
+
+
 def test_owner_prefix_purge_removes_private_and_non_private_uid_objects(monkeypatch):
     uid = 'uid1'
     buckets = {
@@ -356,3 +362,66 @@ def test_privacy_erases_snapshotted_bridge_donors_only_at_explicit_boundary(monk
     storage_mod.delete_privacy_conversation_audio('u', 'survivor', source_ids=['donor', 'donor'])
     assert erased.call_count == 2
     assert {call.args for call in erased.call_args_list} == {(private, 'u', 'survivor'), (private, 'u', 'donor')}
+
+
+def _staging_buckets(monkeypatch, jobs):
+    private = _Bucket({'chunks/u/c/a.bin', 'chunks/u/donor/b.bin', 'chunks/u/other/c.bin'})
+    syncing = _Bucket({'syncing/u/job-a/1.bin', 'syncing/u/job-a/seg_1.wav', 'syncing/u/job-other/2.bin'})
+    syncing.names.add('syncing/stranger/job-a/3.bin')
+    derived = _Bucket({'syncing/u/job-a/4.bin', 'chunks/u/c/d.bin'})
+    for name, bucket in (('private', private), ('syncing', syncing), ('derived', derived)):
+        bucket.name = name
+    monkeypatch.setattr(
+        storage_mod,
+        '_get_storage_client',
+        lambda: _Client({'private': private, 'syncing': syncing, 'derived': derived}),
+    )
+    monkeypatch.setattr(storage_mod, 'private_cloud_sync_bucket', 'private')
+    monkeypatch.setattr(storage_mod, 'syncing_local_bucket', 'syncing')
+    monkeypatch.setenv('BUCKET_AUDIO_DERIVED', 'derived')
+    monkeypatch.delenv('BUCKET_CANONICAL_AUDIO', raising=False)
+    looked_up = []
+
+    def lookup(uid, conversation_ids, **kwargs):
+        looked_up.append((uid, list(conversation_ids)))
+        return list(jobs)
+
+    monkeypatch.setattr('database.sync_ledger_sources.staging_job_ids', lookup)
+    return private, syncing, derived, looked_up
+
+
+def test_privacy_delete_erases_sync_staging_and_donor_prefixes(monkeypatch):
+    private, syncing, derived, looked_up = _staging_buckets(monkeypatch, ['job-a'])
+    storage_mod.delete_privacy_conversation_audio('u', 'c', source_ids=['donor'])
+    assert looked_up == [('u', ['c', 'donor'])]
+    assert private.names == {'chunks/u/other/c.bin'}
+    # Only this owner's staging for the upload that fed the conversation goes.
+    assert syncing.names == {'syncing/u/job-other/2.bin', 'syncing/stranger/job-a/3.bin'}
+    assert derived.names == set()
+
+
+def test_held_sync_staging_is_kept_and_reported_after_every_prefix_is_tried(monkeypatch):
+    private, syncing, derived, _ = _staging_buckets(monkeypatch, ['job-a'])
+    held = 'syncing/u/job-a/1.bin'
+    delete = _Blob.delete
+
+    def delete_with_hold(blob):
+        if blob.name == held:
+            raise Forbidden('held', errors=[{'reason': 'objectUnderActiveHold'}])
+        delete(blob)
+
+    monkeypatch.setattr(_Blob, 'generation', 1, raising=False)
+    monkeypatch.setattr(_Blob, 'delete', delete_with_hold)
+    with pytest.raises(account_deletion_operational_holds.StoragePrefixPurgeBlocked) as error:
+        storage_mod.delete_privacy_conversation_audio('u', 'c')
+    assert error.value.objects == {('syncing', held, 1): 'objectUnderActiveHold'}
+    assert syncing.names == {held, 'syncing/u/job-other/2.bin', 'syncing/stranger/job-a/3.bin'}
+    assert derived.names == set()
+    assert 'chunks/u/c/a.bin' not in private.names
+
+
+def test_no_ledger_upload_leaves_staging_untouched(monkeypatch):
+    _private, syncing, _derived, _ = _staging_buckets(monkeypatch, [])
+    before = set(syncing.names)
+    assert storage_mod.delete_conversation_sync_staging('u', ['c']) == 0
+    assert syncing.names == before

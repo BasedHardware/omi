@@ -1,15 +1,17 @@
 // The End action on a v3 conversation in progress; owns only when it shows and what it calls.
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/home/home_navigation.dart';
+import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -38,31 +40,54 @@ class LiveConversationEndButton extends StatefulWidget {
     return conversation.transcriptSegments.any((segment) => captured.contains(segment.id));
   }
 
+  /// Whether the current capture can finish this window.
+  static bool phoneCaptures(ServerConversation conversation, CaptureProvider capture, {String? currentLiveId}) {
+    final verified = capture.verifiedLiveServerRecordingId;
+    final recordings = conversation.v3?.recordingIds ?? const <String>[];
+    if (verified != null && capture.hasClosedServerRecording(verified)) {
+      // Process Now can close the recording before Listen announces its replacement.
+      // The local close clears segment arrivals. Require a segment received since that
+      // cut in the current live window, and reject windows still listing the closed source.
+      return EpisodePresentation.streamingSource(capture) != null &&
+          conversation.id == currentLiveId &&
+          recordings.isNotEmpty &&
+          !recordings.contains(verified) &&
+          ownsCapture(conversation, capture.locallyReceivedSegmentIds);
+    }
+    // Listen may rotate while the client capture ID and earlier segments are still
+    // present. A window that names its sources must then list the verified recording.
+    if (verified != null && recordings.isNotEmpty) return recordings.contains(verified);
+    if (EpisodePresentation.streamingSource(capture) == null && verified == null) return false;
+    return recordings.contains(capture.activeRecordingId) ||
+        ownsCapture(conversation, capture.locallyReceivedSegmentIds);
+  }
+
   @override
   State<LiveConversationEndButton> createState() => _LiveConversationEndButtonState();
 }
 
 class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
   bool _ended = false;
-
-  bool _owns(ServerConversation conversation, CaptureProvider capture, bool v3Feedback) {
-    final recordingId = v3Feedback ? capture.verifiedLiveServerRecordingId : null;
-    return (recordingId != null && conversation.v3?.recordingIds.contains(recordingId) == true) ||
-        LiveConversationEndButton.ownsCapture(
-          conversation,
-          capture.segments.map((s) => s.id),
-        );
-  }
+  // Failure count when a successful close latched End; a later unsuccessful settlement releases it.
+  int? _latchedFailures;
 
   @override
   Widget build(BuildContext context) {
     final conversation = widget.conversation;
-    final v3Feedback = context.select<ConversationsV3Provider?, bool>(
-      (v3) => v3?.finishFeedbackEnabled ?? false,
-    );
+    final currentLiveId = context.select<ConversationsV3Provider?, String?>((v3) => v3?.live?.id);
     final mine = context.select<CaptureProvider?, bool>(
-      (capture) => capture != null && _owns(conversation, capture, v3Feedback),
+      (capture) =>
+          capture != null &&
+          LiveConversationEndButton.phoneCaptures(conversation, capture, currentLiveId: currentLiveId),
     );
+    final failures = context.select<ConversationsV3Provider?, int>((v3) => v3?.finishFailures ?? 0);
+    if (_ended && _latchedFailures != null && failures != _latchedFailures) {
+      _latchedFailures = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _ended = false;
+        if (mounted) widget.onEndSuppressionChanged?.call(false);
+      });
+    }
     if (!mine) return const SizedBox.shrink();
     final label = context.l10n.endConversation;
     return Padding(
@@ -83,34 +108,45 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
             ),
             child: InkWell(
               borderRadius: OmiRadius.pillAll,
-              onTap: () {
-                if (_ended) return;
-                HapticFeedback.mediumImpact();
+              onTap: () async {
                 final capture = context.read<CaptureProvider>();
                 // Checked again at the tap: the capture may have moved on since the last build.
-                if (!_owns(conversation, capture, v3Feedback)) return;
+                final v3 = context.read<ConversationsV3Provider?>();
+                if (_ended ||
+                    !LiveConversationEndButton.phoneCaptures(conversation, capture, currentLiveId: v3?.live?.id)) {
+                  return;
+                }
                 _ended = true;
+                HapticFeedback.mediumImpact();
                 final setEndSuppressed = widget.onEndSuppressionChanged;
                 setEndSuppressed?.call(true);
-                final v3 = context.read<ConversationsV3Provider?>();
                 final previousFinish = v3?.finishRow;
-                // Settled: on success the capture has cleared and End is gone; after a failed drain the
-                // capture keeps its segments, and End works again.
-                unawaited(
-                  capture
-                      .forceProcessingCurrentConversation(manualFinish: true, liveConversationId: conversation.id)
-                      .whenComplete(() {
+                final failuresAtTap = v3?.finishFailures;
+                var started = false;
+                var closed = false;
+                try {
+                  final finish = capture.forceProcessingCurrentConversation(
+                      manualFinish: true, liveConversationId: conversation.id);
+                  started = v3?.finishRow != null && !identical(v3!.finishRow, previousFinish);
+                  await finish;
+                  closed = true;
+                } catch (_) {
+                  // The close kept the capture. End stays on detail so the user can retry it.
+                  return;
+                } finally {
+                  // A closed window with a published finish stays latched; only a failed close restores End.
+                  if (!(closed && started)) {
                     _ended = false;
-                    if (_owns(conversation, capture, v3Feedback)) {
-                      setEndSuppressed?.call(false);
-                    }
-                  }).catchError((Object _) {}),
-                );
-                if (v3?.finishRow != null &&
-                    !identical(v3!.finishRow, previousFinish) &&
-                    ModalRoute.of(context)?.isCurrent == true) {
-                  unawaited(Navigator.of(context).maybePop());
+                    setEndSuppressed?.call(false);
+                  } else {
+                    _latchedFailures = failuresAtTap;
+                  }
                 }
+                if (!context.mounted || !started || ModalRoute.of(context)?.isCurrent != true) return;
+                // A filtered Home cannot show the Processing row; the result lands on this detail instead.
+                if (context.read<ConversationProvider?>()?.showsDefaultHome != true) return;
+                context.read<HomeProvider?>()?.showNewestOnHome();
+                HomeNavigation.returnHome(context);
               },
               // At most half the bar, so Ask Omi keeps its room; a long translation scales down on one
               // line, then ellipsizes, rather than overflowing a 320pt screen.

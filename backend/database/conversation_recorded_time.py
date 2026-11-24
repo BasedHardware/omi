@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from google.cloud import firestore
 
 from config.recording_speakers import with_creation_scope_index
+from database import home_visibility_index
 from database._client import run_transactional
 from utils.conversations.recorded_time import SPAN_FIELDS, span_fields, write_span
 
@@ -46,7 +47,7 @@ def create_if_absent(uid, payload, *, firestore_client, stage_identity=None):
             changed = processing_backlog.stage_transition(
                 transaction, uid, data['id'], {}, data, firestore_client=firestore_client
             )
-        transaction.create(ref, data)
+        transaction.create(ref, home_visibility_index.stamp(data))
         return True, changed
 
     return run_transactional(firestore_client, create)

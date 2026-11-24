@@ -15399,9 +15399,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get stopThese => 'వీటిని ఆపండి';
 
   @override
-  String get meetingActionItemsTitle => 'చర్య అంశాలు';
-
-  @override
   String get addToTasks => 'పనులకు జోడించండి';
 
   @override
@@ -15886,5 +15883,16 @@ class AppLocalizationsTe extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me ద్వారా బిల్ చేయబడుతుంది. ఎప్పుడైనా ఇక్కడ రద్దు చేయండి.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me ద్వారా బిల్ చేయబడుతుంది.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'మీ $plan ప్లాన్ పాజ్ చేయబడింది.';
   }
 }

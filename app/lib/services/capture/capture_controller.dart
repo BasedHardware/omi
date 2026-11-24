@@ -159,6 +159,7 @@ class CaptureController extends ChangeNotifier
   final Future<bool> Function(String deviceId, int level)? _speakerHaptic;
   final Future<CreateConversationResponse?> Function()? _processInProgressConversationOverride;
   final Future<InProgressProcessOutcome> Function()? _processInProgressOutcomeOverride;
+  final InProgressConversationRequestSender? _processRequestSender;
   final _PhoneDiscardState _phoneDiscard;
   final Future<DeviceConnection?> Function(String deviceId)? _deviceConnectionLoader;
   final Future<void> Function(String deviceId)? _pendantReconnectLoader;
@@ -449,6 +450,7 @@ class CaptureController extends ChangeNotifier
     Future<bool?> Function(String deviceId)? deviceMuteReader,
     Future<void> Function(String deviceId, bool muted)? deviceMuteWriter,
     Future<InProgressProcessOutcome> Function()? processInProgressOutcome,
+    @visibleForTesting InProgressConversationRequestSender? processRequestSender,
     Future<bool> Function(String conversationId)? deleteDiscardedConversation,
     List<Duration> discardDeleteRetryDelays = const [Duration(seconds: 5), Duration(seconds: 30), Duration(minutes: 2)],
     Future<DeviceConnection?> Function(String deviceId)? deviceConnectionLoader,
@@ -480,6 +482,7 @@ class CaptureController extends ChangeNotifier
         _sessionOwner = sessionOwner,
         _processInProgressConversationOverride = processInProgressConversation,
         _processInProgressOutcomeOverride = processInProgressOutcome,
+        _processRequestSender = processRequestSender,
         _phoneDiscard = _PhoneDiscardState(
           retryDelays: discardDeleteRetryDelays,
           deleteOverride: deleteDiscardedConversation,
@@ -858,6 +861,10 @@ class CaptureController extends ChangeNotifier
   /// conversation so the pipeline can be joined without timing heuristics.
   String? get activeRecordingId => _recordingTelemetry.recordingId;
 
+  /// Live segments received by this capture, excluding account-wide snapshot-only segments.
+  Iterable<String> get locallyReceivedSegmentIds =>
+      segments.map((segment) => segment.id).where(_segmentArrivals.containsKey);
+
   ({String uid, String? recordingId, CaptureSessionToken? token})? _liveSocketIdentity;
 
   bool get _canReuseTranscriptionSocket {
@@ -891,6 +898,9 @@ class CaptureController extends ChangeNotifier
     // when the direct connection and its client capture identifier stay valid.
     return socket.liveRecording?.recordingId;
   }
+
+  /// Whether the capture has seen the server close this exact recording.
+  bool hasClosedServerRecording(String recordingId) => _closedServerRecordings.contains(recordingId);
 
   // Identifies a conversation boundary within a continuous recording. This is
   // presentation/action identity, not another capture authorization generation.
@@ -1038,6 +1048,7 @@ class CaptureController extends ChangeNotifier
 
   final Map<String, _ConversationClose> _pendingConversationCloses = {};
   final Set<String> _seenConversationCloses = {};
+  final Set<String> _closedServerRecordings = {};
   final Set<_ConversationClose> _admittedConversationCloses = {};
   final Set<_ConversationClose> _pendingProcessCloses = {};
   int _conversationCustodyEpoch = 0;
@@ -1235,11 +1246,15 @@ class CaptureController extends ChangeNotifier
   /// Finish through the coordinator and return that exact Process Now answer, with why it has no
   /// conversation when it has none (transport, not found, empty). Throws [StateError] when this
   /// finish made no request (a phone Transcribe Later recording).
-  Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
+  Future<InProgressProcessOutcome> finishCaptureWithOutcome({String? liveConversationId}) async {
     _lastProcessRequest = null;
     _firstCaptureProcess = true;
     try {
-      await finishCapture();
+      if (liveConversationId == null) {
+        await finishCapture();
+      } else {
+        await _requestFinish(FinishRequested(liveConversationId: liveConversationId));
+      }
       final request = _lastProcessRequest;
       if (request == null) throw FinishMadeNoRequest();
       return await request;
@@ -3434,8 +3449,10 @@ class CaptureController extends ChangeNotifier
   /// Finish the live capture: the one stop for the live page and the Home button. A phone
   /// recording is stopped and processed before a pendant it took over from resumes, so the
   /// processing request reaches the phone's conversation, not the pendant's next one.
-  Future<void> finishCapture() async {
-    final outcome = await _capture.dispatch(const FinishRequested());
+  Future<void> finishCapture() => _requestFinish(const FinishRequested());
+
+  Future<void> _requestFinish(FinishRequested event) async {
+    final outcome = await _capture.dispatch(event);
     outcome.throwIfFailed();
   }
 
@@ -4406,7 +4423,8 @@ class CaptureController extends ChangeNotifier
     try {
       // Publish the skeleton before waiting for disk, preserving immediate Process Now feedback.
       if (showManualFinish) {
-        actions.onManualFinishStarted(placeholder, sourceId,
+        final openSourceId = sourceId != null && hasClosedServerRecording(sourceId) ? null : sourceId;
+        actions.onManualFinishStarted(placeholder, openSourceId,
             liveConversationId: liveConversationId, captureId: recordingSessionId);
       }
       actions.addProcessingConversation(placeholder);
@@ -4431,30 +4449,36 @@ class CaptureController extends ChangeNotifier
           : _processInProgressConversationOverride != null
               ? _processInProgressConversationOverride!().then((result) =>
                   InProgressProcessOutcome(response: result, absence: result == null ? ProcessAbsence.transport : null))
-              : processInProgressConversationOutcome();
+              : processInProgressConversationOutcome(
+                  liveConversationId: liveConversationId, sendRequest: _processRequestSender);
       requestAdmitted = true;
       if (confirmedProcessing) _lastProcessRequest = request;
       _processInFlight = request.then((_) {}, onError: (_) {});
       request.then<void>((outcome) async {
         // Bind before any asynchronous publication and before awaiting the ordered stamp slot.
-        final conversationId = outcome.response?.conversation?.id;
+        final saved = outcome.response?.conversation;
+        final conversationId = saved?.id;
         close.bind(conversationId);
         _pendingProcessCloses.remove(close);
         if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
-        if (conversationId != null) _rememberConversationClose(conversationId);
-        if (showManualFinish) {
-          actions.onManualFinishSettled(placeholder, outcome, showFailure: !confirmedProcessing);
+        if (saved != null) {
+          // Always remembered: a later processing-started event for this id must not cut again.
+          final closed = saved.status != ConversationStatus.in_progress;
+          _rememberConversationClose(saved.id, closed: closed);
+          if (closed && saved.id == verifiedLiveServerRecordingId) notifyListeners();
         }
+        if (showManualFinish) actions.onManualFinishSettled(placeholder, outcome, showFailure: !confirmedProcessing);
         await OptimisticProcessingPlaceholder.applyProcessResult(
           result: outcome.response,
           absence: outcome.absence,
           actions: externalActions,
           onCreated: _processConversationCreated,
-          onNoConversation: _onProcessProducedNoConversation,
+          // A manual v3 finish that reports its own failure owns the user copy; keep analytics here.
+          onNoConversation: (absence) => _onProcessProducedNoConversation(absence,
+              finishOwnsCopy: showManualFinish && !confirmedProcessing && actions.v3FinishFeedbackEnabled),
           removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
         );
         if (close.sessionStartSeconds > 0 && conversationId != null) {
-          final saved = outcome.response?.conversation;
           if (saved != null && close.phone is LocalWalSyncImpl) {
             await _confirmSessionTranscript(close.sessionStartSeconds, saved, close.segmentArrivals,
                 close: close, needsRepair: close.needsRepair, allowTranscriptCoverageFallback: close.customStt);
@@ -4480,7 +4504,9 @@ class CaptureController extends ChangeNotifier
     } catch (_) {
       close.bind(null);
       if (showManualFinish) {
-        actions.onManualFinishSettled(placeholder, null, showFailure: !confirmedProcessing);
+        // The detail button is still available to retry a failed local drain.
+        actions.onManualFinishSettled(placeholder, null,
+            showFailure: !confirmedProcessing && liveConversationId == null);
       }
       if (placeholderOwner == _processingPlaceholderOwner) {
         actions.removeProcessingConversation(
@@ -4573,12 +4599,13 @@ class CaptureController extends ChangeNotifier
     return null;
   }
 
-  void _onProcessProducedNoConversation(ProcessAbsence absence) {
+  void _onProcessProducedNoConversation(ProcessAbsence absence, {bool finishOwnsCopy = false}) {
     if (_conversationDeliveredForCurrentCapture) return;
     switch (absence) {
       case ProcessAbsence.emptyBody:
-        _announceNoConversation(EmptyRecordingReason.emptyDeleted);
+        _announceNoConversation(EmptyRecordingReason.emptyDeleted, showUserCopy: !finishOwnsCopy);
       case ProcessAbsence.notFound:
+        if (externalActions.v3FinishFeedbackEnabled) return;
         // POST /v1/conversations returns 404 both when nothing was captured and
         // when the conversation was already finalized. Let the conversation-created
         // path set [_deliveredExplanationGeneration] before treating this as empty.
@@ -5047,7 +5074,7 @@ class CaptureController extends ChangeNotifier
           FlushPhoneFramesStage() => Future.sync(_flushPhoneFrames),
           RecordingMarkStage() => Future.sync(() => updateRecordingState(stage.state)),
           DeviceStopTelemetryStage() => _deviceStopTelemetryBody(cleanDevice: stage.cleanDevice),
-          ProcessConversationStage() => _processConversationBody(),
+          ProcessConversationStage() => _processConversationBody(stage.liveConversationId),
           SocketClosedStage() => _socketClosedBody(stage.closeCode),
           SocketConnectedStage() => _socketConnectedBody(),
           SocketErrorStage() => _socketErrorBody(stage.error),
@@ -5065,8 +5092,8 @@ class CaptureController extends ChangeNotifier
           StartPhoneBatchStage() => _startPhoneMicBatchBody(auto: stage.auto),
         };
 
-  Future<void> _processConversationBody() async {
-    await forceProcessingCurrentConversation();
+  Future<void> _processConversationBody(String? liveConversationId) async {
+    await forceProcessingCurrentConversation(liveConversationId: liveConversationId);
     await _processInFlight;
   }
 }
