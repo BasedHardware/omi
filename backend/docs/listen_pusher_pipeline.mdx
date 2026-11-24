@@ -9301,6 +9301,22 @@ single-recognizer padded-empty path is unchanged. The switch adds no provider
 call and needs `BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED`; the shadow
 lane reports the same outcome. Units already `failed_held` are not revisited.
 
+`BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED` (default off, read per
+call on the CPU recovery roles) is the same rule for language-guarded units
+(`unsupported_language`: Parakeet never ran). When Modulate and the
+independent Soniox call both return a validated empty answer for a guarded
+unit whose strict VAD found speech, the unit settles `no_recoverable_speech`
+with both `recognizer_receipts` and the language-guard evidence. The two
+switches are independent: neither opens the other's case. The settlement
+fence accepts a guarded `no_recoverable_speech` result only while this switch
+is on and the job holds both empty receipts, which is the evidence the
+operator terminal disposition already requires. A provider error, words, a
+missing receipt or a refused Soniox call keep the unit `failed_held`; a
+guarded unit above the 60-second independent ceiling is never asked of Soniox,
+so it stays held. The sub-threshold silence rule is unchanged. The settlement
+counter reports these closes as `language_guarded="true"`,
+`result="no_recoverable_speech"`.
+
 Recovery exception boundaries, including the async independent Soniox call,
 emit `event=batch_recovery_stage_failure` with bounded stage/reason and the
 exception type name only. These intermediate warnings do not imply terminal
