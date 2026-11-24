@@ -1097,3 +1097,105 @@ def test_a_new_outcome_clears_detail_fields_it_does_not_set(tombstone_db, audio_
     row = _audio_row(tombstone_db)
     assert row['last_reason'] == 'RuntimeError'
     assert row['blocked_objects'] is firestore.DELETE_FIELD and row['unverified'] is firestore.DELETE_FIELD
+
+
+def test_more_than_500_owed_segments_are_journaled_in_bounded_chunks(
+    monkeypatch, owner, tombstone_db, armed, dispatch, fast_clock
+):
+    """One Firestore transaction holds at most 500 writes: a big upload's owed ids must not fail forever."""
+    plane = owner.plane()
+    ids = {f'seg-{i:04d}' for i in range(520)}
+    for segment_id in ids:
+        plane.add('jobs', segment_id, conversation_id='capture-identity', priority=1)
+    row = _obligation(tombstone_db, 'c1')
+    row['progress'] = {'ns': len(purge.NAMESPACES), 'phase': 'discover'}  # cursor past discovery
+    row['progress_arm'] = {'armed_at': row['armed_at'], 'arm_revision': row['arm_revision']}
+    plane.owed = {'c1': {NS: set(ids)}}
+    sizes, positions = [], []
+    checkpoint = purge_jobs.RunProgress.checkpoint
+
+    def bounded(self, position, *, add_segments=None):
+        if add_segments is not None:
+            sizes.append(len(list(add_segments[1])))
+        else:
+            positions.append(dict(position))
+        return checkpoint(self, position, add_segments=add_segments)
+
+    monkeypatch.setattr(purge_jobs.RunProgress, 'checkpoint', bounded)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    outcome = _run(armed, 1)
+    while outcome == 'checkpointed':
+        _advance(tombstone_db, armed, 1)
+        deletion_batch_purge.reconcile_conversation_batch_purges()
+        outcome = _run(armed, int(_obligation(tombstone_db, 'c1')['generation']))
+    assert outcome == 'purged'
+    journaled = [size for size in sizes if size]
+    assert sum(journaled[:2]) == 520 and max(journaled) <= purge.OWED_JOURNAL_CHUNK
+    # The rewind was persisted before the first chunk, so a crash between chunks resumes at dependents.
+    assert positions[0] == {'ns': 0, 'phase': 'dependents'}
+    assert not any(plane.doc('jobs', segment_id) for segment_id in ids)
+
+
+def test_a_legal_hold_pass_still_records_the_ledger_before_it_expires(monkeypatch, tombstone_db, audio_job):
+    from database import sync_ledger_sources as sources  # noqa: F401 - _fake_ledger patches it
+
+    ledger = _fake_ledger(monkeypatch, tombstone_db)
+    tombstone_db.docs[f'{ledger}/upload'] = {
+        'job_id': 'job-x',
+        'status': 'processing',
+        'result': {'new_memories': ['c1'], 'updated_memories': []},
+    }
+
+    def held(uid):
+        raise legal_holds.LegalHoldActive('held')
+
+    monkeypatch.setattr(purge_jobs, 'assert_account_deletion_permitted', held)
+    erase = MagicMock()
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'held'
+    )
+    # The upload completes and feeds a sibling while the hold lasts; the next held pass records both.
+    tombstone_db.docs[f'{ledger}/upload'] = {
+        'job_id': 'job-x',
+        'status': 'completed',
+        'result': {'new_memories': ['c1', 'late'], 'updated_memories': []},
+    }
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'held'
+    )
+    row = _audio_row(tombstone_db)
+    assert row['staging_sources'] == {'job-x': ['c1', 'late']} and row['staging_settled'] == ['job-x']
+    erase.assert_not_called()
+
+
+def test_visible_row_backs_off_to_hourly_then_daily_and_counts_toward_the_alert(tombstone_db, audio_job):
+    tombstone_db.docs[f'users/{UID}/conversations/c1'] = {'status': 'completed'}
+    erase = MagicMock()
+    start = purge_jobs._now()
+    waits = []
+    for hours in (0, 0, 0, 0, 0, 0):
+        assert purge_jobs.run_audio_erasure_job(
+            audio_job, _audio_generation(tombstone_db, audio_job), erase=erase, now=start
+        ) == ('conversation_row_live')
+        row = _audio_row(tombstone_db)
+        waits.append(round((row['due_at'] - purge_jobs._now()).total_seconds() / 60))
+        assert row['attempts'] == 0
+    assert waits == [5, 10, 20, 40, 60, 60]
+    later = start + purge_jobs.timedelta(hours=25)
+    purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase, now=later)
+    row = _audio_row(tombstone_db)
+    assert row['due_at'] > purge_jobs._now() + purge_jobs.timedelta(hours=23)  # daily
+    assert row['attempts'] >= 1  # past a day it counts toward the stuck-obligation alert
+    assert row['row_live_since'] == start
+    erase.assert_not_called()
+
+
+def test_sync_conversation_with_nothing_traceable_logs_the_accepted_retention(monkeypatch, tombstone_db, caplog):
+    caplog.set_level('INFO', logger=purge_jobs.logger.name)
+    monkeypatch.setattr(purge_jobs, 'assert_account_deletion_permitted', lambda uid: None)
+    _fake_ledger(monkeypatch, tombstone_db)
+    tombstone_db.docs[f'users/{UID}/deleted_conversations/c1'] = {'conversation_id': 'c1'}
+    purge_jobs.arm_audio_erasure(UID, 'c1', [], sync_sourced=True)
+    job = purge_jobs.audio_job_id(UID, 'c1')
+    assert purge_jobs.run_audio_erasure_job(job, _audio_generation(tombstone_db, job), erase=MagicMock()) == 'erased'
+    assert 'outcome=staging_undiscoverable_after_ledger_ttl' in caplog.text

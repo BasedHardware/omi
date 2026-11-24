@@ -292,7 +292,7 @@ def test_cascade_donor_inventory_read_failure_is_retryable_503(monkeypatch):
         response = client.delete('/v1/conversations/conversation-1?cascade=true')
     assert response.status_code == 503
     assert response.json()['detail'] == 'Conversation storage deletion is busy, please retry'
-    assert read.call_args.kwargs == {'field_paths': ['sync_merged_from']}
+    assert read.call_args.kwargs == {'field_paths': ['sync_merged_from', 'sync_content_revision']}
     conversations.delete_conversation_audio_under_gate.assert_not_called()
     conversations.delete_conversation_and_frame_evidence.assert_not_called()
 

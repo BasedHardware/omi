@@ -74,9 +74,9 @@ def durable_audio_erasure() -> bool:
     return is_conversation_batch_purge_dispatch_configured() is True
 
 
-def arm_audio_erasure(uid: str, conversation_id: str, source_ids: list[str]) -> None:
+def arm_audio_erasure(uid: str, conversation_id: str, source_ids: list[str], *, sync_sourced: bool = False) -> None:
     """Owe a deleted conversation's audio (and its merge donors') to the durable runner."""
-    purge_jobs.arm_audio_erasure(uid, conversation_id, source_ids)
+    purge_jobs.arm_audio_erasure(uid, conversation_id, source_ids, sync_sourced=sync_sourced)
 
 
 @contextmanager

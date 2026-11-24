@@ -57,7 +57,7 @@ def route(monkeypatch, plane):
     for name in (
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
-        'delete_privacy_conversation_audio',
+        'delete_conversation_audio_under_gate',
         'delete_vector',
         'delete_transcript_chunk_vectors',
         'delete_action_item_vectors_batch',

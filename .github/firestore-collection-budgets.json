@@ -97,7 +97,7 @@
       "reads_per_unit_budget": 30,
       "reads_per_day_budget": 300000,
       "basis": "planning-bound",
-      "source": "Read path in database/conversation_batch_purge_jobs.run_audio_erasure_job + database/sync_ledger_sources.staging_plan: due scan ~1, claim/begin/finish 3, tombstone 1, hold 1, gate ~2, ledger lookups 4 array_contains_any + 1 job_id query per upload + ~2 sibling tombstones, donors' prefixes 0 Firestore; held or in-flight obligations recheck at most hourly. Reconciler empty polls 1,440/day. Volume: 10,000 deletes/day upper bound (about 7x the ~1,400/day cascade deletes measured for conversation_erasure_jobs, covering default non-cascade deletes).",
+      "source": "Read path in database/conversation_batch_purge_jobs.run_audio_erasure_job + database/sync_ledger_sources.staging_plan: due scan ~1, claim/begin/finish 3, tombstone 1, hold 1, gate ~2, ledger lookups 4 array_contains_any + 1 job_id query per upload + ~2 sibling tombstones, donors' prefixes 0 Firestore. Every pass re-reads the ledger (the same ~7 reads) before any hold; held obligations recheck hourly (storage/legal hold, in-flight staging), daily (unsettled staging, staging kept for a live sibling), or after 5 min doubling to hourly then daily (row still visible), so a held obligation costs at most ~24 x 30 reads/day. Reconciler empty polls 1,440/day. Volume: 10,000 deletes/day upper bound (about 7x the ~1,400/day cascade deletes measured for conversation_erasure_jobs, covering default non-cascade deletes).",
       "reviewed": "2026-11-24"
     },
     {

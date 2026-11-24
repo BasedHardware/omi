@@ -172,8 +172,8 @@ def test_delete_owes_audio_durably_before_the_primary_row_goes(store):
         calls.append(('parent', tombstones.is_deleted(uid, cid)))
         store.rows.pop(f'users/{uid}/conversations/{cid}')
 
-    def arm(uid, cid, source_ids):
-        calls.append(('arm', tombstones.is_deleted(uid, cid), list(source_ids)))
+    def arm(uid, cid, source_ids, *, sync_sourced):
+        calls.append(('arm', tombstones.is_deleted(uid, cid), list(source_ids), sync_sourced))
 
     snapshots = MagicMock()
     snapshots.get_conversation_raw_snapshot.return_value = {'sync_merged_from': ['donor']}
@@ -194,7 +194,7 @@ def test_delete_owes_audio_durably_before_the_primary_row_goes(store):
     delete = function('routers/conversations.py', 'delete_conversation', namespace)
     background = MagicMock()
     assert delete('c', background, False, None, 'u').status_code == 204
-    assert calls == [('arm', True, ['donor']), ('parent', True)]
+    assert calls == [('arm', True, ['donor'], True), ('parent', True)]
     # The durable runner erases it; no unretried after-response attempt remains.
     background.add_task.assert_not_called()
 
@@ -202,7 +202,7 @@ def test_delete_owes_audio_durably_before_the_primary_row_goes(store):
 def test_unarmed_audio_obligation_fails_the_delete_before_the_primary_row_goes(store):
     hard_delete = MagicMock()
 
-    def arm(*args):
+    def arm(*args, **kwargs):
         raise RuntimeError('firestore unavailable')
 
     namespace = {

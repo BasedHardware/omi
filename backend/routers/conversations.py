@@ -1962,7 +1962,9 @@ def _delete_conversation_under_gate(
     # Snapshot merge donors before shared metadata cleanup removes them: their
     # prefixes and sync uploads hold this conversation's audio.
     try:
-        raw = conversations_db.get_conversation_raw_snapshot(uid, conversation_id, field_paths=['sync_merged_from'])
+        raw = conversations_db.get_conversation_raw_snapshot(
+            uid, conversation_id, field_paths=['sync_merged_from', 'sync_content_revision']
+        )
     except Exception as error:
         raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
     source_ids = [source for source in (raw or {}).get('sync_merged_from') or [] if isinstance(source, str)]
@@ -1971,7 +1973,9 @@ def _delete_conversation_under_gate(
         # leaves it owed; the runner retries holds, in-flight staging and read failures.
         known = [*source_ids, *(source for source in audio_source_ids if source not in source_ids)]
         try:
-            arm_audio_erasure(uid, conversation_id, known)
+            arm_audio_erasure(
+                uid, conversation_id, known, sync_sourced=bool((raw or {}).get('sync_content_revision') or known)
+            )
         except Exception as error:
             raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
     else:

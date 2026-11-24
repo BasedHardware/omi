@@ -61,9 +61,19 @@ AUDIO_ROW_LIVE_RETRY_SECONDS = 300
 AUDIO_SHARED_LIVE_RECHECK_SECONDS = 24 * 60 * 60
 AUDIO_GATE_KIND = 'audio_conversation_deletion'
 # Fields an audio run's outcome records; a later outcome that does not set one clears it.
-AUDIO_DETAIL_FIELDS = ('last_reason', 'blocked_objects', 'unverified', 'in_flight_uploads', 'shared_live')
-# Passes that left staging waiting re-read the ledger and merge what it shows into the record.
-AUDIO_RESOURCE_REASONS = frozenset({'staging_in_flight', 'staging_unsettled', 'staging_kept_for_live_sibling'})
+AUDIO_DETAIL_FIELDS = (
+    'last_reason',
+    'blocked_objects',
+    'unverified',
+    'in_flight_uploads',
+    'shared_live',
+    'row_live_since',
+    'row_live_passes',
+)
+# A visible row is rechecked after 5 min, doubling to hourly; after a day it is rechecked daily and counts
+# toward the stuck-obligation alert (a delete that failed after arming and was never retried).
+AUDIO_ROW_LIVE_MAX_RETRY_SECONDS = 60 * 60
+AUDIO_ROW_LIVE_ALERT_AFTER_SECONDS = 24 * 60 * 60
 SEGMENTS = 'segments'
 TOMBSTONES = 'deleted_conversations'
 # Renewed by every checkpoint/unit; a dead or wedged worker loses ownership after this.
@@ -127,10 +137,15 @@ def arm_audio_erasure(
     conversation_id: str,
     source_ids: Iterable[str] = (),
     *,
+    sync_sourced: bool = False,
     firestore_client: Any = None,
     now: datetime | None = None,
 ) -> None:
-    """Owe this deleted conversation's audio durably (merge: a re-arm keeps generation and donors)."""
+    """Owe this deleted conversation's audio durably (merge: a re-arm keeps generation and donors).
+
+    ``sync_sourced`` notes a conversation fed by sync uploads, so a run that finds
+    no staging for it can report that the ledger no longer names it.
+    """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     current = now or _now()
     ref = audio_job_ref(client, uid, conversation_id)
@@ -147,6 +162,11 @@ def arm_audio_erasure(
             'arm_revision': uuid4().hex,
             # A retry after the row lost its merge links keeps the donors an earlier arm recorded.
             'audio_source_ids': known + [source for source in donors if source not in known],
+            'sync_sourced': (
+                bool(sync_sourced or (snapshot.to_dict() or {}).get('sync_sourced'))
+                if snapshot.exists
+                else bool(sync_sourced)
+            ),
         }
         transaction.set(ref, fields, merge=True)
 
@@ -356,6 +376,7 @@ def finish_run(
     detail: dict[str, Any] | None = None,
     arm_revision: Any = None,
     retry_after: float | None = None,
+    count_attempt: bool = False,
 ) -> bool:
     """Record the owning run's outcome; only ``completed`` removes the obligation. False if not owner.
 
@@ -422,7 +443,7 @@ def finish_run(
         wait = HOLD_RECHECK_SECONDS if result == 'held' else REDRIVE_SECONDS
         if retry_after is not None:
             wait = retry_after
-        if result == 'held' and collection == AUDIO_COLLECTION:
+        if result == 'held' and collection == AUDIO_COLLECTION and not count_attempt:
             # A deliberate hold (storage hold, staging waiting, switch off, legal hold) made its
             # decision: it is not a lost task, so it must not trip the stuck-obligation alert.
             release['attempts'] = 0
@@ -764,7 +785,7 @@ def run_audio_erasure_job(
     uid, conversation_id = str(row['uid']), str(row['conversation_id'])
     arm_revision = row.get('arm_revision')
 
-    def finish(outcome: str, retry_after: float | None = None, **detail: Any) -> bool:
+    def finish(outcome: str, retry_after: float | None = None, count_attempt: bool = False, **detail: Any) -> bool:
         return finish_run(
             job,
             generation,
@@ -775,6 +796,7 @@ def run_audio_erasure_job(
             detail={'last_reason': detail.pop('reason', outcome), **detail},
             arm_revision=arm_revision,
             retry_after=retry_after,
+            count_attempt=count_attempt,
         )
 
     donors = [str(source) for source in row.get('audio_source_ids') or []]
@@ -785,19 +807,23 @@ def run_audio_erasure_job(
             return 'no_tombstone' if finish('completed') else 'superseded'
         recorded = {key: list(value) for key, value in (row.get('staging_sources') or {}).items()}
         settled = list(row.get('staging_settled') or [])
-        if row.get('staging_recorded_at') is None or row.get('last_reason') in AUDIO_RESOURCE_REASONS:
-            # Record before any hold: the ledger expires and a held obligation may outlive it. A pass
-            # that left staging waiting re-reads it, so siblings fed since the last record are kept.
-            from database.sync_ledger_sources import staging_sources
+        # Every pass, before any hold, re-reads the ledger (read-only) and merges it into the record:
+        # the ledger expires while a held obligation may outlive it, so siblings fed since the last pass
+        # and a job's settled state are captured whatever holds this pass.
+        from database.sync_ledger_sources import staging_sources
 
-            try:
-                found = staging_sources(uid, [conversation_id, *donors], extra_jobs=recorded, firestore_client=client)
-                recorded, settled = _record_staging(client, job, token, found.fed, found.settled)
-            except RunSuperseded:
+        try:
+            found = staging_sources(uid, [conversation_id, *donors], extra_jobs=recorded, firestore_client=client)
+            recorded, settled = _record_staging(client, job, token, found.fed, found.settled)
+        except RunSuperseded:
+            raise
+        except Exception:
+            if enabled():
                 raise
-            except Exception:
-                if enabled():
-                    raise
+        if not recorded and row.get('sync_sourced'):
+            # Accepted retention exception: a sync conversation deleted after its ledger rows expired
+            # (45 days) cannot be traced to its staging; account deletion still sweeps syncing/{uid}/.
+            logger.info('event=conversation_audio_erasure outcome=staging_undiscoverable_after_ledger_ttl job=%s', job)
         if not enabled():
             # Kill switch off: armed obligations stay owed and resume when it is back on.
             finish('held', reason='switched_off')
@@ -805,7 +831,24 @@ def run_audio_erasure_job(
         conversation = user.collection('conversations').document(conversation_id).get()
         if conversation.exists and not (conversation.to_dict() or {}).get('deleted'):
             # The delete failed after arming (it answered 503): never erase audio of a visible conversation.
-            finish('held', retry_after=AUDIO_ROW_LIVE_RETRY_SECONDS, reason='conversation_row_live')
+            current = now or _now()
+            since = row.get('row_live_since') if row.get('last_reason') == 'conversation_row_live' else None
+            since = since if isinstance(since, datetime) else current
+            passes = int(row.get('row_live_passes') or 0) if row.get('last_reason') == 'conversation_row_live' else 0
+            stuck = (current - since).total_seconds() >= AUDIO_ROW_LIVE_ALERT_AFTER_SECONDS
+            wait = (
+                AUDIO_SHARED_LIVE_RECHECK_SECONDS
+                if stuck
+                else min(AUDIO_ROW_LIVE_RETRY_SECONDS * 2 ** min(passes, 16), AUDIO_ROW_LIVE_MAX_RETRY_SECONDS)
+            )
+            finish(
+                'held',
+                retry_after=wait,
+                count_attempt=stuck,
+                reason='conversation_row_live',
+                row_live_since=since,
+                row_live_passes=passes + 1,
+            )
             return 'conversation_row_live'
         assert_account_deletion_permitted(uid)
         try:

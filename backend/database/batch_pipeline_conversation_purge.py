@@ -187,15 +187,20 @@ def purge_conversation(
     )
 
 
-def _journal_owed(
+# Owed segment ids are journaled in chunks: one Firestore transaction holds at most 500 writes,
+# and each chunk also renews and proves the run's ownership.
+OWED_JOURNAL_CHUNK = 400
+
+
+def _owed_to_journal(
     client: Any,
     key: str,
     members: Mapping[str, MemberProgress],
     progress: Progress,
     owed: Mapping[str, Mapping[str, set[str]]],
-) -> int | None:
-    """Journal ledger-owed segments that still hold this owner's content; the first namespace touched."""
-    first: int | None = None
+) -> list[tuple[int, str, str, list[str]]]:
+    """Ledger-owed segments not yet journaled that still hold this owner's content: (ns index, ns, cid, ids)."""
+    pending: list[tuple[int, str, str, list[str]]] = []
     for ns_index, namespace in enumerate(NAMESPACES):
         wanted = {cid: owed[cid].get(namespace, set()) for cid in members}
         if not any(wanted.values()):
@@ -214,11 +219,18 @@ def _journal_owed(
                 ):
                     live.append(segment_id)
             if live:
-                member = members[cid]
-                member.checkpoint(dict(member.position), add_segments=(namespace, live))
+                pending.append((ns_index, namespace, cid, live))
                 known.update(live)
-                first = ns_index if first is None else first
-    return first
+    return pending
+
+
+def _journal_owed(members: Mapping[str, MemberProgress], pending: list[tuple[int, str, str, list[str]]]) -> None:
+    """Journal owed segments in bounded chunks; dependents run only after every chunk is recorded."""
+    for _ns_index, namespace, cid, segment_ids in pending:
+        member = members[cid]
+        for start in range(0, len(segment_ids), OWED_JOURNAL_CHUNK):
+            chunk = segment_ids[start : start + OWED_JOURNAL_CHUNK]
+            member.checkpoint(dict(member.position), add_segments=(namespace, chunk))
 
 
 def purge_conversations(
@@ -278,10 +290,15 @@ def purge_conversations(
     # Owed rows are known by id, so a cursor already past their discovery (an
     # in-flight run from before this rule, or a sibling deleted last) would never
     # visit them: journal them now and resume that namespace at its dependents.
-    rewind = _journal_owed(client, key, members, progress, owed)
+    pending_owed = _owed_to_journal(client, key, members, progress, owed)
+    rewind = min((ns_index for ns_index, *_ in pending_owed), default=None)
     if rewind is not None and (start_ns > rewind or (start_ns == rewind and start.get('phase') in PHASES[1:])):
+        # Persist the rewind before journaling: a crash between chunks resumes at dependents and
+        # re-journals the rest (still unknown), instead of finishing past rows it never discovered.
         start = {'ns': rewind, 'phase': 'dependents'}
         start_ns = rewind
+        progress.checkpoint(dict(start))
+    _journal_owed(members, pending_owed)
     erased = 0
 
     def mark(position: dict[str, Any], **kwargs: Any) -> None:

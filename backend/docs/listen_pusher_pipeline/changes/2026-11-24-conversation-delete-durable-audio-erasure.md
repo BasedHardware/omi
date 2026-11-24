@@ -31,13 +31,18 @@ that the audio cleanup is durable: failures are retried, not only logged.
     is logged at error level as `event=conversation_audio_erasure outcome=staging_unsettled` on every pass, and is
     rechecked daily.
   - If the conversation row is still visible (the delete failed after arming and answered 503), the runner waits
-    (`last_reason=conversation_row_live`, rechecked after 5 minutes) instead of erasing the audio.
+    (`last_reason=conversation_row_live`) instead of erasing the audio. It rechecks after 5 minutes, doubling to
+    hourly. After 24 hours (`row_live_since`) it rechecks daily, and those passes count toward the stuck-obligation
+    alert.
+  - Owed batch segment ids are journaled in chunks of at most 400 per transaction (Firestore allows 500 writes).
+    A cursor already past discovery is rewound and persisted first, and dependent cleanup runs only after every
+    chunk is recorded.
   - On its first run the obligation records every staging job it reaches, with all the conversations that job
     fed (`staging_sources`), before any hold or kill-switch check. Content-ledger rows expire after 45 days, and a
     held obligation can outlive them. The recorded set is used together with any fresh ledger read: its prefixes
-    stay owed, and its recorded siblings still count as live. Every pass that left staging waiting
-    (`staging_in_flight`, `staging_unsettled` or `staging_kept_for_live_sibling`) re-reads the ledger and merges new
-    siblings into the record; the record never shrinks. A recorded job also records whether a pass ever saw all its
+    stay owed, and its recorded siblings still count as live. Every pass re-reads the ledger, read-only and before
+    any hold (legal hold, switch off, row still visible, storage hold, staging waiting), and merges new siblings and
+    settled state into the record. The record never shrinks. A recorded job also records whether a pass ever saw all its
     ledger rows `completed` (`staging_settled`). Once its ledger rows expire, only a job recorded as settled counts as
     settled; any other recorded job stays in flight and is held, because a conversation it fed after the record could
     be unknown.
@@ -72,8 +77,17 @@ sibling-safe rule, but keep in-flight or shared staging without a retry:
   authority to erase, so arming an obligation there would complete as `no_tombstone`.
 
 In both, a later deletion of a sibling conversation through the route arms its own obligation, which owes the
-shared staging. A sibling deleted more than 45 days later, after the ledger rows expired and with no obligation
-recorded in the meantime, cannot be traced to the job. Account deletion still sweeps `syncing/{uid}/`.
+shared staging.
+
+- **Deletes after the ledger TTL (accepted by Shipping on 2026-11-24, pending Owners' custody review).** A
+  conversation deleted more than 45 days after its upload, once the content-ledger rows have expired and with no
+  obligation recorded in the meantime, cannot be traced to its staging prefix. That prefix is retained. Reasons:
+  - Before #26215, the default delete never touched staging at all.
+  - Staging is normally removed by sync cleanup once processing completes, with a custody receipt.
+  - Account deletion sweeps `syncing/{uid}/`.
+
+  The runner logs `event=conversation_audio_erasure outcome=staging_undiscoverable_after_ledger_ttl` (info) when a
+  sync-sourced conversation finds neither ledger rows nor a record. No new machinery tracks these.
 
 ## Rollout and flags
 
