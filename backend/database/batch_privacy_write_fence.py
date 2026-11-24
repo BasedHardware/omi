@@ -236,7 +236,9 @@ def token_write(path: str) -> Write:
 
 
 def augment_commit(request: Any) -> tuple[Any, int]:
-    writes = (request.get('writes') if isinstance(request, dict) else request.writes) or ()
+    # Normalize dictionary requests before comparing with the protobuf writes
+    # produced by the Home hook. The unchanged path still returns the original.
+    writes = [Write(write) for write in request.get('writes') or ()] if isinstance(request, dict) else request.writes
     count = len(writes)
     home_writes = augment_home_writes(writes)
     tokens = authority_tokens(writes)

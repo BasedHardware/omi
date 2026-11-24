@@ -769,10 +769,18 @@ def prepare_conversation_for_read(
         if 'transcript_segments' in data and isinstance(data['transcript_segments'], bytes):
             try:
                 decompressed_json = zlib.decompress(data['transcript_segments']).decode('utf-8')
-                data['transcript_segments'] = json.loads(decompressed_json)
-            except (json.JSONDecodeError, TypeError, zlib.error) as e:
-                logger.error(e)
-                pass
+                segments = json.loads(decompressed_json)
+                if not isinstance(segments, list) or any(not isinstance(segment, dict) for segment in segments):
+                    raise ValueError('Compressed transcript did not decode to segment objects')
+                data['transcript_segments'] = segments
+            except (TypeError, ValueError, zlib.error):
+                if current_portability_read() is not None:
+                    raise
+                logger.warning('Invalid compressed conversation transcript')
+                # An unreadable transcript is unknown. In particular, the
+                # correction overlay must never receive encoded bytes.
+                data.pop('transcript_segments', None)
+                data.pop('transcript_segments_compressed', None)
 
     if isinstance(segments := data.get('transcript_segments'), list):
         from utils.conversations.speaker_grouping_storage import reveal_segments

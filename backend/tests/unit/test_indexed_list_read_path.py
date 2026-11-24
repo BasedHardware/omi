@@ -233,8 +233,10 @@ def test_canonical_scan_preserves_verified_prefix_after_provider_deadline(monkey
     assert budget.truncated
 
 
-def test_conversation_list_omits_transcript_before_decode_or_overlay_io(monkeypatch):
+@pytest.mark.parametrize('has_compact_evidence', [False, True])
+def test_conversation_list_omits_transcript_before_decode_or_overlay_io(monkeypatch, has_compact_evidence):
     from database import conversations
+    from utils.home_feed import list_transcript
 
     row = _row('conversation')
     row.pop('processing_state')
@@ -247,7 +249,7 @@ def test_conversation_list_omits_transcript_before_decode_or_overlay_io(monkeypa
         discarded=False,
         transcript_segments=b'not-a-valid-compressed-transcript',
         transcript_segments_compressed=True,
-        has_transcript_corrections=True,
+        has_transcript_corrections=not has_compact_evidence,
         user_title='My title',
         structured={'title': 'Generated'},
     )
@@ -256,6 +258,17 @@ def test_conversation_list_omits_transcript_before_decode_or_overlay_io(monkeypa
 
     with pytest.raises(ValidationError):
         Conversation.model_validate(row)
+    if has_compact_evidence:
+        row.update(
+            recorded_start=NOW - timedelta(minutes=2),
+            recorded_end=NOW,
+            home_source_version='source-1',
+        )
+        row[list_transcript.SOURCE_VERSION] = 'source-1'
+        row[list_transcript.FIELD] = list_transcript.stamp(
+            'list-user', [{'text': 'Owner spoke.', 'start': 3, 'end': 7, 'is_user': True}], preview_needed=False
+        )
+        assert row[list_transcript.FIELD] is not None
     db = Db([row])
     monkeypatch.setattr(conversations, 'db', db)
     monkeypatch.setattr(conversations, 'indexed_list_reads_enabled', lambda: True)
@@ -263,7 +276,14 @@ def test_conversation_list_omits_transcript_before_decode_or_overlay_io(monkeypa
     assert len(result) == 1
     assert 'transcript_segments' not in result[0]
     assert result[0]['structured']['title'] == 'My title'
-    assert db.reads == 1
+    if has_compact_evidence:
+        assert result[0]['home_list_transcript_evidence'] == {'has_owner_speech': True, 'duration_seconds': 4}
+        assert db.reads == 1
+    else:
+        # The fallback attempted to read the blob. Bad bytes must not crash
+        # the overlay or turn into affirmative evidence that nobody spoke.
+        assert 'home_list_transcript_evidence' not in result[0]
+        assert db.reads == 2
     assert Conversation.model_validate(result[0]).id == 'conversation'
 
 

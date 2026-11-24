@@ -214,7 +214,11 @@ def test_indexed_list_carries_clock_and_honors_transcript_receipt(monkeypatch, r
     monkeypatch.setattr(conversations, 'indexed_list_reads_enabled', lambda: True)
     rows = conversations.get_conversations_without_photos('u', list_fields_only=True)
     assert len(rows) == 1
-    assert 'transcript_segments' not in rows[0]
+    # The batch receipt governs transcription presentation. It does not
+    # certify a compact transcript row, so the full reader serves this capture.
+    assert rows[0]['transcript_segments'] == []
+    assert 'home_list_transcript_evidence' not in rows[0]
+    assert db.reads == 2
     assert rows[0]['home_transcription_deadline_at'] == row['home_transcription_deadline_at']
     wire = transcribing_hold.project(rows[0])
     assert wire['status'] == ('completed' if revision else 'processing')
