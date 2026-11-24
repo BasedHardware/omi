@@ -177,11 +177,14 @@ def env(monkeypatch):
         )
     monkeypatch.setattr(play_billing, 'clear_fair_use_on_upgrade', lambda uid: effects.append('fair_use'))
     stripe_subs = []
-    monkeypatch.setattr(
-        play_billing.stripe.Subscription,
-        'list',
-        lambda **_: SimpleNamespace(data=[SimpleNamespace(to_dict=lambda s=s: s) for s in stripe_subs]),
-    )
+
+    def stripe_list(limit=10, status=None, **_):
+        # Like Stripe: one page in ``data``, every page through auto_paging_iter, default list hides ended ones.
+        shown = [s for s in stripe_subs if status == 'all' or s.get('status') not in ('canceled', 'incomplete_expired')]
+        wrapped = [SimpleNamespace(to_dict=lambda s=s: s) for s in shown]
+        return SimpleNamespace(data=wrapped[:limit], auto_paging_iter=lambda: iter(wrapped))
+
+    monkeypatch.setattr(play_billing.stripe.Subscription, 'list', stripe_list)
     for name in list(os.environ):
         if name.startswith('PLAY_') or name in (config.ANDROID_BILLING_ENV, config.MIN_BUILD_ENV):
             monkeypatch.delenv(name)

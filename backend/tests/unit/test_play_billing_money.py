@@ -233,16 +233,20 @@ def test_linked_and_account_owners_that_disagree_never_bind(env):
 # ---- 3. Stripe and Play never both bill ----------------------------------------------------
 
 
-def test_play_renewal_never_overwrites_a_live_stripe_row(subscribed, caplog):
+def test_play_renewal_never_overwrites_a_live_stripe_row(subscribed, caplog, monkeypatch):
     stripe_row = Subscription(
         plan=PlanType.unlimited_v2, current_period_end=NOW + 20 * DAY, stripe_subscription_id='sub_9'
     ).model_dump()
     subscribed.users.rows[UID] = stripe_row
     subscribed.publisher.resources[TOKEN] = resource(expiry=NOW + 60 * DAY)
     subscribed.publisher.resources[TOKEN]['acknowledgementState'] = 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED'
+    cancelled = []
+    monkeypatch.setattr(subscribed.publisher, 'cancel', lambda package, token: cancelled.append(token), raising=False)
+    monkeypatch.setattr(play_billing, 'dispatch_notification', lambda intent: None)
     assert _notify(2) == 'stripe_conflict'
     assert _row(subscribed).stripe_subscription_id == 'sub_9'
-    assert 'double billing' in caplog.text
+    assert cancelled == [TOKEN]  # Google stops charging; Stripe keeps the user
+    assert 'play_billing_double_charge' in caplog.text
 
 
 def test_new_play_token_for_a_live_stripe_user_is_never_acknowledged(env):

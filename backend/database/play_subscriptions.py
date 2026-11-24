@@ -135,6 +135,26 @@ def pending_play_purchase(uid: str) -> bool:
     return (get_purchase(key) or {}).get('state') == 'SUBSCRIPTION_STATE_PENDING'
 
 
+# Google can still charge these after access ended (hold, pause) or while a refunded period still renews.
+CHARGEABLE_STATES = frozenset(
+    {
+        'SUBSCRIPTION_STATE_ACTIVE',
+        'SUBSCRIPTION_STATE_IN_GRACE_PERIOD',
+        'SUBSCRIPTION_STATE_ON_HOLD',
+        'SUBSCRIPTION_STATE_PAUSED',
+    }
+)
+
+
+def chargeable_play_state(uid: str) -> Optional[str]:
+    """State of the user's current Play purchase when Google can still charge or recover it, else None."""
+    key = get_user_fields(uid).get(USER_POINTER_FIELD)
+    if not key:
+        return None
+    state = (get_purchase(key) or {}).get('state')
+    return state if state in CHARGEABLE_STATES else None
+
+
 def purchase_keys_for_uid(uid: str, *, firestore_client: Optional[Any] = None) -> list[str]:
     """Every purchase document bound to ``uid``: the exact set ``purge_account_records`` deletes."""
     client = firestore_client or _client.get_firestore_client()

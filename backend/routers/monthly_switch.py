@@ -7,7 +7,7 @@ import logging
 import uuid
 
 import stripe
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 import database.users as users_db
@@ -15,7 +15,7 @@ from config.stt_cap_dispatch import any_execution_admission_enabled as funded_pr
 from database import action_items as action_items_db, conversations as conversations_db, memories as memories_db
 from database import redis_db
 from database.fsr_read_cache import fresh_reader
-from routers.payment import PaymentStatusMessageResponse
+from routers.payment import PaymentStatusMessageResponse, play_client_refusal
 from utils import monthly_switch
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.other import endpoints as auth
@@ -74,13 +74,18 @@ def _store(uid: str, price_id: str, previous, updated: dict) -> None:
 
 @router.post('/v1/payments/payment-issue/monthly-switch', response_model=PaymentStatusMessageResponse)
 @fresh_reader
-def payment_issue_monthly_switch_endpoint(request: MonthlySwitchRequest, uid: str = Depends(auth.get_current_user_uid)):
+def payment_issue_monthly_switch_endpoint(
+    request: MonthlySwitchRequest, uid: str = Depends(auth.get_current_user_uid), http_request: Request = None
+):
     """Move a declined yearly renewal to the same plan's monthly price (utils/monthly_switch.py).
 
     Charges the monthly price now, then voids the unpaid yearly invoice. 402: declined, nothing
     changed. 409: not offered for this subscription, or a switch is already running. 503: billing
     unreachable; a repeat replays the finished switch or refuses, it never charges twice.
     """
+    play_refusal = play_client_refusal(http_request, uid)
+    if play_refusal:
+        return play_refusal
     stored = users_db.get_user_subscription(uid)
     subscription_id = stored.stripe_subscription_id if stored else None
     if not subscription_id or not subscription_id.startswith('sub_'):

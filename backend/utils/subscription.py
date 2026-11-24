@@ -1304,6 +1304,10 @@ def new_buyer_single_plan_violation(uid: str, target_price_id: Optional[str]) ->
     return NEW_BUYER_SINGLE_PLAN_ERROR
 
 
+PLAY_ON_HOLD_STATES = frozenset({'SUBSCRIPTION_STATE_ON_HOLD', 'SUBSCRIPTION_STATE_PAUSED'})
+PLAY_ON_HOLD_REASON = "You have a Google Play subscription on hold. Fix the payment in Google Play."
+
+
 @fresh_reader
 def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tuple[bool, str]:
     """
@@ -1328,6 +1332,12 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
         return False, "Your Omi Pro subscription is billed through Google Play. Manage it in the Play Store."
     if play_subscriptions_db.pending_play_purchase(uid):
         return False, "Your Google Play purchase is still being processed. Try again once it completes."
+    # Access ended but Google can still recover and charge it: a second agreement would double bill.
+    play_state = play_subscriptions_db.chargeable_play_state(uid)
+    if play_state in PLAY_ON_HOLD_STATES:
+        return False, PLAY_ON_HOLD_REASON
+    if play_state:
+        return False, "Your Omi Pro subscription is billed through Google Play. Manage it in the Play Store."
     if target_price_id in configured_ladder_prices() and subscription is not None:
         if subscription.plan != PlanType.basic and ladder_policy.entitlements(subscription) is None:
             return False, "Legacy subscriptions keep their current plan"

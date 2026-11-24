@@ -22,6 +22,7 @@ from config import prepaid_code_redeem as prepaid_config
 from database import promotion_redemptions as redemptions_db
 from database import users as users_db
 from models.users import PlanType, SubscriptionStatus
+import database.play_subscriptions as play_subscriptions_db
 from utils import play_stripe_guard
 from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
@@ -143,7 +144,7 @@ def _has_live_plan(uid: str, now: int, own_promotion_code_id: Optional[str] = No
     With ``own_promotion_code_id`` (a resumed redemption), the prepaid subscription this same code
     created is not counted, so the reader's own half-finished plan never blocks its resume."""
     current = users_db.get_existing_user_subscription(uid)
-    if play_stripe_guard.live_play_row(current):
+    if play_stripe_guard.live_play_row(current) or play_subscriptions_db.chargeable_play_state(uid):
         return True
     other_open, own_ids = _open_stripe_subscriptions(uid, own_promotion_code_id)
     if other_open:

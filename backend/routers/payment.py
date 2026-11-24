@@ -94,7 +94,7 @@ from utils import stripe as stripe_utils
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.apps import find_app_subscription, paid_app, set_user_app_sub_customer_id
 from utils.other import endpoints as auth
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.background import BackgroundTask
 
 from utils.stripe import base_url, create_connect_account, refresh_connect_account_link, is_onboarding_complete
@@ -798,6 +798,20 @@ def _validate_price_id(price_id: str) -> None:
             raise HTTPException(status_code=503, detail='Ladder price unavailable') from error
 
 
+def play_client_refusal(http_request: Optional[Request], uid: str) -> Optional[JSONResponse]:
+    """A build that buys through Google Play never starts a new Stripe charge; management routes stay open."""
+    if http_request is None:
+        return None
+    headers = http_request.headers
+    if not play_billing_config.client_uses_play(headers.get('X-App-Platform'), headers.get('X-App-Build'), uid):
+        return None
+    logger.info(f"Stripe charge refused for a Google Play client: {sanitize(http_request.url.path)}")
+    return JSONResponse(
+        status_code=409,
+        content={'detail': play_billing_config.USE_GOOGLE_PLAY_MESSAGE, 'code': play_billing_config.USE_GOOGLE_PLAY},
+    )
+
+
 @router.post(
     '/v1/payments/checkout-session',
     response_model=PaymentCheckoutSessionResponse,
@@ -808,6 +822,7 @@ def create_checkout_session_endpoint(
     request: CreateCheckoutRequest,
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    http_request: Request = None,
 ):
     # Retained currency prices are management-only; ordinary targets keep the
     # existing purchase and eligibility checks before promotion-code lookup.
@@ -817,6 +832,8 @@ def create_checkout_session_endpoint(
         _validate_price_id(request.price_id)
         # Check if user can make a new payment
         can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
+        if not can_pay and reason == subscription_utils.PLAY_ON_HOLD_REASON:
+            return JSONResponse(status_code=400, content={'detail': reason, 'code': 'play_subscription_on_hold'})
         if not can_pay:
             raise HTTPException(status_code=400, detail=reason)
 
@@ -853,6 +870,10 @@ def create_checkout_session_endpoint(
     reactivation_result = _try_reactivate_subscription(uid, request.price_id)
     if reactivation_result:
         return reactivation_result
+
+    play_refusal = play_client_refusal(http_request, uid)
+    if play_refusal:
+        return play_refusal
 
     # Omi Pro only; runs after every subscriber escape (stale records can look basic).
     single_plan_error = subscription_utils.new_buyer_single_plan_violation(uid, request.price_id)
@@ -960,7 +981,11 @@ def _store_modified_subscription(
 
 @router.post('/v1/payments/upgrade-subscription', response_model=PaymentUpgradeSubscriptionResponse)
 @fresh_reader
-def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
+def upgrade_subscription_endpoint(
+    request: UpgradeSubscriptionRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,
+):
     """Upgrade or change a user's subscription plan.
 
     - Cross-plan changes (e.g. Unlimited→Pro): immediate swap via Subscription.modify(),
@@ -968,6 +993,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     - Same plan, different interval (e.g. monthly→annual): scheduled via SubscriptionSchedule,
       takes effect at end of current billing period.
     """
+    play_refusal = play_client_refusal(http_request, uid)
+    if play_refusal:
+        return play_refusal
     currency_binding = management_binding(request.price_id)
     if currency_binding is None:
         _validate_price_id(request.price_id)

@@ -44,11 +44,17 @@ def android_billing_mode(environ: Optional[Mapping[str, str]] = None) -> str:
     return 'play' if (_env(environ).get(ANDROID_BILLING_ENV) or '').strip().lower() == 'play' else 'stripe'
 
 
-def min_play_build(environ: Optional[Mapping[str, str]] = None) -> Optional[int]:
-    raw = (_env(environ).get(MIN_BUILD_ENV) or '').strip()
-    if not raw.isdigit() or int(raw) <= 0:
+def _build_number(value: Optional[str]) -> Optional[int]:
+    """ASCII digits only: ``str.isdigit()`` also accepts digits ``int()`` cannot parse (e.g. superscripts)."""
+    raw = value.strip() if isinstance(value, str) else ''
+    if not raw or not raw.isascii() or not raw.isdigit():
         return None
     return int(raw)
+
+
+def min_play_build(environ: Optional[Mapping[str, str]] = None) -> Optional[int]:
+    minimum = _build_number(_env(environ).get(MIN_BUILD_ENV))
+    return minimum if minimum else None
 
 
 def user_in_play_cohort(uid: Optional[str], environ: Optional[Mapping[str, str]] = None) -> bool:
@@ -75,10 +81,15 @@ def client_uses_play(
     if account_id_key(environ) is None:
         return False  # without the account-id secret no purchase could be bound safely
     minimum = min_play_build(environ)
-    build = app_build.strip() if isinstance(app_build, str) else ''
-    if minimum is None or not build.isdigit() or int(build) < minimum:
+    build = _build_number(app_build)
+    if minimum is None or build is None or build < minimum:
         return False
     return android_billing_mode(environ) == 'play' or user_in_play_cohort(uid, environ)
+
+
+# Refusal for a new Stripe charge from a client that must buy through Google Play.
+USE_GOOGLE_PLAY = 'use_google_play'
+USE_GOOGLE_PLAY_MESSAGE = 'Subscribe with Google Play in the app.'
 
 
 def package_name(environ: Optional[Mapping[str, str]] = None) -> str:

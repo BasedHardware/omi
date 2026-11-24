@@ -143,6 +143,7 @@ def world(monkeypatch):
         monkeypatch.setattr(redemption.redemptions_db, name, getattr(state.ledger, name))
     monkeypatch.setattr(redemption.users_db, 'get_existing_user_subscription', lambda uid: state.row)
     monkeypatch.setattr(redemption.users_db, 'get_stripe_customer_id', lambda uid: state.customer_id)
+    monkeypatch.setattr(redemption.play_subscriptions_db, 'chargeable_play_state', lambda uid: None)
 
     def set_customer(uid, customer_id):
         state.customer_id = customer_id
