@@ -404,6 +404,7 @@ async def _manual_finish_admitted(
         if not manual_end_marker_enabled():
             return
         single = len(units) == 1
+        promoted = False
         if single:
             # Stored before any detached work, so losing the process cannot lose a single-unit cut.
             promoted = await run_blocking(
@@ -479,7 +480,11 @@ async def _manual_finish_admitted(
                         copied,
                         read,
                         refresh=refresh,
-                        cut=None if single else cut,
+                        # Several units are cut only by a pass that wrote the whole transcript. A
+                        # promoted single unit already holds its cut, but still gets its own
+                        # manual-end wake after the write: the writer's plain wake shares the owner's
+                        # per-minute task name and is skipped when a reconcile already ran that minute.
+                        cut=cut if not single or promoted else None,
                         privacy=privacy,
                         fence=fence,
                     )
