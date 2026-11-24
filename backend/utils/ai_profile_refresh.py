@@ -63,9 +63,6 @@ AUTOMATIC_COOLDOWN_SECONDS = 60 * 60
 MAX_CONCURRENT_AUTOMATIC = 2
 
 _automatic_slots = threading.BoundedSemaphore(MAX_CONCURRENT_AUTOMATIC)
-_scheduled_lock = threading.Lock()
-# Only conversation-owned jobs can need a separately requested account refresh.
-_conversation_jobs: dict[str, threading.Event] = {}
 
 
 class RefreshError(Exception):
@@ -254,38 +251,52 @@ def refresh_now(uid: str) -> dict:
         _release_in_progress(uid)
 
 
+def _refresh_under_cooldown(uid: str, effect_source: ConversationEffectSource | None) -> str:
+    try:
+        if not redis_db.try_acquire_ai_profile_refresh_lock(uid, ttl=IN_PROGRESS_TTL_SECONDS):
+            return 'locked'
+    except Exception:
+        return 'lock_unavailable'
+    try:
+        if not is_stale(users_db.get_ai_user_profile_fresh(uid)):
+            return 'fresh'
+        if not generated_compute_allowed(uid, 'memories'):
+            return 'compute_denied'
+        return 'written' if _generate(uid, effect_source=effect_source)[1] else 'superseded'
+    finally:
+        _release_in_progress(uid)
+
+
 def refresh_if_stale(uid: str, *, effect_source: ConversationEffectSource | None = None) -> str:
     """Automatic refresh; returns an outcome label and never raises."""
-    cooldown_token = None
     try:
         if not uid or not automatic_refresh_enabled():
             return 'disabled'
         if not is_stale(users_db.get_ai_user_profile(uid)):
             return 'fresh'
-        cooldown_token = uuid4().hex if effect_source is not None else None
+        token = uuid4().hex if effect_source is not None else None
         try:
-            if not redis_db.try_acquire_ai_profile_auto_cooldown(
-                uid, ttl=AUTOMATIC_COOLDOWN_SECONDS, **({'token': cooldown_token} if cooldown_token is not None else {})
-            ):
+            if not redis_db.try_acquire_ai_profile_auto_cooldown(uid, ttl=AUTOMATIC_COOLDOWN_SECONDS, token=token):
                 return 'cooldown'
-            if not redis_db.try_acquire_ai_profile_refresh_lock(uid, ttl=IN_PROGRESS_TTL_SECONDS):
-                return 'locked'
         except Exception:
-            return 'lock_unavailable'  # Fail closed: no lock, no spend.
+            return 'lock_unavailable'
+
+        source_fenced = False
+        retry_independently = False
         try:
-            if not is_stale(users_db.get_ai_user_profile_fresh(uid)):
-                return 'fresh'
-            if not generated_compute_allowed(uid, 'memories'):
-                return 'compute_denied'
-            return 'written' if _generate(uid, effect_source=effect_source)[1] else 'superseded'
+            outcome = _refresh_under_cooldown(uid, effect_source)
+        except ConversationEffectSourceChanged:
+            outcome = 'source_fenced'
+            source_fenced = True
         finally:
-            _release_in_progress(uid)
+            if token is not None:
+                retry_independently = redis_db.settle_ai_profile_auto_cooldown(uid, token, source_fenced=source_fenced)
+        if retry_independently:
+            # Redis transferred the cooldown to independent demand. Start over
+            # with fresh inputs and the usual account, lock and compute guards.
+            return _refresh_under_cooldown(uid, None)
+        return outcome
     except ConversationEffectSourceChanged:
-        if cooldown_token is not None:
-            try:
-                redis_db.release_ai_profile_auto_cooldown(uid, cooldown_token)
-            except Exception as error:
-                logger.warning('event=ai_profile_refresh outcome=cooldown_release_error exc=%s', type(error).__name__)
         return 'source_fenced'
     except ConversationEffectFenced:
         return 'account_fenced'
@@ -299,18 +310,7 @@ def refresh_if_stale(uid: str, *, effect_source: ConversationEffectSource | None
 
 def _run_scheduled(uid: str, effect_source: ConversationEffectSource | None = None) -> None:
     try:
-        if effect_source is None:
-            refresh_if_stale(uid)
-            return
-        try:
-            outcome = refresh_if_stale(uid, effect_source=effect_source)
-        finally:
-            with _scheduled_lock:
-                independent = _conversation_jobs.pop(uid).is_set()
-        if outcome == 'source_fenced' and independent:
-            # A read requested its own refresh. Collect fresh inputs after the
-            # rejected synthesis releases the shared Redis lock and cooldown.
-            refresh_if_stale(uid)
+        refresh_if_stale(uid, effect_source=effect_source)
     finally:
         _automatic_slots.release()
 
@@ -325,34 +325,18 @@ def schedule_refresh(
     """Queue an automatic refresh if the profile looks stale and a process slot is free.
 
     ``known`` means ``profile`` is the caller's current read (``None`` = no profile), which
-    saves a cache read. Never blocks and never raises. Returns whether work was
-    queued or an independent request joined a queued conversation job.
+    saves a cache read. Returns whether work was queued.
     """
     try:
         if not uid or not automatic_refresh_enabled():
             return False
         if not is_stale(profile if known else users_db.get_ai_user_profile(uid)):
             return False
-        with _scheduled_lock:
-            pending = _conversation_jobs.get(uid)
-            if pending is not None:
-                if effect_source is None:
-                    pending.set()
-                    return True
-                return False
-            if not _automatic_slots.acquire(blocking=False):
-                return False  # Busy: the next trigger retries.
-            if effect_source is not None:
-                _conversation_jobs[uid] = threading.Event()
+        if not _automatic_slots.acquire(blocking=False):
+            return False  # Busy: the next trigger retries.
         try:
-            if effect_source is None:
-                submit_with_context(postprocess_executor, _run_scheduled, uid)
-            else:
-                submit_with_context(postprocess_executor, _run_scheduled, uid, effect_source)
+            submit_with_context(postprocess_executor, _run_scheduled, uid, effect_source)
         except Exception:
-            with _scheduled_lock:
-                if effect_source is not None:
-                    _conversation_jobs.pop(uid)
             _automatic_slots.release()
             raise
         return True

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from importlib.util import module_from_spec, spec_from_file_location
 
+import fakeredis
 import pytest
 
 from utils import ai_profile_refresh as refresh
@@ -46,7 +48,7 @@ class FakeLock:
         self.ttls.append(ttl)
         return self.acquired
 
-    def cooldown(self, uid, ttl=3600):
+    def cooldown(self, uid, ttl=3600, *, token=None):
         if self.raises:
             raise ConnectionError('redis down')
         self.cooldown_ttls.append(ttl)
@@ -205,7 +207,7 @@ def test_failed_automatic_refresh_releases_in_progress_lock(wired, monkeypatch):
 def test_schedule_refresh_is_bounded_per_process(monkeypatch):
     monkeypatch.delenv(refresh.KILL_SWITCH_ENV, raising=False)
     queued: list = []
-    monkeypatch.setattr(refresh, 'submit_with_context', lambda executor, fn, uid: queued.append((fn, uid)))
+    monkeypatch.setattr(refresh, 'submit_with_context', lambda executor, fn, *args: queued.append((fn, args)))
     monkeypatch.setattr(refresh, '_automatic_slots', refresh.threading.BoundedSemaphore(2))
 
     stale = {'profile_text': 'x'}
@@ -214,11 +216,11 @@ def test_schedule_refresh_is_bounded_per_process(monkeypatch):
     assert not refresh.schedule_refresh('c', stale, known=True)  # both slots busy
     fresh = {'refreshed_at': datetime.now(timezone.utc).isoformat()}
     assert not refresh.schedule_refresh('d', fresh, known=True)
-    assert [uid for _, uid in queued] == ['a', 'b']
+    assert [args[0] for _, args in queued] == ['a', 'b']
 
     # A finished run frees its slot.
-    monkeypatch.setattr(refresh, 'refresh_if_stale', lambda uid: 'written')
-    queued[0][0]('a')
+    monkeypatch.setattr(refresh, 'refresh_if_stale', lambda uid, **kwargs: 'written')
+    queued[0][0](*queued[0][1])
     assert refresh.schedule_refresh('c', stale, known=True)
 
     monkeypatch.setenv(refresh.KILL_SWITCH_ENV, 'off')
@@ -387,7 +389,7 @@ def test_scheduled_profile_revalidates_trigger_and_actual_inputs(wired, monkeypa
     # The cadence fixture stubs persistence. Use the real transactional writer here.
     monkeypatch.setattr(refresh.users_db, 'write_ai_user_profile_if_unchanged', REAL_PROFILE_WRITE)
     monkeypatch.setattr(refresh.redis_db, 'try_acquire_ai_profile_auto_cooldown', lambda *a, **k: True)
-    monkeypatch.setattr(refresh.redis_db, 'release_ai_profile_auto_cooldown', lambda *a: None)
+    monkeypatch.setattr(refresh.redis_db, 'settle_ai_profile_auto_cooldown', lambda *a, **k: False)
     monkeypatch.setattr(
         refresh.conversations_db,
         'get_conversations_without_photos',
@@ -409,36 +411,75 @@ def test_scheduled_profile_revalidates_trigger_and_actual_inputs(wired, monkeypa
     assert bool(client.rows[user]['ai_user_profile']) is (expected == 'written')
 
 
-def test_independent_request_joins_and_retries_a_fenced_conversation_job(wired, monkeypatch):
-    store, _, _ = wired
-    queued = []
-    attempts = []
-    cooldown = set()
-    monkeypatch.setattr(refresh, 'submit_with_context', lambda executor, fn, *args: queued.append((fn, args)))
+# Save the Redis adapters before the cadence fixture replaces them.
+REAL_ADMIT = refresh.redis_db.try_acquire_ai_profile_auto_cooldown
+REAL_SETTLE = refresh.redis_db.settle_ai_profile_auto_cooldown
+REAL_LOCK = refresh.redis_db.try_acquire_ai_profile_refresh_lock
+REAL_UNLOCK = refresh.redis_db.release_ai_profile_refresh_lock
 
-    def acquire(uid, ttl, *, token='independent'):
-        if cooldown:
-            return False
-        cooldown.add(token)
-        return True
+
+@pytest.mark.parametrize('source_fenced', [True, False])
+def test_independent_refresh_survives_a_cross_instance_cooldown(wired, monkeypatch, source_fenced):
+    store, _, _ = wired
+    spec = spec_from_file_location('profile_refresh_other_instance', refresh.__file__)
+    assert spec is not None and spec.loader is not None
+    other = module_from_spec(spec)
+    spec.loader.exec_module(other)
+    assert other._automatic_slots is not refresh._automatic_slots
+
+    server = fakeredis.FakeServer()
+    first = fakeredis.FakeRedis(server=server)
+    second = fakeredis.FakeRedis(server=server)
+    monkeypatch.setattr(refresh.redis_db, 'r', first)
+    monkeypatch.setattr(refresh.redis_db, 'try_acquire_ai_profile_auto_cooldown', REAL_ADMIT)
+    monkeypatch.setattr(refresh.redis_db, 'settle_ai_profile_auto_cooldown', REAL_SETTLE)
+    monkeypatch.setattr(refresh.redis_db, 'try_acquire_ai_profile_refresh_lock', REAL_LOCK)
+    monkeypatch.setattr(refresh.redis_db, 'release_ai_profile_refresh_lock', REAL_UNLOCK)
+    queued = []
+    monkeypatch.setattr(other, 'submit_with_context', lambda executor, fn, *args: queued.append((fn, args)))
+
+    attempts = []
+    cooldown_key = f'users:{UID}:ai_profile_auto_cooldown'
+    source = refresh.ConversationEffectSource('trigger', 3, None)
 
     def write(uid, expected_text, profile, *, effect_source, **kwargs):
         attempts.append(effect_source)
         if effect_source is not None:
-            assert refresh.schedule_refresh(uid, None, known=True)
-            raise refresh.ConversationEffectSourceChanged('fixture trigger changed while generating')
+            # Finish the other instance's queued job before the first reaches
+            # its Firestore refusal. No process-local state crosses this seam.
+            assert other.schedule_refresh(uid, None, known=True)
+            fn, args = queued.pop()
+            with monkeypatch.context() as pod:
+                pod.setattr(refresh.redis_db, 'r', second)
+                fn(*args)
+            assert first.get(cooldown_key).endswith(b':pending')
+            assert store.writes == []
+            if source_fenced:
+                raise refresh.ConversationEffectSourceChanged('fixture trigger changed while generating')
+        else:
+            # The handoff reserved the cooldown. A newer conversation cannot
+            # claim it in the gap before this independent attempt commits.
+            assert first.get(cooldown_key) == b'1'
+            assert not REAL_ADMIT(uid, token='abcdef')
         return store.write_if_unchanged(uid, expected_text, profile)
 
-    monkeypatch.setattr(refresh.redis_db, 'try_acquire_ai_profile_auto_cooldown', acquire)
-    monkeypatch.setattr(refresh.redis_db, 'release_ai_profile_auto_cooldown', lambda uid, token: cooldown.remove(token))
     monkeypatch.setattr(refresh.users_db, 'write_ai_user_profile_if_unchanged', write)
-    source = refresh.ConversationEffectSource('trigger', 3, None)
-    assert refresh.schedule_refresh(UID, None, known=True, effect_source=source)
-    assert not refresh.schedule_refresh(UID, None, known=True, effect_source=source)
-    fn, args = queued.pop()
-    fn(*args)
-
+    assert refresh.refresh_if_stale(UID, effect_source=source) == 'written'
     assert queued == []
-    assert attempts == [source, None]
-    assert cooldown == {'independent'}
+    assert attempts == ([source, None] if source_fenced else [source])
+    assert first.get(cooldown_key) == b'1'
     assert len(store.writes) == 1
+
+
+def test_stale_profile_cooldown_token_cannot_consume_new_owner_demand(monkeypatch):
+    client = fakeredis.FakeRedis()
+    monkeypatch.setattr(refresh.redis_db, 'r', client)
+    key = f'users:{UID}:ai_profile_auto_cooldown'
+    assert REAL_ADMIT(UID, token='aaaa')
+    assert REAL_SETTLE(UID, 'aaaa', source_fenced=True) is False
+    assert REAL_ADMIT(UID, token='bbbb')
+    assert not REAL_ADMIT(UID)
+    assert REAL_SETTLE(UID, 'aaaa', source_fenced=True) is False
+    assert client.get(key) == b'conversation:bbbb:pending'
+    assert REAL_SETTLE(UID, 'bbbb', source_fenced=True) is True
+    assert client.get(key) == b'1'
