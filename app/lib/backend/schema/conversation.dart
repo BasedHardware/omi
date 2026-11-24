@@ -550,12 +550,18 @@ class ServerConversation {
   }
 
   /// This conversation with [segments] as its transcript; every other field is carried over.
-  ServerConversation withTranscriptSegments(List<TranscriptSegment> segments) => _copy(transcriptSegments: segments);
+  ServerConversation withTranscriptSegments(List<TranscriptSegment> segments) =>
+      _copy(transcriptSegments: segments, transcriptSegmentsLoaded: true);
 
   /// Carry Home's list-only presentation through a detail refresh without losing its content.
   ServerConversation withHomeStep(String step) => _copy(homeStep: step)..transcriptCarried = transcriptCarried;
 
-  ServerConversation _copy({List<TranscriptSegment>? transcriptSegments, String? homeStep}) => ServerConversation(
+  ServerConversation _copy({
+    List<TranscriptSegment>? transcriptSegments,
+    bool? transcriptSegmentsLoaded,
+    String? homeStep,
+  }) =>
+      ServerConversation(
         id: id,
         createdAt: createdAt,
         onDeviceProvenance: onDeviceProvenance,
@@ -564,7 +570,7 @@ class ServerConversation {
         startedAt: startedAt,
         finishedAt: finishedAt,
         transcriptSegments: transcriptSegments ?? this.transcriptSegments,
-        transcriptSegmentsLoaded: transcriptSegmentsLoaded,
+        transcriptSegmentsLoaded: transcriptSegmentsLoaded ?? this.transcriptSegmentsLoaded,
         homeListTranscriptEvidence: homeListTranscriptEvidence,
         appResults: appResults,
         suggestedSummarizationApps: suggestedSummarizationApps,
