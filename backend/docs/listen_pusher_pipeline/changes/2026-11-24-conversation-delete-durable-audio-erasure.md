@@ -32,13 +32,35 @@ that the audio cleanup is durable: failures are retried, not only logged.
     rechecked daily.
   - If the conversation row is still visible (the delete failed after arming and answered 503), the runner waits
     (`last_reason=conversation_row_live`, rechecked after 5 minutes) instead of erasing the audio.
-  - An obligation that completes with staging kept for a live sibling logs
-    `last_reason=staging_kept_for_live_sibling`. That sibling's own deletion owes the staging.
+  - On its first run the obligation records every staging job it reaches, with all the conversations that job
+    fed (`staging_sources`), before any hold or kill-switch check. Content-ledger rows expire after 45 days, and a
+    held obligation can outlive them. The recorded set is used together with any fresh ledger read: its prefixes
+    stay owed, and its recorded siblings still count as live. A recorded job with no ledger rows left is past any
+    processing, so it counts as settled.
+  - The obligation is never discharged while a recorded prefix is kept for a live sibling. It stays held
+    (`last_reason=staging_kept_for_live_sibling`, rechecked daily) and erases the prefix once that sibling is
+    deleted.
+  - Contention on the account's audio gate counts as `busy` (30 s retry), not as a failure.
   - Ledger-read and provider failures redrive.
   - Accepted (busy-gate) cascades arm the same obligation, with the donors recorded at acceptance.
 - **Unchanged.** Tombstone-first ordering, the held-account deferral (no erasure while a hold is active), the
   existing batch-purge and cascade-erasure obligations, the account gate, and automatic empty-generation
   teardown, which keeps its audio.
+
+## Retention exceptions
+
+Only the durable obligation retries staging that has to stay. These paths erase best-effort with the same
+sibling-safe rule, but keep in-flight or shared staging without a retry:
+
+- The after-response background erasure, used when the kill switch is off or obligation dispatch is not configured
+  (dev, local). That path is the kill switch's documented fallback.
+- The conversations-v3 recording audio purge (`utils/conversations/v3/service.purge_audio`). It erases a
+  recording's audio, which is not a user conversation delete. It has no tombstone, which is the runner's only
+  authority to erase, so arming an obligation there would complete as `no_tombstone`.
+
+In both, a later deletion of a sibling conversation through the route arms its own obligation, which owes the
+shared staging. A sibling deleted more than 45 days later, after the ledger rows expired and with no obligation
+recorded in the meantime, cannot be traced to the job. Account deletion still sweeps `syncing/{uid}/`.
 
 ## Rollout and flags
 

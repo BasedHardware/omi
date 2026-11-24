@@ -17,7 +17,7 @@ and may yet feed another conversation.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -137,7 +137,50 @@ def uploads_for_conversations(
     return [found[key] for key in sorted(found)]
 
 
-def staging_plan(uid: str, conversation_ids: Iterable[str], *, firestore_client: Any = None) -> StagingPlan:
+def _job_rows(
+    uid: str, conversation_ids: list[str], extra_jobs: Iterable[str], firestore_client: Any
+) -> dict[str, dict[str, SyncUpload]]:
+    """Every ledger row of each upload job that fed these conversations (plus ``extra_jobs``), by job."""
+    uploads = uploads_for_conversations(uid, conversation_ids, firestore_client=firestore_client)
+    job_ids = sorted({upload.job_id for upload in uploads if upload.job_id} | set(extra_jobs))
+    if not job_ids:
+        return {}
+    ledger = _ledger(uid, firestore_client)
+    by_job: dict[str, dict[str, SyncUpload]] = {job: {} for job in job_ids}
+    if ledger is None:
+        return by_job
+    for upload in uploads:
+        if upload.job_id in by_job:
+            by_job[upload.job_id][upload.content_id] = upload
+    for job in job_ids:
+        for snapshot in ledger.where(filter=FieldFilter('job_id', '==', job)).stream():
+            row = _upload(snapshot)
+            if row.job_id == job:
+                by_job[job][row.content_id] = row
+    return by_job
+
+
+def staging_sources(uid: str, conversation_ids: Iterable[str], *, firestore_client: Any = None) -> dict[str, list[str]]:
+    """Each staging job these conversations reach, with every conversation that job fed.
+
+    The durable audio obligation records this on its first run: ledger rows
+    expire (45 days) while an obligation may stay held longer, and the record
+    keeps both the prefix and its sibling set known after they are gone.
+    """
+    conversation_ids = [cid for cid in conversation_ids if cid]
+    if not uid or not conversation_ids:
+        return {}
+    by_job = _job_rows(uid, conversation_ids, (), _client(firestore_client))
+    return {job: sorted({cid for row in rows.values() for cid in row.conversation_ids}) for job, rows in by_job.items()}
+
+
+def staging_plan(
+    uid: str,
+    conversation_ids: Iterable[str],
+    *,
+    recorded: Mapping[str, Iterable[str]] | None = None,
+    firestore_client: Any = None,
+) -> StagingPlan:
     """Sort the staging directories of the uploads that fed these conversations.
 
     A directory is keyed by upload job, so every ledger row naming that job is
@@ -149,32 +192,31 @@ def staging_plan(uid: str, conversation_ids: Iterable[str], *, firestore_client:
     when neither its row nor a tombstone exists (tombstones are written before
     rows are deleted, so that conversation is gone). Read errors propagate: the
     durable obligation retries them.
+
+    ``recorded`` (job id -> fed conversation ids, from ``staging_sources``) is
+    authoritative alongside the ledger: a recorded job is always considered,
+    its recorded siblings always count, and once its ledger rows have expired
+    the upload is past any processing, so it is settled.
     """
     conversation_ids = [cid for cid in conversation_ids if cid]
-    uploads = uploads_for_conversations(uid, conversation_ids, firestore_client=firestore_client)
-    job_ids = sorted({upload.job_id for upload in uploads if upload.job_id})
-    if not job_ids:
+    recorded = {job: list(ids) for job, ids in (recorded or {}).items() if _SAFE_ID.match(str(job))}
+    if not uid or (not conversation_ids and not recorded):
         return StagingPlan()
     firestore_client = _client(firestore_client)
-    ledger = _ledger(uid, firestore_client)
-    if ledger is None:
+    by_job = _job_rows(uid, conversation_ids, recorded, firestore_client)
+    if not by_job:
         return StagingPlan()
-    by_job: dict[str, dict[str, SyncUpload]] = {job: {} for job in job_ids}
-    for upload in uploads:
-        if upload.job_id in by_job:
-            by_job[upload.job_id][upload.content_id] = upload
-    for job in job_ids:
-        for snapshot in ledger.where(filter=FieldFilter('job_id', '==', job)).stream():
-            row = _upload(snapshot)
-            if row.job_id == job:
-                by_job[job][row.content_id] = row
-    fed = {cid for rows in by_job.values() for row in rows.values() for cid in row.conversation_ids}
+    fed_by_job = {
+        job: {cid for row in rows.values() for cid in row.conversation_ids} | set(recorded.get(job, ()))
+        for job, rows in by_job.items()
+    }
+    fed = set().union(*fed_by_job.values())
     deleted = set(conversation_ids) | _tombstoned(uid, fed - set(conversation_ids), firestore_client)
     deleted |= _gone(uid, fed - deleted, firestore_client)
     erasable, shared_live, in_flight = [], [], []
-    for job in job_ids:
+    for job in sorted(by_job):
         rows = by_job[job].values()
-        if any(not row.conversation_ids <= deleted for row in rows):
+        if not fed_by_job[job] <= deleted:
             shared_live.append(job)
         elif any(row.status != SETTLED_STATUS for row in rows):
             in_flight.append(job)

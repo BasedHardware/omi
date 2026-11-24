@@ -504,7 +504,7 @@ def test_eraser_owes_merge_donor_audio_recorded_at_acceptance(plane, cascade):
     erase = MagicMock()
     for job, gen in cascade.audio_sent:
         assert purge_jobs.run_audio_erasure_job(job, gen, erase=erase) == 'erased'
-    erase.assert_called_once_with(UID, 'c1', ['donor-a'])
+    erase.assert_called_once_with(UID, 'c1', ['donor-a'], staging={})
 
 
 def test_accept_transaction_reads_before_it_writes_and_keeps_the_first_tombstone(monkeypatch):

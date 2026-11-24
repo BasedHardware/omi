@@ -692,7 +692,7 @@ def test_storage_hold_is_reported_on_the_obligation_and_retried(tombstone_db, au
 
     calls = []
 
-    def erase(uid, cid, sources):
+    def erase(uid, cid, sources, *, staging):
         calls.append((uid, cid, sources))
         if len(calls) == 1:
             raise StoragePrefixPurgeBlocked({('syncing', 'syncing/uid1/job/1.bin', 1): 'objectUnderActiveHold'})
@@ -716,7 +716,7 @@ def test_retry_after_the_primary_row_is_gone_still_finishes_the_audio(tombstone_
     erase = MagicMock()
     generation = _audio_generation(tombstone_db, audio_job)
     assert purge_jobs.run_audio_erasure_job(audio_job, generation, erase=erase) == 'erased'
-    erase.assert_called_once_with(UID, 'c1', ['donor'])
+    erase.assert_called_once_with(UID, 'c1', ['donor'], staging={})
     assert _audio_row(tombstone_db) is None
 
 
@@ -792,7 +792,7 @@ def test_legal_hold_and_account_wipe_stop_the_audio_erasure(monkeypatch, tombsto
 
 
 def test_rearm_during_a_run_is_erased_again_not_completed(tombstone_db, audio_job):
-    def erase(uid, cid, sources):
+    def erase(uid, cid, sources, *, staging):
         purge_jobs.arm_audio_erasure(UID, 'c1', ['late-donor'])  # a retried delete re-arms meanwhile
 
     assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
@@ -854,13 +854,53 @@ def test_visible_conversation_row_waits_instead_of_losing_its_audio(tombstone_db
     )
 
 
-def test_staging_kept_for_a_live_sibling_is_logged_when_the_obligation_completes(tombstone_db, audio_job, caplog):
+def test_staging_kept_for_a_live_sibling_stays_owed_until_that_sibling_is_deleted(tombstone_db, audio_job, caplog):
     caplog.set_level('INFO', logger=purge_jobs.logger.name)
-    erase = MagicMock(return_value={'shared_live': 1})
+    erase = MagicMock(side_effect=[{'shared_live': 1}, {'shared_live': 0}])
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'staging_kept_for_live_sibling'
+    )
+    assert 'last_reason=staging_kept_for_live_sibling' in caplog.text and 'shared_live=1' in caplog.text
+    row = _audio_row(tombstone_db)
+    # Never discharged while the recorded prefix is kept: the ledger linking it to the sibling expires.
+    assert row['last_reason'] == 'staging_kept_for_live_sibling' and row['shared_live'] == 1
+    assert row['due_at'] > purge_jobs._now() + purge_jobs.timedelta(hours=23)
     assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
         'erased'
     )
-    assert 'last_reason=staging_kept_for_live_sibling' in caplog.text and 'shared_live=1' in caplog.text
+    assert _audio_row(tombstone_db) is None
+
+
+def _fake_ledger(monkeypatch, client):
+    """The dev-stage sync content ledger in the shared fake client, queryable like Firestore."""
+    from database import sync_ledger_sources as sources
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    path = f'users/{UID}/sync_content_ledger_dev'
+
+    class _Query:
+        def __init__(self, field, op, value):
+            self.field, self.op, self.value = field, op, value
+
+        def stream(self):
+            for doc_path, row in sorted(client.docs.items()):
+                if not doc_path.startswith(path + '/') or doc_path.count('/') != path.count('/') + 1:
+                    continue
+                value = row
+                for part in self.field.split('.'):
+                    value = (value or {}).get(part) if isinstance(value, dict) else None
+                hit = value == self.value if self.op == '==' else bool(set(value or []) & set(self.value))
+                if hit:
+                    yield SimpleNamespace(id=doc_path.rsplit('/', 1)[-1], to_dict=lambda row=row: dict(row))
+
+    def ledger_ref(uid, _client):
+        collection = client.collection('users').document(uid).collection('sync_content_ledger_dev')
+        collection.where = lambda *, filter: _Query(filter.field_path, filter.op_string, filter.value)
+        return collection
+
+    monkeypatch.setattr(sources, '_ledger', ledger_ref)
+    monkeypatch.setattr(sources, '_client', lambda _client: client)
+    return path
 
 
 def test_obligation_runs_before_donor_tombstones_and_still_erases_the_donor_upload(
@@ -869,41 +909,17 @@ def test_obligation_runs_before_donor_tombstones_and_still_erases_the_donor_uplo
     """F2 race: the reconciler can run the obligation before the cascade tombstones merge donors."""
     from database import sync_ledger_sources as sources
 
-    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    ledger = f'users/{UID}/sync_content_ledger_dev'
+    ledger = _fake_ledger(monkeypatch, tombstone_db)
     tombstone_db.docs[f'{ledger}/donor-upload'] = {
         'job_id': 'job-donor',
         'status': 'completed',
         'result': {'new_memories': ['donor'], 'updated_memories': []},
     }
     tombstone_db.docs[f'users/{UID}/conversations/donor'] = {'deleted': True}  # absorbed, tombstone not yet written
-
-    class _Query:
-        def __init__(self, path, field, op, value):
-            self.path, self.field, self.op, self.value = path, field, op, value
-
-        def stream(self):
-            for path, row in sorted(tombstone_db.docs.items()):
-                if not path.startswith(self.path + '/') or path.count('/') != self.path.count('/') + 1:
-                    continue
-                value = row
-                for part in self.field.split('.'):
-                    value = (value or {}).get(part) if isinstance(value, dict) else None
-                hit = value == self.value if self.op == '==' else bool(set(value or []) & set(self.value))
-                if hit:
-                    yield SimpleNamespace(id=path.rsplit('/', 1)[-1], to_dict=lambda row=row: dict(row))
-
-    def ledger_ref(uid, client):
-        coll = tombstone_db.collection('users').document(uid).collection('sync_content_ledger_dev')
-        coll.where = lambda *, filter: _Query(ledger, filter.field_path, filter.op_string, filter.value)
-        return coll
-
-    monkeypatch.setattr(sources, '_ledger', ledger_ref)
-    monkeypatch.setattr(sources, '_client', lambda client: tombstone_db)
     erased = []
 
-    def erase(uid, cid, donors):
-        plan = sources.staging_plan(uid, [cid, *donors])
+    def erase(uid, cid, donors, *, staging):
+        plan = sources.staging_plan(uid, [cid, *donors], recorded=staging)
         erased.extend(plan.erasable)
         return {'shared_live': len(plan.shared_live)}
 
@@ -912,3 +928,64 @@ def test_obligation_runs_before_donor_tombstones_and_still_erases_the_donor_uplo
         'erased'
     )
     assert erased == ['job-donor']
+
+
+def test_recorded_staging_outlives_the_ledger_and_keeps_the_obligation_owed(monkeypatch, tombstone_db, audio_job):
+    """A held obligation can outlive the 45-day ledger: the prefix recorded on its first run stays owed."""
+    from database import sync_ledger_sources as sources
+    from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked
+
+    ledger = _fake_ledger(monkeypatch, tombstone_db)
+    tombstone_db.docs[f'{ledger}/upload'] = {
+        'job_id': 'job-x',
+        'status': 'completed',
+        'result': {'new_memories': ['c1', 'sibling'], 'updated_memories': []},
+    }
+    plans = []
+
+    def erase(uid, cid, donors, *, staging):
+        plan = sources.staging_plan(uid, [cid, *donors], recorded=staging)
+        plans.append(plan)
+        if len(plans) == 1:
+            raise StoragePrefixPurgeBlocked({('syncing', 'syncing/uid1/job-x/1.bin', 1): 'objectUnderActiveHold'})
+        return {'shared_live': len(plan.shared_live)}
+
+    # First run (sibling already deleted): the job and its fed conversations are recorded, then a hold stops it.
+    tombstone_db.docs[f'users/{UID}/deleted_conversations/sibling'] = {}
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'storage_held'
+    )
+    assert _audio_row(tombstone_db)['staging_sources'] == {'job-x': ['c1', 'sibling']}
+    # The ledger row expires while the obligation is held.
+    tombstone_db.docs.pop(f'{ledger}/upload')
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'erased'
+    )
+    assert plans[-1].erasable == ('job-x',)
+
+
+def test_recorded_live_sibling_still_protects_its_staging_after_the_ledger_expires(monkeypatch, tombstone_db):
+    from database import sync_ledger_sources as sources
+
+    _fake_ledger(monkeypatch, tombstone_db)
+    tombstone_db.docs[f'users/{UID}/conversations/sibling'] = {'status': 'completed'}
+    plan = sources.staging_plan(UID, ['c1'], recorded={'job-x': ['c1', 'sibling']})
+    assert plan == sources.StagingPlan(shared_live=('job-x',))
+    tombstone_db.docs[f'users/{UID}/deleted_conversations/sibling'] = {}
+    assert sources.staging_plan(UID, ['c1'], recorded={'job-x': ['c1', 'sibling']}).erasable == ('job-x',)
+
+
+def test_audio_gate_contention_is_busy_not_failure(monkeypatch, tombstone_db, audio_job):
+    kinds = []
+
+    def busy_with_peer(error, uid, *, kind, **kwargs):
+        kinds.append(kind)
+        return kind == purge_jobs.AUDIO_GATE_KIND
+
+    monkeypatch.setattr(legal_holds, 'gate_busy_with_peer', busy_with_peer)
+    erase = MagicMock(side_effect=RuntimeError('audio gate held by a peer'))
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'busy'
+    )
+    assert kinds == [purge_jobs.AUDIO_GATE_KIND]
+    assert _audio_row(tombstone_db)['last_outcome'] == 'busy'

@@ -387,7 +387,7 @@ def _staging_buckets(monkeypatch, jobs, *, shared_live=(), in_flight=()):
     from database.sync_ledger_sources import StagingPlan
 
     def lookup(uid, conversation_ids, **kwargs):
-        looked_up.append((uid, list(conversation_ids)))
+        looked_up.append((uid, list(conversation_ids), *([kwargs['recorded']] if kwargs.get('recorded') else [])))
         return StagingPlan(erasable=tuple(jobs), shared_live=tuple(shared_live), in_flight=tuple(in_flight))
 
     monkeypatch.setattr('database.sync_ledger_sources.staging_plan', lookup)
@@ -467,10 +467,18 @@ def test_durable_audio_erasure_runs_every_step_under_the_audio_gate(monkeypatch)
     monkeypatch.setattr(
         storage_mod,
         'delete_privacy_conversation_audio',
-        lambda uid, cid, *, source_ids, strict_staging: erased.append(
+        lambda uid, cid, *, source_ids, strict_staging, recorded_staging: erased.append(
             (uid, cid, source_ids, strict_staging, len(gates))
-        ),
+        )
+        or {'shared_live': 0},
     )
-    storage_mod.erase_conversation_audio('u', 'c', ['donor'])
+    assert storage_mod.erase_conversation_audio('u', 'c', ['donor'], staging={'job-a': ['c']}) == {'shared_live': 0}
     assert gates == [('u', 'audio_conversation_deletion', storage_mod.CONVERSATION_AUDIO_ERASURE_GATE_WAIT_SECONDS)]
     assert erased == [('u', 'c', ['donor'], True, 1)]
+
+
+def test_recorded_staging_reaches_the_plan_on_the_durable_path(monkeypatch):
+    _private, syncing, _derived, looked_up = _staging_buckets(monkeypatch, ['job-a'])
+    storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True, recorded_staging={'job-a': ['c']})
+    assert looked_up == [('u', ['c'], {'job-a': ['c']})]
+    assert not any(name.startswith('syncing/u/job-a/') for name in syncing.names)

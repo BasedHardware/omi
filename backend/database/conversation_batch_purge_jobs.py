@@ -57,6 +57,9 @@ AUDIO_STAGING_PENDING_MAX_SECONDS = 14 * 24 * 60 * 60
 AUDIO_STAGING_UNSETTLED_RECHECK_SECONDS = 24 * 60 * 60
 # A tombstoned conversation whose row is still visible (a delete that failed after arming) is rechecked this soon.
 AUDIO_ROW_LIVE_RETRY_SECONDS = 300
+# Staging kept for a live sibling stays owed (the ledger that links them expires) and is rechecked daily.
+AUDIO_SHARED_LIVE_RECHECK_SECONDS = 24 * 60 * 60
+AUDIO_GATE_KIND = 'audio_conversation_deletion'
 SEGMENTS = 'segments'
 TOMBSTONES = 'deleted_conversations'
 # Renewed by every checkpoint/unit; a dead or wedged worker loses ownership after this.
@@ -625,11 +628,11 @@ def _finish_failed(finish: Callable[[str], bool]) -> None:
         pass  # The lease expires; the original failure is what the queue must see.
 
 
-def lost_gate_to_peer(error: BaseException, uid: str) -> bool:
+def lost_gate_to_peer(error: BaseException, uid: str, kind: str = GATE_KIND) -> bool:
     if type(error).__name__ == 'HTTPException' and getattr(error, 'status_code', None) == 409:
         return True  # the cascade's nested gate mapped a same-account peer to account_gate_busy
     try:
-        return legal_holds.gate_busy_with_peer(error, uid, kind=GATE_KIND) is True
+        return legal_holds.gate_busy_with_peer(error, uid, kind=kind) is True
     except Exception:  # noqa: BLE001 - an unreadable gate is a plain failure (redriven)
         return False
 
@@ -690,24 +693,44 @@ def _gate_busy(error: BaseException, uid: str) -> bool:
     # The audio gate is account-exclusive: any running destructive operation makes it busy.
     if type(error).__name__ in {'DestructiveOperationInProgress', 'DestructiveGateTakeover'}:
         return True
-    return lost_gate_to_peer(error, uid)
+    return lost_gate_to_peer(error, uid, kind=AUDIO_GATE_KIND)
+
+
+def _record_staging(client: Any, job: str, token: str, sources: dict[str, list[str]]) -> None:
+    """Persist the staging jobs (and their fed conversations) under run ownership; never shrinks."""
+    ref = client.collection(AUDIO_COLLECTION).document(job)
+
+    def body(transaction):
+        snapshot = ref.get(transaction=transaction)
+        row = (snapshot.to_dict() or {}) if snapshot.exists else {}
+        if row.get('run_token') != token:
+            raise RunSuperseded()
+        merged = {key: list(value) for key, value in (row.get('staging_sources') or {}).items()}
+        for key, ids in sources.items():
+            merged[key] = sorted(set(merged.get(key, [])) | set(ids))
+        transaction.update(ref, {'staging_sources': merged, 'staging_recorded_at': _now()})
+
+    _in_transaction(client, body)
 
 
 def run_audio_erasure_job(
     job: str,
     generation: int,
     *,
-    erase: Callable[[str, str, list[str]], Any],
+    erase: Callable[..., Any],
     enabled: Callable[[], bool] = lambda: True,
     firestore_client: Any = None,
     now: datetime | None = None,
 ) -> str:
     """Erase one deleted conversation's audio; retried until done, never dropped.
 
-    ``erase(uid, conversation_id, audio_source_ids)`` acquires the account's
-    audio gate (refusing a legal hold) and erases every copy; it is idempotent,
-    so a duplicate run repeats finished steps. It may return a mapping with
-    ``shared_live`` (staging kept for a live sibling), which is logged. Only the
+    ``erase(uid, conversation_id, audio_source_ids, staging=recorded)`` acquires
+    the account's audio gate (refusing a legal hold) and erases every copy; it
+    is idempotent, so a duplicate run repeats finished steps. ``recorded`` is
+    the staging jobs (with their fed conversations) this obligation recorded
+    from the ledger on its first run, so they stay owed after the ledger rows
+    expire. It may return a mapping with ``shared_live`` (staging kept for a
+    live sibling): the obligation then stays owed, rechecked daily. Only the
     tombstone is required: the primary row may already be gone, but a row that
     is still visible (the delete failed after arming) waits. With ``enabled``
     false (the kill switch) the obligation is held, not run. Raises on a
@@ -736,15 +759,32 @@ def run_audio_erasure_job(
             retry_after=retry_after,
         )
 
+    donors = [str(source) for source in row.get('audio_source_ids') or []]
     try:
-        if not enabled():
-            # Kill switch off: armed obligations stay owed and resume when it is back on.
-            finish('held', reason='switched_off')
-            return 'switched_off'
         user = client.collection('users').document(uid)
         if not user.collection(TOMBSTONES).document(conversation_id).get().exists:
             # Account deletion supersedes: the wipe removed the subtree and every owner storage prefix.
             return 'no_tombstone' if finish('completed') else 'superseded'
+        recorded = {key: list(value) for key, value in (row.get('staging_sources') or {}).items()}
+        if row.get('staging_recorded_at') is None:
+            # Record before any hold: the ledger expires, a held obligation may outlive it.
+            from database.sync_ledger_sources import staging_sources
+
+            try:
+                found = staging_sources(uid, [conversation_id, *donors], firestore_client=client)
+                _record_staging(client, job, token, found)
+            except RunSuperseded:
+                raise
+            except Exception:
+                if enabled():
+                    raise
+                found = {}
+            for key, ids in found.items():
+                recorded[key] = sorted(set(recorded.get(key, [])) | set(ids))
+        if not enabled():
+            # Kill switch off: armed obligations stay owed and resume when it is back on.
+            finish('held', reason='switched_off')
+            return 'switched_off'
         conversation = user.collection('conversations').document(conversation_id).get()
         if conversation.exists and not (conversation.to_dict() or {}).get('deleted'):
             # The delete failed after arming (it answered 503): never erase audio of a visible conversation.
@@ -752,7 +792,7 @@ def run_audio_erasure_job(
             return 'conversation_row_live'
         assert_account_deletion_permitted(uid)
         try:
-            summary = erase(uid, conversation_id, [str(source) for source in row.get('audio_source_ids') or []])
+            summary = erase(uid, conversation_id, donors, staging=recorded)
         except LegalHoldActive:
             raise
         except StoragePrefixPurgeBlocked as error:
@@ -792,6 +832,8 @@ def run_audio_erasure_job(
             logger.info('conversation audio erasure waiting for the account gate job=%s', job)
             finish('busy')
             return 'busy'
+    except RunSuperseded:
+        return 'superseded'  # another run owns the obligation now; it records and erases
     except LegalHoldActive:
         # Stays hidden and retained; rechecked hourly.
         finish('held', reason='legal_hold')
@@ -808,13 +850,21 @@ def run_audio_erasure_job(
         raise
     shared_live = int((summary or {}).get('shared_live') or 0) if isinstance(summary, dict) else 0
     if shared_live:
-        # Discharged with staging kept for a live sibling: that sibling's own deletion owes it.
+        # Never discharged while a recorded prefix is kept for a live sibling (the ledger linking
+        # them expires): rechecked daily, erased once that sibling is deleted.
         logger.info(
-            'event=conversation_audio_erasure outcome=erased last_reason=staging_kept_for_live_sibling '
+            'event=conversation_audio_erasure outcome=held last_reason=staging_kept_for_live_sibling '
             'job=%s shared_live=%d',
             job,
             shared_live,
         )
+        finish(
+            'held',
+            retry_after=AUDIO_SHARED_LIVE_RECHECK_SECONDS,
+            reason='staging_kept_for_live_sibling',
+            shared_live=shared_live,
+        )
+        return 'staging_kept_for_live_sibling'
     return 'erased' if finish('completed') else 'superseded'
 
 

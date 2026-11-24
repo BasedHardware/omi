@@ -1538,8 +1538,26 @@ def _seed_shared_upload(client, combo, trial):
 
 _add(
     DriverEntry(
+        'database.sync_ledger_sources._job_rows',
+        base={'uid': UID, 'conversation_ids': ['conv-1']},
+        domains={'extra_jobs': [(), ('job-1',)]},
+        setup=_seed_shared_upload,
+        patchers=(_sync_stage,),
+    )
+)
+_add(
+    DriverEntry(
+        'database.sync_ledger_sources.staging_sources',
+        base={'uid': UID, 'conversation_ids': ['conv-1']},
+        setup=_seed_shared_upload,
+        patchers=(_sync_stage,),
+    )
+)
+_add(
+    DriverEntry(
         'database.sync_ledger_sources.staging_plan',
         base={'uid': UID, 'conversation_ids': ['conv-1']},
+        domains={'recorded': [None, {'job-1': ['conv-1']}]},
         setup=_seed_shared_upload,
         patchers=(_sync_stage,),
     )
