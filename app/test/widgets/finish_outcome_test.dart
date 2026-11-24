@@ -145,7 +145,7 @@ class _Capture extends CaptureProvider {
   void noteClientFinish() => lastClientFinish = (at: DateTime.now(), previewWords: 4, previewSession: 1);
 
   @override
-  Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
+  Future<InProgressProcessOutcome> finishCaptureWithOutcome({String? liveConversationId}) async {
     finishes++;
     segments = [];
     _phoneLive = false;

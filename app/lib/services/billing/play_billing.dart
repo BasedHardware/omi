@@ -25,6 +25,9 @@ class PlayPurchaseResult {
   final String? code;
 }
 
+/// How long Play may take to say whether billing is available or to list the product's offers.
+const playQueryTimeout = Duration(seconds: 10);
+
 /// One base plan as Play sells it to this Google account, in its own currency.
 @immutable
 class PlayPlanOffer {
@@ -37,6 +40,7 @@ class PlayPlanOffer {
     required this.base,
     this.trial,
     this.trialDays,
+    this.trialFormattedPrice,
   });
 
   final String basePlanId;
@@ -53,6 +57,9 @@ class PlayPlanOffer {
   /// The free-trial offer when Play lists it for this account (Play applies new-subscriber eligibility).
   final GooglePlayProductDetails? trial;
   final int? trialDays;
+
+  /// Play's own string for the free-trial phase (e.g. "Free" or "₹0.00").
+  final String? trialFormattedPrice;
 }
 
 @immutable
@@ -131,6 +138,9 @@ class PlayBilling {
   final Set<String> _delivering = {};
   String _accountId = '';
 
+  /// A purchase is on Play's sheet or a token is being confirmed with the server.
+  bool get busy => _purchase != null || _delivering.isNotEmpty;
+
   void _listen() {
     _subscription ??= _platform().purchaseStream.listen(_onPurchases, onError: (Object error) {
       Logger.debug('Play purchase stream error: $error');
@@ -147,8 +157,9 @@ class PlayBilling {
   /// Play's offers for the configured base plans; null when Play is unavailable or has no product.
   Future<PlayOffers?> loadOffers(PlayBillingConfig config) async {
     final platform = _platform();
-    if (!await platform.isAvailable()) return null;
-    final response = await platform.queryProductDetails({config.productId});
+    // A Play client that never answers ends in the error state with Retry, not a skeleton forever.
+    if (!await platform.isAvailable().timeout(playQueryTimeout)) return null;
+    final response = await platform.queryProductDetails({config.productId}).timeout(playQueryTimeout);
     if (response.error != null) Logger.debug('Play product query error: ${response.error}');
     PlayPlanOffer? monthly;
     PlayPlanOffer? yearly;
@@ -173,6 +184,7 @@ class PlayBilling {
         base: base,
         trial: trial,
         trialDays: trial == null ? null : _trialDays(_offer(trial)!),
+        trialFormattedPrice: trial == null ? null : _offer(trial)!.pricingPhases.first.formattedPrice,
       );
       if (entry.value == 'year') {
         yearly = plan;
@@ -304,13 +316,22 @@ class PlayBilling {
       }
       final result = await _verify(token, productId);
       if (!result.retryable) {
-        await _store.write((await _store.read()).where((t) => t['token'] != token).toList());
+        try {
+          await _store.write((await _store.read()).where((t) => t['token'] != token).toList());
+        } catch (error) {
+          // The server has answered: a failed cleanup only means the token is sent once more next launch.
+          Logger.debug('Play token cleanup failed: $error');
+        }
       }
       return switch (result.status) {
         'active' => const PlayPurchaseResult(PlayPurchaseOutcome.purchased),
         'pending' => const PlayPurchaseResult(PlayPurchaseOutcome.pending),
         _ => PlayPurchaseResult(PlayPurchaseOutcome.failed, code: result.code),
       };
+    } catch (error) {
+      // A token store error ends as a failed purchase, so the purchase never stays open for the session.
+      Logger.debug('Play token delivery failed: $error');
+      return const PlayPurchaseResult(PlayPurchaseOutcome.failed);
     } finally {
       _delivering.remove(token);
     }

@@ -7055,6 +7055,26 @@ class AppLocalizationsSk extends AppLocalizations {
   String get authUnexpectedError => 'Neočakávaná chyba';
 
   @override
+  String get accountSignInMethods => 'Spôsoby prihlásenia';
+
+  @override
+  String get accountAddSignInMethod => 'Pridať spôsob prihlásenia';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Pridajte spôsob prihlásenia do tohto účtu Omi. Váš plán, nahrávky a integrácie zostanú v tomto účte.';
+
+  @override
+  String get accountSignInConflictTitle => 'Tento spôsob prihlásenia patrí k inému účtu';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Stále ste v tomto účte. Každý účet Omi si ponechá svoj plán, nahrávky a integrácie.';
+
+  @override
+  String get accountSignInMethodAdded => 'Spôsob prihlásenia bol pridaný';
+
+  @override
   String get authFailedToLinkGoogle => 'Nepodarilo sa prepojiť Google účet';
 
   @override
@@ -14355,6 +14375,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get processingProgress => 'Spracúvanie čakajúcich nahrávok…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Čaká sa na dostupný limit prepisu';
+
+  @override
   String get processingDeferred => 'Čaká na spracovanie';
 
   @override
@@ -15309,9 +15332,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get stopThese => 'Zastaviť tieto';
 
   @override
-  String get meetingActionItemsTitle => 'Akčné položky';
-
-  @override
   String get addToTasks => 'Pridať do úloh';
 
   @override
@@ -15757,4 +15777,54 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Na Androide nie je k dispozícii';
+
+  @override
+  String get pageNotAvailableInApp => 'Táto stránka nie je v aplikácii dostupná.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Objednávka bola odoslaná. Potvrdenie nájdete v e-maile.';
+
+  @override
+  String get prepaidCodeEntry => 'Máte kód?';
+
+  @override
+  String get prepaidCodeTitle => 'Uplatniť kód';
+
+  @override
+  String get prepaidCodeFieldHint => 'Zadajte svoj kód';
+
+  @override
+  String get prepaidCodeRedeem => 'Uplatniť';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kód uplatnený';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Tento kód nie je platný. Skontrolujte ho a skúste to znova.',
+        'used': 'Tento kód už bol použitý.',
+        'expired': 'Platnosť tohto kódu vypršala.',
+        'hasPlan': 'Už máte plán. Váš kód nebol použitý. Uplatnite ho, keď váš plán skončí.',
+        'notPrepaid': 'Tento kód tu nemožno uplatniť. Použite ho pri výbere plánu.',
+        'notEligible': 'Tento kód nemožno použiť v tomto účte.',
+        'rateLimited': 'Príliš veľa pokusov. Skúste to neskôr.',
+        'other': 'Niečo sa pokazilo. Skúste to znova.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Účtované cez omi.me. Zrušiť môžete kedykoľvek tu.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Účtované cez omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Váš plán $plan je pozastavený.';
+  }
 }

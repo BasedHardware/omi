@@ -74,6 +74,7 @@ from database.users import (
 from utils import ai_profile_refresh, billing_recovery, screen_vector_entitlements
 from utils.observability.fallback import record_fallback
 from config import play_billing as play_billing_config
+from config import prepaid_code_redeem as prepaid_code_config
 import database.play_subscriptions as play_subscriptions_db
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
@@ -1374,13 +1375,21 @@ def get_user_subscription_endpoint(
         held = response.held_audio
         audio = {'count': held.count, 'seconds': held.seconds} if held else {'count': 0, 'seconds': 0}
         response.processing_backlog = processing_backlog.snapshot(uid, allowance=funded, audio=audio)
-    if play_billing_config.client_uses_play(x_app_platform, x_app_build, uid):
+    if uses_play := play_billing_config.client_uses_play(x_app_platform, x_app_build, uid):
         response.play_billing = PlayBillingConfig.model_validate(play_billing_config.client_config_payload(uid))
         try:
             play_subscriptions_db.remember_account_once(response.play_billing.obfuscated_account_id, uid)
         except Exception:  # noqa: BLE001 - the map only helps bind notification-only tokens
             logger.warning('play_billing account map write failed')
+    _apply_prepaid_code_switch(response, uid, uses_play=uses_play)
     return response
+
+
+def _apply_prepaid_code_switch(response: UserSubscriptionResponse, uid: str, *, uses_play: bool = False) -> None:
+    """Only the ability to redeem follows the switch (a Play build always can). A stored prepaid plan keeps
+    its `prepaid` marker either way, so a redeemed reader never sees Resubscribe when the switch changes."""
+    if uses_play or prepaid_code_config.enabled_for(uid):
+        response.prepaid_code_redeem = True
 
 
 @router.post('/v1/users/processing-backlog/process', response_model=ProcessingBacklog, tags=['v1'])

@@ -7082,6 +7082,26 @@ class AppLocalizationsHr extends AppLocalizations {
   String get authUnexpectedError => 'Neočekivana greška pri prijavi, molim vas pokušajte ponovno';
 
   @override
+  String get accountSignInMethods => 'Načini prijave';
+
+  @override
+  String get accountAddSignInMethod => 'Dodaj način prijave';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Dodajte način prijave na ovaj Omi račun. Vaš paket, snimke i integracije ostaju na ovom računu.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ovaj način prijave povezan je s drugim računom';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'I dalje ste prijavljeni na ovaj račun. Svaki Omi račun zadržava svoj paket, snimke i integracije.';
+
+  @override
+  String get accountSignInMethodAdded => 'Način prijave dodan je';
+
+  @override
   String get authFailedToLinkGoogle => 'Povezivanje s Google-om nije uspjelo, molim vas pokušajte ponovno.';
 
   @override
@@ -14396,6 +14416,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get processingProgress => 'Obrada vaših snimki na čekanju…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Čeka se dostupna kvota za transkripciju';
+
+  @override
   String get processingDeferred => 'Čeka obradu';
 
   @override
@@ -15350,9 +15373,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get stopThese => 'Zaustavi ovo';
 
   @override
-  String get meetingActionItemsTitle => 'Stavke za poduzeti';
-
-  @override
   String get addToTasks => 'Dodaj u zadatke';
 
   @override
@@ -15798,4 +15818,54 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Nije dostupno na Androidu';
+
+  @override
+  String get pageNotAvailableInApp => 'Ova stranica nije dostupna u aplikaciji.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Narudžba je poslana. Potvrdu potražite u e-pošti.';
+
+  @override
+  String get prepaidCodeEntry => 'Imate kôd?';
+
+  @override
+  String get prepaidCodeTitle => 'Iskoristite kôd';
+
+  @override
+  String get prepaidCodeFieldHint => 'Unesite svoj kôd';
+
+  @override
+  String get prepaidCodeRedeem => 'Iskoristi';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kôd je iskorišten';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Ovaj kôd nije valjan. Provjerite ga i pokušajte ponovno.',
+        'used': 'Ovaj kôd je već iskorišten.',
+        'expired': 'Ovaj kôd je istekao.',
+        'hasPlan': 'Već imate plan. Vaš kôd nije iskorišten. Iskoristite ga kada vam plan istekne.',
+        'notPrepaid': 'Ovaj kôd ne može se iskoristiti ovdje. Iskoristite ga kada odaberete plan.',
+        'notEligible': 'Ovaj kôd ne može se koristiti na ovom računu.',
+        'rateLimited': 'Previše pokušaja. Pokušajte kasnije.',
+        'other': 'Nešto nije u redu. Pokušajte ponovno.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Naplaćuje se putem omi.me. Otkažite ovdje bilo kada.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Naplaćuje se putem omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Vaš plan $plan je pauziran.';
+  }
 }

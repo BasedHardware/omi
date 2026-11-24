@@ -96,9 +96,9 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
       if (outcome == PaywallCheckoutOutcome.failed && _notice == null) {
         setState(() => _notice = context.l10n.anErrorOccurredTryAgain);
       }
-      if (outcome == PaywallCheckoutOutcome.purchased) {
+      if (outcome == PaywallCheckoutOutcome.purchased || outcome == PaywallCheckoutOutcome.alreadyPaid) {
         _dismissed = true;
-        Navigator.of(context).pop(true);
+        Navigator.of(context).pop(outcome == PaywallCheckoutOutcome.purchased);
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -138,6 +138,18 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final top = MediaQuery.paddingOf(context).top;
+    // Paid outside Play on a Play build (the plan or Play setup arrived while open): close, nothing bought.
+    // Only while this page is the top route: a code-success sheet above it stays until Done (ModalRoute.of
+    // rebuilds this page when it is on top again).
+    if (context.select<UsageProvider, bool>((usage) => usage.paywallClosedForPlay) &&
+        !_dismissed &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _dismissed || ModalRoute.of(context)?.isCurrent != true) return;
+        _dismissed = true;
+        Navigator.of(context).pop(false);
+      });
+    }
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -157,7 +169,7 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
                 );
             final loading = offer == null &&
                 widget.offer == null &&
-                (usage.isLoadingPlans || usage.playOffersLoading || usage.billingProviderUnknown);
+                (usage.isLoadingPlans || usage.playOffersLoading || usage.billingProviderPending);
             final blocked = cancelPending && widget.offer == null && !loading && offer?.resubscribe != true;
             final freeMinutes = (usage.subscription?.transcriptionSecondsLimit ?? 0) ~/ 60;
             final yearly = offer?.yearly;
@@ -236,14 +248,20 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
                           const SizedBox(height: 10),
                           const _Skeleton(height: 74),
                         ] else if (offer == null && !blocked) ...[
-                          Text(l10n.unableToLoadPlans, style: _Graphite.body()),
+                          if (usage.playBilledPurchaser || usage.billingProviderFailed)
+                            const PlayPlansError()
+                          else
+                            Text(l10n.unableToLoadPlans, style: _Graphite.body()),
                         ] else if (offer != null) ...[
                           if (yearly != null)
                             _PlanOption(
                               key: const Key('outline_paywall_yearly'),
                               title: l10n.billingYearly,
                               badge: saving == null ? null : l10n.savePercent(saving),
-                              subtitle: yearly.formattedPerMonth + l10n.perMonthLabel,
+                              // Google Play shows only its own price strings, never a computed per-month.
+                              subtitle: usage.playBilledPurchaser
+                                  ? l10n.paywallTrialBilledYearly
+                                  : yearly.formattedPerMonth + l10n.perMonthLabel,
                               price: yearly.formatted,
                               per: l10n.billingYearly,
                               selected: _yearly || monthly == null,

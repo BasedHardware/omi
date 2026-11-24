@@ -9,9 +9,9 @@ Play back to its uid, so a notification for a token no client delivered can stil
 """
 
 import hashlib
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 
-from google.api_core.exceptions import AlreadyExists, Conflict
+from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 
 from database import _client
 
@@ -19,7 +19,12 @@ COLLECTION = 'play_subscription_purchases'
 USER_POINTER_FIELD = 'play_current_purchase'
 PENDING_FIELD = 'play_pending_purchase'
 CUSTOMER_FIELD = 'play_billing_customer'
+# Set when any Play purchase is bound to the user, even one that never granted access (bound on hold).
+BOUND_FIELD = 'play_purchase_bound'
+HISTORY_FIELDS = (USER_POINTER_FIELD, PENDING_FIELD, CUSTOMER_FIELD, BOUND_FIELD)
 ACCOUNTS = 'play_billing_accounts'
+# When account deletion last confirmed Google can no longer charge this purchase.
+DELETION_CONFIRMED_FIELD = 'account_deletion_confirmed_at'
 
 
 def token_key(purchase_token: str) -> str:
@@ -72,7 +77,7 @@ def due_for_reconcile(now: int, limit: int, *, firestore_client: Optional[Any] =
 def get_user_fields(uid: str, *, firestore_client: Optional[Any] = None) -> dict:
     """The Play fields on ``users/{uid}`` (pointer, pending token, customer flag)."""
     client = firestore_client or _client.get_firestore_client()
-    snapshot = client.collection('users').document(uid).get([USER_POINTER_FIELD, PENDING_FIELD, CUSTOMER_FIELD])
+    snapshot = client.collection('users').document(uid).get(list(HISTORY_FIELDS))
     if not snapshot.exists:
         return {}
     return snapshot.to_dict() or {}
@@ -131,3 +136,79 @@ def pending_play_purchase(uid: str) -> bool:
     if not key:
         return False
     return (get_purchase(key) or {}).get('state') == 'SUBSCRIPTION_STATE_PENDING'
+
+
+def has_play_history(fields: Mapping[str, Any]) -> bool:
+    """The user doc shows a Play purchase was ever bound or granted. No history: no Play reads at all."""
+    return any(fields.get(name) for name in HISTORY_FIELDS)
+
+
+def mark_play_history(uid: str, *, firestore_client: Optional[Any] = None) -> None:
+    """Set the user's Play history marker. Written before a purchase is bound and on every retry that sees one.
+
+    A missing user document means the account is gone, so there is nothing to protect.
+    """
+    try:
+        set_user_fields(uid, {BOUND_FIELD: True}, firestore_client=firestore_client)
+    except NotFound:
+        pass
+
+
+def compare_and_set(
+    token_hash: str,
+    field: str,
+    value: Any,
+    can_replace: Callable[[Any], bool],
+    *,
+    firestore_client: Optional[Any] = None,
+    attempts: int = 5,
+) -> bool:
+    """Atomically set one field of a purchase document when ``can_replace(current)`` holds.
+
+    The update carries the read's update time as a precondition, so a concurrent writer makes it fail and
+    the decision is taken again on fresh data. Returns True when this call wrote the field.
+    """
+    client = firestore_client or _client.get_firestore_client()
+    ref = client.collection(COLLECTION).document(token_hash)
+    for _ in range(attempts):
+        snapshot = ref.get()
+        if not snapshot.exists or not can_replace((snapshot.to_dict() or {}).get(field)):
+            return False
+        try:
+            ref.update({field: value}, option=client.write_option(last_update_time=snapshot.update_time))
+            return True
+        except FailedPrecondition:
+            continue
+    raise RuntimeError(f'purchase {token_hash[:12]} kept changing; {field} not written')
+
+
+def mark_once(token_hash: str, field: str, value: Any, *, firestore_client: Optional[Any] = None) -> bool:
+    """Write ``field`` only when it is not set yet (atomic). Returns True when this call wrote it."""
+    return compare_and_set(token_hash, field, value, lambda current: not current, firestore_client=firestore_client)
+
+
+def purchase_keys_for_uid(uid: str, *, firestore_client: Optional[Any] = None) -> list[str]:
+    """Every purchase document bound to ``uid``: the exact set ``purge_account_records`` deletes."""
+    client = firestore_client or _client.get_firestore_client()
+    return [snapshot.id for snapshot in client.collection(COLLECTION).where('uid', '==', uid).stream()]
+
+
+def purge_account_records(uid: str, confirmed_since: Any, *, firestore_client: Optional[Any] = None) -> int:
+    """Account deletion: drop every purchase document (uid + plaintext token) and account-map entry of ``uid``.
+
+    Runs inside the Firestore wipe, after the wipe's billing step. Refuses (raises, so the wipe retries) when
+    a purchase document's cancel was not confirmed at or after ``confirmed_since`` (this wipe's billing step):
+    a purchase Google can still charge is never deleted. A later notification for a dropped token finds no
+    owner and is recorded unbound (token, no uid), never granted.
+    """
+    client = firestore_client or _client.get_firestore_client()
+    purchases = list(client.collection(COLLECTION).where('uid', '==', uid).stream())
+    for snapshot in purchases:
+        confirmed_at = (snapshot.to_dict() or {}).get(DELETION_CONFIRMED_FIELD)
+        if confirmed_at is None or confirmed_at < confirmed_since:
+            raise RuntimeError(f'Play purchase {snapshot.id[:12]} has no confirmed deletion cancel')
+    removed = 0
+    for snapshot in purchases + list(client.collection(ACCOUNTS).where('uid', '==', uid).stream()):
+        snapshot.reference.delete()
+        removed += 1
+    return removed

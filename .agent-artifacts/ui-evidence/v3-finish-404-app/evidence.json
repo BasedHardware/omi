@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-finish-404-processing.png",
+      "platform": "mobile-ios",
+      "description": "Home retains the Processing row after a simulated Finish 404 while the summary is pending.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-finish-404-successor.png",
+      "platform": "mobile-ios",
+      "description": "The matching conversation replaces the Processing placeholder as soon as its summary starts writing.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

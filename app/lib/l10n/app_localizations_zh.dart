@@ -6947,6 +6947,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authUnexpectedError => '登录时发生意外错误，请重试';
 
   @override
+  String get accountSignInMethods => '登录方式';
+
+  @override
+  String get accountAddSignInMethod => '添加登录方式';
+
+  @override
+  String get accountAddSignInMethodDetails => '为此 Omi 账号添加一种登录方式。您的订阅套餐、录音和集成仍保留在此账号中。';
+
+  @override
+  String get accountSignInConflictTitle => '此登录方式属于另一个账号';
+
+  @override
+  String get accountSignInConflictDetails => '您仍登录在当前账号。每个 Omi 账号都有各自的订阅套餐、录音和集成。';
+
+  @override
+  String get accountSignInMethodAdded => '已添加登录方式';
+
+  @override
   String get authFailedToLinkGoogle => '与Google关联失败，请重试。';
 
   @override
@@ -14134,6 +14152,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get processingProgress => '正在处理等待中的录音…';
 
   @override
+  String get waitingForTranscriptionAllowance => '正在等待可用的转写额度';
+
+  @override
   String get processingDeferred => '等待处理';
 
   @override
@@ -15063,9 +15084,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stopThese => '停止此类推荐';
 
   @override
-  String get meetingActionItemsTitle => '行动事项';
-
-  @override
   String get addToTasks => '添加到任务';
 
   @override
@@ -15507,4 +15525,54 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Android 上不可用';
+
+  @override
+  String get pageNotAvailableInApp => '此页面无法在应用中打开。';
+
+  @override
+  String get shopOrderPlacedCheckEmail => '订单已提交。请查收确认邮件。';
+
+  @override
+  String get prepaidCodeEntry => '有兑换码？';
+
+  @override
+  String get prepaidCodeTitle => '兑换码';
+
+  @override
+  String get prepaidCodeFieldHint => '输入你的兑换码';
+
+  @override
+  String get prepaidCodeRedeem => '兑换';
+
+  @override
+  String get prepaidCodeRedeemed => '兑换成功';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': '此兑换码无效。请检查后重试。',
+        'used': '此兑换码已被使用。',
+        'expired': '此兑换码已过期。',
+        'hasPlan': '你已有套餐。你的兑换码未被使用。请在套餐结束后再兑换。',
+        'notPrepaid': '此兑换码无法在这里使用。请在选择套餐时使用。',
+        'notEligible': '此兑换码无法用于此账户。',
+        'rateLimited': '尝试次数过多。请稍后再试。',
+        'other': '出了点问题。请重试。',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => '通过 omi.me 计费。可随时在此取消。';
+
+  @override
+  String get playStripeBilledOnWebShort => '通过 omi.me 计费。';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return '你的 $plan 方案已暂停。';
+  }
 }

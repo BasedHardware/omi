@@ -10,6 +10,8 @@ from google.cloud.firestore_v1 import FieldFilter
 from config.episodes import MAX_EPISODE_SECONDS, CLOSE_GAP_SECONDS
 from database._client import get_firestore_client, run_transactional
 from database import episodes, episode_attach_memo, episode_batch_pending, transcript_pointer
+from database.episode_finalization_fence import require_not_deleted
+from database.firestore_read_metrics import FirestoreReadSite
 from utils.conversations.episode_attach_key import content_key, memo_eligible
 from config.episode_attach import content_gate_enabled, optimizations_enabled
 from utils.conversations.recorded_time import conversation_span
@@ -337,6 +339,7 @@ def attach_recorded(
     deadline_floor: datetime | None = None,
     detach_from: str | None = None,
     admission: bool = False,
+    finalizing_conversation_id: str | None = None,
 ) -> dict[str, Any] | str:
     """Place a capture once. Its owner never changes when the capture spans a cap.
 
@@ -351,6 +354,14 @@ def attach_recorded(
 
     @firestore.transactional
     def attach(transaction):
+        if finalizing_conversation_id is not None:
+            require_not_deleted(
+                transaction,
+                client,
+                uid,
+                finalizing_conversation_id,
+                FirestoreReadSite.EPISODE_FINALIZATION_UPDATE_FENCE,
+            )
         # Both attachment strategies share one read phase and one fence. Cache
         # only inside this callback: Firestore retries must issue fresh queries.
         fence = client.collection('users').document(uid).collection('episode_links').document('recorded_timeline')

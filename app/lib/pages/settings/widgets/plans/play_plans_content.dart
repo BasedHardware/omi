@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
+import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/billing/play_billing.dart';
@@ -18,8 +19,8 @@ typedef PlayUrlOpener = Future<bool> Function(Uri uri);
 Future<bool> _openExternal(Uri uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
 
 /// PlansSheet body for a reader who buys through Google Play: Play's prices, Play's purchase sheet,
-/// Restore, and Play's subscription center for a Play subscriber (on any platform). No Stripe offer,
-/// code or link.
+/// Restore, and Play's subscription center for a Play subscriber (on any platform). No Stripe offer
+/// or link; under the Play actions, "Have a code?" redeems a prepaid code the reader already has.
 class PlayPlansContent extends StatefulWidget {
   const PlayPlansContent({super.key, required this.analyticsSource, this.openUrl, this.onPurchased});
 
@@ -90,7 +91,13 @@ class _PlayPlansContentState extends State<PlayPlansContent> {
   }
 
   Future<void> _manage(String productId) async {
-    final opened = await _open(playManageSubscriptionUri(productId));
+    final usage = context.read<UsageProvider>()..markOpenedPlayManage();
+    var opened = false;
+    try {
+      opened = await _open(playManageSubscriptionUri(productId));
+    } finally {
+      if (!opened) usage.clearOpenedPlayManage();
+    }
     if (!opened && mounted) OmiFeedback.error(context, context.l10n.playManageSubscription);
   }
 
@@ -145,6 +152,14 @@ class _PlayPlansContentState extends State<PlayPlansContent> {
     ];
   }
 
+  // Below every Play action, never above Subscribe. Same entry and style as the Stripe plans sheet.
+  List<Widget> _codeEntry(UsageProvider usage) => [
+        if (usage.canRedeemPrepaidCode) ...[
+          const SizedBox(height: OmiSpacing.md),
+          const Center(child: PrepaidCodeEntry()), // centered like the Stripe sheet's entry
+        ],
+      ];
+
   List<Widget> _purchaser(BuildContext context, UsageProvider usage) {
     final l10n = context.l10n;
     final offers = usage.playOffers;
@@ -167,6 +182,7 @@ class _PlayPlansContentState extends State<PlayPlansContent> {
             message: l10n.checkConnectionTryAgain,
             onRetry: usage.retryPlayOffers,
           ),
+        ..._codeEntry(usage),
       ];
     }
     final plans = [offers.yearly, offers.monthly].whereType<PlayPlanOffer>().toList();
@@ -209,6 +225,7 @@ class _PlayPlansContentState extends State<PlayPlansContent> {
         child: Text(l10n.restoreAction),
       ),
       PlayBillingDisclosure(openUrl: widget.openUrl),
+      ..._codeEntry(usage),
     ];
   }
 }
@@ -216,10 +233,13 @@ class _PlayPlansContentState extends State<PlayPlansContent> {
 /// Under every Google Play purchase button: auto-renewal at the shown price, where to cancel, and the
 /// Terms and Privacy links.
 class PlayBillingDisclosure extends StatelessWidget {
-  const PlayBillingDisclosure({super.key, this.openUrl, this.color});
+  const PlayBillingDisclosure({super.key, this.openUrl, this.color, this.legalLinks = true});
 
   final PlayUrlOpener? openUrl;
   final Color? color;
+
+  /// False where the host page already shows Terms and Privacy.
+  final bool legalLinks;
 
   @override
   Widget build(BuildContext context) {
@@ -244,16 +264,34 @@ class PlayBillingDisclosure extends StatelessWidget {
       children: [
         Text(l10n.playRenewalTerms, key: const Key('play_renewal_terms'), textAlign: TextAlign.center, style: style),
         Text(l10n.playBilledByGoogle, textAlign: TextAlign.center, style: style),
-        Wrap(
-          alignment: WrapAlignment.center,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            link(const Key('play_terms'), l10n.termsOfUse, AuthenticationProvider.termsOfServiceUrl),
-            ExcludeSemantics(child: Text(' · ', style: style)),
-            link(const Key('play_privacy'), l10n.privacyPolicy, AuthenticationProvider.privacyPolicyUrl),
-          ],
-        ),
+        if (legalLinks)
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              link(const Key('play_terms'), l10n.termsOfUse, AuthenticationProvider.termsOfServiceUrl),
+              ExcludeSemantics(child: Text(' · ', style: style)),
+              link(const Key('play_privacy'), l10n.privacyPolicy, AuthenticationProvider.privacyPolicyUrl),
+            ],
+          ),
       ],
+    );
+  }
+}
+
+/// The plans sheet's error state with its Retry, for paywalls that could not load Play's plans: the
+/// subscription read failed (provider unknown) or Play offered no product.
+class PlayPlansError extends StatelessWidget {
+  const PlayPlansError({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final usage = context.watch<UsageProvider>();
+    return OmiErrorState(
+      key: const Key('play_plans_error'),
+      title: context.l10n.unableToLoadPlans,
+      message: context.l10n.checkConnectionTryAgain,
+      onRetry: usage.billingProviderUnknown ? usage.fetchSubscription : usage.retryPlayOffers,
     );
   }
 }
@@ -278,7 +316,7 @@ class _PlayPlansLoadingState extends State<PlayPlansLoading> {
   @override
   Widget build(BuildContext context) {
     final usage = context.watch<UsageProvider>();
-    final failed = usage.error != null && !usage.isLoading;
+    final failed = usage.billingProviderFailed;
     return DecoratedBox(
       decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
       child: SizedBox(

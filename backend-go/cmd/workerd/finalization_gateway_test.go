@@ -2,19 +2,24 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/BasedHardware/omi/backend-go/internal/adapters/conversations"
 	"github.com/BasedHardware/omi/backend-go/internal/adapters/finalizationdocs"
 	"github.com/BasedHardware/omi/backend-go/internal/adapters/llmgateway"
 	"github.com/BasedHardware/omi/backend-go/internal/finalization"
 	"github.com/BasedHardware/omi/backend-go/internal/finalization/rules"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
+	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore/docstoretest"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 	"github.com/BasedHardware/omi/backend-go/internal/queue/queuetest"
@@ -201,6 +206,83 @@ func TestF32TombstoneBeforeNotesFencesGatewayDispatch(t *testing.T) {
 	settled := h.Settled(job.Key)
 	if settled.Outcome == nil || *settled.Outcome != queue.TerminalFenced {
 		t.Fatalf("delete intent did not fence finalization: %+v", settled)
+	}
+}
+
+// Exercise the worker with Python-generated ciphertext, matching the legacy callback guard.
+func TestPL745ForeignOwnerTranscriptPreservesCiphertext(t *testing.T) {
+	t.Parallel()
+	h, runtime, job, bench := gatewayTestJob(t)
+	const path = "users/gateway-owner/conversations/gateway-conversation"
+	wire, err := os.ReadFile("../../internal/adapters/conversations/testdata/python_wire.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Rows map[string]map[string]any `json:"rows"`
+	}
+	if decodeErr := json.Unmarshal(wire, &fixture); decodeErr != nil {
+		t.Fatal(decodeErr)
+	}
+	row := fixture.Rows["enhanced_zlib"]
+	ciphertext, ok := row["transcript_segments"].(string)
+	if !ok || ciphertext == "" || row["transcript_segments_compressed"] != true ||
+		row["data_protection_level"] != "enhanced" {
+		t.Fatal("fixture must contain a protected transcript")
+	}
+	// Use the fixture's master key. Authentication fails because the worker
+	// reads the ciphertext under gateway-owner, not its encryption owner.
+	clk := clock.System{}
+	codec := crypt.New("conversation adapter synthetic fixture key")
+	cipherWire, encodeErr := json.Marshal(ciphertext)
+	if encodeErr != nil {
+		t.Fatal(encodeErr)
+	}
+	segments, decodeErr := codec.Decode("conversation-fixture-owner", crypt.Transcript{
+		Segments: cipherWire, Compressed: true,
+	})
+	if decodeErr != nil || len(segments) == 0 {
+		t.Fatalf("fixture must decode for its original owner: %v", decodeErr)
+	}
+	wireFinalizationDocuments(runtime.family, finalizationdocs.Store{Docs: bench.Store, Clock: clk, Codec: codec}, nil, true)
+	doc := bench.Raw.Doc(path)
+	original, err := doc.Get(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := original.Data()
+	notes := map[string]any{"title": "Existing title", "overview": "Existing notes"}
+	fields["structured"] = notes
+	fields["transcript_segments"] = ciphertext
+	fields["transcript_segments_compressed"] = true
+	fields["data_protection_level"] = row["data_protection_level"]
+	if _, writeErr := doc.Set(t.Context(), fields); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unreadable transcript reached gateway: %s", r.Method)
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(server.Close)
+	bindGatewayFixture(t, runtime, server.URL, clk)
+
+	// Include retry exhaustion so the terminal write must preserve custody too.
+	h.Start(workerdHandlers(runtime.family))
+	outcome := h.Settled(job.Key)
+	if outcome.Outcome == nil || *outcome.Outcome != queue.TerminalFailure ||
+		outcome.Reason == nil || *outcome.Reason != conversations.CauseUnreadable {
+		t.Fatalf("expected an unreadable-transcript disposition, got %+v", outcome)
+	}
+	stored, err := doc.Get(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields = stored.Data()
+	storedNotes, hasNotes := fields["structured"].(map[string]any)
+	if fields["transcript_segments"] != ciphertext || fields["transcript_segments_compressed"] != true ||
+		fields["data_protection_level"] != row["data_protection_level"] || fields["discarded"] == true ||
+		fields["go_finalization_notes_input_hash"] != nil || !hasNotes || !maps.Equal(storedNotes, notes) {
+		t.Fatal("finalization changed transcript custody or committed summary work")
 	}
 }
 

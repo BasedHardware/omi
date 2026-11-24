@@ -8812,6 +8812,30 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "Sign-in methods",
+    "@accountSignInMethods": {
+        "description": "Heading for the sign-in methods in Account settings."
+    },
+    "accountAddSignInMethod": "Add sign-in method",
+    "@accountAddSignInMethod": {
+        "description": "Confirmation title shown before opening a provider sign-in."
+    },
+    "accountAddSignInMethodDetails": "Add a way to sign in to this Omi account. Your plan, recordings and integrations stay with this account.",
+    "@accountAddSignInMethodDetails": {
+        "description": "Explains what adding a sign-in method to the current account will do."
+    },
+    "accountSignInConflictTitle": "This sign-in belongs to another account",
+    "@accountSignInConflictTitle": {
+        "description": "Title shown when a sign-in method is already bound to a different account."
+    },
+    "accountSignInConflictDetails": "You’re still signed in here. Each Omi account keeps its plan, recordings and integrations.",
+    "@accountSignInConflictDetails": {
+        "description": "Explains a rejected provider link and how to open the separate account."
+    },
+    "accountSignInMethodAdded": "Sign-in method added",
+    "@accountSignInMethodAdded": {
+        "description": "Confirmation after adding a new sign-in method to the current account."
+    },
     "authFailedToLinkGoogle": "Failed to link with Google, please try again.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -17467,6 +17491,10 @@
     "processingNewestFirst": "We'll process the newest recordings first, up to what fits. The rest will stay waiting.",
     "processingAction": "Process waiting recordings",
     "processingProgress": "Processing your waiting recordings…",
+    "waitingForTranscriptionAllowance": "Waiting for transcription allowance",
+    "@waitingForTranscriptionAllowance": {
+        "description": "Status for a recording whose transcription job is held awaiting allowance. The current monthly plan limit may be unknown or may have reset while the recording still waits."
+    },
     "processingDeferred": "Waiting for processing",
     "processingCount": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
     "@processingCount": {
@@ -18662,10 +18690,6 @@
     "@stopThese": {
         "description": "Disable the producer of a For You card"
     },
-    "meetingActionItemsTitle": "Action items",
-    "@meetingActionItemsTitle": {
-        "description": "meetingActionItemsTitle"
-    },
     "addToTasks": "Add to Tasks",
     "@addToTasks": {
         "description": "addToTasks"
@@ -19270,5 +19294,59 @@
     "playPaidAppUnavailable": "Not available on Android",
     "@playPaidAppUnavailable": {
         "description": "Disabled action on a paid Marketplace app for a reader who buys through Google Play: it cannot be bought in the Android app"
+    },
+    "pageNotAvailableInApp": "This page isn't available in the app.",
+    "@pageNotAvailableInApp": {
+        "description": "Shown when an in-app store page links somewhere the app does not open"
+    },
+    "shopOrderPlacedCheckEmail": "Order placed. Check your email for the confirmation.",
+    "@shopOrderPlacedCheckEmail": {
+        "description": "Shown after the in-app store closes once an order is paid"
+    },
+    "prepaidCodeEntry": "Have a code?",
+    "@prepaidCodeEntry": {
+        "description": "Link on the paywall and plans sheet that opens the sheet to redeem a prepaid Omi Pro code"
+    },
+    "prepaidCodeTitle": "Redeem a code",
+    "@prepaidCodeTitle": {
+        "description": "Title of the sheet to redeem a prepaid Omi Pro code"
+    },
+    "prepaidCodeFieldHint": "Enter your code",
+    "@prepaidCodeFieldHint": {
+        "description": "Hint in the code field of the prepaid code sheet"
+    },
+    "prepaidCodeRedeem": "Redeem",
+    "@prepaidCodeRedeem": {
+        "description": "Button that redeems the prepaid code"
+    },
+    "prepaidCodeRedeemed": "Code redeemed",
+    "@prepaidCodeRedeemed": {
+        "description": "Title after a prepaid code was redeemed"
+    },
+    "prepaidCodeResult": "{reason, select, invalid{This code isn't valid. Check it and try again.} used{This code has already been used.} expired{This code has expired.} hasPlan{You already have a plan. Your code was not used. Redeem it after your plan ends.} notPrepaid{This code can't be redeemed here. Use it when you choose a plan.} notEligible{This code can't be used on this account.} rateLimited{Too many tries. Try again later.} other{Something went wrong. Please try again.}}",
+    "@prepaidCodeResult": {
+        "description": "Why a prepaid code was not redeemed. The code is never used when this shows.",
+        "placeholders": {
+            "reason": {
+                "type": "String"
+            }
+        }
+    },
+    "playStripeBilledOnWeb": "Billed through omi.me. Cancel here anytime.",
+    "@playStripeBilledOnWeb": {
+        "description": "Plans & Billing on an Android build that sells through Google Play, under the renewing plan of a reader who pays on omi.me (Stripe). The only action on the sheet is Cancel. Plain text, no link."
+    },
+    "playStripeBilledOnWebShort": "Billed through omi.me.",
+    "@playStripeBilledOnWebShort": {
+        "description": "Plans & Billing on an Android build that sells through Google Play, under a cancel-pending plan billed on omi.me (Stripe), next to Resubscribe. Plain text, no link."
+    },
+    "playStripePlanPaused": "Your {plan} plan is paused.",
+    "@playStripePlanPaused": {
+        "description": "Home row line under 'Your card was declined' on an Android build that sells through Google Play. Neutral: names no place or way to pay. plan = a product name such as Omi Pro.",
+        "placeholders": {
+            "plan": {
+                "type": "String"
+            }
+        }
     }
 }

@@ -14,7 +14,7 @@ import unittest.mock
 from itertools import cycle
 
 from config.rollout_cohorts import legacy_membership
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from types import SimpleNamespace
 from typing import Any
@@ -163,7 +163,7 @@ BODY_DIGEST = {
     'utils.support.holds._events': '360ff57663deaf3c17c934276f219cce74f4a468dc28c8a1145623524625927e',
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
-    'database.conversations_v3.commit_projection': '1839fb90b6ce564158f484f9608796e98a401dc0b9b0b6222c60fee1d66514ad',
+    'database.conversations_v3.commit_projection': '5dd4ec5de82b68c50f032b0e44f1961c5a7f0682158a9c57082a052ee49c7354',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -172,6 +172,7 @@ BODY_DIGEST = {
     'database.batch_census_export._scope': '239ed05dc6fef88f4ed8a88b870867f37623329cb96d8b1131278a52a3652dc8',
     'database.batch_pipeline_allowance_migration.candidates': '04c9beae56ec6091544a2ec69a8ba170032dbe3670697b704db2f88d513bc5cb',
     'database.conversation_batch_purge_jobs.RunProgress.pending_segments': '86b3d882fe3c575b3a540bb00d1845c941c5256d99848c4dc89917eb707ff3cc',
+    'database.conversations._PageFill._run_lean': 'b63bc3c4fea800ebe132e510332c4ec503c854a560eb5b380bd7e1d2701cbfe3',
     'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
     'database.conversation_batch_purge_jobs._drop_segment_records': '2db3123e6e11d177d434326668969249a7fd4e0aade9788d045056fbdefe8c9d',
     'database.conversation_batch_purge_jobs._owes_segments': '5945da3db3e539efafe6dbc95560280683ea863b77a8e7e720ee3c2902b59c68',
@@ -245,7 +246,9 @@ BODY_DIGEST = {
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
     # Re-reviewed: quiet admission uses the shared speech clock; query/read shapes are unchanged.
     # Re-reviewed 2026-11-04: atomic blocked_byok_at metadata only; query ownership is unchanged.
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'f20f3b16e0e8d9421b86c675510cbb0fc9a4d09b3e71f70c68c3254b8209542c',
+    # Re-reviewed: the early user-finish admission judges the snapshot already held; no collection query
+    # (cohort mode adds one cached point read of the owner's rollout_cohorts document).
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'dc815b20539ecf62552bd9de5e3f2c3842ecc53cb7a7df04a2edb87dd9ff2292',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
@@ -262,7 +265,7 @@ BODY_DIGEST = {
     # discarded-barrier scan is still covered by the same two driven callees.
     # Recorded-span recomputation is pure; barrier queries still run under the covered callees.
     # Re-reviewed 2026-11-06: C2 preload runner and deleted-blob refusals; serving query shapes unchanged.
-    'database.smart_merge.absorb_conversation': 'f2e9751cdc2cdaef0b9c662d96188a14bcd17e6aefdb324e6d65f4f65f260968',
+    'database.smart_merge.absorb_conversation': 'b859b6a6baaaf774a76cf06120f9070f7759f728bfac4d24d6e288333ac3ffed',
     'database.omi_flags.read_all': '58b65fc434cd3253a55aa54c6defc2a4cfc40dc33b565326b6c688eb8ed374d3',
     'database.omi_flags.read_audit': '12ee243338e5fc080b8e2f81223586837bb454f8d8e14d711f3805c74e258cfa',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
@@ -419,6 +422,14 @@ _add(
 )
 # Play billing reconcile: one single-field ``next_check_at`` range, oldest first.
 _add(DriverEntry('database.play_subscriptions.due_for_reconcile', neutrals={'now': _NOW, 'limit': _LIMIT}))
+# Account deletion: single-field uid equality on the purchase and account-map collections.
+_add(
+    DriverEntry(
+        'database.play_subscriptions.purge_account_records',
+        base={'uid': UID, 'confirmed_since': datetime(2026, 1, 1, tzinfo=timezone.utc)},
+    )
+)
+_add(DriverEntry('database.play_subscriptions.purchase_keys_for_uid', base={'uid': UID}))
 # The pager's separate operations database uses a built-in next_at index.
 _add(DriverEntry('paging.store.due_deliveries', base={'now': T0}))
 # Sealed owner groups use an existing single-field uid index on obligations.
@@ -1345,6 +1356,18 @@ _add(
 )
 _add(
     CoveredByEntry(
+        'database.conversations._PageFill._run_lean',
+        covered_by=(
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations_without_photos',
+        ),
+        reason='lean refill of the same page fill: the consumer query with a field projection and a start_after bookmark, so the same filters, order and index as the full-document refill observed inside both listed consumers; it runs only under a request budget, which the drivers hold neutral',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversations._PageFill._run_lean'],
+    )
+)
+_add(
+    CoveredByEntry(
         'database.conversation_visibility_counts.count_hidden',
         covered_by=('database.conversations.get_conversations_count',),
         reason='tombstone count query invoked by the count driver on every combo',
@@ -1420,6 +1443,7 @@ _add(
             'deadline_floor': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
             'detach_from': (None, 'document gets for the old provisional membership; no query shape effect'),
             'admission': (False, 'member document refusal guard; no query filter or ordering effect'),
+            'finalizing_conversation_id': ('recorded-1', 'transactional deletion document gets only'),
         },
         base={
             'uid': UID,
@@ -1478,6 +1502,23 @@ _add(
         ),
     )
 )
+
+
+def _sync_stage(_fs: Any) -> Any:
+    # Ledger collections are stage-scoped; with no stage there is no ledger and no query.
+    import os
+
+    return unittest.mock.patch.dict(os.environ, {'OMI_ENV_STAGE': 'prod'})
+
+
+for _fn in ('uploads_for_conversations', 'staging_job_ids', 'owed_batch_segments'):
+    _add(
+        DriverEntry(
+            f'database.sync_ledger_sources.{_fn}',
+            base={'uid': UID, 'conversation_ids': ['conv-1']},
+            patchers=(_sync_stage,),
+        )
+    )
 _add(
     DriverEntry(
         'database.recording_speakers.scope_conversation_ids',
@@ -2826,7 +2867,8 @@ _add(
         'has_intervening_discarded/find_preceding_conversations, so the terminal '
         'stream records under those callees, never under absorb_conversation. '
         'The revision-debt hook is a pure payload update with no query or read; '
-        'passing the stored privacy state to the transcript codec adds no query',
+        'passing the stored privacy state to the transcript codec adds no query. '
+        'The WAL custody guard uses the donor, survivor and ancestor rows the transaction already read.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.smart_merge.absorb_conversation'],
     )
@@ -3648,7 +3690,9 @@ for entry in (
     CoveredByEntry(
         'database.conversations_v3.commit_projection',
         covered_by=('database.conversations_v3.merge_donors_have_tasks',),
-        reason='Refinement and live repair use the same bounded donor-task query and write point markers with donor redirects.',
+        reason='Refinement and live repair use the same bounded donor-task query and write point markers with donor redirects. '
+        'The WAL custody guard uses the existing observation rows before donor-task queries or projection writes. '
+        'The Home index bit is derived from the flags already present in those writes.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),

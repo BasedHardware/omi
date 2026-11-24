@@ -1,5 +1,6 @@
 import asyncio
 import contextvars
+from contextlib import nullcontext
 import logging
 import threading
 import time
@@ -17,6 +18,7 @@ from models.speaker_tag_prompts import (
     SpeakerTagPromptOrigin as O,
     SpeakerTagPromptQualityOutcome as Q,
 )
+from database.legal_holds import DestructiveOperationInProgress
 from utils import executors
 from utils import speaker_sample
 from utils.speaker_tag_prompts import service
@@ -48,6 +50,7 @@ class World:
         monkeypatch.setattr(service.users_db, 'get_person', lambda uid, pid: self.people.get(pid))
         monkeypatch.setattr(service.users_db, 'get_person_by_name', lambda uid, name: None)
         monkeypatch.setattr(service.users_db, 'create_person', lambda uid, data: self.created.append(data) or data)
+        monkeypatch.setattr(service, 'external_write_fence', lambda uid: nullcontext())
         monkeypatch.setattr(service.users_db, 'get_people', lambda uid: list(self.people.values()))
         monkeypatch.setattr(service.conversations_db, 'get_conversations', lambda *a, **k: [])
         monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda *a, **k: {})
@@ -123,6 +126,23 @@ def test_saving_other_voices_off_labels_without_teaching(monkeypatch):
     assert world.assignments[0]['use_for_speech_training'] is False
     assert world.scheduled == [] and not response.voice_sample_queued
     assert response.quality_outcome == Q.person_not_enrolled
+
+
+def test_new_person_answer_does_not_create_person_during_destructive_gate(monkeypatch):
+    world = World(monkeypatch)
+
+    def gate_busy(uid):
+        assert uid == 'u'
+        raise DestructiveOperationInProgress('external data write blocked by destructive operation')
+
+    monkeypatch.setattr(service, 'external_write_fence', gate_busy)
+
+    with pytest.raises(DestructiveOperationInProgress):
+        service.apply_answer('u', _request(K.identify, O.unnamed, A.new_person, name='Ana'), world.schedule, NOW)
+
+    assert world.created == []
+    assert world.assignments == []
+    assert world.scheduled == []
 
 
 def test_declined_durable_admission_still_queues_immediate_teaching(monkeypatch):
@@ -1019,3 +1039,24 @@ def test_not_me_card_answer_retires_a_prior_not_a_person_marker(monkeypatch):
 
     service.apply_answer('u', _request(K.identify, O.unnamed, A.someone_else), world.schedule, NOW)
     assert cleared == [(('u', 'c1', [1]), {'assignment_generation': 6})]
+
+
+@pytest.mark.parametrize(
+    'kind,answer,extra',
+    [
+        (K.identify, A.person, {'person_id': 'p1'}),
+        (K.owner_check, A.me, {'evidence_id': 'e1'}),
+    ],
+)
+def test_destructive_gate_propagates_from_every_answer_path(monkeypatch, kind, answer, extra):
+    """The fence must surface intact for the HTTP boundary to map; never a stale/500 crash."""
+
+    world = World(monkeypatch)
+
+    def gate_busy(*args, **kwargs):
+        raise DestructiveOperationInProgress('external data write blocked by destructive operation')
+
+    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', gate_busy)
+    with pytest.raises(DestructiveOperationInProgress):
+        service.apply_answer('u', _request(kind, O.unnamed, answer, **extra), world.schedule, NOW)
+    assert world.scheduled == []

@@ -106,7 +106,8 @@ def test_cascade_delete_cancels_reminders_even_if_vector_delete_raises(monkeypat
 
 
 @pytest.mark.parametrize('configured', [False, True])
-def test_donor_inventory_read_only_when_canonical_bucket_configured(monkeypatch, configured):
+def test_donor_inventory_read_with_or_without_canonical_bucket(monkeypatch, configured):
+    # Donor prefixes and their sync uploads hold the target's audio in every deployment.
     if configured:
         monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
     else:
@@ -118,4 +119,4 @@ def test_donor_inventory_read_only_when_canonical_bucket_configured(monkeypatch,
         return {'sync_merged_from': ['donor']}
 
     _delete_with_tasks(monkeypatch, [], source_lookup=lookup)
-    assert reads == ([(UID, 'conv-1')] if configured else [])
+    assert reads == [(UID, 'conv-1')]

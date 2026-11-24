@@ -7076,6 +7076,26 @@ class AppLocalizationsBe extends AppLocalizations {
   String get authUnexpectedError => 'Неўдаўдаўёнауўхіба пры ўваходзе, спрабуйце яшчэ раз';
 
   @override
+  String get accountSignInMethods => 'Спосабы ўваходу';
+
+  @override
+  String get accountAddSignInMethod => 'Дадаць спосаб уваходу';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Дадайце спосаб уваходу ў гэты ўліковы запіс Omi. Ваш тарыфны план, запісы і інтэграцыі застануцца ў гэтым уліковым запісе.';
+
+  @override
+  String get accountSignInConflictTitle => 'Гэты спосаб уваходу звязаны з іншым уліковым запісам';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Вы па-ранейшаму ўвайшлі ў гэты ўліковы запіс. Кожны ўліковы запіс Omi захоўвае свой тарыфны план, запісы і інтэграцыі.';
+
+  @override
+  String get accountSignInMethodAdded => 'Спосаб уваходу дададзены';
+
+  @override
   String get authFailedToLinkGoogle => 'Не вдалося звязаць з Google, спрабуйце яшчэ раз.';
 
   @override
@@ -14394,6 +14414,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get processingProgress => 'Апрацоўваем запісы ў чаканні…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Чакаем даступнага ліміту транскрыпцыі';
+
+  @override
   String get processingDeferred => 'Чакае апрацоўкі';
 
   @override
@@ -15349,9 +15372,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get stopThese => 'Спыніць гэта';
 
   @override
-  String get meetingActionItemsTitle => 'Элементы действий';
-
-  @override
   String get addToTasks => 'Дадаць у задачы';
 
   @override
@@ -15797,4 +15817,54 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Недаступна на Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Гэтая старонка недаступная ў праграме.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Заказ аформлены. Пацвярджэнне прыйдзе на вашу пошту.';
+
+  @override
+  String get prepaidCodeEntry => 'Ёсць код?';
+
+  @override
+  String get prepaidCodeTitle => 'Актываваць код';
+
+  @override
+  String get prepaidCodeFieldHint => 'Увядзіце ваш код';
+
+  @override
+  String get prepaidCodeRedeem => 'Актываваць';
+
+  @override
+  String get prepaidCodeRedeemed => 'Код актываваны';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Гэты код несапраўдны. Праверце яго і паспрабуйце зноў.',
+        'used': 'Гэты код ужо выкарыстаны.',
+        'expired': 'Тэрмін дзеяння гэтага кода скончыўся.',
+        'hasPlan': 'У вас ужо ёсць план. Ваш код не выкарыстаны. Актывуйце яго пасля заканчэння плана.',
+        'notPrepaid': 'Гэты код нельга актываваць тут. Выкарыстайце яго пры выбары плана.',
+        'notEligible': 'Гэты код нельга выкарыстаць на гэтым акаўнце.',
+        'rateLimited': 'Занадта шмат спроб. Паспрабуйце пазней.',
+        'other': 'Нешта пайшло не так. Паспрабуйце зноў.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Аплата праз omi.me. Скасуйце тут у любы час.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Аплата праз omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Ваш план $plan прыпынены.';
+  }
 }

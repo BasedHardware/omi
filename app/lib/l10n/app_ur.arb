@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "سائن اِن کے طریقے",
+    "accountAddSignInMethod": "سائن اِن کا طریقہ شامل کریں",
+    "accountAddSignInMethodDetails": "اس Omi اکاؤنٹ میں سائن اِن کا ایک طریقہ شامل کریں۔ آپ کا پلان، ریکارڈنگز اور انٹیگریشنز اسی اکاؤنٹ کے ساتھ رہیں گی۔",
+    "accountSignInConflictTitle": "سائن اِن کا یہ طریقہ کسی دوسرے اکاؤنٹ سے منسلک ہے",
+    "accountSignInConflictDetails": "آپ اب بھی اسی اکاؤنٹ میں سائن اِن ہیں۔ ہر Omi اکاؤنٹ کا اپنا پلان، ریکارڈنگز اور انٹیگریشنز برقرار رہتی ہیں۔",
+    "accountSignInMethodAdded": "سائن اِن کا طریقہ شامل ہو گیا",
     "authFailedToLinkGoogle": "Google سے لنک کرنے میں ناکام، براہ کرم دوبارہ کوشش کریں۔",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "ہم دستیاب کوٹے میں تازہ ترین ریکارڈنگز پہلے پروسیس کریں گے۔ باقی منتظر رہیں گی۔",
     "processingAction": "منتظر ریکارڈنگز پروسیس کریں",
     "processingProgress": "آپ کی منتظر ریکارڈنگز پروسیس ہو رہی ہیں…",
+    "waitingForTranscriptionAllowance": "آڈیو کی تحریری نقل کے کوٹے کا انتظار ہے",
     "processingDeferred": "پروسیسنگ کی منتظر",
     "processingCount": "{count, plural, =1{1 گفتگو منتظر} other{{count} گفتگوئیں منتظر}}",
     "playbackPartialAudioSaved": "{saved} آڈیو محفوظ ہوا، کل {total}",
@@ -12172,7 +12179,6 @@
     "capturePendantDisconnectedShort": "Omi خود دوبارہ جڑ جائے گا",
     "forYou": "آپ کے لیے",
     "stopThese": "یہ روکیں",
-    "meetingActionItemsTitle": "عمل کے نکات",
     "addToTasks": "ٹاسکس میں شامل کریں",
     "showInTranscript": "ٹرانسکرپٹ میں دکھائیں",
     "tentativeTaskDueDate": "ممکنہ آخری تاریخ {date}",
@@ -12305,5 +12311,16 @@
     "playPurchaseOtherAccount": "یہ Google Play خریداری کسی دوسرے Omi اکاؤنٹ کی ہے۔",
     "playPurchaseNotConfirmed": "ہم ابھی آپ کی خریداری کی تصدیق نہیں کر سکے۔ ہم خود بخود دوبارہ کوشش کریں گے۔",
     "playRenewalTerms": "منسوخ کرنے تک دکھائی گئی قیمت پر خودکار طور پر تجدید ہوتی ہے۔ Google Play میں کسی بھی وقت انتظام یا منسوخ کریں۔",
-    "playPaidAppUnavailable": "Android پر دستیاب نہیں"
+    "playPaidAppUnavailable": "Android پر دستیاب نہیں",
+    "pageNotAvailableInApp": "یہ صفحہ ایپ میں دستیاب نہیں ہے۔",
+    "shopOrderPlacedCheckEmail": "آرڈر دے دیا گیا۔ تصدیق کے لیے اپنی ای میل دیکھیں۔",
+    "prepaidCodeEntry": "کوڈ ہے؟",
+    "prepaidCodeTitle": "کوڈ ریڈیم کریں",
+    "prepaidCodeFieldHint": "اپنا کوڈ درج کریں",
+    "prepaidCodeRedeem": "ریڈیم کریں",
+    "prepaidCodeRedeemed": "کوڈ ریڈیم ہو گیا",
+    "prepaidCodeResult": "{reason, select, invalid{یہ کوڈ درست نہیں ہے۔ اسے چیک کریں اور دوبارہ کوشش کریں۔} used{یہ کوڈ پہلے ہی استعمال ہو چکا ہے۔} expired{اس کوڈ کی میعاد ختم ہو گئی ہے۔} hasPlan{آپ کے پاس پہلے سے پلان ہے۔ آپ کا کوڈ استعمال نہیں ہوا۔ پلان ختم ہونے کے بعد اسے ریڈیم کریں۔} notPrepaid{یہ کوڈ یہاں ریڈیم نہیں ہو سکتا۔ پلان منتخب کرتے وقت اسے استعمال کریں۔} notEligible{یہ کوڈ اس اکاؤنٹ پر استعمال نہیں ہو سکتا۔} rateLimited{بہت زیادہ کوششیں۔ بعد میں دوبارہ کوشش کریں۔} other{کچھ غلط ہو گیا۔ براہ کرم دوبارہ کوشش کریں۔}}",
+    "playStripeBilledOnWeb": "omi.me کے ذریعے بل کیا جاتا ہے۔ کسی بھی وقت یہاں سے منسوخ کریں۔",
+    "playStripeBilledOnWebShort": "omi.me کے ذریعے بل کیا جاتا ہے۔",
+    "playStripePlanPaused": "آپ کا {plan} پلان روک دیا گیا ہے۔"
 }

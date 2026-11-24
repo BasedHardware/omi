@@ -32,6 +32,8 @@ from config.conversations_v3 import (
     SPEECH_LANDED_FIELD,
     boundary_seconds,
     live_title_enabled,
+    manual_end_home_visible_enabled,
+    max_window_seconds,
     stretch_cohesion_enabled,
 )
 from utils.conversations.v3.triggers import enqueue, changed
@@ -207,7 +209,14 @@ def historical_stretches(eligible, now, *, since, until, internal_end=False):
             landed = row.get(SPEECH_LANDED_FIELD)
             if not isinstance(landed, datetime) or landed.utcoffset() is None:
                 raise Conflict('rederive_live_landing_unknown')
-    groups = outline.stretches(eligible, now, silence_gap=silence_gap, lock_delay=lock_delay, settle_on_landing=True)
+    groups = outline.stretches(
+        eligible,
+        now,
+        silence_gap=silence_gap,
+        lock_delay=lock_delay,
+        settle_on_landing=True,
+        max_window=timedelta(seconds=max_window_seconds()),
+    )
     # Metadata finished_at can lag a late transcript. Reserve a full silence gap on the left
     # of an internal seam and verify the right side starts at or after it.
     latest = until - silence_gap if internal_end else until
@@ -303,11 +312,22 @@ async def reconcile(
             groups = historical_stretches(eligible, now, since=since, until=until, internal_end=internal_end)
         else:
             groups = outline.stretches(
-                eligible, now, silence_gap=silence_gap, lock_delay=lock_delay, settle_on_landing=custom_timing
+                eligible,
+                now,
+                silence_gap=silence_gap,
+                lock_delay=lock_delay,
+                settle_on_landing=custom_timing,
+                max_window=timedelta(seconds=max_window_seconds()),
             )
-        if live and not all(group['finished'] for group in groups):
+        if live and any(not g['finished'] or (g.get('window_cap_end') and not g['locked']) for g in groups):
             # Speech within five minutes of now is still the live builder's; refuse before any paid call.
             raise Conflict('rederive_live_open')
+        if not derive:
+            for group in groups:
+                if group.get('window_cap_end'):
+                    # Later speech can keep refreshing the same recording's landing clock.
+                    # The forced boundary settles the prefix independently of that clock.
+                    group['locked'] = True
         if on_open and conversation_id:
             target = existing.get(conversation_id)
             if target is None:
@@ -523,7 +543,14 @@ async def reconcile(
                     deferred_lock = False
                 if deferred_lock:
                     window['_title_preview'] = True
-                row = planner.build(uid, window, recordings, prior, allocated=allocated)
+                row = planner.build(
+                    uid,
+                    window,
+                    recordings,
+                    prior,
+                    allocated=allocated,
+                    manual_end_home_visible=manual_end_home_visible_enabled(),
+                )
                 if opening and prior and planner.is_unlocked(prior):
                     row['v3_open_locked'] = True
                 row.pop('v3_unlocked', None)
@@ -708,6 +735,10 @@ async def reconcile(
                 # again. If this cleanup fails too, the partition stays unfinished until resume or undo.
                 await run_blocking(db_executor, rederive_store.drop_unwritten_priors, uid, run_id, priors)
             raise
+        if not derive and not on_open:
+            cap_starts = {group['lines'][0]['start'] for group in groups if group['after_window_cap']}
+            new_cap_starts = {row['started_at'] for row in rows if row['id'] not in existing} & cap_starts
+            metrics.WINDOW_CAP_CUTS.inc(len(new_cap_starts))
         report.update(
             sources=len(eligible),
             windows=len(rows),

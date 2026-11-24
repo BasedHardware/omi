@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "Načini prijave",
+    "accountAddSignInMethod": "Dodaj način prijave",
+    "accountAddSignInMethodDetails": "Dodajte način prijave v ta račun Omi. Vaš paket, posnetki in integracije ostanejo v tem računu.",
+    "accountSignInConflictTitle": "Ta način prijave pripada drugemu računu",
+    "accountSignInConflictDetails": "Še vedno ste v tem računu. Vsak račun Omi obdrži svoj paket, posnetke in integracije.",
+    "accountSignInMethodAdded": "Način prijave je dodan",
     "authFailedToLinkGoogle": "Povezovanje s Google ni uspelo, prosimo, poskusite ponovno.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "Najprej bomo obdelali najnovejše posnetke do razpoložljive kvote. Ostali bodo še naprej čakali.",
     "processingAction": "Obdelaj čakajoče posnetke",
     "processingProgress": "Obdelovanje vaših čakajočih posnetkov…",
+    "waitingForTranscriptionAllowance": "Čakanje na razpoložljivo kvoto za prepis",
     "processingDeferred": "Čaka na obdelavo",
     "processingCount": "{count, plural, =1{1 pogovor čaka} other{{count} pogovorov čaka}}",
     "playbackPartialAudioSaved": "Shranjeno {saved} od {total} zvoka",
@@ -12172,7 +12179,6 @@
     "capturePendantDisconnectedShort": "Omi se bo sam znova povezal",
     "forYou": "Za vas",
     "stopThese": "Ustavi te",
-    "meetingActionItemsTitle": "Dejanja",
     "addToTasks": "Dodaj med opravila",
     "showInTranscript": "Pokaži prepis",
     "tentativeTaskDueDate": "Rok približno {date}",
@@ -12305,5 +12311,16 @@
     "playPurchaseOtherAccount": "Ta nakup v Google Play pripada drugemu računu Omi.",
     "playPurchaseNotConfirmed": "Nakupa še nismo mogli potrditi. Samodejno bomo poskusili znova.",
     "playRenewalTerms": "Samodejno se podaljšuje po prikazani ceni, dokler ne prekličete. Upravljajte ali prekličite kadar koli v Google Play.",
-    "playPaidAppUnavailable": "Ni na voljo v Androidu"
+    "playPaidAppUnavailable": "Ni na voljo v Androidu",
+    "pageNotAvailableInApp": "Ta stran v aplikaciji ni na voljo.",
+    "shopOrderPlacedCheckEmail": "Naročilo je oddano. Potrditev boste našli v e-pošti.",
+    "prepaidCodeEntry": "Imate kodo?",
+    "prepaidCodeTitle": "Unovči kodo",
+    "prepaidCodeFieldHint": "Vnesite svojo kodo",
+    "prepaidCodeRedeem": "Unovči",
+    "prepaidCodeRedeemed": "Koda unovčena",
+    "prepaidCodeResult": "{reason, select, invalid{Ta koda ni veljavna. Preverite jo in poskusite znova.} used{Ta koda je že bila uporabljena.} expired{Tej kodi je potekla veljavnost.} hasPlan{Že imate paket. Vaša koda ni bila uporabljena. Unovčite jo, ko se vaš paket konča.} notPrepaid{Te kode ni mogoče unovčiti tukaj. Uporabite jo, ko izberete paket.} notEligible{Te kode ni mogoče uporabiti v tem računu.} rateLimited{Preveč poskusov. Poskusite pozneje.} other{Prišlo je do napake. Poskusite znova.}}",
+    "playStripeBilledOnWeb": "Obračunano prek omi.me. Prekličite tukaj kadar koli.",
+    "playStripeBilledOnWebShort": "Obračunano prek omi.me.",
+    "playStripePlanPaused": "Vaš paket {plan} je začasno ustavljen."
 }

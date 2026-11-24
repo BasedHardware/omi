@@ -37,6 +37,7 @@ class ReasonFamily(StrEnum):
     SYNC_DISPATCH = 'sync_dispatch'
     SYNC_CAPTURE_TIME = 'sync_capture_time'
     SYNC_FUTURE_CAPTURE_RECOVERY = 'sync_future_capture_recovery'
+    SYNC_FUTURE_CAPTURE_REQUEST = 'sync_future_capture_request'
     SYNC_BRIDGE_CONTAINMENT = 'sync_bridge_containment'
     SYNC_PROCESSING_HOLD = 'sync_processing_hold'
     APP_REVIEW_CONFIG = 'app_review_config'

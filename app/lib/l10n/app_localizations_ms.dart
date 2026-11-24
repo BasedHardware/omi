@@ -7074,6 +7074,26 @@ class AppLocalizationsMs extends AppLocalizations {
   String get authUnexpectedError => 'Ralat tidak dijangka semasa log masuk, sila cuba lagi';
 
   @override
+  String get accountSignInMethods => 'Kaedah log masuk';
+
+  @override
+  String get accountAddSignInMethod => 'Tambah kaedah log masuk';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Tambah cara untuk log masuk ke akaun Omi ini. Pelan, rakaman dan penyepaduan anda kekal dalam akaun ini.';
+
+  @override
+  String get accountSignInConflictTitle => 'Kaedah log masuk ini milik akaun lain';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Anda masih dilog masuk ke akaun ini. Setiap akaun Omi mengekalkan pelan, rakaman dan penyepaduannya sendiri.';
+
+  @override
+  String get accountSignInMethodAdded => 'Kaedah log masuk ditambah';
+
+  @override
   String get authFailedToLinkGoogle => 'Gagal memautkan dengan Google, sila cuba lagi.';
 
   @override
@@ -14395,6 +14415,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get processingProgress => 'Memproses rakaman anda yang menunggu…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Menunggu kuota transkripsi tersedia';
+
+  @override
   String get processingDeferred => 'Menunggu pemprosesan';
 
   @override
@@ -15350,9 +15373,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get stopThese => 'Hentikan Ini';
 
   @override
-  String get meetingActionItemsTitle => 'Perkara tindakan';
-
-  @override
   String get addToTasks => 'Tambah ke Tugasan';
 
   @override
@@ -15799,4 +15819,54 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Tidak tersedia di Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Halaman ini tidak tersedia dalam apl.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Pesanan dibuat. Semak e-mel anda untuk pengesahan.';
+
+  @override
+  String get prepaidCodeEntry => 'Ada kod?';
+
+  @override
+  String get prepaidCodeTitle => 'Tebus kod';
+
+  @override
+  String get prepaidCodeFieldHint => 'Masukkan kod anda';
+
+  @override
+  String get prepaidCodeRedeem => 'Tebus';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kod berjaya ditebus';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Kod ini tidak sah. Semak dan cuba lagi.',
+        'used': 'Kod ini telah digunakan.',
+        'expired': 'Kod ini telah tamat tempoh.',
+        'hasPlan': 'Anda sudah mempunyai pelan. Kod anda tidak digunakan. Tebusnya selepas pelan anda tamat.',
+        'notPrepaid': 'Kod ini tidak boleh ditebus di sini. Gunakannya semasa memilih pelan.',
+        'notEligible': 'Kod ini tidak boleh digunakan pada akaun ini.',
+        'rateLimited': 'Terlalu banyak percubaan. Cuba lagi nanti.',
+        'other': 'Ada sesuatu yang tidak kena. Sila cuba lagi.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Dibilkan melalui omi.me. Batalkan di sini pada bila-bila masa.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Dibilkan melalui omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Pelan $plan anda dijeda.';
+  }
 }

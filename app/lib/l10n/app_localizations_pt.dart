@@ -7058,6 +7058,26 @@ class AppLocalizationsPt extends AppLocalizations {
   String get authUnexpectedError => 'Erro inesperado ao fazer login, tente novamente';
 
   @override
+  String get accountSignInMethods => 'Métodos de login';
+
+  @override
+  String get accountAddSignInMethod => 'Adicionar método de login';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Adicione uma forma de entrar nesta conta Omi. Seu plano, suas gravações e suas integrações continuam nesta conta.';
+
+  @override
+  String get accountSignInConflictTitle => 'Este login pertence a outra conta';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Você continua nesta conta. Cada conta Omi mantém seu próprio plano, gravações e integrações.';
+
+  @override
+  String get accountSignInMethodAdded => 'Método de login adicionado';
+
+  @override
   String get authFailedToLinkGoogle => 'Falha ao vincular com o Google, tente novamente.';
 
   @override
@@ -14387,6 +14407,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get processingProgress => 'A processar as suas gravações pendentes…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'À espera de cota de transcrição disponível';
+
+  @override
   String get processingDeferred => 'À espera de processamento';
 
   @override
@@ -15341,9 +15364,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get stopThese => 'Parar estes';
 
   @override
-  String get meetingActionItemsTitle => 'Itens de ação';
-
-  @override
   String get addToTasks => 'Adicionar às tarefas';
 
   @override
@@ -15791,4 +15811,54 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Indisponível no Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Esta página não está disponível no app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Pedido feito. Confira seu e-mail para ver a confirmação.';
+
+  @override
+  String get prepaidCodeEntry => 'Tem um código?';
+
+  @override
+  String get prepaidCodeTitle => 'Resgatar um código';
+
+  @override
+  String get prepaidCodeFieldHint => 'Introduza o seu código';
+
+  @override
+  String get prepaidCodeRedeem => 'Resgatar';
+
+  @override
+  String get prepaidCodeRedeemed => 'Código resgatado';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Este código não é válido. Verifique-o e tente novamente.',
+        'used': 'Este código já foi usado.',
+        'expired': 'Este código expirou.',
+        'hasPlan': 'Já tem um plano. O seu código não foi usado. Resgate-o quando o seu plano terminar.',
+        'notPrepaid': 'Este código não pode ser resgatado aqui. Use-o quando escolher um plano.',
+        'notEligible': 'Este código não pode ser usado nesta conta.',
+        'rateLimited': 'Demasiadas tentativas. Tente mais tarde.',
+        'other': 'Algo correu mal. Tente novamente.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Cobrado pelo omi.me. Cancele aqui quando quiser.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Cobrado pelo omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Seu plano $plan está pausado.';
+  }
 }

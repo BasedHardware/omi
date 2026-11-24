@@ -180,6 +180,8 @@ env:
       configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
   - name: BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED
     value: "false"
+  - name: CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED
+    value: "off"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
@@ -928,6 +930,11 @@ env:
     value: 'true'
   # Quiet-check empty exit; evaluated on backend-sync (Cloud Tasks handler), pinned here for consistency (lead2 9b4ffd).
   - name: QUIET_EMPTY_EXIT_ENABLED
+    value: 'true'
+  # SCA-4019: hold a mobile server-batch capture across a socket drop for the 120 s reconnect
+  # grace; the producer drain releases the lease and persists a bounded deadline, so a held row
+  # seals at the deadline. Rollback: 'false' here and on backend-sync in one config train.
+  - name: LISTEN_BATCH_RECONNECT_ENABLED
     value: 'true'
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"

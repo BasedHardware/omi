@@ -259,9 +259,17 @@
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
+  "backend/database/record_wal_duplicate.py:collection": {
+    "policy": "storage",
+    "reason": "Marks settled custody on the owner-scoped donor row in the receipt transaction after rechecking the original processing and privacy authority."
+  },
   "backend/database/record_wal_handoff.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/record_wal_merge.py:collection": {
+    "policy": "storage",
+    "reason": "Reads bounded owner-scoped retained donors and their erasure fences before publishing the merge binding."
   },
   "backend/database/recording_sessions.py:collection": {
     "policy": "both",
@@ -471,6 +479,10 @@
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
   },
+  "backend/scripts/backfill_home_visibility_index.py:collection": {
+    "policy": "operator",
+    "reason": "Owner-scoped Home index migration reads only the two visibility flags and their derived index bit."
+  },
   "backend/scripts/backfill_notes_v2_default_emoji.py:collection": {
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
@@ -562,6 +574,10 @@
   "backend/scripts/scan_wake_word_variants.py:collection": {
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/settle_parked_conversations.py:collection_group": {
+    "policy": "operator",
+    "reason": "SCA-3590 one-time parked-status migration. Bounded projected scan, with lifecycle and custody rechecked transactionally before status-only writes."
   },
   "backend/scripts/staging/replay.py:collection": {
     "policy": "operator",
@@ -1058,5 +1074,9 @@
   "backend/utils/task_intelligence/task_source_validation.py:get_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/batch_pipeline/live.py:get_conversation": {
+    "policy": "both",
+    "reason": "Record admission's manual-finish first transcript re-reads one owner-scoped recording, decoded, to decide whether it still has no transcript before any provider call and again before the provisional write; recording-layer access by its capture owner."
   }
 }

@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "Mga paraan ng pag-sign in",
+    "accountAddSignInMethod": "Magdagdag ng paraan ng pag-sign in",
+    "accountAddSignInMethodDetails": "Magdagdag ng paraan para mag-sign in sa Omi account na ito. Mananatili rito ang iyong plan, mga recording, at integration.",
+    "accountSignInConflictTitle": "Sa ibang account nakaugnay ang paraang ito",
+    "accountSignInConflictDetails": "Naka-sign in ka pa rin sa account na ito. Nananatili sa bawat Omi account ang sarili nitong plan, mga recording, at integration.",
+    "accountSignInMethodAdded": "Naidagdag ang paraan ng pag-sign in",
     "authFailedToLinkGoogle": "Nabigo ang pag-link gamit ang Google, mangyaring subukan ulit.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "Uunahin naming iproseso ang pinakabagong mga recording hanggang sa kasya sa natitirang allowance. Maghihintay ang iba.",
     "processingAction": "Iproseso ang naghihintay na mga recording",
     "processingProgress": "Pinoproseso ang iyong naghihintay na mga recording…",
+    "waitingForTranscriptionAllowance": "Naghihintay ng magagamit na quota sa transkripsiyon",
     "processingDeferred": "Naghihintay ng pagproseso",
     "processingCount": "{count, plural, =1{1 pag-uusap ang naghihintay} other{{count} pag-uusap ang naghihintay}}",
     "playbackPartialAudioSaved": "{saved} sa {total} ng audio ang na-save",
@@ -12172,7 +12179,6 @@
     "capturePendantDisconnectedShort": "Kusang kokonekta muli ang Omi",
     "forYou": "Para Sa Iyo",
     "stopThese": "Itigil Ang Mga Ito",
-    "meetingActionItemsTitle": "Mga hakbang",
     "addToTasks": "Idagdag sa Mga Gawain",
     "showInTranscript": "Ipakita sa Transcript",
     "tentativeTaskDueDate": "Takdang petsa mga {date}",
@@ -12305,5 +12311,16 @@
     "playPurchaseOtherAccount": "Ang pagbiling ito sa Google Play ay pag-aari ng ibang Omi account.",
     "playPurchaseNotConfirmed": "Hindi pa namin makumpirma ang iyong pagbili. Susubukan naming muli nang awtomatiko.",
     "playRenewalTerms": "Awtomatikong nire-renew sa ipinakitang presyo hanggang kanselahin mo. Pamahalaan o kanselahin anumang oras sa Google Play.",
-    "playPaidAppUnavailable": "Hindi available sa Android"
+    "playPaidAppUnavailable": "Hindi available sa Android",
+    "pageNotAvailableInApp": "Hindi available ang page na ito sa app.",
+    "shopOrderPlacedCheckEmail": "Naipadala na ang order. Tingnan ang email mo para sa kumpirmasyon.",
+    "prepaidCodeEntry": "May code ka?",
+    "prepaidCodeTitle": "I-redeem ang code",
+    "prepaidCodeFieldHint": "Ilagay ang iyong code",
+    "prepaidCodeRedeem": "I-redeem",
+    "prepaidCodeRedeemed": "Na-redeem ang code",
+    "prepaidCodeResult": "{reason, select, invalid{Hindi valid ang code na ito. Suriin ito at subukang muli.} used{Nagamit na ang code na ito.} expired{Nag-expire na ang code na ito.} hasPlan{May plan ka na. Hindi nagamit ang iyong code. I-redeem ito pagkatapos matapos ang iyong plan.} notPrepaid{Hindi ma-redeem dito ang code na ito. Gamitin ito kapag pumili ka ng plan.} notEligible{Hindi magagamit ang code na ito sa account na ito.} rateLimited{Masyadong maraming pagsubok. Subukang muli mamaya.} other{May nangyaring mali. Pakisubukang muli.}}",
+    "playStripeBilledOnWeb": "Sinisingil sa pamamagitan ng omi.me. Kanselahin dito anumang oras.",
+    "playStripeBilledOnWebShort": "Sinisingil sa pamamagitan ng omi.me.",
+    "playStripePlanPaused": "Naka-pause ang iyong {plan} plan."
 }
