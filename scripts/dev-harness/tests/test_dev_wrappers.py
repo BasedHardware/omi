@@ -19,6 +19,7 @@ CLI_WRAPPERS = (
     ("dev-reset.sh", "reset"),
     ("dev-logs.sh", "logs"),
     ("dev-check.sh", "check"),
+    ("dev-parity.sh", "parity"),
 )
 
 PROVISIONED_CLI = "import sys\nprint('cli', *sys.argv[1:])\n"
