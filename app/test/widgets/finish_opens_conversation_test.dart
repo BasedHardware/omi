@@ -47,6 +47,14 @@ class _ManualFinishConversations extends ConversationProvider {
   _ManualFinishConversations() : super(isSignedIn: () => false);
 
   int refreshes = 0;
+  int listReads = 0;
+
+  @override
+  Future<bool> fetchConversations({bool restoreMergeWatches = true}) async {
+    expect(showsPendingFinishOnHome, isTrue);
+    listReads++;
+    return true;
+  }
 
   @override
   Future<void> forceRefreshConversations({bool reconcileHeldRecordings = false}) async {
@@ -748,7 +756,7 @@ void main() {
           return const ApiSuccess(ConversationsLiveRead(v3: true, conversation: null));
         },
       );
-      final conversations = _ManualFinishConversations();
+      final conversations = _ManualFinishConversations()..showStarredOnly = true;
       final messages = MessageProvider();
       final people = PeopleProvider();
       final usage = UsageProvider();
@@ -790,7 +798,10 @@ void main() {
         _ => "Didn't go through. Your audio is safe.",
       };
       if (message != null) expect(find.text(message), findsOneWidget);
-      expect(conversations.refreshes, 1);
+      final pending = absence == ProcessAbsence.notFound;
+      expect(conversations.refreshes, pending ? 0 : 1);
+      expect(conversations.listReads, pending ? 1 : 0);
+      expect(conversations.showStarredOnly, !pending);
       expect(liveReads, 1);
       if (absence == ProcessAbsence.notFound) {
         expect(find.text("Didn't go through. Your audio is safe."), findsNothing);

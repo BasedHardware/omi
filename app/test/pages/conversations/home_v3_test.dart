@@ -1961,7 +1961,10 @@ void main() {
         OmiColors.active = OmiColors.forBrightness(Brightness.dark);
         final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
         final v3 = home.conversationsV3;
-        home.conversations.toggleStarredFilter();
+        home.conversations
+          ..showShortConversations = true
+          ..showDiscardedConversations = true
+          ..toggleStarredFilter();
         final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'live-1');
         v3.startManualFinish(pending, null, captureId: home.capture.activeRecordingId);
         expect(v3.settleManualFinish(pending, null, alreadyClosed: true), isTrue);
@@ -1973,6 +1976,9 @@ void main() {
           entry: FinishEntry.home,
         );
         await tester.pump();
+        expect(home.conversations.showShortConversations, isTrue);
+        expect(home.conversations.showDiscardedConversations, isTrue);
+        expect(home.conversations.showsDefaultHome, isFalse);
         expect(find.text('Launch checklist'), findsNothing);
         expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
         expect(find.byType(V3LivePlaceholderRow), findsNothing);
@@ -1991,6 +1997,9 @@ void main() {
         expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
         await shoot(tester, '001-mobile-ios-finish-404-processing');
 
+        home.conversations
+          ..showShortConversations = false
+          ..showDiscardedConversations = false;
         home.conversations.upsertConversation(
           _conversation('live-1', home.liveStart, 'Launch checklist',
               v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.writing)),

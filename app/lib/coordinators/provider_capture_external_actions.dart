@@ -154,12 +154,11 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
       }
     }
     unawaited(v3.refreshAfterManualFinish().catchError((Object _) {}));
-    unawaited(
-      conversationProvider.forceRefreshConversations().then<void>(
-            (_) {},
-            onError: (Object _) {},
-          ),
-    );
+    // A 404 leaves the pending row on Home. Reload once, with transient filters already cleared.
+    final refresh = alreadyClosed && !conversationProvider.showsPendingFinishOnHome
+        ? conversationProvider.resetToDefaultHome()
+        : conversationProvider.forceRefreshConversations();
+    unawaited(refresh.catchError((Object _) {}));
   }
 
   @override
