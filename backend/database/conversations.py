@@ -4376,11 +4376,14 @@ def update_conversation_segments(
     segment_update_fields: Optional[tuple[str, ...]] = None,
     owner_recognition_diagnostics: Optional[dict] = None,
     require_row: Optional[Callable[[dict], bool]] = None,
+    guard: Optional[Callable[[Any], None]] = None,
 ):
     """Merge live speech transactionally against the current receipt and pinned timeline.
 
     ``require_row`` is judged on the stored row inside the write transaction; a False answer
     writes nothing and returns False, so a caller's earlier read cannot go stale.
+    ``guard`` is called with the transaction after that check and before any write, so its
+    reads join this transaction's conflict set; an exception from it writes nothing and propagates.
 
     Field-only writes preserve stored text/spans. Live writes return the durable
     merge and clear any hash-bound client projection that the new transcript
@@ -4416,6 +4419,8 @@ def update_conversation_segments(
             return False
         if require_row is not None and not require_row(current):
             return False
+        if guard is not None:
+            guard(transaction)
         doc_level = current.get('data_protection_level') or data_protection_level or 'standard'
         receipt = decode_manual_speaker_assignments(
             uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))

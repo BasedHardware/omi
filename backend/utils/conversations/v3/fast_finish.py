@@ -15,6 +15,7 @@ Constraints it upholds:
   runtime rollout cohort, empty until someone is added), ``on`` or ``off``.
 """
 
+import functools
 import logging
 import os
 import time
@@ -150,14 +151,15 @@ def _transcribe(pcm: bytes, language: str | None) -> list[dict]:
     return segments
 
 
-def _write_fenced(uid: str, conversation_id: str, segments: list[dict[str, Any]]):
-    """The stored row is judged again inside the write transaction.
+def _write_fenced(uid: str, conversation_id: str, segments: list[dict[str, Any]], *, fence):
+    """The stored row and the account's batch privacy are judged again inside the write transaction.
 
-    A delete, discard, lock or canonical projection committed since the pass's last read still wins.
+    A delete, discard, lock or canonical projection committed since the pass's last read still wins,
+    and so does an opt-out or privacy generation change made while the provider request was in flight.
     """
     from database.conversations import update_conversation_segments
 
-    return update_conversation_segments(uid, conversation_id, segments, require_row=candidate)
+    return update_conversation_segments(uid, conversation_id, segments, require_row=candidate, guard=fence)
 
 
 def run(
@@ -173,6 +175,7 @@ def run(
     cut=None,
     authorize=None,
     privacy=None,
+    fence=None,
 ) -> str:
     """Transcribe ``units`` and write them as provisional segments. Returns the counted outcome; never raises.
 
@@ -180,7 +183,9 @@ def run(
     without it nothing is sent to a provider that ordinary batch processing would have held.
     ``privacy`` answers whether the account's current sync authorization and privacy generation
     still allow server work on this recording. It is asked before any audio is read and again
-    before the provider call; a missing check, a False answer or an error all stop the pass.
+    before each provider call; a missing check, a False answer or an error all stop the pass.
+    ``fence(transaction)`` is the same authority asked inside the default writer's transaction; it
+    raises to refuse. The default writer never publishes without it.
 
     Runs on a worker thread: the cohort read is synchronous there (on the event loop a cold
     membership cache answers False). ``refresh`` re-reads the row before any audio leaves for the
@@ -201,6 +206,7 @@ def run(
             cut=cut,
             authorize=authorize or funded,
             privacy=privacy,
+            fence=fence,
         )
     except Exception as error:
         logger.warning('event=v3_fast_finish outcome=error exception_type=%s', type(error).__name__)
@@ -221,9 +227,14 @@ def _privacy_allows(privacy) -> bool:
         return False
 
 
-def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, cut, authorize, privacy) -> str:
+def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, cut, authorize, privacy, fence) -> str:
     if not enabled(uid):
         return 'not_enabled'
+    if write is None:
+        if fence is None:
+            # Fail closed: the default writer never publishes without the in-transaction privacy fence.
+            return 'privacy_blocked'
+        write = functools.partial(_write_fenced, fence=fence)
     if refresh is not None:
         # Admission read this row before staging. Nothing is sent to the provider on a stale grant.
         row = refresh()
@@ -278,10 +289,15 @@ def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, 
     segments.sort(key=lambda segment: (segment['start'], segment['end']))
     if refresh is not None and not eligible(refresh()):
         return 'superseded'
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
     started = time.monotonic()
     try:
         # False: the row no longer qualifies, or the canonical record already projected.
-        written = (write or _write_fenced)(uid, conversation_id, segments)
+        written = write(uid, conversation_id, segments)
+    except BatchPrivacyBlocked:
+        # The owner opted out, or the privacy generation moved, while the provider request ran.
+        return 'privacy_blocked'
     except Exception as error:
         logger.warning('event=v3_fast_finish outcome=write_error exception_type=%s', type(error).__name__)
         return 'write_error'

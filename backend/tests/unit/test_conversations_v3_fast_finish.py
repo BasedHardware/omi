@@ -7,7 +7,10 @@ from datetime import datetime, timezone
 import pytest
 
 from config import rollout_cohorts
+from database import _client as db_client
+from database import batch_pipeline_privacy
 from database import conversations as conversations_db
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database import conversations_v3
 from utils import stt_cap_dispatch
 
@@ -142,6 +145,7 @@ def privacy_granted(monkeypatch):
 
     def run(*args, **kwargs):
         kwargs.setdefault('privacy', lambda: True)
+        kwargs.setdefault('fence', lambda transaction: None)
         return _real_run(*args, **kwargs)
 
     monkeypatch.setattr(fast_finish, 'run', run)
@@ -374,11 +378,26 @@ def test_admission_hands_the_pass_the_batch_privacy_fence_at_its_admitted_genera
         conversations_db, 'get_conversation', lambda uid, cid, **kwargs: row(_recovery_transcript_decoded=True)
     )
 
-    def run(uid, cid, row_, units_, read, *, privacy, **kwargs):
+    fenced, transaction = [], object()
+
+    def fence_read(client, tx, uid, **kwargs):
+        fenced.append((tx, uid, kwargs))
+        if blocked:
+            raise BatchPrivacyBlocked('recording_privacy_changed')
+        return kwargs['expected_generation']
+
+    def run(uid, cid, row_, units_, read, *, privacy, fence, **kwargs):
         outcomes.append(fast_finish._privacy_allows(privacy))
+        try:
+            fence(transaction)
+            outcomes.append('published')
+        except BatchPrivacyBlocked:
+            outcomes.append('refused')
         return 'privacy_blocked'
 
     monkeypatch.setattr(fast_finish, 'run', run)
+    monkeypatch.setattr(batch_pipeline_privacy, 'assert_batch_write_allowed', fence_read)
+    monkeypatch.setattr(db_client, 'get_firestore_client', lambda: object())
 
     async def admit():
         await live._manual_finish_admitted(store, UID, 'cid', row(), [UNIT, UNIT], object(), b'k', privacy_generation=7)
@@ -386,8 +405,12 @@ def test_admission_hands_the_pass_the_batch_privacy_fence_at_its_admitted_genera
         await asyncio.sleep(0)
 
     asyncio.run(admit())
-    assert outcomes == [not blocked]
+    assert outcomes == [not blocked, 'refused' if blocked else 'published']
     assert store.checks == [(UID, ('cid',), 7)]
+    # The publication fence reads inside the writer's transaction, at the admitted generation, minting nothing.
+    assert fenced == [
+        (transaction, UID, {'conversation_ids': ('cid',), 'expected_generation': 7, 'allow_token_mint': False})
+    ]
 
 
 def test_nothing_is_sent_to_the_provider_without_consent_and_funding():
@@ -531,7 +554,7 @@ def _admit(monkeypatch, current, units, *, fast='written', promoted=True, member
     calls = {'fast': 0, 'promote': 0, 'cut': 0}
     decoded = current if decoded is None else decoded
 
-    def run(uid, cid, row_, units_, read, *, refresh, cut, privacy):
+    def run(uid, cid, row_, units_, read, *, refresh, cut, privacy, fence):
         calls['fast'] += 1
         # The pass is handed a decoded row, never admission's raw snapshot.
         expected = dict(decoded, _recovery_transcript_decoded=True)
@@ -617,6 +640,7 @@ def test_an_undecodable_stored_transcript_is_not_treated_as_empty(monkeypatch):
             cut=None,
             authorize=None,
             privacy=None,
+            fence=None,
         ),
     )
     monkeypatch.setattr(
@@ -636,16 +660,56 @@ def test_an_undecodable_stored_transcript_is_not_treated_as_empty(monkeypatch):
 def test_the_default_writer_rechecks_the_stored_row_inside_its_transaction(monkeypatch):
     seen = {}
 
-    def writer(uid, cid, segments, *, require_row):
-        seen.update(uid=uid, cid=cid, count=len(segments), require_row=require_row)
+    fence = lambda transaction: None
+
+    def writer(uid, cid, segments, *, require_row, guard):
+        seen.update(uid=uid, cid=cid, count=len(segments), require_row=require_row, guard=guard)
         return False
 
     monkeypatch.setattr(conversations_db, 'update_conversation_segments', writer)
     outcome = fast_finish.run(
-        UID, 'cid', row(), one_unit(), lambda r: bytes(4), transcribe=lambda pcm, language: [seg(0.0, 1.0)]
+        UID,
+        'cid',
+        row(),
+        one_unit(),
+        lambda r: bytes(4),
+        transcribe=lambda pcm, language: [seg(0.0, 1.0)],
+        fence=fence,
     )
     assert outcome == 'superseded'
     assert seen['require_row'] is fast_finish.candidate and (seen['uid'], seen['cid'], seen['count']) == (UID, 'cid', 1)
+    assert seen['guard'] is fence
+
+
+def test_an_opt_out_during_the_only_provider_request_publishes_nothing(monkeypatch):
+    # The publication transaction asks the batch privacy fence itself; it refuses after the owner
+    # opted out while the last (here the only) unit was with the provider.
+    def writer(uid, cid, segments, *, require_row, guard):
+        guard(object())
+        pytest.fail('must not write after the fence refused')
+
+    def refused(transaction):
+        raise BatchPrivacyBlocked('recording_privacy_changed')
+
+    monkeypatch.setattr(conversations_db, 'update_conversation_segments', writer)
+    outcome = _real_run(
+        UID,
+        'cid',
+        row(),
+        one_unit(),
+        lambda r: bytes(4),
+        transcribe=lambda pcm, language: [seg(0.0, 1.0)],
+        cut=lambda: pytest.fail('must not cut'),
+        privacy=lambda: True,
+        fence=refused,
+    )
+    assert outcome == 'privacy_blocked'
+
+
+def test_the_default_writer_never_publishes_without_the_fence():
+    never = lambda *args: pytest.fail('must not read audio or transcribe')
+    outcome = _real_run(UID, 'cid', row(), one_unit(), never, transcribe=never, privacy=lambda: True)
+    assert outcome == 'privacy_blocked'
 
 
 @pytest.mark.parametrize(

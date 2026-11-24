@@ -441,6 +441,22 @@ async def _manual_finish_admitted(
             store.run(lambda tx: tx.check_privacy(uid, (conversation_id,), privacy_generation))
             return True
 
+        def fence(transaction):
+            # The same fence, read inside the transcript write's own transaction: an opt-out or a
+            # generation change during the last provider request still refuses publication.
+            # Read-only: no privacy-cache token is minted from inside a customer-data write.
+            from database._client import get_firestore_client
+            from database.batch_pipeline_privacy import assert_batch_write_allowed
+
+            assert_batch_write_allowed(
+                get_firestore_client(),
+                transaction,
+                uid,
+                conversation_ids=(conversation_id,),
+                expected_generation=privacy_generation,
+                allow_token_mint=False,
+            )
+
         def cut():
             # Sets the cut and wakes the builder again; the transcript write's own wake may have
             # run before the cut existed.
@@ -465,6 +481,7 @@ async def _manual_finish_admitted(
                         refresh=refresh,
                         cut=None if single else cut,
                         privacy=privacy,
+                        fence=fence,
                     )
                 finally:
                     _FAST_FINISH_SLOTS.release()
