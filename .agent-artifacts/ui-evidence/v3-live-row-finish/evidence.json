@@ -2,23 +2,23 @@
   "version": 1,
   "images": [
     {
-      "file": "001-mobile-ios-home-live-finish.png",
+      "file": "001-mobile-ios-live-detail-end.png",
       "platform": "mobile-ios",
-      "description": "Home v3 shows Finish for a live window owned through its recording ID before local segments arrive.",
+      "description": "The live conversation detail shows End when the current capture ID matches and local transcript segments are empty.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "002-mobile-ios-home-placeholder-finish.png",
+      "file": "002-mobile-ios-placeholder-page-finish.png",
       "platform": "mobile-ios",
-      "description": "Home v3 shows the same Finish control while this phone streams before a server window is visible.",
+      "description": "The live transcript page opened from Home’s placeholder shows Finish before any local transcript segments arrive.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "003-mobile-ios-home-finish-processing.png",
+      "file": "003-mobile-ios-home-processing-after-end.png",
       "platform": "mobile-ios",
-      "description": "Processing replaces the live row after tapping Finish on Home.",
+      "description": "After End on the live detail, Home shows the Processing row.",
       "captured_by": "agent",
       "source": "visual-audit"
     }

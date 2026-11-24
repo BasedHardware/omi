@@ -1666,6 +1666,7 @@ void main() {
         expect(find.byType(SnackBar), findsNothing);
         await shoot(tester, '003-mobile-ios-home-processing-after-end');
         await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
       });
     });
 
