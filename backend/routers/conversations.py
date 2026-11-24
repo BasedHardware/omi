@@ -3055,7 +3055,9 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
             from utils.executors import start_background_task
 
             work = start_background_task(
-                reconcile(uid, on_open=True, conversation_id=conversation_id), name='v3-reconcile-open'
+                reconcile(uid, on_open=True, conversation_id=conversation_id),
+                name='v3-reconcile-open',
+                bounded_provider_failure=True,
             )
             await asyncio.wait_for(asyncio.shield(work), timeout=8)
         except Exception as exc:
