@@ -40,8 +40,9 @@ At most 60 extra row reads per early finish.
 
 It rolls out with the fast first transcript: `CONVERSATIONS_V3_FAST_FINISH`
 (default `cohort`, the `v3-fast-finish` runtime rollout cohort; `on` admits
-every owner; `off` stops it). `CONVERSATIONS_V3_BATCH_MANUAL_END=off` also
-stops it. A job admitted before either switch still completes.
+every owner; `off` stops it), read here on `backend`, the service that serves
+`POST /v1/conversations`. `CONVERSATIONS_V3_BATCH_MANUAL_END=off` on `backend`
+also stops it. A job admitted before either switch still completes.
 
 ## Known limits, to settle before `on`
 
@@ -59,3 +60,8 @@ stops it. A job admitted before either switch still completes.
   spends its retry budget meanwhile.
 - A `POST /v1/conversations` sent again more than 10 seconds after a finish
   can cut the successor recording.
+- The worker wait is keyed on the trigger and the row, not on the cohort.
+- In `cohort` mode a cold membership lookup (one Redis read and one point
+  read, cached 60 s) runs inside the admission transaction.
+- A wait that times out is a counted attempt. Before `on`, give it a
+  non-counting retry reason.

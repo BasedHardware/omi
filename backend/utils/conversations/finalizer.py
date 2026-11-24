@@ -283,7 +283,7 @@ async def _yield_live_member_notes(job_id: str, generation: int, lease_epoch: in
     return ConversationFinalizationDisposition.deferred if yielded else ConversationFinalizationDisposition.fenced
 
 
-# The listen session reads its row every few seconds; it commits the audio it holds when it sees the finish.
+# The listen session commits the audio it holds with the next frame after its rollover, or at teardown.
 LIVE_ARCHIVE_COMMIT_WAIT_SECONDS = 30.0
 LIVE_ARCHIVE_COMMIT_POLL_SECONDS = 0.5
 
