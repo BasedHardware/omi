@@ -2193,14 +2193,10 @@ def _ingest_conversation_from_segments(
     resolved_client_device_id = client_device_id or request.client_device_id
     resolved_client_platform = client_platform or request.client_platform
 
-    # Bind before any persist so the ingest-owner mutation can stamp the
-    # projection onto the processing row. The coordinator's generic persists
-    # never write this field.
-    # A resumed keyed retry uses the persisted transcript, so a projection
-    # attached to the retry request is not bound to the conversation being resumed.
-    client_projection = (
-        None if resumable_conversation is not None else _accepted_client_projection(request, transcript_segments)
-    )
+    # Validate against the submitted transcript for the existing content-free
+    # rejection logs. The resume branch below discards the candidate because
+    # it reuses the first attempt's persisted transcript.
+    client_projection = _accepted_client_projection(request, transcript_segments)
 
     # Keep original desktop segment IDs before client compaction. Only a bounded,
     # validated metadata payload enters the existing conversation write.
@@ -2240,8 +2236,10 @@ def _ingest_conversation_from_segments(
         resumable_conversation.status = ConversationStatus.processing
         create_conversation_obj = resumable_conversation
         # The retry resumes the persisted transcript, so discard any projection
-        # from the changed retry request. The persisted display projection stays
-        # on the row; never read it back into the coordinator's projection input.
+        # from the retry request. The persisted display projection stays on the
+        # row; never read it back into the coordinator. A resumed processing row
+        # does not add a projection write; completed idempotency hits retain the
+        # existing digest-checked late-bind path.
         client_projection = None
         language_code = resumable_conversation.language or 'en'
     elif conversation_id:

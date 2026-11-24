@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -17,6 +17,7 @@ from utils.conversations.meeting_treatment import meeting_treatment_verdict
 from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.other.raise_site import raise_site_of
 from utils.other.request_deadline import RequestDeadlineExceeded
+from utils.conversations.transcript_hash import transcript_sha256_for_binding
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -673,7 +674,7 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch, st
         row['status'] = ConversationStatus.in_progress
         return True
 
-    def admit(_uid, conversation_id, *, extra_updates):
+    def admit_side_effect(_uid, conversation_id, *, extra_updates):
         assert row['id'] == conversation_id
         assert row['status'] == ConversationStatus.in_progress
         row['status'] = ConversationStatus.processing
@@ -690,6 +691,7 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch, st
 
     processor = MagicMock(side_effect=process)
     create_claim = MagicMock(side_effect=create)
+    admit = MagicMock(side_effect=admit_side_effect)
     delete = MagicMock()
     event = MagicMock()
     bind_projection = MagicMock(return_value=False)
@@ -701,6 +703,7 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch, st
     monkeypatch.setattr(conversations_db, 'get_conversation', lambda *_args, **_kwargs: dict(row) or None)
     monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
     monkeypatch.setattr(conversations_db, 'bind_client_processing', bind_projection)
+    monkeypatch.setattr(developer, 'client_summaries_at_cap_enabled', lambda: True)
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', create_claim)
     monkeypatch.setattr(developer.lifecycle_service, 'rollback_processing_admission', rollback)
     monkeypatch.setattr(developer.lifecycle_service, 'admit_processing', admit)
@@ -718,12 +721,34 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch, st
     event.assert_not_called()
     row['client_processing'] = dict(stored_projection)
 
+    retry_segments = [{**_segment(), 'text': 'changed on retry'}]
+    retry_digest = transcript_sha256_for_binding(retry_segments)
+    assert retry_digest is not None
+    retry_projection = {
+        'schema_version': 1,
+        'transcript_sha256': retry_digest,
+        'structure': {'title': 'Retry supplied summary'},
+        'provenance': {
+            'model_id': 'local-model',
+            'runtime': 'mlx',
+            'device_class': 'mac',
+            'generated_at': NOW.isoformat(),
+        },
+    }
+    retry_request = _request(
+        client_session_id='local-session-1',
+        transcript_segments=retry_segments,
+        client_processing=retry_projection,
+    )
+    assert (
+        developer._accepted_client_projection(
+            retry_request, [developer.stored_transcript_segment(segment) for segment in retry_segments]
+        )
+        is not None
+    )
     response = developer._create_conversation_from_segments(
         'uid1',
-        _request(
-            client_session_id='local-session-1',
-            transcript_segments=[{**_segment(), 'text': 'changed on retry'}],
-        ),
+        retry_request,
         client_kind='ios',
         app_build='12574',
     )
@@ -731,6 +756,7 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch, st
     assert response.id == row['id']
     assert row['status'] == ConversationStatus.completed
     create_claim.assert_called_once()
+    admit.assert_called_once_with('uid1', row['id'], extra_updates={'external_data.from_segments_claimed_at': ANY})
     delete.assert_not_called()
     assert len(process_kwargs) == 2
     assert 'client_projection' not in process_kwargs[1]
