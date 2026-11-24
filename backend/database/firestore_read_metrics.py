@@ -36,6 +36,11 @@ class FirestoreReadSite(StrEnum):
     wired up to pass an explicit ``read_site`` — never invent one to make a
     label "look" attributed. ``UNATTRIBUTED`` is the honest default for every
     single-document read that has not been reviewed yet.
+
+    Exception: the four ``EPISODE_FINALIZATION_*_FENCE`` members are the sites
+    callers pass. ``database/episode_finalization_fence.py`` derives their
+    ``*_ACCOUNT`` and ``*_TOMBSTONE`` members for the two reads it makes; callers
+    never pass a derived member.
     """
 
     LISTEN_CLIENT_ID_PROBE = 'listen_client_id_probe'

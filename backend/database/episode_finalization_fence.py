@@ -16,6 +16,8 @@ _SPLIT = {
     )
 }
 
+_DERIVED = frozenset(derived for pair in _SPLIT.values() for derived in pair)
+
 
 class EpisodeFinalizationDeleted(RuntimeError):
     """The account or the source conversation has a deletion marker."""
@@ -24,6 +26,8 @@ class EpisodeFinalizationDeleted(RuntimeError):
 def require_not_deleted(transaction, client, uid: str, cid: str, site: FirestoreReadSite) -> None:
     # Keep both authority reads in the write transaction, including reads of
     # absent documents. Every retry must recheck before it can stage writes.
+    if site in _DERIVED:
+        raise ValueError('pass the base fence site, not a derived account or tombstone site')
     account_site, tombstone_site = _SPLIT.get(site, (site, site))
     account = account_deletion_document(uid, firestore_client=client).get(transaction=transaction)
     record_document_read(account_site, FirestoreReadOutcome.HIT if account.exists else FirestoreReadOutcome.MISS)

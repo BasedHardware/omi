@@ -97,3 +97,17 @@ def test_unsplit_site_keeps_its_single_label(monkeypatch):
     allowed, recorded = _run(monkeypatch, marker=_Doc(False), tombstone=_Doc(False), site=Site.UNATTRIBUTED)
     assert allowed
     assert recorded == [(Site.UNATTRIBUTED, Outcome.MISS), (Site.UNATTRIBUTED, Outcome.MISS)]
+
+
+def test_every_fence_site_is_split_into_two_distinct_labels():
+    base = {site for site in Site if site.value.startswith('episode_finalization_') and site.value.endswith('_fence')}
+    assert base and base == set(fence._SPLIT)
+    for site, (account, tombstone) in fence._SPLIT.items():
+        assert account.value == f'{site.value}_account'
+        assert tombstone.value == f'{site.value}_tombstone'
+        assert account != tombstone
+
+
+def test_a_derived_site_is_rejected(monkeypatch):
+    with pytest.raises(ValueError):
+        _run(monkeypatch, marker=_Doc(False), tombstone=_Doc(False), site=Site.EPISODE_FINALIZATION_MEMO_FENCE_ACCOUNT)
