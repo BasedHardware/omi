@@ -35,11 +35,12 @@ def get_yearly_switch_endpoint(
         False, description="Include Stripe's invoice preview: the charge today and the renewal date."
     ),
     uid: str = Depends(auth.get_current_user_uid),
-    http_request: Request = None,
+    http_request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
 ):
     """Whether this monthly payer can switch to yearly now, and (with preview) exactly what it costs."""
-    headers = http_request.headers if http_request is not None else {}
-    if play_billing_config.client_uses_play(headers.get('X-App-Platform'), headers.get('X-App-Build'), uid):
+    if http_request and play_billing_config.client_uses_play(
+        http_request.headers.get('X-App-Platform'), http_request.headers.get('X-App-Build'), uid
+    ):
         # The switch charges through Stripe, which a Google Play build never starts.
         return YearlySwitchResponse(eligible=False, reason=play_billing_config.USE_GOOGLE_PLAY)
     subscription = users_db.get_user_subscription(uid)

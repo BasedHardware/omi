@@ -75,7 +75,9 @@ def _store(uid: str, price_id: str, previous, updated: dict) -> None:
 @router.post('/v1/payments/payment-issue/monthly-switch', response_model=PaymentStatusMessageResponse)
 @fresh_reader
 def payment_issue_monthly_switch_endpoint(
-    request: MonthlySwitchRequest, uid: str = Depends(auth.get_current_user_uid), http_request: Request = None
+    request: MonthlySwitchRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
 ):
     """Move a declined yearly renewal to the same plan's monthly price (utils/monthly_switch.py).
 
