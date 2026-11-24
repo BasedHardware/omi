@@ -8,8 +8,7 @@ from render_backend_runtime_env import DEFAULT_MANIFEST, _load_yaml, _render_env
 def load_expected_env():
     env = _load_yaml(DEFAULT_MANIFEST)['environments']['prod']['cloud_run']['jobs']['notifications-job']['env']
     expected = {
-        entry['name']: entry['value']
-        for entry in _render_env_entries({name: env[name] for name in (ENDPOINT, BLANK)})
+        entry['name']: entry['value'] for entry in _render_env_entries({name: env[name] for name in (ENDPOINT, BLANK)})
     }
     require(expected[ENDPOINT] and expected[ENDPOINT] != 'http://127.0.0.1:9', 'Missing verified gateway endpoint')
     return expected
