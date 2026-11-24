@@ -240,7 +240,7 @@ def augment_commit(request: Any) -> tuple[Any, int]:
     count = len(writes)
     home_writes = augment_home_writes(writes)
     tokens = authority_tokens(writes)
-    if not tokens and len(home_writes) == count:
+    if not tokens and len(home_writes) == count and all(a == b for a, b in zip(writes, home_writes)):
         return request, count
     prepared = CommitRequest(request)
     del prepared.writes[:]

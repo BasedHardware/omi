@@ -7,7 +7,7 @@ import 'package:omi/backend/schema/conversation.dart';
 bool leftToDailyRecap(ServerConversation conversation) =>
     conversation.structured.isBackground &&
     conversation.speakerResolution?.countable == true &&
-    !conversation.transcriptSegments.any((segment) => segment.isUser) &&
+    conversation.hasOwnerSpeech == false &&
     conversation.status == ConversationStatus.completed &&
     !conversation.starred &&
     !conversation.isLocked &&

@@ -365,6 +365,32 @@ class ConversationAudioInfo {
   }
 }
 
+/// Transcript-derived Home presentation. Detail still hydrates the real transcript.
+class HomeListTranscriptEvidence {
+  const HomeListTranscriptEvidence(this.hasOwnerSpeech, this.durationSeconds, this.previewPrefix);
+
+  final bool hasOwnerSpeech;
+  final int durationSeconds;
+  final String? previewPrefix;
+
+  static HomeListTranscriptEvidence? fromJson(Object? json) {
+    if (json is! Map<String, dynamic>) return null;
+    final owner = json['has_owner_speech'];
+    final duration = json['duration_seconds'];
+    final preview = json['preview_prefix'];
+    if (owner is! bool || duration is! int || duration < 0 || (preview != null && preview is! String)) {
+      return null;
+    }
+    return HomeListTranscriptEvidence(owner, duration, preview as String?);
+  }
+
+  Map<String, dynamic> toJson() => {
+        'has_owner_speech': hasOwnerSpeech,
+        'duration_seconds': durationSeconds,
+        if (previewPrefix != null) 'preview_prefix': previewPrefix,
+      };
+}
+
 class ServerConversation {
   final String id;
   final Map<String, dynamic>? onDeviceProvenance;
@@ -375,6 +401,12 @@ class ServerConversation {
 
   final Structured structured;
   final List<TranscriptSegment> transcriptSegments;
+  final bool transcriptSegmentsLoaded;
+  final HomeListTranscriptEvidence? homeListTranscriptEvidence;
+
+  bool? get hasOwnerSpeech => transcriptSegmentsLoaded
+      ? transcriptSegments.any((segment) => segment.isUser)
+      : homeListTranscriptEvidence?.hasOwnerSpeech;
   final Geolocation? geolocation;
   final List<ConversationPhoto> photos;
   final List<AudioFile> audioFiles;
@@ -471,6 +503,8 @@ class ServerConversation {
     this.startedAt,
     this.finishedAt,
     this.transcriptSegments = const [],
+    this.transcriptSegmentsLoaded = true,
+    this.homeListTranscriptEvidence,
     this.appResults = const [],
     this.suggestedSummarizationApps = const [],
     this.geolocation,
@@ -530,6 +564,8 @@ class ServerConversation {
         startedAt: startedAt,
         finishedAt: finishedAt,
         transcriptSegments: transcriptSegments ?? this.transcriptSegments,
+        transcriptSegmentsLoaded: transcriptSegmentsLoaded,
+        homeListTranscriptEvidence: homeListTranscriptEvidence,
         appResults: appResults,
         suggestedSummarizationApps: suggestedSummarizationApps,
         geolocation: geolocation,
@@ -602,6 +638,8 @@ class ServerConversation {
           (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
       processingDeferred: json['processing_deferred'] == true,
+      transcriptSegmentsLoaded: json['transcript_segments'] is List,
+      homeListTranscriptEvidence: HomeListTranscriptEvidence.fromJson(json['home_list_transcript_evidence']),
       homeStep: json['home_step'] is String ? json['home_step'] as String : null,
       transcriptionWait: json['transcription_wait'] is String ? json['transcription_wait'] as String : null,
       transcriptionAdmission:
@@ -621,6 +659,8 @@ class ServerConversation {
     String? syncMergedInto,
     bool siriVisibilityValid = true,
     bool? processingDeferred,
+    bool transcriptSegmentsLoaded = true,
+    HomeListTranscriptEvidence? homeListTranscriptEvidence,
     List<TranscriptMatchSnippet>? matchSnippets,
     Map<String, dynamic>? onDeviceProvenance,
     Map<String, dynamic>? clientProcessing,
@@ -639,6 +679,8 @@ class ServerConversation {
       startedAt: generated.startedAt,
       finishedAt: generated.finishedAt,
       transcriptSegments: generated.transcriptSegments.map(_transcriptSegmentFromGenerated).toList(),
+      transcriptSegmentsLoaded: transcriptSegmentsLoaded,
+      homeListTranscriptEvidence: homeListTranscriptEvidence,
       appResults: generated.appsResults.isNotEmpty
           ? generated.appsResults.map(AppResponse.fromGenerated).toList()
           : generated.pluginsResults.map((result) => AppResponse(result.content, appId: result.pluginId)).toList(),
@@ -693,7 +735,9 @@ class ServerConversation {
       'structured': structured.toJson(),
       'started_at': startedAt?.toUtc().toIso8601String(),
       'finished_at': finishedAt?.toUtc().toIso8601String(),
-      'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
+      if (transcriptSegmentsLoaded)
+        'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
+      if (homeListTranscriptEvidence != null) 'home_list_transcript_evidence': homeListTranscriptEvidence!.toJson(),
       'apps_results': appResults.map((result) => result.toGenerated().toJson()).toList(),
       'plugins_results': appResults.map((result) {
         return wire.GeneratedPluginResult(pluginId: result.appId, content: result.content).toJson();
@@ -827,6 +871,8 @@ class ServerConversation {
   }
 
   int getDurationInSeconds() {
+    final compactDuration = homeListTranscriptEvidence?.durationSeconds;
+    if (!transcriptSegmentsLoaded && compactDuration != null) return compactDuration;
     // started_at is the streaming-session origin, not this conversation's start,
     // so finishedAt - startedAt over-counts; prefer the transcript span (#4056).
     if (transcriptSegments.isEmpty && finishedAt != null && startedAt != null) {

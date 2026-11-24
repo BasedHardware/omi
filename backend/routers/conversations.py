@@ -13,7 +13,7 @@ import os
 import time
 from contextlib import ExitStack, nullcontext
 
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks, Header
 from typing import Annotated, Any, Dict, List, Literal, Optional, cast
 from starlette.datastructures import Headers
@@ -67,6 +67,7 @@ from models.conversation import (
     CalendarEventLink,
     Conversation,
     ConversationAnalytics,
+    ConversationListRow,
     ConversationFinalizationStatusResponse,
     ConversationMutationResponse,
     CreateConversationResponse,
@@ -161,6 +162,7 @@ from utils.other.list_budget import (
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
     finish_list_budget,
+    indexed_list_reads_enabled,
     list_read_budget_for_request,
 )
 from utils.conversations.calendar_linking import (
@@ -1127,8 +1129,9 @@ LEGACY_SEGMENT_INDEX_PREFIX = '#index:'
     response_model=List[Conversation],
     tags=['conversations'],
     description=(
-        "List responses may omit detail-only fields such as transcript_segments. "
-        "Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript. "
+        "Clients sending X-Omi-Home-List-Transcript: 1 may receive compact Home rows with "
+        "home_list_transcript_evidence and no transcript_segments. "
+        "Omitted transcript_segments means the transcript is unknown or unloaded. "
         "Large accounts can outrun the request budget; such responses return a partial "
         "newest-first array with the X-Omi-List-Truncated: true header instead of a 504 (#11831)."
     ),
@@ -1178,6 +1181,7 @@ def get_conversations(
     reject_oversized_filter(source_list, "sources")
 
     from utils.episodes import home_membership
+    from utils.home_feed import list_transcript
 
     # Request-scoped budget: the server-side offset is charged before the
     # query and the page stream runs under the derived per-RPC timeout, so a
@@ -1189,6 +1193,7 @@ def get_conversations(
     # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
     # legacy sync piece there would duplicate them.
     show_held = default_home and not conversations_v3_enabled(uid)
+    accepts_compact = bool(request and request.headers.get(list_transcript.HEADER) == list_transcript.VERSION)
     read_started = time.monotonic()
     conversations = conversations_db.get_conversations_without_photos(
         uid,
@@ -1204,7 +1209,7 @@ def get_conversations(
         folder_id=folder_id,
         starred=starred,
         budget=budget,
-        list_fields_only=True,
+        list_fields_only=accepts_compact,
         presentation=True,
         include_recordings=status_filter == ['in_progress'],
         capture_only=status_filter == ['in_progress'],
@@ -1239,13 +1244,20 @@ def get_conversations(
         for row in conversations
     ]
     redact_conversations_for_list(conversations)
+    preserve_unknown = accepts_compact and indexed_list_reads_enabled()
+    for row in conversations:
+        if row.get('is_locked'):
+            row.pop('home_list_transcript_evidence', None)
+        elif preserve_unknown and 'transcript_segments' not in row:
+            # A legacy row without stored segments supplies no owner-speech evidence.
+            row['omit_unloaded_transcript'] = True
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
     # Read meter: what one list page cost. Counts and timings only, never the owner or the query.
     logger.info(
         'conversation_list_read home=%s paged=%s limit=%d docs=%s storage_rows=%s hidden=%s rows=%d '
-        'truncated=%s read_ms=%d total_ms=%d',
+        'truncated=%s read_ms=%d total_ms=%d compact_rows=%d',
         default_home,
         'cursor' if cursor else ('offset' if offset else 'first'),
         limit,
@@ -1256,7 +1268,15 @@ def get_conversations(
         budget.truncated,
         (read_done - read_started) * 1000,
         (time.monotonic() - read_started) * 1000,
+        sum('home_list_transcript_evidence' in row for row in conversations),
     )
+    if preserve_unknown:
+        # The generated SDK's default list response remains Conversation.
+        # The negotiated wire adds only optional Home fields and can omit speech.
+        return JSONResponse(
+            [ConversationListRow(**row).model_dump(mode='json') for row in conversations],
+            headers=response.headers if response is not None else None,
+        )
     return conversations
 
 

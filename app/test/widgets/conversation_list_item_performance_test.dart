@@ -50,6 +50,37 @@ void main() {
     expect(find.textContaining('Keep the original transcript visible.'), findsWidgets);
   });
 
+  for (final discarded in [false, true]) {
+    testWidgets('compact ${discarded ? 'discarded' : 'deferred'} row renders its transcript preview', (tester) async {
+      final conversation = ServerConversation.fromJson({
+        'id': 'compact',
+        'created_at': '2026-11-22T00:00:00Z',
+        'started_at': '2026-11-22T00:00:00Z',
+        'finished_at': '2026-11-22T00:00:08Z',
+        'structured': {'title': 'Stored title', 'overview': ''},
+        'discarded': discarded,
+        'processing_deferred': !discarded,
+        'home_list_transcript_evidence': {
+          'duration_seconds': 8,
+          'has_owner_speech': true,
+          'preview_prefix': 'Keep the original transcript visible.',
+        },
+      });
+      final provider = ConversationProvider(isSignedIn: () => false)..conversations = [conversation];
+      addTearDown(provider.dispose);
+      await tester.pumpWidget(ChangeNotifierProvider<ConversationProvider>.value(
+          value: provider,
+          child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(
+                  body: ConversationListItem(
+                      conversation: conversation, date: conversation.createdAt, conversationIdx: 0)))));
+      expect(conversation.transcriptSegments, isEmpty);
+      expect(find.textContaining('Keep the original transcript visible.'), findsWidgets);
+    });
+  }
+
   testWidgets('conversation rows are isolated behind a repaint boundary', (tester) async {
     final conversation = ServerConversation(
       id: 'c1',

@@ -66,7 +66,8 @@ func (s Store) CommitInlineSyncRevision(ctx context.Context, a queue.Admitting, 
 		if bytes.Equal(old, updated) {
 			return nil
 		}
-		patch := document{"sync_content_revision": expected + 1, "transcript_segments": decoded, "has_content": true}
+		patch := document{"sync_content_revision": expected + 1, "transcript_segments": decoded, "has_content": true,
+			"home_list_transcript": nil, "home_list_transcript_source_version": nil}
 		stageSummaryRearm(row, patch, now)
 		if storedLowerBound(map[string]any(row))+len(updated) > 900<<10 {
 			return finalization.ErrInvalid

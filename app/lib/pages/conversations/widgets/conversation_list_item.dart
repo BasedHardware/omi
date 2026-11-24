@@ -83,6 +83,8 @@ String conversationRowTitle(BuildContext context, ServerConversation conversatio
 /// A plain-text preview of what was said: the transcript words without timestamps or speaker
 /// prefixes, newest last, trimmed to [maxChars] at a word boundary.
 String conversationSnippet(ServerConversation conversation, {int maxChars = 160}) {
+  final compact = conversation.homeListTranscriptEvidence?.previewPrefix;
+  if (!conversation.transcriptSegmentsLoaded && compact != null) return _trimSnippet(compact, maxChars);
   // Only collect the visible prefix plus one character to decide whether it
   // needs an ellipsis. Hydrated/retained conversations can have hours of text;
   // joining all of it for each scrolling row makes a short preview O(history).
@@ -95,7 +97,10 @@ String conversationSnippet(ServerConversation conversation, {int maxChars = 160}
     if (remaining > 0) prefix.write(words.length > remaining ? words.substring(0, remaining) : words);
     if (prefix.length > maxChars) break;
   }
-  final text = prefix.toString();
+  return _trimSnippet(prefix.toString(), maxChars);
+}
+
+String _trimSnippet(String text, int maxChars) {
   if (text.length <= maxChars) return text;
   final cut = text.substring(0, maxChars);
   final space = cut.lastIndexOf(' ');
@@ -176,6 +181,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.finishedAt,
         conversation.photos.length,
         conversation.transcriptSegments.length,
+        conversation.homeListTranscriptEvidence?.previewPrefix,
+        conversation.homeListTranscriptEvidence?.durationSeconds,
         conversation.captureGroup?.id,
         conversation.captureGroup?.revision,
         conversation.summaryRetryable,

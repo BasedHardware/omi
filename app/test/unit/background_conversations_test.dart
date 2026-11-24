@@ -57,6 +57,22 @@ void main() {
     expect(leftToDailyRecap(row), isFalse);
   });
 
+  test('slim rows distinguish unknown, no owner speech, and owner speech across cache reads', () {
+    final json = _conversation('TV', salience: 'background').toJson()..remove('transcript_segments');
+    final unknown = ServerConversation.fromJson(json);
+    expect(unknown.hasOwnerSpeech, isNull);
+    expect(leftToDailyRecap(unknown), isFalse);
+    expect(unknown.toJson().containsKey('transcript_segments'), isFalse);
+
+    for (final ownerSpoke in [true, false]) {
+      json['home_list_transcript_evidence'] = {'has_owner_speech': ownerSpoke, 'duration_seconds': 8};
+      final row = ServerConversation.fromJson(ServerConversation.fromJson(json).toJson());
+      expect(row.transcriptSegments, isEmpty);
+      expect(row.getDurationInSeconds(), 8);
+      expect(leftToDailyRecap(row), !ownerSpoke);
+    }
+  });
+
   test('locked and discarded rows are never moved to the recap', () {
     final json = _conversation('TV', salience: 'background').toJson();
     json['is_locked'] = true;

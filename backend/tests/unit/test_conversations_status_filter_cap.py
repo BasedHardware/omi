@@ -37,6 +37,7 @@ class _FirestoreLikeDB:
     """Records the filter it was asked for and raises past the real Firestore `in` limit."""
 
     def __init__(self):
+        self.last_list_fields_only = None
         self.last_statuses = None
         self.last_sources = None
         self.last_include_discarded = None
@@ -52,6 +53,7 @@ class _FirestoreLikeDB:
         self.last_end_date = kwargs.get('end_date')
 
     def get_conversations_without_photos(self, uid, limit, offset, *, statuses=(), **kwargs):
+        self.last_list_fields_only = kwargs.get('list_fields_only')
         self.last_statuses = list(statuses)
         self.last_sources = list(kwargs.get('sources') or [])
         self.last_include_discarded = kwargs.get('include_discarded')
@@ -363,3 +365,66 @@ def test_wire_list_single_source_multi_status_with_folder_starred_false_and_date
     assert db.last_starred is False
     assert db.last_start_date == _START
     assert db.last_end_date == _END
+
+
+@pytest.mark.parametrize('capability,expected', [(None, False), ('0', False), ('2', False), ('1', True)])
+def test_home_list_negotiates_explicit_capability(db, capability, expected):
+    app = FastAPI()
+    app.include_router(conv.router)
+    app.dependency_overrides[conv.auth.get_current_user_uid] = lambda: 'u1'
+    headers = {} if capability is None else {'X-Omi-Home-List-Transcript': capability}
+    response = TestClient(app).get('/v1/conversations', headers=headers)
+    assert response.status_code == 200
+    assert db.last_list_fields_only is expected
+
+
+def test_home_list_wire_omits_segments_only_with_evidence():
+    base = dict(id='c', created_at=_START, started_at=_START, finished_at=_END, structured={'title': 'title'})
+    legacy = conv.ConversationListRow(**base).model_dump(mode='json')
+    assert legacy['transcript_segments'] == []
+    assert 'home_list_transcript_evidence' not in legacy
+    evidence = {'has_owner_speech': True, 'duration_seconds': 2, 'preview_prefix': 'Owner spoke.'}
+    slim = conv.ConversationListRow(**base, home_list_transcript_evidence=evidence).model_dump(mode='json')
+    assert 'transcript_segments' not in slim
+    assert slim['home_list_transcript_evidence'] == evidence
+    locked = conv.ConversationListRow(**base, home_list_transcript_evidence=evidence, is_locked=True).model_dump(
+        mode='json'
+    )
+    assert locked['transcript_segments'] == []
+    assert 'home_list_transcript_evidence' not in locked
+
+
+@pytest.mark.parametrize(
+    'enabled,capability,segments,expect_omitted',
+    [
+        ('true', '1', None, True),
+        ('true', '1', [], False),
+        ('false', '1', None, False),
+        ('true', '2', None, False),
+    ],
+)
+def test_negotiated_wire_preserves_missing_older_transcript(
+    db, monkeypatch, enabled, capability, segments, expect_omitted
+):
+    monkeypatch.setenv('OMI_INDEXED_LIST_READS_ENABLED', enabled)
+    row = dict(id='c', created_at=_START, started_at=_START, finished_at=_END, structured={'title': 'title'})
+    if segments is not None:
+        row['transcript_segments'] = segments
+
+    def read_page(*args, cursor_page, **kwargs):
+        cursor_page.update(storage_rows=3, has_more=True, next_cursor='next-page')
+        return [row]
+
+    monkeypatch.setattr(db, 'get_conversations_without_photos', read_page)
+    app = FastAPI()
+    app.include_router(conv.router)
+    app.dependency_overrides[conv.auth.get_current_user_uid] = lambda: 'u1'
+    response = TestClient(app).get('/v1/conversations', headers={'X-Omi-Home-List-Transcript': capability})
+    assert response.status_code == 200
+    assert response.headers['X-Omi-Conversation-Page-Size'] == '3'
+    assert response.headers['X-Omi-Has-More'] == 'true'
+    assert response.headers['X-Omi-Next-Cursor'] == 'next-page'
+    wire = response.json()[0]
+    assert ('transcript_segments' not in wire) is expect_omitted
+    assert 'omit_unloaded_transcript' not in wire
+    assert 'home_list_transcript_evidence' not in wire

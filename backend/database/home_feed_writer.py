@@ -11,6 +11,8 @@ from contextlib import contextmanager
 import inspect
 from functools import wraps
 from database.batch_account_authority_schema import USER_POLICY_FIELDS
+
+from database.home_feed_fields import LIST_TRANSCRIPT, LIST_TRANSCRIPT_SOURCE_VERSION as LIST_SOURCE_VERSION
 from google.cloud.firestore_v1.types import Document, DocumentMask, Value, Write
 
 _ERASING_ROOTS: ContextVar[frozenset[str]] = ContextVar("home_feed_erasing_roots", default=frozenset())
@@ -138,9 +140,20 @@ def augment_home_writes(writes):
         ):
             owners.add(policy_owner)
             policy_owners.add(policy_owner)
-        if not affects_home(write):
-            continue
         parts = _parts(write)
+        if not affects_home(write):
+            # Append-only writes bypass Home invalidation, but can change
+            # transcript-derived speech, duration and previews.
+            if parts and parts[7] == 'conversations' and write.update.name:
+                paths = write.update_mask.field_paths
+                if any(p.split('.', 1)[0].strip('`') == 'transcript_segments' for p in paths):
+                    prepared = Write(write)
+                    for field in (LIST_TRANSCRIPT, LIST_SOURCE_VERSION):
+                        prepared.update.fields.pop(field, None)
+                        if field not in prepared.update_mask.field_paths:
+                            prepared.update_mask.field_paths.append(field)
+                    writes[index] = prepared
+            continue
         if not parts or parts[7] not in {'conversations', 'episodes', 'deleted_conversations'}:
             continue
         owner = '/'.join(parts[:7])
@@ -164,6 +177,12 @@ def augment_home_writes(writes):
             )
             roots = {p.split('.', 1)[0].strip('`') for p in paths} | set(write.update.fields)
             values = {'home_source_version': Value(string_value=uuid4().hex)}
+            if (
+                'transcript_segments' in write.update.fields
+                and LIST_TRANSCRIPT in write.update.fields
+                and write.update.fields[LIST_TRANSCRIPT].string_value
+            ):
+                values[LIST_SOURCE_VERSION] = values['home_source_version']
             if {'transcript_segments', 'user_corrections'}.intersection(roots):
                 values['home_content_invalidated'] = Value(boolean_value='structured' not in roots)
         if values:
@@ -174,6 +193,11 @@ def augment_home_writes(writes):
                 # than billing a second update of the same document.
                 prepared = Write(write)
                 prepared.update.fields.update(values)
+                if parts[7] == 'conversations' and LIST_SOURCE_VERSION not in values:
+                    for field in (LIST_TRANSCRIPT, LIST_SOURCE_VERSION):
+                        prepared.update.fields.pop(field, None)
+                        if Write.pb(write).HasField('update_mask') and field not in prepared.update_mask.field_paths:
+                            prepared.update_mask.field_paths.append(field)
                 if Write.pb(write).HasField('update_mask'):
                     prepared.update_mask.field_paths.extend(
                         key for key in values if key not in prepared.update_mask.field_paths
