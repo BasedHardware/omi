@@ -133,6 +133,20 @@ def admitted(monkeypatch):
     monkeypatch.setattr(fast_finish, 'funded', lambda uid, seconds, language: True)
 
 
+_real_run = fast_finish.run
+
+
+@pytest.fixture(autouse=True)
+def privacy_granted(monkeypatch):
+    """Most cases exercise an authorized pass; the privacy cases pass their own answer."""
+
+    def run(*args, **kwargs):
+        kwargs.setdefault('privacy', lambda: True)
+        return _real_run(*args, **kwargs)
+
+    monkeypatch.setattr(fast_finish, 'run', run)
+
+
 def seg(start, end, **more):
     return {
         'id': f's{start}',
@@ -261,6 +275,96 @@ def test_a_member_outside_the_rollout_reads_no_audio(monkeypatch):
     monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'off')
     never = lambda *args: pytest.fail('must not be called')
     assert fast_finish.run(UID, 'cid', row(), one_unit(), never, write=never, transcribe=never) == 'not_enabled'
+
+
+@pytest.mark.parametrize('answer', [None, 'refuse', 'raise', 'truthy'])
+def test_an_account_that_opted_out_after_capture_reads_no_audio(answer):
+    # No check, a refusal, an unavailable authority and anything but an explicit True all fail closed.
+    never = lambda *args: pytest.fail('must not read audio, transcribe, write or cut')
+    privacy = {'refuse': lambda: False, 'raise': boom, 'truthy': lambda: 1}.get(answer)
+    outcome = _real_run(UID, 'cid', row(), one_unit(), never, write=never, transcribe=never, cut=never, privacy=privacy)
+    assert outcome == 'privacy_blocked'
+
+
+def test_a_privacy_change_while_audio_was_read_sends_nothing_to_the_provider():
+    never = lambda *args: pytest.fail('must not transcribe, write or cut')
+    answers = iter([True, False])
+    reads = []
+    outcome = _real_run(
+        UID,
+        'cid',
+        row(),
+        one_unit(),
+        lambda r: reads.append(r) or bytes(4),
+        write=never,
+        transcribe=never,
+        cut=never,
+        privacy=lambda: next(answers),
+    )
+    assert outcome == 'privacy_blocked' and len(reads) == 1
+
+
+def test_an_authorized_account_is_asked_before_the_audio_and_before_the_provider():
+    order = []
+
+    def privacy():
+        order.append('privacy')
+        return True
+
+    outcome = _real_run(
+        UID,
+        'cid',
+        row(),
+        one_unit(),
+        lambda r: order.append('audio') or bytes(4),
+        write=lambda *a: order.append('write') or True,
+        transcribe=lambda pcm, language: order.append('provider') or [seg(0.0, 1.0)],
+        privacy=privacy,
+    )
+    assert outcome == 'written'
+    assert order == ['privacy', 'audio', 'privacy', 'provider', 'write']
+
+
+class _PrivacyStore:
+    def __init__(self, blocked):
+        self.blocked, self.checks, self.client = blocked, [], _Doc({})
+
+    def run(self, body):
+        store = self
+
+        class Tx:
+            def check_privacy(self, uid, conversation_ids=(), expected_generation=None):
+                store.checks.append((uid, tuple(conversation_ids), expected_generation))
+                if store.blocked:
+                    raise RuntimeError('privacy generation changed')
+                return expected_generation
+
+        return body(Tx())
+
+
+@pytest.mark.parametrize('blocked', [False, True])
+def test_admission_hands_the_pass_the_batch_privacy_fence_at_its_admitted_generation(monkeypatch, blocked):
+    live._FAST_FINISH_STARTED.clear()
+    store, outcomes = _PrivacyStore(blocked), []
+    monkeypatch.setattr(fast_finish, 'enabled', lambda uid: True)
+    monkeypatch.setattr(
+        conversations_db, 'get_conversation', lambda uid, cid, **kwargs: row(_recovery_transcript_decoded=True)
+    )
+
+    def run(uid, cid, row_, units_, read, *, privacy, **kwargs):
+        outcomes.append(fast_finish._privacy_allows(privacy))
+        return 'privacy_blocked'
+
+    monkeypatch.setattr(fast_finish, 'run', run)
+
+    async def admit():
+        await live._manual_finish_admitted(store, UID, 'cid', row(), [UNIT, UNIT], object(), b'k', privacy_generation=7)
+        await asyncio.gather(*list(live._FAST_FINISH_TASKS))
+        await asyncio.sleep(0)
+
+    asyncio.run(admit())
+    assert outcomes == [not blocked]
+    assert store.checks == [(UID, ('cid',), 7)]
 
 
 def test_nothing_is_sent_to_the_provider_without_consent_and_funding():
@@ -404,7 +508,7 @@ def _admit(monkeypatch, current, units, *, fast='written', promoted=True, member
     calls = {'fast': 0, 'promote': 0, 'cut': 0}
     decoded = current if decoded is None else decoded
 
-    def run(uid, cid, row_, units_, read, *, refresh, cut):
+    def run(uid, cid, row_, units_, read, *, refresh, cut, privacy):
         calls['fast'] += 1
         # The pass is handed a decoded row, never admission's raw snapshot.
         expected = dict(decoded, _recovery_transcript_decoded=True)
@@ -479,7 +583,17 @@ def test_an_undecodable_stored_transcript_is_not_treated_as_empty(monkeypatch):
         'run',
         lambda uid, cid, row_, *a, **k: seen.append(row_)
         or fast_finish._run(
-            uid, cid, row_, [], None, write=None, transcribe=None, refresh=k['refresh'], cut=None, authorize=None
+            uid,
+            cid,
+            row_,
+            [],
+            None,
+            write=None,
+            transcribe=None,
+            refresh=k['refresh'],
+            cut=None,
+            authorize=None,
+            privacy=None,
         ),
     )
     monkeypatch.setattr(

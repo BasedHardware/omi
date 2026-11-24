@@ -54,6 +54,7 @@ for _outcome in (
     'too_long',
     'superseded',
     'not_funded',
+    'privacy_blocked',
     'busy',
     'audio_error',
     'provider_error',
@@ -171,11 +172,15 @@ def run(
     refresh=None,
     cut=None,
     authorize=None,
+    privacy=None,
 ) -> str:
     """Transcribe ``units`` and write them as provisional segments. Returns the counted outcome; never raises.
 
     ``row`` and ``refresh()`` must be decoded rows. ``authorize`` is the consent and funding gate;
     without it nothing is sent to a provider that ordinary batch processing would have held.
+    ``privacy`` answers whether the account's current sync authorization and privacy generation
+    still allow server work on this recording. It is asked before any audio is read and again
+    before the provider call; a missing check, a False answer or an error all stop the pass.
 
     Runs on a worker thread: the cohort read is synchronous there (on the event loop a cold
     membership cache answers False). ``refresh`` re-reads the row before any audio leaves for the
@@ -195,6 +200,7 @@ def run(
             refresh=refresh,
             cut=cut,
             authorize=authorize or funded,
+            privacy=privacy,
         )
     except Exception as error:
         logger.warning('event=v3_fast_finish outcome=error exception_type=%s', type(error).__name__)
@@ -204,7 +210,18 @@ def run(
     return outcome
 
 
-def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, cut, authorize) -> str:
+def _privacy_allows(privacy) -> bool:
+    """Fail closed: no check, a refusal or an unavailable authority all mean no."""
+    if privacy is None:
+        return False
+    try:
+        return privacy() is True
+    except Exception as error:
+        logger.warning('event=v3_fast_finish outcome=privacy_blocked exception_type=%s', type(error).__name__)
+        return False
+
+
+def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, cut, authorize, privacy) -> str:
     if not enabled(uid):
         return 'not_enabled'
     if refresh is not None:
@@ -216,6 +233,10 @@ def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, 
         return 'too_long'
     if not authorize(uid, sum(duration for _, duration, _ in units), row.get('language')):
         return 'not_funded'
+    # The owner may have turned sync off or changed privacy since this recording was captured and
+    # admitted. Nothing is read from storage on a stale grant.
+    if not _privacy_allows(privacy):
+        return 'privacy_blocked'
     origin = row['started_at'].timestamp()
     segments: list[dict[str, Any]] = []
     started = time.monotonic()
@@ -225,6 +246,10 @@ def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, 
         logger.warning('event=v3_fast_finish outcome=audio_error exception_type=%s', type(error).__name__)
         return 'audio_error'
     SECONDS.labels('audio').observe(time.monotonic() - started)
+    # Asked again at the provider boundary: reading the audio took time, and audio must not leave
+    # for a provider after the owner opted out.
+    if not _privacy_allows(privacy):
+        return 'privacy_blocked'
     started = time.monotonic()
     try:
         for start, duration, pcm in audio:

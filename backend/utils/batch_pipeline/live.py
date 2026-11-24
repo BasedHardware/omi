@@ -384,7 +384,9 @@ def _admitted_these_units(admitted, job_id) -> bool:
     return isinstance(admitted, dict) and admitted.get('outcome') == 'batch' and admitted.get('job_id') == job_id
 
 
-async def _manual_finish_admitted(store, uid, conversation_id, current, units, client, key) -> None:
+async def _manual_finish_admitted(
+    store, uid, conversation_id, current, units, client, key, privacy_generation=None
+) -> None:
     """After a manually finished v3 recording is admitted: apply its cut, or start the first transcript.
 
     A single batch unit projects as one transcript, so its cut is safe to store now. Several units
@@ -432,6 +434,13 @@ async def _manual_finish_admitted(store, uid, conversation_id, current, units, c
             )
             return row if row and row.get('_recovery_transcript_decoded') is True else {}
 
+        def privacy():
+            # The batch privacy fence at the generation admission was granted under: the account's
+            # current sync authorization and an unchanged privacy generation. It raises when either
+            # no longer holds, and the pass treats any failure as a refusal.
+            store.run(lambda tx: tx.check_privacy(uid, (conversation_id,), privacy_generation))
+            return True
+
         def cut():
             # Sets the cut and wakes the builder again; the transcript write's own wake may have
             # run before the cut existed.
@@ -448,7 +457,14 @@ async def _manual_finish_admitted(store, uid, conversation_id, current, units, c
             else:
                 try:
                     outcome = fast_finish.run(
-                        uid, conversation_id, refresh(), copied, read, refresh=refresh, cut=None if single else cut
+                        uid,
+                        conversation_id,
+                        refresh(),
+                        copied,
+                        read,
+                        refresh=refresh,
+                        cut=None if single else cut,
+                        privacy=privacy,
                     )
                 finally:
                     _FAST_FINISH_SLOTS.release()
@@ -652,7 +668,16 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
     # Only when this call's intake owns these units: the transaction can also answer busy or
     # completed without admitting them, and a failed admission is retried.
     if _admitted_these_units(admitted, binding.job_id):
-        await _manual_finish_admitted(store, uid, conversation_id, current, units, client, artifacts.key_for_owner(uid))
+        await _manual_finish_admitted(
+            store,
+            uid,
+            conversation_id,
+            current,
+            units,
+            client,
+            artifacts.key_for_owner(uid),
+            privacy_generation=pending['privacy_generation'],
+        )
     return admitted
 
 
