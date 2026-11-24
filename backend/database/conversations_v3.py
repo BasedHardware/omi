@@ -15,6 +15,7 @@ from google.api_core.exceptions import DeadlineExceeded, InvalidArgument
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from database import home_visibility_index
 from database._client import firestore_failure_reason, get_firestore_client
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from database import conversations, conversations_v3_leases as leases
@@ -670,7 +671,7 @@ def commit_projection(
                         {OPEN_LOOP_EXTRACTIONS_FIELD: retained}, uid, level
                     )
                 )
-        prepared.append(encoded)
+        prepared.append(home_visibility_index.stamp(encoded))
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
     batch_reads = os.getenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'on').strip().lower() != 'off'
     # What the current transaction attempt writes, kept by reference and sized only after a failure.
@@ -750,6 +751,7 @@ def commit_projection(
                     'deleted': True,
                     'discarded': True,
                     'home_hidden': True,
+                    home_visibility_index.FIELD: False,
                     'summary_due_at': None,
                     'sync_merged_into': survivor,
                     'v3_claims_transferred_to': survivor,
@@ -918,7 +920,7 @@ def commit_projection(
                 }
                 if recordings[rid].get('_v3_derive'):
                     # Our own committed conversion, not an external change.
-                    owned |= {'recording', 'v3_backfill_run', 'v3_backfill_prior'}
+                    owned |= {'recording', home_visibility_index.FIELD, 'v3_backfill_run', 'v3_backfill_prior'}
                 changed = sorted(
                     k
                     for k in set(current) | set(observed[rid])
@@ -1092,7 +1094,7 @@ def backfill_conversion(recording):
     patch = {'recording': True, 'backfill_superseded': True, 'v3_backfill_run': recording['_v3_backfill_run']}
     if '_v3_backfill_prior' in recording:
         patch['v3_backfill_prior'] = recording['_v3_backfill_prior']
-    return patch
+    return home_visibility_index.stamp(patch)
 
 
 def _rederive_prior(row):
@@ -1313,7 +1315,7 @@ def restore_backfill_donors(uid, token, ids, *, firestore_client=None):
                 continue
             patch = {k: prior[k] if k in prior else firestore.DELETE_FIELD for k in BACKFILL_TRACKED}
             patch.update(v3_backfill_run=firestore.DELETE_FIELD, v3_backfill_prior=firestore.DELETE_FIELD)
-            tx.update(ref, patch)
+            tx.update(ref, home_visibility_index.stamp(patch, row))
             restored += 1
         return restored, kept
 

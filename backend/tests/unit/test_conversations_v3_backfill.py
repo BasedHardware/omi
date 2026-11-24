@@ -539,10 +539,12 @@ def stored(row):
 def test_conversion_keeps_legacy_notes_and_undo_restores_the_donor_exactly(strict):
     token = convert(strict)
     assert strict.rows[R]['recording'] is True and strict.rows[R]['structured'] == LEGACY_DONOR['structured']
+    assert strict.rows[R]['home_visible'] is False
+    assert strict.rows[COPY]['home_visible'] is True
     assert strict.rows[R]['claims'] and strict.rows[COPY]['backfilled'] is True
     assert store.restore_backfill_donors('synthetic', token, ['r'], firestore_client=strict) == (1, [])
     assert store.delete_backfill_rows('synthetic', token, ['c0'], firestore_client=strict) == 1
-    assert stored(strict.rows[R]) == LEGACY_DONOR
+    assert stored(strict.rows[R]) == {**LEGACY_DONOR, 'home_visible': True}
     assert COPY not in strict.rows
     # No tombstone: the window can be derived again later.
     assert ('users', 'synthetic', 'deleted_conversations', 'c0') not in strict.rows
