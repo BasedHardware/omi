@@ -311,6 +311,24 @@ def test_scheduling_gate_runs_before_submit_and_preserves_first_finalize(lane, m
     assert submit.call_count == 2
 
 
+@pytest.mark.parametrize('marker', [('account_deletions', 'u'), ('users', 'u', 'deleted_conversations', 'same')])
+def test_finalized_memo_refuses_deletion_after_planning(lane, monkeypatch, marker):
+    store, c, _ = lane
+    member = seed(store)
+    assert service._attach_synced('u', 'same', member, c) == 'recorded'
+    fresh = deepcopy(store.rows[('users', 'u', 'conversations', 'same')])
+    before = deepcopy(store.rows)
+    run = episode_attach_memo.run_preloaded_transactional
+
+    def delete_before_transaction(*args, **kwargs):
+        store.rows[marker] = {}
+        return run(*args, **kwargs)
+
+    monkeypatch.setattr(episode_attach_memo, 'run_preloaded_transactional', delete_before_transaction)
+    episode_attach_memo.complete('u', 'same', fresh, None, finalized=True, firestore_client=store)
+    assert store.rows == {**before, marker: {}}
+
+
 def test_discard_after_intake_same_revision_still_schedules_and_ends_member(lane, monkeypatch):
     from utils.episodes import finalize
 

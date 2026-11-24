@@ -696,6 +696,27 @@ def test_finalization_applies_the_tail_and_reconciles_provisional_items():
     assert service.on_conversation_finalized(UID, 'c1', row, trigger='user_reprocess', collaborators=c) == 'skipped'
 
 
+@pytest.mark.parametrize('marker', [('account_deletions', UID), ('users', UID, 'deleted_conversations', 'c1')])
+def test_finalization_reconciliation_refuses_deletion_after_planning(marker, monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'items': [{'text': 'Book lunch table'}]})
+    service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    monkeypatch.setattr(service, '_finalize_closes', lambda *_: False)
+    before = dict(store.rows)
+
+    def saved_tasks(uid, cid):
+        store.rows[marker] = {}
+        return [{'id': 'task-1', 'description': 'Book lunch table'}]
+
+    c.saved_tasks = saved_tasks
+    row = {'id': 'c1', 'source': 'omi', 'started_at': T0}
+    assert (
+        service.on_conversation_finalized(UID, 'c1', row, trigger='capture_end', collaborators=c) == 'skipped_deleted'
+    )
+    assert store.rows == {**before, marker: {}}
+
+
 def _row(conversation_id='c1', *, text=None, start=30.0, source='omi', **extra):
     return {
         'id': conversation_id,
