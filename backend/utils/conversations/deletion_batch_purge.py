@@ -31,6 +31,10 @@ from google.api_core.exceptions import NotFound
 
 from database import conversation_batch_purge_jobs as purge_jobs
 from database import conversation_tombstones
+
+# Bound at import, like the reconciler's own scan: a jobs module without audio obligations
+# (an older binary's, in the mixed-version proofs) is never asked for this name.
+AUDIO_COLLECTION = purge_jobs.AUDIO_COLLECTION
 from utils.observability.fallback import record_fallback
 from utils.cloud_tasks import (
     conversation_batch_purge_consumer_ready,
@@ -105,7 +109,7 @@ def reconcile_conversation_batch_purges(limit: int = 50) -> dict[str, int]:
     erasures = purge_jobs.due_jobs(limit=limit * ERASURE_SCAN_FACTOR, collection=purge_jobs.ERASURE_COLLECTION)
     # Kill switch off: armed audio obligations stay owed, undispatched, and resume when it is back on.
     audio = (
-        purge_jobs.due_jobs(limit=limit * ERASURE_SCAN_FACTOR, collection=purge_jobs.AUDIO_COLLECTION)
+        purge_jobs.due_jobs(limit=limit * ERASURE_SCAN_FACTOR, collection=AUDIO_COLLECTION)
         if durable_audio_erasure()
         else []
     )
@@ -133,7 +137,7 @@ def reconcile_conversation_batch_purges(limit: int = 50) -> dict[str, int]:
         _dispatch(snapshot, purge_jobs.COLLECTION, counts)
     for prefix, collection, snapshots in (
         ('erasures', purge_jobs.ERASURE_COLLECTION, erasures),
-        ('audio_erasures', purge_jobs.AUDIO_COLLECTION, audio),
+        ('audio_erasures', AUDIO_COLLECTION, audio),
     ):
         if snapshots:
             _dispatch_spread(prefix, collection, snapshots, limit, counts)
@@ -211,7 +215,7 @@ def _enqueue(job: str, generation: int, erasure: bool, audio: bool = False) -> N
 def _dispatch(snapshot: Any, collection: str, counts: dict[str, int]) -> bool:
     job = snapshot.id
     erasure = collection == purge_jobs.ERASURE_COLLECTION
-    audio = collection == purge_jobs.AUDIO_COLLECTION
+    audio = collection == AUDIO_COLLECTION
     row = snapshot.to_dict() or {}
     if purge_jobs.lease_held(row):
         counts['skipped'] += 1  # a run owns it; claim_dispatch would refuse too
