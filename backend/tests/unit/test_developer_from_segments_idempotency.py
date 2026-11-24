@@ -662,6 +662,15 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch, st
     row = {}
     process_kwargs = []
     persisted_payloads = []
+    initial_request = _request(client_session_id='local-session-1')
+    if stored_projection.get('schema_version') == 1:
+        initial_transcript = [
+            developer.stored_transcript_segment(segment) for segment in initial_request.transcript_segments
+        ]
+        initial_digest = transcript_sha256_for_binding(initial_transcript)
+        assert initial_digest is not None
+        stored_projection = {**stored_projection, 'transcript_sha256': initial_digest}
+        initial_request = _request(client_session_id='local-session-1', client_processing=stored_projection)
 
     def create(_uid, payload, *, idempotent):
         assert idempotent and not row
@@ -686,6 +695,7 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch, st
             raise conversation_processing_http_exception(RequestDeadlineExceeded('budget spent'))
         assert conversation.id == row['id']
         assert conversation.transcript_segments[0].text == 'hello world'
+        assert conversation.client_processing is None
         conversation.status = ConversationStatus.completed
         return conversation
 
@@ -711,15 +721,21 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch, st
     monkeypatch.setattr(developer, 'process_conversation', processor)
     monkeypatch.setattr(developer, 'record_product_event', event)
 
-    request = _request(client_session_id='local-session-1')
     with pytest.raises(HTTPException) as cut:
-        developer._create_conversation_from_segments('uid1', request)
+        developer._create_conversation_from_segments('uid1', initial_request)
     assert cut.value.status_code == 503
     assert cut.value.headers == {'Retry-After': '2'}
     assert raise_site_of(cut.value) == 'request_budget_exhausted'
     assert row['status'] == ConversationStatus.in_progress
     event.assert_not_called()
-    row['client_processing'] = dict(stored_projection)
+    if stored_projection.get('schema_version') == 1:
+        persisted_projection = row.get('client_processing')
+        assert persisted_projection is not None
+        assert persisted_projection['transcript_sha256'] == stored_projection['transcript_sha256']
+        assert persisted_projection['structure']['title'] == stored_projection['structure']['title']
+        stored_projection = persisted_projection
+    else:
+        row['client_processing'] = dict(stored_projection)
 
     retry_segments = [{**_segment(), 'text': 'changed on retry'}]
     retry_digest = transcript_sha256_for_binding(retry_segments)
