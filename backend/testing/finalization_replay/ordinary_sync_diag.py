@@ -24,6 +24,7 @@ from testing.finalization_replay.driver import _ReplayKey, _clear, _observe, _se
 from testing.finalization_replay.firestore_proxy import FirestoreProxy
 from testing.finalization_replay import reference as reference_module
 from testing.finalization_replay.metrics import suspend_meter
+from testing.finalization_replay.ordinary_sync_retry import UNREADABLE, check_ciphertext, retry_to_park
 from testing.replay_harness.env import emulator_endpoint, replay_environment
 
 
@@ -92,6 +93,7 @@ class UnexpectedGoOutcome(RuntimeError):
 
 def _go_sync(state, binary, database, key, url, firestore_proxy):
     with suspend_meter():
+        original = state.conversation.get().to_dict() if state.case['name'] == UNREADABLE else None
         job = _seed_worker_intent(state)
     firestore_proxy.reset()
     process = subprocess.run(
@@ -143,12 +145,15 @@ def _go_sync(state, binary, database, key, url, firestore_proxy):
     }
     if result[1] != 'success':
         if (
-            state.case['name'] == 'unreadable-ciphertext-dead-letters'
+            state.case['name'] == UNREADABLE
             and result[1] == 'failure'
             and cause is not None
             and cause[1] == 'conversation_unreadable'
             and row.get('status') == 'dead_letter'
         ):
+            with suspend_meter():
+                check_ciphertext(original, state.conversation.get().to_dict())
+            state.go_evidence['ciphertext_kept'] = True
             return result[1]
         raise UnexpectedGoOutcome
     with suspend_meter():
@@ -256,6 +261,9 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                 def invoke(state):
                     state.replay_side = side
                     if side == 'python':
+                        if state.case['name'] == UNREADABLE:
+                            state.python_retry = retry_to_park(state, worker_backend)
+                            return state.python_retry['outcome']
                         return _python_sync(state)
                     privacy_document_path = f"batch_pipeline_privacy/{sha256(state.uid.encode('utf-8')).hexdigest()}"
                     with FirestoreProxy(
@@ -294,6 +302,8 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                     if getattr(state, 'diag_missing_module', None):
                         out['errors'][side] = f'ModuleNotFoundError: {state.diag_missing_module}'
                     if side in out:
+                        if getattr(state, 'python_retry', None):
+                            out[side]['python_retry'] = state.python_retry
                         calls = getattr(state, 'replay_token_calls', [])
                         out[side]['provider_token_calls'] = calls
                         prompt = sum(call['input'] for call in calls if not call['embedding'])

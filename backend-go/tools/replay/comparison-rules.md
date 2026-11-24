@@ -90,20 +90,18 @@ The value-free report emits no stored row values.
 `go_finalization_notes_input_hash` and `go_finalization_notes_output_hash` are `go_gap` on
 SCA-3551: Go will write Python's notes keys instead. They are not approved as by design.
 `conversation.finalization_job_id` is also `go_gap`: the Go status route resolves that pointer
-and returns it as `job_id`, while the Go ID breaks Python's status lookup. The case-specific
-SCA-3874 exception retains precedence for its unreadable-ciphertext case.
+and returns it as `job_id`, while the Go ID breaks Python's status lookup.
 
-The only Python-bug exception is the unreadable-ciphertext case `unreadable-ciphertext-dead-letters`,
-filed as SCA-3874. While Python still discards the conversation and Go fails closed, remaining
-unexplained rows in that case receive `python_bug:SCA-3874`; independently verified by-design
-rules and Go gaps keep their own labels. The reporter requires both statuses and the status,
-discarded, and transcript sentinel differences, so it fails when Python's behavior is fixed or
-the case changes.
+The SCA-3874 unreadable-ciphertext case compares Python's first-summary retries through
+its durable enrichment age park with Go's unreadable-ciphertext dead letter. The status
+difference is allowed only when both sides retain the seeded ciphertext, Python records
+retry attempts and an age park, and Go records the expected dead letter. Other differences
+remain visible. R7 compares the sum of the metered Python attempt and park operations
+with Go's terminal cost.
 
 The lead-approved pass-3 Go-gap groups from SCA-4012 are stored in
 `approved-go-gaps-sca-4012.csv`. The reporter applies those path/field patterns only to current
-unlabelled rows; existing by-design labels and the SCA-3874 case-specific exception retain
-precedence. A `<document>` pattern covers differences under that document, and a field pattern
+unlabelled rows. Existing by-design labels retain precedence. A `<document>` pattern covers differences under that document, and a field pattern
 covers its nested leaf differences. The report's unexplained gate count is `go_gap + unlabelled`;
 `python_bug:<issue>` exception rows are listed separately and excluded from that count.
 

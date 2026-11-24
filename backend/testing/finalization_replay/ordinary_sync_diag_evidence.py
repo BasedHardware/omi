@@ -17,6 +17,8 @@ def evidence(cases, comparator, worker):
                 'python_status': case.get('python', {}).get('status'),
                 'go_status': go.get('status'),
                 'go_job': worker_evidence.get('job', {}),
+                'go_ciphertext_kept': worker_evidence.get('ciphertext_kept'),
+                'python_retry': case.get('python', {}).get('python_retry'),
                 'go_firestore_rpc_failures': worker_evidence.get('firestore_rpc_failures', {}),
                 **{
                     engine: {

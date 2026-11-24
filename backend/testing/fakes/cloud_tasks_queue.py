@@ -194,7 +194,7 @@ class CloudTasksQueue:
                 self.stats.completed += 1
                 self._interval_successes += 1
                 continue
-            if task.attempts >= self.config.max_attempts:
+            if self.config.max_attempts != -1 and task.attempts >= self.config.max_attempts:
                 task.dropped = True
                 self.stats.dropped += 1
                 continue
