@@ -162,13 +162,14 @@ def format_failure_class_suggest(payload: dict) -> str:
             declaration,
             "",
             "<!-- A `fix:` commit is in this diff. Choose manually: this command does not infer a class from paths or diffs.",
-            "Before opening the PR, inspect a relevant class with `scripts/failure-class explain FC-<slug> --format json`; replace `none` only if an existing class applies, or use `new` for a genuinely new class.",
+            "Before opening the PR, inspect a relevant class with `scripts/failure-class explain FC-<slug> --format json`; replace `none` only if an existing class applies (its `family` lists sibling classes to reuse), or use `new` only when no class in the family fits.",
             _candidate_heading(payload),
         ]
     )
     for candidate in payload.get("advisory_candidates", []):
         if isinstance(candidate, dict):
-            lines.append(f"- {candidate['id']}: {candidate['violated_contract']}")
+            family = f" [{candidate['family']}]" if candidate.get("family") else ""
+            lines.append(f"- {candidate['id']}{family}: {candidate['violated_contract']}")
     lines.extend(["-->", ""])
     return "\n".join(lines)
 
@@ -445,6 +446,10 @@ def main() -> int:
         ]
         if args.metadata_only:
             command.append("--metadata-only")
+        elif args.lane == "local" and not any(
+            os.getenv(name, "").lower() in {"0", "false"} for name in ("OMI_PREFLIGHT_ALL", "PRE_PUSH_PREFLIGHT_ALL")
+        ):
+            command.append("--keep-going")
         if skip_changelog:
             command.append("--skip-changelog")
         result = run_local_checks(command, root, args.lane)

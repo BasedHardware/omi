@@ -39,6 +39,9 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
   bool _loading = true;
   bool _failed = false;
   bool _loadingMore = false;
+
+  /// Show More got no answer: a notice with Try Again where the list ends (V3).
+  bool _moreFailed = false;
   final Set<String> _busy = {};
 
   ReviewChangesLoader get _load => widget.loadChanges ?? api.getReviewChanges;
@@ -77,6 +80,7 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
         case ApiSuccess(:final data):
           _changes = data.changes;
           _cursor = data.nextCursor;
+          _moreFailed = false; // a fresh first page restarts Show More (V3)
         case ApiFailure():
           _failed = true;
       }
@@ -86,14 +90,20 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
   Future<void> _more() async {
     final cursor = _cursor;
     if (cursor == null || _loadingMore) return;
-    setState(() => _loadingMore = true);
+    setState(() {
+      _loadingMore = true;
+      _moreFailed = false;
+    });
     final result = await _load(cursor: cursor);
     if (!mounted) return;
     _update(() {
       _loadingMore = false;
-      if (result case ApiSuccess(:final data)) {
-        _changes = [..._changes, ...data.changes];
-        _cursor = data.nextCursor;
+      switch (result) {
+        case ApiSuccess(:final data):
+          _changes = [..._changes, ...data.changes];
+          _cursor = data.nextCursor;
+        case ApiFailure():
+          _moreFailed = true;
       }
     });
   }
@@ -172,14 +182,22 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final Widget body;
-    if (_loading) {
+    // A refresh keeps the rows on screen: the pull shows it is working, and a failure that has
+    // rows to keep says so above them instead of replacing them (V3).
+    if (_loading && _changes.isEmpty) {
       body = const OmiLoadingState();
-    } else if (_failed) {
+    } else if (_failed && _changes.isEmpty) {
       body = OmiErrorState(message: l10n.reviewChangesLoadFailed, onRetry: _refresh);
     } else if (_changes.isEmpty) {
       body = OmiEmptyState(icon: Icons.history, title: l10n.reviewNoChangesTitle, message: l10n.reviewNoChangesBody);
     } else {
       final rows = <Widget>[
+        if (_failed)
+          OmiPartialNotice(
+            key: const Key('recent_changes_refresh_failed'),
+            message: l10n.reviewChangesLoadFailed,
+            onRetry: _refresh,
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(OmiSpacing.xxs, 0, OmiSpacing.xxs, OmiSpacing.xs),
           child: Text(l10n.reviewChangesIntro, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
@@ -203,7 +221,9 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
           ));
         }
       }
-      if (_cursor != null) {
+      if (_cursor != null && _moreFailed) {
+        rows.add(OmiLoadMoreFailed(key: const Key('recent_changes_more_failed'), onRetry: _more));
+      } else if (_cursor != null) {
         rows.add(Center(
           child: OmiButton.tertiary(label: l10n.reviewShowMore, isLoading: _loadingMore, onPressed: _more),
         ));

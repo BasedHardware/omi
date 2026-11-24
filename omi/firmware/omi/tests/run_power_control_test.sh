@@ -18,6 +18,8 @@ Path(sys.argv[2]).write_text(source[source.index(start):source.index(end)])
 assert 'BT_UUID_128_ENCODE(0x19B10016,' in source
 normal = source[source.index('int transport_start()'):]
 assert normal.index('k_thread_start(power_off_thread);') < normal.index('bt_enable(NULL)')
+# The loader identity is measured once before Bluetooth can serve 19B10043.
+assert normal.index('omi_boot_identity_prepare();') < normal.index('bt_enable(NULL)')
 safe = source[source.index('int transport_start_safe(void)'):source.index('// periodic advertising')]
 assert 'k_thread_start(' not in safe
 attrs = source[source.index('static struct bt_gatt_attr settings_service_attr[]'):]

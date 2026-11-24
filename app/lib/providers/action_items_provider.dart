@@ -61,7 +61,9 @@ class ActionItemsProvider extends ChangeNotifier {
     TaskSuggestionsApi? taskSuggestionsApi,
     AutomaticAppleRemindersExport? automaticAppleRemindersExport,
     Future<ExportResult> Function(ActionItemWithMetadata, TaskIntegrationApp)? exportActionItem,
-  })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
+    void Function(ActionItemWithMetadata item)? deleteLinkedReminder,
+  })  : _deleteLinkedReminder = deleteLinkedReminder,
+        _getActionItems = getActionItems ?? api.tryGetActionItems,
         _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
         _updateActionItemRequest = updateActionItemRequest ?? api.updateActionItem,
         _bulkDeleteActionItemsRequest = bulkDeleteActionItemsRequest ?? api.bulkDeleteActionItems,
@@ -78,6 +80,9 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   late final TaskSuggestionsController? suggestions;
+
+  /// Tests observe the linked Apple Reminder delete; production deletes it on Apple platforms.
+  final void Function(ActionItemWithMetadata item)? _deleteLinkedReminder;
 
   final ActionItemsFetcher _getActionItems;
   final DeleteActionItemRequest _deleteActionItemRequest;
@@ -492,6 +497,7 @@ class ActionItemsProvider extends ChangeNotifier {
     required bool decodedPageIsComplete,
     required int readOrdinal,
   }) async {
+    _loadMoreFailed = false; // a fresh first page restarts pagination (T1)
     // Snapshot server IDs before filtering so tombstone retirement is
     // based on the full server response, not the filtered subset.
     final serverIds = response.actionItems.map((e) => e.id).toSet();
@@ -548,8 +554,14 @@ class ActionItemsProvider extends ChangeNotifier {
     }
   }
 
+  /// The last load-more got no answer: the list shows a notice with Try Again at its end instead of
+  /// just ending (T1), and scrolling does not retry it on its own.
+  bool _loadMoreFailed = false;
+  bool get loadMoreFailed => _loadMoreFailed;
+
   Future<void> loadMoreActionItems() async {
     if (_isLoading || _isFetching || !_hasMore) return;
+    _loadMoreFailed = false;
     final generation = _sessionGeneration;
     final queryOwner = _latestTaskListRead;
     final writeRevision = _taskWriteRevision;
@@ -573,6 +585,9 @@ class ActionItemsProvider extends ChangeNotifier {
         },
       );
 
+      if (response == null && generation == _sessionGeneration && queryOwner == _latestTaskListRead) {
+        _loadMoreFailed = true;
+      }
       if (response != null &&
           generation == _sessionGeneration &&
           writeRevision == _taskWriteRevision &&
@@ -601,6 +616,7 @@ class ActionItemsProvider extends ChangeNotifier {
       }
     } catch (e) {
       Logger.debug('Error loading more action items: $e');
+      if (generation == _sessionGeneration && queryOwner == _latestTaskListRead) _loadMoreFailed = true;
     } finally {
       _activeListReads.remove(readOrdinal);
       if (generation == _sessionGeneration && queryOwner == _latestTaskListRead) setFetching(false);
@@ -859,8 +875,6 @@ class ActionItemsProvider extends ChangeNotifier {
 
   Future<bool> deleteActionItem(ActionItemWithMetadata item) async {
     final generation = _sessionGeneration;
-    // Delete linked Apple Reminder if one exists
-    _deleteAppleReminderIfLinked(item);
 
     // Track as pending-deletion so any background refresh doesn't re-insert it
     // while the server delete is in flight.
@@ -881,6 +895,9 @@ class ActionItemsProvider extends ChangeNotifier {
         _pendingDeletionIds.remove(item.id);
         _restoreDeletedItem(item, index);
       } else {
+        // The linked Apple Reminder goes only once the server confirmed (T4): a failed delete
+        // brings the task back, and its Reminder must still be there.
+        _deleteAppleReminderIfLinked(item);
         _deletionAcknowledgedAtRead[item.id] = _listReadOrdinal;
         SiriIntegration.current.queueDelete('task', item.id);
       }
@@ -938,7 +955,6 @@ class ActionItemsProvider extends ChangeNotifier {
     final generation = _sessionGeneration;
     final staged = _stagedDeletes.remove(id);
     if (staged == null) return false;
-    _deleteAppleReminderIfLinked(staged.item);
     var success = false;
     try {
       success = await _deleteActionItemRequest(id);
@@ -954,6 +970,7 @@ class ActionItemsProvider extends ChangeNotifier {
         notifyListeners();
       }
     } else {
+      _deleteAppleReminderIfLinked(staged.item);
       _deletionAcknowledgedAtRead[id] = _listReadOrdinal;
       SiriIntegration.current.queueDelete('task', id);
     }
@@ -1080,6 +1097,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
   /// Delete the linked Apple Reminder when action item is deleted.
   void _deleteAppleReminderIfLinked(ActionItemWithMetadata item) {
+    if (_deleteLinkedReminder case final delete?) return delete(item);
     if (!PlatformService.isApple) return;
     if (item.appleReminderId == null || item.appleReminderId!.isEmpty) return;
 
@@ -1194,6 +1212,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _loadedTaskPageIds.clear();
     _loadedPageSetComplete = false;
     _hasMore = true;
+    _loadMoreFailed = false;
     _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   }
 
@@ -1446,13 +1465,22 @@ class ActionItemsProvider extends ChangeNotifier {
   /// Deletes a whole section (for example every completed task) in one batch request.
   /// Returns true only when the server deleted every row; rejected rows are already back.
   Future<bool> deleteActionItems(List<ActionItemWithMetadata> items) async {
-    if (items.isEmpty) return true;
+    final result = await clearSection(items);
+    return result.failed == 0 && result.lockedKept == 0;
+  }
+
+  /// Deletes a section and says what happened to each row: deleted, kept because it is locked (by
+  /// design, not a failure: T5), or failed (already back in the list).
+  Future<({int deleted, int lockedKept, int failed})> clearSection(List<ActionItemWithMetadata> items) async {
+    if (items.isEmpty) return (deleted: 0, lockedKept: 0, failed: 0);
     // The batch endpoint refuses the whole request (402) if any task is locked, where a
     // single delete refused only that task. Leave locked tasks in place so the rest still go.
     final deletable = items.where((item) => !item.isLocked).toList();
-    if (deletable.isEmpty) return false;
+    final lockedKept = items.length - deletable.length;
+    if (deletable.isEmpty) return (deleted: 0, lockedKept: lockedKept, failed: 0);
     final result = await _deleteItemsInBulk(deletable);
-    return !result.stale && result.deleted?.length == items.length;
+    final deleted = result.stale ? 0 : (result.deleted?.length ?? 0);
+    return (deleted: deleted, lockedKept: lockedKept, failed: deletable.length - deleted);
   }
 
   Future<bool> clearCompletedItems() async {

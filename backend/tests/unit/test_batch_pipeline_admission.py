@@ -260,6 +260,7 @@ def _release_cycles_while_held(monkeypatch, *, horizon=HOLD_CYCLE_HORIZON_SECOND
 
 
 def test_two_hour_hold_park_releases_four_times_not_twenty_four(monkeypatch):
+    monkeypatch.setenv("BATCH_ALLOWANCE_PARK_ENABLED", "off")
     releases, privacy_checks = _release_cycles_while_held(monkeypatch)
     # Hold window 1800 s: re-leases at 1800, 3600, 5400, 7200.
     assert releases == 4
@@ -269,6 +270,7 @@ def test_two_hour_hold_park_releases_four_times_not_twenty_four(monkeypatch):
 
 
 def test_hold_knob_at_sixty_restores_the_former_release_cycle(monkeypatch):
+    monkeypatch.setenv("BATCH_ALLOWANCE_PARK_ENABLED", "off")
     monkeypatch.setenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '60')
     releases, _ = _release_cycles_while_held(monkeypatch)
     # The 60 s request escalates 60, 60, 120, 240, then caps at 300: 26
@@ -505,6 +507,7 @@ def test_allow_seals_latest_decision_with_the_lease_transition(monkeypatch):
 
 
 def test_latest_decision_overwrites_a_prior_hold(monkeypatch):
+    monkeypatch.setenv("BATCH_ALLOWANCE_PARK_ENABLED", "off")
     """The durable field is the latest decision, never a sticky last denial."""
     from utils import stt_cap_dispatch as cap
 
@@ -569,6 +572,7 @@ def test_privacy_fence_hold_records_its_reason(monkeypatch):
 
 
 def test_allowed_decision_ends_the_parked_hold_for_the_age_proxy(monkeypatch):
+    monkeypatch.setenv("BATCH_ALLOWANCE_PARK_ENABLED", "off")
     store, queue, lease, _ = setup(monkeypatch)
     assert queue.defer('segment', lease.token, 1, 60, held_reason='allowance_exhausted', admission_refused=True)
     assert store.rows['jobs', 'segment']['last_policy_hold'] == {'reason': 'allowance_exhausted', 'at': 1}

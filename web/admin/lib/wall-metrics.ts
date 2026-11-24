@@ -29,6 +29,7 @@ import {
   fetchInfraHistory,
   fetchModulateModelled,
   fetchPlanCostHistory,
+  fetchSpendDays,
   fetchStripeFeeHistory,
   fetchVendorBalanceHistory,
   FinopsHistory,
@@ -38,6 +39,7 @@ import {
   StripeFeeHistory,
   VendorBalanceHistory,
 } from "./wall-finops";
+import { type SpendDay, sonioxSpendByDay } from "./wall-spend";
 import { WallJobCache } from "./wall-job-cache";
 import {
   allInCost,
@@ -178,6 +180,8 @@ export interface WallSources {
   }>;
   /** Mercury non-GCP infra run rate; throws while that table is dark. */
   infra?: (today: string) => Promise<InfraHistory>;
+  /** Settled spend ledger (`spend_daily`); feeds the measured Soniox line. */
+  spend?: (today: string) => Promise<SpendDay[]>;
   stripe: () => Promise<{
     usd: number;
     byPlan?: Record<string, number>;
@@ -212,6 +216,7 @@ export const defaultWallSources: WallSources = {
   vendorBalance: fetchVendorBalanceHistory,
   modulate: fetchModulateModelled,
   infra: fetchInfraHistory,
+  spend: fetchSpendDays,
   stripe: async () => {
     const { getOptionalStripeRead } = await import("./stripe");
     const { fetchWallSubscriptionBook, wallSubscriptionBook } = await import(
@@ -774,6 +779,7 @@ export async function computeWall(
           const vendorBalanceSource = sources.vendorBalance;
           const modulateSource = sources.modulate;
           const infraSource = sources.infra;
+          const spendSource = sources.spend;
           const [
             billResult,
             planCostResult,
@@ -781,6 +787,7 @@ export async function computeWall(
             vendorBalanceResult,
             modulateResult,
             infraResult,
+            spendResult,
           ] = await Promise.allSettled([
             Promise.resolve().then(() => sources.billing()),
             planCostSource
@@ -798,8 +805,19 @@ export async function computeWall(
             infraSource
               ? Promise.resolve().then(() => infraSource(isoDay(now)))
               : Promise.resolve(null),
+            spendSource
+              ? Promise.resolve().then(() => spendSource(isoDay(now)))
+              : Promise.resolve(null),
           ]);
           if (billResult.status === "rejected") throw billResult.reason;
+          // Measured Soniox per day from spend_daily (rows win over the balance
+          // series). A failed read leaves no spend rows and is disclosed as a
+          // missing line; the fallback ladder runs.
+          const sonioxSpend =
+            spendResult.status === "fulfilled" && spendResult.value
+              ? sonioxSpendByDay(spendResult.value)
+              : null;
+          const spendReadFailed = spendResult.status === "rejected";
           const bill = billResult.value;
           const planCost =
             planCostResult.status === "fulfilled" ? planCostResult.value : null;
@@ -883,6 +901,16 @@ export async function computeWall(
           if (sonioxUnavailable) missingLines.push("Soniox measured STT");
           if (modulateUnavailable) missingLines.push("Modulate modelled STT");
           if (infraUnavailable) missingLines.push(infraUnavailable);
+          // Dark vendor-balance tables complete the leg with an estimate; the
+          // missing disclosure still names the reason.
+          if (vendorBalance?.dark) missingLines.push(vendorBalance.dark);
+          if (spendReadFailed)
+            missingLines.push(
+              wallFailure(
+                "Settled spend ledger (spend_daily stt_soniox)",
+                spendResult.reason
+              )
+            );
           // Soniox: the balance-delta day-rate while the snapshot series covers
           // the day; a covered-but-unpublished row is a disclosed gap, never a
           // reset; beyond the last covered day the dated constant returns with
@@ -895,7 +923,7 @@ export async function computeWall(
             bal.ready &&
             last.date >= bal.firstDay &&
             last.date <= bal.lastDay;
-          const sonioxText =
+          const balanceSonioxText =
             bal && vendorBalance
               ? covered
                 ? last.sttFlag === "baseline_reset"
@@ -922,7 +950,10 @@ export async function computeWall(
                   )
                 : staleEstimate(
                     sttEstimate,
-                    `Soniox-console constant $${STT_MONTHLY_USD}/mo (${STT_SOURCE}); ${vendorBalance.snapshots}/2 balance snapshots`
+                    `Soniox-console constant $${STT_MONTHLY_USD}/mo (${STT_SOURCE}); ${
+                      vendorBalance.dark ??
+                      `${vendorBalance.snapshots}/2 balance snapshots`
+                    }`
                   )
               : !vendorBalance && sonioxUnavailable
               ? `Soniox measured line UNAVAILABLE (${sonioxUnavailable})`
@@ -934,10 +965,24 @@ export async function computeWall(
                   sttEstimate,
                   `Soniox-console constant $${STT_MONTHLY_USD}/mo (${STT_SOURCE}); ${
                     vendorBalance
-                      ? `${vendorBalance.snapshots}/2 balance snapshots`
-                      : "no balance series"
+                      ? vendorBalance.dark ??
+                        `${vendorBalance.snapshots}/2 balance snapshots`
+                      : spendReadFailed
+                      ? "spend_daily unreadable (see missing lines); fallback shown"
+                      : sonioxSpend && Object.keys(sonioxSpend).length > 0
+                      ? `spend_daily has no stt_soniox row for ${last.date} (day gap); fallback shown`
+                      : "no data yet (empty spend_daily stt_soniox ledger, no balance series)"
                   }`
                 );
+          // spend_daily wins whenever it has the day's stt_soniox row; the balance
+          // and usage ladder above stays the labelled fallback.
+          const spendSoniox = sonioxSpend?.[last.date];
+          const sonioxText =
+            spendSoniox != null
+              ? `Soniox measured $${spendSoniox.toFixed(
+                  2
+                )}/day (settled spend ledger, spend_daily stt_soniox)`
+              : balanceSonioxText;
           // Deepgram combines independently: its measured usage or its own
           // Mercury cash, never hidden by a Soniox measurement.
           const deepgramText = last.sttDeepgramUsd

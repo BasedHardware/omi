@@ -267,8 +267,13 @@ class DirectoryStore:
         owner_space_id: str,
         *,
         visibility: str,
+        recording: bool = False,
         now: float,
     ) -> None:
+        if recording:
+            self.unregister_public_conversation(conversation_id)
+            return
+
         def body(conn: Any) -> None:
             self._lock_live_owner(conn, owner_space_id)
             conn.execute(

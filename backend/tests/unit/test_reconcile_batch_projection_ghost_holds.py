@@ -11,7 +11,11 @@ from google.api_core.exceptions import FailedPrecondition
 
 from scripts import reconcile_batch_projection_ghost_holds as repair
 
-CLOCK = {'projection_finish_due_at': 123.0, 'projection_finish_backoff_step': 0}
+CLOCK = {
+    'projection_finish_due_at': 123.0,
+    'projection_finish_backoff_step': 0,
+    'projection_followup_due_at': 123.0,
+}
 
 
 @pytest.fixture(autouse=True)
@@ -113,14 +117,13 @@ def test_apply_is_hint_only_idempotent_and_preserves_real_holds():
     assert again['scanned'] == 1 and again['matched'] == again['updated'] == 0
 
 
-@pytest.mark.parametrize('enabled', ['true', 'false'])
-def test_apply_stamps_the_finish_clock_regardless_of_the_lever(monkeypatch, enabled):
-    monkeypatch.setenv('BATCH_PROJECTION_FINISH_BACKOFF_ENABLED', enabled)
+def test_apply_stamps_both_clocks():
     client, rows, _, _ = client_for({'a': GHOST})
     counts = repair.reconcile(client, 'batch_pipeline_test_held', apply=True)
     assert counts['updated'] == 1
     assert rows['a']['projection_state'] == 'ready'
     assert rows['a']['projection_finish_backoff_step'] == 0
+    assert rows['a']['projection_finish_due_at'] == rows['a']['projection_followup_due_at'] == 123.0
 
 
 def test_concurrent_quarantine_change_cannot_be_overwritten():

@@ -8,6 +8,9 @@ Newest first. This page covers the developer platform only: the Developer API, M
 
 ## November 2026
 
+- **MCP** — Conversation search now asks summary vectors and the keyword index on every call and labels each hit's `match_basis`; the new `search_transcripts` tool finds literal words in saved transcripts, located to the segment ([#25527](https://github.com/BasedHardware/omi/pull/25527)).
+- **MCP** — `get_deleted_conversations` and `GET /v1/mcp/conversations/deleted` list deleted conversation ids by `deleted_at`, for agents that keep copies ([#25524](https://github.com/BasedHardware/omi/pull/25524)).
+- **MCP** — Long conversations read progressively: `view=outline`, `offset`/`max_segments` section reads, and the compact `format=lines` transcript ([#25497](https://github.com/BasedHardware/omi/pull/25497)).
 - **Firmware** — CV1 recovery packaging preserved the qualified bootloader and rejected unapproved boot regions ([#25104](https://github.com/BasedHardware/omi/pull/25104)).
 
 ## October 2026

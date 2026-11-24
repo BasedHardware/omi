@@ -12,6 +12,7 @@ import math
 import pytest
 
 from config.batch_pipeline import scheduler_control_key
+from config.batch_pipeline_packing import JOB_FIELDS, PAGE_ROWS
 from config.policy import BatchUnitPolicy, SchedulerPolicy, resolve_stage_policy
 from database import batch_pipeline_policy
 from testing.store_fixtures import build_backend, store_backend  # noqa: F401
@@ -68,6 +69,19 @@ def enqueue(h, items, *, head_priority=False, pin_scheduler=True):
 
 def row(h, segment):
     return h.store.run(lambda tx: tx.get('jobs', segment))
+
+
+def test_packing_candidates_project_one_bounded_owner_prefix(store_backend):
+    h = store_backend
+    uid = h.seed_user('packing')
+    other = h.seed_user('other')
+    enqueue(h, [work('other', other, capture=0)])
+    enqueue(h, [work(f'{i:02d}', uid, capture=10 + i // 2) for i in reversed(range(PAGE_ROWS + 2))])
+    page = h.store.packing_candidates(owner_key(uid))
+    assert len(page) == PAGE_ROWS
+    assert [item['segment_id'] for item in page] == [f'{i:02d}' for i in range(PAGE_ROWS)]
+    assert all(set(item) <= set(JOB_FIELDS) and 'audio_uri' not in item for item in page)
+    assert all(item['state'] == 'ready' for item in page)
 
 
 @pytest.mark.parametrize('multi', [False, True], ids=['single', 'batched'])

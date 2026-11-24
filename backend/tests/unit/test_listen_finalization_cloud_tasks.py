@@ -1293,7 +1293,14 @@ async def test_worker_closes_a_fenced_finalization_without_fanout(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_worker_requeues_an_unexpected_failure_after_claim(monkeypatch):
+@pytest.mark.parametrize(
+    'error,reason',
+    [
+        (RuntimeError('raw text'), 'worker_failed'),
+        (finalization_router.ServerBatchArchiveNotClosed('raw text'), 'server_batch_archive_not_closed'),
+    ],
+)
+async def test_worker_requeues_an_unexpected_failure_after_claim(monkeypatch, caplog, error, reason):
     monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
     monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
@@ -1303,9 +1310,7 @@ async def test_worker_requeues_an_unexpected_failure_after_claim(monkeypatch):
     monkeypatch.setattr(
         jobs_db, 'get_finalization_job', lambda job_id: {'uid': 'uid-1', 'conversation_id': 'conversation-1'}
     )
-    monkeypatch.setattr(
-        finalization_router, 'finalize_persisted_conversation', AsyncMock(side_effect=RuntimeError('raw text'))
-    )
+    monkeypatch.setattr(finalization_router, 'finalize_persisted_conversation', AsyncMock(side_effect=error))
     retryable = MagicMock(return_value=True)
     monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
     monkeypatch.setattr(finalization_router, 'get_listen_finalization_tasks_max_attempts_for_worker', lambda: 3)
@@ -1317,6 +1322,8 @@ async def test_worker_requeues_an_unexpected_failure_after_claim(monkeypatch):
     assert response.status_code == 500
     assert json.loads(response.body) == {'status': 'retry'}
     retryable.assert_called_once_with('job-1', 1, 9, 'worker_failed')
+    assert f'reason={reason}' in caplog.text
+    assert 'raw text' not in caplog.text
 
 
 @pytest.mark.anyio
@@ -2478,13 +2485,14 @@ async def test_finalizer_summary_vector_requires_visible_structure_and_winning_c
         id='conversation-1',
         status=ConversationStatus.completed,
         discarded=discarded,
+        recording=terminal == 'recording',
         structured=(
             SimpleNamespace(title='Meeting', title_provenance='server_minimum' if vector_case == 'minimum' else None)
             if structured
             else None
         ),
     )
-    emits = emits and vector_case != 'minimum'
+    emits = emits and vector_case != 'minimum' and terminal != 'recording'
     events = []
 
     async def inline_run_blocking(_executor, func, *args, **kwargs):
@@ -2530,7 +2538,8 @@ async def test_finalizer_summary_vector_requires_visible_structure_and_winning_c
             'id': conversation.id,
             'status': 'completed',
             'deleted': deleted,
-            persisted_finalizer.TERMINAL_NO_DERIVED_EFFECTS_FIELD: terminal,
+            persisted_finalizer.TERMINAL_NO_DERIVED_EFFECTS_FIELD: terminal is True,
+            'recording': terminal == 'recording',
         },
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', deserialize)
@@ -2993,3 +3002,13 @@ def test_dead_letter_counters_zero_initialize_the_closed_cause_set():
     # The normalizer is load-bearing for the reconciler's wider live codes.
     assert finalization_service._normalize_dead_letter_cause('record_owner_contention') == 'unknown'
     assert finalization_service._normalize_dead_letter_cause('refresh_lease_busy') == 'refresh_lease_busy'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('claim_status', ['claimed', 'completed'])
+async def test_recording_completed_replay_suppresses_fallback_intelligence(monkeypatch, caplog, claim_status):
+    await test_finalizer_summary_vector_requires_visible_structure_and_winning_claim(
+        monkeypatch, claim_status, False, False, True, True, 'success', caplog, 'recording'
+    )
+    persisted_finalizer.extract_memories.assert_not_called()
+    persisted_finalizer.trigger_external_integrations.assert_not_called()

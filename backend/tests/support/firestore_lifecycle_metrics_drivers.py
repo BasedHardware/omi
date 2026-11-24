@@ -40,6 +40,8 @@ def entries():
             setup=_audio_silence_rows,
         ),
         DriverEntry(prefix + 'nojob', domains={'namespace': namespaces}),
+        DriverEntry(prefix + 'vendor_held', domains={'namespace': namespaces}, neutrals={'now': now}),
+        DriverEntry(prefix + 'provider_stage', domains={'namespace': namespaces}, neutrals={'now': now}),
         DriverEntry(prefix + 'enrichment', neutrals={'now': now}),
         DriverEntry(prefix + 'blocked_byok', neutrals={'now': now}),
         DriverEntry(prefix + 'enrichment_summary_repair'),
@@ -72,7 +74,15 @@ def entries():
             prefix + '_where',
             covered_by=tuple(
                 prefix + name
-                for name in ('record_pending', 'nojob', 'enrichment', 'blocked_byok', 'enrichment_summary_repair')
+                for name in (
+                    'record_pending',
+                    'nojob',
+                    'vendor_held',
+                    'provider_stage',
+                    'enrichment',
+                    'blocked_byok',
+                    'enrichment_summary_repair',
+                )
             ),
             reason='pure filter builder; terminal observations execute inside the named sampler drivers',
             expect_observed=False,

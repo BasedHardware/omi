@@ -1,7 +1,7 @@
 import base64
 import uuid
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, List, Optional, Tuple
+from typing import Any, AsyncGenerator, Awaitable, Callable, List, Optional, Tuple
 
 from fastapi import HTTPException
 
@@ -494,6 +494,8 @@ async def process_voice_message_segment_stream(
     uid: str,
     language: str = 'multi',
     platform: Optional[str] = None,
+    *,
+    register_answer: Callable[[str, Callable[[], Awaitable[int]]], None],
 ) -> AsyncGenerator[str, None]:
     if not language:
         language = await run_blocking(db_executor, resolve_voice_message_language, uid, None)
@@ -601,7 +603,7 @@ async def process_voice_message_segment_stream(
     usage_token = set_usage_context(uid, Features.CHAT)
 
     async def emit_voice_done_frame(response: str):
-        """Persist (or fail-open) a terminal voice answer and return the done frame."""
+        """Persist and register the answer push before a client can close at done."""
         persist_outcome = 'degraded'
         try:
             ai_message, ask_for_nps = await process_message(response, callback_data)
@@ -642,7 +644,12 @@ async def process_voice_message_segment_stream(
                 reason='other',
                 outcome='exhausted',
             )
-        return f"done: {data}\n\n", ai_message
+
+        async def notify_answer():
+            return await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
+
+        register_answer(ai_message.id, notify_answer)
+        return f"done: {data}\n\n"
 
     try:
         async for chunk in execute_graph_chat_stream(
@@ -657,10 +664,9 @@ async def process_voice_message_segment_stream(
                     # error frame so history and UI stay on the typed terminal reply.
                     response = callback_data.get('answer')
                     if response and not answered:
-                        done_frame, ai_message = await emit_voice_done_frame(response)
-                        yield done_frame
+                        done_frame = await emit_voice_done_frame(response)
                         answered = True
-                        await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
+                        yield done_frame
                         continue
                 data = chunk.replace("\n", "__CRLF__")
                 yield f'{data}\n\n'
@@ -668,17 +674,15 @@ async def process_voice_message_segment_stream(
             else:
                 response = callback_data.get('answer')
                 if response and not answered:
-                    done_frame, ai_message = await emit_voice_done_frame(response)
-                    yield done_frame
+                    done_frame = await emit_voice_done_frame(response)
                     answered = True
-                    await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
+                    yield done_frame
 
         if not answered:
             response = callback_data.get('answer')
             if response:
-                done_frame, ai_message = await emit_voice_done_frame(response)
+                done_frame = await emit_voice_done_frame(response)
                 yield done_frame
-                await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
             else:
                 if streamed_terminal_error:
                     logger.error(
@@ -732,10 +736,10 @@ async def send_chat_message_notification_async(
     app_id: str,
     message: str,
     message_id: str,
-) -> None:
+) -> int:
     """Async notification boundary for streaming chat responses."""
     ai_message = _chat_message_notification(app_id, message, message_id)
-    await send_client_displayed_notification_async(
+    return await send_client_displayed_notification_async(
         user_id,
         app_name + ' says',
         message,

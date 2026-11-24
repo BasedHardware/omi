@@ -91,7 +91,7 @@ class _Usage extends UsageProvider {
   int fetches = 0;
 
   @override
-  Future<void> fetchSubscription() async => fetches++;
+  Future<void> fetchSubscription({bool fresh = false}) async => fetches++;
 
   @override
   Future<void> loadAvailablePlans() async {}

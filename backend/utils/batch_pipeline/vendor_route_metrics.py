@@ -11,6 +11,8 @@ from typing import Any
 
 from prometheus_client import Counter, Gauge
 
+from config.batch_pipeline import Priority
+
 from utils.batch_pipeline import vendor_route_contracts as contracts
 from utils.observability.reasons import (
     ReasonFamily,
@@ -26,10 +28,14 @@ from utils.observability.reasons import (
 ROUTE_DECISIONS = Counter(contracts.METRIC_ROUTE_DECISIONS, 'Batch vendor route selections', ['route', 'reason'])
 TABLE_LOADS = Counter(contracts.METRIC_TABLE_LOADS, 'Route table resolutions by ladder rung', ['outcome'])
 GPU_OVERFLOW_ACTIVE = Gauge(
-    contracts.METRIC_GPU_OVERFLOW_ACTIVE, '1 while this process reads the GPU ring as past its fresh-backlog SLO'
+    contracts.METRIC_GPU_OVERFLOW_ACTIVE,
+    '1 while this process reads a priority of the GPU ring as past its backlog SLO',
+    ['priority'],
 )
 GPU_BACKLOG_AGE = Gauge(
-    contracts.METRIC_GPU_BACKLOG_AGE, 'Oldest admissible fresh GPU-ring unit age at the last overflow sample'
+    contracts.METRIC_GPU_BACKLOG_AGE,
+    'Oldest admissible GPU-ring unit age for a priority at the last overflow sample',
+    ['priority'],
 )
 ATTEMPTS = Counter(contracts.METRIC_ATTEMPTS, 'Settled batch vendor attempts', ['provider', 'outcome'])
 ATTEMPT_AUDIO = Counter(
@@ -61,6 +67,11 @@ OVERFLOW_AUDIO = Counter(
     'Billed vendor audio seconds for units routed to a vendor over a capable GPU (overflow)',
     ['route'],
 )
+SHORT_SPEECH_SKIPPED_AUDIO = Counter(
+    contracts.METRIC_SHORT_SPEECH_SKIPPED_AUDIO,
+    'Unit audio seconds not sent to a vendor because measured speech was under the minimum',
+    ['provider'],
+)
 COLLECTORS = (
     ROUTE_DECISIONS,
     TABLE_LOADS,
@@ -80,6 +91,7 @@ COLLECTORS = (
     AUDIO_HOURS_CAP,
     CAP_HITS,
     OVERFLOW_AUDIO,
+    SHORT_SPEECH_SKIPPED_AUDIO,
 )
 
 
@@ -126,10 +138,11 @@ def table_load(outcome: VendorRouteTableOutcome | str) -> None:
         pass
 
 
-def gpu_overflow(active: bool, backlog_age_seconds: float) -> None:
+def gpu_overflow(active: bool, backlog_age_seconds: float, priority: int = Priority.FRESH) -> None:
     try:
-        GPU_OVERFLOW_ACTIVE.set(1 if active else 0)
-        GPU_BACKLOG_AGE.set(max(0.0, backlog_age_seconds))
+        label = Priority(priority).name.lower()  # exactly fresh, recent, deep; reject unknown priorities
+        GPU_OVERFLOW_ACTIVE.labels(priority=label).set(1 if active else 0)
+        GPU_BACKLOG_AGE.labels(priority=label).set(max(0.0, backlog_age_seconds))
     except Exception:
         pass
 
@@ -219,5 +232,14 @@ def cap_hit(provider: str, reason: VendorHealthReason | str) -> None:
         CAP_HITS.labels(
             provider=_vendor(provider), reason=reason_label(ReasonFamily.VENDOR_ROUTE, reason, VendorHealthReason)
         ).inc()
+    except Exception:
+        pass
+
+
+def short_speech_skip(provider: str, audio_seconds: float) -> None:
+    """Count the unbilled audio of a unit answered as silence below the speech minimum."""
+    try:
+        if audio_seconds > 0:
+            SHORT_SPEECH_SKIPPED_AUDIO.labels(provider=_vendor(provider)).inc(audio_seconds)
     except Exception:
         pass

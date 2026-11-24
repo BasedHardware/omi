@@ -6,24 +6,27 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_tabs.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
+import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/episode_content.dart';
+import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/pages/episodes/previous_episode_link.dart';
 import 'package:omi/pages/episodes/live_transcript_view.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/capture_sources.dart';
@@ -35,6 +38,18 @@ void switchHomeToConversationsTab(BuildContext context) {
 }
 
 enum LiveEpisodeTab { summary, transcript }
+
+/// What the episodes-off (and v3) live page shell shows. A record, so the select compares values.
+typedef _LegacyShell = ({
+  bool paused,
+  bool callActive,
+  bool verified,
+  CaptureDisplayState state,
+  Duration? bufferingFor,
+  String? source,
+  bool hasCapture,
+  bool canPause,
+});
 
 /// The one live page, opened from Home's live row, the record button, notifications and the
 /// capture deep link.
@@ -63,7 +78,17 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   late final TabController _tabs;
   EpisodeProvider? _episodes;
   bool _mutePending = false;
+  bool _finishing = false;
+
+  /// The transcript on screen at the last Finish, kept until the server answers (and after a
+  /// failure, with [_retryPending] so the next Finish sends it again).
+  HeldCapture? _held;
+  bool _retryPending = false;
   Timer? _tick;
+
+  /// v3: Home stops re-reading the conversation in progress while this page covers it, so the page
+  /// re-reads it itself; its title lands here when the server names it.
+  Timer? _v3Refresh;
 
   @override
   void initState() {
@@ -76,11 +101,23 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     _tick = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
+    // Armed for every account: the v3 switch may answer after the page opens. Each tick reads only
+    // for a v3 account, with the app in the foreground and this page on top, as Home's own read does.
+    final v3 = context.read<ConversationsV3Provider?>();
+    if (v3 != null) {
+      _v3Refresh = Timer.periodic(const Duration(seconds: 15), (_) {
+        if (!mounted || !v3.v3 || ModalRoute.of(context)?.isCurrent == false) return;
+        final lifecycle = WidgetsBinding.instance.lifecycleState;
+        if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return;
+        unawaited(v3.refresh());
+      });
+    }
   }
 
   @override
   void dispose() {
     _tick?.cancel();
+    _v3Refresh?.cancel();
     _episodes?.unwatch();
     _tabs.dispose();
     ListenClientState.instance.capturePageClosed();
@@ -111,36 +148,85 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   Future<void> debugStopConversation(CaptureProvider provider) => _stopConversation(provider);
 
   /// Finish (and Wrap Up Now): the one stop. No confirmation: it is explicit. It processes the
-  /// conversation (a phone recording stops first), Home shows it as a processing row, and the live
-  /// episode closes while a fresh one starts counting from now. It never pauses the pendant: with
-  /// nothing new since the last boundary there is nothing to process, and the clock still restarts.
+  /// conversation (a phone recording stops first) and opens it: its page when the server already
+  /// made it, otherwise a processing page that turns into it ([finishLiveCapture],
+  /// [presentFinishOutcome]). Until the server answers, and after a failure, the transcript the
+  /// reader saw stays on screen; a failure keeps them here with Try Again, which sends it again.
   Future<void> _stopConversation(CaptureProvider provider) async {
-    final hadContent = provider.segments.isNotEmpty || provider.photos.isNotEmpty;
-    if (hadContent) {
-      // Ending the capture fires the shared finalize hook, which closes the episode.
-      await provider.finishCapture();
+    // One Finish at a time: a second tap while the first is processing would pop Home before the
+    // conversation's page opens.
+    if (_finishing || !mounted) return;
+    final now = holdCapture(provider);
+    final before = _held;
+    setState(() {
+      _finishing = true;
+      _held = before == null
+          ? now
+          : now == null
+              ? before
+              : (segments: [...before.segments, ...now.segments], photos: [...before.photos, ...now.photos]);
+    });
+    var stays = false;
+    try {
+      final live = context.read<ConversationsV3Provider?>()?.live;
+      final outcome = await finishLiveCapture(
+        context,
+        provider,
+        episodes: _episodes,
+        retry: _retryPending,
+        owned: live != null && LiveConversationEndButton.phoneCaptures(live, provider, currentLiveId: live.id),
+      );
       if (!mounted) return;
-      switchHomeToConversationsTab(context);
-    } else {
-      final source = provider.liveCaptureSource;
-      if (source == null || source == ConversationSource.phone.name) {
-        await provider.stopStreamRecording();
+      stays = presentFinishOutcome(
+        context,
+        outcome,
+        entry: FinishEntry.livePage,
+        onRetry: () => _stopConversation(provider),
+      );
+      _retryPending = stays;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _finishing = false;
+          if (!stays) _held = null;
+        });
       }
-      final episodes = _episodes;
-      if (episodes != null && episodes.enabled) episodes.onLiveFinalized();
     }
-    if (!mounted) return;
-    // A swipe back during the finish has already popped this route; it only stays mounted while it
-    // animates out, and a pop then would take Home with it and leave the navigator empty.
-    final route = ModalRoute.of(context);
-    if (route != null && route.isCurrent) Navigator.of(context).pop();
   }
+
+  // Home can open this page while the phone recorder is active but is still establishing
+  // coordinator ownership, before either the capture source or its transcript is available.
+  static bool _hasCapture(CaptureProvider capture) =>
+      capture.liveCaptureSource != null ||
+      EpisodePresentation.streamingSource(capture) != null ||
+      capture.segments.isNotEmpty ||
+      capture.photos.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
     final episodes = context.watch<EpisodeProvider?>();
     if (episodes == null || !episodes.enabled) {
-      return Consumer<CaptureProvider>(builder: (context, provider, child) => _legacyPage(context, provider));
+      // v3 accounts always land here: their EpisodeProvider is suppressed. The shell (app bar,
+      // Pause and Finish) selects only what it shows; the transcript subscribes itself. A
+      // whole-page Consumer rebuilt the Scaffold on every capture notify (ingress health,
+      // metrics, socket state) while a pendant streamed.
+      return Builder(
+        builder: (context) => _legacyPage(
+          context,
+          context.select<CaptureProvider, _LegacyShell>(
+            (c) => (
+              paused: c.isPaused,
+              callActive: c.isCallActive,
+              verified: c.pendantCaptureVerified,
+              state: EpisodePresentation.displayState(c),
+              bufferingFor: c.customSttBufferingDuration,
+              source: c.liveCaptureSource,
+              hasCapture: _hasCapture(c),
+              canPause: EpisodePresentation.canPause(c),
+            ),
+          ),
+        ),
+      );
     }
     // The shell rebuilds only when its own state changes (anything capturing, the listening
     // state, pausability). Segment, photo, metric and progress notifies land in the selects
@@ -149,7 +235,7 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     final (listening, hasCapture, canPause) = context.select<CaptureProvider, (bool, bool, bool)>(
       (c) => (
         EpisodePresentation.isListening(EpisodePresentation.displayState(c)),
-        c.liveCaptureSource != null || c.segments.isNotEmpty || c.photos.isNotEmpty,
+        _hasCapture(c),
         EpisodePresentation.canPause(c),
       ),
     );
@@ -158,49 +244,62 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
 
   // --------------------------------------------------------------------------- episodes off
 
-  Widget _legacyPage(BuildContext context, CaptureProvider provider) {
-    final effectivelyMuted = provider.isPaused || provider.isCallActive;
+  Widget _legacyPage(BuildContext context, _LegacyShell shell) {
+    final effectivelyMuted = shell.paused || shell.callActive;
     return Scaffold(
       backgroundColor: OmiColors.surface0,
       appBar: CaptureWedgeAppBar(
-        showStatus: effectivelyMuted || provider.pendantCaptureVerified,
-        state: EpisodePresentation.displayState(provider),
-        bufferingFor: provider.customSttBufferingDuration,
-        sourceLabel: switch (provider.liveCaptureSource) {
+        showStatus: effectivelyMuted || shell.verified,
+        state: shell.state,
+        bufferingFor: shell.bufferingFor,
+        sourceLabel: switch (shell.source) {
           null => null,
           'phone' => context.l10n.captureSourcePhoneMic,
           final source => CaptureSources.label(context, source),
         },
       ),
-      body: LiveTranscriptView(topConversationId: widget.topConversationId, rejectSpeaker: widget.rejectSpeaker),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _V3LiveTitle(),
+          Expanded(
+            child: LiveTranscriptView(
+              topConversationId: widget.topConversationId,
+              rejectSpeaker: widget.rejectSpeaker,
+              held: _held,
+            ),
+          ),
+        ],
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       // Pause/Resume (a pause glyph: mics belong to Ask Omi) and Finish, the one stop.
-      floatingActionButton:
-          (provider.liveCaptureSource != null || provider.segments.isNotEmpty || provider.photos.isNotEmpty)
-              ? Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (EpisodePresentation.canPause(provider)) ...[
-                      OmiIconButton.filled(
-                        key: const Key('capture_pause_button'),
-                        icon: Icon(effectivelyMuted ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 26),
-                        label: effectivelyMuted ? context.l10n.resume : context.l10n.pause,
-                        diameter: 52,
-                        fillColor: OmiColors.surface3,
-                        onPressed: _mutePending || provider.isCallActive ? null : () => _toggleMute(provider),
-                      ),
-                      const SizedBox(width: OmiSpacing.sm),
-                    ],
-                    OmiButton(
-                      key: const Key('process_now_button'),
-                      label: context.l10n.finish,
-                      leading: const Icon(Icons.check_rounded),
-                      onPressed: () => _stopConversation(provider),
-                    ),
-                  ],
-                )
-              : null,
+      floatingActionButton: (shell.hasCapture || _finishing || _held != null)
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (shell.canPause) ...[
+                  OmiIconButton.filled(
+                    key: const Key('capture_pause_button'),
+                    icon: Icon(effectivelyMuted ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 26),
+                    label: effectivelyMuted ? context.l10n.resume : context.l10n.pause,
+                    diameter: 52,
+                    fillColor: OmiColors.surface3,
+                    onPressed:
+                        _mutePending || shell.callActive ? null : () => _toggleMute(context.read<CaptureProvider>()),
+                  ),
+                  const SizedBox(width: OmiSpacing.sm),
+                ],
+                OmiButton(
+                  key: const Key('process_now_button'),
+                  label: context.l10n.finish,
+                  leading: const Icon(Icons.check_rounded),
+                  isLoading: _finishing,
+                  onPressed: () => _stopConversation(context.read<CaptureProvider>()),
+                ),
+              ],
+            )
+          : null,
     );
   }
 
@@ -282,13 +381,14 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                   episode: episode ?? _emptyEpisode(now),
                   onDismissItem: (item) => _dismiss(context, episodes, item),
                   jumpToLatestBottom: 120,
+                  held: _held,
                 ),
               ],
             ),
           ),
         ],
       ),
-      bottomNavigationBar: hasCapture
+      bottomNavigationBar: hasCapture || _finishing || _held != null
           ? _wrapUpBar(context, episodes, paused: context.select<CaptureProvider, bool>((c) => c.isPaused))
           : null,
     );
@@ -453,7 +553,7 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                 label: l10n.episodeWrapUpNow,
                 expand: true,
                 variant: paused ? OmiButtonVariant.secondary : OmiButtonVariant.primary,
-                isLoading: episodes.wrappingUp,
+                isLoading: episodes.wrappingUp || _finishing,
                 onPressed: () => _stopConversation(context.read<CaptureProvider>()),
               ),
             ],
@@ -582,6 +682,31 @@ class _SoFarCard extends StatelessWidget {
             Text(l10n.episodeNotesSoon, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// v3: the conversation in progress's title over its transcript, "Listening" (Home's live row title)
+/// until the server names it. Nothing for an account off v3.
+class _V3LiveTitle extends StatelessWidget {
+  const _V3LiveTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    final (v3, title) = context.select<ConversationsV3Provider?, (bool, String)>((p) {
+      final live = p?.live;
+      return (p?.v3 ?? false, live == null ? '' : presentableConversationTitle(live));
+    });
+    if (!v3) return const SizedBox.shrink();
+    return Padding(
+      key: const Key('live_page_v3_title'),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 4, 16, 8),
+      child: Text(
+        title.isEmpty ? context.l10n.listening : title,
+        style: OmiType.title1.copyWith(height: 1.15, letterSpacing: -0.4),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }

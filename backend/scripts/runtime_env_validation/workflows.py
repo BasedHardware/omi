@@ -39,6 +39,8 @@ from scripts.runtime_env_validation.common import (
     data_plane_project,
 )
 
+RUNTIME_ENV_COMPOSITES = ('deploy-backend-stack', 'deploy-projection-pump')
+
 
 def _composite_step_active_for_caller(nested_step: ConfigDict, caller_with: ConfigDict) -> bool:
     """Skip composite steps gated on inputs.mode when the caller uses another mode."""
@@ -287,7 +289,8 @@ def _backend_deploy_stack_composite_steps(workflow: ConfigDict, *, workflow_root
         if step is None:
             continue
         uses = step.get('uses')
-        if not isinstance(uses, str) or 'deploy-backend-stack' not in uses:
+        # deploy-projection-pump (SCA-3120) renders the same manifest in its own runtime-env step.
+        if not isinstance(uses, str) or not any(name in uses for name in RUNTIME_ENV_COMPOSITES):
             continue
         action = _load_local_composite_action(uses, workflow_root=workflow_root)
         if action is None:
@@ -393,7 +396,9 @@ def _resolve_step_output_reference(raw_value: object, rendered_outputs: StringMa
         '${{ steps.backfill-runtime.outputs.secrets }}',
         rendered_outputs.get('backend_sync_backfill_secrets', ''),
     )
-    # The lifecycle emits the manifest's backfill queue, defaulting to sync-backfill when undeclared.
+    # Static shape only: routing reads the control-source ops queue at runtime.
+    # Execution/selection and differing application/control values are covered
+    # by the real lifecycle-shell regression, not this manifest placeholder.
     backfill_queue = 'sync-backfill'
     for line in rendered_outputs.get('backend_sync_backfill_env_vars', '').splitlines():
         if line.startswith('SYNC_BACKFILL_TASKS_QUEUE=') and line.split('=', 1)[1]:
@@ -404,7 +409,7 @@ def _resolve_step_output_reference(raw_value: object, rendered_outputs: StringMa
         'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=https://backend-sync-backfill.example.invalid/v2/sync-jobs/run'
     )
     resolved = resolved.replace(
-        '${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}',
+        '${{ steps.sync-routing.outputs.sync_backfill_env_vars }}',
         sync_backfill_overlay,
     )
     return resolved
@@ -427,6 +432,7 @@ def _validate_cloud_run_workflows(
     manifest_path: Path,
     manifest: ConfigDict | None = None,
     workflow_root: Path | None = None,
+    integration_canary_source: str | None = None,
 ) -> list[ValidationError]:
     errors: list[ValidationError] = []
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
@@ -464,6 +470,11 @@ def _validate_cloud_run_workflows(
         workflow_jobs.update(extracted['jobs'])
 
     workflow_vars = _workflow_variable_map(env_config, expected_services)
+    if integration_canary_source is not None:
+        # The native caller binds this output through inputs.admitted_sha.
+        # Only the validated canary source resolves that exact provenance chain;
+        # arbitrary expressions and literal mismatches remain visible to checks.
+        workflow_vars['${{ needs.firestore_readiness.outputs.admitted_sha }}'] = integration_canary_source
     for service, service_config in expected_services.items():
         service_state = workflow_services.get(service)
         if service_state is None:
@@ -643,13 +654,24 @@ def _validate_firestore_readiness_workflow_contract(
         errors.append(ValidationError(scope, 'backend deploy must depend on the isolated Firestore readiness job'))
 
     is_manual_deploy = Path(workflow_file).name == 'gcp_backend.yml'
+    source_job = readiness_job if is_manual_deploy else _as_config_dict(jobs.get('admit_source')) or {}
     permissions = _as_config_dict(readiness_job.get('permissions')) or {}
-    # Both lanes resolve their source from the Release Eligibility run listing,
-    # which needs actions:read. Beyond that and the repository read its
-    # checkouts require, only the id-token the keyless index check mints
-    # through the deploy pool is allowed — never a content write or a
-    # deployer-scoped permission.
-    expected_permissions = {'actions': 'read', 'contents': 'read', 'id-token': 'write'}
+    # Source admission needs actions:read for the Release Eligibility run listing.
+    # The Firestore check needs an id-token for the index-reader identity.
+    # The automatic workflow runs those operations in separate jobs.
+    expected_permissions = {'contents': 'read', 'id-token': 'write'}
+    if is_manual_deploy:
+        expected_permissions['actions'] = 'read'
+    else:
+        source_permissions = _as_config_dict(source_job.get('permissions')) or {}
+        if source_permissions != {'actions': 'read', 'contents': 'read'} or 'environment' in source_job:
+            errors.append(ValidationError(scope, 'automatic source admission must be GitHub read-only'))
+        if readiness_job.get('needs') != ['scope', 'admit_source'] or readiness_job.get('if') != (
+            "needs.scope.outputs.applies == 'true'"
+        ):
+            errors.append(
+                ValidationError(scope, 'automatic Firestore readiness must follow admission for backend deploys')
+            )
     if permissions != expected_permissions:
         errors.append(
             ValidationError(
@@ -666,7 +688,16 @@ def _validate_firestore_readiness_workflow_contract(
         errors.append(ValidationError(scope, 'Firestore readiness must not receive backend deployment credentials'))
     resolved_workflow_root = workflow_root or ROOT
     checkout_steps = [step for step in parsed_steps if step.get('uses') == 'actions/checkout@v7']
-    admitted_readiness_ref = '${{ steps.admitted_source.outputs.admitted_sha }}'
+    admitted_readiness_ref = (
+        '${{ steps.admitted_source.outputs.admitted_sha }}'
+        if is_manual_deploy
+        else '${{ needs.admit_source.outputs.admitted_sha }}'
+    )
+    admission_checkouts = [
+        step
+        for step in (_as_config_list(source_job.get('steps')) or [])
+        if isinstance(step, dict) and step.get('uses') == 'actions/checkout@v7'
+    ]
     admission_checkout_name = (
         'Checkout current main for source admission'
         if is_manual_deploy
@@ -676,7 +707,9 @@ def _validate_firestore_readiness_workflow_contract(
         f"{'manual' if is_manual_deploy else 'automatic'} Firestore readiness must check out "
         f"{'main' if is_manual_deploy else 'current main'} then the admitted SHA"
     )
-    admission_checkout = next((step for step in checkout_steps if step.get('name') == admission_checkout_name), None)
+    admission_checkout = next(
+        (step for step in admission_checkouts if step.get('name') == admission_checkout_name), None
+    )
     admitted_checkout = next(
         (step for step in checkout_steps if step.get('name') == 'Checkout admitted Firestore source'), None
     )
@@ -688,7 +721,7 @@ def _validate_firestore_readiness_workflow_contract(
     admitted_with = _as_config_dict((admitted_checkout or {}).get('with')) or {}
     control_with = _as_config_dict((control_checkout or {}).get('with')) or {}
     if (
-        len(checkout_steps) != 3
+        len(checkout_steps) != (3 if is_manual_deploy else 2)
         or admission_with.get('ref') != 'main'
         or admission_with.get('fetch-depth') != 0
         or admitted_with.get('ref') != admitted_readiness_ref

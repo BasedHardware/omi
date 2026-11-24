@@ -370,7 +370,7 @@ _KNOWN_PATTERNS = frozenset(
         'users/memory_outbox',
         'users/memory_historical_overrides',
         'users/memory_state',
-        # Commit-boundary list projection (database/list_projection.py); hot on the write probe.
+        # Historical list projection collections can still be touched by account erasure.
         'users/list_serving_versions',
         'users/conversation_list_rows',
         'users/action_item_list_rows',

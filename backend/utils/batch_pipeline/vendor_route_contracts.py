@@ -586,8 +586,18 @@ FLAGS: Final[Mapping[str, tuple[str, str]]] = {
     'BATCH_VENDOR_ROUTING_SHADOW_PERCENT': ('B', 'decisions computed and counted, routing unchanged; default 0'),
     'BATCH_VENDOR_ROUTE_TABLE': ('B', 'runtime RouteTable payload; unset serves BUILTIN_TABLE'),
     'BATCH_VENDOR_OVERFLOW_ENABLED': ('B', 'ops_kill, on unless false; false never moves a capable unit off GPU'),
-    'BATCH_VENDOR_OVERFLOW_ENTER_SECONDS': ('B', 'fresh GPU backlog age that starts overflow (stops at half); 1200'),
-    'BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS': ('B', 'admissible fresh units waiting before age counts; default 300'),
+    'BATCH_VENDOR_OVERFLOW_PRIORITIES': (
+        'B',
+        'vendor overflow priorities fresh|recent|deep; default fresh, always included',
+    ),
+    'BATCH_VENDOR_OVERFLOW_ENTER_SECONDS': (
+        'B',
+        'per-priority GPU backlog age that starts overflow (stops at half); 1200',
+    ),
+    'BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS': (
+        'B',
+        'admissible units per priority waiting before age counts; default 300',
+    ),
     # slice C
     'BATCH_VENDOR_HEALTH_ENABLED': ('C', 'ops_kill, on unless false; false keeps the process-local vendor_guard'),
     'BATCH_VENDOR_HEALTH_THRESHOLDS': ('C', 'runtime breaker thresholds (ops 1.4); unset keeps vendor_guard defaults'),
@@ -596,6 +606,7 @@ FLAGS: Final[Mapping[str, tuple[str, str]]] = {
     'BATCH_VENDOR_HELD_REDRIVE_ENABLED': ('D', 'ops_kill, on unless false; false parks holds without redrive'),
     'BATCH_VENDOR_HELD_REDRIVE_SECONDS': ('D', 'runtime hold redrive interval'),
     'BATCH_VENDOR_HELD_STALE_GRACE_SECONDS': ('D', 'runtime grace past redrive_at before a hold counts as a wedge'),
+    'BATCH_VENDOR_MIN_SPEECH_SECONDS': ('D', 'strict-VAD speech below which a unit skips the vendor as silence; 2'),
 }
 
 # --- frozen metric names --------------------------------------------------------------------------
@@ -623,5 +634,9 @@ METRIC_AUDIO_HOURS_CAP: Final = 'omi_batch_pipeline_vendor_audio_hours_cap'  # {
 METRIC_CAP_HITS: Final = 'omi_batch_pipeline_vendor_cap_hits_total'  # {provider, reason}  C
 # Billed vendor audio seconds for units routed over a capable GPU, i.e. overflow (the $50/day spend alert).
 METRIC_OVERFLOW_AUDIO: Final = 'omi_batch_pipeline_vendor_overflow_audio_seconds_total'  # {route}  B (overflow)
+# Unit audio answered as local silence because its measured speech was under the minimum (D).
+METRIC_SHORT_SPEECH_SKIPPED_AUDIO: Final = (
+    'omi_batch_pipeline_vendor_short_speech_skipped_audio_seconds_total'  # {provider}
+)
 BREAKER_STATES: Final[frozenset[str]] = frozenset({'closed', 'degraded', 'open', 'half_open'})
 LATE_RESULT_OUTCOMES: Final[frozenset[str]] = frozenset({'ignored', 'reconciled'})

@@ -1,4 +1,5 @@
 import 'package:omi/services/capture/empty_recording_notice.dart';
+import 'package:omi/services/devices/connectors/limitless_realtime_health.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:uuid/uuid.dart';
 import 'package:omi/utils/logger.dart';
@@ -47,6 +48,8 @@ class RecordingLifecycleTelemetry {
   DateTime? _preparedAt;
   bool _audioObserved = false;
   bool _transcriptObserved = false;
+  bool _customLiveEligible = false;
+  bool _customLiveDetectionObserved = false;
   int _audioBytes = 0;
   int _socketBytes = 0;
   int _socketErrors = 0;
@@ -140,6 +143,24 @@ class RecordingLifecycleTelemetry {
         'recording_source': _source,
       });
 
+  /// Identity continuity only; this observation proves no audio gap recovery.
+  void reconnectOutcome(String outcome) => _milestone(outcome);
+
+  void observeCustomLiveAudioEligibility() {
+    if (_recordingId == null || _customLiveEligible) return;
+    _customLiveEligible = true;
+    _milestone('custom_live_audio_detection_eligible');
+  }
+
+  void observeCustomLiveAudioDetection({required bool enabled}) {
+    if (_recordingId == null || _customLiveDetectionObserved) return;
+    _customLiveDetectionObserved = true;
+    _milestone(enabled ? 'custom_live_audio_detection_enabled' : 'custom_live_audio_detection_disabled');
+  }
+
+  void observeCustomLiveAudioStall(LimitlessRealtimeHealthOutcome outcome) =>
+      _milestone('custom_live_audio_stall_${outcome.name}');
+
   void captureGap({required String reason, required String phase}) => _emit('Capture Gap Detected', {
         'recording_id': _recordingId,
         'recording_source': _source,
@@ -162,7 +183,8 @@ class RecordingLifecycleTelemetry {
   bool complete({String reason = 'user_stopped'}) {
     if (_recordingId == null) return false;
     if (!_startedEmitted) {
-      failStart(failureClass: 'pipeline_closed');
+      // Undo before the mic reported running is the reader's choice, not a broken pipeline.
+      failStart(failureClass: reason == 'user_discarded' ? 'user_discarded' : 'pipeline_closed');
       return false;
     }
     if (_startedAt != null && _source != null) {
@@ -235,6 +257,8 @@ class RecordingLifecycleTelemetry {
     _preparedAt = null;
     _audioObserved = false;
     _transcriptObserved = false;
+    _customLiveEligible = false;
+    _customLiveDetectionObserved = false;
     _audioBytes = 0;
     _socketBytes = 0;
     _socketErrors = 0;
@@ -245,7 +269,7 @@ class RecordingLifecycleTelemetry {
   }
 
   static String _normalizeReason(String reason) => switch (reason) {
-        'user_stopped' || 'device_disconnected' || 'mode_changed' || 'pipeline_closed' => reason,
+        'user_stopped' || 'user_discarded' || 'device_disconnected' || 'mode_changed' || 'pipeline_closed' => reason,
         _ => 'unknown',
       };
 
@@ -254,6 +278,7 @@ class RecordingLifecycleTelemetry {
         'capture_unavailable' ||
         'pipeline_unavailable' ||
         'pipeline_closed' ||
+        'user_discarded' ||
         'unknown' =>
           failureClass,
         _ => 'unknown',

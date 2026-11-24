@@ -18,6 +18,9 @@ from prometheus_client import (
 )
 from utils import omi_flag_metrics as _omi_flag_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.conversations import phase_shadow as _phase_shadow  # pyright: ignore[reportUnusedImport]  # noqa: F401
+from utils.conversations import (
+    processing_metrics as _retry_metrics,  # pyright: ignore[reportUnusedImport]  # noqa: F401
+)
 from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.sync import absorption_metrics as _absorption_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 
@@ -88,7 +91,14 @@ PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES = Gauge(
     'Pusher storage PCM byte budget limit; zero means no budget is enforced',
 )
 
-from utils.observability.reasons import PusherPcmErrorReason, PusherPcmStage, ReasonFamily, reason_label
+from utils.observability.reasons import (
+    AppReviewConfigOutcome,
+    AppReviewConfigReason,
+    PusherPcmErrorReason,
+    PusherPcmStage,
+    ReasonFamily,
+    reason_label,
+)
 
 PUSHER_STORAGE_PCM_REFUSALS_TOTAL = Counter(
     'omi_pusher_storage_pcm_refusals_total',
@@ -236,10 +246,6 @@ OMI_AUDIO_TIMELINE_ELAPSED_VALIDATION_TOTAL = Counter(
     'omi_audio_timeline_elapsed_validation_total',
     'Mapped capture windows compared with raw VAD speech decisions',
     ['provider', 'outcome'],
-)
-OMI_AUDIO_TIMELINE_ELAPSED_SHADOW_ERRORS_TOTAL = Counter(
-    'omi_audio_timeline_elapsed_shadow_errors_total',
-    'Failures in validation-only Soniox elapsed-axis bookkeeping',
 )
 AUDIO_TIMELINE_SEND_PATHS = (
     'vad_gate_active',
@@ -846,6 +852,51 @@ OMI_ERROR_CLASS_LAST_FIRED_TIMESTAMP = Gauge(
     ['fingerprint', 'service'],
 )
 
+OMI_APP_REVIEW_CONFIG_ALERT_TOTAL = Counter(
+    'omi_app_review_config_alert_total',
+    'App-review hide lifecycle alerts by platform and bounded reason',
+    ['platform', 'reason'],
+)
+OMI_APP_REVIEW_CONFIG_LAST_ALERT_TIMESTAMP = Gauge(
+    'omi_app_review_config_last_alert_timestamp_seconds',
+    'Unix time of the latest app-review hide lifecycle alert by platform and reason',
+    ['platform', 'reason'],
+)
+OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL = Counter(
+    'omi_app_review_config_sweep_total',
+    'App-review lifecycle sweep ticks by overall outcome',
+    ['outcome'],
+)
+OMI_APP_REVIEW_CONFIG_LAST_SWEEP_TIMESTAMP = Gauge(
+    'omi_app_review_config_last_sweep_timestamp_seconds',
+    'Unix time of the most recent completed app-review lifecycle sweep',
+)
+for _app_review_platform in ('ios', 'android'):
+    for _app_review_reason in (
+        AppReviewConfigReason.CREDENTIALS_UNAVAILABLE,
+        AppReviewConfigReason.STORE_API_ERROR,
+        AppReviewConfigReason.RECONCILIATION_REPAIR,
+        AppReviewConfigReason.LIVE_HIDE_CLEARED,
+        AppReviewConfigReason.SUBMISSION_TOKEN_UNAVAILABLE,
+        AppReviewConfigReason.SUBMISSION_TOKEN_REJECTED,
+    ):
+        OMI_APP_REVIEW_CONFIG_ALERT_TOTAL.labels(
+            platform=_app_review_platform,
+            reason=reason_label(ReasonFamily.APP_REVIEW_CONFIG, _app_review_reason, AppReviewConfigReason),
+        )
+        OMI_APP_REVIEW_CONFIG_LAST_ALERT_TIMESTAMP.labels(
+            platform=_app_review_platform,
+            reason=reason_label(ReasonFamily.APP_REVIEW_CONFIG, _app_review_reason, AppReviewConfigReason),
+        )
+for _app_review_outcome in (
+    AppReviewConfigOutcome.OK,
+    AppReviewConfigOutcome.PARTIAL,
+    AppReviewConfigOutcome.ERROR,
+):
+    OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL.labels(
+        outcome=reason_label(ReasonFamily.APP_REVIEW_CONFIG, _app_review_outcome, AppReviewConfigOutcome)
+    )
+
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',
@@ -1041,11 +1092,23 @@ OMI_SYNC_CAPTURE_TIME_TOTAL = Counter(
     ['outcome'],
 )
 
+OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL = Counter(
+    'omi_pipeline_record_wait_answers_total',
+    'Registered-record upload waits answered by bounded reason',
+    ['reason'],
+)
+
+OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL = Counter(
+    'omi_pipeline_record_wait_memo_hits_total',
+    'Registered-record upload wait memo hits by bounded memo kind',
+    ['memo'],
+)
+
 OMI_SYNC_RECORDING_AGE_SECONDS = Histogram(
     'omi_sync_recording_age_seconds',
     'Oldest recording age at sync admission by lane',
     ['lane'],
-    buckets=(300, 1800, 3600, 21600, 86400, 259200, 604800, 1209600, 2592000),
+    buckets=(300, 1800, 3600, 21600, 86400, 259200, 604800, 1209600, 2592000, 5184000),
 )
 
 OMI_SYNC_QUEUE_WAIT_SECONDS = Histogram(
@@ -1620,6 +1683,22 @@ PUSHER_DRAIN_IN_PROGRESS.set(0)
 OMI_SYNC_JOB_POLL_REQUESTS_TOTAL = Counter(
     'omi_sync_job_poll_requests_total',
     'Authenticated GET /v2/sync-local-files/{job_id} requests, including rejected polls',
+)
+OMI_SYNC_JOB_POLL_COHORT_REQUESTS_TOTAL = Counter(
+    'omi_sync_job_poll_cohort_requests_total',
+    'Sync job-status polls by stable backoff cohort; cohort is limited to in or out',
+    ['cohort'],
+)
+OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS = Gauge(
+    'omi_sync_job_poll_active_uploaders',
+    'Distinct authenticated UIDs with a nonterminal sync job poll in the last five minutes on this process',
+    ['cohort'],
+)
+OMI_SYNC_JOB_COMPLETION_TO_FIRST_TERMINAL_READ_SECONDS = Histogram(
+    'omi_sync_job_completion_to_first_terminal_read_seconds',
+    'Seconds from sync job completion to its first terminal status read observed by this process',
+    ['cohort'],
+    buckets=(1, 5, 10, 20, 30, 60, 120, 300, 600, 1800, 3600, 7200),
 )
 OMI_SYNC_JOB_POLL_THROTTLED_TOTAL = Counter(
     'omi_sync_job_poll_throttled_total',

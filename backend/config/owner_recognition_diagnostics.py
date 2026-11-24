@@ -11,6 +11,17 @@ MAX_BYTES = 8192
 MAX_LIVE_GENERATIONS = 4
 MAX_SCOPES = 8
 MAX_COUNT = 2**31 - 1
+# Code-owned proof outcomes; identifiers and arbitrary exception messages never
+# become labels. Keep current resolver snapshots separate from immutable first.
+PROOF_REASONS = frozenset('''no_job no_result job_owner_mismatch job_unit_mismatch binding_owner_mismatch
+    receipt_missing artifact_row_missing artifact_cleaned artifact_kind_mismatch artifact_owner_mismatch
+    artifact_unit_mismatch generation_mismatch erasure uri_mismatch skipped_expired skipped_merged skipped_shared_unit
+    projection_segment_missing projection_text_mismatch projection_point_words projection_unassigned_words
+    unit_pcm_format unit_duration endpoint_unconfigured private_cloud_disabled
+    inventory_pair_mismatch inventory_count_mismatch decoded_coverage_hole decoded_overlap decoded_duration_mismatch
+    manifest_unvalidated no_proven_window uncovered_window global_manifest_ambiguity stale_generation
+    read_budget other'''.split())
+
 REASONS = frozenset('''other enqueued no_prints unplaced queue_full already_labeled already_mapped missing_speaker
     no_pcm window_outside_buffer segment_shorter_than_minimum no_fresh_audio window_shorter_than_minimum
     stale_generation rejected manual_decision voice_capacity embedding_budget authority_unavailable rejector_tail_reserved
@@ -23,7 +34,7 @@ REASONS = frozenset('''other enqueued no_prints unplaced queue_full already_labe
     blob_missing blob_read_failed blob_decode_failed read_budget decoded_duration_mismatch decoded_overlap
     decoded_coverage_hole embedding_failed resolved partial budget max_embeddings diarizer_unavailable
     capacity_full no_clip clip_too_short chunk_boundary invalid_vector missing_vector failed no_embeddings unaligned_audio
-    voice socket both'''.split())
+    voice socket both'''.split()) | PROOF_REASONS
 COUNTS = frozenset('''enqueued attempted successful failed comparisons owner_comparisons published scores_generated
     pending_queue pending_tasks eligible short segments embeddable pending cache_hits new_embeddings valid_vectors
     clip_skips embed_failures excluded_id excluded_speaker requested invalid_vectors missing_vectors stale clips
@@ -79,10 +90,15 @@ def normalize(value: Any) -> dict[str, Any]:
     first = summary(value.get('first_resolver'))
     if first:
         result['first_resolver'] = first
+    latest = summary(value.get('current_resolver'))
+    if latest:
+        result['current_resolver'] = latest
     # No values other than whitelisted metadata; deterministic encoded size bound.
     while len(json.dumps(result, separators=(',', ':')).encode()) > MAX_BYTES and result.get('live'):
         result['live'].pop(0)
-    return result if result.get('live') or first else {}
+    if len(json.dumps(result, separators=(',', ':')).encode()) > MAX_BYTES:
+        result.pop('current_resolver', None)
+    return result if result.get('live') or first or latest else {}
 
 
 def merge(current: Any, incoming: Any) -> dict[str, Any]:
@@ -97,5 +113,6 @@ def merge(current: Any, incoming: Any) -> dict[str, Any]:
             'live': list(rows.values()),
             # First processing diagnosis is immutable across late repair/reprocessing.
             'first_resolver': current.get('first_resolver') or incoming.get('first_resolver'),
+            'current_resolver': incoming.get('current_resolver') or current.get('current_resolver'),
         }
     )

@@ -174,3 +174,18 @@ def test_main_reads_the_checked_in_contract(monkeypatch, capsys):
     target = json.loads(capsys.readouterr().out)['targets'][0]
     assert target['contract'] is True
     assert target['ceilings'] == ['ceiling_soft_delete:pending', 'ceiling_noncurrent_unbounded:pending']
+
+
+@pytest.mark.parametrize('age', [30, 59, 60])
+def test_live_batch_metadata_is_checked_against_the_runtime_terminal(age):
+    import copy
+    from scripts import retention_contract
+    from utils.batch_pipeline.input_retention import STAGING_BUCKET
+
+    contract = copy.deepcopy(retention_contract.load())
+    contract['holds']['batch_finalization_alarm']['control_verified'] = True
+    metadata = {
+        'metageneration': 15,
+        'lifecycle': {'rule': [{'action': {'type': 'Delete'}, 'condition': {'age': age}}]},
+    }
+    assert guard.policy_failure(metadata, STAGING_BUCKET, contract) == (None if age == 60 else 'lifecycle_delete')

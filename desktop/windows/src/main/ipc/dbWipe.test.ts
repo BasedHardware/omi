@@ -60,6 +60,19 @@ describe('wipeUserDataOn (sign-out teardown)', () => {
     }
   })
 
+  it('clears the legacy AI-profile rows when present and tolerates the table being gone', () => {
+    const db = makeSeededDb()
+    wipeUserDataOn(db)
+    expect(count(db, 'ai_user_profiles')).toBe(0)
+
+    const fresh = makeSeededDb()
+    fresh.exec('DROP TABLE ai_user_profiles')
+    wipeUserDataOn(fresh)
+    for (const t of USER_DATA_TABLES) {
+      if (t !== 'ai_user_profiles') expect(count(fresh, t)).toBe(0)
+    }
+  })
+
   it('does not clear install-scoped JIT cleanup authority during account wipe', () => {
     const db = makeSeededDb()
     db.exec('CREATE TABLE jit_keyframe_pin (v INTEGER)')
@@ -132,13 +145,7 @@ describe('USER_DATA_TABLES covers the whole schema (sign-out leak guard)', () =>
 
   it('finds the known core tables (extractor sanity — never passes vacuously)', () => {
     const tables = realSchemaTables()
-    for (const t of [
-      'local_conversation',
-      'ai_user_profiles',
-      'focus_sessions',
-      'action_items',
-      'staged_tasks'
-    ]) {
+    for (const t of ['local_conversation', 'focus_sessions', 'action_items', 'staged_tasks']) {
       expect(tables, `schema should contain ${t}`).toContain(t)
     }
   })

@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-deleted-source-without-tombstone-retried-forever",
+  "family": "retry-classification",
   "violated_contract": "A projection job whose source conversation was deleted, with no deletion tombstone and no redirect, must end in a terminal disposition that publishes nothing and writes no usage. A tombstone-required guard that only blocks and retries leaves the job non-terminal for good.",
   "canonical_prevention": "Admit the deleted-source case to a terminal source_deleted disposition at session admission; suppress every output ID across parts before publish; skip usage on that path. A kill switch restores the prior blocking behavior.",
   "evidence_prs": [

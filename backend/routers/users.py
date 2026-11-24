@@ -34,6 +34,8 @@ from database import (
 )
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from database._client import get_customer_firestore_client
+from database.go_queue_erase import ERASE_LEASE_SECONDS
+from services.users.go_queue_erase import go_queue_erase_required
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
 from services.users.data_export_response import DataExportStreamingResponse
@@ -69,13 +71,16 @@ from database.users import (
     resolve_deletion_wipe_job_id,
     set_user_transcription_preferences,
 )
-from utils import billing_recovery, screen_vector_entitlements
+from utils import ai_profile_refresh, billing_recovery, screen_vector_entitlements
 from utils.observability.fallback import record_fallback
+from config import play_billing as play_billing_config
+from config import prepaid_code_redeem as prepaid_code_config
+import database.play_subscriptions as play_subscriptions_db
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
 from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
 from utils.generated_compute import require_generated_compute, generated_compute_configured
-from models.users import ProcessingBacklog
+from models.users import PlayBillingConfig, ProcessingBacklog
 from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
@@ -145,8 +150,8 @@ from utils.cloud_tasks import (
     verify_account_deletion_cloud_tasks_oidc,
     verify_conversation_batch_purge_cloud_tasks_oidc,
 )
-from database import conversation_batch_purge_jobs
-from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
+from database import batch_pipeline_conversation_purge_scans, conversation_batch_purge_jobs
+from utils.executors import db_executor, erasure_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
@@ -169,6 +174,7 @@ from utils.daily_summary_validation import (
 )
 from utils.other.daily_recap import delivery_allowed as daily_summary_delivery_allowed
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
+from utils.memory.recap_review import refresh_recap_learning_refs
 from utils.other import endpoints as auth
 from utils.other.list_budget import finish_list_budget
 from utils.other.storage import (
@@ -358,25 +364,34 @@ async def run_account_deletion_wipe(
         )
 
     lock_key = f'account-deletion:{uid}'
-    lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)
+    needs_erase = resolution.get('erase_armed') is True or go_queue_erase_required()
+    lease = (ERASE_LEASE_SECONDS,) if needs_erase else ()
+    lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key, *lease)
     if not lock_token:
         logger.warning(f'account_deletion handler: run-lock held for {uid}, deferring')
         return JSONResponse(status_code=409, content={'status': 'locked'})
 
     release_lock = True
     try:
-        claim_status = await run_blocking(db_executor, claim_deletion_wipe_for_task, uid)
+        claim_status = (
+            await run_blocking(db_executor, claim_deletion_wipe_for_task, uid, expected_job_id=wipe_job_id)
+            if needs_erase
+            else await run_blocking(db_executor, claim_deletion_wipe_for_task, uid)
+        )
         if claim_status == 'completed':
             return JSONResponse(status_code=200, content={'status': 'acked', 'job_status': 'completed'})
         if claim_status == 'running':
             return JSONResponse(status_code=409, content={'status': 'running'})
+        if claim_status == 'erase_required':
+            return JSONResponse(status_code=409, content={'status': 'retry'})
         if claim_status != 'claimed':
             logger.warning(f'account_deletion handler: non-actionable task for {uid}, claim_status={claim_status}')
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': claim_status})
 
         max_attempts = get_account_deletion_tasks_max_attempts()
         terminal = task_authentication.retry_count >= max_attempts - 1
-        ok = await run_deletion_wipe_with_lease(uid, task_authentication.retry_count, terminal, lock_token)
+        erase_args = (wipe_job_id,) if needs_erase else ()
+        ok = await run_deletion_wipe_with_lease(uid, task_authentication.retry_count, terminal, lock_token, *erase_args)
         if ok:
             return JSONResponse(status_code=200, content={'status': 'done'})
 
@@ -399,7 +414,7 @@ async def run_account_deletion_wipe(
             await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
 
 
-# Rides the account-deletion queue and invoker identity; dispatched by the purge reconciler.
+# Rides the conversation-erasure queue with the account-deletion invoker identity; dispatched by the purge reconciler.
 # Path must equal utils.cloud_tasks.CONVERSATION_BATCH_PURGE_PATH (pinned by its test).
 @router.post('/v1/conversations/deletion-batch-purges/run', include_in_schema=False)
 async def run_conversation_batch_purge(
@@ -425,16 +440,14 @@ async def run_conversation_batch_purge(
 
         run = functools.partial(conversation_batch_purge_jobs.run_erasure_job, erase=erase_accepted_conversation)
     else:
-        run = conversation_batch_purge_jobs.run_job
+        run = batch_pipeline_conversation_purge_scans.run_job
     try:
-        outcome = await run_blocking(cleanup_executor, run, job_id, generation)
+        outcome = await run_blocking(erasure_executor, run, job_id, generation)
     except Exception as e:
         # The obligation stays durable; the queue retries and the reconciler redrives.
         logger.warning(
-            'conversation_batch_purge handler: attempt %d failed job=%s: %s',
-            retry_count + 1,
-            job_id,
-            type(e).__name__,
+            f'conversation_batch_purge handler: attempt {retry_count + 1} failed kind={kind} job={job_id} '
+            f'generation={generation}: {type(e).__name__}: {sanitize(str(e))}'
         )
         return JSONResponse(status_code=500, content={'status': 'retry'})
     logger.info('conversation_batch_purge handler: job=%s generation=%d outcome=%s', job_id, generation, outcome)
@@ -797,7 +810,7 @@ def delete_followup_question_endpoint(memory_id: str, uid: str = Depends(auth.ge
             raise HTTPException(status_code=400, detail='No memory in progres')
     else:
         memory = get_conversation(uid, memory_id)
-    if not memory or memory.get('deleted', False):
+    if not memory or memory.get('deleted', False) or memory.get('recording'):
         raise HTTPException(status_code=404, detail='Conversation not found')
     if memory.get('is_locked', False):
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.')
@@ -1100,7 +1113,10 @@ def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depen
     if request.target_level != 'enhanced':
         raise HTTPException(status_code=400, detail="Invalid target_level. Only migration to 'enhanced' is supported.")
 
-    finalize_migration(uid, request.target_level)
+    try:
+        finalize_migration(uid, request.target_level)
+    except users_db.MigrationSuperseded as error:
+        raise HTTPException(status_code=409, detail='Migration is no longer current.') from error
     set_user_data_protection_level(uid, request.target_level)
     return {'status': 'ok'}
 
@@ -1288,6 +1304,7 @@ def get_user_subscription_endpoint(
     uid: str = Depends(auth.get_current_user_uid_no_byok_validation),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+    x_app_build: Optional[str] = Header(None, alias='X-App-Build'),
 ):
     """Gets the user's subscription plan and usage, plus the one transcription-allowance answer."""
     already_read: dict[str, Any] = {}
@@ -1358,7 +1375,21 @@ def get_user_subscription_endpoint(
         held = response.held_audio
         audio = {'count': held.count, 'seconds': held.seconds} if held else {'count': 0, 'seconds': 0}
         response.processing_backlog = processing_backlog.snapshot(uid, allowance=funded, audio=audio)
+    if play_billing_config.client_uses_play(x_app_platform, x_app_build, uid):
+        response.play_billing = PlayBillingConfig.model_validate(play_billing_config.client_config_payload(uid))
+        try:
+            play_subscriptions_db.remember_account_once(response.play_billing.obfuscated_account_id, uid)
+        except Exception:  # noqa: BLE001 - the map only helps bind notification-only tokens
+            logger.warning('play_billing account map write failed')
+    _apply_prepaid_code_switch(response, uid)
     return response
+
+
+def _apply_prepaid_code_switch(response: UserSubscriptionResponse, uid: str) -> None:
+    """Only the ability to redeem follows the switch. A stored prepaid plan keeps its `prepaid` marker
+    either way, so a redeemed reader never sees Resubscribe when the switch or cohort changes."""
+    if prepaid_code_config.enabled_for(uid):
+        response.prepaid_code_redeem = True
 
 
 @router.post('/v1/users/processing-backlog/process', response_model=ProcessingBacklog, tags=['v1'])
@@ -1375,6 +1406,17 @@ def process_waiting_recordings(
     if snapshot is not None and snapshot.state == 'capped':
         raise HTTPException(status_code=402, detail={'error': 'usage_budget_exhausted', 'trigger': 'usage_budget'})
     return snapshot
+
+
+def _never_subscribed(uid: str) -> bool:
+    """No Stripe customer and no Play subscription ever: the only readers a trial may be promised to.
+
+    Fails closed: when a lookup is unavailable the client must not promise a trial checkout refuses.
+    """
+    try:
+        return not users_db.get_stripe_customer_id(uid) and not play_subscriptions_db.is_play_customer(uid)
+    except Exception:  # noqa: BLE001 - eligibility is a promotion hint, never worth a 500
+        return False
 
 
 def _user_subscription_response(
@@ -1607,14 +1649,8 @@ def _user_subscription_response(
             )
 
     show_subscription_ui = not should_hide_subscription_ui(uid, x_app_platform, x_app_version)
-    # Read from the true plan, before the client remap below. Fail closed: when the Stripe customer
-    # lookup is unavailable the client must not promise a trial the checkout may refuse.
-    trial_eligible = False
-    if subscription.plan == PlanType.basic:
-        try:
-            trial_eligible = not users_db.get_stripe_customer_id(uid)
-        except Exception:  # noqa: BLE001 - eligibility is a promotion hint, never worth a 500
-            trial_eligible = False
+    # Read from the true plan, before the client remap below.
+    trial_eligible = subscription.plan == PlanType.basic and _never_subscribed(uid)
 
     # Phone-call feature access + monthly free-tier usage snapshot.
     phone_call_quota = PhoneCallQuota(**get_phone_call_quota_snapshot(uid).to_client_dict())
@@ -2085,7 +2121,8 @@ def get_daily_summaries(
     Returns summaries in reverse chronological order.
     """
     try:
-        return {'summaries': read_daily_summary_page(uid, limit=limit, offset=offset, request=request)}
+        summaries = read_daily_summary_page(uid, limit=limit, offset=offset, request=request)
+        return {'summaries': refresh_recap_learning_refs(uid, summaries)}
     except DailySummaryUnavailable:
         raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 
@@ -2185,7 +2222,8 @@ def search_daily_summaries(
     except DailySummaryUnavailable:
         raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
     filtered = filter_daily_summaries([item.model_dump() for item in valid], query, limit)
-    return {'summaries': [DailySummaryResponse.model_validate(item) for item in filtered]}
+    matches = [DailySummaryResponse.model_validate(item) for item in filtered]
+    return {'summaries': refresh_recap_learning_refs(uid, matches)}
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)
@@ -2197,7 +2235,8 @@ def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')
     try:
-        return require_daily_summary(summary, uid=uid, operation='detail')
+        validated = require_daily_summary(summary, uid=uid, operation='detail')
+        return refresh_recap_learning_refs(uid, [validated])[0]
     except DailySummaryUnavailable:
         raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 
@@ -2654,19 +2693,27 @@ def update_assistant_settings(
 
 class UpdateAIUserProfileRequest(BaseModel):
     profile_text: str | None = Field(None, max_length=50000)
+    # Released desktop builds still mirror their own generation with these two.
     generated_at: Optional[str] = None
     data_sources_used: int | None = Field(None, ge=0)
+    # Current clients say who wrote the text; the backend folds it into the next refresh.
+    source: Literal['user_edit', 'exploration'] | None = None
 
 
 class AIUserProfileResponse(BaseModel):
     profile_text: str | None = None
     generated_at: Optional[str] = None
     data_sources_used: int | None = None
+    source: Optional[str] = None
+    refreshed_at: Optional[str] = None
 
 
 @router.get('/v1/users/ai-profile', tags=['users'], response_model=AIUserProfileResponse | None)
 def get_ai_profile(uid: str = Depends(auth.get_current_user_uid)):
-    return users_db.get_ai_user_profile(uid)
+    """The backend-owned profile. Never blocks on generation; a stale one is refreshed in the background."""
+    profile = users_db.get_ai_user_profile(uid)
+    ai_profile_refresh.schedule_refresh(uid, profile, known=True)
+    return profile
 
 
 @router.patch('/v1/users/ai-profile', tags=['users'], response_model=AIUserProfileResponse)
@@ -2679,7 +2726,36 @@ def update_ai_profile(
         profile_text=request.profile_text,
         generated_at=request.generated_at,
         data_sources_used=request.data_sources_used,
+        source=request.source,
     )
+
+
+@router.delete('/v1/users/ai-profile', tags=['users'], status_code=204)
+def delete_ai_profile(uid: str = Depends(auth.get_current_user_uid)):
+    """Forget the profile; the backend builds a new one on the next refresh trigger."""
+    users_db.delete_ai_user_profile(uid)
+    return Response(status_code=204)
+
+
+_AI_PROFILE_REFRESH_STATUS = {
+    'ai_profile_refresh_unavailable': 503,
+    'ai_profile_refresh_in_progress': 409,
+    'ai_profile_insufficient_data': 422,
+    'ai_profile_synthesis_failed': 502,
+}
+
+
+@router.post('/v1/users/ai-profile/refresh', tags=['users'], response_model=AIUserProfileResponse)
+async def refresh_ai_profile(
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "users:ai_profile_refresh", fail_closed=True)),
+):
+    """Regenerate the profile now from the owner's backend data (Generate Now / Regenerate)."""
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'memories')
+    try:
+        return await run_blocking(llm_executor, ai_profile_refresh.refresh_now, uid)
+    except ai_profile_refresh.RefreshError as error:
+        raise HTTPException(status_code=_AI_PROFILE_REFRESH_STATUS.get(error.code, 502), detail=error.code)
 
 
 class SynthesizeAIUserProfileRequest(BaseModel):
@@ -2711,6 +2787,10 @@ async def synthesize_ai_profile(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "users:ai_profile_synthesize")),
 ):
     """Return-only two-stage AI user profile synthesis through the managed memories feature.
+
+    Deprecated: kept only for released desktop builds that still generate locally; current
+    clients use the backend-owned profile (GET/PATCH/DELETE and POST /refresh). Remove once
+    the minimum supported macOS and Windows builds no longer call it.
 
     Does not write Firestore. Desktop clients send their formatted source lines plus up to
     five past profiles (oldest first) instead of carrying the prompts and calling Anthropic

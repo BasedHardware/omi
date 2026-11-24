@@ -4,6 +4,26 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  rollback_revision:
+    description: 'Exact admitted predecessor for a named deploy or integration canary'
+    required: false
+    default: 'backend-integration-provfix-off1114'
+  post_wrap_guard:
+    description: 'internal fails closed without a trusted adapter; explicit external delegates the post-wrap guard to Pipeline under SCA-2283 08:22 ruling'
+    required: false
+    default: 'internal'
+  integration_only:
+    description: 'SCA-2283 integration transport only; no consumer/GKE mutation'
+    required: false
+    default: 'false'
+  integration_image:
+    description: 'Normally admitted immutable integration image for the new carrier'
+    required: false
+    default: ''
+  integration_canary:
+    description: 'Exact SCA-2283 ruled source only: preserve serving ops and stage integration 0/25/100 under caller lock'
+    required: false
+    default: 'false'
   record_token_lease_mode:
     description: 'Caller-supplied record token lease mode'
     required: false
@@ -21,7 +41,7 @@ inputs:
     required: false
     default: '0'
   backend_sync_memory:
-    description: 'backend-sync memory: 6Gi prod right-size (2026-10-24 costcut), 4Gi/5Gi/8Gi trial values; dev callers keep 8Gi'
+    description: 'backend-sync memory input for dev; production uses backend/deploy/ops/prod.yaml'
     required: false
     default: '8Gi'
   firebase_probe_signer_service_account:
@@ -114,6 +134,10 @@ inputs:
     description: 'Telegram chat ID for production deployment notifications'
     required: false
     default: ''
+  cloud_run_service:
+    description: 'Closed Cloud Run selection; all preserves the existing deployment'
+    required: false
+    default: 'all'
   service_images:
     description: >-
       Plan B B2 role-image opt-in (manual profile only). Empty ships every service
@@ -156,9 +180,52 @@ runs:
     - name: Validate deploy profile boundary
       shell: bash
       env:
+        CLOUD_RUN_SERVICE: ${{ inputs.cloud_run_service }}
         SERVICE_IMAGES: ${{ inputs.service_images }}
+        ROLLBACK_REVISION: ${{ inputs.rollback_revision }}
       run: |
         set -euo pipefail
+        CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-all}"
+        case "$CLOUD_RUN_SERVICE" in all|backend|backend-sync|backend-sync-backfill|backend-integration) ;; *) exit 1 ;; esac
+        if [[ "$CLOUD_RUN_SERVICE" != all ]]; then
+          [[ "${{ inputs.deploy_profile }}" == manual && "${{ inputs.environment }}" == prod &&
+             "${{ inputs.deploy_targets }}" == cloud-run-only && "${{ inputs.deploy_gateway }}" == false &&
+             "${{ inputs.service }}" == backend ]] || exit 1
+          [[ "${{ inputs.integration_canary }}" != true || "$CLOUD_RUN_SERVICE" == backend-integration ]] || exit 1
+          printf 'SELECTED_CLOUD_RUN_SERVICES=%s\n' "$CLOUD_RUN_SERVICE" >> "$GITHUB_ENV"
+        else
+          printf 'SELECTED_CLOUD_RUN_SERVICES=backend backend-sync backend-sync-backfill backend-integration\n' >> "$GITHUB_ENV"
+        fi
+        if [[ "${{ inputs.integration_canary }}" != false ]]; then
+          [[ "${{ inputs.integration_canary }}" == true &&
+             "${{ inputs.deploy_profile }}" == manual && "${{ inputs.environment }}" == prod &&
+             "${{ inputs.runtime_env }}" == prod && "${{ inputs.deploy_targets }}" == cloud-run-only &&
+             "${{ inputs.deploy_gateway }}" == false && "${{ inputs.service }}" == backend &&
+             "${{ inputs.project_id }}" == based-hardware && "${{ inputs.region }}" == us-central1 &&
+             ("${{ inputs.admitted_sha }}" == 0714c5198be8f0183c8fd7dd3810d53c91af17a4 ||
+              "${{ inputs.integration_only }}" == true) ]] || {
+            echo 'Invalid ruled integration canary boundary.' >&2
+            exit 1
+          }
+        fi
+        [[ "${{ inputs.integration_only }}" == false || "${{ inputs.integration_only }}" == true ]] || exit 1
+        [[ "${{ inputs.post_wrap_guard }}" == internal || "${{ inputs.post_wrap_guard }}" == external ]] || exit 1
+        [[ "${{ inputs.post_wrap_guard }}" == internal || "${{ inputs.integration_only }}" == true ]] || exit 1
+        if [[ "${{ inputs.integration_only }}" == true ]]; then
+          [[ "$ROLLBACK_REVISION" =~ ^backend-integration-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ && ${#ROLLBACK_REVISION} -le 63 ]] || exit 1
+          BOUND_SERVICE_IMAGES="${SERVICE_IMAGES%,rollback_revision=$ROLLBACK_REVISION}"
+          [[ "$ROLLBACK_REVISION" == backend-integration-provfix-off1114 || "$BOUND_SERVICE_IMAGES" != "$SERVICE_IMAGES" ]] || exit 1
+          [[ "${{ inputs.integration_canary }}" == true &&
+             "${{ inputs.admitted_sha }}" =~ ^[0-9a-f]{40}$ &&
+             "${{ inputs.integration_image }}" =~ ^gcr\.io/based-hardware/(backend|backend-workers)@sha256:[0-9a-f]{64}$ &&
+             ("$BOUND_SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }},post_wrap_guard=${{ inputs.post_wrap_guard }}" ||
+              ("${{ inputs.post_wrap_guard }}" == internal && "$BOUND_SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }}")) ]] || exit 1
+        elif [[ "$CLOUD_RUN_SERVICE" != all ]]; then
+          [[ "$ROLLBACK_REVISION" =~ ^${CLOUD_RUN_SERVICE}-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ &&
+             ${#ROLLBACK_REVISION} -le 63 ]] || exit 1
+        else
+          [[ "$ROLLBACK_REVISION" == backend-integration-provfix-off1114 ]] || exit 1
+        fi
         if [[ -n "${SERVICE_IMAGES//[[:space:],]/}" && "${{ inputs.deploy_profile }}" != "manual" ]]; then
           echo "service_images (role-image opt-in) is accepted only on the manual profile" >&2
           exit 1
@@ -217,6 +284,7 @@ runs:
       uses: actions/checkout@v7
       with:
         ref: ${{ inputs.admitted_sha }}
+        fetch-depth: ${{ inputs.integration_only == 'true' && '0' || '1' }}
 
     - name: Install immutable workflow validation source and deploy-control scripts
       shell: bash
@@ -286,10 +354,14 @@ runs:
           --allow-tagged-no-percent-targets
 
     - name: Login to GCR
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success()) }}
       shell: bash
       run: gcloud auth configure-docker
 
     - name: Set up Docker Buildx
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success()) }}
       uses: docker/setup-buildx-action@v4
 
     - name: Compute short SHA
@@ -304,6 +376,8 @@ runs:
     # its role image by digest. Validated (registry, role, revision label) before any
     # mutation; the outputs feed every deploy and release-vector step below.
     - name: Resolve per-service images
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success()) }}
       id: service-images
       shell: bash
       env:
@@ -312,6 +386,7 @@ runs:
       run: |
         set -euo pipefail
         python3 "$DEPLOY_CONTROL_SCRIPTS/resolve_service_images.py" \
+          --cloud-run-service "${{ inputs.cloud_run_service }}" \
           --service-images "$SERVICE_IMAGES" \
           --project "${{ inputs.project_id }}" \
           --short-sha "$SHORT_SHA" \
@@ -325,18 +400,80 @@ runs:
       shell: bash
       run: python3 -m pip install -q pyyaml
 
+    - name: Resolve production backend memory
+      if: ${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend' || inputs.cloud_run_service == 'backend-sync') }}
+      id: ops-memory
+      shell: bash
+      run: |
+        set -euo pipefail
+        for service in backend backend-sync; do
+          memory="$(python3 "$DEPLOY_CONTROL_SCRIPTS/ops_train.py" render-memory --env prod --service "$service")"
+          echo "${service//-/_}=$memory" >> "$GITHUB_OUTPUT"
+        done
+
+    - name: Bind integration transport evidence and capture retained inverse
+      id: integration-transport-prepare
+      if: ${{ inputs.integration_only == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        umask 077
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
+        python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
+          --revision "$ROLLBACK_REVISION" --project "${{ inputs.project_id }}" --region "${{ inputs.region }}"
+        extension_args=()
+        if [[ "${{ inputs.integration_only }}" == true ]]; then extension_args=(--integration-only); fi
+        python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" prepare \
+          "${extension_args[@]}" \
+          --post-wrap-guard "${{ inputs.post_wrap_guard }}" \
+          --rollback-revision "$ROLLBACK_REVISION" \
+          --state "$RUNNER_TEMP/integration-canary-private.json" \
+          --source "${{ inputs.admitted_sha }}" \
+          --image "${{ inputs.integration_image || steps.service-images.outputs.backend_integration }}" \
+          --candidate "backend-integration-${{ steps.image-tag.outputs.revision_suffix }}" \
+          --project "${{ inputs.project_id }}" --region "${{ inputs.region }}"
+        # Only the authenticated immutable image identity leaves the private
+        # journal. Never upload or print its serving config/secret references.
+        python3 - <<'PYTHON'
+        import json, os, re, shlex
+        from pathlib import Path
+        state = json.loads((Path(os.environ['RUNNER_TEMP']) / 'integration-canary-private.json').read_text())
+        image = state['image']
+        if not re.fullmatch(r'gcr\.io/based-hardware/[a-z0-9_.-]+@sha256:[0-9a-f]{64}', image):
+            raise ValueError('canary digest identity missing')
+        args = shlex.split(os.environ['EXISTING_VECTOR_ARGS'])
+        pairs = []
+        for offset in range(0, len(args), 2):
+            if args[offset] != '--service-image' or offset + 1 >= len(args):
+                raise ValueError('invalid release vector arguments')
+            if not args[offset + 1].startswith('backend-integration='):
+                pairs.extend(args[offset:offset + 2])
+        pairs.extend(['--service-image', 'backend-integration=' + image])
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write('release_vector_args=' + shlex.join(pairs) + '\n')
+        PYTHON
+      env:
+        ROLLBACK_REVISION: ${{ inputs.rollback_revision }}
+        EXISTING_VECTOR_ARGS: ${{ steps.service-images.outputs.release_vector_args }}
+
     - name: Preflight required deployment secrets before mutations
       id: preflight-required-secrets
       shell: bash
       run: |
         set -euo pipefail
         python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" \
+          ${{ inputs.cloud_run_service != 'all' && format('--service {0}', inputs.cloud_run_service) || '' }} \
           --env="${{ inputs.runtime_env }}" \
           --project="${{ inputs.project_id }}" \
           --manifest="$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
           --check-secrets
 
     - name: Validate backend GMP config without Secret Manager
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && success() }}
       id: prepare-backend-gmp-config
       shell: bash
       run: |
@@ -427,7 +564,9 @@ runs:
     - name: Preflight Cloud Run deploy
       shell: bash
       run: |
+        set -euo pipefail
         PREFLIGHT_ARGS=(
+          ${{ inputs.cloud_run_service != 'all' && format('--service {0}', inputs.cloud_run_service) || '' }} \
           --env ${{ inputs.runtime_env }}
           --project ${{ inputs.project_id }}
           --region ${{ inputs.region }}
@@ -435,14 +574,29 @@ runs:
           --check-secrets
           --check-traffic
         )
-        if [[ "${{ inputs.deploy_profile }}" == "auto-dev" ||
-              "${{ inputs.environment }}" == "prod" ||
-              "${{ inputs.environment }}" == "development" ]]; then
-          PREFLIGHT_ARGS+=(--repair-traffic)
+        if [[ "${{ inputs.integration_only }}" != true &&
+              ("${{ inputs.deploy_profile }}" == "auto-dev" ||
+               "${{ inputs.environment }}" == "prod" ||
+               "${{ inputs.environment }}" == "development") ]]; then
+          # Named deploys must refuse drift against their admitted inverse.
+          # Do not rewrite requested traffic before that comparison.
+          if [[ "${{ inputs.cloud_run_service }}" == all ]]; then
+            PREFLIGHT_ARGS+=(--repair-traffic)
+          fi
+          if [[ "${{ inputs.deploy_profile }}" == manual ]]; then
+            history_args=()
+            if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+              history_args=(--unshallow)
+            fi
+            git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
+            PREFLIGHT_ARGS+=(--release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py")
+          fi
         fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" "${PREFLIGHT_ARGS[@]}"
 
     - name: Build runtime image
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success()) }}
       uses: docker/build-push-action@v7
       with:
         context: .
@@ -456,23 +610,27 @@ runs:
         cache-to: type=registry,ref=gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:buildcache,mode=max
 
     - name: Verify built runtime image before publish
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success()) }}
       shell: bash
       run: |
         image=gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
         python3 "$DEPLOY_CONTROL_SCRIPTS/runtime_image_contracts.py" smoke --dockerfile backend/Dockerfile --image "$image"
 
     - name: Push verified runtime image
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success()) }}
       shell: bash
       run: |
         docker push gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:latest
         docker push gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
 
     - name: Install Helm for combined LLM Gateway deployment
-      if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_gateway == 'true' }}
+      if: ${{ inputs.cloud_run_service == 'all' && (inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev' || inputs.deploy_gateway == 'true')) }}
       uses: azure/setup-helm@v5
 
     - name: Build, smoke, and push combined LLM Gateway image
-      if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_gateway == 'true' }}
+      if: ${{ inputs.cloud_run_service == 'all' && (inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev' || inputs.deploy_gateway == 'true')) }}
       shell: bash
       run: |
         gateway_image="gcr.io/${{ inputs.project_id }}/llm-gateway:${{ steps.image-tag.outputs.short_sha }}"
@@ -483,7 +641,7 @@ runs:
         docker push "$gateway_image"
 
     - name: Deploy LLM Gateway with backend stack
-      if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_gateway == 'true' }}
+      if: ${{ inputs.cloud_run_service == 'all' && (inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev' || inputs.deploy_gateway == 'true')) }}
       shell: bash
       env:
         LLM_GATEWAY_GSA: ${{ env.LLM_GATEWAY_GSA }}
@@ -514,9 +672,7 @@ runs:
 
     - name: Verify combined LLM gateway serving data plane
       id: combined-gateway-serving
-      if: >-
-        ${{ (inputs.deploy_profile == 'auto-dev' ||
-             (inputs.deploy_gateway == 'true' && steps.gateway-intent.outputs.enabled == 'true')) }}
+      if: ${{ inputs.cloud_run_service == 'all' && (inputs.integration_only != 'true' && ((inputs.deploy_profile == 'auto-dev' || (inputs.deploy_gateway == 'true' && steps.gateway-intent.outputs.enabled == 'true')))) }}
       shell: bash
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/verify-llm-gateway-serving.py" \
@@ -526,7 +682,7 @@ runs:
           --github-output "$GITHUB_OUTPUT"
 
     - name: Smoke LLM Gateway
-      if: ${{ inputs.deploy_profile == 'auto-dev' }}
+      if: ${{ inputs.cloud_run_service == 'all' && (inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev')) }}
       shell: bash
       run: |
         set -euo pipefail
@@ -663,6 +819,45 @@ runs:
           exit 1
         fi
 
+    - name: Capture ruled integration canary baseline and serving ops
+      id: integration-canary-prepare
+      if: ${{ inputs.integration_canary == 'true' && inputs.integration_only != 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        umask 077
+        extension_args=()
+        if [[ "${{ inputs.integration_only }}" == true ]]; then extension_args=(--integration-only); fi
+        python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" prepare \
+          "${extension_args[@]}" \
+          --state "$RUNNER_TEMP/integration-canary-private.json" \
+          --source "${{ inputs.admitted_sha }}" \
+          --image "${{ inputs.integration_image || steps.service-images.outputs.backend_integration }}" \
+          --candidate "backend-integration-${{ steps.image-tag.outputs.revision_suffix }}" \
+          --project "${{ inputs.project_id }}" --region "${{ inputs.region }}"
+        # Only the authenticated immutable image identity leaves the private
+        # journal. Never upload or print its serving config/secret references.
+        python3 - <<'PYTHON'
+        import json, os, re, shlex
+        from pathlib import Path
+        state = json.loads((Path(os.environ['RUNNER_TEMP']) / 'integration-canary-private.json').read_text())
+        image = state['image']
+        if not re.fullmatch(r'gcr\.io/based-hardware/[a-z0-9_.-]+@sha256:[0-9a-f]{64}', image):
+            raise ValueError('canary digest identity missing')
+        args = shlex.split(os.environ['EXISTING_VECTOR_ARGS'])
+        pairs = []
+        for offset in range(0, len(args), 2):
+            if args[offset] != '--service-image' or offset + 1 >= len(args):
+                raise ValueError('invalid release vector arguments')
+            if not args[offset + 1].startswith('backend-integration='):
+                pairs.extend(args[offset:offset + 2])
+        pairs.extend(['--service-image', 'backend-integration=' + image])
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write('release_vector_args=' + shlex.join(pairs) + '\n')
+        PYTHON
+      env:
+        EXISTING_VECTOR_ARGS: ${{ steps.service-images.outputs.release_vector_args }}
+
     - name: Render backend runtime env
       id: runtime-env
       shell: bash
@@ -683,9 +878,15 @@ runs:
         SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
         SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}
       run: |
+        canary_args=()
+        if [[ "${{ inputs.integration_canary }}" == true ]]; then
+          canary_args=(--integration-canary-state "$RUNNER_TEMP/integration-canary-private.json"
+                       --integration-canary-source "${{ inputs.admitted_sha }}")
+        fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/render_backend_runtime_env.py" \
           --env ${{ inputs.runtime_env }} \
           --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          "${canary_args[@]}" \
           --state-output "$RUNNER_TEMP/backend-runtime-env-state.json" >> "$GITHUB_OUTPUT"
 
     - name: Validate backend runtime env before deploy
@@ -693,27 +894,33 @@ runs:
       env:
         SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
       run: |
+        canary_args=()
+        if [[ "${{ inputs.integration_canary }}" == true ]]; then
+          canary_args=(--integration-canary-state "$RUNNER_TEMP/integration-canary-private.json"
+                       --integration-canary-source "${{ inputs.admitted_sha }}")
+        fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
           --env ${{ inputs.runtime_env }} \
           --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
           --check-workflows \
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          "${canary_args[@]}" \
           --cloud-run-state "$RUNNER_TEMP/backend-runtime-env-state.json"
 
     - name: Migrate legacy public Cloud Run bindings
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success()) }}
       shell: bash
-      run: >-
-        python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py"
-        --env ${{ inputs.runtime_env }}
-        --project="${{ inputs.project_id }}"
-        --region="${{ inputs.region }}"
-        --migrate-legacy-public-binding backend
-        --migrate-legacy-public-binding backend-sync
-        --migrate-legacy-public-binding backend-sync-backfill
-        --migrate-legacy-public-binding backend-integration
+      run: |
+        set -euo pipefail
+        args=()
+        for service in $SELECTED_CLOUD_RUN_SERVICES; do args+=(--migrate-legacy-public-binding "$service"); done
+        python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" \
+          --env "${{ inputs.runtime_env }}" --project "${{ inputs.project_id }}" --region "${{ inputs.region }}" "${args[@]}"
 
     - name: Check development Cloud Run runtime bindings
-      if: ${{ inputs.deploy_profile == 'auto-dev' }}
+      if: >-
+        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev') }}
       shell: bash
       run: >-
         python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py"
@@ -723,6 +930,7 @@ runs:
         --check-runtime-bindings
 
     - name: Deploy ${{ inputs.service }} to Cloud Run
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && (inputs.integration_only != 'true' && (success())) }}
       id: deploy-backend
       uses: google-github-actions/deploy-cloudrun@v3
       with:
@@ -732,7 +940,6 @@ runs:
         image: ${{ steps.service-images.outputs.backend }}
         no_traffic: true
         # Prod backend sizing is explicit so a fresh service cannot deploy defaults. Dev inherits.
-        # margin-20: 7d application memory p95 <=1.312GiB, max bucket <=1.710GiB; rollback 8Gi.
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.transcription_candidate_tag != '' && format('--tag={0}', inputs.transcription_candidate_tag) || '' }}
@@ -740,13 +947,15 @@ runs:
           --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
           ${{ steps.runtime-env.outputs.backend_identity_flags }}
-          ${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=4Gi --concurrency=20 --min-instances=3 --max-instances=100' || '' }}
+          ${{ inputs.runtime_env == 'prod' && '--cpu=2 --concurrency=20 --min-instances=3 --max-instances=100' || '' }}
+          ${{ inputs.runtime_env == 'prod' && format('--memory={0}', steps.ops-memory.outputs.backend) || '' }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_env_vars }}
           OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
         secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
 
     - name: Attach Managed Prometheus sidecar to ${{ inputs.service }} candidate
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && (inputs.integration_only != 'true' && (success())) }}
       id: attach-backend-gmp-sidecar
       shell: bash
       env:
@@ -770,6 +979,7 @@ runs:
         python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" "${args[@]}"
 
     - name: Capture ${{ inputs.service }} revision
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && (inputs.integration_only != 'true' && (success())) }}
       id: capture-backend-revision
       shell: bash
       run: |
@@ -783,24 +993,8 @@ runs:
     # commits that were not in production. The label cannot be corrected here,
     # so the fix is to publish a marker that is true by construction and then
     # prove it: read the value back off the revision that was actually created.
-    - name: Verify ${{ inputs.service }} release provenance
-      shell: bash
-      run: |
-        set -euo pipefail
-        expected='${{ inputs.admitted_sha }}'
-        revision='${{ steps.capture-backend-revision.outputs.revision }}'
-        actual="$(gcloud run revisions describe "$revision" \
-          --region='${{ inputs.region }}' --project='${{ inputs.project_id }}' --format=json \
-          | jq -r '[.spec.containers[0].env[]? | select(.name == "OMI_BACKEND_RELEASE_SHA") | .value] | first // ""')"
-        if [[ "$actual" != "$expected" ]]; then
-          echo "ERROR: ${{ inputs.service }} revision $revision reports release sha '$actual'," >&2
-          echo "       but this deploy admitted '$expected'. Refusing to report success:" >&2
-          echo "       an untrue provenance marker is worse than none." >&2
-          exit 1
-        fi
-        echo "$revision publishes OMI_BACKEND_RELEASE_SHA=$actual"
-
     - name: Deploy sync-backfill worker
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync-backfill') && (inputs.integration_only != 'true' && (success())) }}
       id: sync-backfill
       uses: ./.deploy-workflow-source/.github/actions/sync-backfill-lifecycle
       with:
@@ -814,11 +1008,42 @@ runs:
         identity_flags: ${{ steps.runtime-env.outputs.backend_sync_backfill_identity_flags }}
         forbidden_env_names: ${{ steps.runtime-env.outputs.backend_sync_backfill_forbidden_env_names }}
         remove_env_extra: ${{ steps.runtime-env.outputs.backend_sync_backfill_remove_env_extra }}
-        backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+        backfill_env_vars: |-
+          ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+          OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
         backfill_secrets: ${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}
         candidate_tag: ${{ inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '' }}
 
-    - name: Validate backend-sync memory trial
+    # This read-only producer runs independently of the omitted worker writer.
+    # Its ops file is staged from workflow control, never the application pin.
+    - name: Resolve selected sync routing
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync') && (inputs.integration_only != 'true' && success()) }}
+      id: sync-routing
+      uses: ./.deploy-workflow-source/.github/actions/sync-backfill-lifecycle
+      with:
+        mode: routing
+        require_existing_queue: ${{ inputs.cloud_run_service != 'all' }}
+        sync_env_vars: ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
+        project_id: ${{ inputs.project_id }}
+        region: ${{ inputs.region }}
+        service: ${{ inputs.service }}
+        backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+
+    - name: Compose exact selected sync routing expectations
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync') && (inputs.integration_only != 'true' && success()) }}
+      shell: bash
+      env:
+        SYNC_ROUTING_ENV: ${{ steps.sync-routing.outputs.sync_backfill_env_vars }}
+      run: |
+        set -euo pipefail
+        umask 077
+        printf '%s\n' "$SYNC_ROUTING_ENV" > "$RUNNER_TEMP/sync-routing.env"
+        python3 "$DEPLOY_CONTROL_SCRIPTS/sync_backfill_routing.py" \
+          --state "$RUNNER_TEMP/backend-runtime-env-state.json" \
+          --routing-env "$RUNNER_TEMP/sync-routing.env"
+
+    - name: Validate dev backend-sync memory trial
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync') && (inputs.runtime_env != 'prod' && inputs.integration_only != 'true' && success()) }}
       shell: bash
       env:
         SYNC_MEMORY: ${{ inputs.backend_sync_memory }}
@@ -826,12 +1051,14 @@ runs:
         case "$SYNC_MEMORY" in 4Gi|5Gi|6Gi|8Gi) ;; *) echo 'backend-sync memory must be 4Gi, 5Gi, 6Gi or 8Gi' >&2; exit 1 ;; esac
 
     - name: Resolve live sync maxScale
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync') && (inputs.integration_only != 'true' && (success())) }}
       id: live-max-scale
       shell: bash
       env:
         CLOUD_RUN_SERVICE: ${{ inputs.service }}-sync
         CLOUD_RUN_PROJECT: ${{ inputs.project_id }}
         CLOUD_RUN_REGION: ${{ inputs.region }}
+        DEFAULT_MAX_SCALE: '50'
       run: |
         set -euo pipefail
         # Service-level caps are the live ops control; older services may only have a revision cap.
@@ -840,20 +1067,21 @@ runs:
           --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
           --filter="metadata.name=$CLOUD_RUN_SERVICE" \
           --format='json(metadata.name,metadata.annotations,spec.template.metadata.annotations)' \
-          | jq -er --arg service "$CLOUD_RUN_SERVICE" '
+          | jq -er --arg service "$CLOUD_RUN_SERVICE" --arg default "$DEFAULT_MAX_SCALE" '
             [.[] | select(.metadata.name == $service)]
             | if length > 1 then error("Duplicate Cloud Run service") else
                 (.[0].metadata.annotations["run.googleapis.com/maxScale"]
                  // .[0].spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"]
-                 // "50") end
+                 // $default) end
             | if type == "string" and test("^[1-9][0-9]*$") then .
               else error("Invalid Cloud Run maxScale") end
             # Bound digits before shell arithmetic; oversized annotations use the fresh-service default.
-            | if length > 3 then "50"
-              elif tonumber > 500 then "50" else . end')"
+            | if length > 3 then $default
+              elif tonumber > 500 then $default else . end')"
         echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
 
     - name: Deploy ${{ inputs.service }}-sync to Cloud Run
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync') && (inputs.integration_only != 'true' && (success())) }}
       id: deploy-backend-sync
       uses: google-github-actions/deploy-cloudrun@v3
       with:
@@ -871,19 +1099,22 @@ runs:
           ${{ steps.runtime-env.outputs.backend_sync_identity_flags }}
           --cpu=2
           --max-instances=${{ steps.live-max-scale.outputs.max_scale }}
-          --memory=${{ inputs.backend_sync_memory }}
+          --memory=${{ inputs.runtime_env == 'prod' && steps.ops-memory.outputs.backend_sync || inputs.backend_sync_memory }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
-          ${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}
+          OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
+          ${{ steps.sync-routing.outputs.sync_backfill_env_vars }}
         secrets: ${{ steps.runtime-env.outputs.backend_sync_secrets }}
 
     - name: Capture ${{ inputs.service }}-sync revision
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync') && (inputs.integration_only != 'true' && (success())) }}
       id: capture-backend-sync-revision
       shell: bash
       run: |
         echo "revision=backend-sync-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
     - name: Provision sync-backfill lane
+      if: ${{ inputs.cloud_run_service == 'all' && (inputs.integration_only != 'true' && (success())) }}
       uses: ./.deploy-workflow-source/.github/actions/sync-backfill-lifecycle
       with:
         mode: ${{ (inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all') && 'platform' || 'dispatch' }}
@@ -893,12 +1124,14 @@ runs:
         service: ${{ inputs.service }}
         provision_sync_ledger_ttl: 'true'
         # The manifest names the live backfill queue the reconcile step manages.
-        backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+        backfill_env_vars: |-
+          ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+          OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
         provision_budget_alerts: ${{ inputs.sync_backfill_budget_alerts }}
         alert_notification_channels: ${{ inputs.sync_backfill_alert_channels }}
 
     - name: Configure production conversation-finalization Cloud Tasks queue
-      if: ${{ inputs.runtime_env == 'prod' && inputs.deploy_targets == 'all' }}
+      if: ${{ inputs.cloud_run_service == 'all' && (inputs.integration_only != 'true' && (inputs.runtime_env == 'prod' && inputs.deploy_targets == 'all')) }}
       shell: bash
       env:
         TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.listen_finalization_tasks_invoker_sa }}
@@ -938,7 +1171,7 @@ runs:
         fi
 
     - name: Configure production batch quarantine recovery queue
-      if: ${{ inputs.runtime_env == 'prod' }}
+      if: ${{ inputs.cloud_run_service == 'all' && (inputs.integration_only != 'true' && (inputs.runtime_env == 'prod')) }}
       shell: bash
       run: |
         set -euo pipefail
@@ -967,7 +1200,95 @@ runs:
           --max-attempts=5 \
           --min-backoff=5s --max-backoff=60s
 
+    - name: Configure production conversation-erasure Cloud Tasks queue
+      if: ${{ inputs.cloud_run_service == 'all' && (inputs.integration_only != 'true' && (inputs.runtime_env == 'prod')) }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Conversation batch purges and accepted-delete erasures, kept off the
+        # account-deletion queue (4 dispatches) so account wipes never wait
+        # behind them. 2026-11-14: a 533-conversation cleanup queued ~760 units
+        # there, draining 2-3/min; users' accepted deletes waited up to 40 min.
+        # 20 dispatches is ~5x that drain (~400 units/h arming at the cleanup's
+        # peak). Units serialize per account on its gate and each purge unit is
+        # at most 10 rows per 1.5 s, so the load stays far below Firestore write
+        # limits, and 20 fits one backend-sync instance (concurrency 20) and the
+        # handler's 20-worker erasure pool. Listing must succeed:
+        # permission/transport errors never imply absence.
+        queue=conversation-erasure
+        name="projects/${{ inputs.project_id }}/locations/${{ inputs.region }}/queues/$queue"
+        existing=$(gcloud tasks queues list \
+          --location="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --filter="name=$name" --format='value(name)')
+        operation=create
+        if [[ "$existing" == "$name" || "$existing" == "$queue" ]]; then
+          operation=update
+        elif [[ -n "$existing" ]]; then
+          echo 'Unexpected conversation-erasure queue inventory' >&2
+          exit 1
+        fi
+        gcloud tasks queues "$operation" "$queue" \
+          --location="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --max-concurrent-dispatches=20 \
+          --max-dispatches-per-second=5 \
+          --max-attempts=5 \
+          --min-backoff=5s --max-backoff=300s
+
+    - name: Resolve live integration maxScale
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-integration') && (inputs.integration_only != 'true' && (inputs.integration_canary != 'true')) }}
+      id: live-integration-max-scale
+      shell: bash
+      env:
+        CLOUD_RUN_SERVICE: ${{ inputs.service }}-integration
+        CLOUD_RUN_PROJECT: ${{ inputs.project_id }}
+        CLOUD_RUN_REGION: ${{ inputs.region }}
+        DEFAULT_MAX_SCALE: ${{ inputs.runtime_env == 'prod' && '35' || '50' }}
+      run: |
+        set -euo pipefail
+        # Integration carries its cap on the serving revision (no service cap), so a capacity revision's
+        # cap survives the next train instead of being reset to the former 35 literal (2026-11-20).
+        # The cap is the minimum of the service cap (when set) and the cap of every revision
+        # receiving traffic (the headroom gate's min-of-caps rule), never the latest template (it can
+        # be a no-traffic candidate). Unlike the gate, which refuses these cases, an uncapped
+        # receiving revision contributes the default (35 in prod), and with no service cap and no
+        # receiving revision (including a fresh service) the cap is the default. A cap over 500 also
+        # falls back to the default; that bound is the resolver's own, not the gate's. Each cap is
+        # validated whole before any arithmetic. Any lookup failure stops the deploy.
+        LISTING="$(gcloud run services list \
+          --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
+          --filter="metadata.name=$CLOUD_RUN_SERVICE" \
+          --format='json(metadata.name,metadata.annotations,status.traffic)')"
+        PLAN="$(jq -ec --arg service "$CLOUD_RUN_SERVICE" '
+          [.[] | select(.metadata.name == $service)]
+          | if length > 1 then error("Duplicate Cloud Run service")
+            elif length == 0 then {service: null, revisions: []}
+            else {service: .[0].metadata.annotations["run.googleapis.com/maxScale"],
+                  revisions: [.[0].status.traffic[]? | select((.percent // 0) > 0) | .revisionName]} end
+          | if any(.revisions[]; (type == "string" and test("\\A[a-z][a-z0-9-]{0,62}\\z")) | not)
+              then error("Invalid serving revision") else . end' <<< "$LISTING")"
+        CAPS="$(jq -c '[.service | select(. != null)]' <<< "$PLAN")"
+        REVISIONS="$(jq -r '.revisions[]' <<< "$PLAN")"
+        while IFS= read -r REVISION; do
+          [[ -n "$REVISION" ]] || continue
+          ANNOTATIONS="$(gcloud run revisions describe "$REVISION" \
+            --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
+            --format='json(metadata.annotations)')"
+          CAPS="$(jq -ec --argjson revision "$ANNOTATIONS" --arg default "$DEFAULT_MAX_SCALE" \
+            '. + [$revision.metadata.annotations["autoscaling.knative.dev/maxScale"] // $default]' <<< "$CAPS")"
+        done <<< "$REVISIONS"
+        MAX_SCALE="$(jq -er --arg default "$DEFAULT_MAX_SCALE" '
+          if length == 0 then [$default] else . end
+          | if all(.[]; type == "string" and test("\\A[1-9][0-9]*\\z")) then .
+            else error("Invalid Cloud Run maxScale") end
+          # Bound digits before shell arithmetic; oversized caps use the fresh-service default.
+          | map(if length > 3 then $default elif tonumber > 500 then $default else . end)
+          | min_by(tonumber)' <<< "$CAPS")"
+        echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
+
     - name: Deploy ${{ inputs.service }}-integration to Cloud Run
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-integration') && (inputs.integration_only != 'true' && (inputs.integration_canary != 'true')) }}
       id: deploy-backend-integration
       uses: google-github-actions/deploy-cloudrun@v3
       with:
@@ -987,24 +1308,42 @@ runs:
           --memory=${{ inputs.runtime_env == 'prod' && '4Gi' || '2Gi' }}
           --concurrency=${{ inputs.runtime_env == 'prod' && '80' || '40' }}
           --min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}
-          --max-instances=${{ inputs.runtime_env == 'prod' && '35' || '50' }}
+          --max-instances=${{ steps.live-integration-max-scale.outputs.max_scale }}
           --no-cpu-throttling
-        env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
+        env_vars: |-
+          ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
+          OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
         secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
 
+    - name: Create ruled integration candidate by CAS from serving configuration
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-integration') && (inputs.integration_canary == 'true') }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" candidate \
+          --state "$RUNNER_TEMP/integration-canary-private.json" \
+          --runtime-state "$RUNNER_TEMP/backend-runtime-env-state.json"
+
     - name: Capture ${{ inputs.service }}-integration revision
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-integration') && success() }}
       id: capture-backend-integration-revision
       shell: bash
       run: |
         echo "revision=backend-integration-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
     - name: Attach Managed Prometheus to sync and integration candidates
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success()) }}
       shell: bash
       env:
         GMP_CANDIDATE_TAG: ${{ inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '' }}
       run: |
         set -euo pipefail
-        for service in backend-sync backend-sync-backfill backend-integration; do
+        for service in $SELECTED_CLOUD_RUN_SERVICES; do
+          [[ "$service" != backend ]] || continue
+          # The CAS candidate already retains the serving collector exactly;
+          # reattaching it here would create a second integration revision.
+          if [[ "$service" == backend-integration && "${{ inputs.integration_canary }}" == true ]]; then continue; fi
           ingress=backend-1
           if [[ "$service" == backend-integration ]]; then ingress=backend-integration; fi
           args=(
@@ -1023,20 +1362,43 @@ runs:
         done
 
     - name: Wait for Cloud Run revisions to become ready
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success()) }}
       shell: bash
       run: |
+        scope_args=()
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then scope_args+=(--wait-revision-ready backend=${{ steps.capture-backend-revision.outputs.revision }}); fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then scope_args+=(--wait-revision-ready backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }}); fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync-backfill "* ]]; then scope_args+=(--wait-revision-ready backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}); fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-integration "* ]]; then scope_args+=(--wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}); fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" \
+          "${scope_args[@]}" \
           --env ${{ inputs.runtime_env }} \
           --project ${{ inputs.project_id }} \
-          --region ${{ inputs.region }} \
-          --wait-revision-ready backend=${{ steps.capture-backend-revision.outputs.revision }} \
-          --wait-revision-ready backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
-          --wait-revision-ready backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }} \
-          --wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
+          --region ${{ inputs.region }}
+
+    - name: Verify ${{ inputs.service }} release provenance
+      if: ${{ inputs.integration_only != 'true' && success() }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        expected='${{ inputs.admitted_sha }}'
+        for service in $SELECTED_CLOUD_RUN_SERVICES; do
+          revision="$service-${{ steps.image-tag.outputs.revision_suffix }}"
+          actual="$(gcloud run revisions describe "$revision" \
+            --region='${{ inputs.region }}' --project='${{ inputs.project_id }}' \
+            --format='json(metadata.name,metadata.labels,spec.containers[].env)' \
+            | jq -er --arg revision "$revision" --arg service "$service" '
+                select(.metadata.name == $revision and .metadata.labels["serving.knative.dev/service"] == $service)
+                | [.spec.containers[].env[]? | select(.name == "OMI_BACKEND_RELEASE_SHA") | .value]
+                | unique | if length == 1 then .[0] else error("source stamp missing or ambiguous") end')"
+          [[ "$actual" == "$expected" ]] || { echo "Candidate source stamp mismatch: $service" >&2; exit 1; }
+        done
 
     - name: Capture exact no-traffic candidate URLs
       id: candidate-urls
-      if: ${{ inputs.deploy_profile == 'auto-dev' }}
+      if: >-
+        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev') }}
       shell: bash
       run: |
         set -euo pipefail
@@ -1083,19 +1445,40 @@ runs:
           echo "backend_integration_audience=${backend_integration_audience}"
         } >> "$GITHUB_OUTPUT"
 
+    - name: Wait for integration-only candidate readiness
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-integration') && (inputs.integration_only == 'true') }}
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" \
+          --env prod --project based-hardware --region us-central1 \
+          --wait-revision-ready backend-integration=backend-integration-${{ steps.image-tag.outputs.revision_suffix }}
+
     - name: Validate backend runtime env after deploy
       shell: bash
       env:
         SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
       run: |
+        canary_args=()
+        if [[ "${{ inputs.integration_canary }}" == true ]]; then
+          canary_args=(--integration-canary-state "$RUNNER_TEMP/integration-canary-private.json"
+                       --integration-canary-source "${{ inputs.admitted_sha }}")
+        fi
+        routing_args=()
+        if [[ -f "$RUNNER_TEMP/sync-routing.env" ]]; then
+          routing_args=(--sync-routing-env-file "$RUNNER_TEMP/sync-routing.env")
+        fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
           --env ${{ inputs.runtime_env }} \
           --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
           --check-workflows \
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          "${canary_args[@]}" "${routing_args[@]}" \
+          --cloud-run-service "${{ inputs.cloud_run_service }}" \
           --check-live-cloud-run
 
     - name: Report live Cloud Run env drift from manifest
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success()) }}
       shell: bash
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/check_cloud_run_env_drift.py" \
@@ -1103,11 +1486,13 @@ runs:
           --project ${{ inputs.project_id }} \
           --region ${{ inputs.region }} \
           --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          ${{ inputs.cloud_run_service != 'all' && format('--service {0}', inputs.cloud_run_service) || '' }} \
           --rendered-state "$RUNNER_TEMP/backend-runtime-env-state.json" \
           --summary-file "$GITHUB_STEP_SUMMARY"
 
     - name: Gate candidate revisions with the acceptance manifest
-      if: ${{ inputs.deploy_profile == 'auto-dev' }}
+      if: >-
+        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev') }}
       shell: bash
       env:
         PROJECT_ID: ${{ inputs.project_id }}
@@ -1130,7 +1515,8 @@ runs:
 
     - name: Resolve transcription candidate URL
       id: transcription-candidate
-      if: ${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}
+      if: >-
+        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'manual' && inputs.environment == 'development') }}
       shell: bash
       run: |
         candidate_url="$(python3 "$DEPLOY_CONTROL_SCRIPTS/resolve_cloud_run_tagged_url.py" \
@@ -1142,7 +1528,8 @@ runs:
         printf 'url=%s\n' "$candidate_url" >> "$GITHUB_OUTPUT"
 
     - name: Gate backend candidate on known audio
-      if: ${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}
+      if: >-
+        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'manual' && inputs.environment == 'development') }}
       uses: ./.deploy-workflow-source/.github/actions/transcription-release-candidate-probe
       with:
         probe_fleet: 'true'
@@ -1160,13 +1547,17 @@ runs:
     - name: Accept no-traffic Cloud Run candidate
       id: verify-cloud-run-candidate
       shell: bash
+      # A legitimate receiver URL change fails closed until this pin changes in a reviewed PR.
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
+          ${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync-backfill') && '--backfill-binding-sha256 3a180b6e241438dbc43a7292b07de3866e95a35af1bb08210be1d05e80017ceb' || '' }} \
+          ${{ inputs.integration_only == 'true' && '--integration-only' || '' }} \
           --candidate \
           --cloud-run-only \
+          --cloud-run-service "${{ inputs.cloud_run_service }}" \
           --commit-sha "${{ inputs.admitted_sha }}" \
           --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
-          ${{ steps.service-images.outputs.release_vector_args }} \
+          ${{ steps.integration-transport-prepare.outputs.release_vector_args || steps.integration-canary-prepare.outputs.release_vector_args || steps.service-images.outputs.release_vector_args }} \
           --deploy-run-id "${{ github.run_id }}" \
           --deploy-run-attempt "${{ github.run_attempt }}" \
           --project "${{ inputs.project_id }}" \
@@ -1175,7 +1566,8 @@ runs:
           --evidence-path ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-cloud-run-candidate-release-vector.json' || 'artifacts/backend-cloud-run-candidate-release-vector.json' }}
 
     - name: Remove passed transcription candidate tag
-      if: ${{ success() && inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success() && inputs.deploy_profile == 'manual' && inputs.environment == 'development') }}
       shell: bash
       run: |
         gcloud run services update-traffic ${{ inputs.service }} \
@@ -1186,8 +1578,7 @@ runs:
 
     - name: Remove failed transcription candidate tag
       if: >-
-        ${{ failure() && steps.deploy-backend.outcome == 'success' &&
-        inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}
+        ${{ inputs.integration_only != 'true' && (failure() && steps.deploy-backend.outcome == 'success' && inputs.deploy_profile == 'manual' && inputs.environment == 'development') }}
       shell: bash
       run: |
         gcloud run services update-traffic ${{ inputs.service }} \
@@ -1197,11 +1588,13 @@ runs:
           --quiet
 
     - name: Install Helm
-      if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}
+      if: >-
+        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all') }}
       uses: azure/setup-helm@v5
 
     - name: Apply non-secret backend runtime config
-      if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}
+      if: >-
+        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all') }}
       shell: bash
       env:
         ENVIRONMENT: ${{ inputs.runtime_env }}
@@ -1233,7 +1626,8 @@ runs:
       run: bash "$DEPLOY_CONTROL_SCRIPTS/deploy-backend-config.sh"
 
     - name: Deploy backend-secrets to GKE
-      if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}
+      if: >-
+        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all') }}
       shell: bash
       env:
         ENVIRONMENT: ${{ inputs.runtime_env }}
@@ -1243,7 +1637,8 @@ runs:
       run: bash "$DEPLOY_CONTROL_SCRIPTS/deploy-backend-secrets.sh"
 
     - name: Deploy ${{ env.SERVICE }}-listen to GKE using Helm
-      if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}
+      if: >-
+        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all') }}
       shell: bash
       run: |
         helm -n ${{ inputs.runtime_env }}-omi-backend upgrade --install ${{ inputs.runtime_env }}-omi-backend-listen ./backend/charts/backend-listen \
@@ -1260,14 +1655,18 @@ runs:
         python3 "$DEPLOY_CONTROL_SCRIPTS/deploy_status_report.py" --env ${{ inputs.runtime_env }} --include-gke --gke-service backend-listen
 
     - name: Verify exact candidate composition
-      if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}
+      if: >-
+        ${{ inputs.integration_only == 'true' || inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}
       shell: bash
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
+          ${{ inputs.integration_only == 'true' && '--integration-only' || '' }} \
           --candidate \
+          ${{ inputs.integration_only == 'true' && '--cloud-run-only' || '' }} \
+          --cloud-run-service "${{ inputs.cloud_run_service }}" \
           --commit-sha "${{ inputs.admitted_sha }}" \
           --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
-          ${{ steps.service-images.outputs.release_vector_args }} \
+          ${{ steps.integration-transport-prepare.outputs.release_vector_args || steps.integration-canary-prepare.outputs.release_vector_args || steps.service-images.outputs.release_vector_args }} \
           --deploy-run-id "${{ github.run_id }}" \
           --deploy-run-attempt "${{ github.run_attempt }}" \
           --project "${{ inputs.project_id }}" \
@@ -1276,34 +1675,84 @@ runs:
           --evidence-path ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-deployment-composition.json' || 'artifacts/backend-deployment-composition.json' }}
 
     - name: Capture Cloud Run pre-promotion traffic snapshot
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success()) }}
       id: cloud-run-traffic-snapshot
       shell: bash
+      env:
+        CLOUD_RUN_SERVICE: ${{ inputs.cloud_run_service }}
+        ROLLBACK_REVISION: ${{ inputs.rollback_revision }}
       run: |
+        set -euo pipefail
+        scope_args=()
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then scope_args+=(--service backend); fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then scope_args+=(--service backend-sync); fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync-backfill "* ]]; then scope_args+=(--service backend-sync-backfill); fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-integration "* ]]; then scope_args+=(--service backend-integration); fi
+        if [[ "${{ inputs.deploy_profile }}" == manual && "$CLOUD_RUN_SERVICE" != all ]]; then
+          scope_args+=(--expected-serving-revision "$ROLLBACK_REVISION")
+        fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" capture \
+          "${scope_args[@]}" \
           --project "${{ inputs.project_id }}" \
           --region "${{ inputs.region }}" \
-          --service backend \
-          --service backend-sync \
-          --service backend-sync-backfill \
-          --service backend-integration \
           --output ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-cloud-run-pre-promotion-traffic-snapshot.json' || 'artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json' }}
-
     - name: Verify validated revisions are still current
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success()) }}
       shell: bash
       run: |
-        test "$(gcloud run services describe backend --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
-        test "$(gcloud run services describe backend-sync --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
-        test "$(gcloud run services describe backend-sync-backfill --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.sync-backfill.outputs.revision }}"
-        test "$(gcloud run services describe backend-integration --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then
+          test "$(gcloud run services describe backend --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
+        fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then
+          test "$(gcloud run services describe backend-sync --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
+        fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync-backfill "* ]]; then
+          test "$(gcloud run services describe backend-sync-backfill --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.sync-backfill.outputs.revision }}"
+        fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-integration "* ]]; then
+          test "$(gcloud run services describe backend-integration --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
+        fi
+
+    - name: Stage integration-only traffic and persist verified hold
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-integration') && (inputs.integration_only == 'true') }}
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" stage \
+          --state "$RUNNER_TEMP/integration-canary-private.json"
+
+    - name: Continue integration-only traffic with HTTP and post-wrap guards
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-integration') && (inputs.integration_only == 'true') }}
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" complete \
+          --state "$RUNNER_TEMP/integration-canary-private.json"
 
     - name: Shift Cloud Run traffic to validated revisions
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success()) }}
       id: shift-cloud-run-traffic
       shell: bash
       run: |
-        gcloud run services update-traffic backend --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
-        gcloud run services update-traffic backend-sync --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
-        gcloud run services update-traffic backend-sync-backfill --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.sync-backfill.outputs.revision }}=100 --quiet
-        gcloud run services update-traffic backend-integration --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
+        set -euo pipefail
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then
+          gcloud run services update-traffic backend --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
+        fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then
+          gcloud run services update-traffic backend-sync --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
+        fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync-backfill "* ]]; then
+          gcloud run services update-traffic backend-sync-backfill --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.sync-backfill.outputs.revision }}=100 --quiet
+        fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-integration "* ]]; then
+        if [[ "${{ inputs.integration_canary }}" == true ]]; then
+          python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" promote \
+            --state "$RUNNER_TEMP/integration-canary-private.json"
+        else
+          gcloud run services update-traffic backend-integration --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
+        fi
+        fi
 
     - name: Verify serving backend release vector
       id: verify-serving-release-vector
@@ -1314,9 +1763,11 @@ runs:
           CLOUD_RUN_ONLY="--cloud-run-only"
         fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
+          ${{ inputs.integration_only == 'true' && '--integration-only' || '' }} \
+          --cloud-run-service "${{ inputs.cloud_run_service }}" \
           --commit-sha "${{ inputs.admitted_sha }}" \
           --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
-          ${{ steps.service-images.outputs.release_vector_args }} \
+          ${{ steps.integration-transport-prepare.outputs.release_vector_args || steps.integration-canary-prepare.outputs.release_vector_args || steps.service-images.outputs.release_vector_args }} \
           --deploy-run-id "${{ github.run_id }}" \
           --deploy-run-attempt "${{ github.run_attempt }}" \
           --project "${{ inputs.project_id }}" \
@@ -1327,11 +1778,12 @@ runs:
 
     - name: Smoke promoted production serving API
       id: smoke-promoted-production-serving-api
-      if: ${{ inputs.deploy_profile == 'manual' && inputs.environment == 'prod' }}
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && (inputs.deploy_profile == 'manual' && inputs.environment == 'prod') }}
       shell: bash
       env:
         PROBE_SECRET_PROJECT: ${{ inputs.project_id }}
         FIREBASE_AUTH_PROJECT_ID: based-hardware
+        SMOKE_CLOUD_RUN_SERVICE: ${{ inputs.cloud_run_service }}
       run: |
         set -euo pipefail
         umask 077
@@ -1342,60 +1794,184 @@ runs:
           --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
           --token-output "$token_file"
         reservation_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+          --connect-timeout 5 --max-time 10 \
           --request POST https://api.omi.me/v2/desktop/beta/candidates/reserve \
           --header 'Content-Type: application/json' --data '{"tag":"v0.0.0+1-macos"}')"
         # A schema-valid inert tag reaches the authorization wall without reserving a real candidate.
         test "$reservation_status" = 401
-        python3 "$DEPLOY_CONTROL_SCRIPTS/transcription_capability_probe.py" \
-          --candidate-api-url https://api.omi.me \
-          --bearer-token-file "$token_file" --json-only
+        if [[ "$SMOKE_CLOUD_RUN_SERVICE" != backend ]]; then
+          python3 "$DEPLOY_CONTROL_SCRIPTS/transcription_capability_probe.py" \
+            --candidate-api-url https://api.omi.me \
+            --bearer-token-file "$token_file" --json-only
+          exit
+        fi
 
-    - name: Smoke What Matters Now datastore query
-      id: smoke-what-matters-now-datastore-query
-      if: ${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}
-      shell: bash
-      env:
-        PROJECT_ID: ${{ inputs.project_id }}
-      run: |
-        set -euo pipefail
-        ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project="$PROJECT_ID")"
-        export ADMIN_KEY
-        trap 'unset ADMIN_KEY' EXIT
-        # api.omi.dev has never resolved (NXDOMAIN), so this smoke could not reach
-        # anything; api.omiapi.com is development's real public API host, matching
-        # the rest of the dev domain family (parakeet/nllb/pusher.omiapi.com).
-        python3 "$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url https://api.omiapi.com
+        # Replace the shell so the runner's cancellation signal reaches the retry delay.
+        exec python3 -I - "$DEPLOY_CONTROL_SCRIPTS" "$token_file" <<'PY'
+        import json
+        from pathlib import Path
+        import signal
+        import subprocess
+        import sys
+        import time
+
+        token_file = Path(sys.argv[2])
+        command = [
+            sys.executable, "-I", str(Path(sys.argv[1]) / "transcription_capability_probe.py"),
+            "--candidate-api-url", "https://api.omi.me",
+            "--bearer-token-file", str(token_file),
+            "--timeout-seconds", "30",
+            "--no-redirects", "--json-only",
+        ]
+
+        def stop(signum, _frame):
+            raise SystemExit(128 + signum)
+
+        try:
+            signal.signal(signal.SIGTERM, stop)
+            deadline = time.monotonic() + 65
+            for attempt in (1, 2):
+                started = time.monotonic()
+                remaining = deadline - started
+                if remaining <= 0:
+                    sys.exit("Transcription smoke exceeded its 65-second deadline")
+                try:
+                    probe = subprocess.run(
+                        command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=remaining,
+                    )
+                except subprocess.TimeoutExpired:
+                    sys.exit(f"Transcription smoke attempt {attempt} exceeded the 65-second deadline")
+                if probe.returncode not in (0, 1):
+                    sys.exit(f"Transcription probe exited with status {probe.returncode}")
+                try:
+                    report = json.loads(probe.stdout)
+                    status = report["status"]
+                    details = report["checks"][0]["details"]
+                except (ValueError, KeyError, IndexError, TypeError):
+                    sys.exit("Transcription probe did not emit its redacted result")
+                print(json.dumps({
+                    **report,
+                    "attempt": attempt,
+                    "elapsed_seconds": round(time.monotonic() - started, 3),
+                }), flush=True)
+                if probe.returncode == 0 and status == "PASS":
+                    sys.exit(0)
+                if (
+                    probe.returncode != 1 or status != "FAIL" or attempt == 2
+                    or details.get("error_kind") != "network_error" or "http_status" in details
+                ):
+                    sys.exit(1)
+                if deadline - time.monotonic() <= 5:
+                    sys.exit("Transcription smoke has no time for its retry")
+                print("Retrying transcription smoke in 5 seconds after a transport failure", flush=True)
+                time.sleep(5)
+        finally:
+            token_file.unlink(missing_ok=True)
+        PY
+
+    # SCA-3681: The manual dev datastore smoke is suspended pending a verified
+    # dev endpoint. api.omiapi.com forwards Beta clients to production.
 
     - name: Restore Cloud Run traffic snapshot after failed promotion
       if: >-
-        ${{ inputs.deploy_profile == 'auto-dev' && (failure() || cancelled()) &&
-        steps.cloud-run-traffic-snapshot.outcome == 'success' &&
-        (steps.shift-cloud-run-traffic.outcome == 'failure' ||
-        steps.verify-serving-release-vector.outcome == 'failure') }}
+        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev' && (failure() || cancelled()) && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure')) }}
       shell: bash
       run: |
+        set -euo pipefail
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" restore \
           --snapshot artifacts/dev-backend-cloud-run-pre-promotion-traffic-snapshot.json \
+          --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
           --evidence-path artifacts/dev-backend-cloud-run-traffic-restore.json
 
     - name: Restore Cloud Run traffic snapshot after failed promotion
       if: >-
-        ${{ inputs.deploy_profile == 'manual' && (failure() || cancelled()) &&
-        steps.cloud-run-traffic-snapshot.outcome == 'success' &&
-        (steps.shift-cloud-run-traffic.outcome == 'failure' ||
-        steps.verify-serving-release-vector.outcome == 'failure' ||
-        steps.smoke-promoted-production-serving-api.outcome == 'failure' ||
-        steps.smoke-what-matters-now-datastore-query.outcome == 'failure') }}
+        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'manual' && (failure() || cancelled()) && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.shift-cloud-run-traffic.outcome == 'cancelled' || steps.verify-serving-release-vector.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'cancelled' || steps.smoke-promoted-production-serving-api.outcome == 'failure' || steps.smoke-promoted-production-serving-api.outcome == 'cancelled')) }}
       shell: bash
       run: |
+        set -euo pipefail
+        canary_args=()
+        rollback_rc=0
+        if [[ "${{ inputs.integration_canary }}" == true ]]; then
+          python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" rollback \
+            --state "$RUNNER_TEMP/integration-canary-private.json" || rollback_rc=$?
+          canary_args=(--exclude-service backend-integration)
+        fi
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" restore \
           --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \
-          --evidence-path artifacts/backend-cloud-run-traffic-restore.json
+          --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
+          "${canary_args[@]}" \
+          --evidence-path artifacts/backend-cloud-run-traffic-restore.json || rollback_rc=$?
+        exit "$rollback_rc"
 
-    - name: Cloud Run deploy status report
-      if: always()
+    - name: Recover integration-only retained revision after failure or cancellation
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-integration') && (always() && inputs.integration_only == 'true' && (failure() || cancelled()) && steps.integration-transport-prepare.outcome == 'success') }}
       shell: bash
       run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" rollback \
+          --state "$RUNNER_TEMP/integration-canary-private.json"
+
+    - name: Record ruled integration canary metadata receipt
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-integration') && (always() && inputs.integration_canary == 'true') }}
+      shell: bash
+      run: |
+        python3 - <<'PYTHON'
+        import json, os
+        from pathlib import Path
+        source = Path(os.environ['RUNNER_TEMP']) / 'integration-canary-private.json'
+        if source.exists():
+            state = json.loads(source.read_text())
+            receipt = {key: state.get(key) for key in
+                       ('source', 'image', 'candidate', 'candidate_uid', 'rollback', 'run_id', 'run_attempt',
+                        'phase', 'prepared_at', 'moved_at', 'baseline_hash', 'metrics_read_at',
+                        'profile', 'control_sha', 'post_wrap_guard')}
+            if state.get('profile') == 'integration-only':
+                receipt['inverse'] = state.get('inverse')
+                decision = state.get('discovery', {})
+                receipt['discovery'] = {key: decision.get(key) for key in
+                                        ('state', 'binding_sha256', 'artifact_digests', 'owner', 'rollback_executor')}
+                if state.get('post_wrap_guard') == 'external':
+                    handoff = state.get('external_handoff', {})
+                    receipt['external_handoff'] = {key: handoff.get(key) for key in
+                        ('project', 'region', 'service', 'source', 'image', 'revision', 'revision_uid',
+                         'generation', 'config_sha256', 'run_id', 'run_attempt', 'control_sha',
+                         'receiving_verified_at', 'traffic_percent', 'sweep_page_rows', 'tick_seconds',
+                         'provider_release', 'rollback_revision')}
+            receipt['moves'] = [{key: row.get(key) for key in ('percent', 'verified_at')}
+                                for row in state.get('moves', [])]
+            receipt['health'] = {key: state.get('health', {}).get(key)
+                                 for key in ('state', 'error_share', 'error_threshold')}
+            receipt['baseline'] = {key: state.get('baseline', {}).get(key)
+                                   for key in ('end', 'read_at', 'share', 'cpu_p95')}
+            receipt['intent'] = {key: (state.get('intent') or {}).get(key) for key in ('kind', 'status', 'at')}
+            target = Path('artifacts/integration-canary-receipt.json')
+            target.parent.mkdir(exist_ok=True)
+            target.write_text(json.dumps(receipt, sort_keys=True, allow_nan=False) + '\n')
+        PYTHON
+
+    - name: Cloud Run deploy status report
+      if: >-
+        ${{ inputs.integration_only != 'true' && (always()) }}
+      shell: bash
+      run: |
+        scope_args=()
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then scope_args+=(--cloud-run-service backend); fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then scope_args+=(--cloud-run-service backend-sync); fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync-backfill "* ]]; then scope_args+=(--cloud-run-service backend-sync-backfill); fi
+        if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-integration "* ]]; then scope_args+=(--cloud-run-service backend-integration); fi
+        if [[ "${{ steps.shift-cloud-run-traffic.outcome }}" == success && " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then scope_args+=(--expect-cloud-run-traffic backend=${{ steps.capture-backend-revision.outputs.revision }}); fi
+        if [[ "${{ steps.shift-cloud-run-traffic.outcome }}" == success && " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then scope_args+=(--expect-cloud-run-traffic backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }}); fi
+        if [[ "${{ steps.shift-cloud-run-traffic.outcome }}" == success && " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync-backfill "* ]]; then scope_args+=(--expect-cloud-run-traffic backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}); fi
+        if [[ "${{ steps.shift-cloud-run-traffic.outcome }}" == success && " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-integration "* ]]; then scope_args+=(--expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}); fi
         set -o pipefail
         if [[ "${{ steps.verify-cloud-run-candidate.outcome }}" != "success" ]]; then
           echo "Cloud Run candidate verification failed before traffic promotion; candidate evidence follows."
@@ -1405,23 +1981,12 @@ runs:
           fi
         fi
         expected_traffic=()
-        if [[ "${{ steps.shift-cloud-run-traffic.outcome }}" == "success" ]]; then
-          expected_traffic=(
-            --expect-cloud-run-traffic backend=${{ steps.capture-backend-revision.outputs.revision }}
-            --expect-cloud-run-traffic backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }}
-            --expect-cloud-run-traffic backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}
-            --expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
-          )
-        fi
         report_args=(
           --env ${{ inputs.runtime_env }}
           --project ${{ inputs.project_id }}
           --region ${{ inputs.region }}
+          "${scope_args[@]}"
           --include-cloud-run
-          --cloud-run-service backend
-          --cloud-run-service backend-sync
-          --cloud-run-service backend-sync-backfill
-          --cloud-run-service backend-integration
         )
         if [[ "${{ inputs.deploy_profile }}" == "auto-dev" ]]; then
           python3 "$DEPLOY_CONTROL_SCRIPTS/deploy_status_report.py" \
@@ -1446,6 +2011,35 @@ runs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
         fi
+    - name: Record verified Cloud Run selection custody
+      if: ${{ success() && steps.verify-serving-release-vector.outcome == 'success' }}
+      shell: bash
+      env:
+        ADMITTED_SOURCE: ${{ inputs.admitted_sha }}
+        WORKFLOW_CONTROL: ${{ github.workflow_sha }}
+        CLOUD_RUN_SELECTION: ${{ inputs.cloud_run_service }}
+      run: |
+        python3 - <<'PYTHON'
+        import json, os, re
+        from pathlib import Path
+        source, control, selection = (os.environ[k] for k in ('ADMITTED_SOURCE', 'WORKFLOW_CONTROL', 'CLOUD_RUN_SELECTION'))
+        if not all(re.fullmatch('[0-9a-f]{40}', value) for value in (source, control)):
+            raise ValueError('immutable selection source required')
+        if selection not in ('all', 'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+            raise ValueError('invalid selection')
+        target = Path('artifacts/cloud-run-selection.json')
+        target.parent.mkdir(exist_ok=True)
+        target.write_text(json.dumps(dict(schema=1, source=source, control=control, selection=selection,
+            run_id=int(os.environ['GITHUB_RUN_ID']), run_attempt=int(os.environ['GITHUB_RUN_ATTEMPT'])), sort_keys=True)+'\n')
+        PYTHON
+
+    - name: Upload verified Cloud Run selection custody
+      if: ${{ success() && steps.verify-serving-release-vector.outcome == 'success' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: cloud-run-selection-${{ github.run_id }}-${{ github.run_attempt }}
+        path: artifacts/cloud-run-selection.json
+        if-no-files-found: error
 
     - name: Upload backend release-vector evidence
       if: always()
@@ -1460,9 +2054,12 @@ runs:
           ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-candidate-acceptance.json' || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-candidate-status.json' || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-cloud-run-traffic-restore.json' || 'artifacts/backend-cloud-run-traffic-restore.json' }}
+          artifacts/integration-canary-receipt.json
         if-no-files-found: warn
 
     - name: Show Output
+      if: >-
+        ${{ inputs.integration_only != 'true' && (success()) }}
       shell: bash
       run: |
         if [[ "${{ inputs.deploy_profile }}" == "auto-dev" ]]; then
@@ -1472,16 +2069,18 @@ runs:
         fi
 
     - name: Generate deployment summary
-      if: always() && inputs.deploy_profile == 'manual' && inputs.environment == 'prod'
+      if: >-
+        ${{ inputs.integration_only != 'true' && (always() && inputs.deploy_profile == 'manual' && inputs.environment == 'prod') }}
       uses: ./.deploy-workflow-source/.github/actions/deployment-summary
       with:
         environment: ${{ inputs.environment }}
         release_version: ${{ inputs.release_version }}
         status: ${{ job.status }}
-        service: ${{ inputs.service }}
+        service: ${{ inputs.cloud_run_service != 'all' && inputs.cloud_run_service || inputs.service }}
 
     - name: Notify deployment status on Telegram
-      if: always() && inputs.deploy_profile == 'manual' && inputs.environment == 'prod'
+      if: >-
+        ${{ inputs.integration_only != 'true' && (always() && inputs.deploy_profile == 'manual' && inputs.environment == 'prod') }}
       uses: ./.deploy-workflow-source/.github/actions/deployment-notifier
       with:
         environment: ${{ inputs.environment }}

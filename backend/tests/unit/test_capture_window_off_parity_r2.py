@@ -29,7 +29,6 @@ def test_graduated_resolution_receipt(env, verified_audio, monkeypatch):
 
     monkeypatch.setenv('LIVE_CAPTURE_WINDOW_STRICT_PROJECTION', 'false')
     monkeypatch.setenv('LIVE_CAPTURE_WINDOW_RETENTION', 'false')
-    monkeypatch.setenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', 'false')
     rows = []
     before = old_counters()
     for scope in ('sync', 'v2'):

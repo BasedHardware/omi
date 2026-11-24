@@ -65,7 +65,13 @@ const uiCleanupWalk = DemoWalk(
   ],
 );
 
-const demoWalks = <DemoWalk>[uiCleanupWalk];
+const homeFeedWalk = DemoWalk(
+  id: 'home-feed',
+  title: 'Buffered compact Home feed',
+  steps: [DemoWalkStep('conversations-buffered-home')],
+);
+
+const demoWalks = <DemoWalk>[uiCleanupWalk, homeFeedWalk];
 
 DemoWalk demoWalkById(String id) {
   for (final walk in demoWalks) {

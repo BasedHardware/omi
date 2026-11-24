@@ -14,6 +14,10 @@ on:
         default: check
         type: choice
         options: [check, reconcile]
+      jobs:
+        description: Optional space-separated declared job names; required to select planned jobs
+        required: false
+        type: string
       production_confirmation:
         description: For an approved production reconcile, type APPLY_PROD_SCHEDULER
         required: false
@@ -56,16 +60,23 @@ jobs:
           OPERATION: ${{ github.event.inputs.operation }}
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           INPUT_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          JOBS: ${{ github.event.inputs.jobs }}
           PROD_CONFIRMATION: ${{ github.event.inputs.production_confirmation }}
         run: |
           set -euo pipefail
+          SELECTED_JOBS=()
+          JOB_ARGS=()
+          if [[ -n "$JOBS" ]]; then
+            read -r -a SELECTED_JOBS <<< "$JOBS"
+            JOB_ARGS=(--jobs "${SELECTED_JOBS[@]}")
+          fi
           if [[ "$OPERATION" == "reconcile" ]]; then
             if [[ "$INPUT_ENVIRONMENT" == "prod" && "$PROD_CONFIRMATION" != "APPLY_PROD_SCHEDULER" ]]; then
               echo "Production reconcile requires the typed confirmation after prod environment approval." >&2
               exit 1
             fi
             python3 backend/scripts/scheduler_reconcile.py \
-              --environment "$ENVIRONMENT" --project "$PROJECT_ID" --apply
+              --environment "$ENVIRONMENT" --project "$PROJECT_ID" --apply "${JOB_ARGS[@]}"
           fi
           python3 backend/scripts/scheduler_reconcile.py \
-            --environment "$ENVIRONMENT" --project "$PROJECT_ID" --check
+            --environment "$ENVIRONMENT" --project "$PROJECT_ID" --check "${JOB_ARGS[@]}"

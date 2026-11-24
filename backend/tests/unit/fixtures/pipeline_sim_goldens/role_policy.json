@@ -79,6 +79,13 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "unknown",
+     "provider_error": "unknown",
+     "stage": "unknown",
+     "worker_reason": "unknown"
+    },
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,
@@ -229,6 +236,13 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "unknown",
+     "provider_error": "unknown",
+     "stage": "unknown",
+     "worker_reason": "unknown"
+    },
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,
@@ -379,6 +393,13 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "unknown",
+     "provider_error": "unknown",
+     "stage": "unknown",
+     "worker_reason": "unknown"
+    },
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,
@@ -539,6 +560,13 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "unknown",
+     "provider_error": "unknown",
+     "stage": "unknown",
+     "worker_reason": "unknown"
+    },
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,

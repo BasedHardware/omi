@@ -8,6 +8,7 @@ maintenance frontier persists; no planner/apply semantics are reimplemented here
 from collections import Counter, deque
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import hashlib
 import json
 import logging
 import math
@@ -23,6 +24,7 @@ from google.api_core.exceptions import FailedPrecondition
 from google.cloud.firestore_v1 import FieldFilter
 
 from utils.batch_pipeline import record_seal_profile
+from utils.batch_pipeline.record_seal_budget import BudgetExhausted
 from config import refactor_modes
 from config import record_seal_repair as config
 from config import record_partial as partial_config
@@ -185,6 +187,7 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
             check_budget=budget.check,
             repair_upload_failed=True,
             repair_closed=True,
+            wake_admission=config.fresh_enabled(),
         )
         apply = repair.apply_seals
     else:
@@ -237,7 +240,7 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     require_fresh_proof(proof)  # Tail downloads can exhaust the five-minute inventory window.
     budget.check()
     record_seal_profile.enter('apply')
-    result = apply(store, plan, plan['plan_sha256'])
+    result = apply(store, plan, plan['plan_sha256'], **({'observation_counts': reason_out} if job else {}))
     if sum(result.values()) != 1 or len(result) != 1:
         return 'unknown'
     disposition = next(iter(result))
@@ -263,7 +266,16 @@ def settled(data):
 
 
 def discover(
-    client, *, budget, after=None, max_rows=MAX_ROWS, max_scan=MAX_SCAN, advance_rows=MAX_ROWS, selected_cursors=None
+    client,
+    *,
+    budget,
+    after=None,
+    max_rows=MAX_ROWS,
+    max_scan=MAX_SCAN,
+    advance_rows=MAX_ROWS,
+    selected_cursors=None,
+    shard=0,
+    shards=1,
 ):
     """Page past closed rows; newest finished first within each bounded pass.
 
@@ -274,6 +286,7 @@ def discover(
     """
     from google.cloud.firestore_v1 import FieldFilter
 
+    validate_partition(shard, shards)
     rows, scanned, cursor = [], 0, after
     # Freeze each pass's upper finish boundary. Continuous newer inflow must
     # not prevent wrap and indefinitely starve the oldest refused rows.
@@ -321,6 +334,10 @@ def discover(
                 and finished.tzinfo is not None
                 and not settled(data)
             ):
+                if shards > 1:
+                    parts = doc.reference.path.split('/')
+                    if len(parts) != 4 or not owns_record(parts[-3], parts[-1], shard=shard, shards=shards):
+                        continue
                 stamp = finished.timestamp()
                 age = max(0, int(time.time() - stamp)) if valid_metric_clock(stamp) else None
                 rows.append((doc.reference.path, age))
@@ -364,6 +381,27 @@ def pending_blocker(row):
     return 'seal_eligible'
 
 
+class DiscoveryProgress:
+    """One content-free malformed-row count across all polls/legs in a run."""
+
+    def __init__(self, progress):
+        self.progress = progress
+        self.malformed = set()
+
+    def __call__(self, event):
+        self.progress(event)
+
+    def refuse_malformed(self, document_id):
+        self.malformed.add(hashlib.sha256(document_id.encode()).digest())
+
+    def flush(self):
+        if self.malformed:
+            self.progress(
+                {'event': 'record_seal_repair_discovery', 'outcome': 'malformed_pending', 'count': len(self.malformed)}
+            )
+            self.malformed.clear()
+
+
 @read_origin('job:record_seal_cluster_repair:discover_jobs')
 def discover_jobs(
     client,
@@ -377,6 +415,11 @@ def discover_jobs(
     metric_ages=None,
     urgent=False,
     invalid_clock_counts=None,
+    fresh=False,
+    exclude=frozenset(),
+    newest=False,
+    shard=0,
+    shards=1,
 ):
     """Newest pending jobs, or earliest near-dead-letter deadline, with bounded cursors.
 
@@ -384,11 +427,14 @@ def discover_jobs(
     the name scan; the age query does not remove any eligible record. Keep the
     local age/identity filters in both modes. Never use mutable available_at.
     """
+    validate_partition(shard, shards)
     global _age_order_index_warned
     if not 1 <= max_rows <= MAX_ROWS or not 1 <= max_scan <= MAX_SCAN:
         raise ValueError('invalid jobs discovery limits')
     budget.check()
-    age_order = refactor_modes.record_seal_repair_age_order()
+    age_order = fresh or newest or refactor_modes.record_seal_repair_age_order()
+    if fresh and urgent:
+        return [], False, None
     if urgent and not age_order:
         return [], False, None
     order_field = 'record_dead_letter_deadline_at' if urgent else 'enqueued_at'
@@ -410,6 +456,11 @@ def discover_jobs(
         query = client.collection('batch_pipeline_prod_jobs').where(filter=FieldFilter('state', '==', 'record_pending'))
         if age_order:
             cutoff = horizon.timestamp() + (NEAR_DEAD_LETTER_SECONDS if urgent else 0)
+            if fresh:
+                query = query.where(
+                    filter=FieldFilter(order_field, '>=', horizon.timestamp() - config.FRESH_WINDOW_SECONDS)
+                )
+                cutoff -= config.FRESH_MIN_AGE_SECONDS
             if urgent:
                 query = query.where(filter=FieldFilter(order_field, '>', 0))
             query = query.where(filter=FieldFilter(order_field, '<=', cutoff)).order_by(
@@ -437,6 +488,8 @@ def discover_jobs(
         message = str(error).lower()
         if (
             urgent
+            or fresh
+            or newest
             or not age_order
             or not (
                 'requires an index' in message
@@ -473,13 +526,26 @@ def discover_jobs(
             if age_order
             else {'path': doc.reference.path, 'finished_at': horizon}
         )
+        if not isinstance(uid, str) or not uid or '/' in uid or not isinstance(cid, str) or not cid or '/' in cid:
+            malformed = True
+        else:
+            malformed = doc.id != record_identity(uid, cid)[1] or not job.get('record_content_id')
+        if malformed:
+            # Invalid identities cannot supply a user path or proof authority.
+            # Their metadata-only refusal still has exactly one owner, including
+            # the legacy single-shard path (which previously skipped silently).
+            owner = int(hashlib.sha256(doc.id.encode()).hexdigest(), 16) % shards
+            if shard == owner:
+                if isinstance(progress, DiscoveryProgress):
+                    progress.refuse_malformed(doc.id)
+                else:
+                    progress({'event': 'record_seal_repair_discovery', 'outcome': 'malformed_pending', 'count': 1})
+            continue
+        if not owns_record(uid, cid, shard=shard, shards=shards):
+            continue
         if urgent and not valid_metric_clock(job.get(order_field)):
             if invalid_clock_counts is not None:
                 invalid_clock_counts['invalid_clock_rows'] += 1
-            continue
-        if not isinstance(uid, str) or not uid or '/' in uid or not isinstance(cid, str) or not cid or '/' in cid:
-            continue
-        if doc.id != record_identity(uid, cid)[1] or not job.get('record_content_id'):
             continue
         if not isinstance(enqueued, (int, float)) or isinstance(enqueued, bool) or not math.isfinite(enqueued):
             continue
@@ -491,10 +557,14 @@ def discover_jobs(
                 or deadline > horizon.timestamp() + NEAR_DEAD_LETTER_SECONDS
             ):
                 continue
-        age = horizon.timestamp() - enqueued
-        if age < config.JOBS_MIN_AGE_SECONDS:
+        age = (time.time() if fresh else horizon.timestamp()) - enqueued
+        if fresh and age > config.FRESH_WINDOW_SECONDS:
+            continue
+        if age < (config.FRESH_MIN_AGE_SECONDS if fresh else config.JOBS_MIN_AGE_SECONDS):
             continue
         path = f'users/{uid}/conversations/{cid}'
+        if path in exclude:
+            continue
         # Preserve selection/cursors even for zero or negative clocks. Only the metric is absent.
         rows.append((path, max(0, int(age)) if valid_metric_clock(enqueued) else None))
         # Keep invalid-clock jobs eligible and preserve their exact cursor.
@@ -508,6 +578,53 @@ def discover_jobs(
             return rows, True, cursor
     saturated = len(page) >= min(128, max_scan)
     return rows, saturated, cursor if saturated else None
+
+
+class FreshLane:
+    """Always probe the live newest page; separately walk its bounded recent tail.
+
+    No persisted sweep horizon and no writes. Two pages per poll bound read cost;
+    a retry exclusion set prevents chronic refusals consuming every fresh poll.
+    """
+
+    def __init__(self, client, *, shard=0, shards=1, progress=lambda _: None):
+        self.progress = progress
+        self.client, self.after = client, None
+        self.shard, self.shards = shard, shards
+
+    def __call__(self, exclude):
+        from utils.batch_pipeline.record_seal_budget import SweepBudget
+
+        budget = SweepBudget(10)
+        with silent_dependencies(), budget.interrupt_io():
+            head, saturated, cursor = discover_jobs(
+                self.client,
+                budget=budget,
+                max_rows=128,
+                fresh=True,
+                exclude=exclude,
+                shard=self.shard,
+                shards=self.shards,
+                progress=self.progress,
+            )
+            rows = head
+            if saturated:
+                tail, _, self.after = discover_jobs(
+                    self.client,
+                    budget=budget,
+                    after=self.after or cursor,
+                    max_rows=128,
+                    fresh=True,
+                    exclude=exclude | {path for path, _ in head},
+                    shard=self.shard,
+                    shards=self.shards,
+                    progress=self.progress,
+                )
+                rows += tail
+            else:
+                self.after = None
+        # The tail's frozen horizon can only supply older candidates than the live head.
+        return rows
 
 
 class RowProcess(subprocess.Popen):
@@ -633,33 +750,96 @@ def coordinate(
     pause=time.sleep,
     progress=lambda _: None,
     attempted=lambda _: None,
+    fresh=None,
+    fresh_workers=0,
+    bootstrap_rows=0,
+    backlog=None,
 ):
     """Bound total concurrency and wall time; reap every child, including on failure."""
     pending, active, counts, reasons = deque(rows), [], Counter(), Counter()
     gaps, partial_reasons, blocker_outcomes = Counter(), Counter(), Counter()
+    ledger_misses = 0
     started = clock()
     deadline = started + run_seconds
     max_age, sealed_age, invalid_clock_rows = 0, 0, 0
     elapsed_by_disposition = Counter()
+    if not 0 <= fresh_workers < workers or (fresh is not None and not fresh_workers):
+        raise ValueError('fresh slots must leave at least one backlog slot')
+    if not 0 <= bootstrap_rows <= min(workers, len(pending)):
+        raise ValueError('bootstrap exceeds the guaranteed initial worker group')
+    bootstrap_remaining = bootstrap_rows
+    fresh_pending, fresh_processes, seen = deque(), set(), {}
+    active_paths = {}
+    pending_aged_at = started
+    fresh_at = started
+    backlog_at = started
     try:
-        while pending or active:
+        while pending or active or (fresh is not None or backlog is not None) and clock() < deadline:
             now = clock()
             if now >= deadline:
-                counts['deferred'] += len(pending)
+                counts['deferred'] += len(pending) + len(fresh_pending)
                 if pending:
                     elapsed_by_disposition['deferred'] += 0
                 pending.clear()
-            while pending and len(active) < workers and now < deadline:
-                path, age = pending.popleft()
-                attempted(path)
+                fresh_pending.clear()
+            elif fresh is not None and now >= fresh_at:
+                try:
+                    incoming = fresh(
+                        {path for path, at in seen.items() if now - at < config.FRESH_RETRY_SECONDS}
+                        | set(active_paths.values())
+                    )
+                    # New head first, bounded queue, private identities remain in memory.
+                    elapsed = max(0, int(clock() - pending_aged_at))
+                    aged = [(path, age + elapsed) for path, age in fresh_pending]
+                    combined = dict(aged + incoming)
+                    fresh_pending = deque(sorted(combined.items(), key=lambda item: item[1])[:MAX_ROWS])
+                    pending_aged_at = clock()
+                except (Exception, BudgetExhausted):
+                    progress({'event': 'record_seal_repair_fresh', 'outcome': 'error'})
+                fresh_at = clock() + 15
+                now = clock()  # Discovery time counts against the original run deadline.
+            if backlog is not None and not pending and len(active) < workers and now < deadline and now >= backlog_at:
+                try:
+                    pending.extend(backlog(set(seen) | set(active_paths.values()) | {p for p, _ in fresh_pending}))
+                except (Exception, BudgetExhausted):
+                    progress({'event': 'record_seal_repair_backlog', 'outcome': 'error'})
+                backlog_at = clock() + (0 if pending else 15)
+                now = clock()
+            while len(active) < workers and now < deadline:
+                # Discovery checkpoints promise this initial group will be
+                # attempted. Start it before borrowing its ordinary capacity;
+                # otherwise an interruption could skip unattempted candidates.
+                is_fresh = bool(not bootstrap_remaining and fresh_pending and len(fresh_processes) < fresh_workers)
+                if is_fresh:
+                    path, age = fresh_pending.popleft()
+                elif pending:
+                    path, age = pending.popleft()
+                    bootstrap_remaining = max(0, bootstrap_remaining - 1)
+                else:
+                    break
+                if path in seen and (not is_fresh or now - seen[path] < config.FRESH_RETRY_SECONDS):
+                    continue
+                if path in active_paths.values():
+                    continue
+                seen[path] = now
+                if not is_fresh:
+                    attempted(path)
                 if age is None:
                     invalid_clock_rows += 1
                 else:
                     max_age = max(max_age, age)
                 seconds = min(row_seconds, deadline - now)
+                # The urgent/ordinary job leg retains its original half of the
+                # worker group and full row budget. Unused ordinary slots are
+                # lent to backlog, with a bound on how long fresh must wait.
+                if is_fresh or fresh is not None and len(active) - len(fresh_processes) >= workers - fresh_workers:
+                    seconds = min(seconds, config.FRESH_ROW_SECONDS)
                 try:
                     process = launch(path, seconds, mode)
                     active.append((process, now + seconds, age, now, RowOutput(process)))
+                    active_paths[process] = path
+                    if is_fresh:
+                        fresh_processes.add(process)
                 except Exception:
                     counts['error'] += 1
                     elapsed_by_disposition['error'] += max(0, round((clock() - now) * 1000))
@@ -676,6 +856,9 @@ def coordinate(
                 if finished:
                     try:
                         result = output.result
+                        miss = result.get('ledger_misses')
+                        if type(miss) is int and miss == 1:
+                            ledger_misses += 1
                         candidate = result.get('trimmed_divergent_overlaps', 0)
                         trimmed = candidate if type(candidate) is int and 0 <= candidate <= 4096 else 0
                         disposition = result.get('disposition')
@@ -720,6 +903,7 @@ def coordinate(
                             'elapsed_ms': row_elapsed,
                             **output.profile,
                             'count': 1,
+                            'lane': 'fresh' if process in fresh_processes else 'backlog',
                             **({'blocker': blocker} if blocker else {}),
                             'trimmed_divergent_overlaps': trimmed,
                             'disposition': disposition,
@@ -734,7 +918,9 @@ def coordinate(
                             ),
                         }
                     )
-            if active:
+                    fresh_processes.discard(process)
+                    active_paths.pop(process, None)
+            if active or (fresh is not None or backlog is not None) and clock() < deadline:
                 pause(0.05)
     finally:
         for process, *_ in active:
@@ -746,6 +932,7 @@ def coordinate(
         'tail_gap_buckets': dict(sorted(gaps.items())),
         'partial_finishes': dict(sorted(partial_reasons.items())),
         'blocker_outcomes': dict(sorted(blocker_outcomes.items())),
+        **({'ledger_misses': ledger_misses} if ledger_misses else {}),
         'rows': sum(counts.values()),
         'oldest_unsealed_seconds': max_age,
         'oldest_seal_age_seconds': sealed_age,
@@ -795,11 +982,64 @@ def row_main(payload, *, progress=lambda _: None):
     return {'disposition': result, **reason, **profile.snapshot()}
 
 
-def run(*, progress=lambda _: None):
+def validate_partition(shard, shards):
+    if type(shard) is not int or type(shards) is not int or not 1 <= shards <= 8 or not 0 <= shard < shards:
+        raise ValueError('invalid repair partition')
+
+
+def owns_record(uid, cid, *, shard, shards):
+    return int(record_identity(uid, cid)[1], 16) % shards == shard
+
+
+def run(*, progress=lambda _: None, shard=0, shards=1, deadline=None, before=lambda: None, phase_progress=None):
+    validate_partition(shard, shards)
+
+    def execute():
+        discovery_progress = DiscoveryProgress(progress)
+        try:
+            before()  # Projection rebuild is inside the same coordinator lease.
+            return _run(
+                progress=discovery_progress,
+                shard=shard,
+                shards=shards,
+                **({'deadline': deadline} if deadline is not None else {}),
+                **({'phase_progress': phase_progress} if phase_progress is not None else {}),
+            )
+        finally:
+            discovery_progress.flush()
+
+    if shards == 1 or not config.enabled() or config.settings()[3] == 'plan':
+        return execute()
+    config.require_runtime()
+    with silent_dependencies():
+        from database._client import get_firestore_client
+        from utils.batch_pipeline.record_seal_run_lease import RepairRunLease
+        from utils.batch_pipeline.record_seal_sweeper import read_pusher_pod_proof, require_fresh_proof
+
+        config.server_flags()
+        require_fresh_proof(read_pusher_pod_proof())
+        lease = RepairRunLease(get_firestore_client(), shard, shards)
+        acquired = lease.acquire(time.time())
+    if not acquired:
+        return {'event': 'record_seal_repair', 'outcome': 'overlap_refused', 'shard': shard, 'shards': shards}
+    try:
+        return execute()
+    finally:
+        with silent_dependencies():
+            lease.release()
+
+
+def _run(*, progress, shard, shards, deadline=None, phase_progress=lambda _: None):
     if not config.enabled():
         return {'event': 'record_seal_repair', 'outcome': 'disabled'}
+    phase_progress('discovery')
     workers, row_seconds, run_seconds, mode = config.settings()
+    fresh_slots = workers // 2 if config.jobs_enabled() and config.fresh_enabled() and workers > 1 else 0
+    # Fresh borrows ordinary execution capacity; it never shrinks either
+    # discovery leg, the urgent allocation or the ordinary-job reserve.
+    sweep_workers = workers
     config.require_runtime()
+    partition_options: dict[str, Any] = {'partition': (shard, shards)} if shards > 1 else {}
     with silent_dependencies():
         from database._client import get_firestore_client
         from utils.batch_pipeline.record_seal_budget import BudgetExhausted, SweepBudget
@@ -811,7 +1051,7 @@ def run(*, progress=lambda _: None):
         budget = SweepBudget(60)
         with budget.interrupt_io():
             client = get_firestore_client()
-            frontier = RepairCursor(client, config.cursor_secret())
+            frontier = RepairCursor(client, config.cursor_secret(), **partition_options)
             selected_cursors, job_cursors = {}, {}
             job_rows, jobs_saturated, jobs_cursor = [], False, None
             job_metric_ages = []
@@ -819,21 +1059,25 @@ def run(*, progress=lambda _: None):
             urgent_rows, urgent_cursors, urgent_cursor = [], {}, None
             invalid_clock_counts = Counter()
             if config.jobs_enabled():
-                jobs_frontier = RepairCursor(client, config.cursor_secret(), jobs=True)
-                allocation = max(1, workers // 2)
+                jobs_frontier = RepairCursor(client, config.cursor_secret(), jobs=True, **partition_options)
+                allocation = max(1, sweep_workers // 2)
                 # Scan ordinary jobs every run, even under continuous urgency.
                 job_rows, jobs_saturated, jobs_cursor = discover_jobs(
                     client,
                     budget=budget,
                     after=jobs_frontier.read(budget),
                     max_rows=allocation,
+                    shard=shard,
+                    shards=shards,
                     selected_cursors=job_cursors,
                     progress=progress,
                     metric_ages=job_metric_ages,
                 )
                 ordinary_reserve = min(len(job_rows), max(1, allocation // 4))
                 if refactor_modes.record_seal_repair_age_order() and allocation > ordinary_reserve:
-                    urgent_frontier = RepairCursor(client, config.cursor_secret(), jobs=True, urgent=True)
+                    urgent_frontier = RepairCursor(
+                        client, config.cursor_secret(), jobs=True, urgent=True, **partition_options
+                    )
                     try:
                         urgent_rows, urgent_saturated, urgent_cursor = discover_jobs(
                             client,
@@ -842,8 +1086,11 @@ def run(*, progress=lambda _: None):
                             max_rows=allocation - ordinary_reserve,
                             selected_cursors=urgent_cursors,
                             urgent=True,
+                            shard=shard,
+                            shards=shards,
                             invalid_clock_counts=invalid_clock_counts,
                             metric_ages=job_metric_ages,
+                            progress=progress,
                         )
                         jobs_saturated = jobs_saturated or urgent_saturated
                     except FailedPrecondition:
@@ -871,10 +1118,19 @@ def run(*, progress=lambda _: None):
                 client,
                 budget=budget,
                 after=frontier.read(budget),
-                advance_rows=workers - len(job_rows),
-                max_rows=MAX_ROWS - len(job_rows),
+                advance_rows=sweep_workers - len(job_rows),
+                # Preserve the guaranteed legacy-conversation group, then let
+                # the parallel stock drain refill by canonical enqueue order.
+                # One shard retains the previous static conversation sweep.
+                max_rows=(
+                    (sweep_workers - len(job_rows))
+                    if shards > 1 and config.jobs_enabled()
+                    else MAX_ROWS - len(job_rows)
+                ),
                 max_scan=MAX_SCAN - (128 if jobs_frontier else 0) - (128 if urgent_frontier else 0),
                 selected_cursors=selected_cursors,
+                shard=shard,
+                shards=shards,
             )
             # Advance before slow proofs: refused, hung, deferred or killed rows
             # cannot monopolize the next run. Wrap revisits them on a later pass.
@@ -893,7 +1149,7 @@ def run(*, progress=lambda _: None):
     # Reuse discovery's bounded, content-free age sample. No additional query
     # and no activation of the idle seal worker's scanner are needed.
     REPAIR_OLDEST.set(max(metric_ages, default=0))
-    if mode == 'apply':
+    if mode == 'apply' and shard == 0:
         # The checked-in production seal worker is idle. The active repair
         # CronJob must resume parked accepted bytes in off/shadow/serve too.
         try:
@@ -924,6 +1180,20 @@ def run(*, progress=lambda _: None):
             progress({'event': 'record_custody_receipts_expiry', 'outcome': 'budget_exhausted'})
         except Exception:
             progress({'event': 'record_custody_receipts_expiry', 'outcome': 'error'})
+    from utils.batch_pipeline.record_seal_backlog import BacklogLane
+
+    backlog = (
+        BacklogLane(
+            client,
+            lambda: RepairCursor(client, config.cursor_secret(), jobs=True, backlog=True, **partition_options),
+            mode=mode,
+            shard=shard,
+            shards=shards,
+            progress=progress,
+        )
+        if config.jobs_enabled()
+        else None
+    )
     last_attempted, last_job_attempted, last_urgent_attempted = None, None, None
 
     def attempted(path):
@@ -932,9 +1202,14 @@ def run(*, progress=lambda _: None):
             last_urgent_attempted = urgent_cursors[path]
         elif path in job_cursors:
             last_job_attempted = job_cursors[path]
-        else:
+        elif path in selected_cursors:
             last_attempted = selected_cursors[path]
+        elif backlog is not None:
+            backlog.attempted(path)
 
+    if deadline is not None:
+        run_seconds = max(0, min(run_seconds, deadline - time.monotonic() - 30))
+    phase_progress('rows')
     report = coordinate(
         rows,
         workers=workers,
@@ -943,19 +1218,41 @@ def run(*, progress=lambda _: None):
         mode=mode,
         progress=progress,
         attempted=attempted,
+        fresh=FreshLane(client, shard=shard, shards=shards, progress=progress) if fresh_slots else None,
+        fresh_workers=fresh_slots,
+        bootstrap_rows=min(workers, len(rows)),
+        backlog=backlog,
     )
+    phase_progress('checkpoint')
     report['invalid_clock_rows'] = report.get('invalid_clock_rows', 0) + invalid_clock_counts['invalid_clock_rows']
-    if mode == 'apply' and (last_attempted or last_job_attempted or last_urgent_attempted):
-        # Preserve exact Firestore nanoseconds, not an age reconstructed clock.
-        # The second point write (lead ruling 4cbd2a) advances past ALL attempts,
-        # never past a deferred row. Initial checkpoint survives interruption;
-        # end-of-pass wrap revisits even the oldest chronic/interrupted row.
+    if mode == 'apply' and (
+        last_attempted or last_job_attempted or last_urgent_attempted or (backlog and backlog.last_attempted)
+    ):
+        # Preserve the exact query position, including Firestore nanoseconds.
+        # Checkpoint attempts and leave deferred rows for the next run.
+        # On interruption the previous checkpoint still holds; wrap revisits
+        # chronic and interrupted rows.
         budget = SweepBudget(30)
-        with silent_dependencies(), budget.interrupt_io():
-            if last_attempted:
-                frontier.write(last_attempted, budget)
-            if last_job_attempted and jobs_frontier is not None:
-                jobs_frontier.write(last_job_attempted, budget)
-            if last_urgent_attempted and urgent_frontier is not None:
-                urgent_frontier.write(last_urgent_attempted, budget)
-    return {'event': 'record_seal_repair', 'outcome': 'ok', 'mode': mode, 'discovery_saturated': saturated, **report}
+        try:
+            with silent_dependencies(), budget.interrupt_io():
+                if last_attempted:
+                    frontier.write(last_attempted, budget)
+                if last_job_attempted and jobs_frontier is not None:
+                    jobs_frontier.write(last_job_attempted, budget)
+                if last_urgent_attempted and urgent_frontier is not None:
+                    urgent_frontier.write(last_urgent_attempted, budget)
+                if backlog is not None:
+                    backlog.checkpoint_attempted(budget)
+        except BudgetExhausted:
+            report['cursor_checkpoint_outcome'] = 'budget_exhausted'
+            report['work_incomplete'] = True
+            progress({'event': 'record_seal_repair_checkpoint', 'outcome': 'budget_exhausted'})
+    return {
+        'event': 'record_seal_repair',
+        'outcome': 'budget_exhausted' if report.get('cursor_checkpoint_outcome') == 'budget_exhausted' else 'ok',
+        'mode': mode,
+        'discovery_saturated': saturated,
+        'shard': shard,
+        'shards': shards,
+        **report,
+    }

@@ -321,7 +321,9 @@ def get_day_recording_count(uid: str, start: datetime, end: datetime, *, firesto
         collection, {'start': start, 'end': end, 'discarded': False}, field_filter_factory=FieldFilter
     )
     try:
-        return int(query.count().get()[0][0].value or 0)
+        total = int(query.count().get()[0][0].value or 0)
+        recordings = int(query.where(filter=FieldFilter('recording', '==', True)).count().get()[0][0].value or 0)
+        return max(0, total - recordings)
     except FailedPrecondition:
         record_fallback(
             component='daily_summary',
@@ -336,13 +338,17 @@ def get_day_recording_count(uid: str, start: datetime, end: datetime, *, firesto
         snapshots = list(
             collection.where(filter=FieldFilter('started_at', '>=', start))
             .where(filter=FieldFilter('started_at', '<=', end))
-            .select(['discarded'])
+            .select(['discarded', 'recording'])
             .limit(10001)
             .stream()
         )
         if len(snapshots) > 10000:
             raise RuntimeError('daily_recording_count_incomplete: required index is not ready')
-        return sum(1 for snapshot in snapshots if (snapshot.to_dict() or {}).get('discarded') is False)
+        return sum(
+            1
+            for snapshot in snapshots
+            if (snapshot.to_dict() or {}).get('discarded') is False and not (snapshot.to_dict() or {}).get('recording')
+        )
 
 
 def get_daily_summary_generation_status(uid: str, date: str, *, firestore_client: Any = None) -> Optional[dict]:

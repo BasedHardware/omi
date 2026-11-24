@@ -620,13 +620,9 @@ class LiveLegSocket(STTSocket):
                 if callable(bind):
                     bind(
                         lambda: (
-                            None
-                            if send_tracker.soniox_elapsed_mode == 'on'
-                            else (
-                                send_tracker.wire_audio_samples
-                                if self._soniox_wire_ledger
-                                else (send_tracker.send_map.last_provider_sample or 0)
-                            )
+                            send_tracker.wire_audio_samples
+                            if self._soniox_wire_ledger
+                            else (send_tracker.send_map.last_provider_sample or 0)
                         )
                     )
         except Exception:

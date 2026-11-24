@@ -11,6 +11,8 @@ import pytest
 
 from tests.unit.test_batch_pipeline_quarantine_recovery import row, setup  # noqa: F401
 from utils.batch_pipeline.source_audio import MAGIC, InvalidRetainedManifest, materialize, read_reference
+from utils.batch_pipeline.serving import Serving
+from routers import batch_pipeline as routes
 
 SOURCE = b'\1\0' * 16000
 ITEM = SimpleNamespace(owner_id='o', conversation_id='c', capture_at=1, duration_seconds=1.0)
@@ -123,9 +125,6 @@ def test_digest_change_is_not_classified_as_invalid_manifest():
 
 
 def serve(setup, monkeypatch):
-    from routers import batch_pipeline as routes
-    from utils.batch_pipeline.serving import Serving
-
     _, store, _, _, _, recovery = setup
     service = Serving(store, recovery=recovery)
     service.reconcile_async = AsyncMock()

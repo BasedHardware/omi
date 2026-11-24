@@ -21,6 +21,7 @@ from types import SimpleNamespace
 from typing import Any, Iterable, List, Optional, Protocol, Sequence
 
 from config.refactor_modes import serving_for
+from utils.conversations.transcript_repeats import canonical_prompt_segments
 from database.auth import get_user_name
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
@@ -323,8 +324,13 @@ def conversation_transcript_for_llm(
     """Build a transcript string for LLM prompts using the user's configured name."""
     user_name = get_user_name(uid, use_default=False)
     segments = getattr(conversation, 'transcript_segments', None)
-    if segments and speaker_role_projection(segments) is not None:
-        safe, note = owner_safe_transcript_segments(segments)
+    canonical = canonical_prompt_segments(segments) if segments else []
+    if segments and (len(canonical) != len(segments) or speaker_role_projection(segments) is not None):
+        safe, note = (
+            owner_safe_transcript_segments(canonical, evidence_segments=segments)
+            if speaker_role_projection(segments) is not None
+            else (canonical, '')
+        )
         text = TranscriptSegment.segments_as_string(
             safe, include_timestamps=include_timestamps, people=people, user_name=user_name
         )
@@ -356,6 +362,7 @@ def conversation_transcript_and_speaker_map(
     if not segments:
         return conversation_transcript_for_llm(uid, conversation, people), {}
 
+    segments = canonical_prompt_segments(segments)
     profile_name = get_user_name(uid, use_default=False)
     people_map = {person.id: person.name for person in people} if people else {}
     if serving_for('NOTES_PACKET_V2_MODE', uid):

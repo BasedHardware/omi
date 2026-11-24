@@ -44,8 +44,16 @@ _EXEMPT_PREFIXES = (
 )
 
 
+# Per-conversation streams: /v1/conversations/{id}/summary/stream (v3 on-open summary, chat SSE).
+_EXEMPT_CONVERSATION_SUFFIXES = ('/summary/stream', '/summary/live-catchup/stream')
+
+
 def _is_exempt(path: str) -> bool:
-    return path in _EXEMPT_PATHS or path.startswith(_EXEMPT_PREFIXES)
+    return (
+        path in _EXEMPT_PATHS
+        or path.startswith(_EXEMPT_PREFIXES)
+        or (path.startswith('/v1/conversations/') and path.endswith(_EXEMPT_CONVERSATION_SUFFIXES))
+    )
 
 
 def _header(scope: Scope, name: str) -> str:

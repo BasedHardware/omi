@@ -143,20 +143,26 @@ def test_repaired_replay_preserves_later_ordering_and_does_not_refetch_stt(lane)
     assert not entry.get('projection_privacy_refusal') and not checkpoint(entry)
 
 
-def test_existing_assignment_hold_and_resume_never_rewind_or_repeat_assignment(lane):
+@pytest.mark.parametrize('async_projection', [False, True])
+@pytest.mark.parametrize('state', ['persisted', 'ready'])
+def test_existing_assignment_hold_and_resume_never_rewind_or_repeat_assignment(lane, async_projection, state):
     client, store, binding = lane
+    policy = replace(POLICY, async_projection=async_projection)
     client.rows[('privacy_hold_results', 'head')].update(
-        projection_state='persisted',
-        projection={'state': 'persisted', 'conversation_id': 'synthetic-output', 'speech_seconds': 4},
+        projection_state=state,
+        projection={'state': state, 'conversation_id': 'synthetic-output', 'speech_seconds': 4},
     )
     client.rows[('privacy_hold_owners', owner_key(binding.owner_id))]['projection_watermark'] = 'later'
     fence(client, binding, BatchPrivacyReason.DATA_PROTECTION_CHANGED)
-    assert hold(store, 'head', binding, 2000, BatchPrivacyReason.DATA_PROTECTION_CHANGED, policy=POLICY)
+    assert hold(store, 'head', binding, 2000, BatchPrivacyReason.DATA_PROTECTION_CHANGED, policy=policy)
     assert store.projection_watermark(owner_key(binding.owner_id)) == 'later'
     client.rows[('users', binding.owner_id)].pop('migration_status')
-    restored = resume(store, 'head', binding, 2001, policy=POLICY)
-    assert restored['projection'] == {'state': 'persisted', 'conversation_id': 'synthetic-output', 'speech_seconds': 4}
+    restored = resume(store, 'head', binding, 2001, policy=policy)
+    assert restored['projection'] == {'state': state, 'conversation_id': 'synthetic-output', 'speech_seconds': 4}
     assert store.projection_watermark(owner_key(binding.owner_id)) == 'later'
+
+    assert restored['projection_finish_due_at'] == (-1.0 if async_projection else 2001)
+    assert restored['projection_followup_due_at'] == 2001
 
 
 def test_completed_ready_result_does_not_become_a_new_privacy_obligation(lane):
