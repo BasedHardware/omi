@@ -61,6 +61,7 @@ func TestBatchPrivacyMemoRuleRequiresBoundRotationAndExactOperations(t *testing.
 		name   string
 		mutate func(*observation, *observation)
 		path   string
+		kind   string
 	}{
 		{
 			name: "malformed token",
@@ -85,6 +86,7 @@ func TestBatchPrivacyMemoRuleRequiresBoundRotationAndExactOperations(t *testing.
 				mustMap(goRun.Derived[batchPrivacyDocumentPath("u")])["memo_schema"] = json.Number("2")
 			},
 			path: "/derived_documents/" + escapePointer(batchPrivacyDocumentPath("u")) + "/memo_schema",
+			kind: "different_value",
 		},
 		{
 			name: "privacy state changed from seed",
@@ -115,7 +117,13 @@ func TestBatchPrivacyMemoRuleRequiresBoundRotationAndExactOperations(t *testing.
 			py, goRun := batchPrivacyRun(pyMemoToken), batchPrivacyRun(goMemoToken)
 			test.mutate(py, goRun)
 			diffs := compareObservations(py, goRun)
-			if !hasKindPath(diffs, "invalid_binding", test.path) && !hasKindPath(diffs, "invalid_operations", test.path) {
+			kind := test.kind
+			if kind == "" && hasKindPath(diffs, "invalid_operations", test.path) {
+				kind = "invalid_operations"
+			} else if kind == "" {
+				kind = "invalid_binding"
+			}
+			if !hasKindPath(diffs, kind, test.path) {
 				t.Fatalf("negative evidence did not fail the rule: %+v", diffs)
 			}
 			for _, diff := range diffs {
@@ -124,5 +132,26 @@ func TestBatchPrivacyMemoRuleRequiresBoundRotationAndExactOperations(t *testing.
 				}
 			}
 		})
+	}
+}
+
+func TestMissingGoMemoStaysAMissingInGoDifference(t *testing.T) {
+	py, goRun := batchPrivacyRun(pyMemoToken), batchPrivacyRun(goMemoToken)
+	goRun.BatchPrivacy = &batchPrivacyEvidence{
+		Seed:  batchPrivacySnapshot{Fields: map[string]any{}},
+		Final: batchPrivacySnapshot{Fields: map[string]any{}},
+	}
+	goRun.Derived = map[string]any{}
+	goRun.Cost.Firestore.BatchPrivacyDocumentWrites = 0
+
+	path := "/derived_documents/" + escapePointer(batchPrivacyDocumentPath("u"))
+	diffs := compareObservations(py, goRun)
+	if !hasKindPath(diffs, "missing_in_go", path) {
+		t.Fatalf("missing Go memo document was not retained as a missing-in-Go difference: %+v", diffs)
+	}
+	for _, field := range []string{"existence", "memo_schema"} {
+		if hasKindPath(diffs, "invalid_binding", path+"/"+field) {
+			t.Fatalf("missing document was duplicated as an invalid binding for %s: %+v", field, diffs)
+		}
 	}
 }

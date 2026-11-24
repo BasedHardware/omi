@@ -178,11 +178,4 @@ func validateBatchPrivacyPair(diffs *[]difference, python, goRun *observation) {
 			addDifference(diffs, "/derived_documents/"+escapePointer(path)+"/"+field, "invalid_binding")
 		}
 	}
-	if python.BatchPrivacy.Seed.Exists != goRun.BatchPrivacy.Seed.Exists ||
-		python.BatchPrivacy.Final.Exists != goRun.BatchPrivacy.Final.Exists {
-		addDifference(diffs, "/derived_documents/"+escapePointer(path)+"/existence", "invalid_binding")
-	}
-	if !samePrivacyField(python.BatchPrivacy.Final.Fields, goRun.BatchPrivacy.Final.Fields, "memo_schema") {
-		addDifference(diffs, "/derived_documents/"+escapePointer(path)+"/memo_schema", "invalid_binding")
-	}
 }
