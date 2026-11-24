@@ -1008,3 +1008,423 @@ def test_restore_and_a_new_intent_start_the_failed_admission_record_from_zero():
     assert merged['grace_actions_failed_attempts'] == 0
     assert merged['grace_actions_overdue'] is False
     assert merged['grace_actions_last_failed_at'] is None
+
+
+def test_terminal_failed_in_terminal_statuses():
+    assert 'terminal_failed' in users_db._DELETION_WIPE_TERMINAL_STATUSES
+    assert users_db.DELETION_WIPE_MAX_ATTEMPTS >= 5
+
+
+def test_mark_user_deletion_wipe_terminal_failed():
+    doc_ref = MagicMock()
+    with (
+        patch.object(users_db, 'account_deletion_firestore_client', return_value=MagicMock()),
+        patch.object(users_db, 'account_deletion_document', return_value=doc_ref),
+    ):
+        users_db.mark_user_deletion_wipe_terminal_failed('uid123', reason='test_exhausted', error='404 queue')
+
+    assert doc_ref.set.called
+    payload, kwargs = doc_ref.set.call_args[0][0], doc_ref.set.call_args[1]
+    assert kwargs == {'merge': True}
+    assert payload['wipe_status'] == 'terminal_failed'
+    assert payload['terminal_reason'] == 'test_exhausted'
+    assert payload['terminal_error'] == '404 queue'
+    assert isinstance(payload['wipe_terminal_at'], datetime)
+
+
+def test_claim_txn_caps_attempts_and_transitions_to_terminal_failed():
+    now = datetime.now(timezone.utc)
+    data = {
+        'uid': 'poisoned_uid',
+        'wipe_status': 'failed',
+        'wipe_attempts': users_db.DELETION_WIPE_MAX_ATTEMPTS,
+        'wipe_failed_at': now - timedelta(hours=2),
+        'wipe_error': 'Firestore 403 permission denied',
+    }
+    result, updates = _run_claim(data)
+    assert result is None
+    assert len(updates) == 1
+    assert updates[0][1]['wipe_status'] == 'terminal_failed'
+    assert updates[0][1]['terminal_reason'] == 'max_attempts_exceeded'
+    assert updates[0][1]['terminal_error'] == 'Firestore 403 permission denied'
+
+
+def test_claim_txn_respects_backoff_inside_transaction():
+    now = datetime.now(timezone.utc)
+    data = {
+        'uid': 'backing_off_uid',
+        'wipe_status': 'failed',
+        'wipe_attempts': 3,
+        'wipe_failed_at': now - timedelta(minutes=2),
+    }
+    result, updates = _run_claim(data)
+    assert result is None
+    assert len(updates) == 0
+
+
+def test_claim_txn_allows_failed_marker_when_backoff_elapsed():
+    now = datetime.now(timezone.utc)
+    data = {
+        'uid': 'ready_uid',
+        'wipe_status': 'failed',
+        'wipe_attempts': 3,
+        'wipe_failed_at': now - timedelta(minutes=15),
+    }
+    result, updates = _run_claim(data)
+    assert result == 'ready_uid'
+    assert len(updates) == 1
+    assert updates[0][1]['wipe_status'] == 'retrying'
+
+
+def test_claim_txn_running_marker_without_wipe_running_at_falls_back():
+    now = datetime.now(timezone.utc)
+    # Fresh via wipe_claimed_at -> skip
+    data_fresh = {
+        'uid': 'running_fresh',
+        'wipe_status': 'running',
+        'wipe_claimed_at': now - timedelta(minutes=10),
+    }
+    result_fresh, updates_fresh = _run_claim(data_fresh, running_stale_after=timedelta(hours=6))
+    assert result_fresh is None
+    assert len(updates_fresh) == 0
+
+    # Stale via wipe_claimed_at -> reclaim
+    data_stale = {
+        'uid': 'running_stale',
+        'wipe_status': 'running',
+        'wipe_claimed_at': now - timedelta(hours=7),
+    }
+    result_stale, updates_stale = _run_claim(data_stale, running_stale_after=timedelta(hours=6))
+    assert result_stale == 'running_stale'
+    assert updates_stale[0][1]['wipe_status'] == 'retrying'
+
+
+def test_claim_deletion_wipe_task_txn_terminal_failed_is_not_actionable():
+    txn = _make_txn()
+    txn_obj = users_db._claim_deletion_wipe_task_txn
+    raw_fn = getattr(txn_obj, 'to_wrap', txn_obj)
+    snapshot = _make_snapshot(
+        {
+            'uid': 'terminal_uid',
+            'wipe_status': 'terminal_failed',
+            'wipe_terminal_at': datetime.now(timezone.utc),
+        }
+    )
+
+    class FakeDocRef:
+        def get(self, transaction=None):
+            return snapshot
+
+    outcome = raw_fn(txn, FakeDocRef(), running_stale_after=timedelta(hours=6), operation_id='op-test-1')
+    assert outcome == 'not_actionable'
+
+
+def test_get_pending_deletion_wipes_returns_capped_failed_for_dead_lettering():
+    now = datetime.now(timezone.utc)
+    docs_by_status = {
+        'failed': [
+            {
+                'uid': 'capped1',
+                'wipe_status': 'failed',
+                'wipe_attempts': users_db.DELETION_WIPE_MAX_ATTEMPTS + 2,
+                'wipe_failed_at': now - timedelta(hours=2),
+            },
+            {
+                'uid': 'eligible1',
+                'wipe_status': 'failed',
+                'wipe_attempts': 2,
+                'wipe_failed_at': now - timedelta(hours=1),
+            },
+        ],
+        'pending': [],
+        'running': [],
+        'retrying': [],
+    }
+    fake_collection = _FakeCollection(docs_by_status)
+    with patch.object(users_db, 'account_deletion_collection', lambda **_kwargs: fake_collection):
+        result = users_db.get_pending_deletion_wipes(limit=10)
+
+    uids = [r['uid'] for r in result]
+    assert 'eligible1' in uids
+    assert 'capped1' in uids
+
+
+def test_new_intent_on_cancelled_marker_rearms():
+    txn = _make_txn()
+    snapshot = _make_snapshot(
+        {
+            'uid': 'uid1',
+            'wipe_status': 'cancelled',
+            'wipe_job_id': 'old-job-1',
+            'wipe_attempts': 9,
+            'wipe_error': 'old error',
+            'wipe_failed_at': datetime.now(timezone.utc) - timedelta(days=1),
+        }
+    )
+    doc_ref = types.SimpleNamespace(id='uid1', get=lambda transaction=None: snapshot)
+    raw_fn = getattr(
+        users_db._mark_user_deletion_wipe_intent_txn,
+        'to_wrap',
+        users_db._mark_user_deletion_wipe_intent_txn,
+    )
+
+    result = raw_fn(txn, doc_ref, 'new-job-2')
+
+    assert result == {'wipe_job_id': 'new-job-2', 'dispatch_claimed': True}
+    assert len(txn._sets) == 1
+    fields = txn._sets[0][1]
+    assert fields['wipe_status'] == 'pending'
+    assert fields['wipe_job_id'] == 'new-job-2'
+    assert fields['wipe_attempts'] == 0
+    assert fields['wipe_error'] is None
+    assert fields['wipe_failed_at'] is None
+
+
+def test_cancel_user_deletion_wipe_resets_wipe_attempts_and_error():
+    doc_ref = MagicMock()
+    with (
+        patch.object(users_db, 'account_deletion_firestore_client', return_value=MagicMock()),
+        patch.object(users_db, 'account_deletion_document', return_value=doc_ref),
+    ):
+        users_db.cancel_user_deletion_wipe('uid123')
+
+    payload, kwargs = doc_ref.set.call_args[0][0], doc_ref.set.call_args[1]
+    assert kwargs == {'merge': True}
+    assert payload['wipe_status'] == 'cancelled'
+    assert payload['wipe_attempts'] == 0
+    assert payload['wipe_error'] is None
+    assert payload['wipe_failed_at'] is None
+
+
+def test_grace_restore_and_new_intent_reset_wipe_attempts_and_error():
+    stale_marker = {
+        'uid': 'uid1',
+        'wipe_status': 'pending_deletion',
+        'wipe_due_at': datetime.now(timezone.utc) + timedelta(days=1),
+        'grace_actions_complete': True,
+        'wipe_attempts': 8,
+        'wipe_error': 'old wipe failure',
+        'wipe_failed_at': datetime.now(timezone.utc) - timedelta(days=1),
+    }
+    outcome, updates = _run_restore(stale_marker)
+    assert outcome == 'restored'
+    assert updates[0][1]['wipe_attempts'] == 0
+    assert updates[0][1]['wipe_error'] is None
+    assert updates[0][1]['wipe_failed_at'] is None
+
+    result, sets, _ = _run_mark_grace(
+        {**stale_marker, 'wipe_status': 'cancelled'},
+        datetime.now(timezone.utc) + timedelta(days=14),
+    )
+    assert result['mode'] == 'created'
+    assert sets[0][1]['wipe_attempts'] == 0
+    assert sets[0][1]['wipe_error'] is None
+    assert sets[0][1]['wipe_failed_at'] is None
+
+
+def test_new_intent_on_terminal_failed_marker_joins_without_rearming():
+    txn = _make_txn()
+    snapshot = _make_snapshot(
+        {
+            'uid': 'uid1',
+            'wipe_status': 'terminal_failed',
+            'wipe_job_id': 'dead-job-1',
+        }
+    )
+    doc_ref = types.SimpleNamespace(id='uid1', get=lambda transaction=None: snapshot)
+    raw_fn = getattr(
+        users_db._mark_user_deletion_wipe_intent_txn,
+        'to_wrap',
+        users_db._mark_user_deletion_wipe_intent_txn,
+    )
+
+    result = raw_fn(txn, doc_ref, 'new-job-2')
+
+    assert result == {'wipe_job_id': 'dead-job-1', 'dispatch_claimed': False}
+    assert txn._sets == []
+    assert txn._updates == []
+
+
+def test_mark_user_deletion_wipe_failed_sanitizes_and_caps_wipe_error():
+    doc_ref = MagicMock()
+    raw_error = 'Typesense failed for alice@example.com with sk_live_1234567890\n' + ('a' * 600)
+    with (
+        patch.object(users_db, 'account_deletion_firestore_client', return_value=MagicMock()),
+        patch.object(users_db, 'account_deletion_document', return_value=doc_ref),
+    ):
+        users_db.mark_user_deletion_wipe_failed('uid123', error=raw_error)
+
+    payload, kwargs = doc_ref.set.call_args[0][0], doc_ref.set.call_args[1]
+    assert kwargs == {'merge': True}
+    assert payload['wipe_status'] == 'failed'
+    assert 'wipe_error' in payload
+    assert 'alice@example.com' not in payload['wipe_error']
+    assert 'sk_live_1234567890' not in payload['wipe_error']
+    assert '\n' not in payload['wipe_error']
+    assert len(payload['wipe_error']) <= 500
+
+
+def test_mark_user_deletion_wipe_terminal_failed_sanitizes_and_caps_error():
+    doc_ref = MagicMock()
+    raw_error = 'Queue failed for bob@example.com secret_9876543210 ' + ('z' * 600)
+    with (
+        patch.object(users_db, 'account_deletion_firestore_client', return_value=MagicMock()),
+        patch.object(users_db, 'account_deletion_document', return_value=doc_ref),
+    ):
+        users_db.mark_user_deletion_wipe_terminal_failed('uid123', reason='enqueue_attempts_exhausted', error=raw_error)
+
+    payload = doc_ref.set.call_args[0][0]
+    assert 'bob@example.com' not in payload['terminal_error']
+    assert 'secret_9876543210' not in payload['terminal_error']
+    assert len(payload['terminal_error']) <= 500
+
+
+def test_claim_txn_reclaims_running_marker_with_no_timestamps():
+    result, updates = _run_claim({'uid': 'running_notimestamp', 'wipe_status': 'running'})
+    assert result == 'running_notimestamp'
+    assert len(updates) == 1
+    assert updates[0][1]['wipe_status'] == 'retrying'
+
+
+def test_claim_deletion_wipe_task_txn_caps_failed_redelivery_to_terminal_failed():
+    data = {
+        'uid': 'capped_task_uid',
+        'wipe_status': 'failed',
+        'wipe_attempts': users_db.DELETION_WIPE_MAX_ATTEMPTS,
+        'wipe_error': 'cell_directory_purge: alice@example.com secret_1234567890',
+    }
+    outcome, updates = _run_task_claim(data)
+    assert outcome == 'not_actionable'
+    assert len(updates) == 1
+    fields = updates[0][1]
+    assert fields['wipe_status'] == 'terminal_failed'
+    assert fields['terminal_reason'] == 'max_attempts_exceeded'
+    assert 'alice@example.com' not in fields['terminal_error']
+    assert 'secret_1234567890' not in fields['terminal_error']
+
+
+def test_parse_deletion_wipe_max_attempts_handles_malformed_and_nonpositive():
+    from database.account_deletion_policy import (
+        DEFAULT_DELETION_WIPE_MAX_ATTEMPTS,
+        parse_deletion_wipe_max_attempts,
+    )
+
+    assert parse_deletion_wipe_max_attempts('not-a-number') == DEFAULT_DELETION_WIPE_MAX_ATTEMPTS
+    assert parse_deletion_wipe_max_attempts('') == DEFAULT_DELETION_WIPE_MAX_ATTEMPTS
+    assert parse_deletion_wipe_max_attempts(None) == DEFAULT_DELETION_WIPE_MAX_ATTEMPTS
+    assert parse_deletion_wipe_max_attempts(True) == DEFAULT_DELETION_WIPE_MAX_ATTEMPTS
+    assert parse_deletion_wipe_max_attempts(0) == 1
+    assert parse_deletion_wipe_max_attempts('-5') == 1
+    assert parse_deletion_wipe_max_attempts('12') == 12
+
+
+def test_dead_letter_deletion_wipe_txn_enforces_status_and_attempt_preconditions():
+    raw_fn = getattr(users_db._dead_letter_deletion_wipe_txn, 'to_wrap', users_db._dead_letter_deletion_wipe_txn)
+
+    # Non-failed statuses must not be dead-lettered when allowed_statuses={'failed'}
+    for status in ('running', 'pending', 'pending_deletion', 'cancelled', 'completed'):
+        txn = _make_txn()
+        snap = _make_snapshot({'uid': 'u1', 'wipe_status': status, 'wipe_attempts': 12})
+        ref = types.SimpleNamespace(get=lambda transaction=None, s=snap: s)
+        assert (
+            raw_fn(
+                txn,
+                ref,
+                reason='reconciliation_attempts_exhausted',
+                error='boom',
+                allowed_statuses=frozenset({'failed'}),
+                min_attempts=10,
+                operation_id='dl-1',
+            )
+            is False
+        )
+        assert txn._sets == [] and txn._updates == []
+
+    # Failed below min_attempts is refused
+    txn = _make_txn()
+    snap = _make_snapshot({'uid': 'u1', 'wipe_status': 'failed', 'wipe_attempts': 9})
+    ref = types.SimpleNamespace(get=lambda transaction=None: snap)
+    assert (
+        raw_fn(
+            txn,
+            ref,
+            reason='reconciliation_attempts_exhausted',
+            error='boom',
+            allowed_statuses=frozenset({'failed'}),
+            min_attempts=10,
+            operation_id='dl-2',
+        )
+        is False
+    )
+    assert txn._sets == []
+
+    # Eligible failed record transitions cleanly
+    txn = _make_txn()
+    snap = _make_snapshot({'uid': 'u1', 'wipe_status': 'failed', 'wipe_attempts': 10, 'wipe_error': '404 Queue'})
+    ref = types.SimpleNamespace(get=lambda transaction=None: snap)
+    assert (
+        raw_fn(
+            txn,
+            ref,
+            reason='reconciliation_attempts_exhausted',
+            error='',
+            allowed_statuses=frozenset({'failed'}),
+            min_attempts=10,
+            operation_id='dl-3',
+        )
+        is True
+    )
+    assert txn._updates[0][1]['wipe_status'] == 'terminal_failed'
+    assert txn._updates[0][1]['terminal_error'] == '404 Queue'
+
+    # Enqueue exhaustion on retrying record bumps attempt count and preserves status fence
+    txn = _make_txn()
+    snap = _make_snapshot({'uid': 'u1', 'wipe_status': 'retrying', 'wipe_attempts': 9})
+    ref = types.SimpleNamespace(get=lambda transaction=None: snap)
+    assert (
+        raw_fn(
+            txn,
+            ref,
+            reason='enqueue_attempts_exhausted',
+            error='404 Queue not found',
+            allowed_statuses=frozenset({'retrying', 'failed'}),
+            increment_attempt=True,
+            operation_id='dl-4',
+        )
+        is True
+    )
+    assert txn._updates[0][1]['wipe_status'] == 'terminal_failed'
+    assert txn._updates[0][1]['wipe_attempts'] == 10
+
+
+def test_get_pending_deletion_wipes_yields_timestampless_stuck_markers():
+    now = datetime.now(timezone.utc)
+    docs_by_status = {
+        'failed': [],
+        'billing_failed': [],
+        'pending_deletion': [],
+        'pending': [
+            {'uid': 'pending_fresh', 'wipe_status': 'pending', 'wipe_queued_at': now - timedelta(seconds=10)},
+            {'uid': 'pending_nots', 'wipe_status': 'pending'},
+        ],
+        'running': [
+            {'uid': 'running_fresh', 'wipe_status': 'running', 'wipe_running_at': now - timedelta(minutes=1)},
+            {'uid': 'running_nots', 'wipe_status': 'running'},
+        ],
+        'deleting_auth': [
+            {'uid': 'auth_fresh', 'wipe_status': 'deleting_auth', 'wipe_intent_at': now - timedelta(seconds=10)},
+            {'uid': 'auth_nots', 'wipe_status': 'deleting_auth'},
+        ],
+        'retrying': [
+            {'uid': 'retrying_fresh', 'wipe_status': 'retrying', 'wipe_claimed_at': now - timedelta(minutes=1)},
+            {'uid': 'retrying_nots', 'wipe_status': 'retrying'},
+        ],
+    }
+    fake_collection = _FakeCollection(docs_by_status)
+    with patch.object(users_db, 'account_deletion_collection', lambda **_kwargs: fake_collection):
+        uids = [row['uid'] for row in users_db.get_pending_deletion_wipes(limit=100)]
+
+    assert uids == ['pending_nots', 'running_nots', 'auth_nots', 'retrying_nots']
+    retrying_result, retrying_updates = _run_claim({'uid': 'retrying_nots', 'wipe_status': 'retrying'})
+    assert retrying_result == 'retrying_nots'
+    assert 'wipe_claimed_at' in retrying_updates[0][1]

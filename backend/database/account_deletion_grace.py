@@ -13,7 +13,7 @@ from database.account_deletion_marker import (
     account_deletion_firestore_client,
 )
 from database.batch_account_authority import write_account_authority
-from database.account_deletion_policy import ACCOUNT_DELETION_GRACE_STATUS
+from database.account_deletion_policy import ACCOUNT_DELETION_GRACE_STATUS, WIPE_RETRY_RESET
 from database.fsr_read_cache import cache_writer
 
 
@@ -33,6 +33,7 @@ GRACE_FAILURE_RESET = {
     'grace_actions_failed_attempts': 0,
     'grace_actions_last_failed_at': None,
     'grace_actions_overdue': False,
+    **WIPE_RETRY_RESET,
 }
 
 

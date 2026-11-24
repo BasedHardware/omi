@@ -167,7 +167,7 @@ def ceremony(monkeypatch, world):
         return lambda *args, **kwargs: events.append(name) or result
 
     def status(value):
-        def write(uid):
+        def write(uid, **_kwargs):
             events.append(value)
             marker(store, value)
             # The running transition returns whether the generation was already armed.

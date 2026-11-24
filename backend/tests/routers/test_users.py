@@ -318,7 +318,7 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
         state['status'] = 'pending'
         return True
 
-    def mark_failed(_uid):
+    def mark_failed(_uid, error=None):
         state['status'] = 'failed'
 
     def enqueue_task(job_id):
