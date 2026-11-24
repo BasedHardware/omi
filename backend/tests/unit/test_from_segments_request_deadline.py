@@ -373,7 +373,7 @@ def test_notes_deadline_maps_to_a_tagged_retryable_503():
     exc = conversation_processing_http_exception(RequestDeadlineExceeded('spent'))
     assert exc.status_code == 503
     assert exc.headers == {'Retry-After': '2'}
-    assert raise_site_of(exc) == 'notes_deadline_exceeded'
+    assert raise_site_of(exc) == 'request_budget_exhausted'
 
 
 def test_absolute_deadline_is_one_instant_for_every_step():

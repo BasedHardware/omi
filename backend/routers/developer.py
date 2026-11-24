@@ -90,7 +90,13 @@ from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.other.from_segments_503 import FromSegments503Route
-from utils.other.request_deadline import from_segments_request_deadline
+from utils.other.request_deadline import (
+    RequestDeadlineExceeded,
+    from_segments_request_deadline,
+    request_deadline_absolute,
+    wait_for_from_segments_processing,
+)
+from utils.llm.gateway_error_contract import retryable_processing_response
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.observability.external_lists import (
     observe_action_items_page,
@@ -129,7 +135,7 @@ from utils.conversations.meeting_receipt import (
     projected_meeting_treatment_eligible,
     record_finalized_meeting_receipt,
 )
-from utils.executors import postprocess_executor
+from utils.executors import ExecutorSaturatedError, postprocess_executor
 from utils.external_read_contract import ignore_unknown_query, pagination_headers, utc_window
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
@@ -1795,7 +1801,7 @@ def _is_stale_from_segments_claim(conversation: dict, client_session_id: str, no
         return False
     if conversation.get('status') != ConversationStatus.processing.value:
         return False
-    claimed_at = external_data.get('from_segments_claimed_at')
+    claimed_at = conversation.get('processing_admitted_at') or external_data.get('from_segments_claimed_at')
     if not isinstance(claimed_at, datetime):
         return False
     if claimed_at.tzinfo is None:
@@ -2113,6 +2119,34 @@ def _ingest_conversation_from_segments(
 
     if request.folder_id is not None and not folders_db.get_folder(uid, request.folder_id):
         raise HTTPException(status_code=422, detail="folder_id does not match any of your folders")
+    bounded_processing = bool(request.client_session_id) and request_deadline_absolute() is not None
+    args = (uid, request, transcript_segments, started_at, finished_at)
+    kwargs = {
+        'client_device_id': client_device_id,
+        'client_platform': client_platform,
+        'bounded_processing': bounded_processing,
+    }
+    if not bounded_processing:
+        return _process_validated_segments(*args, **kwargs)
+    try:
+        return wait_for_from_segments_processing(_process_validated_segments, *args, **kwargs)
+    except RequestDeadlineExceeded as error:
+        raise retryable_processing_response('request_budget_exhausted') from error
+    except ExecutorSaturatedError as error:
+        raise retryable_processing_response('from_segments_processing_capacity') from error
+
+
+def _process_validated_segments(
+    uid: str,
+    request: CreateConversationFromTranscriptRequest,
+    transcript_segments: list[TranscriptSegment],
+    started_at: datetime,
+    finished_at: datetime,
+    *,
+    client_device_id: Optional[str],
+    client_platform: Optional[str],
+    bounded_processing: bool,
+) -> ConversationResponse:
     calendar_context = request.calendar_meeting_context.to_context() if request.calendar_meeting_context else None
 
     # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
@@ -2167,6 +2201,8 @@ def _ingest_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
+                if bounded_processing and existing_conversation.get('status') == ConversationStatus.processing:
+                    raise retryable_processing_response('from_segments_processing_in_flight')
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
                 existing_conversation = _apply_late_from_segments_context(uid, existing_conversation, request)
                 receipt = record_finalized_meeting_receipt(uid, existing_conversation)
@@ -2258,6 +2294,8 @@ def _ingest_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
+                if bounded_processing and existing_conversation.get('status') == ConversationStatus.processing:
+                    raise retryable_processing_response('from_segments_processing_in_flight')
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
                 existing_conversation = _apply_late_from_segments_context(uid, existing_conversation, request)
                 receipt = record_finalized_meeting_receipt(uid, existing_conversation)

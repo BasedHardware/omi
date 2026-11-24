@@ -3,8 +3,9 @@
 The route must answer a retryable error inside the client's own 30 s HTTP pool
 deadline instead of holding the request for the notes agent's full recovery
 budget (agentic 120 s, then one-shot 180 s). The route sets the deadline; the
-auth dependency bounds its in-flight calls by it and the notes step caps its own
-deadlines to whatever remains. Unset — every other caller — changes nothing.
+auth dependency bounds its in-flight calls by it. Keyed uploads use it to bound
+the wait for processing while their admitted worker uses separate model budgets.
+Inline processing caps the notes step to the time remaining.
 
 The deadline is a contextvar, so it reaches the synchronous auth dependency and
 the handler through the threadpool context copy FastAPI makes for each, and the
@@ -18,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import time
-from concurrent.futures import TimeoutError as FuturesTimeoutError
+from concurrent.futures import TimeoutError as FuturesTimeoutError, wait
 from typing import Any, AsyncIterator, Callable, Coroutine, TypeVar
 
 # The client's own HTTP pool gives up at 30 s per attempt; answering a retryable
@@ -137,6 +138,31 @@ def call_within_request_deadline(fn: Callable[..., T], *args: object, **kwargs: 
             raise
         future.cancel()
         raise RequestDeadlineExceeded('request budget spent while the call was in flight') from error
+
+
+def wait_for_from_segments_processing(fn: Callable[..., T], *args: object, **kwargs: object) -> T:
+    """Bound the request's wait while the owner of the persisted claim finishes.
+
+    The worker keeps the caller context except for the HTTP deadline. Its model
+    calls retain their own processing budgets. Once running, the worker owns
+    completion and cleanup even when the caller receives a retryable response.
+    """
+    remaining = request_deadline_remaining_seconds()
+    if remaining is None:
+        return fn(*args, **kwargs)
+    if remaining <= 0.0:
+        raise RequestDeadlineExceeded('request budget spent before transcript processing')
+
+    from utils.executors import from_segments_executor
+
+    context = contextvars.copy_context()
+    context.run(_deadline.set, None)
+    future = from_segments_executor.submit(context.run, fn, *args, **kwargs)
+    done, _ = wait((future,), timeout=request_deadline_remaining_seconds())
+    if done:
+        return future.result()
+    future.cancel()  # Only work that has yet to start can be cancelled.
+    raise RequestDeadlineExceeded('request budget spent waiting for transcript processing')
 
 
 async def from_segments_request_deadline() -> AsyncIterator[None]:

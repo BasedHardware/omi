@@ -390,17 +390,22 @@ def retryable_provider_failure_http_exception(error: BaseException, *, route: st
     )
     # Name the raise site so the route-level 503 hook logs one attributable
     # WARNING line; the tag is metadata only and the response is unchanged.
+    site = 'conversation_processing_retryable'
+    if isinstance(error, RequestDeadlineExceeded):
+        site = 'request_budget_exhausted'
+    elif failure_class == 'timeout':
+        site = 'conversation_processing_retryable:timeout'
+    return retryable_processing_response(site)
+
+
+def retryable_processing_response(raise_site: str) -> HTTPException:
     return tag_raise_site(
         HTTPException(
             status_code=503,
             detail=RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL,
             headers={'Retry-After': RETRYABLE_CONVERSATION_PROCESSING_RETRY_AFTER_SECONDS},
         ),
-        (
-            'notes_deadline_exceeded'
-            if isinstance(error, RequestDeadlineExceeded)
-            else 'conversation_processing_retryable'
-        ),
+        raise_site,
     )
 
 

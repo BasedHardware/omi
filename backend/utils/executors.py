@@ -325,6 +325,11 @@ sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_
 auth_deadline_executor = MonitoredThreadPoolExecutor(
     name="auth_deadline", max_workers=16, max_queue_size=64, thread_name_prefix="auth-deadline"
 )
+# Keyed transcript ingestion can outlive its HTTP waiter. Reserve capacity
+# independently of auth and derived effects, and do not queue expired uploads.
+from_segments_executor = MonitoredThreadPoolExecutor(
+    name="from_segments", max_workers=8, max_queue_size=0, thread_name_prefix="from-segments"
+)
 # Optional per-window LID must not hold the shared sync coordination pool.
 # Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
 record_language_executor = MonitoredThreadPoolExecutor(
@@ -400,6 +405,7 @@ _ALL_EXECUTORS = [
     admission_executor,
     sync_executor,
     auth_deadline_executor,
+    from_segments_executor,
     record_language_executor,
     postprocess_executor,
     cleanup_executor,

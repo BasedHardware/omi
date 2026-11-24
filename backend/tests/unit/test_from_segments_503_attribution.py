@@ -243,10 +243,10 @@ def _reachable_503_sites() -> dict[str, HTTPException]:
         'directory_routing_unavailable': _directory_routing_503(),
         'rate_limiter_unavailable': _rate_limiter_503(),
         'account_cutover_state_unavailable': _cutover_503(),
-        'conversation_processing_retryable': gateway_error_contract.conversation_processing_http_exception(
+        'conversation_processing_retryable:timeout': gateway_error_contract.conversation_processing_http_exception(
             TimeoutError('slow')
         ),
-        'notes_deadline_exceeded': gateway_error_contract.conversation_processing_http_exception(
+        'request_budget_exhausted': gateway_error_contract.conversation_processing_http_exception(
             RequestDeadlineExceeded('spent')
         ),
         'auth_deadline_exceeded': _auth_deadline_503(),
@@ -311,4 +311,4 @@ def test_endpoints_503_sites_are_tagged():
 def test_conversation_processing_503_is_tagged():
     exc = gateway_error_contract.conversation_processing_http_exception(TimeoutError('slow'))
     assert exc.status_code == 503
-    assert raise_site_of(exc) == 'conversation_processing_retryable'
+    assert raise_site_of(exc) == 'conversation_processing_retryable:timeout'

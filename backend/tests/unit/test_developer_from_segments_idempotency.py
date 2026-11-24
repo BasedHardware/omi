@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -10,6 +11,8 @@ import database.conversations as conversations_db
 from database.firestore_read_metrics import FirestoreReadSite
 import routers.developer as developer
 import utils.conversations.meeting_receipt as meeting_receipt
+from utils.other.raise_site import raise_site_of
+from utils.other.request_deadline import request_deadline_absolute, reset_request_deadline, set_request_deadline
 from models.conversation import Conversation, CreateConversation
 from models.structured import Structured
 from models.conversation_enums import ConversationStatus
@@ -632,6 +635,66 @@ def test_client_session_id_stale_claim_is_deleted_and_reprocessed(monkeypatch):
     assert response.id == expected_id
     delete.assert_called_once_with('uid1', expected_id)
     process.assert_called_once()
+
+
+def test_budget_cut_keeps_claim_and_retry_reads_completed_result(monkeypatch):
+    row = {}
+    processing_started = Event()
+    finish_processing = Event()
+    persisted = Event()
+
+    def claim(_uid, payload, *, idempotent):
+        row.update(payload)
+        return True
+
+    def process(_uid, _language, conversation, **_kwargs):
+        assert request_deadline_absolute() is None
+        processing_started.set()
+        assert finish_processing.wait(timeout=10)
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    def persist(_uid, payload):
+        row.update(payload)
+        persisted.set()
+
+    delete = MagicMock()
+    processor = MagicMock(side_effect=process)
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *_args, **_kwargs: dict(row) or None)
+    monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persist)
+    monkeypatch.setattr(developer, 'process_conversation', processor)
+    request = _request(client_session_id='local-session-1')
+
+    def submit(budget):
+        token = set_request_deadline(budget)
+        try:
+            return developer._create_conversation_from_segments('uid1', request)
+        finally:
+            reset_request_deadline(token)
+
+    try:
+        with pytest.raises(HTTPException) as cut:
+            submit(0.5)
+        assert cut.value.status_code == 503
+        assert raise_site_of(cut.value) == 'request_budget_exhausted'
+        assert processing_started.is_set()
+        assert row['status'] == ConversationStatus.processing
+
+        with pytest.raises(HTTPException) as active:
+            submit(5)
+        assert active.value.status_code == 503
+        assert raise_site_of(active.value) == 'from_segments_processing_in_flight'
+    finally:
+        finish_processing.set()
+        assert persisted.wait(timeout=5)
+
+    result = submit(5)
+    assert result.status == 'completed'
+    assert result.id == row['id']
+    processor.assert_called_once()
+    delete.assert_not_called()
 
 
 def test_client_session_id_claim_is_released_when_processing_fails(monkeypatch):
