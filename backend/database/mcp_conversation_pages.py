@@ -22,6 +22,11 @@ from config.firestore_read_levers import lever_enabled
 from config.transcript_publication import discovery_statuses, ready_for_discovery
 
 from ._client import get_firestore_client
+from .conversation_discovery_query import (
+    PartitionedConversationQuery,
+    category_batches,
+    combine_category_queries,
+)
 from .conversations import (
     document_data_with_revision,
     prepare_conversation_for_read,
@@ -76,7 +81,7 @@ def _card_field_paths(extra_field_paths: Optional[Sequence[str]]) -> List[str]:
 
 def _card_query(collection, categories, start_date, end_date):
     categories = list(dict.fromkeys(categories or ()))
-    statuses = discovery_statuses(categories)
+    statuses = discovery_statuses()
     spec = MCP_CONVERSATION_CARD_QUERY_SPECS[(bool(categories), start_date is not None, end_date is not None)]
 
     def field_filter(path, operator, value):
@@ -84,10 +89,13 @@ def _card_query(collection, categories, start_date, end_date):
             return FieldFilter(path, 'in', statuses)
         return FieldFilter(path, operator, value)
 
-    return spec.build(
-        collection,
-        dict(discarded=False, status=statuses[0], categories=categories, start_date=start_date, end_date=end_date),
-        field_filter_factory=field_filter,
+    return combine_category_queries(
+        spec.build(
+            collection,
+            dict(discarded=False, status=statuses[0], categories=batch, start_date=start_date, end_date=end_date),
+            field_filter_factory=field_filter,
+        )
+        for batch in category_batches(categories, statuses)
     )
 
 
@@ -120,10 +128,15 @@ def get_mcp_conversation_cards(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = client.collection('users').document(uid).collection(conversations_collection)
     query = _card_query(collection, categories, start_date, end_date)
-    query = query.order_by('created_at', direction=firestore.Query.DESCENDING).select(
-        _card_field_paths(extra_field_paths)
+    query = (
+        query.order_by('created_at', direction=firestore.Query.DESCENDING)
+        .order_by('__name__', direction=firestore.Query.DESCENDING)
+        .select(_card_field_paths(extra_field_paths))
     )
     window = query.limit(limit).offset(offset)
+    partition_cap = budget is None and read_cap is not None and isinstance(query, PartitionedConversationQuery)
+    if partition_cap:
+        budget = ListReadBudget.for_request(None, route='mcp_cards', max_documents=read_cap)
     conversations: List[Dict[str, Any]] = []
     scanned = 0
     window_size = limit
@@ -131,15 +144,22 @@ def get_mcp_conversation_cards(
         while True:
             fetched = 0
             last_doc = None
-            for doc in projected_stream_iter(
-                window, budget, surface='mcp_cards', offset_reads=offset if scanned == 0 else 0
-            ):
+            docs = (
+                window.iter_documents(budget)
+                if isinstance(window, PartitionedConversationQuery)
+                else projected_stream_iter(
+                    window, budget, surface='mcp_cards', offset_reads=offset if scanned == 0 else 0
+                )
+            )
+            for doc in docs:
                 fetched += 1
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
                 if conversation is None:
                     continue
-                if not is_visible_conversation(conversation, presentation=True) or not ready_for_discovery(conversation):
+                if not is_visible_conversation(conversation, presentation=True) or not ready_for_discovery(
+                    conversation
+                ):
                     continue
                 conversation.setdefault('id', doc.id)
                 conversations.append(conversation)
@@ -170,13 +190,12 @@ def get_mcp_conversation_cards(
                 # Refill only missing slots, rather than discarding an entire
                 # second page's surplus visible cards after paying for them.
                 window_size = min(limit - len(conversations), remaining)
-            window = (
-                query.order_by('__name__', direction=firestore.Query.DESCENDING)
-                .limit(window_size)
-                .start_after({'created_at': last_created_at, '__name__': collection.document(last_doc.id)})
+            window = query.limit(window_size).start_after(
+                {'created_at': last_created_at, '__name__': collection.document(last_doc.id)}
             )
     except ListReadBudgetExhausted:
-        pass
+        if partition_cap:
+            _require_cursor()
     return conversations[:limit]
 
 
@@ -218,6 +237,7 @@ def get_mcp_conversation_cards_page(
     scanned = 0
     last_position = after
     exhausted = False
+    partition_budget = None
     while len(visible) < limit + 1 and scanned < scan_cap:
         window_size = min(limit + 1 - len(visible), scan_cap - scanned) if read_cap is not None else limit + 1
         query = _card_query(collection, categories, start_date, end_date)
@@ -234,9 +254,21 @@ def get_mcp_conversation_cards_page(
             if not isinstance(after_id, str) or not after_id.strip() or '/' in after_id:
                 raise ValueError('conversation keyset doc id is invalid')
             query = query.start_after({'created_at': after_ts, '__name__': collection.document(after_id)})
-        raw_docs = projected_stream_list(query, surface='mcp_cards')
+        capped = False
+        if isinstance(query, PartitionedConversationQuery):
+            if read_cap is not None and partition_budget is None:
+                partition_budget = ListReadBudget.for_request(None, route='mcp_cards', max_documents=read_cap)
+            raw_docs = []
+            try:
+                raw_docs.extend(query.iter_documents(partition_budget))
+            except ListReadBudgetExhausted:
+                capped = True
+        else:
+            raw_docs = projected_stream_list(query, surface='mcp_cards')
         if not raw_docs:
-            exhausted = True
+            if capped and scanned == 0:
+                _require_cursor()
+            exhausted = not capped
             break
         scanned += len(raw_docs)
         for doc in raw_docs:
@@ -258,7 +290,7 @@ def get_mcp_conversation_cards_page(
             conversation.setdefault('id', doc.id)
             visible.append(conversation)
             visible_positions.append(last_position)
-        if exhausted:
+        if exhausted or capped:
             break
         if len(raw_docs) < window_size:
             exhausted = True

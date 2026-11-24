@@ -7,12 +7,8 @@ def deferred_transcript_reads_enabled() -> bool:
     return os.getenv('OMI_DEFERRED_TRANSCRIPT_READS_ENABLED', 'on').lower() == 'on'
 
 
-def discovery_statuses(categories: list[str] | None) -> list[str]:
-    # Two IN filters expand into disjunctive normal form. Six categories fit
-    # with both date bounds and keyset ordering under Firestore's 100-term cap.
-    if deferred_transcript_reads_enabled() and len(set(categories or ())) <= 6:
-        return ['completed', 'processing']
-    return ['completed']
+def discovery_statuses() -> list[str]:
+    return ['completed', 'processing'] if deferred_transcript_reads_enabled() else ['completed']
 
 
 def ready_for_discovery(row: dict) -> bool:

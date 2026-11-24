@@ -509,6 +509,167 @@ def test_worker_catches_up_published_memories_before_chat_retrieval(lane, monkey
     assert not lane.tasks and not lane.published
 
 
+@pytest.mark.parametrize('category_count', [6, 7, 33])
+def test_external_discovery_pages_mixed_statuses_and_tied_keys_without_paid_work(lane, monkeypatch, category_count):
+    from datetime import datetime, timedelta, timezone
+
+    from fastapi import HTTPException, Response
+
+    from database import mcp_conversation_pages
+    from dependencies import ApiKeyAuth
+    from models.conversation_enums import CategoryEnum
+    from routers import conversations as app, developer, mcp as mcp_rest
+    from utils.mcp_server.handlers import conversations as mcp
+
+    monkeypatch.setenv('OMI_DEFERRED_TRANSCRIPT_READS_ENABLED', 'on')
+    monkeypatch.setattr(mcp_conversation_pages, 'get_firestore_client', lambda: lane.client)
+    monkeypatch.setattr(lane.conversations, 'db', lane.client)
+    monkeypatch.setattr(developer, 'populate_speaker_names', lambda *_a, **_kw: None)
+    monkeypatch.setattr(developer, 'populate_folder_names', lambda *_a, **_kw: None)
+    monkeypatch.setattr(developer, '_audit_developer_read', lambda **_kw: None)
+
+    def unexpected(*_a, **_kw):
+        pytest.fail('discovery started paid work')
+
+    monkeypatch.setattr(app, '_enrich_deferred_conversation', unexpected)
+    monkeypatch.setattr(app, 'open_recording', unexpected)
+    monkeypatch.setattr(app, 'process_conversation', unexpected)
+
+    checks = []
+
+    def transcript_grant(auth, **_):
+        checks.append(auth.uid)
+        if auth.scopes != ['transcript']:
+            raise HTTPException(403, 'Transcript grant required')
+
+    monkeypatch.setattr(developer, 'check_conversation_transcript_read_limit', transcript_grant)
+
+    all_categories = [category.value for category in CategoryEnum]
+    assert len(all_categories) >= category_count
+    categories = all_categories[:category_count]
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    end = start + timedelta(days=1)
+    tied = start + timedelta(hours=12)
+    all_rows = {
+        'i-newer': (0, 'completed', tied + timedelta(minutes=1), {}),
+        'h-deferred-tie': (6, 'processing', tied, {'processing_deferred': True}),
+        'g-unready-tie': (6, 'processing', tied, {}),
+        'f-completed-tie': (1, 'completed', tied, {}),
+        'e-erased-tie': (0, 'processing', tied, {'deferred': True, 'deleted': True}),
+        'd-deferred-tie': (4, 'processing', tied, {'deferred': True}),
+        'c-completed-tie': (6, 'completed', tied, {}),
+        'b-older': (5, 'processing', tied - timedelta(minutes=1), {'has_content': True}),
+        'a-last-category': (len(all_categories) - 1, 'completed', tied - timedelta(minutes=2), {}),
+        'z-outside-date': (6, 'completed', start - timedelta(days=1), {}),
+    }
+
+    def add_row(user, cid, info):
+        category, status, stamp, extra = info
+        row = lane.conversations.encode_conversation_for_write(
+            user.id,
+            {
+                'id': cid,
+                'source': 'omi',
+                'status': status,
+                'discarded': False,
+                'created_at': stamp,
+                'started_at': stamp,
+                'finished_at': stamp,
+                'structured': {'title': cid, 'category': all_categories[category]},
+                'folder_id': 'synthetic-folder',
+                'starred': cid != 'b-older',
+                'transcript_segments': [{'id': cid, 'start': 0.0, 'end': 1.0, 'text': f'Stored {cid}'}],
+                **extra,
+            },
+        )
+        user.collection('conversations').document(cid).set(row)
+
+    for cid, info in all_rows.items():
+        add_row(lane.user, cid, info)
+    add_row(lane.client.collection('users').document('other-owner'), 'other-owner-row', all_rows['f-completed-tie'])
+    expected = ['i-newer', 'f-completed-tie', 'd-deferred-tie', 'b-older']
+    if category_count > 6:
+        expected = ['i-newer', 'h-deferred-tie', 'f-completed-tie', 'd-deferred-tie', 'c-completed-tie', 'b-older']
+    if all_categories[-1] in categories:
+        expected.append('a-last-category')
+
+    def tool_page(cursor):
+        response = mcp.get_conversations(
+            lane.uid,
+            {
+                'categories': categories,
+                'timezone': 'UTC',
+                'start_date': '2026-01-01',
+                'end_date': '2026-01-01',
+                'limit': 2,
+                **({'cursor': cursor} if cursor else {}),
+            },
+        )
+        return [row['id'] for row in response['conversations']], response.get('next_cursor')
+
+    def rest_page(cursor, offset=0):
+        response = Response()
+        rows = mcp_rest.get_conversations(
+            response, start, end, ','.join(categories), 2, offset, cursor, timezone='UTC', uid=lane.uid
+        )
+        return [row.id for row in rows], response.headers.get('X-Next-Cursor')
+
+    def developer_page(cursor, *, offset=0, transcript=False, auth=None, folder=None, starred=None):
+        response = Response()
+        rows = developer.get_conversations(
+            start_date=start,
+            end_date=end,
+            categories=','.join(categories),
+            limit=2,
+            offset=offset,
+            include_transcript=transcript,
+            folder_id=folder,
+            starred=starred,
+            uid=auth or ApiKeyAuth(lane.uid, ['transcript']),
+            response=response,
+            cursor=cursor,
+        )
+        if transcript:
+            assert all(row.transcript_segments[0].text == f'Stored {row.id}' for row in rows)
+            return [row.id for row in rows], response.headers.get('X-Omi-Next-Offset')
+        return [row.id for row in rows], response.headers.get('X-Omi-Next-Cursor')
+
+    def collect(page, cursor=None):
+        ids = []
+        for _ in range(len(expected) + 2):
+            rows, cursor = page(cursor)
+            ids.extend(rows)
+            if cursor is None:
+                return ids
+        pytest.fail('discovery pagination did not terminate')
+
+    snapshots = {row.id: row.update_time for row in lane.user.collection('conversations').stream()}
+    for page in (tool_page, rest_page, developer_page):
+        assert collect(page) == expected
+    assert collect(lambda offset: developer_page(None, offset=int(offset or 0), transcript=True)) == expected
+    assert collect(lambda cursor: rest_page(cursor, offset=1 if cursor is None else 0)) == expected[1:]
+    assert collect(
+        lambda offset: developer_page(
+            None, offset=int(offset or 0), transcript=True, folder='synthetic-folder', starred=True
+        )
+    ) == [cid for cid in expected if cid != 'b-older']
+    _, owner_cursor = rest_page(None)
+    assert owner_cursor
+    with pytest.raises(HTTPException) as wrong_owner:
+        mcp_rest.get_conversations(
+            Response(), start, end, ','.join(categories), 2, cursor=owner_cursor, timezone='UTC', uid='other-owner'
+        )
+    assert wrong_owner.value.status_code == 400
+    with pytest.raises(HTTPException) as denied:
+        developer_page(None, transcript=True, auth=ApiKeyAuth(lane.uid, []))
+    assert denied.value.status_code == 403
+    assert checks and set(checks) == {lane.uid}
+    monkeypatch.setenv('OMI_DEFERRED_TRANSCRIPT_READS_ENABLED', 'off')
+    assert collect(rest_page) == [cid for cid in expected if all_rows[cid][1] == 'completed']
+    assert {row.id: row.update_time for row in lane.user.collection('conversations').stream()} == snapshots
+    assert not lane.tasks and not lane.published
+
+
 def test_replay_has_one_assignment_one_enrichment_version_and_durable_before_client(lane):
     batch = lane.seed()
     lane.finish(batch)

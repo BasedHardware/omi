@@ -1541,6 +1541,7 @@ def get_conversations(
         budget_kwargs = {'budget': budget} if budget is not None else {}
 
         next_cursor = None
+        next_offset = None
         if not include_transcript and folder_id is None and starred is None:
             try:
                 conversations, next_cursor = conversation_cards_page_core(
@@ -1564,19 +1565,23 @@ def get_conversations(
             except ToolExecutionError as exc:
                 raise HTTPException(status_code=exc.http_status or 400, detail=exc.message) from exc
             has_more = next_cursor is not None
+            if next_cursor is None and conversations:
+                next_offset = offset + len(conversations)
         else:
             if cursor:
                 raise HTTPException(
                     status_code=400, detail="cursor requires include_transcript=false and no folder/starred filter"
                 )
+            page_report = {}
             conversations = conversations_db.get_conversations_without_photos(
                 uid,
                 limit + 1,
                 offset,
                 include_discarded=False,
                 presentation=True,
-                statuses=discovery_statuses([c.value for c in category_list]),
+                statuses=discovery_statuses(),
                 transcript_discovery=True,
+                cursor_page=page_report,
                 start_date=start_date,
                 end_date=end_date,
                 categories=list(dict.fromkeys(c.value for c in category_list)),
@@ -1584,7 +1589,10 @@ def get_conversations(
                 starred=starred,
                 **budget_kwargs,
             )
-            has_more = len(conversations) > limit
+            lookahead = len(conversations) > limit
+            has_more = lookahead or page_report.get('has_more', False)
+            consumed = page_report.get('storage_rows', len(conversations)) - int(lookahead)
+            next_offset = offset + consumed if consumed > 0 else None
             conversations = conversations[:limit]
         if budget is not None:
             finish_list_budget(response, budget)
@@ -1593,7 +1601,7 @@ def get_conversations(
             response,
             limit=limit,
             has_more=has_more,
-            next_offset=offset + len(conversations) if next_cursor is None and conversations else None,
+            next_offset=next_offset,
             next_cursor=next_cursor,
         )
 

@@ -86,6 +86,11 @@ from utils.conversations.home_titles import (
 )
 from utils.conversations import transcribing_hold
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
+from database.conversation_discovery_query import (
+    PartitionedConversationQuery,
+    category_batches,
+    combine_category_queries,
+)
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from database import recording_transcript_publication as recording_publication
 from database import transcript_pointer
@@ -1132,7 +1137,12 @@ class _PageFill:
         refill = 0
         while True:
             fetched = 0
-            for doc in budgeted_stream_iter(query, self.budget):
+            docs = (
+                query.iter_documents(self.budget)
+                if isinstance(query, PartitionedConversationQuery)
+                else budgeted_stream_iter(query, self.budget)
+            )
+            for doc in docs:
                 fetched += 1
                 self.consumed += 1
                 self.last_doc = doc
@@ -1328,7 +1338,7 @@ def _collect_visible_conversation_page(
         # This scan's offset counts visible rows, so the advance is the page size.
         return finish(conversations, last_doc, storage_rows=len(conversations), has_more=has_more)
 
-    if budget is not None and offset > 0:
+    if budget is not None and offset > 0 and not isinstance(conversations_ref, PartitionedConversationQuery):
         try:
             budget.charge(offset)
         except ListReadBudgetExhausted:
@@ -2468,9 +2478,6 @@ def get_conversations_without_photos(
         else:
             conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
 
-    if categories:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
-
     if folder_id:
         conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
 
@@ -2485,6 +2492,18 @@ def get_conversations_without_photos(
 
     # Sort
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    if categories:
+        if transcript_discovery:
+            groups = category_batches(
+                categories, statuses, extra_filters=int(bool(folder_id)) + int(starred is not None)
+            )
+            if len(groups) > 1:
+                conversations_ref = conversations_ref.order_by('__name__', direction=firestore.Query.DESCENDING)
+            conversations_ref = combine_category_queries(
+                conversations_ref.where(filter=FieldFilter('structured.category', 'in', group)) for group in groups
+            )
+        else:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
 
     rows = _collect_visible_conversation_page(
         conversations_ref,
