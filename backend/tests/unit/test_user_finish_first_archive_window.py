@@ -5,22 +5,21 @@ only when an archive window commits. A finish before that used to be answered ``
 ignored, so the recording stayed open until the socket closed or the quiet timer fired.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
+from google.cloud import firestore
 
 from config import server_batch
 from database import conversation_finalization_jobs as jobs
 from utils.conversations import finalizer
+from utils.conversations import lifecycle
 from utils.conversations.processing_trigger import ProcessingTrigger
-from tests.unit.test_conversation_finalization_jobs import (
-    _Collection,
-    _Transaction,
-    _admit_finalization,
-    _conversation,
-    _now,
-)
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+NOW = datetime(2026, 7, 13, tzinfo=timezone.utc)
+ROW = ('users', 'uid-1', 'conversations', 'conversation-1')
 
 
 def _live(**row):
@@ -30,7 +29,7 @@ def _live(**row):
         'record_lane_owner': 'batch_live_v1',
         server_batch.MARKER: True,
         'server_batch_audio_received': True,
-        'created_at': _now() - timedelta(seconds=37),
+        'created_at': NOW - timedelta(seconds=37),
         **row,
     }
 
@@ -40,25 +39,45 @@ def _every_owner(monkeypatch):
     monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'on')
 
 
-def _intent(row, trigger):
-    return jobs._create_or_get_finalization_intent_txn(  # pyright: ignore[reportPrivateUsage]
-        _Transaction(),
-        _conversation(row),
-        _Collection({}),
+def _admit(row, trigger):
+    """Run the real admission transaction and the real lifecycle reducer on a strict store."""
+    db = StrictFirestore({ROW: row})
+    intent = firestore.transactional(
+        jobs._create_or_get_finalization_intent_txn
+    )(  # pyright: ignore[reportPrivateUsage]
+        db.transaction(),
+        db.document('/'.join(ROW)),
+        db.collection(jobs.FINALIZATION_JOBS_COLLECTION),
         'uid-1',
         'conversation-1',
         False,
-        _admit_finalization,
-        _now(),
+        lambda conversation: lifecycle._finalization_admission(  # pyright: ignore[reportPrivateUsage]
+            conversation, 'conversation-1'
+        ),
+        NOW,
         trigger=trigger,
     )
+    return intent, db
+
+
+def _intent(row, trigger):
+    intent, db = _admit(row, trigger)
+    if intent['status'] == 'no_content':
+        # A refused finish writes nothing: the recording stays open for its natural end.
+        assert db.rows == {ROW: row}
+    return intent
 
 
 def test_user_finish_before_the_first_archive_window_is_admitted():
-    intent = _intent(_live(), ProcessingTrigger.CLIENT_FINALIZE)
+    intent, db = _admit(_live(), ProcessingTrigger.CLIENT_FINALIZE)
 
     assert intent['status'] == 'queued'
-    assert intent['job_id']
+    job = db.rows[(jobs.FINALIZATION_JOBS_COLLECTION, intent['job_id'])]
+    assert (job['status'], job['uid'], job['conversation_id']) == ('queued', 'uid-1', 'conversation-1')
+    assert job['processing_trigger'] == ProcessingTrigger.CLIENT_FINALIZE.value
+    row = db.rows[ROW]
+    assert row['status'] == 'processing'
+    assert (row['finalization_job_id'], row['finalization_revision']) == (intent['job_id'], 1)
 
 
 @pytest.mark.parametrize(
@@ -70,7 +89,7 @@ def test_user_finish_before_the_first_archive_window_is_admitted():
         _live(record_lane_owner=None),
         {'status': 'in_progress', 'transcript_segments': []},
         _live(listen_batch_producer={'version': 1, 'token': 't'}),
-        _live(created_at=_now() - timedelta(seconds=3)),
+        _live(created_at=NOW - timedelta(seconds=3)),
         _live(created_at=None),
     ],
     ids=[
@@ -116,7 +135,7 @@ def test_committed_audio_is_not_uncommitted():
 
     assert server_batch.live_audio_uncommitted(_live())
     assert not server_batch.live_audio_uncommitted(committed)
-    assert not server_batch.user_finish_admits('uid-1', committed, _now())
+    assert not server_batch.user_finish_admits('uid-1', committed, NOW)
 
 
 def _worker(monkeypatch, first, later):
