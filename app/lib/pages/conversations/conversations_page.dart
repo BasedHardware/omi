@@ -389,6 +389,7 @@ class _ConversationsPageState extends State<ConversationsPage>
   DateTime? _v3QuickSince;
   int? _v3ProcessingSignature;
   String? _v3LiveId;
+  DateTime? _v3LiveCreatedAt;
   DateTime? _v3EventRefreshAt;
 
   /// Episodes were asked for before the switch answered (and so made no call); ask again once it says
@@ -403,19 +404,35 @@ class _ConversationsPageState extends State<ConversationsPage>
       // Skip ticks while a pushed page (a conversation, settings) covers Home.
       _v3!.watch(
         when: () => mounted && (ModalRoute.of(context)?.isCurrent ?? true),
-        // X7: a row still transcribing or writing re-reads the list on the same 15 s tick.
+        // X7: a row that went to transcribing or writing within the last hour re-reads the recent
+        // rows on the same 15 s tick. An older stuck row no longer keeps the list re-reading.
         rowsPending: () =>
             mounted &&
             (_v3?.finishRow != null ||
-                ConversationsV3Provider.anyMidPipeline(
+                ConversationsV3Provider.recentlyMidPipeline(
                   context.read<ConversationProvider>().conversations,
-                )),
-        refreshRows: () => context.read<ConversationProvider>().fetchConversations(),
+                  clock.now(),
+                ).isNotEmpty),
+        refreshRows: _refreshRecentV3Rows,
       );
     } else {
       _v3?.unwatch();
       _stopV3Quick();
     }
+  }
+
+  /// Re-reads the rows that can be changing (created since the earliest recent pending row, the
+  /// rows this phone is processing, and [touched]) instead of the whole newest page, and leaves the
+  /// scroll position's paging alone.
+  Future<void> _refreshRecentV3Rows({Iterable<DateTime> touched = const []}) {
+    if (!mounted) return Future.value();
+    final provider = context.read<ConversationProvider>();
+    final now = clock.now();
+    return provider.refreshRecentConversations(ConversationsV3Provider.recentRefreshSince([
+      ...touched,
+      for (final row in ConversationsV3Provider.recentlyMidPipeline(provider.conversations, now)) row.createdAt,
+      for (final row in provider.processingConversations) row.createdAt,
+    ], now));
   }
 
   void _stopV3Quick() {
@@ -427,7 +444,11 @@ class _ConversationsPageState extends State<ConversationsPage>
   /// v3 Home after a frame. Until the server shows the conversation in progress, a streaming capture
   /// re-reads it every 5 s for up to 3 minutes. A capture event (a recording ended or was processed)
   /// re-reads the list and the live conversation instead of adding the recording as a row.
-  void _afterV3Frame({required bool waitingForLive, required int processingSignature, required String? liveId}) {
+  void _afterV3Frame(
+      {required bool waitingForLive,
+      required int processingSignature,
+      required String? liveId,
+      DateTime? liveCreatedAt}) {
     final v3 = _v3;
     if (v3 == null || !mounted) return;
     if (waitingForLive && _v3Watching) {
@@ -458,14 +479,17 @@ class _ConversationsPageState extends State<ConversationsPage>
         (last == null || clock.now().difference(last) >= const Duration(seconds: 10))) {
       _v3EventRefreshAt = clock.now();
       unawaited(v3.refresh());
-      unawaited(context.read<ConversationProvider>().fetchConversations());
+      unawaited(_refreshRecentV3Rows(touched: [if (liveCreatedAt != null) liveCreatedAt]));
     }
     // The conversation in progress closed (it left the live slot or another took it): re-read the list
     // so it appears as an ordinary row, whatever the processing signature did.
     final previousLive = _v3LiveId;
+    final previousLiveCreatedAt = _v3LiveCreatedAt;
     _v3LiveId = liveId;
+    _v3LiveCreatedAt = liveCreatedAt;
     if (previousLive != null && previousLive != liveId && v3.finishRow == null) {
-      unawaited(context.read<ConversationProvider>().fetchConversations());
+      // The closed conversation was created when it opened, possibly hours ago: start there.
+      unawaited(_refreshRecentV3Rows(touched: [if (previousLiveCreatedAt != null) previousLiveCreatedAt]));
     }
   }
 
@@ -751,6 +775,13 @@ class _ConversationsPageState extends State<ConversationsPage>
             // the latch so the next scroll can retry the same offset.
             _lastLoadMoreRequestKey = null;
           }
+          // A page can come back short (hidden rows) or add nothing new. With the reader still
+          // near the end, ask for the next one now instead of waiting for another scroll.
+          if (mounted && succeeded) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _prefetchCards();
+            });
+          }
         }),
       );
     }
@@ -958,6 +989,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                 waitingForLive: waiting,
                 processingSignature: signature,
                 liveId: v3Live?.id,
+                liveCreatedAt: v3Live?.createdAt,
               ));
         }
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,

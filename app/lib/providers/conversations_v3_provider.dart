@@ -299,6 +299,29 @@ class ConversationsV3Provider extends ChangeNotifier {
         return tile == ConversationTileState.transcribing || tile == ConversationTileState.writing;
       });
 
+  /// How long a row may sit mid-pipeline and still drive Home's periodic re-read. An older stuck
+  /// row updates on pull-to-refresh and when the app reopens; it must not keep the list re-reading.
+  static const pendingRefreshWindow = Duration(hours: 1);
+
+  /// The rows of [conversations] mid-pipeline whose last activity is within [pendingRefreshWindow].
+  static Iterable<ServerConversation> recentlyMidPipeline(Iterable<ServerConversation> conversations, DateTime now) =>
+      conversations.where((c) {
+        final tile = c.v3?.tileState;
+        if (tile != ConversationTileState.transcribing && tile != ConversationTileState.writing) return false;
+        return now.difference(c.finishedAt ?? c.startedAt ?? c.createdAt) < pendingRefreshWindow;
+      });
+
+  /// Where a bounded re-read of recent rows starts: the earliest creation among [touched] (rows known
+  /// to be changing), never later than [pendingRefreshWindow] ago and never earlier than a day ago.
+  static DateTime recentRefreshSince(Iterable<DateTime> touched, DateTime now) {
+    var since = now.subtract(pendingRefreshWindow);
+    for (final at in touched) {
+      if (at.isBefore(since)) since = at;
+    }
+    final floor = now.subtract(const Duration(days: 1));
+    return (since.isBefore(floor) ? floor : since).subtract(const Duration(minutes: 2));
+  }
+
   void unwatch() {
     if (_watchers > 0) _watchers--;
     if (_watchers > 0) return;

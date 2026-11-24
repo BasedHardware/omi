@@ -541,10 +541,20 @@ class _Conversations extends ConversationProvider {
 
   int listReads = 0;
 
+  /// Where the last recent-rows re-read started; null until one runs.
+  DateTime? recentSince;
+
   @override
   Future<bool> fetchConversations({bool restoreMergeWatches = true}) async {
     listReads++;
     return true;
+  }
+
+  // v3 Home's periodic and capture-event re-reads ask only for recent rows.
+  @override
+  Future<void> refreshRecentConversations(DateTime since) async {
+    listReads++;
+    recentSince = since;
   }
 }
 
@@ -713,6 +723,8 @@ void main() {
       expect(home.conversationsV3.live, isNull);
       expect(home.conversations.listReads, before + 1,
           reason: 'the closed conversation comes back as an ordinary row from the list read');
+      expect(home.conversations.recentSince!.isAfter(home.liveStart), isFalse,
+          reason: 'the bounded re-read reaches back to when the closed conversation opened');
 
       // The pendant is still streaming with no window open: the live row's placeholder stands in, and
       // the pendant capture card does not come back between windows.
