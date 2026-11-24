@@ -14,6 +14,7 @@ from utils.conversations import lifecycle, typesense_index
 from database.batch_pipeline_store import FirestoreStore
 from database import recording_sessions, batch_pipeline_privacy as privacy
 from utils.batch_pipeline import record_orphan_repair as repair
+from utils.other import storage
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit import test_conversation_quiet_finalization as quiet_tests
 
@@ -174,13 +175,17 @@ def test_delete_empty_uses_real_fenced_terminal_and_never_audio_cleanup(source, 
     # deletion transaction and raw-audio preservation path still run.
     monkeypatch.setattr(typesense_index, 'delete_conversation_index_doc', lambda *a: None)
     monkeypatch.setattr(lifecycle.conversations_db, 'delete_conversation_photos', lambda *a: None)
-    monkeypatch.setattr(lifecycle, 'delete_conversation_audio_files', Mock(side_effect=AssertionError('no GCS delete')))
+    raw_delete = Mock(side_effect=AssertionError('no GCS delete'))
+    inventory = Mock(return_value=0)
+    monkeypatch.setattr(storage, 'delete_conversation_audio_files', raw_delete)
+    monkeypatch.setattr(lifecycle, 'count_retained_raw_conversation_objects', inventory)
     result = plan(source)
     assert result['entries'][0]['disposition'] == 'delete_empty'
     assert apply(source, result) == {'empty_deleted': 1}
     assert PATH not in source[1].rows
     assert source[1].rows[SESSION]['lifecycle_phase'] == 'discarded'
-    lifecycle.delete_conversation_audio_files.assert_not_called()
+    raw_delete.assert_not_called()
+    inventory.assert_called_once_with(UID, CID)
     assert plan(source)['entries'][0]['disposition'] == 'not_candidate'
 
 
@@ -343,13 +348,25 @@ def test_cli_refuses_before_cloud_and_errors_are_aggregate_only(monkeypatch, cap
     module.get_firestore_client.assert_not_called()
 
 
-def test_dry_run_cannot_mint_privacy_cache_tokens(source, monkeypatch):
-    monkeypatch.setattr(privacy, 'lever_enabled', lambda name, *a: name == 'bpp_generation_memo')
+@pytest.mark.parametrize('shadow', [False, True])
+def test_dry_run_cannot_mint_privacy_cache_tokens(source, monkeypatch, shadow):
+    enabled_levers = {'bpp_owner_memo', 'bpp_owner_memo_enforce', 'bpp_token_mint'}
+    if shadow:
+        enabled_levers.add('privacy_checks_shadow')
+    monkeypatch.setattr(privacy, 'lever_enabled', lambda name, *a: name in enabled_levers)
+    monkeypatch.setattr(
+        privacy,
+        'lever_percent',
+        lambda name, *a: 100 if shadow and name == 'privacy_checks_shadow' else 0,
+    )
     mint = Mock(side_effect=AssertionError('dry-run must never mint'))
     monkeypatch.setattr(privacy, 'schedule_token_mint', mint)
+    token_path = ('batch_pipeline_privacy', privacy.privacy_owner_key(UID))
+    assert token_path not in source[1].rows  # Exercise the missing durable-token path.
     assert plan(source)['entries'][0]['disposition'] == 'register'
     mint.assert_not_called()
     assert no_writes(source[1])
+    assert token_path not in source[1].rows
 
 
 def test_report_uses_retained_sample_spans_and_separates_stt_padding(source, monkeypatch):

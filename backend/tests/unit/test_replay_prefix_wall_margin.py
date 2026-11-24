@@ -88,7 +88,6 @@ async def run_prefix(virtual_clock, write_seconds, last_write_seconds=None):
             prefix,
             source=ring,
             provider='parakeet',
-            soniox=None,
             pacer=pacer,
             deadline=began + REPLAY_PREFIX_SECONDS,
             await_writes=True,

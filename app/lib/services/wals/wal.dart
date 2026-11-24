@@ -7,6 +7,9 @@
 // decodes as the wrong codec (still HTTP 200), so naming schemes here must
 // stay in sync with backend/utils/sync (CUSTODY.md).
 import 'dart:math';
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 
 import 'package:path_provider/path_provider.dart';
 
@@ -197,6 +200,9 @@ const int liveCaptureMaxAgeSeconds = 6 * 60 * 60;
 /// Build/patch rollback for clock-priority scheduling; never changes stored time.
 const walClockPriorityOff = bool.fromEnvironment('OMI_WAL_CLOCK_PRIORITY_OFF');
 
+/// Restores legacy display totals without changing recording custody.
+const catchUpStaleHandleOff = bool.fromEnvironment('OMI_CATCH_UP_STALE_HANDLE_OFF');
+
 /// Roll back indefinite clock-refusal probes to the ordinary seven-day policy.
 const invalidCaptureTimeRecoveryOff = bool.fromEnvironment('OMI_INVALID_CAPTURE_TIME_RECOVERY_OFF');
 
@@ -291,6 +297,7 @@ class Wal {
   set timerStart(int value) {
     if (_timerStart == value) return;
     _timerStart = value;
+    _id = null;
     _changed();
   }
 
@@ -331,6 +338,7 @@ class Wal {
   set device(String value) {
     if (_device == value) return;
     _device = value;
+    _id = null;
     _changed();
   }
 
@@ -368,6 +376,12 @@ class Wal {
   }
 
   /// Explicit Transcribe Later consent: only a manual upload may release this hold.
+  // New orphan rows need a file-specific playback/upload identity: producer
+  // collision and fractional suffixes can share the legacy device/second id.
+  // Existing and released rows keep their original id.
+  final bool recoveredOrphan;
+  String? _orphanIdentityPath, _orphanIdentity;
+
   bool _holdForUser;
   bool get holdForUser => _holdForUser;
   set holdForUser(bool value) {
@@ -668,6 +682,14 @@ class Wal {
     _changed();
   }
 
+  String? _liveFileWriteId;
+  String? get liveFileWriteId => _liveFileWriteId;
+  set liveFileWriteId(String? value) {
+    if (_liveFileWriteId == value) return;
+    _liveFileWriteId = value;
+    _changed();
+  }
+
   /// SHA-256 of the immutable fsynced file, using the upload manifest digest.
   /// Absent on legacy indexes: they cannot supply pendant reclaim authority.
   String? _fileSha256;
@@ -839,7 +861,37 @@ class Wal {
   bool refusalReported(int nowSeconds) =>
       status == WalStatus.uploadRejected && uploadRejectedAt > 0 && nowSeconds >= uploadRejectedAt + 7 * 86400;
 
-  String get id => '${device}_$timerStart';
+  /// Display-only expiry: an old uploaded handle needs a recent server wait.
+  /// Never retires the WAL or authorizes deleting any audio.
+  int? get pendingWorkExpiresAt => status == WalStatus.uploaded && !catchUpStaleHandleOff
+      ? max(uploadedAt + 86401, jobPendingConfirmedAt + 301)
+      : null;
+
+  bool countsAsPendingWork({int? nowSeconds}) {
+    if (status == WalStatus.uploaded) {
+      final expires = pendingWorkExpiresAt;
+      return expires == null || (nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) < expires;
+    }
+    return status == WalStatus.miss &&
+        !onDeviceOnly &&
+        (syncDisplayState == WalSyncDisplayState.waiting ||
+            syncDisplayState == WalSyncDisplayState.retrying ||
+            syncDisplayState == WalSyncDisplayState.syncing);
+  }
+
+  // Cache the regular identity used when scanning large histories. The device
+  // and timerStart setters invalidate it.
+  String? _id;
+
+  String get id {
+    final file = filePath;
+    if (!recoveredOrphan || file == null || file.isEmpty) return _id ??= '${_device}_$_timerStart';
+    if (_orphanIdentityPath != file) {
+      _orphanIdentityPath = file;
+      _orphanIdentity = 'orphan_${sha256.convert(utf8.encode(file))}';
+    }
+    return _orphanIdentity!;
+  }
 
   /// Single source of truth for how this recording's sync state is shown to the
   /// user. The sync page renders an explicit label + icon for every value so a
@@ -940,6 +992,7 @@ class Wal {
     WalStorage storage = WalStorage.mem,
     bool onDeviceOnly = false,
     bool holdForUser = false,
+    this.recoveredOrphan = false,
     DeviceType? deviceType,
     Map<String, dynamic>? onDeviceConversation,
     Map<String, dynamic>? onDevicePreparedUpload,
@@ -971,6 +1024,7 @@ class Wal {
     int? downloadSeqEnd,
     int? downloadFileBytes,
     String? fileSha256,
+    String? liveFileWriteId,
     Geolocation? geolocation,
     int retryCount = 0,
     int lastRetryAt = 0,
@@ -1024,6 +1078,7 @@ class Wal {
         _downloadSeqEnd = downloadSeqEnd,
         _downloadFileBytes = downloadFileBytes,
         _fileSha256 = fileSha256,
+        _liveFileWriteId = liveFileWriteId,
         _geolocation = geolocation,
         _retryCount = retryCount,
         _lastRetryAt = lastRetryAt,
@@ -1052,6 +1107,7 @@ class Wal {
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
       onDeviceOnly: json['on_device_only'] == true,
       holdForUser: json['hold_for_user'] == true,
+      recoveredOrphan: json['recovered_orphan'] == true,
       deviceType: DeviceType.values.asNameMap()[json['device_type']],
       onDeviceConversation:
           json['on_device_conversation'] is Map ? Map<String, dynamic>.from(json['on_device_conversation']) : null,
@@ -1087,6 +1143,7 @@ class Wal {
       downloadSeqEnd: json['download_seq_end'],
       downloadFileBytes: json['download_file_bytes'],
       fileSha256: json['file_sha256'],
+      liveFileWriteId: json['live_file_write_id'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
           : null,
@@ -1120,6 +1177,7 @@ class Wal {
       'storage': storage.name,
       'on_device_only': onDeviceOnly,
       'hold_for_user': holdForUser,
+      if (recoveredOrphan) 'recovered_orphan': true,
       if (deviceType != null) 'device_type': deviceType!.name,
       'on_device_conversation': onDeviceConversation,
       if (onDevicePreparedUpload != null) 'on_device_prepared_upload': onDevicePreparedUpload,
@@ -1152,6 +1210,7 @@ class Wal {
       if (downloadSeqEnd != null) 'download_seq_end': downloadSeqEnd,
       if (downloadFileBytes != null) 'download_file_bytes': downloadFileBytes,
       if (fileSha256 != null) 'file_sha256': fileSha256,
+      if (liveFileWriteId != null) 'live_file_write_id': liveFileWriteId,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
@@ -1188,6 +1247,7 @@ class Wal {
     h = _mixFingerprint(h, storage.index);
     h = _mixFingerprint(h, onDeviceOnly ? 1 : 0);
     h = _mixFingerprint(h, holdForUser ? 1 : 0);
+    h = _mixFingerprint(h, recoveredOrphan ? 1 : 0);
     h = _mixFingerprint(h, deviceType?.index ?? -1);
     h = _mixFingerprint(h, identityHashCode(onDeviceConversation));
     h = _mixFingerprint(h, identityHashCode(onDevicePreparedUpload));
@@ -1220,6 +1280,7 @@ class Wal {
     h = _mixFingerprint(h, downloadSeqEnd ?? -1);
     h = _mixFingerprint(h, downloadFileBytes ?? -1);
     h = _mixFingerprint(h, fileSha256?.hashCode ?? 0);
+    h = _mixFingerprint(h, liveFileWriteId?.hashCode ?? 0);
     h = _mixFingerprint(h, identityHashCode(geolocation));
     h = _mixFingerprint(h, retryCount);
     h = _mixFingerprint(h, lastRetryAt);

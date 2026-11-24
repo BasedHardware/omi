@@ -25,7 +25,7 @@ long unmatched prefix.
 from __future__ import annotations
 
 import time
-from typing import Any, Callable, ContextManager, Iterable, Protocol
+from typing import Any, Callable, ContextManager, Iterable, Mapping, Protocol
 
 from google.cloud import firestore
 
@@ -40,6 +40,7 @@ from database.batch_pipeline_purge import delete_job as _delete_job
 from database.batch_pipeline_purge import erase_artifact as _erase_artifact
 from database.batch_pipeline_purge import erase_result as _erase_result
 from database.batch_pipeline_purge import row_belongs as _belongs
+from database.sync_ledger_sources import owed_batch_segments
 from database.batch_pipeline_purge import row_references as _references
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
 from database.legal_holds import settles_unknown_erasure
@@ -63,17 +64,27 @@ SEGMENT_PAGE = 20
 OBJECT_DELETE_TIMEOUT_SECONDS = 5.0
 
 
+class PurgeIntentMissing(RuntimeError):
+    """Deletion intent vanished before traversal; no destructive work is authorized."""
+
+
+class ArtifactUploadPending(Exception):
+    """The current page still owns an upload erasure receipt."""
+
+
 class PurgeCheckpointed(Exception):
     """The run budget ran out at a checkpoint; the next run resumes from it."""
 
 
-class Progress(Protocol):
+class MemberProgress(Protocol):
     position: dict[str, Any]
 
     def checkpoint(self, position: dict[str, Any], *, add_segments: tuple[str, Iterable[str]] | None = None) -> None:
         """Persist position (and newly found segments) under run ownership."""
         ...
 
+
+class Progress(MemberProgress, Protocol):
     def segments(self, namespace: str) -> set[str]:
         """Every persisted segment id for ``namespace``."""
         ...
@@ -165,12 +176,43 @@ def purge_conversation(
     delete_uri: Callable[[str, str], None] | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> int:
-    """Erase ``conversation_id``'s batch rows from ``progress.position`` onward; returns rows erased."""
+    """Erase one conversation using the same traversal as a sealed owner group."""
+    return purge_conversations(
+        uid,
+        {conversation_id: progress},
+        progress,
+        firestore_client=firestore_client,
+        delete_uri=delete_uri,
+        clock=clock,
+    )
+
+
+def purge_conversations(
+    uid: str,
+    members: Mapping[str, MemberProgress],
+    progress: Progress,
+    *,
+    firestore_client: Any = None,
+    delete_uri: Callable[[str, str], None] | None = None,
+    clock: Callable[[], float] = time.monotonic,
+    check_tombstones: bool = True,
+) -> int:
+    """One owner traversal for sealed, independently authorized members.
+
+    Each member keeps its own durable segment journal. Associations are saved
+    before the shared cursor, and every dependent/parked page finishes for the
+    entire group before any binding is removed. The single-member path retains
+    its atomic association+cursor checkpoint. A coalesced caller may skip the
+    precheck only after transactionally checking every member tombstone.
+    """
     client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
     rpc_deadline.bind_firestore_client(client)  # erasures inside units honour the unit deadline
-    tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(conversation_id)
-    if not tombstone.get().exists:
-        raise RuntimeError('conversation deletion intent required before batch purge')
+    for conversation_id in members if check_tombstones else ():
+        tombstone = (
+            client.collection('users').document(uid).collection('deleted_conversations').document(conversation_id)
+        )
+        if not tombstone.get().exists:
+            raise PurgeIntentMissing('conversation deletion intent required before batch purge')
     default_storage_cleanup = delete_uri is None
     if delete_uri is None:
         from utils.batch_pipeline.retention import delete_batch_object
@@ -189,6 +231,13 @@ def purge_conversation(
             delete_batch_object(owner, uri, timeout=OBJECT_DELETE_TIMEOUT_SECONDS, storage_client=storage[0])
 
         delete_uri = bounded_delete
+
+    def belongs(data: dict[str, Any]) -> bool:
+        return any(_belongs(data, conversation_id) for conversation_id in members)
+
+    # Sync uploads are keyed by a provisional capture identity; the ledger names
+    # the batch segments that a now fully deleted upload left behind.
+    owed = {cid: owed_batch_segments(uid, [cid], firestore_client=client) for cid in members}
     key = privacy_owner_key(uid)
     start = dict(progress.position or {})
     start_ns = int(start.get('ns') or 0)
@@ -217,9 +266,12 @@ def purge_conversation(
         def erase(item: Any, authority: Any) -> None:
             snapshot, data = item
             if table == 'artifacts':
-                _erase_artifact(
+                pending = _erase_artifact(
                     uid, namespace, snapshot, data, remote_delete(authority), fence=authority.fence, client=client
                 )
+                if pending:
+                    # Replay this page after the upload deadline, before unlinking segments.
+                    raise ArtifactUploadPending()
                 return
             if table == 'coalesce_groups':
                 from database.batch_pipeline_coalescing import purge_group
@@ -240,12 +292,17 @@ def purge_conversation(
     # reader already past the last namespace. Deleted generations are their
     # own cursor: a crash/budget handoff resumes with the remaining first page.
     if default_storage_cleanup:
-        while True:
-            _ensure_budget(progress)
-            originals = conversation_objects(uid, conversation_id, limit=UNIT_MAX_ROWS)
-            if not originals:
-                break
-            _in_units(progress, originals, lambda uri, authority: remote_delete(authority)(uid, uri), clock, settle)
+        for conversation_id in members:
+            while True:
+                _ensure_budget(progress)
+                originals = conversation_objects(uid, conversation_id, limit=UNIT_MAX_ROWS)
+                if not originals:
+                    break
+                _in_units(progress, originals, lambda uri, authority: remote_delete(authority)(uid, uri), clock, settle)
+                if len(members) > 1:
+                    # Deleted object generations are the WAL cursor. Persist a
+                    # handoff point even before the first metadata page.
+                    mark(dict(progress.position))
     for ns_index in range(start_ns, len(NAMESPACES)):
         namespace = NAMESPACES[ns_index]
         resuming = ns_index == start_ns and start.get('phase') in PHASES
@@ -271,7 +328,7 @@ def purge_conversation(
                         cursor = rows[-1].id
                         position = {'ns': ns_index, 'phase': phase, 'table': table_index, 'after': cursor}
                         if phase == 'discover':
-                            found = []
+                            found: dict[str, list[str]] = {cid: [] for cid in members}
                             for snapshot in rows:
                                 data = snapshot.to_dict() or {}
                                 result = {}
@@ -281,16 +338,28 @@ def purge_conversation(
                                     result_ref = client.collection(f'{namespace}_results').document(snapshot.id)
                                     result = result_ref.get().to_dict() or {}
                                 projection = result.get('projection') or data.get('projection')
-                                if _belongs({**data, 'projection': projection}, conversation_id):
-                                    found.append(snapshot.id)
-                            mark(position, add_segments=(namespace, found))
+                                for cid in members:
+                                    if snapshot.id in owed[cid].get(namespace, ()) or _belongs(
+                                        {**data, 'projection': projection}, cid
+                                    ):
+                                        found[cid].append(snapshot.id)
+                            if len(members) == 1 and next(iter(members.values())) is progress:
+                                mark(position, add_segments=(namespace, next(iter(found.values()))))
+                            else:
+                                # Fan-out can span transactions. Cursor commits LAST; replay is idempotent.
+                                for cid, segment_ids in found.items():
+                                    if segment_ids:
+                                        _ensure_budget(progress)
+                                        member = members[cid]
+                                        member.checkpoint(member.position, add_segments=(namespace, segment_ids))
+                                mark(position)
                             continue
                         matches = []
                         for snapshot in rows:
                             data = snapshot.to_dict() or {}
                             if (
-                                _belongs(data, conversation_id)
-                                or (table == 'artifacts' and data.get('segment_id') in segments)
+                                belongs(data)
+                                or (table in {'artifacts', 'projections'} and data.get('segment_id') in segments)
                                 or (table == 'intakes' and segments.intersection(data.get('segment_ids') or []))
                             ):
                                 matches.append((snapshot, data))
@@ -311,9 +380,9 @@ def purge_conversation(
                     matches = []
                     for snapshot in rows:
                         data = snapshot.to_dict() or {}
-                        if data.get('owner_key') == key:
-                            continue  # Already handled in ``dependents``, including pending writes.
-                        if _belongs(data, conversation_id) or data.get('segment_id') in segments:
+                        if data.get('owner_key') == key and not data.get('erasure_requested'):
+                            continue  # Already handled in ``dependents``.
+                        if belongs(data) or data.get('segment_id') in segments:
                             matches.append((snapshot, data))
                     erased += _in_units(progress, matches, erase_dependent(namespace, 'artifacts'), clock, settle)
                     mark({'ns': ns_index, 'phase': phase, 'table': 0, 'after': cursor})
@@ -379,4 +448,4 @@ def purge_conversation(
     return erased
 
 
-__all__ = ['PHASES', 'PurgeCheckpointed', 'purge_conversation']
+__all__ = ['PHASES', 'PurgeCheckpointed', 'PurgeIntentMissing', 'purge_conversation', 'purge_conversations']

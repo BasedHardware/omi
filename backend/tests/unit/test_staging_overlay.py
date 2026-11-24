@@ -318,3 +318,95 @@ def test_worker_post_render_sets_on_demand_replicas():
         render.patch([_worker_doc()], entries, replicas=-1)
     with pytest.raises(SystemExit):
         render.patch([{'kind': 'HorizontalPodAutoscaler'}, _worker_doc()], entries, replicas=0)
+
+
+@pytest.mark.parametrize('service', ['backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'])
+@pytest.mark.parametrize(
+    'lever,value', [('bpp_owner_memo_enforce', 100), ('privacy_checks_shadow', 0), ('bpp_decision_cache', 0)]
+)
+def test_staging_rejects_production_privacy_admission(tmp_path, service, lever, value):
+    import json
+
+    root = _copy_tree(tmp_path)
+
+    def mutate(doc):
+        entry = doc['overlay']['cloud_run']['services'][service]['env']['FIRESTORE_READ_LEVERS']
+        values = json.loads(entry['value'])
+        values[lever] = value
+        entry['value'] = json.dumps(values)
+
+    _edit_staging_overlay(root, mutate)
+    assert (
+        service,
+        'FIRESTORE_READ_LEVERS',
+        'staging privacy retention or other lever parity differs',
+    ) in staging_check.staging_diff(root)
+
+
+@pytest.mark.parametrize('service', sorted(staging_check.STAGING_PRIVACY_SERVICES))
+def test_removing_staging_privacy_map_cannot_inherit_production_admission(tmp_path, service):
+    root = _copy_tree(tmp_path)
+    _edit_staging_overlay(
+        root, lambda doc: doc['overlay']['cloud_run']['services'][service]['env'].pop('FIRESTORE_READ_LEVERS')
+    )
+    assert (
+        service,
+        'FIRESTORE_READ_LEVERS',
+        'staging privacy retention or other lever parity differs',
+    ) in staging_check.staging_diff(root)
+
+
+@pytest.mark.parametrize('mutation', ['unrelated', 'extra', 'missing', 'malformed', 'boolean', 'unrelated_boolean'])
+def test_staging_privacy_exception_preserves_strict_map_parity(tmp_path, mutation):
+    import json
+
+    root = _copy_tree(tmp_path)
+
+    def mutate(doc):
+        entry = doc['overlay']['cloud_run']['services']['backend']['env']['FIRESTORE_READ_LEVERS']
+        values = json.loads(entry['value'])
+        if mutation == 'unrelated':
+            values['usage_month_cache'] = 0
+        elif mutation == 'extra':
+            values['unreviewed_lever'] = 100
+        elif mutation == 'missing':
+            values.pop('usage_month_cache')
+        elif mutation == 'boolean':
+            values['bpp_owner_memo_enforce'] = False
+        elif mutation == 'unrelated_boolean':
+            values['privacy_ttl60'] = False
+        entry['value'] = 'not-json' if mutation == 'malformed' else json.dumps(values)
+
+    _edit_staging_overlay(root, mutate)
+    assert (
+        'backend',
+        'FIRESTORE_READ_LEVERS',
+        'staging privacy retention or other lever parity differs',
+    ) in staging_check.staging_diff(root)
+
+
+@pytest.mark.parametrize('environment', ['prod', 'staging'])
+def test_full_deploy_preserves_restored_integration_cadence(composer, environment):
+    config = (
+        composer.compose_staging(inputs=INPUTS)
+        if environment == 'staging'
+        else composer.compose_manifest()['environments']['prod']
+    )
+    expected = {
+        'BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS': '200',
+        'BATCH_PIPELINE_SERVING_TICK_SECONDS': '10',
+        'BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT': '16',
+    }
+    assert 'backend-integration' in config['cloud_run']['services']
+    for service, spec in config['cloud_run']['services'].items():
+        actual = {key: entry['value'] for key, entry in spec['env'].items() if key in expected}
+        # SCA-3120: the prod-only projection pump derives from integration; serving is off there.
+        assert actual == (expected if service in ('backend-integration', 'backend-projection-pump') else {}), service
+
+
+def test_staging_integration_keeps_the_serving_sweep_without_a_pump(composer):
+    """#25989 panel F1: prod hands the sweep to the projection pump; staging has no pump."""
+    services = composer.compose_staging(inputs=INPUTS)['cloud_run']['services']
+    assert 'backend-projection-pump' not in services
+    env = services['backend-integration']['env']
+    assert env['BATCH_PIPELINE_SERVING_PROJECTION_SWEEP'] == {'value': 'true', 'category': 'ops_kill'}

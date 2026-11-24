@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-pre-request-tool-identity-not-reproducible",
+  "family": "identity-qualifier",
   "violated_contract": "A pre-request artifact identity must be derivable from reviewed immutable source and independently match the actual future producer runtime; local tool hashes or unpinned protected-run dependencies cannot establish that binding.",
   "canonical_prevention": "Predict the full binding from a reviewed exact-control platform/artifact manifest, verify every archive and staged runtime identity before credentials, and require independently fetched successful exact-control reconstruction provenance before request creation. Missing identity remains UNKNOWN without migration or post-hoc attestation.",
   "canonical_prevention_artifact": [

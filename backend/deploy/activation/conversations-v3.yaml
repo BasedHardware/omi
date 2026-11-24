@@ -1,0 +1,157 @@
+# Activation manifest: what moving the conversations-v3 lever needs from live prod serving state.
+# Checked by backend/scripts/activation_check.py against state from backend/scripts/activation_collect.py.
+# Read-only declaration: it is not a deploy source. Queues, scheduler jobs and env have their own writers
+# (deploy/ops/prod.yaml, deploy/scheduler/jobs.yaml, deploy/runtime_env/), named in each `why`.
+# Format and semantics: backend/deploy/activation/README.md.
+schema_version: 1
+feature: conversations-v3
+environment: prod
+project: based-hardware
+region: us-central1
+cluster: prod-omi-gke
+owner: backend/docs/runbooks/conversations-v3.md
+lever:
+  # The move this manifest gates: a stage change (cohort -> beta -> all) or the kill switch back on.
+  env: [CONVERSATIONS_V3_STAGE, CONVERSATIONS_V3]
+  source: backend/deploy/runtime_env/_base.yaml
+
+services:
+  backend:
+    kind: cloud_run
+    service: backend
+    contains: &v3_writer
+      - commit: 012329830a9ed7b65642401b7f2af827af7cfb2c
+        why: '#25500 conversations v3 (recordings, builder, task routes)'
+      - commit: 0ce396503a5595975055c44994005db986294060
+        why: '#25588 planned participants carry a source; without it GET /v1/conversations 500s (2026-11-17)'
+      - commit: 156b50921d7eda7d7ce88b41ff27ded258277271
+        why: '#25658 admit only owners with a v3-capable app'
+      - commit: 70f86810a16cbd19815e0bdbd55ea7d0b10b9aa6
+        why: '#25661 commit hardening for live-appended sources'
+  backend-sync:
+    # Hosts the reconcile task route (/v1/conversations-v3/reconcile) and the sweeper, so it runs the
+    # background builder and notes, including short-recording task extraction.
+    kind: cloud_run
+    service: backend-sync
+    contains: &v3_builder
+      - commit: 012329830a9ed7b65642401b7f2af827af7cfb2c
+        why: '#25500 conversations v3 (recordings, builder, task routes)'
+      - commit: 0ce396503a5595975055c44994005db986294060
+        why: '#25588 planned participants carry a source; without it GET /v1/conversations 500s (2026-11-17)'
+      - commit: 156b50921d7eda7d7ce88b41ff27ded258277271
+        why: '#25658 admit only owners with a v3-capable app'
+      - commit: 70f86810a16cbd19815e0bdbd55ea7d0b10b9aa6
+        why: '#25661 commit hardening for live-appended sources'
+      - commit: c6e0bb6c56a23b58bc930f6b75159637095b0720
+        why: '#25691 short tasks stop sending json_object to conv-action-items (every short tile failed, 2026-11-18)'
+  backend-sync-backfill:
+    kind: cloud_run
+    service: backend-sync-backfill
+    contains: *v3_builder
+  backend-integration:
+    kind: cloud_run
+    service: backend-integration
+    contains: *v3_writer
+  desktop-backend:
+    # Separate release; only its stage must agree (capability/episode responses).
+    kind: cloud_run
+    service: desktop-backend
+  llm-gateway:
+    kind: gke
+    namespace: prod-omi-backend
+    deployment: prod-omi-llm-gateway
+    contains:
+      - commit: 012329830a9ed7b65642401b7f2af827af7cfb2c
+        why: '#25500 adds the conversation-v3 lanes; a stale gateway 404s every v3 model call (2026-11-17)'
+  pusher:
+    kind: gke
+    namespace: prod-omi-backend
+    deployment: prod-omi-pusher
+    # Prod pusher runs a dev-qualified digest promoted by digest; its commit tag lives in the dev registry.
+    promoted_from: [gcr.io/based-hardware-dev/pusher]
+    contains:
+      - commit: 012329830a9ed7b65642401b7f2af827af7cfb2c
+        why: '#25500 v3-aware finalization; an older pusher reruns notes/memories/tasks on v3 recordings'
+      - commit: 156b50921d7eda7d7ce88b41ff27ded258277271
+        why: '#25658 pusher evaluates admission on recording writes; an older image admits pre-v3 apps'
+  backend-listen:
+    kind: gke
+    namespace: prod-omi-backend
+    deployment: prod-omi-backend-listen
+    contains: *v3_writer
+
+# Required move order. Requirements of a service are due before every later step and before the lever.
+# The live-title lane must be serving before a builder can claim a conversation's one attempt.
+# Listen hands finalization to pusher, and both call the gateway, so they move last (2026-11-17 train split).
+order:
+  - [llm-gateway]
+  - [backend, backend-sync, backend-sync-backfill, backend-integration, desktop-backend]
+  - [pusher]
+  - [backend-listen]
+
+gateway_lanes:
+  service: llm-gateway
+  why: utils/conversations/v3/models.py calls these feature lanes only through the gateway
+  lanes:
+    - omi:auto:conversation-v3-live-title
+    - omi:auto:conversation-v3-outline
+    - omi:auto:conversation-v3-summary
+    - omi:auto:conversation-v3-summary-open
+    - omi:auto:conv-action-items
+
+env:
+  - id: v3-task-binding
+    why: >-
+      utils/conversations/v3/triggers.py enqueue -> utils/cloud_tasks.enqueue_named_task; a missing key raises and the
+      owner waits for the 5-minute sweeper (pusher, 2026-11-17). Writer: deploy/runtime_env + charts.
+    keys: [SYNC_TASKS_PROJECT, SYNC_TASKS_LOCATION, SYNC_TASKS_INVOKER_SA]
+    runtimes: &v3_writers [backend, backend-sync, backend-sync-backfill, backend-integration, pusher, backend-listen]
+    equal: true
+  - id: v3-task-target
+    why: triggers.task_base() needs CONVERSATIONS_V3_TASKS_URL or SYNC_TASKS_HANDLER_URL
+    any_of: [CONVERSATIONS_V3_TASKS_URL, SYNC_TASKS_HANDLER_URL]
+    runtimes: *v3_writers
+  - id: v3-stage
+    why: config/conversations_v3.py; every writer and the desktop backend must admit the same owners (runbook)
+    keys: [CONVERSATIONS_V3_STAGE]
+    default: beta
+    runtimes: [backend, backend-sync, backend-sync-backfill, backend-integration, desktop-backend, pusher, backend-listen]
+    equal: true
+  - id: v3-kill-switch
+    why: CONVERSATIONS_V3=off stops admission; a writer that disagrees admits owners the others refuse
+    keys: [CONVERSATIONS_V3]
+    default: 'on'
+    runtimes: *v3_writers
+    equal: true
+  - id: v3-gateway-endpoint
+    why: >-
+      v3 outline/notes run on the API (on-open) and the sync task handler; the Cloud Run deploy default
+      http://127.0.0.1:9 and the code default http://127.0.0.1:9080 mean the gateway URL was never supplied
+    keys: [OMI_LLM_GATEWAY_URL]
+    # The deploy placeholder and the code default (utils/llm/gateway_client.DEFAULT_LLM_GATEWAY_URL).
+    unset_values: ['http://127.0.0.1:9', 'http://127.0.0.1:9080']
+    runtimes: [backend, backend-sync]
+
+queues:
+  - name: conversations-v3
+    location: us-central1
+    why: 'reconcile tasks (triggers.enqueue); declared in deploy/ops/prod.yaml; missing in prod on 2026-11-17'
+  - name: conversations-v3-backfill
+    location: us-central1
+    controlled: false
+    why: operator-planned backfill only (CONVERSATIONS_V3_BACKFILL); admission does not use it
+
+scheduler_jobs:
+  - name: conversations-v3-sweep
+    location: us-central1
+    state: ENABLED
+    why: '5-minute sweeper: the only recovery for a failed enqueue; deploy/scheduler/jobs.yaml; missing on 2026-11-17'
+  - name: conversations-v3-legacy-users
+    location: us-central1
+    state: ENABLED
+    why: 'daily legacy-owner gauge the step-2 (all) criteria read; deploy/scheduler/jobs.yaml; missing on 2026-11-17'
+
+not_checked:
+  - id: firestore-indexes
+    owner: Firestore index readiness gate (.github/agent-docs/firestore-queries-and-indexes.md)
+    why: the v3 manifest declares ~300 composite indexes; readiness is owned by that gate, not re-read here

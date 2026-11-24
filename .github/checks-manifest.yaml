@@ -6,7 +6,7 @@
 checks:
   - id: worker-image-only-tests
     command: ["python3", ".github/scripts/test_worker_image_only.py"]
-    triggers: [".github/scripts/worker_image_only.py", ".github/scripts/test_worker_image_only.py", ".github/workflows/gcp_diarizer.yml", ".github/checks-manifest.yaml"]
+    triggers: [".github/scripts/worker_image_only.py", ".github/scripts/test_worker_image_only.py", ".github/workflows/gcp_diarizer.yml", ".github/checks-manifest.yaml", "backend/charts/batch-pipeline-worker/**"]
     lanes: ["local", "ci"]
     reason: "SCA-2149: image.digest-only Helm overrides would activate 28 levers over the approved live empty map; execute the guarded image-only primitive against private-runtime and drift fixtures"
   - id: batch-pipeline-tuning-disclosure
@@ -639,7 +639,7 @@ checks:
     reason: "the guard-artifact ratchet's counting window, threshold, allowlist shrink rule, and shallow-history skip must stay behaviorally covered"
   - id: failure-class-cli-tests
     command: ["python3", "scripts/test_failure_class.py"]
-    triggers: ["scripts/failure-class", "scripts/test_failure_class.py", "scripts/git_test_env.py", ".github/failure-classes/**", ".github/checks-manifest.yaml"]
+    triggers: ["scripts/failure-class", "scripts/test_failure_class.py", "scripts/git_test_env.py", ".github/failure-classes/**", ".github/failure-class-families.json", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the failure-class CLI is the registry's only schema authority; its hermetic tests had no blocking lane and had silently gone stale"
   - id: desktop-changelog-data
@@ -842,6 +842,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "Ray-Ban DAT launch collision requires the Meta and mcumgr SwiftProtobuf copies to remain in mutually exclusive iOS pod graphs"
+  - id: ios-bgtask-launch-registration
+    command: ["ruby", "app/ios/test/bgtask_launch_registration_test.rb"]
+    triggers: ["app/ios/Runner/AppDelegate.swift", "app/ios/Runner/OnDeviceOverflowPlugin.swift", "app/packages/flutter_background_service_ios/**", "app/pubspec.yaml", "app/ios/test/bgtask_launch_registration_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "Crashlytics 6c17570d/84b41824: every BGTask launch handler is registered once, from didFinishLaunching, even when the UIScene fallback resends didFinishLaunching to plugins"
   - id: ios-rayban-audio-capture
     command: ["ruby", "app/ios/test/rayban_audio_capture_test.rb"]
     triggers: ["app/ios/Runner/RayBanMeta/RayBanMetaAudioCapture.swift", "app/ios/test/rayban_audio_capture_test.rb", "app/ios/test/rayban_audio_capture_test.swift", "app/ios/test/fixtures/rayban_audio_avfoundation.swift", ".github/checks-manifest.yaml"]
@@ -926,7 +932,7 @@ checks:
     reason: "TestFlight 1.0.553 crashed when battery history wrote NSNull to UserDefaults; future Swift null placeholders and Optional<Any> coalescing require review before merge"
   - id: ios-ble-connection-policy
     command: ["ruby", "app/ios/test/omi_ble_connection_policy_test.rb"]
-    triggers: ["app/ios/Runner/Ble/OmiBleConnectionPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/test/omi_ble_connection_policy_test.rb", ".github/checks-manifest.yaml"]
+    triggers: ["app/ios/Runner/AppDelegate.swift", "app/ios/Runner/Ble/OmiBleConnectionPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/Runner/Limitless/LimitlessFlashDrainEngine.swift", "app/ios/test/omi_saved_reconnect_manager_test.swift", "app/ios/test/omi_ble_connection_policy_test.rb", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "pairing recovery must fire only for ATT authentication/encryption failures so ordinary Omi notification noise never tears down a healthy GATT link"
@@ -1018,6 +1024,11 @@ checks:
     triggers: [".github/scripts/measure_ci_budget.py", ".github/scripts/test_measure_ci_budget.py", ".github/workflows/ci-budget-audit.yml"]
     lanes: ["local", "ci"]
     reason: "weekly audit must skip unused jobs, detect over-budget p50, and update one tracking issue"
+  - id: backend-unit-plan-contract
+    command: ["python3", ".github/actions/ci-tier/test_plan_backend_unit_selection.py"]
+    triggers: [".github/actions/ci-tier/plan_backend_unit_selection.sh", ".github/actions/ci-tier/test_plan_backend_unit_selection.py", ".github/workflows/backend-unit-tests.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "one plan per run: nightly and ci:full run everything, main diffs from the last green main run with a rotating slice, and every lookup failure falls back to the full suite"
   - id: ci-tier-contract
     command: ["python3", ".github/actions/ci-tier/test_resolve.py"]
     triggers: [".github/actions/ci-tier/**", ".github/workflows/backend-hermetic-e2e.yml", ".github/workflows/backend-unit-tests.yml", ".github/workflows/desktop-swift-ci.yml", ".github/workflows/mobile-app-checks.yml", ".github/workflows/python-cli-ci.yml", ".github/checks-manifest.yaml"]
@@ -1268,6 +1279,11 @@ checks:
     triggers: ["backend/charts/pusher/**", "backend/charts/backend-listen/**", "backend/scripts/verify_pusher_cohost_env_diff.py", "backend/tests/unit/test_verify_pusher_cohost_env_diff.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "2026-08-30 pusher finalization outage: unexplained pusher vs backend-listen env divergence must fail the deploy path (decision 4 co-host env-diff)"
+  - id: conversation-reader-classification
+    command: ["python3", "backend/scripts/check_conversation_readers.py"]
+    triggers: ["backend/**/*.py", "backend/docs/conversations-v3-readers.json"]
+    lanes: ["local", "ci"]
+    reason: "Recordings/conversations v3 reader inventory: raw by-id product readers bypassed the list predicate; every new reader must declare its layer."
   - id: conversation-lifecycle-write-guard
     command: ["python3", "backend/scripts/check_conversation_lifecycle_writes.py"]
     triggers: ["backend/**/*.py", "backend/scripts/check_conversation_lifecycle_writes.py"]
@@ -1303,6 +1319,11 @@ checks:
     triggers: [".github/scripts/resolve-desktop-changelog-sync.py", ".github/scripts/test_resolve_desktop_changelog_sync.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "issue #11936: squash/orphan changelog recovery must not hard-fail every hourly retry or scan main history O(n)"
+  - id: desktop-changelog-approval-wait
+    command: ["python3", ".github/scripts/test_wait_for_changelog_approval.py"]
+    triggers: [".github/scripts/wait-for-changelog-approval.py", ".github/scripts/test_wait_for_changelog_approval.py", ".github/workflows/desktop_auto_release.yml", ".github/workflows/ui-author-approval.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-3432: the hourly candidate planner must wait for the asynchronous UI author approval status on the exact changelog PR head and fail closed before any merge or tag on timeout, rejection, an unreadable status or a changed head"
   - id: desktop-candidate-source-gate
     command: ["python3", ".github/scripts/test_plan_desktop_release.py"]
     triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
@@ -1353,9 +1374,14 @@ checks:
     triggers: [".github/scripts/dispatch_mobile_internal_builds.py", ".github/scripts/test_dispatch_mobile_internal_builds.py", ".github/workflows/mobile_internal_build.yml", "codemagic.yaml", "app/scripts/checkout_release_source_pin.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "internal mobile builds are dispatched on a cadence, so who gets an instant build and when the batch fires must stay pinned rather than drift back to build-per-merge"
+  - id: play-internal-publish-contract
+    command: ["python3", "app/scripts/play_internal_publish_test.py"]
+    triggers: ["app/scripts/play_internal_publish.py", "app/scripts/play_internal_publish_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Play flipped changesNotSentForReview five times by 2026-11-21; android-internal-auto publishes without it and retries held only on Play's held instruction, recording the mode for the dispatcher"
   - id: mobile-distribution-contract
     command: ["python3", ".github/scripts/test_mobile_distribution.py"]
-    triggers: [".github/scripts/mobile_distribution.py", ".github/scripts/test_mobile_distribution.py", ".github/scripts/dispatch_mobile_internal_builds.py", ".github/scripts/test_dispatch_mobile_internal_builds.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/scripts/mobile_distribution.py", ".github/scripts/test_mobile_distribution.py", ".github/scripts/dispatch_mobile_internal_builds.py", ".github/scripts/test_dispatch_mobile_internal_builds.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "mobile Codemagic distribution evidence must be explicit, platform-specific, source-bound, and fail closed when post-publish state is missing or unknown"
   - id: mobile-release-identity
@@ -1600,6 +1626,16 @@ checks:
     triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/actions/deploy-backend-stack/**", ".github/actions/firestore-readiness/**", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/verify_auto_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/scripts/test_verify_auto_backend_release_admission.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9991 mutation-tests workflow-run event, result, branch, SHA, repository, and manual proof drift"
+  - id: workerd-chart-release-identity
+    command: ["bash", "backend-go/deploy/workerd/test-render.sh"]
+    triggers: ["backend-go/deploy/workerd/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-3883 keeps the workerd release identity stable for equal inputs, sensitive to tree, digest and Release values, and refusing on any failure"
+  - id: backend-release-floor-fixtures
+    command: ["python3", ".github/scripts/test_verify_backend_release_floor.py"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/verify_backend_release_floor.py", ".github/scripts/test_verify_backend_release_floor.py", "backend/deploy/release_floor.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#25692 prevents manual backend admission below the purge-safe floor, including under break-glass"
   - id: automatic-backend-release-admission
     command: ["python3", ".github/scripts/test_verify_auto_backend_release_admission.py"]
     triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/actions/deploy-backend-stack/**", ".github/actions/firestore-readiness/**", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/verify_auto_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/scripts/test_verify_auto_backend_release_admission.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]

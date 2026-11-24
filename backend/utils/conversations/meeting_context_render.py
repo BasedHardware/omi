@@ -47,11 +47,15 @@ class MeetingContextPack:
     screen_text: str = ''
     screen_moments: tuple[str, ...] = ()
     screen_rows: tuple[Mapping[str, Any], ...] = ()
+    owner_profile: str = ''
+    owner_memories: str = ''
 
     @property
     def empty(self) -> bool:
         return not (
-            self.prior_meetings
+            self.owner_profile
+            or self.owner_memories
+            or self.prior_meetings
             or self.people_facts
             or self.goals
             or self.memories
@@ -92,6 +96,10 @@ def render_meeting_context_pack(pack: Optional[MeetingContextPack]) -> str:
     if pack is None or pack.empty:
         return ''
     parts: list[str] = [BACKGROUND_CONTEXT_HEADING]
+    if pack.owner_profile:
+        parts.append('OWNER PROFILE / GOALS / BOUND PEOPLE\n' + truncate_context_text(pack.owner_profile, 2400))
+    if pack.owner_memories:
+        parts.append('ACCOUNT MEMORIES\n' + truncate_context_text(pack.owner_memories, 3400))
     prior_lines = []
     for note in pack.prior_meetings:
         line = f'- [{note.date_label}] {note.title}'

@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
+import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
+import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
 import 'package:omi/pages/paywall/paywall_pacing.dart';
+import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/billing/play_billing.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
@@ -80,20 +85,33 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     if (_locked) return;
     setState(() => _busy = true);
     try {
-      final usage = context.read<UsageProvider>();
-      await usage.fetchSubscription();
+      final outcome = await context.read<UsageProvider>().restorePurchases();
       if (!mounted || _dismissed) return;
       final l10n = context.l10n;
-      if (usage.subscription?.subscription.plan.isPaid == true) {
-        OmiFeedback.confirm(context, l10n.unlimitedPlan);
-        _dismissed = true;
-        Navigator.of(context).pop(true);
-        return;
+      switch (outcome) {
+        case RestoreOutcome.paid:
+          OmiFeedback.confirm(context, l10n.unlimitedPlan);
+          _dismissed = true;
+          Navigator.of(context).pop(true);
+        case RestoreOutcome.free when context.read<UsageProvider>().lastPlayRestoreRefusal != null:
+          OmiFeedback.error(context, playRefusalMessage(l10n, context.read<UsageProvider>().lastPlayRestoreRefusal));
+        case RestoreOutcome.free:
+          OmiFeedback.info(context, l10n.freePlan);
+        case RestoreOutcome.failed:
+          OmiFeedback.error(context, l10n.restorePurchasesFailed, actionLabel: l10n.tryAgain, onAction: _restore);
       }
-      OmiFeedback.info(context, l10n.freePlan);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// The trial page only sells plans Google Play lists with a free-trial phase for this account; any
+  /// plan without one sends the reader to the plain Play plans (price, Subscribe, renewal disclosure).
+  static bool _everyPlayPlanHasTrial(UsageProvider usage) {
+    final offers = usage.playOffers;
+    if (offers == null) return false;
+    final plans = [offers.monthly, offers.yearly].whereType<PlayPlanOffer>();
+    return plans.isNotEmpty && plans.every((plan) => plan.trial != null && (plan.trialDays ?? 0) > 0);
   }
 
   /// A free-trial button may only open checkout while the backend still offers that trial.
@@ -110,6 +128,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
   Future<PaywallCheckoutOutcome?> _purchase(PaywallOffer offer) async {
     final price = _yearly ? (offer.yearly ?? offer.monthly) : (offer.monthly ?? offer.yearly);
     if (price == null || _locked) return null;
+    final trialDays = price.display != null ? price.trialDays : TrialPaywallPage.trialDays;
     // Never open a checkout that would charge at once under a free-trial button.
     if (!_canCheckout) {
       OmiFeedback.error(context, context.l10n.couldNotProcessSubscription);
@@ -124,7 +143,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                 plan: tierId,
                 interval: price.interval,
                 source: widget.source,
-                trialDays: TrialPaywallPage.trialDays,
+                trialDays: trialDays,
               );
       final outcome = await start(context, price, offer.tierId);
       if (mounted && !_dismissed && outcome == PaywallCheckoutOutcome.purchased) {
@@ -141,12 +160,15 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
   Future<void> _offerMonthly(PaywallOffer offer) async {
     final monthly = offer.monthly;
     if (_monthlyOffered || monthly == null || !mounted || _locked) return;
+    final playBilled = context.read<UsageProvider>().playBilledPurchaser;
+    if (playBilled && monthly.trialDays == null) return;
+    final trialDays = playBilled ? monthly.trialDays! : TrialPaywallPage.trialDays;
     _monthlyOffered = true;
     // Leaving before the success page does not prove nothing was bought: ask the server first.
     final usage = context.read<UsageProvider>();
     setState(() => _busy = true);
     try {
-      await usage.fetchSubscription().timeout(const Duration(seconds: 4));
+      await usage.fetchSubscription(fresh: true).timeout(const Duration(seconds: 4));
     } catch (_) {
       return;
     } finally {
@@ -167,7 +189,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
       builder: (_) => OmiSheetScaffold(
         showCloseButton: false,
         padding: EdgeInsets.zero,
-        child: _MonthlyOffer(price: monthly, trialDays: TrialPaywallPage.trialDays),
+        child: _MonthlyOffer(price: monthly, trialDays: trialDays),
       ),
     );
     if (accepted != true) {
@@ -185,7 +207,11 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
       outcome: switch (outcome) {
         PaywallCheckoutOutcome.purchased => PaywallMonthlyFallbackAcceptedOutcome.purchased,
         PaywallCheckoutOutcome.cancelled => PaywallMonthlyFallbackAcceptedOutcome.cancelled,
-        PaywallCheckoutOutcome.failed || null => PaywallMonthlyFallbackAcceptedOutcome.failed,
+        // A pending Play payment has not been paid yet; the closed enum has no pending value.
+        PaywallCheckoutOutcome.failed ||
+        PaywallCheckoutOutcome.pending ||
+        null =>
+          PaywallMonthlyFallbackAcceptedOutcome.failed,
       },
     ));
   }
@@ -199,6 +225,45 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     final dateFormat = DateFormat.yMMMd(Localizations.localeOf(context).toString());
     String onDay(int days) => dateFormat.format(now.add(Duration(days: days)));
     final slides = _slideSpecs(l10n);
+    // At accessibility text sizes the pinned footer would fill the screen, so the cancel note and the
+    // code hint scroll with the page there; at every other size they stay pinned under the button.
+    final notesScroll = MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+    final canRedeemCode = context.select<UsageProvider, bool>((usage) => usage.canRedeemPrepaidCode);
+    final playBilled = context.select<UsageProvider, bool>((usage) => usage.playBilledPurchaser);
+    final notes = [
+      // Google Play readers: renewal at the shown price, managed and cancelled in Google Play (Terms and
+      // Privacy stay in this page's own footer).
+      if (playBilled)
+        const PlayBillingDisclosure(color: _Paper.textSecondary, legalLinks: false)
+      else
+        Text(
+          l10n.paywallTrialCancelNote,
+          textAlign: TextAlign.center,
+          style: _Paper.label(size: 13, color: _Paper.success, weight: FontWeight.w600),
+        ),
+      const SizedBox(height: 4),
+      // Shopify buyers with an included year land here, not on the plans sheet with
+      // its code field; their code goes in Stripe Checkout's promotion code box (not on Google Play).
+      // Server switch on: redeem a prepaid code right here, no card. Never for a Play-billed reader.
+      if (canRedeemCode)
+        PrepaidCodeEntry(
+          center: true,
+          style: _Paper.label(size: 13, color: _Paper.textSecondary),
+          // Redeemed: the reader is Pro now, so close the paywall the way a restored purchase does.
+          onRedeemed: () {
+            if (!mounted || _dismissed) return;
+            _dismissed = true;
+            Navigator.of(context).pop(true);
+          },
+        )
+      else if (!playBilled)
+        Text(
+          l10n.paywallTrialCodeHint,
+          key: const Key('trial_paywall_code_hint'),
+          textAlign: TextAlign.center,
+          style: _Paper.label(size: 13, color: _Paper.textSecondary),
+        ),
+    ];
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -210,187 +275,244 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
         }
         _dismiss();
       },
-      child: Scaffold(
-        backgroundColor: _Paper.background,
-        body: Consumer<UsageProvider>(
-          builder: (context, usage, _) {
-            final offer = widget.offer ?? PaywallOffer.fromCatalog(usage.availablePlans);
-            final loading = offer == null && widget.offer == null && usage.isLoadingPlans;
-            final yearly = offer?.yearly;
-            final monthly = offer?.monthly;
-            final selected = _yearly ? (yearly ?? monthly) : (monthly ?? yearly);
-            final currency = selected?.currency ?? 'usd';
-            final zero = formatBillingPrice(0, currency);
-            final yearlySaving = yearly != null && monthly != null && monthly.amountMinor * 12 > yearly.amountMinor
-                ? monthly.amountMinor * 12 - yearly.amountMinor
-                : null;
-            return Column(
-              children: [
-                Expanded(
-                  child: ListView(
-                    padding: EdgeInsets.fromLTRB(0, top + 8, 0, 16),
+      // The paper is always light, so the status bar icons stay dark in dark mode too.
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.dark,
+        child: Scaffold(
+          backgroundColor: _Paper.background,
+          body: Consumer<UsageProvider>(
+            builder: (context, usage, _) {
+              // Google Play did not list the free-trial offer for this account: sell the base plan with
+              // honest copy instead of a trial button that cannot start a trial.
+              if (widget.offer == null &&
+                  usage.playBilledPurchaser &&
+                  usage.playOffers != null &&
+                  (usage.subscription?.trialEligible != true || !_everyPlayPlanHasTrial(usage))) {
+                return SafeArea(
+                  child: Column(
                     children: [
-                      _Header(onClose: _dismiss, onRestore: _restore, brand: l10n.paywallTrialBrand),
-                      const SizedBox(height: 18),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Text(l10n.paywallTrialHeadline, textAlign: TextAlign.center, style: _Paper.headline(30)),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton(
+                          key: const Key('trial_paywall_play_close'),
+                          icon: const Icon(Icons.close),
+                          tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                          onPressed: _dismiss,
+                        ),
                       ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        height: 250,
-                        child: PageView.builder(
-                          controller: _slides,
-                          itemCount: slides.length,
-                          onPageChanged: (index) => setState(() => _slide = index),
-                          itemBuilder: (context, index) => Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                            child: _SlideCard(spec: slides[index]),
+                      Expanded(
+                        child: PlayPlansContent(
+                          analyticsSource: widget.source,
+                          onPurchased: () {
+                            _dismissed = true;
+                            Navigator.of(context).pop(true);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              final offer = widget.offer ?? PaywallOffer.forUsage(usage);
+              final loading = offer == null &&
+                  widget.offer == null &&
+                  (usage.isLoadingPlans || usage.playOffersLoading || usage.billingProviderPending);
+              final yearly = offer?.yearly;
+              final monthly = offer?.monthly;
+              final selected = _yearly ? (yearly ?? monthly) : (monthly ?? yearly);
+              // Google Play readers: Play's own trial length for the selected plan, never the constant.
+              final trialDays = (usage.playBilledPurchaser ? selected?.trialDays : null) ?? TrialPaywallPage.trialDays;
+              // Until Play's offer has loaded (or when it failed) a Play reader sees no trial length,
+              // date or timeline: there is no Play trial to describe yet. The same holds on Android
+              // while the billing provider is still unknown: the reader may turn out to be Play-billed.
+              final playTrialUnknown = (widget.offer == null && usage.billingProviderUnknown) ||
+                  (usage.playBilledPurchaser && selected?.trialDays == null);
+              final currency = selected?.currency ?? 'usd';
+              final zero = formatBillingPrice(0, currency);
+              final yearlySaving = yearly != null && monthly != null && monthly.amountMinor * 12 > yearly.amountMinor
+                  ? monthly.amountMinor * 12 - yearly.amountMinor
+                  : null;
+              return Column(
+                children: [
+                  Expanded(
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(0, top + 8, 0, 16),
+                      children: [
+                        _Header(onClose: _dismiss, onRestore: _restore, brand: l10n.paywallTrialBrand),
+                        const SizedBox(height: 18),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child:
+                              Text(l10n.paywallTrialHeadline, textAlign: TextAlign.center, style: _Paper.headline(30)),
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          height: 250,
+                          child: PageView.builder(
+                            controller: _slides,
+                            itemCount: slides.length,
+                            onPageChanged: (index) => setState(() => _slide = index),
+                            itemBuilder: (context, index) => Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6),
+                              child: _SlideCard(spec: slides[index]),
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 14),
-                      _Dots(count: slides.length, current: _slide),
-                      const SizedBox(height: 22),
-                      _Card(
-                        child: Column(
-                          children: [
-                            _TimelineRow(
-                              icon: Icons.lock_open_rounded,
-                              title: l10n.paywallTrialTodayTitle,
-                              body: l10n.paywallTrialTodayBody,
-                              date: onDay(0),
-                              emphasis: _TimelineEmphasis.first,
+                        const SizedBox(height: 14),
+                        _Dots(count: slides.length, current: _slide),
+                        const SizedBox(height: 22),
+                        if (playTrialUnknown)
+                          loading
+                              ? const Padding(
+                                  key: Key('trial_paywall_timeline_pending'),
+                                  padding: EdgeInsets.symmetric(horizontal: 16),
+                                  child: _Skeleton(height: 120),
+                                )
+                              : const SizedBox.shrink()
+                        else
+                          _Card(
+                            key: const Key('trial_paywall_timeline'),
+                            child: Column(
+                              children: [
+                                _TimelineRow(
+                                  icon: Icons.lock_open_rounded,
+                                  title: l10n.paywallTrialTodayTitle,
+                                  body: l10n.paywallTrialTodayBody,
+                                  date: onDay(0),
+                                  emphasis: _TimelineEmphasis.first,
+                                ),
+                                _TimelineRow(
+                                  icon: Icons.check_circle_outline_rounded,
+                                  title: l10n.paywallTrialInDaysTitle(trialDays),
+                                  body: selected?.trialLabel(context, trialDays) ?? l10n.paywallTrialEndsBody,
+                                  date: onDay(trialDays),
+                                  emphasis: _TimelineEmphasis.plain,
+                                  last: true,
+                                ),
+                              ],
                             ),
-                            _TimelineRow(
-                              icon: Icons.add_circle_outline_rounded,
-                              title: l10n.paywallTrialFreeDaysTitle(TrialPaywallPage.trialDays),
-                              body: l10n.paywallTrialFreeDaysBody(TrialPaywallPage.trialDays),
-                              date: onDay(TrialPaywallPage.trialDays),
-                              emphasis: _TimelineEmphasis.accent,
-                            ),
-                            _TimelineRow(
-                              icon: Icons.check_circle_outline_rounded,
-                              title: l10n.paywallTrialInDaysTitle(TrialPaywallPage.trialDays),
-                              body: selected?.trialLabel(context, TrialPaywallPage.trialDays) ??
-                                  l10n.paywallTrialEndsBody,
-                              date: onDay(TrialPaywallPage.trialDays),
-                              emphasis: _TimelineEmphasis.plain,
-                              last: true,
-                            ),
-                          ],
+                          ),
+                        const SizedBox(height: 16),
+                        _Card(
+                          child: Column(
+                            children: [
+                              _FeatureRow(
+                                  icon: Icons.description_outlined, label: l10n.paywallTrialSlideSummariesTitle),
+                              _FeatureRow(
+                                  icon: Icons.graphic_eq_rounded, label: l10n.paywallTrialSlideTranscriptionTitle),
+                              _FeatureRow(icon: Icons.auto_awesome_outlined, label: l10n.paywallTrialFeatureModels),
+                              _FeatureRow(
+                                  icon: Icons.record_voice_over_outlined, label: l10n.paywallTrialSlideSpeakersTitle),
+                              _FeatureRow(
+                                  icon: Icons.chat_bubble_outline_rounded,
+                                  label: l10n.paywallTrialFeatureAsk,
+                                  last: true),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      _Card(
-                        child: Column(
-                          children: [
-                            _FeatureRow(icon: Icons.description_outlined, label: l10n.paywallTrialSlideSummariesTitle),
-                            _FeatureRow(
-                                icon: Icons.graphic_eq_rounded, label: l10n.paywallTrialSlideTranscriptionTitle),
-                            _FeatureRow(icon: Icons.auto_awesome_outlined, label: l10n.paywallTrialFeatureModels),
-                            _FeatureRow(
-                                icon: Icons.record_voice_over_outlined, label: l10n.paywallTrialSlideSpeakersTitle),
-                            _FeatureRow(
-                                icon: Icons.chat_bubble_outline_rounded,
-                                label: l10n.paywallTrialFeatureAsk,
-                                last: true),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: loading
-                            ? const Row(children: [
-                                Expanded(child: _Skeleton(height: 96)),
-                                SizedBox(width: 10),
-                                Expanded(child: _Skeleton(height: 96)),
-                              ])
-                            : offer == null
-                                ? Text(l10n.unableToLoadPlans, textAlign: TextAlign.center, style: _Paper.body())
-                                : IntrinsicHeight(
-                                    child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
-                                        if (monthly != null)
-                                          Expanded(
-                                            child: _PlanCard(
-                                              key: const Key('trial_paywall_monthly'),
-                                              title: l10n.billingMonthly,
-                                              price: formatBillingPrice(monthly.amountMinor, monthly.currency),
-                                              footnote: l10n.paywallTrialBilledMonthly,
-                                              selected: !_yearly || yearly == null,
-                                              onTap: () => setState(() => _yearly = false),
-                                            ),
-                                          ),
-                                        if (monthly != null && yearly != null) const SizedBox(width: 10),
-                                        if (yearly != null)
-                                          Expanded(
-                                            child: _PlanCard(
-                                              key: const Key('trial_paywall_yearly'),
-                                              title: l10n.billingYearly,
-                                              price: formatBillingPrice(yearly.amountMinor, yearly.currency),
-                                              wasPrice: monthly == null
-                                                  ? null
-                                                  : formatBillingPrice(monthly.amountMinor * 12, monthly.currency),
-                                              footnote: l10n.paywallTrialBilledYearly,
-                                              saving: yearlySaving == null
-                                                  ? null
-                                                  : l10n.paywallTrialSaveAmount(
-                                                      formatBillingPrice(yearlySaving, yearly.currency)),
-                                              selected: _yearly || monthly == null,
-                                              onTap: () => setState(() => _yearly = true),
-                                            ),
-                                          ),
-                                      ],
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: loading
+                              ? const Row(children: [
+                                  Expanded(child: _Skeleton(height: 96)),
+                                  SizedBox(width: 10),
+                                  Expanded(child: _Skeleton(height: 96)),
+                                ])
+                              : offer == null
+                                  ? (usage.playBilledPurchaser || usage.billingProviderFailed
+                                      ? const PlayPlansError()
+                                      : Text(l10n.unableToLoadPlans, textAlign: TextAlign.center, style: _Paper.body()))
+                                  : IgnorePointer(
+                                      // The CTA captures the selected price before the
+                                      // session request resolves. Letting a card change
+                                      // the selection in that window redraws the terms
+                                      // for one plan while the other plan's cart opens.
+                                      ignoring: _locked,
+                                      child: IntrinsicHeight(
+                                        child: Row(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            if (monthly != null)
+                                              Expanded(
+                                                child: _PlanCard(
+                                                  key: const Key('trial_paywall_monthly'),
+                                                  title: l10n.billingMonthly,
+                                                  price: monthly.formatted,
+                                                  footnote: l10n.paywallTrialBilledMonthly,
+                                                  selected: !_yearly || yearly == null,
+                                                  onTap: () => setState(() => _yearly = false),
+                                                ),
+                                              ),
+                                            if (monthly != null && yearly != null) const SizedBox(width: 10),
+                                            if (yearly != null)
+                                              Expanded(
+                                                child: _PlanCard(
+                                                  key: const Key('trial_paywall_yearly'),
+                                                  title: l10n.billingYearly,
+                                                  price: yearly.formatted,
+                                                  // Play gives no "twelve months" or "saving" string; computed
+                                                  // amounts are never shown next to Play's own prices.
+                                                  wasPrice: monthly == null || usage.playBilledPurchaser
+                                                      ? null
+                                                      : formatBillingPrice(monthly.amountMinor * 12, monthly.currency),
+                                                  footnote: l10n.paywallTrialBilledYearly,
+                                                  saving: yearlySaving == null || usage.playBilledPurchaser
+                                                      ? null
+                                                      : l10n.paywallTrialSaveAmount(
+                                                          formatBillingPrice(yearlySaving, yearly.currency)),
+                                                  selected: _yearly || monthly == null,
+                                                  onTap: () => setState(() => _yearly = true),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(20, 8, 20, bottom + 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (selected != null) ...[
-                        Text(
-                          selected.trialLabel(context, TrialPaywallPage.trialDays),
-                          key: const Key('trial_paywall_price_terms'),
-                          textAlign: TextAlign.center,
-                          style: OmiType.subhead.copyWith(color: _Paper.text, fontWeight: FontWeight.w600),
                         ),
-                        const SizedBox(height: 10),
+                        if (notesScroll)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: notes),
+                          ),
                       ],
-                      _Button(
-                        key: const Key('trial_paywall_cta'),
-                        label: l10n.paywallTrialCta(zero),
-                        busy: _busy,
-                        onPressed: offer == null || _busy ? null : () => _checkout(offer),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        l10n.paywallTrialCancelNote,
-                        textAlign: TextAlign.center,
-                        style: _Paper.label(size: 13, color: _Paper.success, weight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 4),
-                      // Shopify buyers with an included year land here, not on the plans sheet with
-                      // its code field; their code goes in Stripe Checkout's promotion code box.
-                      Text(
-                        l10n.paywallTrialCodeHint,
-                        key: const Key('trial_paywall_code_hint'),
-                        textAlign: TextAlign.center,
-                        style: _Paper.label(size: 13, color: _Paper.textSecondary),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
-            );
-          },
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(20, 8, 20, bottom + 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (selected != null) ...[
+                          Text(
+                            selected.trialLabel(context, trialDays),
+                            key: const Key('trial_paywall_price_terms'),
+                            textAlign: TextAlign.center,
+                            style: OmiType.subhead.copyWith(color: _Paper.text, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                        _Button(
+                          key: const Key('trial_paywall_cta'),
+                          // Google Play readers: Play's own trial-phase string, never an app-formatted zero.
+                          label: !usage.playBilledPurchaser
+                              ? l10n.paywallTrialCta(zero)
+                              : selected?.trialDisplay != null
+                                  ? l10n.paywallTrialCta(selected!.trialDisplay!)
+                                  : l10n.subscribe,
+                          busy: _busy,
+                          onPressed: offer == null || _busy ? null : () => _checkout(offer),
+                        ),
+                        if (!notesScroll) ...[const SizedBox(height: 10), ...notes],
+                        // Like the plan cards: nothing on the page reacts while a checkout or restore runs.
+                        IgnorePointer(ignoring: _locked, child: const _LegalLinks()),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -400,7 +522,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
         _SlideSpec(
           caption: l10n.paywallTrialSlideSummariesTitle,
           colors: const [Color(0xFF1F2937), Color(0xFF4B5563)], // omi-ux-allow: color-literal -- fixed card gradient
-          art: _SummaryArt(title: l10n.paywallTrialSlideSummariesTitle, body: l10n.paywallTrialSlideSummariesBody),
+          art: _SummaryArt(body: l10n.paywallTrialSlideSummariesBody),
         ),
         _SlideSpec(
           caption: l10n.paywallTrialSlideTranscriptionTitle,
@@ -476,41 +598,109 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return SizedBox(
-      height: 44,
-      child: Stack(
-        alignment: Alignment.center,
+    // Equal side slots keep the brand centred. Each side is 3/8 of the width, so a long Restore label
+    // ("Wiederherstellen") keeps its full size at the default text size; at large text sizes the brand
+    // ellipsizes and the Restore label shrinks to its slot instead of running into the brand.
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 44),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(brand, style: _Paper.label(size: 19, color: _Paper.textTertiary, weight: FontWeight.w600)),
-            ],
-          ),
-          Positioned(
-            left: 8,
-            child: TextButton(
-              key: const Key('trial_paywall_restore'),
-              onPressed: onRestore,
-              child: Text(l10n.restoreAction, style: _Paper.label(size: 13, color: _Paper.textTertiary)),
+          Expanded(
+            flex: 3,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const Key('trial_paywall_restore'),
+                  onPressed: onRestore,
+                  // 44pt tall like the Close button, so the header keeps its 44pt height.
+                  style: TextButton.styleFrom(
+                      minimumSize: const Size(44, 44), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(l10n.restoreAction, style: _Paper.label(size: 13, color: _Paper.textTertiary)),
+                  ),
+                ),
+              ),
             ),
           ),
-          Positioned(
-            right: 16,
-            child: Material(
-              color: _Paper.card,
-              shape: const CircleBorder(),
-              elevation: 0.5,
-              child: IconButton(
-                key: const Key('trial_paywall_close'),
-                tooltip: l10n.useFreePlan,
-                onPressed: onClose,
-                icon: const Icon(Icons.close, color: _Paper.text, size: 20),
+          Flexible(
+            flex: 2,
+            child: Text(
+              brand,
+              key: const Key('trial_paywall_brand'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: _Paper.label(size: 19, color: _Paper.textTertiary, weight: FontWeight.w600),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Material(
+                  color: _Paper.card,
+                  shape: const CircleBorder(),
+                  elevation: 0.5,
+                  child: IconButton(
+                    key: const Key('trial_paywall_close'),
+                    tooltip: l10n.useFreePlan,
+                    onPressed: onClose,
+                    constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+                    style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                    icon: const Icon(Icons.close, color: _Paper.text, size: 20),
+                  ),
+                ),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Terms of Use and Privacy Policy beside the trial button (App Store 3.1.2), each a 44pt target.
+class _LegalLinks extends StatelessWidget {
+  const _LegalLinks();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final style = OmiType.caption.copyWith(color: _Paper.textSecondary);
+    Widget link(Key key, String label, void Function(AuthenticationProvider auth) open) => Semantics(
+          link: true,
+          child: InkWell(
+            key: key,
+            onTap: () => open(context.read<AuthenticationProvider>()),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
+                child: Center(
+                  widthFactor: 1,
+                  child: Text(label,
+                      textAlign: TextAlign.center,
+                      style:
+                          style.copyWith(decoration: TextDecoration.underline, decorationColor: _Paper.textSecondary)),
+                ),
+              ),
+            ),
+          ),
+        );
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        link(const Key('trial_paywall_terms'), l10n.termsOfUse, (auth) => auth.openTermsOfService()),
+        ExcludeSemantics(child: Text(' · ', style: style)),
+        link(const Key('trial_paywall_privacy'), l10n.privacyPolicy, (auth) => auth.openPrivacyPolicy()),
+      ],
     );
   }
 }
@@ -561,9 +751,8 @@ class _SlideCard extends StatelessWidget {
 }
 
 class _SummaryArt extends StatelessWidget {
-  const _SummaryArt({required this.title, required this.body});
+  const _SummaryArt({required this.body});
 
-  final String title;
   final String body;
 
   @override
@@ -579,11 +768,6 @@ class _SummaryArt extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: _Paper.label(size: 14, weight: FontWeight.w700)),
-                const SizedBox(height: 6),
                 Text(body, maxLines: 4, overflow: TextOverflow.fade, style: _Paper.body(size: 11, height: 1.35)),
                 const SizedBox(height: 8),
               ],
@@ -766,7 +950,7 @@ class _Dots extends StatelessWidget {
 }
 
 class _Card extends StatelessWidget {
-  const _Card({required this.child});
+  const _Card({super.key, required this.child});
 
   final Widget child;
 

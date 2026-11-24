@@ -29,7 +29,8 @@ from copy import deepcopy
 import hashlib
 from typing import Any, Callable, TypeVar
 
-from config.batch_pipeline import held_poll_skip_enabled, MERGE_POLL_TERMINAL_STATES
+from config import batch_pipeline_packing as batch_packing
+from database import batch_pipeline_projection_outbox as outbox
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from database.batch_pipeline_projection_followup_backfill import (
     BACKFILL_KEY as FOLLOWUP_BACKFILL_KEY,
@@ -93,7 +94,12 @@ class CustomerData:
         """Advance the privacy generation and block, as ``advance_privacy_generation(blocked=True)`` does."""
         key = (PRIVACY_COLLECTION, privacy_owner_key(uid))
         previous = self.client.rows.get(key, {})
-        self.client.rows[key] = {'generation': int(previous.get('generation', 0)) + 1, 'blocked': True, 'purging': True}
+        self.client.rows[key] = {
+            **previous,
+            'generation': int(previous.get('generation', 0)) + 1,
+            'blocked': True,
+            'purging': True,
+        }
 
     def delete_account(self, uid: str) -> None:
         self.client.rows[('account_deletions', uid)] = {'wipe_status': 'pending'}
@@ -150,6 +156,12 @@ class SimTransaction:
             base = self.store.rows.get(address, {})
         return deepcopy({**base, **self.patches.get(address, {})})
 
+    def get_existing(self, table: str, key: str) -> dict | None:
+        address = (table, key)
+        if address in self.writes or address in self.patches or address in self.store.rows:
+            return self.get(table, key)
+        return None
+
     def put(self, table: str, key: str, value: dict) -> None:
         # Same refusals as FirestoreTransaction.put/patch (conformance: tests/integration/test_store_conformance.py).
         if table == 'conversations':
@@ -157,8 +169,9 @@ class SimTransaction:
         self.writes[(table, key)] = deepcopy(value)
 
     def patch(self, table: str, key: str, fields: dict) -> None:
-        if table != 'conversations' or set(fields) != {'record_lane_owner'}:
-            raise ValueError('only the conversation route owner may be patched by admission')
+        outbox.validate_batch_patch(table, fields)
+        if table == 'results' and self.get_existing(table, key) is None:
+            raise LookupError('cannot patch missing projection result')
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
     def defer_set(self, ref: Any, value: dict) -> None:
@@ -167,6 +180,9 @@ class SimTransaction:
 
     def first_pending(self, owner_key: str) -> dict | None:
         return self.store.first_pending(owner_key)
+
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]:
+        return self.store.pending_page(owner_key, limit)
 
     def fresh_first_pending(self, owner_key: str) -> dict | None:
         return self._fresh_first(owner_key, ready=False)
@@ -426,13 +442,28 @@ class SimStore:
         return True
 
     # -- Query helpers --------------------------------------------------
-    def first_pending(self, owner_key: str, *, ready_only: bool = False, skip_terminal: bool = True) -> dict | None:
-        skip = not ready_only and skip_terminal and held_poll_skip_enabled()
+    def packing_candidates(self, owner_key: str) -> list[dict]:
+        rows = sorted(
+            (self.rows[('jobs', segment_id)]['capture_at'], segment_id)
+            for segment_id in self._pending_by_owner.get(owner_key, ())
+        )
+        result = []
+        for _, segment_id in rows[: batch_packing.PAGE_ROWS]:
+            row = self.rows[('jobs', segment_id)]
+            result.append({field: deepcopy(row[field]) for field in batch_packing.JOB_FIELDS if field in row})
+        return result
+
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]:
+        rows = sorted(
+            (self.rows[('jobs', segment_id)]['capture_at'], segment_id)
+            for segment_id in self._pending_by_owner.get(owner_key, ())
+        )
+        return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[: max(1, min(limit, 160))]]
+
+    def first_pending(self, owner_key: str, *, ready_only: bool = False) -> dict | None:
         best = None
         for segment_id in self._pending_by_owner.get(owner_key, ()):
             row = self.rows[('jobs', segment_id)]
-            if skip and row.get('state') in (None, *MERGE_POLL_TERMINAL_STATES):
-                continue
             if ready_only and row.get('state') != 'result_ready':
                 continue
             candidate = (row['capture_at'], segment_id)
@@ -485,6 +516,27 @@ class SimStore:
         exclude_async: bool = False,
         followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
+        page = self._projection_page(
+            limit,
+            after=after,
+            states=states,
+            due_before=due_before,
+            exclude_async=exclude_async,
+            followup_due_before=followup_due_before,
+        )
+        return page[0], page[1]
+
+    def _projection_page(
+        self,
+        limit: int = 100,
+        *,
+        after: tuple | None = None,
+        states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+        due_before: float | None = None,
+        exclude_async: bool = False,
+        followup_due_before: float | None = None,
+        include_outbox: bool = False,
+    ):
         """Mirror Firestore's legacy or due-clock keyset scan, including inclusive seed cursors."""
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
             raise ValueError('projection discovery states must be drain states')
@@ -510,7 +562,23 @@ class SimStore:
         size = max(1, min(limit, 200))
         page = ordered[:size]
         cursor = page[-1] if len(page) == size else None
-        return [entry[-1] for entry in page], cursor
+        ids = [entry[-1] for entry in page]
+        if include_outbox:
+            return ids, cursor, {sid for sid in ids if outbox.covered(sid, self.rows['results', sid])}
+        return ids, cursor
+
+    def projection_page_with_outbox(self, **scope):
+        return self._projection_page(include_outbox=True, **scope)
+
+    def projection_outbox_page(self, now: float, limit: int) -> list[outbox.DueObligation]:
+        due = (
+            obligation
+            for (table, key), row in self.rows.items()
+            if table == 'results'
+            and (obligation := outbox.due_obligation(key, row)) is not None
+            and obligation.due_at <= now
+        )
+        return sorted(due, key=lambda row: (row.due_at, row.key.segment_id))[: max(1, min(limit, 200))]
 
     def longest_ready_pending(self, owner_key: str) -> dict | None:
         # Firestore excludes rows without the ordered field, and orders ties by document name.
@@ -522,12 +590,10 @@ class SimStore:
         return deepcopy(self.rows[('jobs', min(rows)[1])]) if rows else None
 
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
-        skip = held_poll_skip_enabled()
         rows = sorted(
             (row['capture_at'], segment_id)
             for segment_id in self._pending_by_owner.get(owner_key, ())
             if (row := self.rows[('jobs', segment_id)]).get('fresh_capture') is True
-            and (not skip or row.get('state') not in (None, *MERGE_POLL_TERMINAL_STATES))
         )
         return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
 
@@ -565,7 +631,7 @@ class SimStore:
         )
         owners = []
         for key in keys[:limit]:
-            job = self.first_pending(key, skip_terminal=False)
+            job = self.first_pending(key)
             owners.append((key, job['owner_id'] if job else None))
         return owners
 

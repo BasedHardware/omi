@@ -21,6 +21,7 @@ from prometheus_client import Counter, Gauge, Histogram
 from config import batch_pipeline_coalescing as config
 from config.policy import BatchUnitPolicy
 from database import batch_pipeline_coalescing as rows
+from database.batch_pipeline_coalescing_identity import compatibility_key, digest
 from database.batch_pipeline_leader import LeaseLost
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.capture_decode import decode_units
@@ -65,6 +66,7 @@ def member_status(store, uid, intake, read_status):
             **queued(intake),
             'status': 'completed',
             'result': content['result'],
+            'completed_at': content.get('completed_at'),
             'total_segments': intake['original_units'],
             'processed_segments': intake['original_units'],
             'successful_segments': intake['original_units'],
@@ -81,7 +83,7 @@ def member_status(store, uid, intake, read_status):
     result = status.get('result') if complete else None
     if result is not None:
         result = {**result, 'total_segments': intake['original_units']}
-        rows.checkpoint_completion(store, intake, result, time.time())
+        rows.checkpoint_completion(store, intake, result, time.time(), completed_at=status.get('completed_at'))
     return {
         **status,
         'job_id': intake['job_id'],
@@ -150,7 +152,7 @@ def _pack(paths, arguments):
         end,
         sum(d for _, d in spans),
         len(spans),
-        [rows.digest(f['name']) for f in files],
+        [digest(f['name']) for f in files],
         source_frames,
     )
 
@@ -186,7 +188,7 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
     # This source item is a deletion-outbox identity, never a scheduler job.
     item = replace(
         seed,
-        segment_id=await run_blocking(sync_executor, rows.digest, ['held-source', arguments['content_id']]),
+        segment_id=await run_blocking(sync_executor, digest, ['held-source', arguments['content_id']]),
         capture_at=start,
         duration_seconds=seconds,
         privacy_generation=context.generation,
@@ -219,24 +221,13 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
     # Metadata is hashed for identity; private context remains encrypted in body.
     key = await run_blocking(
         sync_executor,
-        rows.digest,
-        [
-            arguments['uid'],
-            session,
-            arguments['conversation_id'],
-            arguments['source'],
-            arguments['client_device_id'],
-            arguments['client_platform'],
-            arguments['should_lock'],
-            context.level,
-            context.generation,
-            language,
-            policy.policy_id,
-            arguments['lane'],
-            int(seed.priority),
-            sorted({tuple(Path(p).name.split('_')[1:4]) for p in arguments['paths']}),
-            upload_context.get('geolocation'),
-        ],
+        compatibility_key,
+        arguments,
+        privacy_level=context.level,
+        generation=context.generation,
+        language=language,
+        policy_id=policy.policy_id,
+        priority=seed.priority,
     )
     admitted = await run_blocking(db_executor, rows.enqueue, store, member, key, now)
     if admitted == 'wait':
@@ -306,7 +297,7 @@ async def drain_group(store, artifacts, group_id, *, admit_upload=None, now=None
     try:
         uploads = []
         for index, member in enumerate(group['members']):
-            item = WorkItem(**member['item'])
+            item = WorkItem.from_dict(member['item'])
             body = await run_blocking(storage_executor, artifacts.fetch_audio, item)
             destination = Path(directory.name) / str(index)
             await run_blocking(storage_executor, destination.mkdir)
@@ -318,7 +309,7 @@ async def drain_group(store, artifacts, group_id, *, admit_upload=None, now=None
             args = dict(batch[0][0])
             args['paths'] = [path for _, paths in batch for path in paths]
             if group['mode'] == 'merged':
-                content = await run_blocking(sync_executor, rows.digest, [group['id'], 'merged'])
+                content = await run_blocking(sync_executor, digest, [group['id'], 'merged'])
                 args.update(job_id=content, content_id=content)
                 args['intake_context'] = {
                     **(args.get('intake_context') or {}),

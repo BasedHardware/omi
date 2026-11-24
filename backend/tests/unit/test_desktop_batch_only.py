@@ -409,7 +409,10 @@ async def test_first_audio_marker_failure_keeps_buffered_original_for_shutdown_c
     ],
 )
 @pytest.mark.parametrize('status', [ConversationStatus.processing, ConversationStatus.completed])
-async def test_zero_preview_finalizer_registers_exact_language_bounds_before_completion(monkeypatch, trigger, status):
+@pytest.mark.parametrize('archive_closed', [False, True])
+async def test_zero_preview_finalizer_registers_exact_language_bounds_before_completion(
+    monkeypatch, trigger, status, archive_closed
+):
     row = capture()
     row.update(
         status=status.value,
@@ -421,6 +424,7 @@ async def test_zero_preview_finalizer_registers_exact_language_bounds_before_com
         has_content=True,
         server_batch_audio_start=1000,
         server_batch_audio_end=1002,
+        server_batch_audio_closed=archive_closed,
     )
     store = MemoryStore()
     model = SimpleNamespace(status=status, transcript_segments=[])
@@ -543,8 +547,8 @@ async def test_real_controller_closes_empty_archive_and_only_removes_inactive_no
     monkeypatch.setattr(recording_sessions, 'stop_quiet_check_for_conversation', lambda *a, **kw: None)
     monkeypatch.setattr(conversations, 'get_conversation', lambda *a, **kw: db.documents.get(ROW))
     monkeypatch.setattr(conversations, 'delete_conversation_photos', lambda *a: None)
-    erase = Mock()
-    monkeypatch.setattr(lifecycle, 'delete_conversation_audio_files', erase)
+    inventory = Mock(return_value=0)
+    monkeypatch.setattr(lifecycle, 'count_retained_raw_conversation_objects', inventory)
     h = host()
     h.state = SimpleNamespace(current_conversation_id='conversation', first_audio_byte_timestamp=None, active=active)
     h.recording_session_ids_by_conversation = {}
@@ -560,7 +564,10 @@ async def test_real_controller_closes_empty_archive_and_only_removes_inactive_no
     assert await controller.process_conversation('conversation') is (not active)
     assert (ROW in db.documents) is active
     controller.schedule_finalization.assert_not_awaited()
-    erase.assert_not_called()
+    if active:
+        inventory.assert_not_called()
+    else:
+        inventory.assert_called_once_with('owner', 'conversation')
 
 
 @pytest.mark.asyncio
@@ -574,7 +581,8 @@ async def test_late_first_frame_after_close_cannot_delete_capture_before_commit(
     monkeypatch.setattr(recording_sessions, 'stop_quiet_check_for_conversation', lambda *a, **kw: None)
     monkeypatch.setattr(conversations, 'get_conversation', lambda *a, **kw: db.documents.get(ROW))
     monkeypatch.setattr(conversations, 'delete_conversation_photos', lambda *a: None)
-    monkeypatch.setattr(lifecycle, 'delete_conversation_audio_files', Mock())
+    inventory = Mock(return_value=0)
+    monkeypatch.setattr(lifecycle, 'count_retained_raw_conversation_objects', inventory)
     h = archive_host()
     h.server_batch_only = True
     h.state = SimpleNamespace(current_conversation_id='conversation', first_audio_byte_timestamp=None, active=True)
@@ -599,6 +607,7 @@ async def test_late_first_frame_after_close_cannot_delete_capture_before_commit(
     controller.schedule_finalization = AsyncMock(return_value=True)
     assert not await controller.process_conversation('conversation')
     assert db.documents[ROW]['server_batch_audio_received'] is True
+    inventory.assert_not_called()
     controller.schedule_finalization.assert_not_awaited()
     await close()
     assert db.documents[ROW]['server_batch_audio_start'] == 1000
@@ -635,16 +644,6 @@ def test_archive_close_barrier_requires_owned_existing_capture():
     assert db.rows[ROW]['server_batch_audio_closed'] is True
     db.rows[ROW]['deleted'] = True
     assert not server_batch_audio.close_server_batch_audio('owner', 'conversation', firestore_client=db)
-
-
-@pytest.mark.parametrize('received', [True, False])
-def test_empty_server_batch_display_cleanup_never_erases_original_custody(monkeypatch, received):
-    erase = Mock()
-    monkeypatch.setattr(lifecycle, 'delete_conversation_audio_files', erase)
-    row = capture()
-    row.update(server_batch_audio_received=received, server_batch_audio_closed=True)
-    lifecycle._discard_unreferenced_audio('owner', 'conversation', row)
-    erase.assert_not_called()
 
 
 @pytest.mark.parametrize('received', [False, True, None])

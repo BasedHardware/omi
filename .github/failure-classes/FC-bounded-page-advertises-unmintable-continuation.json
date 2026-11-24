@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-bounded-page-advertises-unmintable-continuation",
+  "family": "work-bounded-resumable",
+  "violated_contract": "A bounded list page must not advertise a continuation it cannot mint, and the alternative it advertises must be usable. The MCP memory list's bounded newest-updated window returned has_more=true with no next_cursor at the window end, so a client that trusted has_more looped or reported a truncated discovery; the coverage hint then told it to continue with sort=updated_desc and the cursor it already held, but cursors are bound to the sort, so that path answered Invalid cursor.",
+  "canonical_prevention": "Derive has_more from the continuation the response can actually mint (has_more is true only when next_cursor is present), keep global coverage in a separate field, and make the advertised restart explicit: drop the cursor and restart with sort=updated_desc. Name the sort a reused cursor was minted for instead of a bare Invalid cursor. Pin it with a test that pages a bounded window to its end and asserts has_more agrees with next_cursor, plus a cross-sort cursor test.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_mcp_read_correctness.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/mcp_server/handlers/memories.py",
+    "backend/utils/mcp_server/registry.py"
+  ],
+  "status": "open"
+}

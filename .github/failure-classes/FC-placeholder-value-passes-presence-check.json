@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-placeholder-value-passes-presence-check",
+  "family": "deploy-prerequisite",
   "violated_contract": "A required identity or audience must be a real, usable value, not merely a non-empty string. A presence check admits placeholders such as TBD_feature_disabled, which then reach gcloud run deploy --service-account= and fail with iam.serviceAccounts.actAs denied.",
   "canonical_prevention": "Shape-check service-account emails and origin-only HTTPS audiences before deploy, print the offending variable name without its value, and in runtime preflight prove the service account exists and the deployer has iam.serviceAccounts.actAs via testIamPermissions.",
   "canonical_prevention_artifact": [

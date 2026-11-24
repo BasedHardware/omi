@@ -16,6 +16,25 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   final requests = <Completer<List<double>?>>[];
   final played = <Wal>[];
   final shared = <Wal>[];
+  final transferDone = Completer<void>();
+  Wal? transferring;
+  @override
+  double get walsSyncedProgress => 0.87;
+  @override
+  Future<void> transferWalToPhone(Wal wal) {
+    transferring = wal;
+    wal.isSyncing = true;
+    notifyListeners();
+    return transferDone.future;
+  }
+
+  void reportTransfer(double fraction) {
+    transferring!
+      ..deviceDownloadFraction = fraction
+      ..syncSpeedKBps = 50;
+    notifyListeners();
+  }
+
   @override
   Future<void> toggleWalPlayback(Wal wal) async => played.add(wal);
   @override
@@ -47,7 +66,7 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-Future<_Sync> _open(WidgetTester tester) async {
+Future<_Sync> _open(WidgetTester tester, {WalStorage storage = WalStorage.disk}) async {
   final sync = _Sync();
   tester.view.physicalSize = const Size(1170, 2532);
   tester.view.devicePixelRatio = 3;
@@ -63,7 +82,7 @@ Future<_Sync> _open(WidgetTester tester) async {
         codec: BleAudioCodec.opus,
         seconds: 30,
         status: WalStatus.miss,
-        storage: WalStorage.disk,
+        storage: storage,
         device: 'synthetic-pendant',
       )),
     ),
@@ -72,6 +91,35 @@ Future<_Sync> _open(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('Transfer to Phone shows only the selected recording’s measured progress', (tester) async {
+    final sync = await _open(tester, storage: WalStorage.sdcard);
+    await tester.tap(find.text('Transfer to Phone'));
+    await tester.pump();
+    LinearProgressIndicator indicator() => tester.widget(find.byType(LinearProgressIndicator));
+
+    // A different background sync is at 87%. This transfer has no measurement yet.
+    expect(indicator().value, isNull);
+    expect(find.textContaining('%'), findsNothing);
+    sync.reportTransfer(0);
+    await tester.pump();
+    expect(indicator().value, 0);
+    expect(find.text('0%'), findsOneWidget);
+    sync.reportTransfer(0.38);
+    await tester.pump();
+    expect(indicator().value, 0.38);
+    expect(find.text('38%'), findsOneWidget);
+    expect(find.text('50.0 KB/s'), findsOneWidget);
+
+    // The same progress row must remain readable with a short viewport.
+    tester.view.physicalSize = const Size(2400, 1500);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.text('38%'));
+    expect(find.text('38%').hitTestable(), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    sync.transferDone.complete();
+  });
+
   testWidgets('waveform failure ends loading and retry renders recovered waveform', (tester) async {
     final sync = await _open(tester);
     expect(tester.widget<WaveformSection>(find.byType(WaveformSection)).isProcessingWaveform, isTrue);

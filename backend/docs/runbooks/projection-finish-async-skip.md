@@ -7,7 +7,7 @@ independent of finish clocks (the scheduling safety required by option 3).
 
 The pinned projection policy on a job is authoritative. A session with that
 policy writes `projection_finish_due_at = -1` when it persists or acknowledges
-an async receipt. Synchronous receipts retain their current clock and backoff.
+an async receipt. Synchronous receipts retain their finish clock.
 Historical async receipts are read and classified once: a transaction rereads
 both pinned policy and result state before changing only the clock. It never
 changes payload, receipt, privacy, custody, ordering, usage or client state.
@@ -15,12 +15,9 @@ Recovery writers that cannot classify a receipt continue to stamp it due now;
 that receipt remains eligible for bounded classification on later finish passes.
 
 After the existing version-1 finish-clock backfill marker is complete, the finish
-page adds `projection_finish_due_at >= 0` to its existing clock query. With
-finish backoff off, the upper bound is positive infinity (all sync clocks);
-with it on, the upper bound stays the current time. Before the marker, the
-legacy unfiltered page stays active so unstamped sync obligations remain visible.
-Moving to the clock ordering even when backoff is off is intentional. It
-relies on the stamping marker: the cost lead reported it complete with zero
+page adds `projection_finish_due_at >= 0` with no upper bound on synchronous
+clocks. Before the marker, the unfiltered page keeps unstamped obligations visible.
+The switch to clock ordering relies on the stamping marker: the cost lead reported it complete with zero
 missing clocks at 12:46Z on November 14. Before that marker, ordering stays
 legacy. There is no new maintenance pass or production action in this PR.
 
@@ -42,12 +39,37 @@ Claims, privacy fences, readiness, retries and completion transactions retain
 their contracts; this composition does not authorize follow-up-clock rollout.
 
 `BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED` defaults on. Set it to `false` to
-remove the lower bound and restore the former finish discovery, preserving the
-separate finish-backoff switch. Negative clocks are already due under that
-query, so rollback requires no data repair. Older binaries also see them as due.
+restore unfiltered finish discovery. That query includes negative clocks, so
+rollback requires no data repair.
 Mixed fleets may write an ordinary clock again on a state change; newer sweep
 readers reclassify it safely. No new clock delays transcript assignment or async
 follow-up execution.
+
+## Ready-state writer coverage (SCA-2280 follow-up)
+
+The November 16 production verification found 569,250 finish rows read in the
+04:00-05:00Z hour versus the corrected 502,606/hour baseline. Positive-clock
+stock fell by only about 3.5-4k/hour while classification retired about 21k/hour;
+60 sampled positive-clock jobs all had async policy. These observations do not
+prove which writer accounts for all replenishment.
+
+Held-ready settlement, durable sibling completion, privacy resume and ghost
+settlement previously stamped positive finish clocks even for pinned async jobs.
+These paths now pass the pinned policy to the existing clock primitive.
+Sibling transitions use each sibling's policy from the job already read in the
+transaction, rather than inheriting the initiating segment's policy. Missing
+policies remain positive for later classification. Whole-document privacy
+resume now accepts the same async hint as patch writes. Both forms continue to
+stamp the independent follow-up clock due now; no receipt or effect is skipped.
+
+This correction adds no document reads, write operations, index, marker, rollout
+setting or classification budget. It prevents replenishment from these known
+writers; existing positive-clock rows still require bounded classification.
+After a source-containing ordinary release, measure net positive-clock drain
+against classification throughput, then a full hour of finish reads below the
+502,606 baseline. The 14,400/hour example below is an empty-page asymptote, not a
+production result or an immediate target. Keep savings unbooked until the cost
+owner reads both caller counters and Quality supplies matched p50/p90.
 
 ## Bounded classification and progress
 

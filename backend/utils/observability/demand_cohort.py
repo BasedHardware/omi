@@ -5,8 +5,6 @@ from time import monotonic
 
 from prometheus_client import Counter, Histogram
 
-from utils.observability.soniox_idle_arm import IdleArmLedger, session_ledger
-
 DEMAND_COHORTS = ('admitted', 'eligible_control', 'ineligible')
 current_demand: ContextVar['DemandTelemetry | None'] = ContextVar('listen_demand', default=None)
 TRANSPORT_ORIGINS = ('initial', 'idle_reopened', 'replacement')
@@ -198,8 +196,6 @@ class DemandTelemetry:
         self.first_output = False
         self.visible_at: float | None = None
         self.visibility: str | None = None
-        # Soniox idle cohort ledger (utils.observability.soniox_idle_arm), set at admission.
-        self.idle_arm: IdleArmLedger | None = None
 
     def capture(self, seconds: float) -> None:
         if seconds > 0:
@@ -207,8 +203,6 @@ class DemandTelemetry:
                 self.first_audio_at = monotonic()
                 self.output_event('first_output', 'started')
             record_metric(CAPTURE_AUDIO, {'demand_cohort': self.cohort}, seconds)
-            if self.idle_arm is not None:
-                self.idle_arm.add_capture(seconds)
             record_metric(BATCH_CAPTURE_AUDIO, {'batch_cohort': self.batch_cohort}, seconds)
 
     def observe_visibility(self, payload) -> None:
@@ -235,8 +229,6 @@ class DemandTelemetry:
                 max(0, now - self.first_audio_at),
                 observe=True,
             )
-            if self.idle_arm is not None:
-                self.idle_arm.first_output(max(0, now - self.first_audio_at))
             self.first_output = True
             self.output_event('first_output', 'delivered')
         if self.visible_at is not None:
@@ -293,9 +285,6 @@ class WireAudioMeter:
                 {'provider': self.provider, 'demand_cohort': cohort_label(self.telemetry), 'origin': self.origin},
                 len(data) / self.bytes_per_second,
             )
-            ledger = session_ledger(self.telemetry) if self.provider == 'soniox' else None
-            if ledger is not None:
-                ledger.add_wire(len(data) / self.bytes_per_second)
 
 
 class ConnectedSecondsMeter:
@@ -311,7 +300,6 @@ class ConnectedSecondsMeter:
         self.metric = SONIOX_CONNECTED if metric is None else metric
         telemetry = current_telemetry()
         self.cohort = cohort_label(telemetry)
-        self.ledger = session_ledger(telemetry) if metric is None else None
         self.origin = transport_origin()
         self.accounted_at = monotonic()
         self.closed = False
@@ -327,8 +315,6 @@ class ConnectedSecondsMeter:
         self.closed = close
         if elapsed > 0:
             record_metric(self.metric, {'demand_cohort': self.cohort, 'origin': self.origin}, elapsed)
-            if self.ledger is not None:
-                self.ledger.add_connected(elapsed)
 
 
 class MeteredSyncTransport:

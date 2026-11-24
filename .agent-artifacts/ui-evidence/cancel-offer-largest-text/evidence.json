@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-cancel-final-largest-text.png",
+      "platform": "mobile-ios",
+      "description": "Cancel flow final step at the largest accessibility text size, light: main (left) overflows and pushes Cancel Subscription off screen; this PR (right) keeps Stay for 50% off and Cancel Subscription pinned. iPhone 17 Pro simulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-cancel-feedback-largest-dark.png",
+      "platform": "mobile-ios",
+      "description": "Cancel flow feedback step at the largest text size, dark: main (left) hides Continue and Skip for Now under an overflow; this PR (right) keeps both on screen. iPhone 17 Pro simulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-trial-offer-largest-text.png",
+      "platform": "mobile-ios",
+      "description": "30-day trial offer sheet at the largest text size after swiping up: main (left) cannot scroll and Claim and No thanks stay off screen; this PR (right) scrolls to the price terms, Claim and No thanks. iPhone 17 Pro simulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-cancel-final-default-size.png",
+      "platform": "mobile-ios",
+      "description": "Cancel flow final step at default text with this PR, light (left) and dark (right); visually identical to main (PSNR above 90 dB). iPhone 17 Pro simulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-trial-offer-default-size.png",
+      "platform": "mobile-ios",
+      "description": "30-day trial offer sheet at default text with this PR, light (left) and dark (right); byte-identical to main's screenshots. iPhone 17 Pro simulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

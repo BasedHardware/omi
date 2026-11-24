@@ -178,8 +178,8 @@ def test_expired_or_explicit_failure_is_clear_non200_without_model(monkeypatch, 
         routes.reprocess_conversation('capture', uid='synthetic')
     assert caught.value.status_code == 409
     assert caught.value.detail['code'] == 'transcription_pending'
-    # Both clients map this to ReprocessFailed, not ReprocessBusy; Needs
-    # attention shows its existing error toast and keeps the retry button.
+    # The mobile app maps this to ReprocessTranscriptionPending: it shows a
+    # "Not transcribed yet" status and stops offering the summary retry.
     assert caught.value.detail['code'] != 'conversation_processing_in_progress'
     for call in no_paid_path:
         call.assert_not_called()

@@ -24,6 +24,7 @@ from scripts.runtime_env_capability_contracts import (
     validate_voice_transcription_storage,
 )  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
+from scripts.sync_backfill_routing import compose_expected_routing, read_routing
 from scripts.runtime_env_canary_ops import compose  # noqa: E402
 from scripts.validate_object_lake_bucket_contract import validate_write_admission  # noqa: E402
 from scripts.render_backend_runtime_env import validate_sync_lineage_rollout  # noqa: E402
@@ -43,6 +44,7 @@ from scripts.runtime_env_validation.common import (
     _as_config_dict,
     _as_config_list,
     _config_map_names,
+    _chart_env_entries,
     _env_entries_by_name,
     _expected_flag_value,
     _get_env_config,
@@ -116,7 +118,7 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
             continue
         values_file = ROOT / service_config['values_file']
         values = _load_yaml(values_file)
-        actual_env = _env_entries_by_name(values.get('env', []))
+        actual_env = _chart_env_entries(values)
         # GKE ports are declared in Helm values, while the host may come from
         # the manifest's shared ConfigMap. Validate the effective pair.
         if 'REDIS_DB_HOST' in (service_config.get('env') or {}):
@@ -659,6 +661,9 @@ def _validate_directory_routing_bindings(env: str, env_config: ConfigDict) -> li
     return errors
 
 
+PUMP_ONLY_SELECTOR = 'backend-projection-pump'
+
+
 def validate_runtime_env(
     *,
     env: str,
@@ -670,6 +675,8 @@ def validate_runtime_env(
     strict_provisional: bool = False,
     integration_canary_state: Path | None = None,
     integration_canary_source: str | None = None,
+    cloud_run_service: str = 'all',
+    sync_routing_env_path: Path | None = None,
 ) -> list[ValidationError]:
     manifest = _load_yaml(manifest_path)
     env_config = _get_env_config(manifest, env)
@@ -696,7 +703,11 @@ def validate_runtime_env(
     errors.extend(ValidationError(env, error) for error in validate_write_admission(env, env_config))
     errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
     errors.extend(_validate_proactivity_v2_flag_hosts(env, env_config))
-    errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    # A pump-only run (the declared selector, never a skip flag) mutates no GKE workload,
+    # so listen chart-vs-manifest drift is not its target's drift (SCA-3318). Every other
+    # selector, including 'all', still checks every GKE workload.
+    if cloud_run_service != PUMP_ONLY_SELECTOR:
+        errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     errors.extend(validate_conversation_finalization_capabilities(env, env_config))
     errors.extend(validate_speaker_embedding_hosts(env, env_config))
     errors.extend(validate_voice_transcription_storage(env, env_config))
@@ -721,13 +732,37 @@ def validate_runtime_env(
 
     cloud_run_state = None
     live_config = env_config
+    from scripts.cloud_run_scope import selected
+
+    try:
+        service_scope = selected(cloud_run_service)
+    except ValueError:
+        return [ValidationError(env, 'invalid Cloud Run selector')]
+    if integration_only and cloud_run_service not in ('all', 'backend-integration'):
+        return [ValidationError(env, 'integration-only selector mismatch')]
+    if cloud_run_service != 'all':
+        if any(name not in env_config['cloud_run']['services'] for name in service_scope):
+            return [ValidationError(env, 'manifest lacks selected Cloud Run service')]
+        live_config = deepcopy(env_config)
+        live_config['cloud_run']['services'] = {
+            name: env_config['cloud_run']['services'][name] for name in service_scope
+        }
     if integration_only:
+        if 'backend-integration' not in env_config['cloud_run']['services']:
+            return [ValidationError(env, 'manifest lacks selected Cloud Run service')]
         # Static source/workflow contracts above stay full-manifest. Live
         # comparison follows the sole service this protected profile mutates.
         live_config = deepcopy(env_config)
         live_config['cloud_run']['services'] = {
             'backend-integration': env_config['cloud_run']['services']['backend-integration']
         }
+    if sync_routing_env_path is not None:
+        if 'backend-sync' not in service_scope or integration_only:
+            return [ValidationError(env, 'sync routing overlay outside selected service scope')]
+        try:
+            live_config = compose_expected_routing(live_config, read_routing(sync_routing_env_path))
+        except (ValueError, KeyError, TypeError, OSError):
+            return [ValidationError(env, 'invalid sync routing overlay')]
     if cloud_run_state_path is not None:
         cloud_run_state = _load_json(cloud_run_state_path)
     elif check_live_cloud_run:

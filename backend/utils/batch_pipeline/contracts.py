@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 import hashlib
 import math
+import re
 from typing import Protocol, Sequence
 
 
@@ -89,6 +90,16 @@ class WorkItem:
     # Privacy-only source authority; never an assignment target or ordering hint.
     capture_source_conversation_id: str | None = None
 
+    # Server-derived exact original-file and decoded-range proof; never client supplied.
+    source_reuse_key: str | None = None
+    source_alias_of: str | None = None
+    source_conversation_ids: tuple[str, ...] = ()
+
+    @classmethod
+    def from_dict(cls, value: dict) -> 'WorkItem':
+        """Read a stored item envelope, ignoring fields a newer writer added (reader-first rollout)."""
+        return cls(**{key: item for key, item in value.items() if key in cls.__dataclass_fields__})
+
     def to_dict(self, *, include_nulls: bool = False):
         """Preserve old envelope nulls on request; trust is absent unless explicitly set."""
         from dataclasses import asdict
@@ -100,9 +111,31 @@ class WorkItem:
             value.pop('capture_time_trust')
         if self.capture_source_conversation_id is None:
             value.pop('capture_source_conversation_id')
+        if self.source_reuse_key is None:
+            value.pop('source_reuse_key')
+        if self.source_alias_of is None:
+            value.pop('source_alias_of')
+        if not self.source_conversation_ids:
+            value.pop('source_conversation_ids')
         return value
 
     def __post_init__(self):
+        if self.source_alias_of is not None and (
+            not self.source_reuse_key
+            or len(self.source_alias_of) != 64
+            or any(c not in '0123456789abcdef' for c in self.source_alias_of)
+        ):
+            raise ValueError('bounded source alias owner required')
+        if len(self.source_conversation_ids) > 256 or any(
+            type(cid) is not str or not cid or '/' in cid or len(cid) > 128 for cid in self.source_conversation_ids
+        ):
+            raise ValueError('bounded same-owner source dependencies required')
+        if self.source_reuse_key is not None and (
+            type(self.source_reuse_key) is not str
+            or len(self.source_reuse_key) != 64
+            or any(c not in '0123456789abcdef' for c in self.source_reuse_key)
+        ):
+            raise ValueError('bounded server source identity required')
         if self.timing_store not in {None, 'batch', 'sync'}:
             raise ValueError('invalid audio timing store')
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
@@ -300,6 +333,7 @@ class WorkResult:
     result_uri: str
     outcome: str = 'success'
     language_receipt: dict | None = field(default=None, compare=False)
+    worker_image_digest: str | None = field(default=None, compare=False)
 
     def __post_init__(self):
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
@@ -308,6 +342,8 @@ class WorkResult:
             raise ValueError('unsupported batch result outcome')
         if not self.result_uri or len(self.result_uri.encode()) > 2048:
             raise ValueError('result_uri must be a bounded durable encrypted reference')
+        if self.worker_image_digest is not None and not re.fullmatch(r'sha256:[0-9a-f]{64}', self.worker_image_digest):
+            raise ValueError('worker_image_digest requires a full SHA-256 digest')
         if self.language_receipt is not None:
             from utils.batch_pipeline.language_receipt import validate
 
@@ -321,6 +357,8 @@ class WorkResult:
         # completed results, including idempotent retries across a rolling deploy.
         if self.language_receipt is None:
             value.pop('language_receipt')
+        if self.worker_image_digest is None:
+            value.pop('worker_image_digest')
         return value
 
     def matches_persisted(self, value):
@@ -329,9 +367,10 @@ class WorkResult:
             return False
         expected = self.to_dict()
         existing = dict(value)
-        if expected.get('language_receipt') is None or existing.get('language_receipt') is None:
-            expected.pop('language_receipt', None)
-            existing.pop('language_receipt', None)
+        for key in ('language_receipt', 'worker_image_digest'):
+            if expected.get(key) is None or existing.get(key) is None:
+                expected.pop(key, None)
+                existing.pop(key, None)
         return existing == expected
 
 

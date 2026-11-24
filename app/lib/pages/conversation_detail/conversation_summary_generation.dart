@@ -39,6 +39,9 @@ enum SummaryFailureKind {
   /// The hourly regenerate limit (HTTP 429).
   rateLimited,
 
+  /// The audio is still awaiting transcription (HTTP 409 `transcription_pending`): nothing to retry.
+  transcriptionPending,
+
   /// Anything else.
   generic,
 }
@@ -152,6 +155,21 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
     if (_summaryFailure == null) return;
     _summaryFailure = null;
     notifyListeners();
+  }
+
+  /// Retires a card a fresh copy shows is stale, without notifying (the refresh notifies): a
+  /// summary ends a busy or not-transcribed card, and a transcript ends a not-transcribed one.
+  @protected
+  void clearSettledSummaryFailure(ServerConversation fresh) {
+    final failure = _summaryFailure;
+    if (failure == null || failure.conversationId != fresh.id) return;
+    final summarized = conversationHasRequestedSummary(fresh, failure.appId);
+    final settled = switch (failure.kind) {
+      SummaryFailureKind.transcriptionPending => summarized || fresh.transcriptSegments.isNotEmpty,
+      SummaryFailureKind.busy => summarized,
+      _ => false,
+    };
+    if (settled) _summaryFailure = null;
   }
 
   /// Sets (or clears) the failure without notifying; the reprocess flow notifies once.

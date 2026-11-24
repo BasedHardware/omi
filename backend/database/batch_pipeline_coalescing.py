@@ -5,18 +5,11 @@ released only after every original member is bound to admitted work (or purge).
 Group/member/source writes recheck live authority in their own transaction.
 """
 
-import hashlib
-import json
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from config import batch_pipeline_coalescing as config
-
-
-def digest(value):
-    return hashlib.sha256(
-        json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
-    ).hexdigest()
+from database.batch_pipeline_coalescing_identity import digest
 
 
 def authorize(tx, row):
@@ -296,7 +289,7 @@ def release_for_open(store, uid, job_id, now):
     return store.run(commit)
 
 
-def checkpoint_completion(store, intake, result, now):
+def checkpoint_completion(store, intake, result, now, *, completed_at=None):
     """Arm replay/metadata TTL only after authoritative group completion."""
 
     def commit(tx):
@@ -311,6 +304,8 @@ def checkpoint_completion(store, intake, result, now):
         expires = datetime.fromtimestamp(now, timezone.utc) + timedelta(days=45)
         current['expires_at'] = expires
         content.update(status='completed', result=result, expires_at=expires)
+        if completed_at is not None:
+            content['completed_at'] = completed_at
         tx.put('intakes', intake['job_id'], current)
         tx.put('content', content_key, content)
 

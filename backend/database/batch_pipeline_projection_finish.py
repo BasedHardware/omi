@@ -1,19 +1,4 @@
-"""Durable next-attempt clock for the projection finish page (dark read lever).
-
-The finish page re-walks every ``persisted``/``ready`` result on every serving
-tick whether or not anything changed, which is almost all of the projection
-replay. With ``BATCH_PROJECTION_FINISH_BACKOFF_ENABLED`` on, a walk that changes
-nothing writes ``projection_finish_due_at`` and the page filters on it, so an
-unchanged row is retried after 60 s, then 300 s, then 900 s (capped). A state
-move writes the clock as due now in the same transaction, so no obligation
-waits on it, and the ``pending`` assignment page is untouched, so new work is
-never delayed.
-
-Clock writes are unconditional, including on writer-only hosts with the read
-lever disabled. The lever controls query selection and no-change deferrals.
-Historical rows are stamped by the bounded maintenance pass before its durable
-completion marker allows serving processes to use the filtered page.
-"""
+"""Shared projection finish and follow-up clocks for state transitions."""
 
 from google.cloud import firestore
 
@@ -47,12 +32,12 @@ def projection_finish_state_fields(state: str | None, now: float, *, async_proje
     }
 
 
-def projection_finish_entry_fields(state: str | None, now: float) -> dict:
+def projection_finish_entry_fields(state: str | None, now: float, *, async_projection: bool = False) -> dict:
     """The same fields for a whole-document ``set``, where sentinels are not values."""
     if state not in PROJECTION_FINISH_STATES:
         return {}
     return {
-        PROJECTION_FINISH_DUE_FIELD: now,
+        PROJECTION_FINISH_DUE_FIELD: PROJECTION_FINISH_ASYNC_CLOCK if async_projection else now,
         PROJECTION_FINISH_STEP_FIELD: 0,
         **followup_state_fields(state, now, entry=True),
     }

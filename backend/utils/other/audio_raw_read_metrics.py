@@ -4,6 +4,7 @@ import logging
 
 from google.cloud.exceptions import NotFound
 from prometheus_client import Counter
+from utils.observability.reasons import RawPackExclusionReason, ReasonFamily, reason_label
 
 logger = logging.getLogger(__name__)
 RESULTS = frozenset(
@@ -22,6 +23,17 @@ CODECS = frozenset({'opus', 'flac', 'pcm16', 'pcm8'})
 RAW_READ = Counter('omi_audio_raw_read_total', 'Raw audio read outcomes', ['result'])
 for _result in RESULTS:
     RAW_READ.labels(result=_result)
+EXCLUSIONS = Counter('omi_audio_raw_pack_exclusions_total', 'Raw inventory exclusions', ['reason'])
+for _reason in RawPackExclusionReason:
+    EXCLUSIONS.labels(reason=reason_label(ReasonFamily.AUDIO_RAW, _reason, RawPackExclusionReason))
+
+
+def exclude(reason: str) -> None:
+    try:
+        value = RawPackExclusionReason(reason)
+    except ValueError:
+        value = RawPackExclusionReason.INVALID
+    EXCLUSIONS.labels(reason=reason_label(ReasonFamily.AUDIO_RAW, value, RawPackExclusionReason)).inc()
 
 
 class CoverageMismatch(ValueError):

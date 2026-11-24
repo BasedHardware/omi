@@ -1,5 +1,7 @@
 'use client';
 
+import { CHECKOUT_POPUP_BLOCKED, openCheckoutWindow } from '@/lib/checkoutWindow';
+
 import * as Dialog from '@radix-ui/react-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, Crown, CreditCard, Loader2, AlertCircle } from 'lucide-react';
@@ -34,6 +36,9 @@ import {
   trackUpgradePlanSelected,
   trackUpgradeSucceeded,
 } from '@/lib/analytics/subscriptionFunnel';
+
+const PLAY_SUBSCRIPTIONS_URL =
+  'https://play.google.com/store/account/subscriptions?sku=omi_pro&package=com.friend.ios';
 
 interface PlansSheetProps {
   open: boolean;
@@ -175,8 +180,8 @@ export function PlansSheet({
 
       const tier = option?.plan_id ?? 'unknown';
       const interval = option?.interval ?? option?.title ?? 'unknown';
-      trackUpgradePlanSelected(tier, interval, 'web_plans');
 
+      trackUpgradePlanSelected(tier, interval, 'web_plans');
       // If already subscribed and selecting a different plan, use upgrade endpoint
       if (isPaid && !isCanceling_ && !isCurrentPlan) {
         purchaseRoute = 'upgrade';
@@ -196,7 +201,10 @@ export function PlansSheet({
           // Stripe Checkout opens in a new tab. The parent page never sees the
           // cancel URL Stripe returns to, so Upgrade Cancelled is not emitted
           // here. trackUpgradeCancelled exists for a client that can observe it.
-          window.open(result.url, '_blank');
+          if (!openCheckoutWindow(result.url)) {
+            setError(CHECKOUT_POPUP_BLOCKED);
+            return;
+          }
           onOpenChange(false);
           // Listen for window focus to refresh subscription
           const handleFocus = () => {
@@ -292,6 +300,9 @@ export function PlansSheet({
                   initial={{ opacity: 0, scale: 0.95, y: 10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  transformTemplate={(_, transform) =>
+                    `translate(-50%, -50%) ${transform}`
+                  }
                   transition={{ duration: 0.15, ease: 'easeOut' }}
                   className={cn(
                     'fixed left-1/2 top-1/2 z-[101] -translate-x-1/2 -translate-y-1/2',
@@ -343,7 +354,25 @@ export function PlansSheet({
 
                   {/* Content */}
                   <div className="space-y-6 p-6">
-                    {isUnknownPlan ? (
+                    {isPaid && subscription?.provider === 'play' ? (
+                      <div
+                        className="space-y-4 py-4 text-center"
+                        data-testid="plans-play-managed"
+                      >
+                        <p className="text-sm text-text-secondary">
+                          Your Omi Pro is billed by Google Play. Manage or cancel it in
+                          Google Play on your Android device.
+                        </p>
+                        <a
+                          href={PLAY_SUBSCRIPTIONS_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-medium text-black"
+                        >
+                          Manage in Google Play
+                        </a>
+                      </div>
+                    ) : isUnknownPlan ? (
                       <div className="py-8 text-center">
                         <p className="text-sm text-text-secondary">
                           This account uses a plan that this version of Omi does not

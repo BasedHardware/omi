@@ -18,6 +18,7 @@ import pytest
 import yaml
 
 from scripts.alert_backtest import metric_names, prometheus
+from scripts.redis_pager_route import REDIS_PAGER_RECEIVER, REDIS_PAGER_TARGET, REDIS_PAGER_UID
 from tests.unit.test_record_seal_cluster_repair_deploy import documents as repair_documents
 
 REPO = Path(__file__).resolve().parents[3]
@@ -111,11 +112,12 @@ def test_every_record_token_alert_metric_survives_its_producer_scrape_filters(en
     )
     assert result.returncode == 0, result.stderr
     pusher_monitors = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'PodMonitoring']
-    assert len(pusher_monitors) == 1
+    assert {m['metadata']['name'] for m in pusher_monitors} == {'prod-omi-pusher', 'prod-omi-pusher-bulk'}
+    primary_monitor = next(m for m in pusher_monitors if m['metadata']['name'] == 'prod-omi-pusher')
     repair = repair_documents()['PodMonitoring', 'record-seal-repair']
     paths = {
         'sync': sync_relabels,
-        'pusher': pusher_monitors[0]['spec']['endpoints'][0].get('metricRelabeling', []),
+        'pusher': primary_monitor['spec']['endpoints'][0].get('metricRelabeling', []),
         'repair': repair['spec']['endpoints'][0].get('metricRelabeling', []),
     }
     for metric in queried:
@@ -368,6 +370,8 @@ CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_batch_held_oldest_age_seconds/',
     'prometheus.googleapis.com/omi_batch_projection_drain_oldest_age_seconds/',
     'prometheus.googleapis.com/omi_batch_staged_input_clock_invalid_total/',
+    'prometheus.googleapis.com/omi_batch_projection_finish_reads_total/',
+    'prometheus.googleapis.com/omi_batch_projection_finish_completed_total/',
     'prometheus.googleapis.com/omi_finalization_pair_',
     'prometheus.googleapis.com/omi_enrichment_summary_repair_',
     'prometheus.googleapis.com/omi_batch_record_pending_',
@@ -609,9 +613,13 @@ def test_alert_rules_use_declared_receiver_and_instatus_components():
     label_key = routing['instatus_label']
 
     for rule in _alert_rules():
-        receiver = (rule.get('notification_settings') or {}).get('receiver')
-        assert receiver == default_receiver, f"{rule.get('uid')}: unexpected receiver {receiver!r}"
+        uid = rule.get('uid')
         labels = rule.get('labels') or {}
+        receiver = (rule.get('notification_settings') or {}).get('receiver')
+        expected_receiver = REDIS_PAGER_RECEIVER if uid == REDIS_PAGER_UID else default_receiver
+        assert receiver == expected_receiver, f"{uid}: unexpected receiver {receiver!r}"
+        if uid == REDIS_PAGER_UID:
+            assert labels.get('paging_target') == REDIS_PAGER_TARGET, uid
         component = labels.get(label_key)
         canary_sources = {
             'omi-datasource-prometheus': 'prometheus',
@@ -637,9 +645,8 @@ def test_alert_rules_use_declared_receiver_and_instatus_components():
 
 
 def test_every_alert_rule_declares_tier_owner_and_audience():
-    # Only tier=page reaches the human Telegram channel. Agent-tier rules keep
-    # evaluating (agents read them from the Alertmanager API) but are muted by
-    # the always-on time interval, so a missing label is a page-noise bug.
+    # Agent-tier Telegram rules keep evaluating under the always-on mute.
+    # The Redis pilot uses a direct receiver and retains its agent labels.
     routing = _load_inventory()['routing']
     silent = routing['agent_tier_mute_timing']
     for rule in _alert_rules():
@@ -648,7 +655,11 @@ def test_every_alert_rule_declares_tier_owner_and_audience():
         settings = rule.get('notification_settings') or {}
         assert labels.get('owner'), f"{uid}: missing owner label"
         assert labels.get('tier') in {'page', 'agent'}, f"{uid}: tier must be page or agent"
-        if labels['tier'] == 'page':
+        if uid == REDIS_PAGER_UID:
+            assert labels.get('paging_target') == REDIS_PAGER_TARGET, uid
+            assert labels['tier'] == labels.get('audience') == 'agent', uid
+            assert settings.get('mute_time_intervals', []) == [], uid
+        elif labels['tier'] == 'page':
             assert labels.get('audience') == 'human', uid
             assert silent not in (settings.get('mute_time_intervals') or []), f"{uid}: page rule is muted"
         else:

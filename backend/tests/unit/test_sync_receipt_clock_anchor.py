@@ -18,6 +18,12 @@ from models.capture_coverage import FrameRange
 
 RECEIVED = datetime(2026, 11, 15, tzinfo=timezone.utc).timestamp()
 FUTURE = datetime(2038, 1, 19, tzinfo=timezone.utc).timestamp()
+OUTCOMES = ('anchored', 'anchor_pending', 'identity_required', 'anchor_error', 'refused')
+
+
+def recovery_counts():
+    metric = receipt_clock._recovery_counter()
+    return {outcome: metric.labels(outcome=outcome)._value.get() for outcome in OUTCOMES}
 
 
 @pytest.fixture
@@ -53,11 +59,14 @@ def units(directory, starts, *, received=RECEIVED, device='ios_abcd1234', owner=
 
 
 def test_newest_first_requests_preserve_order_gaps_and_nonoverlap(anchors, tmp_path):
+    before_counts = recovery_counts()
     newer = units(tmp_path / 'newer', [FUTURE + 600, FUTURE + 610])
+    assert recovery_counts() == {**before_counts, 'anchored': before_counts['anchored'] + 1}
     before = deepcopy(anchors.rows)
     older = units(tmp_path / 'older', [FUTURE, FUTURE + 10], received=RECEIVED + 2)
     all_units = sorted(older + newer, key=lambda unit: unit.capture_at)
     assert anchors.rows == before
+    assert recovery_counts() == {**before_counts, 'anchored': before_counts['anchored'] + 2}
     assert [u.stored_capture_at for u in all_units] == [RECEIVED - 611, RECEIVED - 601, RECEIVED - 11, RECEIVED - 1]
     for left, right in zip(all_units, all_units[1:]):
         assert left.stored_capture_at + left.duration_seconds <= right.stored_capture_at
@@ -137,11 +146,94 @@ def test_exhausted_anchor_transaction_is_retryable_without_alternate_offset(anch
         raise ValueError('Failed to commit transaction in 5 attempts')
 
     monkeypatch.setattr(receipt_clock, 'frozen_offset', exhausted)
+    before_counts = recovery_counts()
     with pytest.raises(receipt_clock.FutureCaptureRetry) as error:
         units(tmp_path / 'contended', [FUTURE])
     assert error.value.status_code == 503
     assert error.value.headers == {'Retry-After': '30'}
     assert not anchors.rows
+    assert recovery_counts() == {**before_counts, 'anchor_error': before_counts['anchor_error'] + 1}
+
+
+@pytest.mark.parametrize(
+    'outcome,status,code',
+    [
+        ('anchor_pending', 503, 'capture_clock_anchor_pending'),
+        ('identity_required', 503, 'capture_clock_identity_required'),
+        ('anchor_error', 503, 'capture_clock_anchor_unavailable'),
+        ('refused', 400, 'invalid_capture_time'),
+    ],
+)
+def test_offset_exit_is_counted_once_and_preserves_response(anchors, monkeypatch, outcome, status, code):
+    def unavailable(_uid):
+        raise RuntimeError('account creation read unavailable')
+
+    span = (f'audio_omi_pcm16_16000_u0_clkeone_{int(FUTURE)}.wav', FUTURE, 1.0)
+    spans = [span]
+    device = 'ios_abcd1234'
+    if outcome == 'anchor_pending':
+        receipt_clock.receipt_clock_offsets(spans, uid='synthetic', device_id=device, received_at=RECEIVED)
+        path, start, duration = span
+        spans = [(path, start + 10, duration)]
+    elif outcome == 'identity_required':
+        device = None
+    elif outcome == 'anchor_error':
+        monkeypatch.setattr(receipt_clock, 'account_created_at', unavailable)
+    else:
+        spans = []
+
+    before_counts = recovery_counts()
+    before_rows = deepcopy(anchors.rows)
+    error_type = receipt_clock.FutureCaptureRetry if status == 503 else receipt_clock.FutureCaptureRefused
+    with pytest.raises(error_type) as caught:
+        receipt_clock.receipt_clock_offsets(spans, uid='synthetic', device_id=device, received_at=RECEIVED)
+
+    expected = error_type(code) if status == 503 else error_type()
+    assert caught.value.status_code == status
+    assert caught.value.detail == expected.detail
+    assert caught.value.headers == expected.headers
+    assert anchors.rows == before_rows
+    assert recovery_counts() == {**before_counts, outcome: before_counts[outcome] + 1}
+
+
+@pytest.mark.parametrize('detail', ['unstructured retry', {}, {'code': []}, {'code': 'unrecognized'}])
+def test_unclassified_retry_detail_preserves_original_exception(monkeypatch, detail):
+    retry = receipt_clock.FutureCaptureRetry()
+    retry.detail = detail
+
+    def unavailable(*args, **kwargs):
+        raise retry
+
+    monkeypatch.setattr(receipt_clock, '_resolve_receipt_clock_offsets', unavailable)
+    before_counts = recovery_counts()
+    with pytest.raises(receipt_clock.FutureCaptureRetry) as caught:
+        receipt_clock.receipt_clock_offsets([], uid='synthetic', device_id=None, received_at=RECEIVED)
+    assert caught.value is retry
+    assert caught.value.detail == detail
+    assert caught.value.headers == {'Retry-After': '30'}
+    assert recovery_counts() == {**before_counts, 'anchor_error': before_counts['anchor_error'] + 1}
+
+
+def test_metrics_failure_preserves_offsets_and_retry(anchors, monkeypatch):
+    class BrokenCounter:
+        def labels(self, *, outcome):
+            return self
+
+        def inc(self):
+            raise RuntimeError('metrics unavailable')
+
+    monkeypatch.setattr(receipt_clock, '_recovery_counter', BrokenCounter)
+    path = f'audio_omi_pcm16_16000_u0_clkeone_{int(FUTURE)}.wav'
+    spans = [(path, FUTURE, 1.0)]
+    assert receipt_clock.receipt_clock_offsets(
+        spans, uid='synthetic', device_id='ios_abcd1234', received_at=RECEIVED
+    ) == {path: FUTURE + 1 - RECEIVED}
+    with pytest.raises(receipt_clock.FutureCaptureRetry) as caught:
+        receipt_clock.receipt_clock_offsets(spans, uid='synthetic', device_id=None, received_at=RECEIVED)
+    assert caught.value.status_code == 503
+    assert caught.value.detail['code'] == 'capture_clock_identity_required'
+    assert caught.value.headers == {'Retry-After': '30'}
+    assert len(anchors.rows) == 1
 
 
 def test_coverage_trim_inherits_full_decode_anchor_and_retains_source_proof(anchors, tmp_path, monkeypatch):

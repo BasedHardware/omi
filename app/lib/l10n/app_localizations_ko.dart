@@ -551,10 +551,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get hardwareSection => '하드웨어';
 
   @override
-  String get v2Undetected => 'V2를 감지할 수 없음';
+  String get v2Undetected => '오프라인 동기화를 사용할 수 없음';
 
   @override
-  String get v2UndetectedMessage => 'V1 기기를 사용하고 있거나 기기가 연결되지 않았습니다. SD 카드 기능은 V2 기기에서만 사용할 수 있습니다.';
+  String get v2UndetectedMessage => '오프라인 동기화를 사용하려면 SD 카드 저장소가 있는 연결된 Omi 기기가 필요합니다. 현재 기기는 이를 지원하지 않습니다.';
 
   @override
   String get endConversation => '대화 종료';
@@ -1108,6 +1108,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get nameUpdatedSuccessfully => '이름이 성공적으로 업데이트되었습니다!';
+
+  @override
+  String calendarReadSelectionHelp(String calendar) {
+    return '선택한 캘린더를 읽습니다. 새 일정은 $calendar에 생성됩니다.';
+  }
 
   @override
   String get calendarSettings => '캘린더 설정';
@@ -1953,6 +1958,15 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get memoryHistory => '기록';
+
+  @override
+  String get recordingWithYourPhone => '휴대폰으로 녹음 중';
+
+  @override
+  String get wrapUp => '마무리';
+
+  @override
+  String get recordingDiscarded => '녹음을 삭제했습니다';
 
   @override
   String get undo => '실행 취소';
@@ -6940,6 +6954,24 @@ class AppLocalizationsKo extends AppLocalizations {
   String get authUnexpectedError => '로그인 중 예기치 않은 오류가 발생했습니다. 다시 시도해 주세요';
 
   @override
+  String get accountSignInMethods => '로그인 방법';
+
+  @override
+  String get accountAddSignInMethod => '로그인 방법 추가';
+
+  @override
+  String get accountAddSignInMethodDetails => '이 Omi 계정에 로그인할 방법을 추가하세요. 요금제, 녹음, 연동은 이 계정에 그대로 유지됩니다.';
+
+  @override
+  String get accountSignInConflictTitle => '이 로그인 방법은 다른 계정에 연결되어 있습니다';
+
+  @override
+  String get accountSignInConflictDetails => '현재 계정에 로그인된 상태입니다. 요금제, 녹음, 연동은 각 Omi 계정에 그대로 유지됩니다.';
+
+  @override
+  String get accountSignInMethodAdded => '로그인 방법이 추가되었습니다';
+
+  @override
   String get authFailedToLinkGoogle => 'Google 연결에 실패했습니다. 다시 시도해 주세요.';
 
   @override
@@ -8942,7 +8974,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      '이 녹음은 업로드되었지만 Omi가 아직 대화를 만들고 있습니다. 지금 삭제하고 처리가 실패하면 복구할 수 없습니다. 그래도 삭제하시겠습니까?';
+      '이 녹음은 이미 업로드되었고 Omi가 처리 중입니다. 여기서 삭제하면 휴대폰에 있는 사본이 삭제됩니다. 처리에 실패하면 Omi가 이 휴대폰에서 다시 시도할 수 없습니다.';
 
   @override
   String get syncCardAllBackedUp => '모든 녹음이 동기화됨';
@@ -12041,7 +12073,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return '페어링 이후: 끊김 $drops회, 실패한 연결 $failed회.';
+    return '페어링 이후: 재연결 $drops회, 연결 실패 $failed회.';
   }
 
   @override
@@ -13270,16 +13302,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount을(를) 대화로 변환 중';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total 완료 · 이 화면을 나가도 됩니다';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount 동기화 준비됨';
   }
@@ -13303,7 +13325,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => '이 휴대폰에서 대기 중';
 
   @override
-  String get syncDetailsTranscribing => 'Omi에서 텍스트 변환 중';
+  String get syncDetailsTranscribing => '업로드됨, 서버 대기 중';
 
   @override
   String get syncDetailsAudioFiles => '오디오 파일';
@@ -13757,6 +13779,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get summaryBusyBody => 'Omi가 이미 이 대화를 처리하고 있습니다. 완료되면 여기에 요약이 표시됩니다.';
 
   @override
+  String get summaryTranscriptionPendingTitle => '아직 전사되지 않음';
+
+  @override
+  String get summaryTranscriptionPendingBody => '전사가 완료되면 요약이 표시됩니다.';
+
+  @override
   String get summaryCheckAgain => '다시 확인';
 
   @override
@@ -14149,6 +14177,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get processingProgress => '대기 중인 녹음을 처리하는 중…';
 
   @override
+  String get waitingForTranscriptionAllowance => '사용 가능한 전사 한도를 기다리는 중';
+
+  @override
   String get processingDeferred => '처리 대기 중';
 
   @override
@@ -14277,14 +14308,6 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done/$total분';
-  }
-
-  @override
-  String get deviceRecently => '최근';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration 동안 연결 끊김';
   }
 
   @override
@@ -15204,6 +15227,11 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return '업데이트가 설치되지 않았습니다. 펜던트는 현재 펌웨어($version)로 계속 작동합니다. 업데이트를 다시 시도하지 말고 지원팀에 문의해 주세요.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15242,4 +15270,331 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => '처리 중인 목록이 변경되었습니다. 목록을 확인하고 다시 시도하세요.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return '이번 달 $minutes분을 모두 사용했습니다';
+  }
+
+  @override
+  String get freeCapBody => 'Omi는 계속 녹음 중입니다. 전사를 이어갈 방법을 선택하세요.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => '무제한 클라우드 전사';
+
+  @override
+  String get freeCapProAccuracy => '최고의 정확도';
+
+  @override
+  String get freeCapProWaiting => '대기 중인 녹음을 전사합니다';
+
+  @override
+  String get freeCapPhoneSubtitle => '무료. 다시 전환할 때까지 유지됩니다.';
+
+  @override
+  String get transcribingOnThisPhone => '이 휴대폰에서 전사 중';
+
+  @override
+  String get getPro => 'Pro 받기';
+
+  @override
+  String get unlock => '잠금 해제';
+
+  @override
+  String get transcribeWith => '전사 방식';
+
+  @override
+  String get omiCloud => 'Omi 클라우드';
+
+  @override
+  String get thisPhone => '이 휴대폰';
+
+  @override
+  String get onDeviceReady => '준비됨';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit분 남음 · $date 초기화';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '클라우드 $minutes분 사용 가능';
+  }
+
+  @override
+  String get switchBack => '다시 전환';
+
+  @override
+  String get setUpThisPhone => '이 휴대폰 설정';
+
+  @override
+  String get speechRecognition => '음성 인식';
+
+  @override
+  String get audioStaysOnPhone => '오디오는 휴대폰에만 남습니다';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '${size}MB 다운로드';
+  }
+
+  @override
+  String get downloadNow => '지금 다운로드';
+
+  @override
+  String get onWifiLater => '나중에 Wi-Fi로';
+
+  @override
+  String get conversationWritingSummary => '요약을 작성하는 중…';
+
+  @override
+  String get onTheWayServerWork => '서버에서 보고한 작업';
+
+  @override
+  String get finishNothingToProcess => '아직 처리할 내용이 없어요.';
+
+  @override
+  String get finishStillProcessing => '아직 처리 중이에요. 홈에 표시될 거예요.';
+
+  @override
+  String get finishBackToHome => '홈으로 돌아가기';
+
+  @override
+  String get conversationSummaryWhenItEnds => '이 대화가 끝나면 요약이 표시됩니다';
+
+  @override
+  String get deviceUploadsWaitingOnServer => '서버에서 대기 중인 업로드';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => '오디오는 기기 또는 휴대전화에 안전하게 저장되어 있습니다';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time까지의 요약';
+  }
+
+  @override
+  String get conversationRecentTranscript => '최근 녹취록';
+
+  @override
+  String get finishAlreadySaved => '이미 저장되었습니다. 홈에 있습니다.';
+
+  @override
+  String get finishAudioNotReceived => '오디오가 아직 전송 중입니다.';
+
+  @override
+  String get finishFailedOffline => '처리되지 않았습니다. 오디오는 안전합니다.';
+
+  @override
+  String get finishFailed => '처리되지 않았습니다. 오디오는 안전합니다.';
+
+  @override
+  String get micBlockedCannotRecord => '녹음하려면 마이크 권한을 허용하세요.';
+
+  @override
+  String get couldNotStartRecording => '녹음을 시작하지 못했습니다.';
+
+  @override
+  String get restorePurchasesFailed => '플랜을 확인하지 못했습니다.';
+
+  @override
+  String get firmwareCheckFailed => '업데이트를 확인할 수 없습니다.';
+
+  @override
+  String get conversationStillPublic => '아직 링크로 공유되어 있습니다.';
+
+  @override
+  String get goalSaveFailed => '목표를 저장하지 못했습니다.';
+
+  @override
+  String get goalDeleteFailed => '삭제하지 못했습니다. 목표가 복원되었습니다.';
+
+  @override
+  String get goalsLoadFailed => '목표를 불러오지 못했습니다.';
+
+  @override
+  String get missingTargetEndedRecording => '해당 녹음은 이미 종료되었습니다.';
+
+  @override
+  String get missingTargetMemory => '해당 기억은 더 이상 없습니다.';
+
+  @override
+  String get missingTargetTask => '해당 작업은 더 이상 없습니다.';
+
+  @override
+  String get missingTargetConversation => '이 대화를 열 수 없습니다.';
+
+  @override
+  String get couldNotRefreshConversations => '새로고침하지 못했습니다.';
+
+  @override
+  String get connectDeviceForOfflineSync => '동기화하려면 Omi를 연결하세요.';
+
+  @override
+  String get useDifferentAccountMessage => '로그아웃되며 이 휴대전화의 Omi 설정이 초기화됩니다.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => '안경을 찾을 수 없습니다. 전원이 켜져 있나요?';
+
+  @override
+  String get couldNotMoveTask => '작업을 이동하지 못했습니다.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '삭제되었습니다. 잠긴 작업 $count개가 유지되었습니다.',
+      one: '삭제되었습니다. 잠긴 작업 1개가 유지되었습니다.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => '변경 사항을 저장하지 못했습니다.';
+
+  @override
+  String get couldNotLoadNotificationSettings => '설정을 불러오지 못했습니다.';
+
+  @override
+  String get waitForOmiToFinish => 'Omi의 응답이 끝날 때까지 기다려 주세요.';
+
+  @override
+  String get voiceNoteTooShort => '너무 짧습니다. 길게 눌러 녹음하세요.';
+
+  @override
+  String get submitAppMissingFields => '제출하려면 이름, 설명, 이미지, 카테고리, 기능을 추가하세요.';
+
+  @override
+  String get appSetupNotFinished => '설정이 아직 완료되지 않았습니다.';
+
+  @override
+  String get finishNothingKeptTitle => '유지할 항목 없음';
+
+  @override
+  String get submitAppFinishDetails => '제출하려면 위의 기능 및 가격 세부정보를 완성하세요.';
+
+  @override
+  String get finishNothingNew => '아직 새로운 내용이 없습니다.';
+
+  @override
+  String get takingLongerThanUsual => '평소보다 오래 걸리고 있습니다. 홈에 추가될 예정입니다.';
+
+  @override
+  String get couldNotCheckOnIt => '확인하지 못했습니다. 다시 시도하세요.';
+
+  @override
+  String get upgradeToOpenThisOne => '열려면 업그레이드가 필요합니다.';
+
+  @override
+  String get missingTargetConversationGone => '해당 대화는 삭제되었습니다.';
+
+  @override
+  String get cantConnectRightNow => '지금은 연결할 수 없습니다.';
+
+  @override
+  String get loadOlderFailed => '이전 항목을 불러오지 못했습니다. 탭하여 다시 시도하세요.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return '듣는 중 · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => '변경하려면 종료될 때까지 기다려 주세요.';
+
+  @override
+  String get finishedSummaryReady => '요약이 준비되었습니다';
+
+  @override
+  String get writingSummaryStatus => '요약 작성 중…';
+
+  @override
+  String get stillWorkingOnIt => '아직 처리 중입니다.';
+
+  @override
+  String get deviceReadyToUse => '사용 준비 완료';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld => '기기의 펌웨어가 너무 오래되어 이 업데이트를 설치할 수 없습니다. 기기 업데이트에 도움이 필요하면 지원팀에 문의하세요.';
+
+  @override
+  String get firmwareUpdateAppRequired => '이 펌웨어 업데이트에는 더 최신 버전의 Omi 앱이 필요합니다. 앱 스토어에서 앱을 업데이트한 후 다시 확인하세요.';
+
+  @override
+  String get quietPayerTitle => '5일 동안 녹음이 없어요';
+
+  @override
+  String get quietPayerMessage => 'Omi를 확인해 보세요.';
+
+  @override
+  String get quietPayerCheck => '확인';
+
+  @override
+  String get playManageSubscription => '구독 관리';
+
+  @override
+  String get playBilledByGoogle => 'Google Play에서 청구됩니다';
+
+  @override
+  String get playPurchasePending => '결제가 대기 중입니다. Google Play에서 확인되면 Omi Pro가 시작됩니다.';
+
+  @override
+  String get playPurchaseOtherAccount => '이 Google Play 구매는 다른 Omi 계정에 속해 있습니다.';
+
+  @override
+  String get playPurchaseNotConfirmed => '아직 구매를 확인하지 못했습니다. 자동으로 다시 시도합니다.';
+
+  @override
+  String get playRenewalTerms => '해지할 때까지 표시된 가격으로 자동 갱신됩니다. Google Play에서 언제든지 관리하거나 해지할 수 있습니다.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android에서는 사용할 수 없음';
+
+  @override
+  String get pageNotAvailableInApp => '이 페이지는 앱에서 볼 수 없습니다.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => '주문이 완료되었습니다. 확인 메일을 확인하세요.';
+
+  @override
+  String get prepaidCodeEntry => '코드가 있나요?';
+
+  @override
+  String get prepaidCodeTitle => '코드 사용';
+
+  @override
+  String get prepaidCodeFieldHint => '코드를 입력하세요';
+
+  @override
+  String get prepaidCodeRedeem => '사용';
+
+  @override
+  String get prepaidCodeRedeemed => '코드가 적용되었습니다';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': '유효하지 않은 코드입니다. 확인 후 다시 시도하세요.',
+        'used': '이미 사용된 코드입니다.',
+        'expired': '만료된 코드입니다.',
+        'hasPlan': '이미 플랜이 있습니다. 코드는 사용되지 않았습니다. 플랜이 끝난 후에 사용하세요.',
+        'notPrepaid': '이 코드는 여기에서 사용할 수 없습니다. 플랜을 선택할 때 사용하세요.',
+        'notEligible': '이 계정에서는 이 코드를 사용할 수 없습니다.',
+        'rateLimited': '시도 횟수가 너무 많습니다. 나중에 다시 시도하세요.',
+        'other': '문제가 발생했습니다. 다시 시도하세요.',
+      },
+    );
+    return '$_temp0';
+  }
 }

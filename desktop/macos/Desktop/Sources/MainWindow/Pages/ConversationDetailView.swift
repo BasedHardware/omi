@@ -152,6 +152,7 @@ struct ConversationDetailView: View {
   // Full conversation loaded from API (with transcript segments)
   @State private var loadedConversation: ServerConversation?
   @State private var isLoadingConversation = false
+  @State private var detailOpenAdmission = ConversationDetailOpenAdmission()
   // True while a lazily-deferred conversation is being enriched (polled) on first open.
   @State private var isEnrichingDeferred = false
 
@@ -162,6 +163,7 @@ struct ConversationDetailView: View {
   @State private var followUpDraftText = ""
   @State private var editedTitle = ""
   @State private var isUpdatingTitle = false
+  @StateObject private var deleteFeedback = ConversationDeleteFeedback()
   @State private var isDeleting = false
 
   // Capture deep-link focus state. A successful acknowledgement is terminal;
@@ -311,6 +313,7 @@ struct ConversationDetailView: View {
     ) {
       Task { await deleteConversation() }
     }
+    .conversationDeleteFeedback(deleteFeedback) { Task { await deleteConversation() } }
     .dismissableSheet(isPresented: $showEditDialog) {
       TextPromptSheet(
         title: "Rename Conversation",
@@ -372,6 +375,7 @@ struct ConversationDetailView: View {
     }
     .onDisappear {
       detailLoadGeneration &+= 1
+      detailOpenAdmission = ConversationDetailOpenAdmission()
       retrySpeakerAssignment = nil
       speakerAssignmentTail = nil
       captureFocusGeneration &+= 1
@@ -404,44 +408,30 @@ struct ConversationDetailView: View {
       guard isCurrentDetailRequest(requestGeneration) else { return }
       AnalyticsManager.shared.conversationDetailOpened(conversationId: requestedConversation.id)
 
-      // All detail reads go through the repository. It can paint a complete
-      // cached detail immediately, but always revalidates server-owned fields.
-      if requestedConversation.needsProcessingDetailRefresh {
-        isEnrichingDeferred = true
-        // Keep following the row for as long as it is open. A bounded loop
-        // that silently stops leaves the banner promising a summary that no
-        // fetch will ever deliver; the backoff caps the cost instead.
-        var attempts = 0
-        while true {
-          guard isCurrentDetailRequest(requestGeneration), let appState = AppState.current else { break }
-          let fetched = await appState.loadConversationDetail(requestedConversation) { cached in
+      // Cache rows may drop the deferred flag. Use the initial row for
+      // loading presentation, then follow the server's actual admission.
+      isEnrichingDeferred = requestedConversation.needsProcessingDetailRefresh
+      isLoadingConversation = !isEnrichingDeferred
+      await ProcessingConversationWatcher.followDetail(
+        fetch: { polling in
+          guard isCurrentDetailRequest(requestGeneration), let appState = AppState.current else { return nil }
+          let readOnly = polling || detailOpenAdmission.isReadOnly(for: requestedConversation.id)
+          let fetched = await appState.loadConversationDetail(requestedConversation, polling: readOnly) { cached in
             guard isCurrentDetailRequest(requestGeneration) else { return }
             applyLoadedConversation(cached)
           }
-          guard isCurrentDetailRequest(requestGeneration) else { return }
+          return isCurrentDetailRequest(requestGeneration) ? fetched : nil
+        },
+        onResponse: { fetched, isProcessing in
           applyLoadedConversation(fetched)
-          if fetched.homeStep == "failed" || fetched.status != .processing { break }
-          let delay = ProcessingConversationWatcher.pollDelay(attempt: attempts)
-          attempts += 1
-          try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+          isLoadingConversation = false
+          isEnrichingDeferred = isProcessing
         }
-        guard isCurrentDetailRequest(requestGeneration) else { return }
-        isEnrichingDeferred = false
-      } else {
-        isLoadingConversation = true
-        if let appState = AppState.current {
-          let fetched = await appState.loadConversationDetail(requestedConversation) { cached in
-            guard isCurrentDetailRequest(requestGeneration) else { return }
-            applyLoadedConversation(cached)
-          }
-          guard isCurrentDetailRequest(requestGeneration) else { return }
-          applyLoadedConversation(fetched)
-        }
-        guard isCurrentDetailRequest(requestGeneration) else { return }
-        isLoadingConversation = false
-      }
-
+      )
       guard isCurrentDetailRequest(requestGeneration) else { return }
+      isEnrichingDeferred = false
+      isLoadingConversation = false
+
       detailReadyConversationID = requestedConversation.id
     }
     .task(id: capturePlaybackTaskID) {
@@ -793,7 +783,10 @@ struct ConversationDetailView: View {
     defer { isDeleting = false }
 
     let conversationId = conversation.id
-    if await AppState.current?.deleteConversation(conversationId) == true {
+    let outcome =
+      await AppState.current?.deleteConversation(conversationId)
+      ?? .failed(message: "Couldn't delete the conversation. Please try again.")
+    if deleteFeedback.present(outcome) {
       await MainActor.run {
         onDelete?()
         onBack()

@@ -93,7 +93,7 @@ def _drive_sync_route(conv, monkeypatch, *, persisted=True):
 
     monkeypatch.setattr(conv, 'retrieve_in_progress_conversation', lambda uid: {'id': in_progress.id})
     monkeypatch.setattr(conv, 'deserialize_conversation', lambda data: in_progress)
-    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid, **_kw: {'id': cid})
     monkeypatch.setattr(conv.lifecycle_service, 'admit_processing', lambda uid, cid: True)
     monkeypatch.setattr(conv.lifecycle_service, 'processing_admission_guard', _noop_guard)
     monkeypatch.setattr(conv.redis_db, 'get_cached_user_geolocation', lambda uid: None)
@@ -126,7 +126,7 @@ def test_sync_finalize_that_lost_admission_leaves_the_episode_alone(conv, monkey
     in_progress = _conversation(ConversationStatus.in_progress)
     monkeypatch.setattr(conv, 'retrieve_in_progress_conversation', lambda uid: {'id': in_progress.id})
     monkeypatch.setattr(conv, 'deserialize_conversation', lambda data: in_progress)
-    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid, **_kw: {'id': cid})
     monkeypatch.setattr(conv.lifecycle_service, 'admit_processing', lambda uid, cid: False)
     monkeypatch.setattr(conv.redis_db, 'get_cached_user_geolocation', lambda uid: None)
     _episode_spies(monkeypatch, conv, timeline)
@@ -138,7 +138,7 @@ def test_sync_finalize_that_lost_admission_leaves_the_episode_alone(conv, monkey
 def test_durable_client_finalize_closes_the_episode_with_the_request(conv, monkeypatch):
     timeline: list[tuple] = []
     in_progress = _conversation(ConversationStatus.in_progress)
-    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid, **_kw: {'id': cid})
     monkeypatch.setattr(conv, 'deserialize_conversation', lambda data: in_progress)
     monkeypatch.setattr(conv.byok, 'has_byok_keys', lambda: False)
     monkeypatch.setattr(
@@ -331,7 +331,7 @@ def test_mobile_process_now_uses_exact_id_durable_handoff(conv, monkeypatch, rou
     monkeypatch.setattr(conv, 'is_listen_finalization_dispatch_enabled', lambda: True)
     monkeypatch.setattr(conv.byok, 'has_byok_keys', lambda: False)
     monkeypatch.setattr(conv, 'retrieve_in_progress_conversation', lambda uid: {'id': 'conv-finalize'})
-    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid, **_kw: {'id': cid})
     monkeypatch.setattr(conv, 'deserialize_conversation', lambda data: in_progress)
 
     def admit(uid, cid, **kwargs):
@@ -367,7 +367,7 @@ def test_mobile_durable_admission_unavailable_leaves_recording_recoverable(conv,
     monkeypatch.setattr(conv, 'is_listen_finalization_dispatch_enabled', lambda: True)
     monkeypatch.setattr(conv.byok, 'has_byok_keys', lambda: False)
     monkeypatch.setattr(conv, 'retrieve_in_progress_conversation', lambda uid: {'id': 'conv-finalize'})
-    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid, **_kw: {'id': cid})
     monkeypatch.setattr(conv, 'deserialize_conversation', lambda data: in_progress)
 
     def refuse(*args, **kwargs):
@@ -403,3 +403,54 @@ def test_group_join_schedules_one_group_recovery(monkeypatch):
     )
     episode_finalize.schedule_group_attachments(_UID, ['desktop', 'pendant', 'desktop'])
     assert calls == [(_UID, 'pendant', ProcessingTrigger.CAPTURE_GROUP)]
+
+
+def test_serving_intake_notifies_workerd_only_for_current_bound_revision(monkeypatch):
+    from datetime import datetime, timezone
+    from unittest.mock import Mock
+
+    import httpx
+    from database import _client
+    from utils.episodes import service
+    from utils.sync import worker_client
+
+    monkeypatch.delenv('SYNC_EPISODE_INTAKE_ORIGIN', raising=False)
+    monkeypatch.delenv('WORKER_EPISODE_INTAKE_AUDIENCE', raising=False)
+    monkeypatch.setattr(episode_finalize.client_gate, 'client_seen_cached', lambda _uid: True)
+    canonical = Mock(return_value='joined')
+    monkeypatch.setattr(service, 'attach_synced_intake', canonical)
+    client = Mock()
+    snapshot_get = (
+        client.collection.return_value.document.return_value.collection.return_value.document.return_value.get
+    )
+    snapshot = snapshot_get.return_value
+    snapshot.update_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    snapshot.to_dict.return_value = {'sync_content_revision': 3}
+    firestore_client = Mock(return_value=client)
+    monkeypatch.setattr(_client, 'get_firestore_client', firestore_client)
+    token = Mock(return_value='fixture-token')
+    monkeypatch.setattr(worker_client, 'identity_token', token)
+    request = Mock(return_value=Mock(status_code=200))
+    monkeypatch.setattr(httpx, 'post', request)
+
+    assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 3}) == 'joined'
+    canonical.assert_called_once_with(_UID, 'clip', {'source': None, 'sync_content_revision': 3})
+    firestore_client.assert_not_called()
+    token.assert_not_called()
+    request.assert_not_called()
+
+    monkeypatch.setenv('SYNC_EPISODE_INTAKE_ORIGIN', 'https://workerd.fixture.test')
+    monkeypatch.setenv('WORKER_EPISODE_INTAKE_AUDIENCE', 'fixture-audience')
+    assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 2}) == 'joined'
+    request.assert_not_called()
+    assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 3}) == 'joined'
+    request.assert_called_once_with(
+        'https://workerd.fixture.test/internal/finalization/episode-intake',
+        json={'owner': _UID, 'conversation': 'clip', 'written': snapshot.update_time.isoformat()},
+        headers={'Authorization': 'Bearer fixture-token'},
+        follow_redirects=False,
+        timeout=5.0,
+    )
+    canonical.return_value = 'skipped_discarded'
+    assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 3}) == 'skipped_discarded'
+    token.assert_called_once_with('fixture-audience')

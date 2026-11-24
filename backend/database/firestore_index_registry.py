@@ -42,6 +42,48 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
     FirestoreIndexRequirement(
+        'conversations_v3_pending_capture_continuation',
+        'conversations',
+        'COLLECTION',
+        (_asc('v3_pending'), _asc('started_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_v3_pending_oldest_page',
+        'conversations',
+        'COLLECTION',
+        (_asc('v3_pending'), _asc('v3_pending_since'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_v3_pending_age_sweep',
+        'conversations',
+        'COLLECTION_GROUP',
+        (_asc('v3_pending'), _asc('v3_pending_since'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_v3_active_legacy_meter',
+        'conversations',
+        'COLLECTION_GROUP',
+        (_asc('source'), _asc('created_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_v3_derived_window',
+        'conversations',
+        'COLLECTION',
+        (_asc('v3_derived'), _asc('finished_at'), _asc('started_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_v3_geolocation_count',
+        'conversations',
+        'COLLECTION',
+        (_asc('recording'), _asc('geolocation.latitude'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_v3_day_count',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('recording'), _asc('started_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'conversations_summary_repair_window',
         'conversations',
         'COLLECTION_GROUP',
@@ -2235,9 +2277,17 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('conversations', 'live_transcript_replay_receipt'),
     # Internal, bounded metadata read by document ID only; descendants inherit.
     ('conversations', 'owner_recognition_diagnostics'),
+    # Lease observations are projected from an existing owner index.
+    ('batch_pipeline_prod_jobs', 'packing_observation'),
+    ('batch_pipeline_dev_jobs', 'packing_observation'),
 )
 
 FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_REQUIREMENTS + (
+    FieldIndexRequirement('conversations_v3_pending_sweep', 'conversations', 'v3_pending', ('ASCENDING',)),
+    FieldIndexRequirement('conversations_v3_processing_sweep', 'conversations', 'v3_process_pending', ('ASCENDING',)),
+    FieldIndexRequirement(
+        'conversations_v3_audio_purge_sweep', 'conversations', 'v3_audio_purge_pending', ('ASCENDING',)
+    ),
     FieldIndexRequirement('record_custody_receipt_expiry', 'record_custody_recoveries', 'recorded_at', ('ASCENDING',)),
     FieldIndexRequirement('lifecycle_pair_finalization_status', 'conversations', 'finalization_status', ('ASCENDING',)),
     FieldIndexRequirement('cap_redrive_processing_state', 'processing_backlog', 'state', ('ASCENDING',)),
@@ -2250,6 +2300,9 @@ FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_RE
     # Census stock: stage equality over the collection group needs its own
     # group-scoped single-field index; automatic indexes are collection-scoped.
     FieldIndexRequirement('pipeline_ledger_stage_group_ascending', 'pipeline_ledger', 'stage', ('ASCENDING',)),
+    FieldIndexRequirement(
+        'deleted_conversations_deleted_at_group_ascending', 'deleted_conversations', 'deleted_at', ('ASCENDING',)
+    ),
     FieldIndexRequirement('conversations_id_group_ascending', 'conversations', 'id', ('ASCENDING',)),
     FieldIndexRequirement('conversations_source_group_ascending', 'conversations', 'source', ('ASCENDING',)),
     FieldIndexRequirement('conversations_status_group_ascending', 'conversations', 'status', ('ASCENDING',)),

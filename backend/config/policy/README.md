@@ -141,9 +141,12 @@ its original `parakeet-window:` salt and first eight sha256 bytes. E1's batch
 32-bit default is unchanged. Window membership is characterized over 260 fixed
 UIDs and eight percentage boundaries, including fractional percentages.
 
-The registry still marks `PARAKEET_WINDOW_ALLOCATION_PERCENT` as `rollout`, so
-it is frozen rather than promoted to a live kill switch by this change. E1's
-registry-checked ops_kill allowlist also includes #22514's live `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED`, retaining its original false/0/off semantics and logging the policy ID. Rollback is a revert: old code
+DEC-BTR-001 classifies the stream and window allocation percentages as permanent
+`ops_kill` controls. The window allocation is recorded in the session policy.
+Setting it to zero withdraws the window leg for new sessions. E1's live policy
+kill switches include #22514's `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED`,
+which retains its original false/0/off semantics and logs the policy ID.
+Rollback is a revert: old code
 ignores the additive Redis namespace and state fields; sessions without a usable
 record fall back to deterministic resolution. No env or deployment changes are
 part of E2; the lead owns the canary/deploy train.

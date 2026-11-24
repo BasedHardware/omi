@@ -847,11 +847,14 @@ def test_ghost_flag_is_strict_opt_in_in_every_parser_mode(monkeypatch, mode, raw
 
 @pytest.mark.parametrize('recovery', [None, 'recovered'])
 @pytest.mark.parametrize('enabled', [False, True])
-def test_ghost_repair_is_hint_only_and_reads_target_only_when_enabled(monkeypatch, recovery, enabled):
+@pytest.mark.parametrize('async_policy', [None, False, True])
+def test_ghost_repair_is_hint_only_and_reads_target_only_when_enabled(monkeypatch, recovery, enabled, async_policy):
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
 
     monkeypatch.setenv(GHOST_FLAG, str(enabled).lower())
     seeded = ghost_rows(recovery=recovery)
+    if async_policy is not None:
+        seeded[JOB_KEY]['policy_parts'] = {'projection': {'async_projection': async_policy}}
     client, store = store_for(seeded)
     read_paths = []
     original = StrictFirestoreDocument.get
@@ -874,7 +877,7 @@ def test_ghost_repair_is_hint_only_and_reads_target_only_when_enabled(monkeypatc
                 {
                     'projection_state': 'ready',
                     'ghost_settled_cohort': 'g1',
-                    'projection_finish_due_at': GHOST_NOW,
+                    'projection_finish_due_at': -1.0 if async_policy else GHOST_NOW,
                     'projection_followup_due_at': GHOST_NOW,
                     'projection_finish_backoff_step': 0,
                 }
@@ -890,7 +893,7 @@ def test_ghost_repair_is_hint_only_and_reads_target_only_when_enabled(monkeypatc
                 {
                     'projection_state': 'ready',
                     'ghost_settled_cohort': 'g1',
-                    'projection_finish_due_at': GHOST_NOW,
+                    'projection_finish_due_at': -1.0 if async_policy else GHOST_NOW,
                     'projection_followup_due_at': GHOST_NOW,
                     'projection_finish_backoff_step': 0,
                 },

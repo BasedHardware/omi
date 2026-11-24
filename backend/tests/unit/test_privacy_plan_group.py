@@ -20,9 +20,13 @@ TOKEN = ('batch_pipeline_privacy', privacy.privacy_owner_key(UID))
 
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch):
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
+    # These contracts pin the live/id-set read sequences; the owner-level memo
+    # (bpp_owner_memo, default on) has its own coverage in test_privacy_ttl_cache.
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_owner_memo": 0}')
+    privacy.PROCESS_OWNERS.clear()
     token = tier._request_owner.set(None)
     yield
+    privacy.PROCESS_OWNERS.clear()
     tier._request_owner.reset(token)
 
 
@@ -134,7 +138,11 @@ def test_batch_labels_all_existing_reads_and_decision(world, monkeypatch, plan, 
     db, reads = world
     db.rows[('users', UID)] = {'subscription': {'plan': plan}} if plan is not None else {}
     flags = {'shadow': ['privacy_checks_shadow'], 'memo_miss': ['bpp_generation_memo']}.get(path, [])
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps(dict.fromkeys(flags, 100)))
+    levers = dict.fromkeys(flags, 100)
+    # These paths pin the id-set/live read sequences; the owner-level memo
+    # (bpp_owner_memo, default on) has its own coverage below.
+    levers['bpp_owner_memo'] = 0
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps(levers))
     before = {result: read_value('batch', 'live', result, group) for result in ('hit', 'miss')}
     checks = metrics.CHECKS.labels('batch', 'live', 'allow', group)._value.get()
     shadow_before = {result: read_value('batch', 'shadow', result, group) for result in ('hit', 'miss')}

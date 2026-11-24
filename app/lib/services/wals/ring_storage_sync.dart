@@ -1444,7 +1444,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     if (advancedOk) {
       final bool ok;
       if (ringDrainRecoveryEnabled && ringId != null && (effectiveCaps & RingProtocol.capAppAckReclaim) != 0) {
-        ok = (_custody.acknowledgedReadSeqFor(custodyDeviceId, epoch, ringId) ?? readStart) >= doneNextSeq!;
+        ok = await _confirmWindowReclaim(pass, ringId, doneNextSeq!);
       } else {
         ok = await _custodyAdvance(connection, custodyDeviceId, epoch, doneNextSeq!, ringId);
       }
@@ -1475,6 +1475,57 @@ class RingStorageSyncImpl implements RingStorageSync {
       );
       if (!stopSent) await _stopRingTransfer(connection, epoch);
       return null;
+    }
+  }
+
+  Future<bool> _confirmWindowReclaim(_RingPass pass, int ringId, int endSeq) async {
+    final connection = pass.connection;
+    final deviceId = pass.deviceId;
+    final epoch = pass.epoch;
+    bool current() =>
+        !_isCancelled &&
+        _device?.id == deviceId &&
+        connection.ringCustodyEpoch == epoch &&
+        _localSync?.sessionGeneration == pass.admittedGeneration &&
+        !_custody.isIncarnationInvalid(deviceId, epoch);
+    bool confirmed() => (_custody.acknowledgedReadSeqFor(deviceId, epoch, ringId) ?? -1) >= endSeq;
+
+    if (!current()) return false;
+    if (confirmed()) return true;
+
+    // A concurrent live WAL write can invalidate the READ's index snapshot.
+    // Retry once with fresh proof and release only this completed window.
+    try {
+      final validator = await _custody.createReadValidator();
+      if (!current()) return false;
+      final target = await _custody.validatedAdvanceTarget(deviceId, epoch, ringId, readValidator: validator);
+      if (current() && !confirmed() && validator.isCurrent && target != null && target >= endSeq) {
+        await _custodyAdvance(connection, deviceId, epoch, endSeq, ringId, reason: 'window_confirm');
+      }
+    } catch (error) {
+      Logger.debug('RingStorageSync: retrying reclaim confirmation: $error');
+    }
+
+    // A concurrent live ADVANCE can settle the window while we wait. Observe
+    // its acknowledged position without repeatedly sending BLE commands.
+    for (var check = 0; check < 8 && current() && !confirmed(); check++) {
+      final wait = Completer<void>();
+      _transferTimer(const Duration(seconds: 1), wait.complete);
+      await wait.future;
+    }
+    if (!current()) return false;
+    if (confirmed()) return true;
+
+    try {
+      final info = await connection.getRingInfo();
+      if (!current() || info == null || info.ringId != ringId) return false;
+      if (confirmed()) return true;
+      if (info.readSeq < endSeq) return false;
+      _custody.noteInfo(deviceId, epoch, info);
+      return true;
+    } catch (error) {
+      Logger.debug('RingStorageSync: could not read reclaim position: $error');
+      return false;
     }
   }
 

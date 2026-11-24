@@ -10,6 +10,8 @@ file(GLOB app_sources
     src/main.c
     src/diagnostics.c
     src/diagnostics_packet.c
+    src/boot_identity.c
+    src/boot_identity_zephyr.c
     src/boot_telemetry.c
     src/boot_telemetry_logic.c
     src/safe_mode.c

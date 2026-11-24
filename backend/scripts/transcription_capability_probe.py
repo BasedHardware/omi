@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -51,6 +52,7 @@ class ProbeConfig:
     bearer_token: str | None
     cloud_run_identity_token: str | None
     timeout_seconds: float
+    follow_redirects: bool = True
 
 
 @dataclass(frozen=True)
@@ -117,6 +119,7 @@ def config_from_args(args: argparse.Namespace) -> ProbeConfig:
         bearer_token=_read_bearer_token(args.bearer_token_file),
         cloud_run_identity_token=_read_bearer_token(args.cloud_run_identity_token_file),
         timeout_seconds=args.timeout_seconds,
+        follow_redirects=not args.no_redirects,
     )
 
 
@@ -125,18 +128,30 @@ def _read_response(response: Any, max_bytes: int) -> tuple[bytes, bool]:
     return body[:max_bytes], len(body) > max_bytes
 
 
-def request_bytes(request: urllib.request.Request, timeout_seconds: float, max_bytes: int) -> HttpResult:
+class _NoRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def request_bytes(
+    request: urllib.request.Request, timeout_seconds: float, max_bytes: int, *, follow_redirects: bool = True
+) -> HttpResult:
     """Make one bounded request without retaining a printable error body."""
+    open_request = urllib.request.urlopen if follow_redirects else urllib.request.build_opener(_NoRedirects()).open
+    status_code = None
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        with open_request(request, timeout=timeout_seconds) as response:
+            status_code = int(response.status)
             body, oversized = _read_response(response, max_bytes)
-            return HttpResult(status_code=int(response.status), body=body, error_kind=None, oversized=oversized)
+            return HttpResult(status_code=status_code, body=body, error_kind=None, oversized=oversized)
     except urllib.error.HTTPError as error:
         # Do not read or print an error body: it can contain request-sensitive
         # data echoed by a proxy or upstream service.
         return HttpResult(status_code=error.code, body=b'', error_kind='http_error')
-    except (urllib.error.URLError, OSError, TimeoutError, ValueError):
-        return HttpResult(status_code=None, body=b'', error_kind='network_error')
+    except (urllib.error.URLError, OSError, TimeoutError):
+        return HttpResult(status_code=status_code, body=b'', error_kind='network_error')
+    except (http.client.IncompleteRead, ValueError):
+        return HttpResult(status_code=status_code, body=b'', error_kind='invalid_response')
 
 
 def build_multipart(audio: bytes, language: str) -> tuple[str, bytes]:
@@ -272,6 +287,7 @@ def _probe_full_route(
         ),
         config.timeout_seconds,
         MAX_RESPONSE_BYTES,
+        follow_redirects=config.follow_redirects,
     )
     del body
     payload = _parse_json_object(result)
@@ -323,6 +339,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument('--bearer-token-file', type=Path, required=True)
     parser.add_argument('--cloud-run-identity-token-file', type=Path)
     parser.add_argument('--timeout-seconds', type=float, default=30.0)
+    parser.add_argument('--no-redirects', action='store_true', help='Treat a redirect as an HTTP response.')
     parser.add_argument('--json-only', action='store_true', help='Emit only the redacted machine-readable report.')
     return parser.parse_args(argv)
 

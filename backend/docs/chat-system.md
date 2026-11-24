@@ -460,6 +460,41 @@ The Flutter app parses these to show:
 - Streaming response text
 - Final message with linked memories
 
+### Voice answer completion and push
+
+`process_voice_message_segment_stream` persists the AI message and registers one pending
+notification with its response owner before exposing `done`. The shared terminal emitter
+covers the completion sentinel, a staged error answer and graph exhaustion.
+`VoiceAnswerStreamingResponse` dispatches from its `__call__` finalizer after transport
+iteration returns or raises, so closing immediately at `done` cannot skip the push.
+It closes nested generators in the iteration task to preserve their usage-context tokens;
+cleanup and delivery are shielded from AnyIO disconnect cancellation.
+
+Dispatch remains after transport send, preserving released clients' foreground ordering
+and the existing plugin payload, saved message ID and `/chat/omi` destination. Missing
+registration, account-deletion suppression and provider rejection retain the foreground
+answer. The post-stream notification wait is bounded to two seconds. A timeout is
+indeterminate: an executor request may finish later, so the owner does not retry.
+Cancellation before answer registration sends nothing; cancellation afterward keeps the
+already registered attempt. This is request-owned best-effort delivery, not a durable queue.
+
+One content-free log correlates the message ID with `accepted` (at least one provider
+receipt), `no_acceptance` (no recorded acceptance), `failed` (setup exception) or
+`indeterminate` (timeout). A batch exception may hide an ambiguous provider result;
+`no_acceptance` does not establish rejection. Token cleanup errors preserve any known
+acceptance count. Provider acceptance does not prove iOS display. Repeated completion and
+finalization within a request send once; existing message-ID collapse tags do not provide
+global exactly-once delivery across separate requests.
+
+Verification checklist:
+- Close immediately at `done` and fully drain all three terminal branches through ASGI
+  2.3/2.4 and the actual timeout middleware; send after transport without waiting before `done`.
+- Keep the persisted ID, terminal ID and push ID equal; repeated completion sends once.
+- Preserve `done` for rejected/absent registration, suppressed accounts, setup failures
+  and timed-out sends; keep invalid-token cleanup, usage-context reset and temporary-file cleanup.
+- Inspect message-correlated receipts without answer text or tokens; confirm visible
+  background delivery separately on the released iOS client.
+
 ## Key File Locations
 
 | Component | File Path |

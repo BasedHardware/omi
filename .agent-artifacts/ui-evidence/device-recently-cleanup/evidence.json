@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-device-settings-before.png",
+      "platform": "mobile-ios",
+      "description": "Before: Device Settings with a stalled upload labelled 'Transcription unavailable' and a Recently section listing four routine BLE disconnects (synthetic data)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-device-settings-after.png",
+      "platform": "mobile-ios",
+      "description": "After: same synthetic state; no Recently section, and the stalled upload row reads 'Uploads waiting on the server' with 'Your audio is safe on your device or phone'",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

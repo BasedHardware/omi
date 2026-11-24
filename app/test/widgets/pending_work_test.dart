@@ -32,9 +32,10 @@ class _IdleSync extends ChangeNotifier with WalDerivedSyncViews implements SyncP
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-AttentionItem _item(String id, {String? title, bool seen = false}) => AttentionItem(
+AttentionItem _item(String id, {String? title, bool seen = false, String kind = 'conversation_summary_failed'}) =>
+    AttentionItem(
       id: id,
-      kind: 'conversation_summary_failed',
+      kind: kind,
       conversationId: 'c-$id',
       title: title,
       retryable: true,
@@ -47,6 +48,7 @@ Future<PendingWorkStore> _store({
   List<AttentionItem> attention = const [],
   List<String>? retried,
   List<String>? retriedAll,
+  List<String>? dismissed,
 }) async {
   final store = PendingWorkStore(
     loadPending: () async => ApiSuccess(PendingWorkSnapshot(enabled: true, items: pending, attentionUnseenCount: 0)),
@@ -60,6 +62,10 @@ Future<PendingWorkStore> _store({
       return const ApiSuccess([]);
     },
     markSeen: (_) async => const ApiSuccess(null),
+    dismiss: (id) async {
+      dismissed?.add(id);
+      return const ApiSuccess(null);
+    },
   );
   await store.refresh();
   return store;
@@ -137,6 +143,23 @@ void main() {
       await tester.pump();
       expect(retriedAll, hasLength(1));
     });
+
+    testWidgets('swiping a server row left dismisses it; VoiceOver gets the same action', (tester) async {
+      final dismissed = <String>[];
+      final store = await _store(attention: [_item('x', title: 'Launch planning'), _item('y')], dismissed: dismissed);
+      await tester.pumpWidget(_app(NeedsAttentionSection(store: store, syncProvider: _IdleSync())));
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(find.byKey(const ValueKey('activity_attention_dismiss_y')));
+      expect(node.getSemanticsData().customSemanticsActionIds, isNotEmpty);
+      semantics.dispose();
+
+      await tester.drag(find.text('Launch planning'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(dismissed, ['x']);
+      expect(find.text('Launch planning'), findsNothing);
+      expect(find.text("Couldn't summarize this conversation"), findsOneWidget);
+    });
   });
 
   group('bell', () {
@@ -151,8 +174,8 @@ void main() {
       expect(find.byKey(const ValueKey('home_activity_dot')), findsNothing);
     });
 
-    testWidgets('unseen attention lights the warning dot; no recap needed', (tester) async {
-      final store = await _store(attention: [_item('x')]);
+    testWidgets('other unseen attention lights the warning dot even with an unseen summary failure', (tester) async {
+      final store = await _store(attention: [_item('x'), _item('y', kind: 'future_kind')]);
       var stored = DateTime.now().millisecondsSinceEpoch;
       final seen = ActivitySeen(read: () => stored, write: (v) => stored = v, owner: () => 'u');
       await tester.pumpWidget(_app(ActivityBellButton(seen: seen, pendingWork: store)));

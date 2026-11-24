@@ -80,3 +80,64 @@ def test_repair_from_state_accepts_top_level_service_list(tmp_path: Path) -> Non
 
     assert len(results) == 1
     assert results[0].action == 'failed'
+
+
+def test_live_repair_validates_exact_target_before_moving_traffic(monkeypatch) -> None:
+    import subprocess
+
+    from scripts import repair_cloud_run_traffic as repair
+
+    state = json.loads((FIXTURES / 'cloud_run_spec_status_mismatch.json').read_text(encoding='utf-8'))
+    monkeypatch.setattr(repair, '_fetch_service', lambda **kwargs: state['services'][0])
+    calls = []
+
+    def reject(args, *, check):
+        calls.append(args)
+        raise subprocess.CalledProcessError(1, args)
+
+    monkeypatch.setattr(repair.subprocess, 'run', reject)
+    results = repair.repair_live(
+        project='based-hardware',
+        region='us-central1',
+        services=('backend',),
+        repair=True,
+        release_floor_check='floor.py',
+    )
+
+    assert results[0].action == 'failed'
+    assert calls == [
+        [
+            sys.executable,
+            'floor.py',
+            '--revision',
+            'backend-good-1',
+            '--project',
+            'based-hardware',
+            '--region',
+            'us-central1',
+        ]
+    ]
+
+
+def test_state_file_cannot_bypass_requested_release_floor(monkeypatch) -> None:
+    import pytest
+
+    from scripts import repair_cloud_run_traffic as repair
+
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'repair',
+            '--project',
+            'based-hardware',
+            '--state',
+            'snapshot.json',
+            '--repair',
+            '--release-floor-check',
+            'floor.py',
+        ],
+    )
+
+    with pytest.raises(SystemExit, match='2'):
+        repair.main()

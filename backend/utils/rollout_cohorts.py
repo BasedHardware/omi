@@ -141,6 +141,10 @@ def _in_rollout_cohort(
         if name == 'dream-agent':
             _dream_cohort_degraded('unavailable')
             raise policy.RolloutCohortUnavailable('dream cohort membership unavailable')
+        if name == 'go-finalization':
+            # The caller (utils/rollout/go_finalization_admission.py) fails closed and records
+            # the fallback; a silent False would hide a membership-store outage during a ramp.
+            raise policy.RolloutCohortUnavailable('go finalization membership unavailable')
         return False
     try:
         members = members.get(rollout_environment(), {})

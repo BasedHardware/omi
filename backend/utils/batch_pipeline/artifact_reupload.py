@@ -13,7 +13,7 @@ from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.future_capture_decode import decode_future_units
-from utils.capture.batch_coverage import decode_for_intake
+from utils.sync.source_reuse_decode import decode_for_intake
 from utils.batch_pipeline.repair_lineage import LANGUAGE_KEYS, LINEAGE_KEYS, recorded_lineage
 from utils.executors import run_blocking, db_executor, storage_executor, sync_executor
 
@@ -144,7 +144,26 @@ async def restore_upload(
                 uid=uid,
                 device_id=binding.client_device_id,
                 retained_offsets_by_name=context.get('retained_capture_offsets_by_name'),
+                durable_repair=True,
             ),
+        )
+    elif any(job.get('source_reuse_key') for job in jobs):
+        from utils.sync.source_reuse_decode import decode_sources
+
+        # Accepted units pin per-file packing, even when new reuse is OFF.
+        # The original content HMAC already proves the complete bytes/names;
+        # _original_unit rechecks every original unit boundary before the CAS.
+        iterator = decode_sources(
+            paths,
+            uid=uid,
+            max_seconds=ceiling,
+            decoder=decode_units,
+            context={
+                **context,
+                'client_device_id': binding.client_device_id,
+                'source': binding.source,
+                'should_lock': binding.is_locked,
+            },
         )
     else:
         iterator = decode_units(paths, max_seconds=ceiling)

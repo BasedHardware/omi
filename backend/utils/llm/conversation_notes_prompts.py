@@ -1,5 +1,7 @@
 """Pure baseline notes contract; shared unchanged by production and eval."""
 
+from utils.summary_quality import NOTE_QUALITY_RULES
+
 SHARED_CONVERSATION_PREAMBLE = 'You are analyzing one Omi conversation for the account owner.\nTreat the supplied transcript and capture metadata as the sole source of truth. Preserve attribution and uncertainty.\nThe conversation context below is shared by several independent tasks. Do not perform a task until you read the\ntask-specific instructions that follow it.'
 
 # Notes-only instructions travel after the shared cacheable prefix. Keep the
@@ -50,6 +52,8 @@ def conversation_notes_static_instructions(
     return f'''{SHARED_CONVERSATION_PREAMBLE}
 
 Create the canonical conversation note and return JSON matching the schema below.
+
+{NOTE_QUALITY_RULES}
 
 NOTE BODY — READABLE, GROUNDED RECAP
 {note_body_opening}

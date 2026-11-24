@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-test-cold-import-in-call-budget",
+  "family": "test-fidelity",
+  "violated_contract": "A per-call test CPU budget must measure the exercised behavior rather than shared process dependency initialization. A cold real-module import inside the first parameter case charges shared setup to that case and can fail the call budget while every behavioral assertion passes.",
+  "canonical_prevention": "Load shared real dependencies in an explicit pytest setup fixture before call-phase accounting. Retain the real implementation, external-service mocks, parameter matrix, behavioral assertions and unchanged blocking CPU threshold. Profile the original call to distinguish import initialization from expensive behavior.",
+  "canonical_prevention_artifact": [
+    "backend/tests/conftest.py",
+    "backend/tests/services/users/test_account_deletion.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/tests/services/users/test_account_deletion.py"
+  ],
+  "status": "open"
+}

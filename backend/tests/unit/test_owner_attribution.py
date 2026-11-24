@@ -10,17 +10,12 @@ import pytest
 from models.conversation import Conversation
 from models.memories import SubjectAttribution
 from models.transcript_segment import TranscriptSegment
+from tests.support.memory_process_conversation import pc  # noqa: F401 - pytest fixture
 from utils.conversations import transcript_for_llm
 from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.conversations.transcript_for_llm import memory_transcript_from_segments
 from utils.memory.decision_path_telemetry import emit_memory_capture_decision
-from tests.unit.test_memory_replace_policy import _memory_replace_import_isolation, _load_process_conversation
-
-
-@pytest.fixture(scope="module")
-def pc(_memory_replace_import_isolation):
-    return _load_process_conversation()
 
 
 def _segments(owners):

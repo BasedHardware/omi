@@ -210,6 +210,17 @@ def pod_template_semantic_projection(template: dict[str, Any]) -> dict[str, Any]
         )
         for item in projected_container["env"]
     ]
+    # The API server also defaults downward-API references: fieldRef.apiVersion
+    # to v1 and resourceFieldRef.divisor to 1. A chart that omits them must
+    # still hash equal to the stored template.
+    for item in projected_container["env"]:
+        value_from = item.get("valueFrom") if isinstance(item, dict) else None
+        if not isinstance(value_from, dict):
+            continue
+        if isinstance(value_from.get("fieldRef"), dict):
+            value_from["fieldRef"].setdefault("apiVersion", "v1")
+        if isinstance(value_from.get("resourceFieldRef"), dict):
+            value_from["resourceFieldRef"].setdefault("divisor", "1")
     resources = projected_container.get("resources")
     if isinstance(resources, dict):
         for scope in ("requests", "limits"):

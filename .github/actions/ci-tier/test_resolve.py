@@ -90,7 +90,9 @@ class CITierTests(unittest.TestCase):
                 HAS_IOS="false",
                 GENERATED_FILES_RESULT="skipped",
                 ANALYZE_AND_TEST_RESULT="skipped",
-                DART_TIMEZONE_RESULT="skipped",
+                DART_TIMEZONE_KIRITIMATI_RESULT="skipped",
+                DART_TIMEZONE_PAGO_PAGO_RESULT="skipped",
+                DART_TIMEZONE_EXPECTED="false",
                 JOURNEYS_RESULT="skipped",
                 ANDROID_COMPILE_RESULT="skipped",
                 ANDROID_UNIT_RESULT="skipped",
@@ -130,6 +132,45 @@ class CITierTests(unittest.TestCase):
             result = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 1)
             self.assertIn("Required Dart Analyze & Tests did not pass: skipped", result.stderr)
+
+    def test_mobile_aggregate_requires_both_far_timezone_suites_when_selected(self):
+        script = workflow_script("Aggregate conditional mobile checks")
+        with tempfile.TemporaryDirectory() as temp:
+            env = dict(
+                os.environ,
+                CHANGES_RESULT="success",
+                FULL_CI="true",
+                HAS_GENERATED="false",
+                HAS_DART="true",
+                DART_EXPECTED="true",
+                HAS_JOURNEYS="false",
+                HAS_ANDROID="false",
+                HAS_IOS="false",
+                GENERATED_FILES_RESULT="skipped",
+                ANALYZE_AND_TEST_RESULT="success",
+                JOURNEYS_RESULT="skipped",
+                ANDROID_COMPILE_RESULT="skipped",
+                ANDROID_UNIT_RESULT="skipped",
+                ANDROID_EMULATOR_RESULT="skipped",
+                EMULATOR_EXPECTED="false",
+                IOS_COMPILE_RESULT="skipped",
+                DART_TIMEZONE_KIRITIMATI_RESULT="success",
+                DART_TIMEZONE_PAGO_PAGO_RESULT="success",
+                DART_TIMEZONE_EXPECTED="true",
+                GITHUB_STEP_SUMMARY=str(Path(temp) / "summary"),
+            )
+            result = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            # An expected zone that is skipped or cancelled is a missing
+            # result, not an inapplicable lane.
+            for zone in ("DART_TIMEZONE_KIRITIMATI_RESULT", "DART_TIMEZONE_PAGO_PAGO_RESULT"):
+                for conclusion in ("skipped", "cancelled", "failure"):
+                    with self.subTest(zone=zone, conclusion=conclusion):
+                        env[zone] = conclusion
+                        result = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
+                        self.assertEqual(result.returncode, 1)
+                        self.assertIn("Required Dart far-timezone suite did not pass", result.stderr)
+                env[zone] = "success"
 
     def run_issue_bot(self, result: str, expected: str, title: str):
         with tempfile.TemporaryDirectory() as temp:
@@ -173,7 +214,8 @@ class CITierTests(unittest.TestCase):
                 ANDROID_COMPILE="skipped",
                 ANDROID_JVM="skipped",
                 ANDROID_EMULATOR="skipped",
-                TIMEZONES="skipped",
+                TIMEZONES_KIRITIMATI="skipped",
+                TIMEZONES_PAGO_PAGO="skipped",
                 JOURNEYS_EXPECTED="false",
                 ANDROID_EXPECTED="false",
                 TIMEZONES_EXPECTED="false",

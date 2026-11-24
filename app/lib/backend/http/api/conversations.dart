@@ -1,5 +1,7 @@
 import 'package:omi/utils/analytics/lag_work_registry.dart';
 import 'sync_upload_refusal.dart';
+import 'conversation_page_headers.dart';
+export 'conversation_page_headers.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -15,6 +17,7 @@ import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
@@ -40,17 +43,57 @@ part 'conversation_search_decode.dart';
 /// already finalized. Reporting it floods crash reporting with noise.
 bool isBenignInProgressConversationCreateStatus(int statusCode) => statusCode == 404;
 
+/// True only for the backend's typed, recoverable processing failure.
+@visibleForTesting
+bool isRetryableInProgressConversationResponse(http.Response? response) {
+  if (response?.statusCode != 503) return false;
+  try {
+    // omi-perf-allow: history-json-on-ui -- bounded typed error body, never conversation history
+    final decoded = jsonDecode(response!.body);
+    final detail = decoded is Map ? decoded['detail'] : null;
+    return detail is Map && detail['code'] == 'conversation_processing_retryable';
+  } catch (_) {
+    return false;
+  }
+}
+
+@visibleForTesting
+typedef InProgressConversationRequestSender = Future<http.Response?> Function(ApiRequest request);
+
 Future<CreateConversationResponse?> processInProgressConversation() async {
   return (await processInProgressConversationOutcome()).response;
 }
 
-Future<InProgressProcessOutcome> processInProgressConversationOutcome() async {
-  var response = await makeApiCall(
+Future<InProgressProcessOutcome> processInProgressConversationOutcome({
+  @visibleForTesting InProgressConversationRequestSender? sendRequest,
+  @visibleForTesting Future<void> Function(Duration)? waitBeforeRetry,
+  @visibleForTesting void Function(http.Response)? reportUnexpectedResponse,
+}) async {
+  final request = ApiRequest(
     url: '${Env.apiBaseUrl}v1/conversations',
-    headers: {},
+    headers: const {},
     method: 'POST',
     body: jsonEncode({}),
   );
+  Future<http.Response?> sendProductionRequest(ApiRequest request) => makeApiCall(
+        url: request.url,
+        headers: request.headers,
+        method: request.method,
+        body: request.body,
+        retries: 1,
+        retryServerErrors: false,
+      );
+
+  final send = sendRequest ?? sendProductionRequest;
+  var response = await send(request);
+  if (isRetryableInProgressConversationResponse(response)) {
+    final delay = parseApiRetryAfter(response!, DateTime.now) ?? const Duration(seconds: 2);
+    await (waitBeforeRetry ?? (duration) => Future<void>.delayed(duration))(delay);
+    // The backend rolls the failed admission back before returning this typed
+    // response. Replaying the identical empty POST therefore re-admits the same
+    // in-progress conversation; never retry other 5xx or an exhausted second try.
+    response = await send(request);
+  }
   if (response == null) return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
@@ -62,12 +105,20 @@ Future<InProgressProcessOutcome> processInProgressConversationOutcome() async {
   } else if (isBenignInProgressConversationCreateStatus(response.statusCode)) {
     Logger.debug('processInProgressConversation: no in-progress conversation (already finalized), skipping');
     return const InProgressProcessOutcome(absence: ProcessAbsence.notFound);
+  } else if (isRetryableInProgressConversationResponse(response)) {
+    Logger.debug('processInProgressConversation: bounded retry exhausted; conversation remains recoverable');
+    return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
   }
-  PlatformManager.instance.crashReporter.reportCrash(
-    Exception('Failed to create conversation'),
-    StackTrace.current,
-    userAttributes: {'response': response.body},
-  );
+  final report = reportUnexpectedResponse;
+  if (report != null) {
+    report(response);
+  } else {
+    PlatformManager.instance.crashReporter.reportCrash(
+      Exception('Failed to create conversation'),
+      StackTrace.current,
+      userAttributes: {'response': response.body},
+    );
+  }
   return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
 }
 
@@ -101,8 +152,10 @@ Future<List<ServerConversation>> getConversations({
 Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversationsResult({
   Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
   void Function(int)? onStorageCount,
+  void Function(ConversationPageHeaders)? onPageHeaders,
   int limit = 50,
   int offset = 0,
+  String? cursor,
   List<ConversationStatus> statuses = const [],
   bool includeDiscarded = false,
   DateTime? startDate,
@@ -120,6 +173,7 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
     endDate: endDate,
     folderId: folderId,
     starred: starred,
+    cursor: cursor,
   );
 
   final held = <String, ServerConversation>{};
@@ -148,6 +202,7 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
         threshold: conversationListBackgroundParseBytes,
         debugName: 'conversation_list_parse');
     onStorageCount?.call(int.tryParse(response.headers['x-omi-conversation-page-size'] ?? '') ?? memories.length);
+    onPageHeaders?.call(ConversationPageHeaders.parse(response.headers));
     // Preserve an exact local fallback for each server omission. If a later
     // overlay refresh drops this episode, its members can still render on Home.
     final retained =
@@ -176,7 +231,8 @@ bool hasSpeakerReceiptSummaryCapability(Map<String, String> headers) => headers[
 sealed class ReprocessResult {
   const ReprocessResult();
 
-  /// The reprocessed conversation, only on [ReprocessSuccess].
+  /// The server's copy of the conversation: the reprocessed one on [ReprocessSuccess], the
+  /// still-transcribing one on a 200 [ReprocessTranscriptionPending].
   ServerConversation? get conversation => null;
 
   /// Adapts a call that only knows "a conversation or nothing" (older seams, list-row retries).
@@ -195,6 +251,18 @@ final class ReprocessSuccess extends ReprocessResult {
 /// `conversation_processing_in_progress`).
 final class ReprocessBusy extends ReprocessResult {
   const ReprocessBusy();
+}
+
+/// The audio has not been transcribed, so a summary retry cannot help. Two server answers mean
+/// this: HTTP 200 with the conversation back in Home step `transcribing` (still inside its
+/// transcription window; [conversation] is that copy, to apply as is), and HTTP 409
+/// `transcription_pending` (past the window; no copy). Neither promises the audio will be
+/// transcribed.
+final class ReprocessTranscriptionPending extends ReprocessResult {
+  const ReprocessTranscriptionPending([this.conversation]);
+
+  @override
+  final ServerConversation? conversation;
 }
 
 /// The hourly reprocess limit (HTTP 429). [retryAfter] when the server said how long.
@@ -232,20 +300,32 @@ Future<ReprocessResult> reProcessConversationServer(
   String? appId,
   bool requireSpeakerReceipt = false,
   bool forceOmi = false,
+  // Tests replace the transport; production sends through makeApiCall.
+  Future<http.Response?> Function(String url)? send,
 }) async {
   final route = '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess';
-  final response = await makeApiCall(
-    url: '$route${reprocessQuery(appId: appId, forceOmi: forceOmi)}',
-    headers: {},
-    method: 'POST',
-    body: '',
-    timeout: reprocessRequestTimeout,
-    retries: 0,
-  );
+  final url = '$route${reprocessQuery(appId: appId, forceOmi: forceOmi)}';
+  final response = await (send ?? _sendReprocess)(url);
   if (response == null) return const ReprocessFailed();
   Logger.debug('reProcessConversationServer: ${response.statusCode}');
-  return reprocessResultFromResponse(response, requireSpeakerReceipt: requireSpeakerReceipt);
+  final result = reprocessResultFromResponse(response, requireSpeakerReceipt: requireSpeakerReceipt);
+  // Only the 409 has no copy to carry the answer; a returned copy speaks for itself.
+  if (result is ReprocessTranscriptionPending && result.conversation == null) {
+    TranscriptionPendingConversations.mark(conversationId);
+  } else if (result.conversation != null) {
+    TranscriptionPendingConversations.unmark(conversationId);
+  }
+  return result;
 }
+
+Future<http.Response?> _sendReprocess(String url) => makeApiCall(
+      url: url,
+      headers: {},
+      method: 'POST',
+      body: '',
+      timeout: reprocessRequestTimeout,
+      retries: 0,
+    );
 
 /// Maps a reprocess response to its [ReprocessResult].
 @visibleForTesting
@@ -256,25 +336,32 @@ ReprocessResult reprocessResultFromResponse(
 }) {
   switch (response.statusCode) {
     case 200:
+      final ServerConversation conversation;
+      try {
+        conversation = ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      } catch (e) {
+        Logger.debug('reProcessConversationServer decode failed: ${e.runtimeType}');
+        return const ReprocessFailed(statusCode: 200);
+      }
+      // Audio still inside its transcription window: the server ran nothing and answered with the
+      // row's waiting state. No summary path ran, so the speaker receipt does not apply.
+      if (conversation.homeStep == 'transcribing') return ReprocessTranscriptionPending(conversation);
       // A pre-fix backend can return 200 with a summary made from stale speaker
       // labels. Keep the detail page's retry action until the receipt-aware
       // processor explicitly acknowledges its summary path.
       if (requireSpeakerReceipt && !hasSpeakerReceiptSummaryCapability(response.headers)) {
         return const ReprocessFailed(statusCode: 200);
       }
-      try {
-        return ReprocessSuccess(ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>));
-      } catch (e) {
-        Logger.debug('reProcessConversationServer decode failed: ${e.runtimeType}');
-        return const ReprocessFailed(statusCode: 200);
-      }
+      return ReprocessSuccess(conversation);
     case 409:
       // 409 is busy only with the structured `conversation_processing_in_progress` detail. The same
       // route answers 409 with a string detail when the selected app is disabled or not enabled:
       // that is the template failing, not the conversation being busy.
-      return _detailCode(response.body) == 'conversation_processing_in_progress'
-          ? const ReprocessBusy()
-          : const ReprocessFailed(statusCode: 409);
+      return switch (_detailCode(response.body)) {
+        'conversation_processing_in_progress' => const ReprocessBusy(),
+        'transcription_pending' => const ReprocessTranscriptionPending(),
+        _ => const ReprocessFailed(statusCode: 409),
+      };
     case 429:
       return ReprocessRateLimited(retryAfter: parseApiRetryAfter(response, now));
     default:
@@ -435,7 +522,9 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   return [];
 }
 
-Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId,
+typedef ConversationByIdResult = ({ServerConversation? item, bool ok, bool inaccessible});
+
+Future<ConversationByIdResult> getConversationDetailReadResult(String conversationId,
     {bool userInitiated = false}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
@@ -443,20 +532,30 @@ Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String c
     method: 'GET',
     body: '',
   );
-  if (response == null) return (item: null, ok: false);
+  if (response == null) return (item: null, ok: false, inaccessible: false);
   if (response.statusCode == 200) {
-    return (item: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>), ok: true);
+    return (
+      item: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+      ok: true,
+      inaccessible: false
+    );
   } else if (response.statusCode == 402) {
     // Locked conversations are still returned by the list endpoint as a
     // redacted completed row, but their detail endpoint intentionally returns
     // 402. Treat that response as an authoritative terminal result for
     // lifecycle reconciliation so a stale Processing card is cleared.
     Logger.debug('Conversation is locked/redacted: $conversationId');
-    return (item: null, ok: true);
+    return (item: null, ok: true, inaccessible: true);
   } else if (response.statusCode == 404) {
-    return (item: null, ok: true);
+    return (item: null, ok: true, inaccessible: true);
   }
-  return (item: null, ok: false);
+  return (item: null, ok: false, inaccessible: response.statusCode == 401 || response.statusCode == 403);
+}
+
+Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId,
+    {bool userInitiated = false}) async {
+  final result = await getConversationDetailReadResult(conversationId, userInitiated: userInitiated);
+  return (item: result.item, ok: result.ok);
 }
 
 /// Per local day in [tz], how many noise/media clips the server folded away from Home
@@ -508,6 +607,7 @@ String conversationCollectionUrl(
   DateTime? endDate,
   String? folderId,
   bool? starred,
+  String? cursor,
 }) {
   final root = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
   var url =
@@ -523,6 +623,9 @@ String conversationCollectionUrl(
   }
   if (starred != null) {
     url += '&starred=$starred';
+  }
+  if (cursor != null && cursor.isNotEmpty) {
+    url += '&cursor=${Uri.encodeQueryComponent(cursor)}';
   }
   return url;
 }
@@ -548,10 +651,14 @@ class ConversationApi {
     bool? starred,
     Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
     void Function(int)? onStorageCount,
+    void Function(ConversationPageHeaders)? onPageHeaders,
+    String? cursor,
   }) =>
       _listHomeConversations(this,
           limit: limit,
           offset: offset,
+          cursor: cursor,
+          onPageHeaders: onPageHeaders,
           statuses: statuses,
           includeDiscarded: includeDiscarded,
           startDate: startDate,

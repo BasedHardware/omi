@@ -39,7 +39,7 @@ class SyncDetailsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
-    final amounts = SyncPipelineAmounts.of(sync.allWals);
+    final amounts = SyncPipelineAmounts.fromPending(sync.derivedWals.pendingWork);
     final state = sync.syncState;
     final jobs = sync.offlineServerProcessingCounts;
     String dur(int seconds) => OmiDuration.compact(seconds, l);

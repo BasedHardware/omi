@@ -8,6 +8,7 @@ from google.api_core.exceptions import AlreadyExists, FailedPrecondition
 
 from google.cloud import firestore  # noqa: F401  # warm the CAS path's lazy import outside the call budget
 
+from config.batch_pipeline_retention import LIFECYCLE_DAYS
 from database import outbox_firestore
 from database.outbox import Claim, OutboxKind, Outcome
 from utils import cloud_tasks, provider_stt_tasks
@@ -235,14 +236,19 @@ def test_wake_task_shape(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    'age,setting,skipped', [(15, 'on', True), (1, 'on', False), (14, 'on', False), (15, 'off', False)]
+    'age,setting,skipped',
+    [
+        (LIFECYCLE_DAYS + 1, 'on', True),
+        (1, 'on', False),
+        (LIFECYCLE_DAYS, 'on', False),
+        (LIFECYCLE_DAYS + 1, 'off', False),
+    ],
 )
 def test_sweep_age_gate_preserves_old_rows_and_counts(box, monkeypatch, age, setting, skipped):
     from copy import deepcopy
     from utils.observability.sweep_age import SKIPPED
 
     monkeypatch.setenv('BATCH_PIPELINE_SWEEP_AGE_GATE', setting)
-    monkeypatch.delenv('BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS', raising=False)
     enqueue(box, now=100)
     box.woken.clear()
     before = deepcopy(row(box))
@@ -268,7 +274,7 @@ def test_ancient_sweep_keeps_existing_privacy_discard(box, monkeypatch):
     box.woken.clear()
     counter = SKIPPED.labels(queue='provider-stt', reason='max_age')
     before = counter._value.get()
-    counts = box.outbox.sweep(now=100 + 15 * 86400)
+    counts = box.outbox.sweep(now=100 + (LIFECYCLE_DAYS + 1) * 86400)
     assert counts.discarded == 1 and counts.rewoken == 0
     assert row(box)['closed_reason'] == 'privacy_blocked'
     assert not box.woken and counter._value.get() == before
@@ -278,7 +284,7 @@ def test_sweep_advances_past_ancient_page_and_wraps(box, monkeypatch):
     from copy import deepcopy
 
     monkeypatch.setenv('BATCH_PIPELINE_SWEEP_AGE_GATE', 'on')
-    now = 2_000_000.0
+    now = (LIFECYCLE_DAYS + 2) * 86400.0
     collection = 'batch_pipeline_test_provider_stt_outbox'
     ids = [f'{i:064x}' for i in range(4)]
     for key in ids:
@@ -297,7 +303,7 @@ def test_sweep_advances_past_ancient_page_and_wraps(box, monkeypatch):
 def test_sweep_cursor_wraps_an_exactly_full_last_page(box, monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_SWEEP_AGE_GATE', 'on')
     enqueue(box, now=100)
-    assert box.outbox.sweep(now=2_000_000, limit=1).rewoken == 0
+    assert box.outbox.sweep(now=(LIFECYCLE_DAYS + 2) * 86400, limit=1).rewoken == 0
     assert box.outbox._sweep_cursor is not None
-    assert box.outbox.sweep(now=2_000_000, limit=1).rewoken == 0
+    assert box.outbox.sweep(now=(LIFECYCLE_DAYS + 2) * 86400, limit=1).rewoken == 0
     assert box.outbox._sweep_cursor is None

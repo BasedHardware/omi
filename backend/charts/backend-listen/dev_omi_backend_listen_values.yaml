@@ -151,6 +151,12 @@ env:
     value: "true"
   - name: SYNC_RECORD_DECODE_FAILURE_MEMO
     value: "true"
+  - name: CONVERSATIONS_V3_STAGE
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: CONVERSATIONS_V3_STAGE}
+  - name: CONVERSATIONS_V3_FIRST_APP_BUILD
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: CONVERSATIONS_V3_FIRST_APP_BUILD}
   - name: RECORD_TOKEN_LEASE_MODE
     valueFrom:
       configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
@@ -163,6 +169,8 @@ env:
   - name: RECORD_TOKEN_LEASE_DEPLOYED_AT
     valueFrom:
       configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
+  - name: BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED
+    value: "true"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
@@ -217,12 +225,16 @@ env:
     value: "true"
   - name: BATCH_HELD_DEAD_LETTER_ENABLED
     value: "true"
+  - name: BATCH_PARKED_JOB_SWEEPER_ENABLED
+    value: "true"
   - name: RECORD_INTAKE_AGE_PRIORITY_ENABLED
     value: "true"
   - name: RECORD_SEAL_REPAIR_FRESH_ENABLED
     value: "true"
   - name: BATCH_PIPELINE_ENABLED
     value: "false"
+  - name: BATCH_PIPELINE_PACKING_SAMPLE_RATE
+    value: "0.001"
   - name: BATCH_PIPELINE_UID_ALLOWLIST
     value: ""
   - name: FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED
@@ -251,8 +263,16 @@ env:
     value: "true"
   - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
     value: "true"
+  - name: CONVERSATIONS_V3_RECORDING_ROTATION
+    value: "off"
+  - name: CONVERSATIONS_V3_ROTATION_MIN_SECONDS
+    value: "180"
+  - name: CONVERSATIONS_V3_ROTATION_MAX_SECONDS
+    value: "300"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
+  - name: SYNC_POLL_BACKOFF_PERCENT
+    value: "0"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_LIVE_ADMISSION_ENABLED
@@ -295,8 +315,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
-    value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "0"
   - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
@@ -304,8 +322,6 @@ env:
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
   - name: BUCKET_AUDIO_DERIVED
-    value: ""
-  - name: AUDIO_MERGE_WORKER_URL
     value: ""
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
   - name: PROACTIVITY_V2_POSTHOG_TOKEN
@@ -561,8 +577,6 @@ env:
     value: "parakeet,modulate-velma-2"
   - name: PRERECORDED_SONIOX_FAILOVER_ENABLED
     value: "true"
-  - name: STT_RESILIENT_RECONNECT
-    value: "false"
   - name: STT_LIVE_DEMAND_ENABLED
     value: "false"
   - name: STT_LIVE_DEMAND_PERCENT
@@ -599,8 +613,6 @@ env:
     value: "1"
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
-  - name: PARAKEET_WINDOW_DIARIZATION
-    value: "false"
   - name: PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS
     value: "1.2"
   - name: PARAKEET_WINDOW_PACE_SECONDS
@@ -739,23 +751,18 @@ env:
   - name: EDGE_SHADOW_URL
     value: "ws://dev-omi-listen-edge.dev-omi-backend.svc.cluster.local:8080/v1/shadow"
   # EDGE_SHADOW_TOKEN (sent as x-edge-shadow-token; must match listen-edge's)
-  # is a secret: never committed here, set only through privateEnv
-  # (LISTEN_PRIVATE_VALUES_YAML), which adds the entry at rollout. Unset,
-  # listen sends no token.
+  # is a secret: never committed here. Development has no private value
+  # source (prod uses privateSecretEnv); unset, listen sends no token.
   # Audio-timeline v2: one capture coordinate for segments and stored audio.
   # Admits new eligible recordings only (single-channel, server STT);
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "true"
-  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
     value: "false"
   - name: SONIOX_WIRE_LEDGER
-    value: "false"
-  - name: SONIOX_ORDERED_FINALIZE
     value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "false"

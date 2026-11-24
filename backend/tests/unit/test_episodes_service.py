@@ -522,7 +522,21 @@ def test_first_moment_opens_an_episode_with_sealed_content():
         }
     )
     c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
-    assert service.record_moment(UID, _moment(person='p1'), c) == 'applied'
+    named = _moment(person='p1')
+    named = replace(
+        named,
+        segments=[
+            {
+                **segment,
+                'id': str(index),
+                'speaker_id': index % 2,
+                'speaker_id_scope': 'synthetic',
+                **({'speaker_label_source': 'manual'} if not segment['is_user'] else {}),
+            }
+            for index, segment in enumerate(named.segments)
+        ],
+    )
+    assert service.record_moment(UID, named, c) == 'applied'
 
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
     assert episode['title'] == 'Coding at the café'
@@ -562,7 +576,7 @@ def test_next_moment_sends_only_state_plus_new_text_and_dedupes_applied_segments
     user_message = model.calls[1][1][1]
     assert '"Lunch at 12:30"' in user_message and 'git thing' not in user_message and 'pricing' in user_message
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
-    assert [m['heading'] for m in episode['moments']] == ['Lunch', '']
+    assert [m['heading'] for m in episode['moments']] == ['Lunch', 'Discussion 2']
     assert episode['bullets'] == ['B2'] and episode['applied']['c1'] == 50.0
 
 
@@ -680,6 +694,67 @@ def test_finalization_applies_the_tail_and_reconciles_provisional_items():
     # The tail call saw only the unapplied tail.
     assert 'sandbox' in model.calls[1][1][1] and 'git thing' not in model.calls[1][1][1]
     assert service.on_conversation_finalized(UID, 'c1', row, trigger='user_reprocess', collaborators=c) == 'skipped'
+
+
+@pytest.mark.parametrize('marker', [('account_deletions', UID), ('users', UID, 'deleted_conversations', 'c1')])
+def test_finalization_reconciliation_refuses_deletion_after_planning(marker, monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'items': [{'text': 'Book lunch table'}]})
+    service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    monkeypatch.setattr(service, '_finalize_closes', lambda *_: False)
+    before = dict(store.rows)
+
+    def saved_tasks(uid, cid):
+        store.rows[marker] = {}
+        return [{'id': 'task-1', 'description': 'Book lunch table'}]
+
+    c.saved_tasks = saved_tasks
+    row = {'id': 'c1', 'source': 'omi', 'started_at': T0}
+    assert (
+        service.on_conversation_finalized(UID, 'c1', row, trigger='capture_end', collaborators=c) == 'skipped_deleted'
+    )
+    assert store.rows == {**before, marker: {}}
+
+
+@pytest.mark.parametrize('marker', [('account_deletions', UID), ('users', UID, 'deleted_conversations', 'c1')])
+@pytest.mark.parametrize(
+    'path,writer',
+    [
+        ('new_tail', 'commit_moment'),
+        ('live_tail', 'commit_moment'),
+        ('close', 'close_episode'),
+        ('early_close', 'close_episode'),
+        ('discarded', 'update_episode'),
+        ('deleted', 'update_episode'),
+    ],
+)
+def test_finalization_writers_refuse_deletion_after_planning(path, writer, marker, monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch'}, {'bullets': ['New speech']})
+    if path != 'new_tail':
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    before = dict(store.rows)
+    write = getattr(episodes_db, writer)
+
+    def write_after_deletion(*args, **kwargs):
+        assert store.rows == before
+        store.rows[marker] = {}
+        return write(*args, **kwargs)
+
+    monkeypatch.setattr(episodes_db, writer, write_after_deletion)
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    row = {'id': 'c1', 'source': 'omi', 'started_at': T0, 'finished_at': T0 + timedelta(minutes=1)}
+    if path.endswith('tail'):
+        row['transcript_segments'] = _segments(LONG, start=30.0)
+    if path in {'discarded', 'deleted'}:
+        row[path] = True
+    if path == 'early_close':
+        outcome = service.close_on_finalize(UID, 'c1', trigger='client_finalize', collaborators=c)
+    else:
+        outcome = service.on_conversation_finalized(UID, 'c1', row, trigger='client_finalize', collaborators=c)
+    assert outcome == 'skipped_deleted'
+    assert store.rows == {**before, marker: {}}
 
 
 def _row(conversation_id='c1', *, text=None, start=30.0, source='omi', **extra):
@@ -1629,6 +1704,28 @@ def test_a_late_sync_clip_rejoins_the_gap_closed_episode_and_reopens_it():
     assert episodes_db.get_last_closed_episode(UID, firestore_client=store) is None
 
 
+@pytest.mark.parametrize('marker', [('account_deletions', UID), ('users', UID, 'deleted_conversations', 'c-wal')])
+def test_sync_rejoin_refuses_deletion_after_planning(marker, monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch'})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    _close_on_gap(store)
+    before = dict(store.rows)
+    reopen = episodes_db.reopen_episode
+
+    def reopen_after_deletion(*args, **kwargs):
+        store.rows[marker] = {}
+        return reopen(*args, **kwargs)
+
+    monkeypatch.setattr(episodes_db, 'reopen_episode', reopen_after_deletion)
+    c = _collaborators(model, now=T0 + timedelta(minutes=21), store=store)
+    outcome = service.on_conversation_finalized(
+        UID, 'c-wal', _wal_row(minutes=15), trigger='sync_update', collaborators=c
+    )
+    assert outcome == 'skipped_deleted'
+    assert store.rows == {**before, marker: {}}
+
+
 def test_a_late_sync_clip_starting_within_the_continue_gap_of_the_close_rejoins():
     store = StrictFirestore()
     service.record_moment(
@@ -2143,7 +2240,7 @@ def test_output_language_firestore_and_preference_reads_are_cached_per_session(m
         conversations_db,
         'get_conversation_raw_snapshot',
         lambda *args, **kwargs: (
-            language_reads.append(args[1]) if kwargs.get('field_paths') == ['language'] else None,
+            language_reads.append(args[1]) if kwargs.get('field_paths') == ['language', 'recording'] else None,
             raw_snapshot(*args, **kwargs),
         )[1],
     )

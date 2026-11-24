@@ -23,6 +23,8 @@ from config.batch_pipeline import (
     record_capture_eligible,
 )
 from config.policy import resolve_batch_policy
+from config.record_gap_fill import gap_fill_enabled
+from config.record_wal_duplicate import MERGE_TARGET_FIELD, RECEIPT_FIELD
 from config.batch_pipeline_coverage_wait import coverage_wait_memo_enabled, record_wait_memo_first_enabled
 from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
 from database.conversations import claim_record_lane_owner
@@ -45,8 +47,8 @@ from utils.batch_pipeline.live import OWNER, record_identity
 from utils.batch_pipeline.language_metrics import record_admission_exclusion
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.capture.batch_coverage import covered_response
-from utils.batch_pipeline import record_gap_fill, record_wal_handoff, record_wal_metrics
-from config.record_gap_fill import gap_fill_enabled
+from utils.batch_pipeline import record_gap_fill, record_wal_handoff, record_wal_metrics, record_wal_sample
+from utils.batch_pipeline import record_wal_duplicate
 from utils.executors import db_executor, storage_executor, run_blocking, sync_executor
 from utils.metrics import OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL, OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL
 from utils.observability.reasons import ReasonFamily, reason_label
@@ -304,6 +306,7 @@ async def registered_record_response(
     legacy_mode=None,
     evidence: IntakeRouteEvidence | None = None,
     before_coverage=None,
+    capture_claims=None,
 ) -> JSONResponse | RecordUploadRoute | None:
     policy = policy or resolve_batch_policy(uid)
     if not conversation_id and not recording_session_id:
@@ -395,7 +398,13 @@ async def registered_record_response(
                 'retryable': False,
             },
         )
-    if row.get('deleted') or row.get('source') != source or row.get('client_device_id') != client_device_id:
+    retained_merge = bool(row.get(MERGE_TARGET_FIELD))
+    if (
+        row.get('deleted')
+        and not retained_merge
+        or row.get('source') != source
+        or row.get('client_device_id') != client_device_id
+    ):
         return _pending(RecordUploadWait.OWNER_CONTEXT_MISMATCH)
     content, _ = record_identity(uid, conversation_id)
 
@@ -418,6 +427,58 @@ async def registered_record_response(
                 'detail': 'Capture is unavailable for server processing',
             },
         )
+    claims = capture_claims or {}
+    proof_args = (store, uid, conversation_id, source, client_device_id, content_id, recording_session_id)
+    if RECEIPT_FIELD in prior:
+        try:
+            status = await record_wal_duplicate.replay(*proof_args, claims)
+        except Exception:
+            return _pending(RecordUploadWait.RECEIPT_STATUS_READ_FAILED, content)
+        return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING, content)
+    if retained_merge:
+        return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content)
+    duplicate_mode, shadow_slot = record_wal_duplicate.select(uid, content_id)
+    if duplicate_mode == 'settle' and not prior and jobs and client_device_id and claims:
+        try:
+            status = await record_wal_duplicate.evaluate(*proof_args, paths, claims, 'settle')
+        except Exception:
+            return _pending(RecordUploadWait.ALIAS_WRITE_FAILED, content)
+        if status is not None:
+            return start_response(status)
+    response = await _answer_registered_upload(
+        store,
+        uid,
+        conversation_id,
+        content_id,
+        paths,
+        source,
+        client_device_id,
+        row,
+        content,
+        prior,
+        jobs,
+        before_coverage,
+    )
+    if duplicate_mode == 'shadow' and response.status_code == 503 and not prior and client_device_id:
+        await record_wal_duplicate.evaluate(*proof_args, paths, claims, 'shadow', shadow_slot)
+    await record_wal_sample.observe(
+        store=store,
+        uid=uid,
+        cid=conversation_id,
+        source=source,
+        device=client_device_id,
+        paths=paths,
+        content_id=content_id,
+        claims=capture_claims or {},
+        status_code=response.status_code,
+        has_jobs=bool(jobs or prior or row.get('record_wal_handoff_present')),
+    )
+    return response
+
+
+async def _answer_registered_upload(
+    store, uid, conversation_id, content_id, paths, source, client_device_id, row, content, prior, jobs, before_coverage
+) -> JSONResponse:
     # A prior native alias already has a proven disposition. New originals need
     # their own custody/status handle, never that old job's completed status.
     if not prior and (record_wal_handoff.handoff_enabled() or row.get('record_wal_handoff_present')):
@@ -508,6 +569,9 @@ async def registered_record_response(
             current = tx.get('content', f'{uid}/{content_id}')
             original = tx.get('content', f'{uid}/{content}')
             tx.check_privacy(uid, (conversation_id,))
+            if RECEIPT_FIELD in current:
+                # A concurrent settlement owns this alias. Retry reads its receipt.
+                return False
             if current and current.get('job_id') != original.get('job_id'):
                 return False
             tx.put(

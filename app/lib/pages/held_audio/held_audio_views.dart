@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -19,6 +20,20 @@ bool heldAudioPhoneEligible(OnDeviceTranscriptionController controller) {
 
 void openHeldAudioPlans(BuildContext context) {
   unawaited(openContextualPlans(context, source: 'held_audio', trigger: 'usage_budget'));
+}
+
+/// The current Basic limit is useful for the Upgrade action on a confirmed hold.
+/// A recording stays held until its own admission changes, even when the plan has minutes again.
+int? heldRecordingUpgradeLimitMinutes(ServerConversation conversation, UsageProvider? usage) {
+  if (!conversation.isTranscriptionAllowanceHeld || usage == null || !usage.showSubscriptionUI) return null;
+  final subscription = usage.subscription;
+  if (subscription == null || subscription.subscription.plan != PlanType.basic) return null;
+  final limitMinutes = (subscription.transcriptionSecondsLimit / 60).round();
+  final allowance = subscription.transcriptionAllowance;
+  if (limitMinutes <= 0 || allowance == null || allowance.isManaged || allowance.reason != 'plan_allowance_exhausted') {
+    return null;
+  }
+  return limitMinutes;
 }
 
 /// Recordings still waiting for a plan or an allowance, as locked rows. A running release shows none.
@@ -45,21 +60,40 @@ class HeldRecordingLockedRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          OmiLockedPreview(
-            key: Key('held_recording_locked_${recording.id}'),
-            label: l10n.upgrade,
-            onPressed: onPressed ?? () => openHeldAudioPlans(context),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
-              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(l10n.heldAudioRecordingTitle(OmiDateFormat.of(context).timestamp(started)), style: OmiType.body),
-                  const SizedBox(height: 2),
-                  Text(OmiDuration.compact(recording.seconds, l10n),
-                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-                ],
+          Material(
+            color: OmiColors.surface1,
+            borderRadius: OmiRadius.lgAll,
+            child: InkWell(
+              key: Key('held_recording_locked_${recording.id}'),
+              borderRadius: OmiRadius.lgAll,
+              onTap: onPressed ?? () => openHeldAudioPlans(context),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_outline, size: 20, color: OmiColors.warning),
+                    const SizedBox(width: OmiSpacing.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(l10n.heldAudioRecordingTitle(OmiDateFormat.of(context).timestamp(started)),
+                              style: OmiType.body),
+                          const SizedBox(height: 2),
+                          Text('${OmiDuration.compact(recording.seconds, l10n)} · ${l10n.saved}',
+                              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: OmiSpacing.sm),
+                    OmiButton(
+                      key: Key('held_recording_unlock_${recording.id}'),
+                      label: l10n.unlock,
+                      size: OmiButtonSize.compact,
+                      onPressed: onPressed ?? () => openHeldAudioPlans(context),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

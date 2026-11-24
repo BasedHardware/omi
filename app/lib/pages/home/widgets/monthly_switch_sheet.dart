@@ -79,7 +79,7 @@ class _MonthlySwitchSheetState extends State<MonthlySwitchSheet> {
     var switched = result != null && result['error'] != true;
     if (result == null && usage != null) {
       // No answer (timeout, server error): read the plan again before saying anything about it.
-      await usage.fetchSubscription();
+      await usage.fetchSubscription(fresh: true);
       if (!mounted) return;
       final sub = usage.subscription;
       switched = sub != null && sub.paymentIssue == null && sub.subscription.plan.isPaid;
@@ -88,7 +88,7 @@ class _MonthlySwitchSheetState extends State<MonthlySwitchSheet> {
     if (switched) {
       const TypedEvents().emit(const SubscriptionPaymentIssueMonthlySwitched());
       widget.onSwitched?.call();
-      if (usage != null && result != null) unawaited(usage.fetchSubscription());
+      if (usage != null && result != null) unawaited(usage.fetchSubscription(fresh: true));
       setState(() {
         _switching = false;
         _done = true;

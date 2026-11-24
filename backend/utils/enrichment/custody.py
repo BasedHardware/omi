@@ -8,7 +8,9 @@ from google.cloud import firestore
 from config.record_latency import record_notes_eager_enabled
 from database.record_notes_hold import merge_producers
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, assert_batch_write_allowed
+from models.finalization_owner import python_owns_finalization
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS
+from utils.sync import processing_hold
 
 
 def discard_blocked(document_id: str) -> bool:
@@ -21,7 +23,7 @@ def discard_blocked(document_id: str) -> bool:
     @firestore.transactional
     def discard(transaction):
         row = ref.get(transaction=transaction).to_dict() or {}
-        if not row or row.get('dormant'):
+        if not row or (row.get('dormant') and not outbox.ownership_parked(row)):
             return False
         try:
             assert_batch_write_allowed(client, transaction, row['uid'], conversation_ids=[row['conversation_id']])
@@ -80,6 +82,18 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
         while isinstance(current, str) and current not in seen:
             seen.add(current)
             data = snapshots.get('conversations', {}).get(current, {})
+            if not data:
+                # A certified memo decision serves no rows; read the redirect
+                # hop this caller needs in the same transaction.
+                data = (
+                    client.collection('users')
+                    .document(donor['uid'])
+                    .collection('conversations')
+                    .document(current)
+                    .get(transaction=transaction)
+                    .to_dict()
+                    or {}
+                )
             if data.get('owner_uid', donor['uid']) != donor['uid'] or data.get('id', current) != current:
                 raise reprocess.FirstSummaryCallbackPending('redirect ownership changed')
             if not data.get('deleted'):
@@ -87,22 +101,28 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
             current = data.get('sync_merged_into')
         if current != canonical or current == donor['conversation_id'] or not data:
             raise reprocess.FirstSummaryCallbackPending('redirect target changed')
+        if not python_owns_finalization(data):
+            raise processing_hold.finalization_owner_deferral()
         target_id = reprocess.key(donor['uid'], canonical)
         target = client.collection(reprocess.COLLECTION).document(target_id)
         previous = target.get(transaction=transaction).to_dict() or {}
+        ownership_parked = reprocess.ownership_parked(previous)
+        dormant_receipt = previous.get('dormant') and not ownership_parked
         if (
             previous
-            and not previous.get('dormant')
+            and not dormant_receipt
             and (previous.get('uid') != donor['uid'] or previous.get('conversation_id') != canonical)
         ):
             raise reprocess.FirstSummaryCallbackPending('canonical custody binding changed')
         pending = dict(previous)
-        if previous.get('dormant'):
+        if ownership_parked:
+            pending.update(finalization_owner_parked=False, deferred_reason=None)
+        if dormant_receipt:
             pending.pop('merge_hold', None)
             pending.pop('sync_hold_requested', None)
         elif previous.get('sync_hold') and not previous.get('merge_hold'):
             pending['sync_hold_requested'] = True
-        prior_due = previous.get('due_at')
+        prior_due = None if ownership_parked else previous.get('due_at')
         pending.update(
             document_id=target_id,
             uid=donor['uid'],
@@ -118,7 +138,7 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
         )
         if record_notes_eager_enabled() and donor.get('record_notes_producers'):
             pending['record_notes_producers'] = merge_producers(
-                None if previous.get('dormant') else previous.get('record_notes_producers'),
+                None if dormant_receipt else previous.get('record_notes_producers'),
                 donor['record_notes_producers'],
             )
         if donor.get('sync_hold'):

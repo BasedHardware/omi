@@ -2,8 +2,9 @@
 # LIFECYCLE: permanent
 """Manual held-input redrive. Dry-run defaults to aggregate counts and a plan digest.
 
-No GCS access, audio, provider calls or scheduled execution. Apply uses only the
-existing privacy/content-fenced GPU requeue or target-restorable assignment release.
+Dry-run has no GCS access. Apply requires generation-pinned object metadata before
+the existing privacy/content-fenced GPU requeue or target-restorable assignment
+release. No audio reads, provider calls or scheduled execution.
 """
 
 import argparse
@@ -15,9 +16,11 @@ import logging
 import math
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 import time
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -136,7 +139,37 @@ def plan_digest(units, as_of, limit, cursor):
     ).hexdigest()
 
 
-def apply_plan(store, units, digest, approved, now):
+def pinned_audio_exists(job, storage_client=None):
+    """Metadata GET only; absent, unpinned and unknown generations never authorize redrive."""
+    try:
+        uri = job.get('audio_uri')
+        if not isinstance(uri, str):
+            return False
+        parsed = urlsplit(uri)
+        if (
+            parsed.scheme != 'gs'
+            or parsed.netloc != STAGING_BUCKET
+            or parsed.query
+            or not parsed.path.startswith('/')
+            or not parsed.path[1:]
+            or not re.fullmatch(r'[1-9][0-9]{0,19}', parsed.fragment)
+        ):
+            return False
+        generation = int(parsed.fragment)
+        if storage_client is None:
+            from google.cloud import storage
+
+            storage_client = storage.Client(project='based-hardware')
+        blob = storage_client.bucket(STAGING_BUCKET).blob(parsed.path[1:], generation=generation)
+        blob.reload(if_generation_match=generation, timeout=10, retry=None)
+        return str(blob.generation) == parsed.fragment
+    except Exception:
+        # Includes NotFound, precondition failure, permissions and transport errors.
+        # Neither provider exception bodies nor private references enter output.
+        return False
+
+
+def apply_plan(store, units, digest, approved, now, *, storage_client=None):
     # Approval is checked before constructing a writer or entering any transaction.
     require(approved == digest, 'approval_digest_changed')
     from database.batch_pipeline_quarantine_recovery import RecoveryStore
@@ -147,6 +180,9 @@ def apply_plan(store, units, digest, approved, now):
 
     counts = Counter()
     for unit in units:
+        if not pinned_audio_exists(unit['job'], storage_client):
+            counts['skipped_input_unproven'] += 1
+            continue
         try:
             if unit['leg'] == 'gpu':
                 changed = RecoveryStore(store).requeue_quarantined(unit['id'], now, expected_job=unit['job'])
