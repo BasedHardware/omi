@@ -212,6 +212,53 @@ def test_home_projection_settles_with_episode_receipt_without_stale_write(claim,
         assert stored['home_has_tasks'] is False
 
 
+def test_minimum_finalizes_attach_memo_against_stored_title(claim, monkeypatch):
+    from database import conversations, episode_attach_memo
+    from utils.episodes import service
+
+    client, row, job, req = claim
+    req = req.model_copy(update={'step': 'episode-reconcile'})
+    req.operation = req.expected_operation()
+    stamp = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    episode_id = 'fixture-episode'
+    link = row.parent.parent.collection('episode_links').document(req.conversation)
+    monkeypatch.setenv('HOME_NEUTRAL_MINIMUM_TITLES', 'true')
+    monkeypatch.setenv('EPISODE_ATTACH_OPTIMIZATIONS_ENABLED', 'true')
+    monkeypatch.setenv('EPISODE_ATTACH_CONTENT_GATE_ENABLED', 'true')
+    row.update(
+        {
+            'id': req.conversation,
+            'episode_id': episode_id,
+            'created_at': stamp,
+            'started_at': stamp,
+            'finished_at': stamp,
+            'go_sync_minimum_revision': req.sync_revision,
+            'summary_blocked_reason': 'content_below_floor',
+            'structured': {'title': 'Stored minimum', 'title_provenance': 'server_minimum'},
+            'transcript_segments': [{'id': 'segment', 'text': 'Short memo', 'start': 0, 'end': 1}],
+        }
+    )
+    stored = row.get().to_dict()
+    assert conversations.prepare_conversation_for_read(stored, req.owner)['structured']['title'] != 'Stored minimum'
+    key = episode_attach_memo.current_key(req.owner, stored)
+    assert key
+    link.set(
+        {'episode_id': episode_id, 'attach_owner_id': episode_id, 'attach_revision': key, 'attach_completed': key}
+    )
+
+    def reconcile(_uid, _cid, episode_row, *, collaborators, **_kwargs):
+        collaborators.finalized_memo(episode_row)
+        return 'reconciled'
+
+    monkeypatch.setattr(service, 'on_conversation_finalized', reconcile)
+    try:
+        assert reference._adapt(client, req) == {}
+        assert link.get().get('attach_finalized') == key
+        assert job.get().get(reference.RECEIPTS) == {req.operation: 'settled'}
+    finally:
+        link.delete()
+
+
 @pytest.mark.parametrize('fence', [None, 'tombstone', 'owner_deleting', 'revision', 'handback', 'stale_queue_epoch'])
 def test_empty_discard_repair_is_fenced_and_idempotent(claim, monkeypatch, fence):
     from config import episodes as episodes_config

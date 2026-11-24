@@ -740,12 +740,20 @@ def _adapt(client, req: ReferenceRequest):
 
         episode = _EpisodeFence(client, req, stored)
         collaborators = Collaborators(firestore_client=client, finalized_memo=episode.finalize_memo)
+        # The Home read projection localizes minimum titles. Attachment and its
+        # completion memo must use the persisted structured data instead.
+        episode_row = row
+        if (
+            stored.get('go_sync_minimum_revision') == req.sync_revision
+            and stored.get('summary_blocked_reason') == 'content_below_floor'
+        ):
+            episode_row = {**row, 'structured': stored.get('structured')}
         try:
             with episode_write_fence.use(episode):
                 outcome = on_conversation_finalized(
                     req.owner,
                     req.conversation,
-                    row,
+                    episode_row,
                     trigger=ProcessingTrigger.SYNC_UPDATE.value,
                     collaborators=collaborators,
                 )
