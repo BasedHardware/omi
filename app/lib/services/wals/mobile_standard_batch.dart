@@ -182,7 +182,8 @@ class MobileStandardBatch {
       return false;
     }
     // Bound the inference queue. Overload is treated as speech/unknown; its
-    // original frames are already safe, and max chunk latency stays 60s.
+    // original frames are already safe, and max chunk latency stays at the
+    // buffer's file cap (60s by default).
     if (_queued < 32) {
       _queued++;
       final vad = _vad!;
