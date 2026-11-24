@@ -17,6 +17,7 @@ from models.speaker_tag_prompts import (
     SpeakerTagPromptOrigin as O,
     SpeakerTagPromptQualityOutcome as Q,
 )
+from database.legal_holds import DestructiveOperationInProgress
 from utils import executors
 from utils import speaker_sample
 from utils.speaker_tag_prompts import service
@@ -1019,3 +1020,24 @@ def test_not_me_card_answer_retires_a_prior_not_a_person_marker(monkeypatch):
 
     service.apply_answer('u', _request(K.identify, O.unnamed, A.someone_else), world.schedule, NOW)
     assert cleared == [(('u', 'c1', [1]), {'assignment_generation': 6})]
+
+
+@pytest.mark.parametrize(
+    'kind,answer,extra',
+    [
+        (K.identify, A.person, {'person_id': 'p1'}),
+        (K.owner_check, A.me, {'evidence_id': 'e1'}),
+    ],
+)
+def test_destructive_gate_propagates_from_every_answer_path(monkeypatch, kind, answer, extra):
+    """The fence must surface intact for the HTTP boundary to map; never a stale/500 crash."""
+
+    world = World(monkeypatch)
+
+    def gate_busy(*args, **kwargs):
+        raise DestructiveOperationInProgress('external data write blocked by destructive operation')
+
+    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', gate_busy)
+    with pytest.raises(DestructiveOperationInProgress):
+        service.apply_answer('u', _request(kind, O.unnamed, answer, **extra), world.schedule, NOW)
+    assert world.scheduled == []

@@ -57,6 +57,10 @@ def _call(fn, *args, **kwargs):
         TaskLinkValidationError,
     ) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+        # A speaker answer applies a manual assignment through the account fence;
+        # while a destructive operation owns the gate, retry instead of 500.
+        raise account_gate_busy_http_exception() from exc
 
 
 @router.get('/v1/review/items', response_model=ReviewItemsResponse, tags=['review'])
