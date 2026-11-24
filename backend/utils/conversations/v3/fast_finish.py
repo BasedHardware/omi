@@ -246,13 +246,13 @@ def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, 
         logger.warning('event=v3_fast_finish outcome=audio_error exception_type=%s', type(error).__name__)
         return 'audio_error'
     SECONDS.labels('audio').observe(time.monotonic() - started)
-    # Asked again at the provider boundary: reading the audio took time, and audio must not leave
-    # for a provider after the owner opted out.
-    if not _privacy_allows(privacy):
-        return 'privacy_blocked'
     started = time.monotonic()
     try:
         for start, duration, pcm in audio:
+            # Asked again at the provider boundary, before every unit: reading the audio and each
+            # earlier provider request take time, and no unit may leave after the owner opted out.
+            if not _privacy_allows(privacy):
+                return 'privacy_blocked'
             shift = start - origin
             lines = sorted(transcribe(pcm, row.get('language')), key=lambda line: (line['start'], line['end']))
             for segment in lines:

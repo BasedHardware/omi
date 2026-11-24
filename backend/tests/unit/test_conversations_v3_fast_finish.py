@@ -325,6 +325,29 @@ def test_an_authorized_account_is_asked_before_the_audio_and_before_the_provider
     assert order == ['privacy', 'audio', 'privacy', 'provider', 'write']
 
 
+def test_an_opt_out_during_the_first_unit_never_sends_the_second():
+    granted, sent = [True], []
+
+    def transcribe(pcm, language):
+        sent.append(pcm)
+        granted[0] = False  # the owner opts out while the first request is in flight
+        return [seg(0.0, 1.0)]
+
+    units = one_unit() + [(START.timestamp() + 10.0, 10.0, [ref('p2', 0, 0, 2)])]
+    outcome = _real_run(
+        UID,
+        'cid',
+        row(),
+        units,
+        lambda r: bytes(4),
+        write=lambda *a: pytest.fail('must not write'),
+        transcribe=transcribe,
+        cut=lambda: pytest.fail('must not cut'),
+        privacy=lambda: granted[0],
+    )
+    assert outcome == 'privacy_blocked' and len(sent) == 1
+
+
 class _PrivacyStore:
     def __init__(self, blocked):
         self.blocked, self.checks, self.client = blocked, [], _Doc({})
