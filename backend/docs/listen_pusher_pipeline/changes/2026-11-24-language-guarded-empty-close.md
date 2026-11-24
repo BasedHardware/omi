@@ -41,11 +41,23 @@ The [empty-ASR contract](../../listen_pusher_pipeline.mdx) and the
 the switch. Rollback: unset it on the CPU recovery roles; later settlements
 stay held and completed results stay completed.
 
-Production readback before enabling (2026-11-24, 24 hours of batch worker
-logs): the worker refused 4,247 units as `unsupported_language`, about 0.3% of
-the units admitted and about 8% of the units that failed that day. Recovery
-logs do not separate guarded units, so how many of them end with two empty
-answers is not known yet; the settlement counter below answers that.
+Production readback before enabling (2026-11-24, job records and batch worker
+logs over the last seven days):
+
+- The worker refuses about 0.3% of units as `unsupported_language` with speech
+  present. 7.6% of those end held after two validated empty answers.
+- Such units are about 0.02% of batch units and about 0.01% of batch audio.
+  They are 18% of all held units, and 62% of them have been held for more than
+  seven days.
+- About 3% of the accounts with recording activity in the week have at least
+  one. This share is approximate: the account count and the activity count
+  come from different systems.
+- Our detectors measured speech in 7% of their audio. Between 82% and 89% of
+  these units carry under two seconds of measured speech; 4% to 6% carry five
+  seconds or more.
+- Of all language-guarded held units, 72% have two empty answers, 10% are held
+  on a Soniox failure and 4% were never sent to Soniox. The switch reaches
+  only the first group.
 
 Readout: `omi_batch_pipeline_recovery_recognizer_outcomes_total` already
 carries `language_guarded`. With the switch off the case reads
