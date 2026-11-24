@@ -10,7 +10,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -30,12 +29,14 @@ func sealReplayValue(t *testing.T, uid, plaintext string, nonceByte byte) string
 		t.Fatal(err)
 	}
 	nonce := bytes.Repeat([]byte{nonceByte}, aead.NonceSize())
-	sealed := append(nonce, aead.Seal(nil, nonce, []byte(plaintext), nil)...)
+	sealed := append([]byte(nil), nonce...)
+	sealed = aead.Seal(sealed, nonce, []byte(plaintext), nil)
 	return base64.StdEncoding.EncodeToString(sealed)
 }
 
-func encryptedTranscript(t *testing.T, uid string, segments any, nonceByte byte) string {
+func encryptedTranscript(t *testing.T, segments any, nonceByte byte) string {
 	t.Helper()
+	const uid = "synthetic-owner"
 	plain, err := json.Marshal(segments)
 	if err != nil {
 		t.Fatal(err)
@@ -52,6 +53,7 @@ func encryptedTranscript(t *testing.T, uid string, segments any, nonceByte byte)
 }
 
 func compressedJSON(t *testing.T, value any) []byte {
+	t.Helper()
 	return compressedJSONLevel(t, value, zlib.DefaultCompression)
 }
 
@@ -89,12 +91,12 @@ func TestProtectedFieldsAllowDifferentNoncesOnlyForEqualPlaintext(t *testing.T) 
 		"speaker": "SPEAKER_00", "is_user": true,
 	}}
 	python.Document = map[string]any{
-		"transcript_segments":            encryptedTranscript(t, uid, segments, 1),
+		"transcript_segments":            encryptedTranscript(t, segments, 1),
 		"transcript_segments_compressed": true,
 		"home_display":                   sealReplayValue(t, uid, `{"schema":"home-v1","title":"Agenda"}`, 2),
 	}
 	goRun.Document = map[string]any{
-		"transcript_segments":            encryptedTranscript(t, uid, segments, 3),
+		"transcript_segments":            encryptedTranscript(t, segments, 3),
 		"transcript_segments_compressed": true,
 		"home_display":                   sealReplayValue(t, uid, `{"schema":"home-v1","title":"Agenda"}`, 4),
 	}
@@ -110,12 +112,12 @@ func TestProtectedFieldsAllowDifferentNoncesOnlyForEqualPlaintext(t *testing.T) 
 		t.Fatalf("equal plaintext with different nonces was not approved: %+v", diffs)
 	}
 
-	goRun.Document.(map[string]any)["home_display"] = sealReplayValue(t, uid, `{"schema":"home-v1","title":"Different"}`, 9)
+	mustMap(goRun.Document)["home_display"] = sealReplayValue(t, uid, `{"schema":"home-v1","title":"Different"}`, 9)
 	diffs = compareObservations(python, goRun)
 	if !hasUnexplainedAt(diffs, "/conversation/home_display") {
 		t.Fatalf("different home display plaintext was excused: %+v", diffs)
 	}
-	goRun.Document.(map[string]any)["home_display"] = sealReplayValue(t, uid, `{"schema":"home-v1","title":"Agenda"}`, 10)
+	mustMap(goRun.Document)["home_display"] = sealReplayValue(t, uid, `{"schema":"home-v1","title":"Agenda"}`, 10)
 
 	goDoc := mustMap(goRun.Derived["users/"+uid+"/episodes/e"])
 	goDoc["content"] = sealReplayValue(t, uid, `{"title":"Different","lede":"Review"}`, 11)
@@ -131,7 +133,7 @@ func TestProtectedFieldsAllowDifferentNoncesOnlyForEqualPlaintext(t *testing.T) 
 	}
 	goDoc["home_display"] = sealReplayValue(t, uid, `{"schema":"episode-v1","title":"Agenda"}`, 14)
 
-	goRun.Document.(map[string]any)["transcript_segments"] = "not-an-authenticated-envelope"
+	mustMap(goRun.Document)["transcript_segments"] = "not-an-authenticated-envelope"
 	diffs = compareObservations(python, goRun)
 	if !hasUnexplainedAt(diffs, "/conversation/transcript_segments") {
 		t.Fatalf("undecryptable transcript was excused: %+v", diffs)
@@ -148,7 +150,7 @@ func TestTranscriptComparisonAcceptsGoDecodedSegmentsAndKeepsStoredFields(t *tes
 		"speaker_label_source": nil, "speaker_word_seconds": nil, "is_user": true, "original_text": "agenda raw",
 	}}
 	python.Document = map[string]any{
-		"transcript_segments":            encryptedTranscript(t, uid, segments, 41),
+		"transcript_segments":            encryptedTranscript(t, segments, 41),
 		"transcript_segments_compressed": true,
 	}
 	goRun.Document = map[string]any{"transcript_segments": segments}
@@ -156,7 +158,7 @@ func TestTranscriptComparisonAcceptsGoDecodedSegmentsAndKeepsStoredFields(t *tes
 	if hasUnexplained(diffs) || !hasReason(diffs, "transcript_segments") {
 		t.Fatalf("decoded Go segments did not match encrypted Python transcript: %+v", diffs)
 	}
-	goSegments := mustMap(goRun.Document)["transcript_segments"].([]any)
+	goSegments := mustSlice(mustMap(goRun.Document)["transcript_segments"])
 	mustMap(goSegments[0])["original_text"] = "dropped or changed Python stored field"
 	diffs = compareObservations(python, goRun)
 	if !hasUnexplainedAt(diffs, "/conversation/transcript_segments") {
@@ -196,7 +198,7 @@ func TestTranscriptByteWrapperComparesDecodedSegments(t *testing.T) {
 	py.OwnerID, goRun.OwnerID = uid, uid
 	py.Document = map[string]any{"transcript_segments": wrapped, "transcript_segments_compressed": true}
 	goRun.Document = map[string]any{
-		"transcript_segments": encryptedTranscript(t, uid, segments, 2), "transcript_segments_compressed": true,
+		"transcript_segments": encryptedTranscript(t, segments, 2), "transcript_segments_compressed": true,
 	}
 	diffs := compareObservations(py, goRun)
 	if hasUnexplained(diffs) {
@@ -218,21 +220,21 @@ func TestTranscriptComparesSemanticFieldsAndPreservesNonDefaults(t *testing.T) {
 		"speaker": "SPEAKER_00", "is_user": true,
 	}}
 	python.Document = map[string]any{
-		"transcript_segments": encryptedTranscript(t, uid, pySegments, 20), "transcript_segments_compressed": true,
+		"transcript_segments": encryptedTranscript(t, pySegments, 20), "transcript_segments_compressed": true,
 	}
 	goRun.Document = map[string]any{
-		"transcript_segments": encryptedTranscript(t, uid, goSegments, 21), "transcript_segments_compressed": true,
+		"transcript_segments": encryptedTranscript(t, goSegments, 21), "transcript_segments_compressed": true,
 	}
 	if diffs := compareObservations(python, goRun); !hasUnexplainedAt(diffs, "/conversation/transcript_segments") {
 		t.Fatalf("Go dropping a non-default Python field was excused: %+v", diffs)
 	}
-	goSegments[0].(map[string]any)["original_text"] = "captured"
-	goRun.Document.(map[string]any)["transcript_segments"] = encryptedTranscript(t, uid, goSegments, 22)
+	mustMap(goSegments[0])["original_text"] = "captured"
+	mustMap(goRun.Document)["transcript_segments"] = encryptedTranscript(t, goSegments, 22)
 	if diffs := compareObservations(python, goRun); hasUnexplained(diffs) || !hasReason(diffs, "transcript_segments") {
 		t.Fatalf("model defaults prevented equal semantic transcript from matching: %+v", diffs)
 	}
-	goSegments[0].(map[string]any)["text"] = "different"
-	goRun.Document.(map[string]any)["transcript_segments"] = encryptedTranscript(t, uid, goSegments, 23)
+	mustMap(goSegments[0])["text"] = "different"
+	mustMap(goRun.Document)["transcript_segments"] = encryptedTranscript(t, goSegments, 23)
 	if diffs := compareObservations(python, goRun); !hasUnexplainedAt(diffs, "/conversation/transcript_segments") {
 		t.Fatalf("different transcript text was excused: %+v", diffs)
 	}
@@ -254,12 +256,12 @@ func TestUserCorrectionsRequireConsistentCompressedStorageAndEqualPlaintext(t *t
 	if diffs := compareObservations(python, goRun); hasUnexplained(diffs) || !hasReason(diffs, "user_corrections") {
 		t.Fatalf("equal corrections with fresh nonces were not approved: %+v", diffs)
 	}
-	goRun.Document.(map[string]any)["user_corrections_compressed"] = false
+	mustMap(goRun.Document)["user_corrections_compressed"] = false
 	if diffs := compareObservations(python, goRun); !hasUnexplainedAt(diffs, "/conversation/user_corrections") {
 		t.Fatalf("inconsistent correction compression marker was excused: %+v", diffs)
 	}
-	goRun.Document.(map[string]any)["user_corrections_compressed"] = true
-	goRun.Document.(map[string]any)["user_corrections"] = encryptedCorrections(
+	mustMap(goRun.Document)["user_corrections_compressed"] = true
+	mustMap(goRun.Document)["user_corrections"] = encryptedCorrections(
 		t, uid, []any{map[string]any{"original": "captured", "corrected": "other"}}, 33,
 	)
 	if diffs := compareObservations(python, goRun); !hasUnexplainedAt(diffs, "/conversation/user_corrections") {
@@ -281,7 +283,7 @@ func TestUserCorrectionsRequireConsistentCompressedStorageAndEqualPlaintext(t *t
 	if diffs := compareObservations(standard, standardGo); hasUnexplained(diffs) || !hasReason(diffs, "user_corrections") {
 		t.Fatalf("standard compressed corrections were not decoded: %+v", diffs)
 	}
-	standardGo.Document.(map[string]any)["data_protection_level"] = "enhanced"
+	mustMap(standardGo.Document)["data_protection_level"] = "enhanced"
 	if diffs := compareObservations(standard, standardGo); !hasUnexplainedAt(diffs, "/conversation/user_corrections") {
 		t.Fatalf("byte storage inconsistent with enhanced protection was excused: %+v", diffs)
 	}
@@ -321,6 +323,6 @@ func TestProtectedFieldReasonDoesNotExposePlaintext(t *testing.T) {
 		t.Fatal(err)
 	}
 	if bytes.Contains(encoded, []byte("secret")) || !bytes.Contains(encoded, []byte("fixture key")) {
-		t.Fatalf("protected comparison report leaked data or omitted rule evidence: %s", fmt.Sprint(encoded))
+		t.Fatalf("protected comparison report leaked data or omitted rule evidence: %s", string(encoded))
 	}
 }

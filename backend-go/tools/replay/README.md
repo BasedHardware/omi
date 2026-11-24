@@ -204,7 +204,7 @@ not fetch conversations or read production keys.
 | --- | --- |
 | Nested fields, arrays, numeric values, missing fields and escaped paths compare deterministically | `TestCompareReportsNestedDiffsAndKeepsPresence` |
 | Object, array, scalar and null mismatches produce a report | `TestCompareDifferencesWithIncompatibleJSONShapes` |
-| Fanout bindings and the existing conversation timestamp rule require side-local evidence; `finalization_job_id` remains unexplained | `TestCompareOnlyExcusesVerifiedFanoutAndClocks` |
+| Go-only fanout and ownership receipts require side-local evidence; conversation and nested write clocks are checked in their own windows | `TestGoOnlyReceiptsRequireBoundGoEvidenceAndNoPythonCopies`, `TestApprovedConversationAndNestedWriteClocksAreChecked` |
 | Each approved derived timestamp retains its Firestore or RFC3339 type, is inside its own replay window, and meets its fixture day bucket | `TestApprovedTimestampRulesRequireSideLocalTypeAndWindow` |
 | Goal event IDs bind to their paths, parent goals and progress sequence before event semantics are compared | `TestGoalEventIdentityIsBoundBeforeSemanticComparison` |
 | Every approved Home token is UUIDv4 hex, fresh, unique in its side's run, and bound to the same-side dependent record | `TestEachHomeTokenRequiresUUIDv4AndItsSameSideLink`, `TestHomeTokensRejectSeedCollisionsAndRunWideDuplicates` |

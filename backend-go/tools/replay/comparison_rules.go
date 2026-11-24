@@ -248,16 +248,20 @@ func homeTokenFailureReason(run *observation, slot tokenSlot, value any, isStrin
 	if !isString {
 		return "value_not_string"
 	}
-	if !uuid4Hex.MatchString(value.(string)) {
+	token, ok := value.(string)
+	if !ok {
+		return "value_not_string"
+	}
+	if !uuid4Hex.MatchString(token) {
 		return "not_uuidv4_hex"
 	}
-	if seededHomeToken(run, value.(string)) {
+	if seededHomeToken(run, token) {
 		return "collides_with_seeded_uuid"
 	}
-	if counts[value.(string)] != 1 {
+	if counts[token] != 1 {
 		return "not_unique_in_side_run"
 	}
-	return homeTokenLinkFailureReason(run, slot, value.(string))
+	return homeTokenLinkFailureReason(run, slot, token)
 }
 
 func homeTokenLinkFailureReason(run *observation, slot tokenSlot, value string) string {
@@ -393,7 +397,7 @@ func normalizeGoalEvents(run *observation) (map[string]any, map[string]goalEvent
 			valid = valid && latestOK && latest == sequence
 		}
 		created, createdOK := doc["created_at"]
-		createdValid := createdOK && validTimestampValue(run, created, true)
+		createdValid := createdOK && validTimestampValue(run, created)
 		if !createdValid {
 			invalid = append(invalid, invalidEvidence{"/derived_documents/" + escapePointer(path) + "/created_at", "invalid_clock"})
 		}

@@ -66,8 +66,8 @@ func timestampText(value any) (string, bool) {
 	return stamp, ok
 }
 
-func validTimestampValue(run *observation, value any, firestore bool) bool {
-	return validTimestampValueWithin(run, value, firestore, 0)
+func validTimestampValue(run *observation, value any) bool {
+	return validTimestampValueWithin(run, value, true, 0)
 }
 
 func validTimestampValueWithin(run *observation, value any, firestore bool, grace time.Duration) bool {
@@ -179,7 +179,7 @@ func approvedTimestampDifference(path string, python, goRun *observation) string
 		}
 		pyValue, pyOK := nestedField(python.Document, field)
 		goValue, goOK := nestedField(goRun.Document, field)
-		if pyOK && goOK && validTimestampValue(python, pyValue, true) && validTimestampValue(goRun, goValue, true) {
+		if pyOK && goOK && validTimestampValue(python, pyValue) && validTimestampValue(goRun, goValue) {
 			return "both conversation write clocks are Firestore timestamps within their own replay windows"
 		}
 		return ""
@@ -219,12 +219,18 @@ func validateTimestampEvidence(diffs *[]difference, side string, run *observatio
 	if run == nil {
 		return
 	}
-	conversation, _ := run.Document.(map[string]any)
+	conversation, ok := run.Document.(map[string]any)
+	if !ok {
+		if run.UpdatedAtChanged && run.Document != nil {
+			addDifference(diffs, "/"+side+"/conversation/updated_at", "invalid_clock")
+		}
+		return
+	}
 	if run.UpdatedAtChanged && run.Document != nil && !timestampInWindow(run) {
 		addDifference(diffs, "/"+side+"/conversation/updated_at", "invalid_clock")
 	}
 	for field := range approvedConversationTimestampFields {
-		if value, exists := conversation[field]; exists && !validTimestampValue(run, value, true) {
+		if value, exists := conversation[field]; exists && !validTimestampValue(run, value) {
 			addDifference(diffs, "/"+side+"/conversation/"+field, "invalid_clock")
 		}
 	}
@@ -342,7 +348,7 @@ func docAtPath(doc map[string]any, parts []string) map[string]any {
 
 func nestedField(value any, path string) (any, bool) {
 	current := value
-	for _, part := range strings.Split(path, "/") {
+	for part := range strings.SplitSeq(path, "/") {
 		object, ok := current.(map[string]any)
 		if !ok {
 			return nil, false

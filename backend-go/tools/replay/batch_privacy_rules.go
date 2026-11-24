@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"reflect"
 	"strings"
 )
 
@@ -22,7 +21,7 @@ func batchPrivacyDocumentPath(owner string) string {
 func samePrivacyField(left, right map[string]any, field string) bool {
 	leftValue, leftExists := left[field]
 	rightValue, rightExists := right[field]
-	return leftExists == rightExists && (!leftExists || reflect.DeepEqual(leftValue, rightValue))
+	return leftExists == rightExists && (!leftExists || equalReplayValue(leftValue, rightValue))
 }
 
 func privacyStateEqual(left, right map[string]any) bool {

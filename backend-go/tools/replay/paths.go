@@ -145,7 +145,7 @@ func loadCorpus(path string) (data []byte, err error) {
 	return data, err
 }
 
-func loadObservationFile(path string) ([]byte, error) {
+func loadObservationFile(path string) (data []byte, resultErr error) {
 	canonical, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return nil, fmt.Errorf("resolve diagnostic observations: %w", err)
@@ -154,14 +154,14 @@ func loadObservationFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve diagnostic observation path: %w", err)
 	}
-	if _, err := outsideWorktree(canonical); err != nil {
+	if _, validationErr := outsideWorktree(canonical); validationErr != nil {
 		return nil, errors.New("diagnostic observations must be outside Git worktrees")
 	}
 	file, err := os.Open(canonical)
 	if err != nil {
 		return nil, fmt.Errorf("open diagnostic observations: %w", err)
 	}
-	defer file.Close()
+	defer func() { resultErr = errors.Join(resultErr, file.Close()) }()
 	info, err := file.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("inspect diagnostic observations: %w", err)
@@ -169,7 +169,7 @@ func loadObservationFile(path string) ([]byte, error) {
 	if !info.Mode().IsRegular() || info.Size() > maxObservationBytes {
 		return nil, errors.New("diagnostic observations must be a regular file of at most 128 MiB")
 	}
-	data, err := io.ReadAll(io.LimitReader(file, maxObservationBytes+1))
+	data, err = io.ReadAll(io.LimitReader(file, maxObservationBytes+1))
 	if len(data) > maxObservationBytes {
 		return nil, errors.New("diagnostic observations exceed 128 MiB")
 	}

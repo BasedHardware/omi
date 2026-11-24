@@ -31,6 +31,14 @@ func mustMap(value any) map[string]any {
 	return doc
 }
 
+func mustSlice(value any) []any {
+	items, ok := value.([]any)
+	if !ok {
+		panic("test fixture expected a list")
+	}
+	return items
+}
+
 func hasUnexplained(diffs []difference) bool {
 	for _, diff := range diffs {
 		if diff.Reason == "" {

@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"reflect"
 	"strconv"
 	"strings"
 )
@@ -37,11 +36,6 @@ func decryptReplayEnvelope(uid, envelope, secret string) ([]byte, error) {
 		return nil, errors.New("invalid encrypted envelope")
 	}
 	return aead.Open(nil, sealed[:aead.NonceSize()], sealed[aead.NonceSize():], nil)
-}
-
-func protectedDifferenceReason(path string, python, goRun *observation) string {
-	reason, _ := protectedDifferenceEvidence(path, python, goRun)
-	return reason
 }
 
 func protectedDifferenceEvidence(path string, python, goRun *observation) (string, string) {
@@ -120,17 +114,17 @@ func protectedDifferenceEvidence(path string, python, goRun *observation) (strin
 		}
 		return "transcript semantic fields match and Go preserves every non-default Python segment field", ""
 	case "user_corrections":
-		if !reflect.DeepEqual(pyPlain, goPlain) {
+		if !equalReplayValue(pyPlain, goPlain) {
 			return "", "corrections_plaintext_mismatch"
 		}
 		return "both correction blobs have storage consistent with their protection level and decrypt to the same correction list", ""
 	case "episode content":
-		if !reflect.DeepEqual(pyPlain, goPlain) {
+		if !equalReplayValue(pyPlain, goPlain) {
 			return "", "episode_content_plaintext_mismatch"
 		}
 		return "both episode content ciphertexts decrypt with the fixture key to the same content plaintext", ""
 	default:
-		if !reflect.DeepEqual(pyPlain, goPlain) {
+		if !equalReplayValue(pyPlain, goPlain) {
 			return "", "home_display_plaintext_mismatch"
 		}
 		return "both home_display ciphertexts decrypt with the fixture key to the same card plaintext", ""
@@ -143,7 +137,10 @@ func episodeDocumentPath(path string) bool {
 }
 
 func derivedField(run *observation, docPath, field string) any {
-	doc, _ := run.Derived[docPath].(map[string]any)
+	doc, ok := run.Derived[docPath].(map[string]any)
+	if !ok {
+		return nil
+	}
 	return doc[field]
 }
 
@@ -327,7 +324,7 @@ func isTranscriptDefault(field string, value any, segment map[string]any) bool {
 		"speaker_grouping_shadow_expires_at": nil,
 	}
 	defaultValue, known := defaults[field]
-	if known && reflect.DeepEqual(value, defaultValue) {
+	if known && equalReplayValue(value, defaultValue) {
 		return true
 	}
 	if field == "speaker_identity_status" {
@@ -356,11 +353,56 @@ func isTranscriptDefault(field string, value any, segment map[string]any) bool {
 
 func equalReplayValue(left, right any) bool {
 	if a, ok := left.(json.Number); ok {
-		if b, ok := right.(json.Number); ok {
-			return equalNumbers(a, b)
-		}
+		b, ok := right.(json.Number)
+		return ok && equalNumbers(a, b)
 	}
-	return reflect.DeepEqual(left, right)
+	switch a := left.(type) {
+	case nil:
+		return right == nil
+	case bool:
+		b, ok := right.(bool)
+		return ok && a == b
+	case string:
+		b, ok := right.(string)
+		return ok && a == b
+	case float64:
+		b, ok := right.(float64)
+		return ok && a == b
+	case int:
+		b, ok := right.(int)
+		return ok && a == b
+	case int64:
+		b, ok := right.(int64)
+		return ok && a == b
+	case []byte:
+		b, ok := right.([]byte)
+		return ok && bytes.Equal(a, b)
+	case []any:
+		b, ok := right.([]any)
+		if !ok || (a == nil) != (b == nil) || len(a) != len(b) {
+			return false
+		}
+		for index, value := range a {
+			if !equalReplayValue(value, b[index]) {
+				return false
+			}
+		}
+		return true
+	case map[string]any:
+		b, ok := right.(map[string]any)
+		if !ok || (a == nil) != (b == nil) || len(a) != len(b) {
+			return false
+		}
+		for key, value := range a {
+			other, exists := b[key]
+			if !exists || !equalReplayValue(value, other) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 func transcriptPlaintext(uid string, value any, compressed bool, key string) ([]byte, error) {

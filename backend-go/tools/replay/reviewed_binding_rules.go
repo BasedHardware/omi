@@ -102,8 +102,7 @@ func approvedGoOnlyDifference(path string, python, goRun *observation) string {
 	if python == nil || goRun == nil {
 		return ""
 	}
-	if strings.HasPrefix(path, "/conversation/") {
-		field := strings.TrimPrefix(path, "/conversation/")
+	if field, ok := strings.CutPrefix(path, "/conversation/"); ok {
 		switch field {
 		case "finalization_engine", "finalization_owner_epoch", "finalization_revision":
 			if hasFenceField(goRun) && goFenceBinds(goRun) && !hasDocumentField(python.Document, field) {

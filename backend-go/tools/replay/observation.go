@@ -129,7 +129,7 @@ func objectField(value any, field string) any {
 }
 
 func timestampInWindow(run *observation) bool {
-	return run.UpdatedAtChanged && validTimestampValue(run, documentField(run, "updated_at"), true)
+	return run.UpdatedAtChanged && validTimestampValue(run, documentField(run, "updated_at"))
 }
 
 func validateBinding(diffs *[]difference, side string, run *observation, goSide bool) {

@@ -50,7 +50,7 @@ func TestHourlyUsageAllowsOnlyFiveSecondScheduledPostFinishWrite(t *testing.T) {
 	if diffs := compareObservations(py, goRun); hasUnexplained(diffs) || !hasReason(diffs, "last_updated") {
 		t.Fatalf("scheduled hourly usage write at grace edge was not allowed: %+v", diffs)
 	}
-	py.Derived[path].(map[string]any)["last_updated"] = wrappedStamp(stamp.Add(time.Nanosecond))
+	mustMap(py.Derived[path])["last_updated"] = wrappedStamp(stamp.Add(time.Nanosecond))
 	if diffs := compareObservations(py, goRun); !hasUnexplained(diffs) ||
 		!hasKindPath(diffs, "invalid_clock", "/python/derived_documents/"+escapePointer(path)+"/last_updated") {
 		t.Fatalf("hourly usage write beyond grace was excused: %+v", diffs)
@@ -78,12 +78,12 @@ func TestMemoryExpiryUsesThirtyDayTTLAndMustFollowWrite(t *testing.T) {
 	if diffs := compareObservations(py, goRun); hasUnexplained(diffs) || !hasReason(diffs, "expires_at") {
 		t.Fatalf("30-day expiries were constrained to replay time: %+v", diffs)
 	}
-	goRun.Derived[path].(map[string]any)["expires_at"] = wrappedStamp(created.Add(memoryItemTTL + postFinishWriteGrace + time.Nanosecond))
+	mustMap(goRun.Derived[path])["expires_at"] = wrappedStamp(created.Add(memoryItemTTL + postFinishWriteGrace + time.Nanosecond))
 	if diffs := compareObservations(py, goRun); !hasUnexplained(diffs) ||
 		!hasKindPath(diffs, "invalid_ttl", "/go/derived_documents/"+escapePointer(path)+"/expires_at") {
 		t.Fatalf("expiry beyond 30-day TTL grace was excused: %+v", diffs)
 	}
-	goRun.Derived[path].(map[string]any)["expires_at"] = wrappedStamp(updated)
+	mustMap(goRun.Derived[path])["expires_at"] = wrappedStamp(updated)
 	if diffs := compareObservations(py, goRun); !hasUnexplained(diffs) ||
 		!hasKindPath(diffs, "invalid_ttl", "/go/derived_documents/"+escapePointer(path)+"/expires_at") {
 		t.Fatalf("expiry equal to the item write time was excused: %+v", diffs)
@@ -99,7 +99,7 @@ func TestApprovedConversationAndNestedWriteClocksAreChecked(t *testing.T) {
 		if hasUnexplained(diffs) || !hasReason(diffs, field) {
 			t.Fatalf("valid %s clock was not explained: %+v", field, diffs)
 		}
-		goRun.Document.(map[string]any)[field] = wrappedStamp(ruleStart.Add(3 * time.Hour))
+		mustMap(goRun.Document)[field] = wrappedStamp(ruleStart.Add(3 * time.Hour))
 		if diffs := compareObservations(py, goRun); !hasUnexplained(diffs) {
 			t.Fatalf("out-of-window %s clock was excused", field)
 		}
@@ -113,13 +113,13 @@ func TestApprovedConversationAndNestedWriteClocksAreChecked(t *testing.T) {
 		t.Fatalf("valid numeric summary clock was not explained: %+v", diffs)
 	}
 
-	goRun.Document.(map[string]any)["summary_completed_at"] = float64(goRun.Finished.Add(time.Second).UnixNano()) / float64(time.Second)
+	mustMap(goRun.Document)["summary_completed_at"] = float64(goRun.Finished.Add(time.Second).UnixNano()) / float64(time.Second)
 	diffs = compareObservations(py, goRun)
 	if !hasUnexplained(diffs) || !hasKindPath(diffs, "invalid_clock", "/go/conversation/summary_completed_at") {
 		t.Fatalf("out-of-window numeric summary clock was excused: %+v", diffs)
 	}
 
-	goRun.Document.(map[string]any)["summary_completed_at"] = wrappedStamp(ruleStart.Add(2 * time.Minute))
+	mustMap(goRun.Document)["summary_completed_at"] = wrappedStamp(ruleStart.Add(2 * time.Minute))
 	diffs = compareObservations(py, goRun)
 	if !hasUnexplained(diffs) || !hasKindPath(diffs, "invalid_clock", "/go/conversation/summary_completed_at") {
 		t.Fatalf("Firestore timestamp was accepted for numeric summary clock: %+v", diffs)
@@ -148,8 +148,8 @@ func TestEveryApprovedDerivedTimestampRuleHasPositiveAndNegativeEvidence(t *test
 			path := "users/u/" + rule.collection + "/" + document
 			py, goRun := ruleRun(), ruleRun()
 			pyDoc, goDoc := map[string]any{}, map[string]any{}
-			setTimestampField(pyDoc, rule.field, timestampForRule(rule, ruleStart.Add(10*time.Minute)))
-			setTimestampField(goDoc, rule.field, timestampForRule(rule, ruleStart.Add(20*time.Minute)))
+			setTimestampField(pyDoc, rule.field, timestampForRule(ruleStart.Add(10*time.Minute)))
+			setTimestampField(goDoc, rule.field, timestampForRule(ruleStart.Add(20*time.Minute)))
 			if strings.Contains(document, "/goal_history/") {
 				parts := strings.Split(document, "/")
 				day := parts[len(parts)-1]
@@ -161,7 +161,7 @@ func TestEveryApprovedDerivedTimestampRuleHasPositiveAndNegativeEvidence(t *test
 				t.Fatalf("valid timestamp rule was not explained: %+v", diffs)
 			}
 
-			setTimestampField(goDoc, rule.field, timestampForRule(rule, goRun.Finished.Add(rule.grace+time.Nanosecond)))
+			setTimestampField(goDoc, rule.field, timestampForRule(goRun.Finished.Add(rule.grace+time.Nanosecond)))
 			diffs = compareObservations(py, goRun)
 			if !hasUnexplained(diffs) {
 				t.Fatalf("timestamp outside rule window was excused: %+v", diffs)
@@ -170,7 +170,7 @@ func TestEveryApprovedDerivedTimestampRuleHasPositiveAndNegativeEvidence(t *test
 	}
 }
 
-func timestampForRule(rule timestampRule, value time.Time) any {
+func timestampForRule(value time.Time) any {
 	return wrappedStamp(value)
 }
 

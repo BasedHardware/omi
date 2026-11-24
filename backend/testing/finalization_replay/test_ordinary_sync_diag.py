@@ -32,7 +32,7 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
         self.assertEqual(family_for_path('/conversation/summary_due_at'), 'Digest, minimum and relevance')
         report = {
             'commit_sha': 'a' * 40,
-            'unexplained_differences': 4,
+            'unexplained_differences': 5,
             'cases': [
                 {
                     'name': 'receipt-trace',
