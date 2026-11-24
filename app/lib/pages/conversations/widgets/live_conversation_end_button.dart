@@ -49,6 +49,9 @@ class LiveConversationEndButton extends StatefulWidget {
     // A verified recording also rides out a brief source blip (a pendant lease lapsing, a reconnect).
     if (EpisodePresentation.streamingSource(capture) == null && verified == null) return false;
     final recordings = conversation.v3?.recordingIds ?? const <String>[];
+    // A window that lists its recordings and not the verified one is an earlier window: segments
+    // this phone received before the rotation still overlap it, so they cannot authorize End there.
+    if (verified != null && recordings.isNotEmpty) return recordings.contains(verified);
     return recordings.contains(verified ?? capture.activeRecordingId) ||
         ownsCapture(conversation, capture.locallyReceivedSegmentIds);
   }

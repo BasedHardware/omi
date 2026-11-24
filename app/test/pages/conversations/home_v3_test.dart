@@ -949,25 +949,31 @@ void main() {
     });
   });
 
-  testWidgets('End is hidden on the earlier window after the server rotates its recording', (tester) async {
-    await withClock(Clock.fixed(_now), () async {
-      final home = await _pumpHome(tester, v3: true);
-      home.detailSegments = [];
-      home.capture.segments = [];
-      // The earlier window still lists the client capture ID; the verified server ID has moved on.
-      home.liveRecordingIds = [home.capture.activeRecordingId!];
-      await home.conversationsV3.refresh();
-      home.capture.verifiedLiveServerRecordingId = 'rec-next';
-      await tester.tap(find.text('Launch checklist'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byKey(const ValueKey('detail_ask_omi')), findsOneWidget);
-      expect(find.byKey(const Key('live_conversation_end')), findsNothing);
-      expect(home.capture.endCalls, 0);
-      await _dispose(tester, home);
+  for (final overlapping in [false, true]) {
+    testWidgets(
+        'End is hidden on the earlier window after the server rotates its recording'
+        '${overlapping ? ' even with overlapping local segments' : ''}', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await _pumpHome(tester, v3: true);
+        if (!overlapping) {
+          home.detailSegments = [];
+          home.capture.segments = [];
+        }
+        // The earlier window still lists the client capture ID; the verified server ID has moved on.
+        home.liveRecordingIds = [home.capture.activeRecordingId!];
+        await home.conversationsV3.refresh();
+        home.capture.verifiedLiveServerRecordingId = 'rec-next';
+        await tester.tap(find.text('Launch checklist'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.byKey(const ValueKey('detail_ask_omi')), findsOneWidget);
+        expect(find.byKey(const Key('live_conversation_end')), findsNothing);
+        expect(home.capture.endCalls, 0);
+        await _dispose(tester, home);
+      });
     });
-  });
+  }
 
   for (final verified in [false, true]) {
     testWidgets('End uses the ${verified ? 'verified server' : 'active capture'} ID with no local transcript',
