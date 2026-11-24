@@ -1,8 +1,10 @@
 """Indexed 24-hour user census with a hard, content-free read budget."""
 
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from google.api_core.exceptions import DeadlineExceeded
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -10,10 +12,17 @@ from utils.lifecycle_metrics import COHORT_SECONDS, SILENCE_CENSUS_SOURCES, SILE
 
 WINDOW_SECONDS = COHORT_SECONDS
 PAGE_LIMIT = 300
+INDEX_ENTRY_BATCH_SIZE = 1000
 READ_BUDGET = 4000
+SAMPLE_DEADLINE_SECONDS = 5
+RPC_TIMEOUT_SECONDS = 10
 
 
 class _BudgetExhausted(Exception):
+    pass
+
+
+class _SampleDeadlineExceeded(Exception):
     pass
 
 
@@ -21,10 +30,17 @@ class _Reads:
     def __init__(self, limit):
         self.limit = limit
         self.used = 0
+        self.modeled = 0
         self.partial = False
 
     def documents(self, count):
         self.used += count
+        self.modeled += count
+
+    def source_query(self):
+        # Reserve one read for the query's index-entry batch, or its minimum
+        # charge when the page is empty. The page cap is at most one batch.
+        self.used += 1
 
     def aggregate(self):
         # COUNT(1) is capped at one matching index entry and therefore costs at
@@ -33,6 +49,7 @@ class _Reads:
             self.partial = True
             raise _BudgetExhausted
         self.used += 1
+        self.modeled += 1
 
 
 @dataclass
@@ -78,35 +95,61 @@ def _census_state(item):
 
 
 def sample(client, namespace, now, *, read_budget=READ_BUDGET, page_limit=PAGE_LIMIT):
-    """Return unique classifiable users, a partial marker and modeled reads.
+    """Return unique classifiable users, completeness and conservative read counts.
 
     A full source page conservatively means unseen evidence exists. Candidate
     existence aggregates restore exact app/audio classification where possible;
     an empty-audio candidate remains unclassified when unseen upload-session
     maps could still exist. Users without enough evidence never become zeros.
+    ``reads`` reports returned documents plus existence aggregates;
+    ``budget_reads`` also includes one billed source-query unit per page.
     """
     current = seconds(now)
     after = current - WINDOW_SECONDS
     after_datetime = datetime.fromtimestamp(after, tz=timezone.utc)
     current_datetime = datetime.fromtimestamp(current, tz=timezone.utc)
     reads = _Reads(read_budget)
+    deadline = time.monotonic() + SAMPLE_DEADLINE_SECONDS
     evidence = {}
     truncated = {'conversations': False, 'jobs': False, 'outbox': False}
 
+    def rpc_timeout():
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            reads.partial = True
+            raise _SampleDeadlineExceeded
+        return min(RPC_TIMEOUT_SECONDS, remaining)
+
     def stream(kind, query):
-        cap = min(page_limit, reads.limit - reads.used)
+        timeout = rpc_timeout()
+        # Keep room for the minimum/index-entry read charged for this query.
+        cap = min(page_limit, INDEX_ENTRY_BATCH_SIZE, reads.limit - reads.used - 1)
         if cap <= 0:
             reads.partial = truncated[kind] = True
             return []
-        rows = list(query.limit(cap).stream(timeout=10, retry=None))
-        reads.documents(len(rows))
+        reads.source_query()
+        rows = []
+        try:
+            for row in query.limit(cap).stream(timeout=timeout, retry=None):
+                rows.append(row)
+                reads.documents(1)
+        except DeadlineExceeded:
+            # Preserve rows already received, publish them only as lower bounds,
+            # and let the shared deadline stop any follow-up query work.
+            reads.partial = truncated[kind] = True
+            return rows
         truncated[kind] = len(rows) == cap
         reads.partial |= truncated[kind]
         return rows
 
     def exists(query):
+        timeout = rpc_timeout()
         reads.aggregate()
-        aggregation = query.limit(1).count().get(timeout=10, retry=None)
+        try:
+            aggregation = query.limit(1).count().get(timeout=timeout, retry=None)
+        except DeadlineExceeded as error:
+            reads.partial = True
+            raise _SampleDeadlineExceeded from error
         return int(aggregation[0][0].value) > 0
 
     def activity_query(uid):
@@ -140,6 +183,7 @@ def sample(client, namespace, now, *, read_budget=READ_BUDGET, page_limit=PAGE_L
             return None
         return evidence.setdefault(uid, _Evidence())
 
+    conversations = jobs = outbox = []
     try:
         conversations = stream(
             'conversations',
@@ -162,6 +206,7 @@ def sample(client, namespace, now, *, read_budget=READ_BUDGET, page_limit=PAGE_L
         outbox = stream(
             'outbox',
             client.collection('sync_reprocess_outbox')
+            .where(filter=FieldFilter('dormant', '==', False))
             .where(filter=FieldFilter('first_pending_at', '>=', after))
             .where(filter=FieldFilter('first_pending_at', '<=', current))
             .order_by('first_pending_at')
@@ -169,7 +214,12 @@ def sample(client, namespace, now, *, read_budget=READ_BUDGET, page_limit=PAGE_L
             .select(('uid', 'first_pending_at')),
         )
     except _BudgetExhausted:
-        conversations = jobs = outbox = []
+        pass
+    except _SampleDeadlineExceeded:
+        # A page that was not read cannot support negative classification.
+        # Candidate checks below also stop at the same deadline.
+        for kind in truncated:
+            truncated[kind] = True
 
     for doc in conversations:
         row = doc.to_dict() or {}
@@ -222,6 +272,11 @@ def sample(client, namespace, now, *, read_budget=READ_BUDGET, page_limit=PAGE_L
                 # disproved by COUNT. Do not mislabel this user as silent.
                 continue
             counts[_census_state(item), item.source] += 1
-    except _BudgetExhausted:
+    except (_BudgetExhausted, _SampleDeadlineExceeded):
         pass
-    return {'counts': counts, 'partial': reads.partial, 'reads': reads.used}
+    return {
+        'counts': counts,
+        'partial': reads.partial,
+        'reads': reads.modeled,
+        'budget_reads': reads.used,
+    }

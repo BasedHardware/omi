@@ -14,6 +14,7 @@ def _audio_silence_rows(client, combo, _trial):
         client.documents[f'sync_reprocess_outbox/o{index}'] = {
             'uid': 'shape-orphan',
             'first_pending_at': created.timestamp(),
+            'dormant': False,
         }
         client.documents[f'{combo["namespace"]}_jobs/j{index}'] = {
             'owner_id': 'shape-job-user',
@@ -33,7 +34,7 @@ def entries():
             domains={'namespace': namespaces},
             neutrals={
                 'now': now,
-                'read_budget': (4000, 'hard modeled-read ceiling only'),
+                'read_budget': (4000, 'hard billed-read ceiling including source-query charges'),
                 'page_limit': (1, 'force bounded-page candidate aggregation coverage'),
             },
             setup=_audio_silence_rows,

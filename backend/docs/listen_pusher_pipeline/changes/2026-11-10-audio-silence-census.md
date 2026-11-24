@@ -9,12 +9,22 @@ only `omi`, `desktop`, `other`. The intended signal is silence/orphan prevalence
 not recording correctness or custody disposition.
 
 The observation uses recent conversations, stage-qualified batch jobs and
-`sync_reprocess_outbox`. It never lists GCS, exports UID labels or writes account
-state. Three indexed 300-row pages and candidate `COUNT(1)` checks share a hard
-4,000-read ceiling. Full pages and unseen upload-session maps make counts
-partial; unclassifiable users are omitted, not counted as silent. Under
-saturation, source attribution covers only source-bearing rows actually read;
-other candidates fold to `other`. See
+active `sync_reprocess_outbox` obligations. It never lists GCS, exports UID
+labels or writes account state. Three indexed 300-row pages and candidate
+`COUNT(1)` checks share a 4,000 billed-read ceiling. The budget counts returned
+documents, one read per capped aggregation and one reserved query/index-entry
+read per source page, including empty pages. A five-second wall-clock deadline
+bounds the observation; each RPC timeout is capped by the remaining time and
+ten seconds.
+
+The conversation projection includes the full `record_upload_sessions` map so
+the observer can test whether it is nonempty. That production read includes
+session identifiers and producer lease metadata in process memory; the values
+are not logged or exported. This field-level read is part of the rollout scope.
+Full pages and unseen upload-session maps make counts partial; unclassifiable
+users are omitted, not counted as silent. Under saturation, source attribution
+covers only source-bearing rows actually read; other candidates fold to
+`other`. See
 `backend/charts/monitoring/lifecycle-alarms.md#audio-silence-census` for exact
 metric and partial semantics.
 

@@ -72,22 +72,37 @@ no deployment binding is required. No Cloud Run service, scheduler or account
 write is added.
 
 Each run reads at most 300 indexed rows from conversations, the stage's batch
-jobs and the outbox. Full pages make the result partial. Candidate users then
-use bounded `COUNT(1)` existence aggregations only for missing app/audio
-stamps. Documents plus one charged read per aggregation have a hard ceiling of
-4,000 reads per observer run. Unseen non-empty upload-session maps cannot be
-excluded by an aggregate, so those candidates remain unclassified rather than
-becoming false silence. Under saturation, `source` is only the latest
-source-bearing row actually read, and candidates with no source-bearing row
-fold to `other`; per-source attribution is partial rather than a full-window
-claim. `omi_audio_silence_census_partial=1` marks every count as a lower bound after source saturation, unclassifiable evidence or budget
-exhaustion. `omi_audio_silence_census_observed_at_seconds` marks completed full
-or partial observations. Exceptions retain prior values and their timestamp.
+jobs and active outbox obligations. Full pages make the result partial.
+Candidate users then use `COUNT(1)` queries limited to one matching entry,
+only for missing app/audio stamps. The 4,000-read ceiling includes returned
+documents, one billed read per candidate aggregation, and one reserved read per
+source-page query. That page charge covers its index-entry batch (at most 300
+entries) or Firestore's minimum query charge when the page is empty. A five
+second wall-clock deadline bounds the observation; each RPC timeout is capped
+by the time remaining and ten seconds. Deadline exhaustion publishes only
+verified lower bounds with `omi_audio_silence_census_partial=1`, so sequential
+candidate aggregations cannot hold up the worker's next queue observation.
+
+The conversation projection reads the full `record_upload_sessions` map to
+check whether it is nonempty. This brings session identifiers and producer
+lease metadata into process memory. The census does not log or export those
+values, but this field-level production read is part of the rollout scope.
+Unseen non-empty maps cannot be excluded by an aggregate, so candidates without
+enough evidence remain unclassified rather than becoming false silence. Under
+saturation, `source` is only the latest source-bearing row actually read, and
+candidates with no source-bearing row fold to `other`; per-source attribution
+is partial rather than a full-window claim. `omi_audio_silence_census_partial=1`
+marks every count as a lower bound after source saturation, unclassifiable
+evidence or budget/deadline exhaustion. `omi_audio_silence_census_observed_at_seconds`
+marks completed full or partial observations. Exceptions retain prior values
+and their timestamp.
+
 There is deliberately no alert threshold while the bounded census establishes
-its baseline; its runbook query is `max by (state, source)
-(omi_audio_silence_census) and on() (omi_audio_silence_census_partial == 0)`.
-Use `max`, never `sum`, across per-observer values so replicas do not multiply
-the same census.
+its baseline. To keep only complete observer samples, match each census series
+to its own partial marker before aggregating replicas:
+`max by (state, source) (omi_audio_silence_census and on (job, instance)
+(omi_audio_silence_census_partial == 0))`. Use `max`, never `sum`, across
+per-observer values so replicas do not multiply the same census.
 
 ## Pair consistency and repair fences
 

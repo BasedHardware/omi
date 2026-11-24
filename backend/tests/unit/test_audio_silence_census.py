@@ -79,7 +79,9 @@ class Query:
         return rows[: self.cap]
 
     def stream(self, **kwargs):
-        assert kwargs == {'timeout': 10, 'retry': None}
+        assert set(kwargs) == {'timeout', 'retry'}
+        assert 0 < kwargs['timeout'] <= 10
+        assert kwargs['retry'] is None
         rows = self.rows()
         self.client.streamed += len(rows)
         return [
@@ -135,8 +137,8 @@ def test_complete_window_deduplicates_users_and_partitions_states_sources():
         'enqueued_at': NOW - 60,
         'record_snapshot': {'source': 'desktop'},
     }
-    rows['sync_reprocess_outbox/orphan'] = {'uid': 'orphan', 'first_pending_at': NOW - 30}
-    rows['sync_reprocess_outbox/app'] = {'uid': 'outbox-app', 'first_pending_at': NOW - 20}
+    rows['sync_reprocess_outbox/orphan'] = {'uid': 'orphan', 'first_pending_at': NOW - 30, 'dormant': False}
+    rows['sync_reprocess_outbox/app'] = {'uid': 'outbox-app', 'first_pending_at': NOW - 20, 'dormant': False}
 
     result = sample(Client(rows), 'batch_pipeline_prod', NOW)
 
@@ -185,7 +187,7 @@ def test_candidate_aggregates_join_audio_and_app_evidence_outside_the_page():
             conversation('outbox-app', 'hidden', created_at=NOW - 3600),
         ]
     )
-    rows['sync_reprocess_outbox/app'] = {'uid': 'outbox-app', 'first_pending_at': NOW}
+    rows['sync_reprocess_outbox/app'] = {'uid': 'outbox-app', 'first_pending_at': NOW, 'dormant': False}
     client = Client(rows)
 
     result = sample(client, 'batch_pipeline_prod', NOW, page_limit=1)
@@ -200,7 +202,7 @@ def test_candidate_aggregates_join_audio_and_app_evidence_outside_the_page():
 def test_hard_read_budget_stops_candidate_queries():
     rows = dict([conversation(f'user-{index}', 'one') for index in range(5)])
     rows['batch_pipeline_prod_jobs/job'] = {'owner_id': 'job', 'enqueued_at': NOW}
-    rows['sync_reprocess_outbox/outbox'] = {'uid': 'orphan', 'first_pending_at': NOW}
+    rows['sync_reprocess_outbox/outbox'] = {'uid': 'orphan', 'first_pending_at': NOW, 'dormant': False}
 
     result = sample(Client(rows), 'batch_pipeline_prod', NOW, read_budget=4)
 
