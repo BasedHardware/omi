@@ -15,9 +15,12 @@ def _assert_admission_contention_outcome(contention):
     stage = contention['stages'][0]
     if contention['verdict'] == 'FAIL':
         assert stage['exception_type'] == 'FirestoreContentionExhausted', contention
-        assert stage['operation'] in ('read_pending', 'admit'), contention
-        if stage['operation'] == 'admit':
-            assert stage['transaction'] == 'database.batch_pipeline_intake.admit.commit', contention
+        expected_transactions = {
+            'read_pending': 'utils.batch_pipeline.live.drain_recordings.drain_one.lambda',
+            'admit': 'database.batch_pipeline_intake.admit.commit',
+        }
+        assert stage['operation'] in expected_transactions, contention
+        assert stage['transaction'] == expected_transactions[stage['operation']], contention
     else:
         assert contention['verdict'] == 'PASS', contention
         assert stage['details']['pending'] == 0 and stage['details']['admitted'] == stage['details']['rows']
@@ -58,6 +61,13 @@ def test_admission_seed_cases(tmp_path):
             'utils.batch_pipeline.live.drain_recordings.drain_one.lambda',
             nullcontext(),
             id='pending-read-exhaustion',
+        ),
+        pytest.param(
+            'read_pending',
+            'FirestoreContentionExhausted',
+            'unrelated.callback',
+            pytest.raises(AssertionError),
+            id='pending-read-wrong-transaction',
         ),
         pytest.param(
             'admit',
