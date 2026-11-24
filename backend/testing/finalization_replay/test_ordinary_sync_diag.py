@@ -1,10 +1,21 @@
+from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 import unittest
 
+from testing.finalization_replay.metrics import _active_state, measure, suspend_meter
 from testing.finalization_replay.ordinary_sync_diag import _stored_sync_cases
 from testing.finalization_replay.ordinary_sync_diag_report import enrich, family_for_path, unlabelled_groups
 
 
 class OrdinarySyncDiagnosticTests(unittest.TestCase):
+    def test_memo_probe_suspends_only_its_own_meter(self):
+        state = SimpleNamespace(cost_measured=False)
+        with measure(state), ThreadPoolExecutor(max_workers=1) as executor:
+            with suspend_meter():
+                self.assertIsNone(_active_state())
+                self.assertIs(executor.submit(_active_state).result(timeout=2), state)
+            self.assertIs(_active_state(), state)
+
     def test_projection_preserves_explicit_revision_and_labels_repeat_gap(self):
         cases = _stored_sync_cases(
             [

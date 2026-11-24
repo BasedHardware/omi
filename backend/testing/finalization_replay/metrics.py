@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from functools import lru_cache
 import json
@@ -10,6 +11,7 @@ from threading import Lock
 
 _ACTIVE_STATE = None
 _ACTIVE_LOCK = Lock()
+_METER_SUSPENDED = ContextVar('finalization_replay_meter_suspended', default=False)
 _METER_INSTALLED = False
 
 
@@ -88,19 +90,17 @@ def measure(state):
 
 @contextmanager
 def suspend_meter():
-    """Exclude replay fixture setup and observation reads from product operation counts."""
-    global _ACTIVE_STATE
-    with _ACTIVE_LOCK:
-        active = _ACTIVE_STATE
-        _ACTIVE_STATE = None
+    """Exclude harness reads in this context while other workers remain metered."""
+    token = _METER_SUSPENDED.set(True)
     try:
         yield
     finally:
-        with _ACTIVE_LOCK:
-            _ACTIVE_STATE = active
+        _METER_SUSPENDED.reset(token)
 
 
 def _active_state():
+    if _METER_SUSPENDED.get():
+        return None
     with _ACTIVE_LOCK:
         return _ACTIVE_STATE
 
