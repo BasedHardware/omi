@@ -1,5 +1,7 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
+const {readFileSync} = require('node:fs');
+const {join} = require('node:path');
 const {decision} = require('../ui-author-approval.cjs');
 const actor = {id:9387252};
 const nik = {id:43514161};
@@ -61,6 +63,74 @@ function fixture() {
   const context = {repo:{owner:'test',repo:'test'},payload:{pull_request:{number:1}}};
   return {p,prs,comments,statuses,calls,github,context};
 }
+test('over 100 same-head requests coalesce on main and keep the latest decision', async () => {
+  const workflow = readFileSync(join(__dirname,'../../workflows/ui-author-approval.yml'),'utf8');
+  const [requestJob, workerJob] = workflow.split('\n  guard:\n');
+  assert.doesNotMatch(requestJob,/^\s*concurrency:/m);
+  assert.match(workerJob,/if: github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/main'/);
+  assert.match(workerJob,/group: .*inputs\.head_sha/);
+  assert.match(workerJob,/cancel-in-progress: false/);
+  assert.doesNotMatch(workerJob,/^\s*queue:/m);
+
+  const f = fixture();
+  const {github, context} = f;
+  let pending;
+  let requests = 0;
+  github.rest.actions = {createWorkflowDispatch:async request => {
+    assert.equal(request.ref,'main');
+    assert.equal(request.workflow_id,'ui-author-approval.yml');
+    assert.deepEqual(request.inputs,{pull_number:'1',head_sha:f.p.head.sha});
+    // Model the platform's single waiting slot for the main worker.
+    pending = request.inputs;
+    requests++;
+  }};
+  const evaluate = inputs => run.evaluateDispatch({github,context:{repo:context.repo,payload:{inputs}}});
+  const atDecision = Promise.withResolvers();
+  const finish = Promise.withResolvers();
+  const saveStatus = github.rest.repos.createCommitStatus;
+  github.rest.repos.createCommitStatus = async status => {
+    if (status.state === 'success') {
+      atDecision.resolve();
+      await finish.promise;
+    }
+    await saveStatus(status);
+  };
+  f.comments[1].push(approve);
+  await run.requestEvaluation(f);
+  const running = evaluate(pending);
+  pending = undefined;
+  await atDecision.promise;
+
+  const commentContext = {...context,payload:{issue:{number:1,pull_request:{}}}};
+  try {
+    for (let i = 0; i < 101; i++) await run.requestEvaluation({github,context:commentContext});
+    f.comments[1].push({id:2,user:nik,body:`/reject-ui ${f.p.head.sha}`});
+    await run.requestEvaluation({github,context:commentContext});
+    assert.equal(requests,103);
+    assert.deepEqual(f.statuses.map(s => s.state),['pending']);
+  } finally {
+    finish.resolve();
+    await running;
+  }
+  await evaluate(pending);
+  assert.deepEqual(f.statuses.map(({state,sha}) => [state,sha]),[
+    ['pending',f.p.head.sha],['success',f.p.head.sha],
+    ['pending',f.p.head.sha],['failure',f.p.head.sha],
+  ]);
+});
+test('a dispatch rejection fails the request without publishing approval', async () => {
+  const f = fixture();
+  f.github.rest.actions = {createWorkflowDispatch:async () => {throw new Error('rate limited');}};
+  await assert.rejects(run.requestEvaluation(f),/Could not request UI approval evaluation.*rate limited/);
+  assert.deepEqual(f.statuses,[]);
+});
+test('the dispatched worker rejects invalid routing inputs before writing status', async () => {
+  const {github, context, statuses} = fixture();
+  const dispatch = inputs => run.evaluateDispatch({github,context:{repo:context.repo,payload:{inputs}}});
+  await assert.rejects(dispatch({pull_number:'1',head_sha:'main'}),/Invalid UI approval evaluation inputs/);
+  await assert.rejects(dispatch({pull_number:'0',head_sha:pr.head.sha}),/Invalid UI approval evaluation inputs/);
+  assert.deepEqual(statuses,[]);
+});
 test('workflow blocks repeatedly, notifies once per head, approves and revokes', async () => {
   const f = fixture();
   await run(f); await run(f); await run(f);

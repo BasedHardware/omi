@@ -133,9 +133,9 @@ async function unchangedUI(github, repo, approvedSha, headSha) {
   }
 }
 
-async function evaluateHead({github, context, headSha}) {
+async function evaluateHead({github, context, headSha, pullNumber}) {
   const repo = context.repo;
-  const pull_number = context.payload.pull_request?.number || context.payload.issue.number;
+  const pull_number = pullNumber ?? (context.payload.pull_request?.number || context.payload.issue.number);
   const trigger = (await github.rest.pulls.get({...repo,pull_number})).data;
   if (!headSha && (trigger.state !== 'open' || trigger.base.ref !== 'main')) return;
   const sha = headSha || trigger.head.sha;
@@ -186,12 +186,35 @@ async function evaluateHead({github, context, headSha}) {
     throw error;
   }
 }
-async function run(args) {
-  // Workflow concurrency is keyed to the resolved immutable head. Replaced
-  // pending events therefore still evaluate that same head's latest comments.
-  return evaluateHead(args);
+async function requestEvaluation({github, context}) {
+  const pull_number = context.payload.pull_request?.number || context.payload.issue.number;
+  const {data: pr} = await github.rest.pulls.get({...context.repo,pull_number});
+  if (!/^[a-f0-9]{40}$/.test(pr.head.sha)) throw new Error('Invalid head SHA');
+  try {
+    await github.rest.actions.createWorkflowDispatch({
+      ...context.repo,
+      workflow_id:'ui-author-approval.yml',
+      ref:'main',
+      inputs:{pull_number:String(pull_number),head_sha:pr.head.sha},
+    });
+  } catch (error) {
+    throw new Error(`Could not request UI approval evaluation for ${pr.head.sha}: ${error.message}`,{cause:error});
+  }
 }
-module.exports = run;
+
+async function evaluateDispatch({github, context}) {
+  const {pull_number, head_sha: headSha} = context.payload.inputs;
+  const pullNumber = Number(pull_number);
+  if (!/^[1-9][0-9]*$/.test(pull_number) || !Number.isSafeInteger(pullNumber)
+      || !/^[a-f0-9]{40}$/.test(headSha)) {
+    throw new Error('Invalid UI approval evaluation inputs');
+  }
+  return evaluateHead({github,context,headSha,pullNumber});
+}
+
+module.exports = evaluateHead;
+module.exports.requestEvaluation = requestEvaluation;
+module.exports.evaluateDispatch = evaluateDispatch;
 module.exports.decision = decision;
 module.exports.evidence = evidence;
 module.exports.carryCandidate = carryCandidate;

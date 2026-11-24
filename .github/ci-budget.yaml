@@ -3516,16 +3516,16 @@
       "runs_on": "ubuntu-latest"
     },
     "ui-author-approval.yml/guard": {
-      "budget_p50_minutes": 5,
-      "display_name": "guard",
+      "budget_p50_minutes": 4,
+      "display_name": "Evaluate UI author approval",
       "expected_runs_class": "unsampled-pr-sentinel",
       "expected_runs_per_day": 1,
-      "if": "github.event_name == 'pull_request_target' || github.event.issue.pull_request",
+      "if": "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'",
       "matrix": {},
       "matrix_size": 1,
-      "needs": "resolve",
+      "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Account-scoped UI approval requested by Nik: one API-only Linux job, no builds or PR execution, five-minute hard timeout; unsampled sentinel until first daily audit.",
+      "rationale": "Only a trusted main dispatch can start the serialized API worker. The smaller checkout fits the four-minute p50 budget; the five-minute hard timeout and one evaluation per event still apply.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3534,8 +3534,8 @@
       "runs_on": "ubuntu-latest"
     },
     "ui-author-approval.yml/resolve": {
-      "budget_p50_minutes": 5,
-      "display_name": "resolve",
+      "budget_p50_minutes": 2,
+      "display_name": "Request UI approval evaluation",
       "expected_runs_class": "unsampled-pr-sentinel",
       "expected_runs_per_day": 1,
       "if": "github.event_name == 'pull_request_target' || github.event.issue.pull_request",
@@ -3543,7 +3543,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Resolve immutable SHA read-only before the per-SHA guard concurrency group; one API call and no checkout.",
+      "rationale": "Resolve the current head and dispatch evaluation on main. One small trusted checkout and two API calls; the original two-minute timeout still applies.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -6757,7 +6757,7 @@
     "ui-author-approval.yml": {
       "name": "UI author approval",
       "owner": "CI maintainers",
-      "rationale": "Account-scoped UI approval requested by Nik: one API-only Linux job, no builds or PR execution, five-minute hard timeout; unsampled sentinel until first daily audit.",
+      "rationale": "Account-scoped UI approval requested by Nik. Each source event requests one main-only API evaluation, with at most one pending worker per head. No builds or PR execution; the same five-minute worker timeout and per-event job count apply.",
       "triggers": {
         "issue_comment": {
           "types": [
@@ -6776,6 +6776,18 @@
             "reopened",
             "ready_for_review"
           ]
+        },
+        "workflow_dispatch": {
+          "inputs": {
+            "head_sha": {
+              "required": "true",
+              "type": "string"
+            },
+            "pull_number": {
+              "required": "true",
+              "type": "string"
+            }
+          }
         }
       }
     },
