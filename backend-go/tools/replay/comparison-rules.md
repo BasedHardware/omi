@@ -116,6 +116,18 @@ age park, and Go records the expected dead letter. Other differences remain visi
 R7 compares the sum of the metered Python attempt and park operations with Go's terminal
 cost.
 
+The attach memo fallthrough rule applies only to the case's own episode link
+and the four exact memo fields. Each side recomputes the key from its stored
+final conversation. Go's revision, completed and finalized keys must all match
+that key, and the memo owner must match both the episode link and conversation.
+An absent Python memo or a coherent memo proven by Python's own earlier writer
+is a skip-cache miss. The comparator labels differences that pass these checks
+`by_design:attach_memo_cache_fallthrough`. A failed Go check on an expected
+final memo remains a Go gap, including when the compared field values are equal.
+
+The ordinary-sync driver freezes the hourly usage bucket clock at the corpus
+date at 12:30 UTC. Usage fields and operation costs still compare in full.
+
 The lead-approved pass-3 Go-gap groups from SCA-4012 are stored in
 `approved-go-gaps-sca-4012.csv`. The reporter applies those path/field patterns only to current
 unlabelled rows. Existing by-design labels retain precedence. A `<document>` pattern covers differences under that document, and a field pattern

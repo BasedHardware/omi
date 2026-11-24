@@ -37,6 +37,7 @@ type observation struct {
 	UpdatedAtChanged               bool                       `json:"updated_at_changed"`
 	Admitted                       *admission                 `json:"admitted"`
 	EpisodeAttachMemoValid         bool                       `json:"episode_attach_memo_valid"`
+	EpisodeAttachMemoExpected      bool                       `json:"episode_attach_memo_expected,omitempty"`
 	EpisodeAttachMemoFailureReason string                     `json:"episode_attach_memo_failure_reason,omitempty"`
 	Started                        time.Time                  `json:"started_at"`
 	Finished                       time.Time                  `json:"finished_at"`

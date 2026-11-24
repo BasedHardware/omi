@@ -292,6 +292,7 @@ func TestUserCorrectionsRequireConsistentCompressedStorageAndEqualPlaintext(t *t
 func TestEpisodeAttachMemoDifferenceRequiresBothSideChecks(t *testing.T) {
 	python, goRun := ruleRun(), ruleRun()
 	python.EpisodeAttachMemoValid, goRun.EpisodeAttachMemoValid = true, true
+	goRun.EpisodeAttachMemoExpected = true
 	path := "users/u/episode_links/c"
 	python.Derived[path] = map[string]any{
 		"attach_revision": "python-key", "attach_completed": "python-key", "attach_finalized": nil,
@@ -313,8 +314,15 @@ func TestEpisodeAttachMemoDifferenceRequiresBothSideChecks(t *testing.T) {
 		}
 	}
 	goRun.EpisodeAttachMemoValid = false
-	if diffs = compareObservations(python, goRun); !hasUnexplained(diffs) {
+	goRun.EpisodeAttachMemoFailureReason = "finalized_binding_mismatch"
+	if diffs = compareObservations(python, goRun); !hasUnexplainedAt(diffs, "/go/episode_attach_memo") {
 		t.Fatalf("invalid Go memo evidence was excused: %+v", diffs)
+	}
+
+	// Equal raw fields are still invalid when Go cannot reproduce its memo key.
+	python.Derived[path] = goRun.Derived[path]
+	if diffs = compareObservations(python, goRun); !hasUnexplainedAt(diffs, "/go/episode_attach_memo") {
+		t.Fatalf("equal invalid Go memo fields escaped validation: %+v", diffs)
 	}
 }
 

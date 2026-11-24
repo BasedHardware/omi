@@ -332,11 +332,16 @@ def enrich(report: dict) -> dict:
                 label = validate_label(difference['label'], difference.get('reason'))
                 if label.startswith('python_bug:'):
                     raise ValueError('python_bug labels require a matching approved case-specific exception')
-            elif difference.get('path') in {
-                '/conversation/go_finalization_notes_input_hash',
-                '/conversation/go_finalization_notes_output_hash',
-                '/conversation/finalization_job_id',
-            }:
+            elif (
+                difference.get('path')
+                in {
+                    '/conversation/go_finalization_notes_input_hash',
+                    '/conversation/go_finalization_notes_output_hash',
+                    '/conversation/finalization_job_id',
+                    '/go/episode_attach_memo',
+                }
+                or difference.get('failure_reason') == 'go_attach_memo_invalid'
+            ):
                 label = 'go_gap'
             elif (
                 is_episode_attach_memo_path(difference.get('path', ''))

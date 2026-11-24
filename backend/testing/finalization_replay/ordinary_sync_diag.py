@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import datetime
 from hashlib import sha256
 import importlib
 import importlib.util
@@ -20,13 +20,28 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 from testing.finalization_replay.candidate import replay_database
-from testing.finalization_replay.corpus import DEFAULT_TEST_KEY, pack, read_corpus, seed_document
+from testing.finalization_replay.corpus import DEFAULT_TEST_KEY, FIXED_DATE, pack, read_corpus, seed_document
 from testing.finalization_replay.driver import _ReplayKey, _clear, _observe, _seed
 from testing.finalization_replay.firestore_proxy import FirestoreProxy
 from testing.finalization_replay import reference as reference_module
 from testing.finalization_replay.metrics import suspend_meter
 from testing.finalization_replay.ordinary_sync_retry import UNREADABLE, check_ciphertext, retry_to_park
 from testing.replay_harness.env import emulator_endpoint, replay_environment
+
+
+class HourlyUsageReplayClock(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        midhour = FIXED_DATE.replace(minute=30)
+        return midhour.astimezone(tz) if tz is not None else midhour.replace(tzinfo=None)
+
+
+def remember_python_memo(state, key):
+    if key:
+        with suspend_meter():
+            link = state.client.document(state.home_dirty_receipt_path).get().to_dict() or {}
+        if link.get('attach_revision') == key:
+            state.episode_attach_memo_writer_keys.append(key)
 
 
 def _worker_providers(worker_backend):
@@ -37,18 +52,6 @@ def _worker_providers(worker_backend):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.provider_server, module.allow_provider_port
-
-
-def _usage_bucket_datetime(bucket):
-    """Freeze hourly usage bucket selection while retaining real write timestamps."""
-    anchor = datetime.strptime(bucket, '%Y-%m-%d-%H').replace(minute=30, tzinfo=timezone.utc)
-
-    class UsageBucketDatetime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return anchor if tz is None else anchor.astimezone(tz)
-
-    return UsageBucketDatetime
 
 
 def _enable_worker_backend(worker_backend):
@@ -216,15 +219,14 @@ def _observe_sync(state, run, leaves, url):
             row = kwargs.get('attach_row')
             key = content_key(row) if isinstance(row, Mapping) else None
             result = original_attach_recorded(*args, **kwargs)
-            if key:
-                state.episode_attach_memo_writer_keys.append(key)
+            remember_python_memo(state, key)
             return result
 
         def complete(uid, cid, row, owner, *args, **kwargs):
             key = content_key(row) if isinstance(row, Mapping) else None
             result = original_complete(uid, cid, row, owner, *args, **kwargs)
-            if uid == state.uid and cid == state.cid and key:
-                state.episode_attach_memo_writer_keys.append(key)
+            if uid == state.uid and cid == state.cid:
+                remember_python_memo(state, key)
             return result
 
         leaves.enter_context(patch.object(episode_timeline, 'attach_recorded', attach_recorded))
@@ -267,13 +269,10 @@ def _run_side(cases, side, binary, database, key, worker_backend):
             import tiktoken
 
             tiktoken.encoding_for_model('text-embedding-3-large')
+            from database import redis_db
             from utils import analytics
 
-            usage_bucket = os.environ.get('OMI_REPLAY_USAGE_BUCKET')
-            if usage_bucket is None:
-                usage_bucket = datetime.now(timezone.utc).strftime('%Y-%m-%d') + '-12'
-            cleanup.enter_context(patch.object(analytics, 'datetime', _usage_bucket_datetime(usage_bucket)))
-            from database import redis_db
+            cleanup.enter_context(patch.object(analytics, 'datetime', HourlyUsageReplayClock))
 
             with fakeredis.FakeRedis() as redis, patch.object(redis_db, 'r', redis), patch.object(
                 redis_db, 'create_bounded_redis_client', lambda *_a, **_kw: redis
@@ -300,10 +299,9 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                     from database import episode_attach_memo
 
                     row = target.conversation.get().to_dict() or {}
-                    key = episode_attach_memo.current_key(target.uid, row)
+                    key = episode_attach_memo.current_key(target.uid, row) if side == 'python' else None
                     result = finalize.attach_synced_at_intake(target.uid, target.cid, row)
-                    if key:
-                        target.episode_attach_memo_intake_keys.append(key)
+                    remember_python_memo(target, key)
                     return result
 
                 outputs = []
@@ -346,10 +344,7 @@ def _run_side(cases, side, binary, database, key, worker_backend):
 
 def _paired(payload, worker_binary, worker_backend):
     sides = []
-    usage_bucket = datetime.now(timezone.utc).strftime('%Y-%m-%d') + '-12'
     for side in ('python', 'go'):
-        child_environment = os.environ.copy()
-        child_environment['OMI_REPLAY_USAGE_BUCKET'] = usage_bucket
         result = subprocess.run(
             [
                 sys.executable,
@@ -366,7 +361,6 @@ def _paired(payload, worker_binary, worker_backend):
             input=payload,
             capture_output=True,
             timeout=240,
-            env=child_environment,
         )
         if result.returncode:
             detail = result.stderr.decode(errors='replace')[-2000:]

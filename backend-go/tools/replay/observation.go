@@ -27,6 +27,13 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	compareObject(&diffs, "/webhooks", webhookGroups(python), webhookGroups(goRun))
 	for i := range diffs {
 		diff := &diffs[i]
+		if diff.Reason == "" {
+			diff.Reason = approvedEpisodeAttachMemoDifference(diff.Path, python, goRun)
+		}
+		if diff.Reason == "" && goRun.EpisodeAttachMemoExpected && !goRun.EpisodeAttachMemoValid &&
+			episodeAttachMemoField(diff.Path, goRun) {
+			diff.FailureReason = "go_attach_memo_invalid"
+		}
 		switch diff.Kind {
 		case "different_value":
 			if diff.Reason == "" {
@@ -38,9 +45,6 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 				if diff.Reason == "" && diff.FailureReason == "" {
 					diff.FailureReason = failureReason
 				}
-			}
-			if diff.Reason == "" {
-				diff.Reason = approvedEpisodeAttachMemoDifference(diff.Path, python, goRun)
 			}
 			if diff.Reason == "" {
 				diff.Reason = allowedHomeTokenDifference(diff.Path, python, goRun, pythonTokens, goTokens)
@@ -66,10 +70,12 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 				diff.Kind = "unported"
 			}
 		case "missing_in_python":
-			var failureReason string
-			diff.Reason, failureReason = protectedDifferenceEvidence(diff.Path, python, goRun)
-			if diff.Reason == "" && diff.FailureReason == "" {
-				diff.FailureReason = failureReason
+			if diff.Reason == "" {
+				var failureReason string
+				diff.Reason, failureReason = protectedDifferenceEvidence(diff.Path, python, goRun)
+				if diff.Reason == "" && diff.FailureReason == "" {
+					diff.FailureReason = failureReason
+				}
 			}
 			if diff.Reason == "" {
 				diff.Reason = approvedEpisodeAttachMemoDifference(diff.Path, python, goRun)
@@ -88,6 +94,7 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	validateHomeTokenEvidence(&diffs, "go", goRun, goTokens)
 	validateBinding(&diffs, "/python", python, false)
 	validateBinding(&diffs, "/go", goRun, true)
+	validateEpisodeAttachMemoEvidence(&diffs, python, goRun)
 	validateReviewedGoOnlyFields(&diffs, python, goRun)
 	return diffs
 }
