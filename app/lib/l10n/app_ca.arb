@@ -4762,5 +4762,8 @@
     "prepaidCodeFieldHint": "Introdueix el teu codi",
     "prepaidCodeRedeem": "Bescanvia",
     "prepaidCodeRedeemed": "Codi bescanviat",
-    "prepaidCodeResult": "{reason, select, invalid{Aquest codi no és vàlid. Comprova'l i torna-ho a provar.} used{Aquest codi ja s'ha utilitzat.} expired{Aquest codi ha caducat.} hasPlan{Ja tens un pla. El teu codi no s'ha utilitzat. Bescanvia'l quan acabi el teu pla.} notPrepaid{Aquest codi no es pot bescanviar aquí. Fes-lo servir quan triïs un pla.} notEligible{Aquest codi no es pot utilitzar en aquest compte.} rateLimited{Massa intents. Torna-ho a provar més tard.} other{Alguna cosa ha anat malament. Torna-ho a provar.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Aquest codi no és vàlid. Comprova'l i torna-ho a provar.} used{Aquest codi ja s'ha utilitzat.} expired{Aquest codi ha caducat.} hasPlan{Ja tens un pla. El teu codi no s'ha utilitzat. Bescanvia'l quan acabi el teu pla.} notPrepaid{Aquest codi no es pot bescanviar aquí. Fes-lo servir quan triïs un pla.} notEligible{Aquest codi no es pot utilitzar en aquest compte.} rateLimited{Massa intents. Torna-ho a provar més tard.} other{Alguna cosa ha anat malament. Torna-ho a provar.}}",
+    "playStripeBilledOnWeb": "Es factura a través d'omi.me. Cancel·la-ho aquí quan vulguis.",
+    "playStripeBilledOnWebShort": "Es factura a través d'omi.me.",
+    "playStripeUpdateCardToGetPlanBack": "Actualitza la targeta a omi.me per recuperar {plan}."
 }

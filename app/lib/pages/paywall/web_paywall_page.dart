@@ -68,6 +68,10 @@ class WebPaywallPage extends StatefulWidget {
     return base.replace(queryParameters: params);
   }
 
+  /// Only https pages load, and none at all once this client sells through Google Play.
+  static NavigationDecision navigationDecision(String url, {required bool buysThroughPlay}) =>
+      !buysThroughPlay && url.startsWith('https://') ? NavigationDecision.navigate : NavigationDecision.prevent;
+
   @override
   State<WebPaywallPage> createState() => _WebPaywallPageState();
 }
@@ -94,7 +98,8 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
   }
 
   Future<void> _prepare() async {
-    if (!mounted) return;
+    if (!mounted || _closed) return;
+    if (context.read<UsageProvider>().buysThroughPlay) return _closeForPlay();
     final usage = context.read<UsageProvider>();
     if (usage.availablePlans == null) await usage.loadAvailablePlans();
     if (!mounted) return;
@@ -119,8 +124,10 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
       ..addJavaScriptChannel(WebPaywallPage.channel, onMessageReceived: (message) => _onMessage(message.message))
       ..setNavigationDelegate(
         NavigationDelegate(
-          onNavigationRequest: (request) =>
-              request.url.startsWith('https://') ? NavigationDecision.navigate : NavigationDecision.prevent,
+          onNavigationRequest: (request) => WebPaywallPage.navigationDecision(
+            request.url,
+            buysThroughPlay: mounted && context.read<UsageProvider>().buysThroughPlay,
+          ),
           onWebResourceError: (error) {
             if (error.isForMainFrame == false) return;
             Logger.debug('Web paywall load error: ${error.description}');
@@ -184,6 +191,10 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
         source: widget.source,
       );
       if (!mounted) return;
+      if (outcome == PaywallCheckoutOutcome.alreadyPaid) {
+        _closeForPlay();
+        return;
+      }
       await _tell('onCheckout', outcome.name);
       if (!mounted) return;
       if (outcome == PaywallCheckoutOutcome.purchased) {
@@ -222,6 +233,14 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
     }
   }
 
+  /// A build that sells through Google Play: this hosted page may not take a payment, so it closes.
+  void _closeForPlay() {
+    if (_closed || !mounted) return;
+    _closed = true;
+    _timeout?.cancel();
+    Navigator.of(context).pop(false);
+  }
+
   void _dismiss() {
     if (_closed) return;
     _closed = true;
@@ -244,6 +263,10 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Play became known (or the reader cannot buy on Stripe here): never leave a payment page open.
+    if (context.select<UsageProvider, bool>((usage) => usage.buysThroughPlay) && !_closed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _closeForPlay());
+    }
     final controller = _controller;
     return PopScope(
       canPop: false,

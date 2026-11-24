@@ -15858,4 +15858,15 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Dibilkan melalui omi.me. Batalkan di sini pada bila-bila masa.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Dibilkan melalui omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Kemas kini kad anda di omi.me untuk mendapatkan semula $plan.';
+  }
 }

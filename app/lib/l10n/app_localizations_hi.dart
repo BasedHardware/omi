@@ -15803,4 +15803,15 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me के ज़रिए बिल किया जाता है। यहाँ कभी भी रद्द करें।';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me के ज़रिए बिल किया जाता है।';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return '$plan वापस पाने के लिए omi.me पर अपना कार्ड अपडेट करें।';
+  }
 }
