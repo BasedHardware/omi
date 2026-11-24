@@ -1519,6 +1519,25 @@ for _fn in ('uploads_for_conversations', 'staging_job_ids', 'owed_batch_segments
             patchers=(_sync_stage,),
         )
     )
+
+
+def _seed_shared_upload(client, combo, trial):
+    """One upload fed conv-1: the per-job ``job_id ==`` lookup of its staging siblings then runs."""
+    row = {'job_id': 'job-1', 'status': 'completed', 'result': {'new_memories': ['conv-1']}}
+    client.queue_results([client.snapshot(f'users/{UID}/sync_content_ledger/content-1', row)])
+    for _ in range(len(importlib.import_module('database.sync_ledger_sources').CONVERSATION_FIELDS) - 1):
+        client.queue_results([])
+    client.queue_results([client.snapshot(f'users/{UID}/sync_content_ledger/content-1', row)])
+
+
+_add(
+    DriverEntry(
+        'database.sync_ledger_sources.staging_plan',
+        base={'uid': UID, 'conversation_ids': ['conv-1']},
+        setup=_seed_shared_upload,
+        patchers=(_sync_stage,),
+    )
+)
 _add(
     DriverEntry(
         'database.recording_speakers.scope_conversation_ids',

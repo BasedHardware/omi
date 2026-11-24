@@ -17,6 +17,14 @@ whole cascade erasure instead: one ``conversation_erasure_jobs`` obligation,
 written with the tombstone, dispatched and leased the same way (so an older
 consumer that cannot run it answers ``missing`` and it is redriven, never
 dropped), and run serially under the account gate by ``run_erasure_job``.
+
+Every delete that erases audio (both cascade modes) owes it through one
+``conversation_audio_erasure_jobs`` obligation, armed before the primary row is
+deleted and dispatched, leased and redriven the same way. ``run_audio_erasure_job``
+needs only the tombstone, so a retry after the row is gone still finishes the
+audio; storage holds, staging still in use and ledger-read failures are
+recorded on the obligation and retried. It is its own collection so a consumer
+that predates it can never mistake it for a cascade erasure.
 """
 
 from __future__ import annotations
@@ -41,6 +49,10 @@ logger = logging.getLogger(__name__)
 COLLECTION = 'conversation_batch_purge_jobs'
 # Accepted deletes owing their cascade erasure (a collection older code never reads).
 ERASURE_COLLECTION = 'conversation_erasure_jobs'
+# Deletes owing their audio erasure (canonical, conversation/donor prefixes, sync staging).
+AUDIO_COLLECTION = 'conversation_audio_erasure_jobs'
+# Staging still read by an unfinished upload is retried this long after the delete; then reported and given up.
+AUDIO_STAGING_PENDING_MAX_SECONDS = 14 * 24 * 60 * 60
 SEGMENTS = 'segments'
 TOMBSTONES = 'deleted_conversations'
 # Renewed by every checkpoint/unit; a dead or wedged worker loses ownership after this.
@@ -89,6 +101,45 @@ def erasure_job_id(uid: str, conversation_id: str) -> str:
 
 def erasure_job_ref(client: Any, uid: str, conversation_id: str) -> Any:
     return client.collection(ERASURE_COLLECTION).document(erasure_job_id(uid, conversation_id))
+
+
+def audio_job_id(uid: str, conversation_id: str) -> str:
+    return hashlib.sha256(f'audio\x00{uid}\x00{conversation_id}'.encode()).hexdigest()[:40]
+
+
+def audio_job_ref(client: Any, uid: str, conversation_id: str) -> Any:
+    return client.collection(AUDIO_COLLECTION).document(audio_job_id(uid, conversation_id))
+
+
+def arm_audio_erasure(
+    uid: str,
+    conversation_id: str,
+    source_ids: Iterable[str] = (),
+    *,
+    firestore_client: Any = None,
+    now: datetime | None = None,
+) -> None:
+    """Owe this deleted conversation's audio durably (merge: a re-arm keeps generation and donors)."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    current = now or _now()
+    ref = audio_job_ref(client, uid, conversation_id)
+    donors = [str(source) for source in dict.fromkeys(source_ids) if source and source != conversation_id]
+
+    def body(transaction):
+        snapshot = ref.get(transaction=transaction)
+        known = list((snapshot.to_dict() or {}).get('audio_source_ids') or []) if snapshot.exists else []
+        fields = {
+            'uid': uid,
+            'conversation_id': conversation_id,
+            'due_at': current,
+            'armed_at': current,
+            'arm_revision': uuid4().hex,
+            # A retry after the row lost its merge links keeps the donors an earlier arm recorded.
+            'audio_source_ids': known + [source for source in donors if source not in known],
+        }
+        transaction.set(ref, fields, merge=True)
+
+    _in_transaction(client, body)
 
 
 def accept_fields(
@@ -291,8 +342,15 @@ def finish_run(
     now: datetime | None = None,
     firestore_client: Any = None,
     collection: str = COLLECTION,
+    detail: dict[str, Any] | None = None,
+    arm_revision: Any = None,
 ) -> bool:
-    """Record the owning run's outcome; only ``completed`` removes the obligation. False if not owner."""
+    """Record the owning run's outcome; only ``completed`` removes the obligation. False if not owner.
+
+    ``detail`` is recorded on a retained obligation (e.g. why it waits). For an
+    audio obligation, ``arm_revision`` is the arm the run erased: a newer arm
+    (a retried delete) is redriven instead of completed.
+    """
     if outcome not in {'completed', 'held', 'failed', 'checkpointed', 'busy', 'artifact_pending'}:
         raise ValueError('invalid purge outcome')
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -323,19 +381,28 @@ def finish_run(
                 },
             )
             return False
-        if outcome == 'completed':
+        result = outcome
+        if result == 'completed' and collection == AUDIO_COLLECTION and row.get('arm_revision') != arm_revision:
+            result = 'checkpointed'  # re-armed while running: erase again for the newer arm
+        if result == 'completed':
             transaction.delete(ref)
             return True
-        release = {'run_token': None, 'lease_generation': None, 'lease_until': None, 'last_outcome': outcome}
-        if outcome == 'checkpointed':
+        release = {
+            'run_token': None,
+            'lease_generation': None,
+            'lease_until': None,
+            'last_outcome': result,
+            **(detail or {}),
+        }
+        if result == 'checkpointed':
             # Progress was made: hand off at once and restart the lost-task backoff.
             transaction.update(ref, {**release, 'due_at': current, 'attempts': 0})
             return False
-        if outcome in {'busy', 'artifact_pending'}:
-            wait = BUSY_RETRY_SECONDS if outcome == 'busy' else ARTIFACT_RETRY_SECONDS
+        if result in {'busy', 'artifact_pending'}:
+            wait = BUSY_RETRY_SECONDS if result == 'busy' else ARTIFACT_RETRY_SECONDS
             transaction.update(ref, {**release, 'due_at': current + timedelta(seconds=wait), 'attempts': 0})
             return False
-        wait = HOLD_RECHECK_SECONDS if outcome == 'held' else REDRIVE_SECONDS
+        wait = HOLD_RECHECK_SECONDS if result == 'held' else REDRIVE_SECONDS
         transaction.update(ref, {**release, 'due_at': current + timedelta(seconds=wait)})
         return False
 
@@ -610,13 +677,118 @@ def run_erasure_job(
     return 'erased' if finish('completed') else 'superseded'
 
 
+def _gate_busy(error: BaseException, uid: str) -> bool:
+    # The audio gate is account-exclusive: any running destructive operation makes it busy.
+    if type(error).__name__ in {'DestructiveOperationInProgress', 'DestructiveGateTakeover'}:
+        return True
+    return lost_gate_to_peer(error, uid)
+
+
+def run_audio_erasure_job(
+    job: str,
+    generation: int,
+    *,
+    erase: Callable[[str, str, list[str]], None],
+    firestore_client: Any = None,
+    now: datetime | None = None,
+) -> str:
+    """Erase one deleted conversation's audio; retried until done, never dropped.
+
+    ``erase(uid, conversation_id, audio_source_ids)`` acquires the account's
+    audio gate (refusing a legal hold) and erases every copy; it is idempotent,
+    so a duplicate run repeats finished steps. Only the tombstone is required:
+    the primary row may already be gone. Raises on a retryable failure.
+    """
+    from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked
+    from database.sync_ledger_sources import StagingInFlight
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    claim, row, token = begin_run(job, generation, firestore_client=client, collection=AUDIO_COLLECTION, now=now)
+    if claim != 'run' or row is None or token is None:
+        return claim
+    uid, conversation_id = str(row['uid']), str(row['conversation_id'])
+    arm_revision = row.get('arm_revision')
+
+    def finish(outcome: str, **detail: Any) -> bool:
+        return finish_run(
+            job,
+            generation,
+            token,
+            outcome,
+            firestore_client=client,
+            collection=AUDIO_COLLECTION,
+            detail={'last_reason': detail.pop('reason', outcome), **detail},
+            arm_revision=arm_revision,
+        )
+
+    try:
+        tombstone = client.collection('users').document(uid).collection(TOMBSTONES).document(conversation_id)
+        if not tombstone.get().exists:
+            # Account deletion supersedes: the wipe removed the subtree and every owner storage prefix.
+            return 'no_tombstone' if finish('completed') else 'superseded'
+        assert_account_deletion_permitted(uid)
+        try:
+            erase(uid, conversation_id, [str(source) for source in row.get('audio_source_ids') or []])
+        except LegalHoldActive:
+            raise
+        except StoragePrefixPurgeBlocked as error:
+            # Object holds are reported on the obligation and rechecked; nothing else is skipped.
+            logger.warning(
+                'event=conversation_audio_erasure outcome=storage_held job=%s objects=%d unverified=%d',
+                job,
+                len(error.objects),
+                error.unverified,
+            )
+            finish('held', reason='storage_hold', blocked_objects=len(error.objects), unverified=error.unverified)
+            return 'storage_held'
+        except StagingInFlight as error:
+            armed_at = row.get('armed_at')
+            if armed_at is not None and (now or _now()) - armed_at >= timedelta(
+                seconds=AUDIO_STAGING_PENDING_MAX_SECONDS
+            ):
+                logger.error(
+                    'event=conversation_audio_erasure outcome=staging_unsettled job=%s uploads=%d', job, error.count
+                )
+                return 'staging_unsettled' if finish('completed') else 'superseded'
+            logger.info(
+                'event=conversation_audio_erasure outcome=staging_in_flight job=%s uploads=%d', job, error.count
+            )
+            finish('held', reason='staging_in_flight', in_flight_uploads=error.count)
+            return 'staging_in_flight'
+        except Exception as error:
+            if not _gate_busy(error, uid):
+                raise
+            logger.info('conversation audio erasure waiting for the account gate job=%s', job)
+            finish('busy')
+            return 'busy'
+    except LegalHoldActive:
+        # Stays hidden and retained; rechecked hourly.
+        finish('held', reason='legal_hold')
+        return 'held'
+    except BaseException as error:
+        # Ledger reads, provider errors, an unreadable hold: the obligation stays and is redriven.
+        logger.warning(
+            'event=conversation_audio_erasure outcome=failed job=%s exception_type=%s', job, type(error).__name__
+        )
+        try:
+            finish('failed', reason=type(error).__name__)
+        except Exception:
+            pass  # The lease expires; the original failure is what the queue must see.
+        raise
+    return 'erased' if finish('completed') else 'superseded'
+
+
 __all__ = [
+    'AUDIO_COLLECTION',
     'COLLECTION',
     'ERASURE_COLLECTION',
     'RunProgress',
     'RunSuperseded',
     'accept_fields',
+    'arm_audio_erasure',
     'arm_fields',
+    'audio_job_id',
+    'audio_job_ref',
     'begin_run',
     'claim_dispatch',
     'defer',
@@ -627,6 +799,7 @@ __all__ = [
     'job_id',
     'job_ref',
     'lease_held',
+    'run_audio_erasure_job',
     'run_erasure_job',
     'run_job',
     'segment_records',

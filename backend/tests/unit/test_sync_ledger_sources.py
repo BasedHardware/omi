@@ -26,11 +26,16 @@ class _Doc:
 
 
 class _Query:
-    def __init__(self, collection, field, values):
-        self.collection, self.field, self.values = collection, field, values
+    def __init__(self, collection, field, op, values):
+        self.collection, self.field, self.op, self.values = collection, field, op, values
 
     def stream(self):
-        self.collection.client.queries.append((self.field, list(self.values)))
+        if self.collection.client.fail_reads:
+            raise RuntimeError('ledger unavailable')
+        if self.op == '==':
+            self.collection.client.job_queries.append(self.values)
+        else:
+            self.collection.client.queries.append((self.field, list(self.values)))
         prefix = self.collection.path + '/'
         for path, row in sorted(self.collection.client.docs.items()):
             if not path.startswith(prefix) or '/' in path[len(prefix) :]:
@@ -38,7 +43,11 @@ class _Query:
             value = row
             for part in self.field.split('.'):
                 value = (value or {}).get(part) if isinstance(value, dict) else None
-            if isinstance(value, list) and set(value) & set(self.values):
+            if self.op == '==':
+                matched = value == self.values
+            else:
+                matched = isinstance(value, list) and bool(set(value) & set(self.values))
+            if matched:
                 yield SimpleNamespace(id=path[len(prefix) :], to_dict=lambda row=row: dict(row))
 
 
@@ -50,14 +59,18 @@ class _Collection:
         return _Doc(self.client, f'{self.path}/{doc_id}')
 
     def where(self, *, filter):
+        if filter.op_string == '==':
+            # Every ledger row of one upload job: its staging directory is shared by all of them.
+            assert filter.field_path == 'job_id'
+            return _Query(self, filter.field_path, '==', filter.value)
         assert filter.op_string == 'array_contains_any'
         assert len(filter.value) <= 30
-        return _Query(self, filter.field_path, filter.value)
+        return _Query(self, filter.field_path, 'array_contains_any', filter.value)
 
 
 class _Client:
     def __init__(self, docs):
-        self.docs, self.queries = dict(docs), []
+        self.docs, self.queries, self.job_queries, self.fail_reads = dict(docs), [], [], False
 
     def collection(self, name):
         return _Collection(self, name)
@@ -68,9 +81,10 @@ def dev_stage(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
 
 
-def _row(job_id, new=(), updated=(), partial=(), segments=None, namespace='batch_pipeline_dev'):
+def _row(job_id, new=(), updated=(), partial=(), segments=None, namespace='batch_pipeline_dev', status='completed'):
     row = {
         'job_id': job_id,
+        'status': status,
         'result': {'new_memories': list(new), 'updated_memories': list(updated)},
         'partial_result': {'new_memories': list(partial), 'updated_memories': []},
     }
@@ -90,7 +104,8 @@ def test_uploads_found_from_every_conversation_field_and_unsafe_job_ids_dropped(
             'users/someone-else/sync_content_ledger_dev/x': _row('job-foreign', new=['c1']),
         }
     )
-    assert sources.staging_job_ids(UID, ['c1'], firestore_client=client) == [
+    uploads = sources.uploads_for_conversations(UID, ['c1'], firestore_client=client)
+    assert sorted(upload.job_id for upload in uploads if upload.job_id) == [
         'job-created',
         'job-partial',
         'job-updated',
@@ -101,7 +116,7 @@ def test_uploads_found_from_every_conversation_field_and_unsafe_job_ids_dropped(
 def test_lookup_chunks_conversation_ids_to_the_firestore_limit():
     client = _Client({f'{LEDGER}/last': _row('job-last', new=['c44'])})
     ids = [f'c{i}' for i in range(45)]
-    assert sources.staging_job_ids(UID, ids, firestore_client=client) == ['job-last']
+    assert [u.job_id for u in sources.uploads_for_conversations(UID, ids, firestore_client=client)] == ['job-last']
     assert sorted(len(values) for _, values in client.queries) == [15] * 4 + [30] * 4
 
 
@@ -171,3 +186,54 @@ def test_inline_conversation_batch_purge_erases_ledger_linked_rows(monkeypatch):
         UID, conversation_id='c1', namespaces=(ns,), firestore_client=client, delete_uri=lambda *a: None
     )
     assert sorted(erased) == [('jobs', 'seg-job'), ('results', 'seg-job'), ('results', 'seg-result')]
+
+
+def test_shared_upload_with_a_live_sibling_keeps_its_staging():
+    """Deleting A from an A/B upload must not erase the staged bytes B still needs."""
+    client = _Client(
+        {
+            f'{LEDGER}/shared': _row('job-shared', new=['a'], updated=['b']),
+            f'{LEDGER}/solo': _row('job-solo', new=['a']),
+            f'{TOMBSTONES}/a': {},
+        }
+    )
+    plan = sources.staging_plan(UID, ['a'], firestore_client=client)
+    assert plan == sources.StagingPlan(erasable=('job-solo',), shared_live=('job-shared',))
+    assert sources.staging_job_ids(UID, ['a'], firestore_client=client) == ['job-solo']
+
+
+def test_deleting_the_last_sibling_makes_the_shared_staging_erasable():
+    client = _Client(
+        {
+            f'{LEDGER}/shared': _row('job-shared', new=['a'], updated=['b']),
+            f'{TOMBSTONES}/a': {},
+            f'{TOMBSTONES}/b': {},
+        }
+    )
+    assert sources.staging_plan(UID, ['b'], firestore_client=client).erasable == ('job-shared',)
+
+
+def test_sibling_fed_by_another_ledger_row_of_the_same_job_keeps_the_staging():
+    """The directory is keyed by job: a row that does not name the deleted conversation still counts."""
+    client = _Client(
+        {
+            f'{LEDGER}/first-file': _row('job-shared', new=['a']),
+            f'{LEDGER}/second-file': _row('job-shared', new=['b']),
+            f'{TOMBSTONES}/a': {},
+        }
+    )
+    assert sources.staging_plan(UID, ['a'], firestore_client=client).shared_live == ('job-shared',)
+    assert client.job_queries == ['job-shared']
+
+
+def test_staging_of_an_unfinished_upload_is_retained_for_retry():
+    client = _Client({f'{LEDGER}/running': _row('job-running', new=['a'], status='processing'), f'{TOMBSTONES}/a': {}})
+    plan = sources.staging_plan(UID, ['a'], firestore_client=client)
+    assert plan == sources.StagingPlan(in_flight=('job-running',))
+
+
+def test_ledger_read_failure_propagates_instead_of_erasing_nothing_silently():
+    client = _Client({f'{LEDGER}/solo': _row('job-solo', new=['a']), f'{TOMBSTONES}/a': {}})
+    client.fail_reads = True
+    with pytest.raises(RuntimeError, match='ledger unavailable'):
+        sources.staging_plan(UID, ['a'], firestore_client=client)

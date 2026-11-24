@@ -144,12 +144,14 @@ def cascade(monkeypatch, plane):
     monkeypatch.setattr(conversations, 'delete_conversation_and_frame_evidence', hard_delete)
     monkeypatch.setattr(deletion_batch_purge, 'is_conversation_batch_purge_dispatch_configured', lambda: True)
     monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_consumer_ready', lambda: True)
-    state.sent = []
+    state.sent, state.audio_sent = [], []
     monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_task_pending', lambda *a, **k: False)
     monkeypatch.setattr(
         deletion_batch_purge,
         'enqueue_conversation_batch_purge',
-        lambda job, gen, erasure=False: state.sent.append((job, gen, erasure)),
+        lambda job, gen, erasure=False, audio=False: (state.audio_sent if audio else state.sent).append(
+            (job, gen) if audio else (job, gen, erasure)
+        ),
     )
     monkeypatch.setattr(
         purge_jobs,
@@ -493,9 +495,16 @@ def test_eraser_owes_merge_donor_audio_recorded_at_acceptance(plane, cascade):
     assert _erasure(plane, 'c1')['audio_source_ids'] == ['donor-a']
     plane.docs.pop(GATE_PATH)
     _drain_erasures(plane, cascade, passes=1)
-    audio = conversations.delete_privacy_conversation_audio
-    audio.assert_called_once()
-    assert audio.call_args.kwargs['source_ids'] == ['donor-a']
+    # The cascade owes its audio to the durable audio obligation, donors recorded at acceptance included.
+    conversations.delete_privacy_conversation_audio.assert_not_called()
+    owed = plane.docs[f'{purge_jobs.AUDIO_COLLECTION}/{purge_jobs.audio_job_id(UID, "c1")}']
+    assert owed['audio_source_ids'] == ['donor-a']
+    cascade.audio_sent.clear()
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    erase = MagicMock()
+    for job, gen in cascade.audio_sent:
+        assert purge_jobs.run_audio_erasure_job(job, gen, erase=erase) == 'erased'
+    erase.assert_called_once_with(UID, 'c1', ['donor-a'])
 
 
 def test_accept_transaction_reads_before_it_writes_and_keeps_the_first_tombstone(monkeypatch):
@@ -533,3 +542,27 @@ def test_task_handler_routes_erasures_to_the_eraser(monkeypatch):
     response = asyncio.run(users_router.run_conversation_batch_purge(_Request(), 0))
     assert response.status_code == 200
     assert calls == [('j1', 3, conversations.erase_accepted_conversation)]
+
+
+def test_task_handler_routes_audio_erasures_to_the_audio_eraser(monkeypatch):
+    import asyncio
+
+    from utils.other.storage import erase_conversation_audio
+
+    calls = []
+
+    def run_audio_erasure_job(job, generation, *, erase):
+        calls.append((job, generation, erase))
+        return 'erased'
+
+    monkeypatch.setattr(purge_jobs, 'run_audio_erasure_job', run_audio_erasure_job)
+    monkeypatch.setattr(purge_jobs, 'run_erasure_job', MagicMock(side_effect=AssertionError('not a cascade')))
+    monkeypatch.setattr(purge_jobs, 'run_job', MagicMock(side_effect=AssertionError('not a batch purge')))
+
+    class _Request:
+        async def json(self):
+            return {'job_id': 'j1', 'generation': 2, 'kind': 'audio_erasure'}
+
+    response = asyncio.run(users_router.run_conversation_batch_purge(_Request(), 0))
+    assert response.status_code == 200
+    assert calls == [('j1', 2, erase_conversation_audio)]

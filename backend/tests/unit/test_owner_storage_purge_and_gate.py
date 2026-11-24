@@ -60,7 +60,9 @@ class _Client:
 @pytest.fixture(autouse=True)
 def _no_sync_uploads(monkeypatch):
     # Sync staging lookups read the owner's ledger; these fakes have none unless a test says so.
-    monkeypatch.setattr('database.sync_ledger_sources.staging_job_ids', lambda *args, **kwargs: [])
+    from database.sync_ledger_sources import StagingPlan
+
+    monkeypatch.setattr('database.sync_ledger_sources.staging_plan', lambda *args, **kwargs: StagingPlan())
 
 
 def test_owner_prefix_purge_removes_private_and_non_private_uid_objects(monkeypatch):
@@ -364,7 +366,7 @@ def test_privacy_erases_snapshotted_bridge_donors_only_at_explicit_boundary(monk
     assert {call.args for call in erased.call_args_list} == {(private, 'u', 'survivor'), (private, 'u', 'donor')}
 
 
-def _staging_buckets(monkeypatch, jobs):
+def _staging_buckets(monkeypatch, jobs, *, shared_live=(), in_flight=()):
     private = _Bucket({'chunks/u/c/a.bin', 'chunks/u/donor/b.bin', 'chunks/u/other/c.bin'})
     syncing = _Bucket({'syncing/u/job-a/1.bin', 'syncing/u/job-a/seg_1.wav', 'syncing/u/job-other/2.bin'})
     syncing.names.add('syncing/stranger/job-a/3.bin')
@@ -382,11 +384,13 @@ def _staging_buckets(monkeypatch, jobs):
     monkeypatch.delenv('BUCKET_CANONICAL_AUDIO', raising=False)
     looked_up = []
 
+    from database.sync_ledger_sources import StagingPlan
+
     def lookup(uid, conversation_ids, **kwargs):
         looked_up.append((uid, list(conversation_ids)))
-        return list(jobs)
+        return StagingPlan(erasable=tuple(jobs), shared_live=tuple(shared_live), in_flight=tuple(in_flight))
 
-    monkeypatch.setattr('database.sync_ledger_sources.staging_job_ids', lookup)
+    monkeypatch.setattr('database.sync_ledger_sources.staging_plan', lookup)
     return private, syncing, derived, looked_up
 
 
@@ -425,3 +429,48 @@ def test_no_ledger_upload_leaves_staging_untouched(monkeypatch):
     before = set(syncing.names)
     assert storage_mod.delete_conversation_sync_staging('u', ['c']) == 0
     assert syncing.names == before
+
+
+def test_staging_a_live_sibling_still_needs_is_kept(monkeypatch):
+    _private, syncing, derived, _ = _staging_buckets(monkeypatch, [], shared_live=['job-a'])
+    before_syncing = set(syncing.names)
+    storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True)
+    assert syncing.names == before_syncing
+    # The conversation's own prefix goes; the shared upload's staging stays in both buckets.
+    assert derived.names == {'syncing/u/job-a/4.bin'}
+
+
+def test_unfinished_upload_staging_is_kept_and_raised_only_for_the_durable_runner(monkeypatch):
+    from database.sync_ledger_sources import StagingInFlight
+
+    private, syncing, _derived, _ = _staging_buckets(monkeypatch, ['job-other'], in_flight=['job-a'])
+    storage_mod.delete_privacy_conversation_audio('u', 'c')
+    assert 'syncing/u/job-a/1.bin' in syncing.names
+    with pytest.raises(StagingInFlight):
+        storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True)
+    # Every other step still ran: the conversation prefix and the erasable upload are gone.
+    assert 'chunks/u/c/a.bin' not in private.names
+    assert 'syncing/u/job-other/2.bin' not in syncing.names
+    assert 'syncing/u/job-a/1.bin' in syncing.names
+
+
+def test_durable_audio_erasure_runs_every_step_under_the_audio_gate(monkeypatch):
+    gates = []
+
+    @contextmanager
+    def gate(uid, *, kind, wait_seconds=0.0, **kwargs):
+        gates.append((uid, kind, wait_seconds))
+        yield 'token'
+
+    erased = []
+    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', gate)
+    monkeypatch.setattr(
+        storage_mod,
+        'delete_privacy_conversation_audio',
+        lambda uid, cid, *, source_ids, strict_staging: erased.append(
+            (uid, cid, source_ids, strict_staging, len(gates))
+        ),
+    )
+    storage_mod.erase_conversation_audio('u', 'c', ['donor'])
+    assert gates == [('u', 'audio_conversation_deletion', storage_mod.CONVERSATION_AUDIO_ERASURE_GATE_WAIT_SECONDS)]
+    assert erased == [('u', 'c', ['donor'], True, 1)]

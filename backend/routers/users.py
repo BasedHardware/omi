@@ -428,7 +428,7 @@ async def run_conversation_batch_purge(
         kind = payload.get('kind', 'batch_purge') if isinstance(payload, dict) else None
         if not isinstance(job_id, str) or not job_id or not isinstance(generation, int) or generation < 1:
             raise ValueError('job_id and a positive generation are required')
-        if kind not in {'batch_purge', 'erasure'}:
+        if kind not in {'batch_purge', 'erasure', 'audio_erasure'}:
             raise ValueError('unknown obligation kind')
     except Exception as e:
         logger.error(f'conversation_batch_purge handler: invalid payload, dropping task: {sanitize(str(e))}')
@@ -439,6 +439,11 @@ async def run_conversation_batch_purge(
         from routers.conversations import erase_accepted_conversation
 
         run = functools.partial(conversation_batch_purge_jobs.run_erasure_job, erase=erase_accepted_conversation)
+    elif kind == 'audio_erasure':
+        # A deleted conversation's audio (both cascade modes); retried until erased.
+        from utils.other.storage import erase_conversation_audio
+
+        run = functools.partial(conversation_batch_purge_jobs.run_audio_erasure_job, erase=erase_conversation_audio)
     else:
         run = batch_pipeline_conversation_purge_scans.run_job
     try:

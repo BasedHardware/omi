@@ -187,6 +187,40 @@ def purge_conversation(
     )
 
 
+def _journal_owed(
+    client: Any,
+    key: str,
+    members: Mapping[str, MemberProgress],
+    progress: Progress,
+    owed: Mapping[str, Mapping[str, set[str]]],
+) -> int | None:
+    """Journal ledger-owed segments that still hold this owner's content; the first namespace touched."""
+    first: int | None = None
+    for ns_index, namespace in enumerate(NAMESPACES):
+        wanted = {cid: owed[cid].get(namespace, set()) for cid in members}
+        if not any(wanted.values()):
+            continue
+        known = progress.segments(namespace)
+        for cid, segment_ids in wanted.items():
+            live = []
+            for segment_id in sorted(segment_ids - known):
+                job = client.collection(f'{namespace}_jobs').document(segment_id).get()
+                result = client.collection(f'{namespace}_results').document(segment_id).get()
+                job_data = (job.to_dict() or {}) if job.exists else {}
+                result_data = (result.to_dict() or {}) if result.exists else {}
+                # Owner-scoped like discovery; an erased result is done and never re-journaled.
+                if job_data.get('owner_key') == key or (
+                    result_data.get('owner_key') == key and result_data.get('projection_state') != 'erased'
+                ):
+                    live.append(segment_id)
+            if live:
+                member = members[cid]
+                member.checkpoint(dict(member.position), add_segments=(namespace, live))
+                known.update(live)
+                first = ns_index if first is None else first
+    return first
+
+
 def purge_conversations(
     uid: str,
     members: Mapping[str, MemberProgress],
@@ -239,8 +273,15 @@ def purge_conversations(
     # the batch segments that a now fully deleted upload left behind.
     owed = {cid: owed_batch_segments(uid, [cid], firestore_client=client) for cid in members}
     key = privacy_owner_key(uid)
-    start = dict(progress.position or {})
+    start: dict[str, Any] = dict(progress.position or {})
     start_ns = int(start.get('ns') or 0)
+    # Owed rows are known by id, so a cursor already past their discovery (an
+    # in-flight run from before this rule, or a sibling deleted last) would never
+    # visit them: journal them now and resume that namespace at its dependents.
+    rewind = _journal_owed(client, key, members, progress, owed)
+    if rewind is not None and (start_ns > rewind or (start_ns == rewind and start.get('phase') in PHASES[1:])):
+        start = {'ns': rewind, 'phase': 'dependents'}
+        start_ns = rewind
     erased = 0
 
     def mark(position: dict[str, Any], **kwargs: Any) -> None:
