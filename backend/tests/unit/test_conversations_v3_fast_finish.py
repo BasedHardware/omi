@@ -296,14 +296,14 @@ def _admit(monkeypatch, current, units, *, fast='written', promoted=True):
 UNIT = (0.0, 1.0, [{'bucket': 'b', 'path': 'p', 'generation': 1}])
 
 
-def test_admission_hands_an_eligible_recording_to_the_fast_pass(monkeypatch):
-    assert _admit(monkeypatch, row(), [UNIT]) == {'fast': 1, 'promote': 0}
-
-
 @pytest.mark.parametrize('units,promotes', [([UNIT], 1), ([UNIT, UNIT], 0)])
-def test_without_a_fast_transcript_only_a_single_unit_recording_is_cut(monkeypatch, units, promotes):
-    # Several units project one at a time: cutting on the first would lock a partial window.
-    assert _admit(monkeypatch, row(), units, fast='not_enabled') == {'fast': 1, 'promote': promotes}
+@pytest.mark.parametrize('fast', ['written', 'not_enabled', 'provider_error'])
+def test_admission_cuts_a_single_unit_itself_and_leaves_several_units_to_the_fast_pass(
+    monkeypatch, units, promotes, fast
+):
+    # Several units project one at a time: cutting on the first would lock a partial window, so only
+    # the fast pass (which covers every unit) may cut those. A single unit is cut before any detached work.
+    assert _admit(monkeypatch, row(), units, fast=fast) == {'fast': 1, 'promote': promotes}
 
 
 def test_a_recording_that_already_has_a_transcript_skips_the_fast_pass(monkeypatch):

@@ -397,6 +397,10 @@ async def _manual_finish_admitted(store, uid, conversation_id, current, units, c
         def promote():
             return conversations_v3.promote_manual_end(uid, conversation_id, firestore_client=store.client)
 
+        if len(units) == 1:
+            # Stored before any detached work, so losing the process cannot lose a single-unit cut.
+            promoted = await run_blocking(db_executor, promote)
+            v3_metrics.BATCH_MANUAL_END.labels('promoted' if promoted else 'not_promoted').inc()
         if fast_finish.eligible(current) and conversation_id not in _FAST_FINISH_STARTED:
             _FAST_FINISH_STARTED[conversation_id] = None
             while len(_FAST_FINISH_STARTED) > _FAST_FINISH_STARTED_MAX:
@@ -418,21 +422,16 @@ async def _manual_finish_admitted(store, uid, conversation_id, current, units, c
                 outcome = fast_finish.run(uid, conversation_id, current, copied, read, refresh=refresh, promote=promote)
                 if outcome == 'written':
                     v3_metrics.BATCH_MANUAL_END.labels('fast_finish').inc()
-                elif len(copied) == 1:
-                    # Not admitted to the fast pass, or it failed before writing: the single unit still cuts.
-                    v3_metrics.BATCH_MANUAL_END.labels('promoted' if promote() else 'not_promoted').inc()
-                else:
+                elif len(copied) > 1:
                     v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
 
+            # Detached on purpose: admission must not wait for a provider call. Losing it at
+            # SIGKILL loses only the early transcript; the admitted batch job still delivers.
             task = asyncio.ensure_future(run_blocking(storage_executor, run))
             # The loop holds tasks weakly; keep this one until it settles.
             _FAST_FINISH_TASKS.add(task)
             task.add_done_callback(_FAST_FINISH_TASKS.discard)
-            return
-        if len(units) == 1:
-            promoted = await run_blocking(db_executor, promote)
-            v3_metrics.BATCH_MANUAL_END.labels('promoted' if promoted else 'not_promoted').inc()
-        else:
+        elif len(units) > 1:
             v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
     except Exception as error:
         logger.warning('event=v3_manual_finish_admission outcome=error exception_type=%s', type(error).__name__)

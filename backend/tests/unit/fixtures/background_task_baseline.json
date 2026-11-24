@@ -440,6 +440,13 @@
       "kind": "start_background_task",
       "count": 2,
       "why": "Joined worker and lease keeper, not detached work: leased_work awaits (shielded) the worker and then the keeper before returning, so both live exactly as long as the request. At SIGKILL the v3 builder lease expires and the named Cloud Tasks reconcile plus the sweeper redrive the user; no partial write is committed without the lease token."
+    },
+    {
+      "path": "utils/batch_pipeline/live.py",
+      "function": "_manual_finish_admitted",
+      "kind": "asyncio.ensure_future",
+      "count": 1,
+      "why": "Manual-finish first transcript (SCA-3024), at most one per recording per process and only for owners admitted by CONVERSATIONS_V3_FAST_FINISH: a best-effort early provider transcript written after record admission has committed. Losing it at SIGKILL loses only the early transcript; the admitted batch job still owns and delivers the canonical one, and a single-unit recording's manual-end cut is stored before the task starts."
     }
   ]
 }
