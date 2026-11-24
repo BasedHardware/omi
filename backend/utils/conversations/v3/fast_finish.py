@@ -149,6 +149,16 @@ def _transcribe(pcm: bytes, language: str | None) -> list[dict]:
     return segments
 
 
+def _write_fenced(uid: str, conversation_id: str, segments: list[dict[str, Any]]):
+    """The stored row is judged again inside the write transaction.
+
+    A delete, discard, lock or canonical projection committed since the pass's last read still wins.
+    """
+    from database.conversations import update_conversation_segments
+
+    return update_conversation_segments(uid, conversation_id, segments, require_row=candidate)
+
+
 def run(
     uid: str,
     conversation_id: str,
@@ -245,16 +255,8 @@ def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, 
         return 'superseded'
     started = time.monotonic()
     try:
-        if write is None:
-            from database.conversations import update_conversation_segments
-
-            # The stored row is judged again inside the write transaction: a delete, discard, lock or
-            # canonical projection committed since the read above still wins.
-            def write(uid, conversation_id, segments):
-                return update_conversation_segments(uid, conversation_id, segments, require_row=candidate)
-
         # False: the row no longer qualifies, or the canonical record already projected.
-        written = write(uid, conversation_id, segments)
+        written = (write or _write_fenced)(uid, conversation_id, segments)
     except Exception as error:
         logger.warning('event=v3_fast_finish outcome=write_error exception_type=%s', type(error).__name__)
         return 'write_error'

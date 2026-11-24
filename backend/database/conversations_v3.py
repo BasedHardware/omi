@@ -602,7 +602,7 @@ def promote_manual_end(uid, cid, *, firestore_client=None):
             or row.get('discarded')
         ):
             return False
-        update = {'v3_manual_end': True}
+        update: dict[str, Any] = {'v3_manual_end': True}
         if row.get('v3_speech_landed_at') is not None:
             # Speech already landed, so its reconcile may have run without the cut. Leave the
             # recording pending: the sweep re-enqueues an owner whose pending is older than ten minutes.
