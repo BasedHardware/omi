@@ -727,6 +727,8 @@ class _PlansSheetState extends State<PlansSheet> {
   void initState() {
     PaywallPacing.markShown();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Reopening the sheet re-reads the plan; the last answer stays on screen while it loads.
+      if (mounted) unawaited(context.read<UsageProvider>().fetchSubscription());
       _loadAvailablePlans();
       _initializeStorefront();
     });

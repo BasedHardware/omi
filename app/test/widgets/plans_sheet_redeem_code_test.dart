@@ -55,6 +55,10 @@ class _Usage extends UsageProvider {
   int checkouts = 0;
   final checkoutCodes = <String?>[];
   int upgrades = 0;
+  // These cases count the reads a code causes; the sheet's own opening read is covered elsewhere.
+  bool skipReads = false;
+  @override
+  Future<void> fetchSubscription() => skipReads ? Future.value() : super.fetchSubscription();
   @override
   Future<void> loadAvailablePlans() async {}
   @override
@@ -123,6 +127,7 @@ Future<void> _pump(WidgetTester tester, _Usage usage, {Locale locale = const Loc
     ]
   });
   addTearDown(usage.dispose);
+  usage.skipReads = true;
   await tester.pumpWidget(RepaintBoundary(
       key: _boundary,
       child: MultiProvider(
@@ -149,6 +154,7 @@ Future<void> _pump(WidgetTester tester, _Usage usage, {Locale locale = const Loc
   await tester.pump();
   await tester.ensureVisible(find.byKey(_field));
   await tester.pump();
+  usage.skipReads = false;
 }
 
 Future<void> _capture(WidgetTester tester, String name) async {

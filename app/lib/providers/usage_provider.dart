@@ -72,6 +72,7 @@ class UsageProvider with ChangeNotifier {
   @override
   void dispose() {
     _backlogRefreshTimer?.cancel();
+    _playManageFollowUp?.cancel();
     unawaited(_wifiWait?.cancel());
     _wifiWait = null;
     _sessionGeneration++;
@@ -418,6 +419,10 @@ class UsageProvider with ChangeNotifier {
     _backlogIdempotencyKey = null;
     _backlogRefreshTimer?.cancel();
     _backlogRefreshTimer = null;
+    _playManageFollowUp?.cancel();
+    _playManageFollowUp = null;
+    _openedPlayManage = false;
+    _lastResumeRefreshAt = null;
     _isProcessingBacklog = false;
     TranscriptionAllowanceCache.clear();
     _subscription = null;
@@ -458,6 +463,37 @@ class UsageProvider with ChangeNotifier {
   }
 
   Future<void>? _subscriptionFetch;
+
+  static const resumeRefreshInterval = Duration(seconds: 30);
+  static const playManageFollowUpDelay = Duration(seconds: 5);
+  DateTime? _lastResumeRefreshAt;
+  bool _openedPlayManage = false;
+  Timer? _playManageFollowUp;
+
+  /// The reader is leaving for Google Play's subscription page; the next resume reads twice.
+  void markOpenedPlayManage() => _openedPlayManage = true;
+
+  /// The app came back to the foreground: the plan may have changed in Google Play or the Stripe
+  /// portal. At most one read per [resumeRefreshInterval]; none when signed out. After Play's
+  /// subscription page, one more read [playManageFollowUpDelay] later, because the server learns
+  /// of the change from Play's notification a few seconds after the reader returns.
+  Future<void> refreshOnResume({required bool signedIn}) async {
+    final fromPlay = _openedPlayManage;
+    _openedPlayManage = false;
+    if (!signedIn) return;
+    final now = _now();
+    final last = _lastResumeRefreshAt;
+    if (!fromPlay && last != null && now.difference(last) < resumeRefreshInterval) return;
+    _lastResumeRefreshAt = now;
+    final generation = _sessionGeneration;
+    await fetchSubscription();
+    if (!fromPlay || generation != _sessionGeneration) return;
+    _playManageFollowUp?.cancel();
+    _playManageFollowUp = Timer(playManageFollowUpDelay, () {
+      _playManageFollowUp = null;
+      unawaited(fetchSubscription());
+    });
+  }
 
   /// Fetches the subscription; concurrent callers share the request in flight instead of
   /// returning before it lands (the after-sign-up paywall gate awaits this right after sign-in,

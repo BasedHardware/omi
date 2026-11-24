@@ -90,6 +90,7 @@ class _PlayPlansContentState extends State<PlayPlansContent> {
   }
 
   Future<void> _manage(String productId) async {
+    context.read<UsageProvider>().markOpenedPlayManage();
     final opened = await _open(playManageSubscriptionUri(productId));
     if (!opened && mounted) OmiFeedback.error(context, context.l10n.playManageSubscription);
   }

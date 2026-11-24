@@ -181,7 +181,9 @@ void main() {
 
   testWidgets('Android Play-billed reader sees Play prices and buys through Play, never the Stripe webview',
       (tester) async {
-    final world = await _pump(tester, [_response(), _response(plan: PlanType.unlimitedV2, provider: 'play')]);
+    // Reads: before the sheet, the sheet's opening read, then after the purchase.
+    final world =
+        await _pump(tester, [_response(), _response(), _response(plan: PlanType.unlimitedV2, provider: 'play')]);
     expect(world.usage.playBilledPurchaser, isTrue);
     expect(find.byType(PlayPlansContent), findsOneWidget);
     expect(find.textContaining('₹22,500.00'), findsWidgets);
@@ -231,7 +233,8 @@ void main() {
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('Restore sends the owned Play purchase to the server', (tester) async {
-    final world = await _pump(tester, [_response(), _response(plan: PlanType.unlimitedV2, provider: 'play')]);
+    final world =
+        await _pump(tester, [_response(), _response(), _response(plan: PlanType.unlimitedV2, provider: 'play')]);
     world.platform.owned = [playPurchase(PurchaseStatus.restored, token: 'owned')];
     await tester.tap(find.byKey(const Key('play_restore')));
     await tester.pumpAndSettle();

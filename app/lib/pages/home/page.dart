@@ -5,6 +5,7 @@
 // state rather than the stored flag (the OS may have revoked a granted
 // permission), and the static FGS call here stays an App UI handoff -- capture
 // ownership belongs to CaptureSessionOwner (app/lib/services/capture/OWNERSHIP.md).
+import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/on_device/on_device_runner.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
@@ -412,6 +413,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         // Heal phone-mic sessions that went silent while another app played
         // audio (Stage Manager / YouTube) without an AVAudioSession interrupt.
         captureProvider.onAppResumed();
+        // The plan may have changed in Google Play or the Stripe portal while the app was away.
+        unawaited(context.read<UsageProvider>().refreshOnResume(
+              signedIn: context.read<AuthenticationProvider>().isSignedIn(),
+            ));
         _scheduleHomeWidgetFreshness(context.read<ActionItemsProvider>());
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
