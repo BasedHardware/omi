@@ -15876,4 +15876,15 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me ಮೂಲಕ ಬಿಲ್ ಮಾಡಲಾಗುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ಇಲ್ಲಿ ರದ್ದುಮಾಡಿ.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me ಮೂಲಕ ಬಿಲ್ ಮಾಡಲಾಗುತ್ತದೆ.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return '$plan ಮರಳಿ ಪಡೆಯಲು omi.me ನಲ್ಲಿ ನಿಮ್ಮ ಕಾರ್ಡ್ ಅಪ್‌ಡೇಟ್ ಮಾಡಿ.';
+  }
 }

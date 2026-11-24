@@ -19335,5 +19335,22 @@
                 "type": "String"
             }
         }
+    },
+    "playStripeBilledOnWeb": "Billed through omi.me. Cancel here anytime.",
+    "@playStripeBilledOnWeb": {
+        "description": "Plans & Billing on an Android build that sells through Google Play, under the renewing plan of a reader who pays on omi.me (Stripe). The only action on the sheet is Cancel. Plain text, no link."
+    },
+    "playStripeBilledOnWebShort": "Billed through omi.me.",
+    "@playStripeBilledOnWebShort": {
+        "description": "Plans & Billing on an Android build that sells through Google Play, under a cancel-pending plan billed on omi.me (Stripe), next to Resubscribe. Plain text, no link."
+    },
+    "playStripeUpdateCardToGetPlanBack": "Update your card at omi.me to get {plan} back.",
+    "@playStripeUpdateCardToGetPlanBack": {
+        "description": "Home row line under 'Your card was declined' on an Android build that sells through Google Play; the card can only be updated on the omi.me website. plan = a product name such as Omi Pro. Plain text, no link.",
+        "placeholders": {
+            "plan": {
+                "type": "String"
+            }
+        }
     }
 }

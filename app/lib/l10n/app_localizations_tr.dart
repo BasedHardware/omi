@@ -15834,4 +15834,15 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me üzerinden faturalandırılır. İstediğin zaman buradan iptal et.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me üzerinden faturalandırılır.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return '$plan planını geri almak için kartını omi.me üzerinden güncelle.';
+  }
 }

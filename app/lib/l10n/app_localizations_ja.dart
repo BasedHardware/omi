@@ -15591,4 +15591,15 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me で請求されています。ここでいつでも解約できます。';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me で請求されています。';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return '$plan を再開するには omi.me でカードを更新してください。';
+  }
 }

@@ -4763,5 +4763,8 @@
     "prepaidCodeFieldHint": "Sisesta oma kood",
     "prepaidCodeRedeem": "Lunasta",
     "prepaidCodeRedeemed": "Kood on lunastatud",
-    "prepaidCodeResult": "{reason, select, invalid{See kood ei kehti. Kontrolli seda ja proovi uuesti.} used{Seda koodi on juba kasutatud.} expired{Selle koodi kehtivus on lõppenud.} hasPlan{Sul on juba pakett. Sinu koodi ei kasutatud. Lunasta see, kui su pakett lõpeb.} notPrepaid{Seda koodi ei saa siin lunastada. Kasuta seda paketi valimisel.} notEligible{Seda koodi ei saa selles kontos kasutada.} rateLimited{Liiga palju katseid. Proovi hiljem uuesti.} other{Midagi läks valesti. Proovi uuesti.}}"
+    "prepaidCodeResult": "{reason, select, invalid{See kood ei kehti. Kontrolli seda ja proovi uuesti.} used{Seda koodi on juba kasutatud.} expired{Selle koodi kehtivus on lõppenud.} hasPlan{Sul on juba pakett. Sinu koodi ei kasutatud. Lunasta see, kui su pakett lõpeb.} notPrepaid{Seda koodi ei saa siin lunastada. Kasuta seda paketi valimisel.} notEligible{Seda koodi ei saa selles kontos kasutada.} rateLimited{Liiga palju katseid. Proovi hiljem uuesti.} other{Midagi läks valesti. Proovi uuesti.}}",
+    "playStripeBilledOnWeb": "Arveldatakse omi.me kaudu. Tühista siin igal ajal.",
+    "playStripeBilledOnWebShort": "Arveldatakse omi.me kaudu.",
+    "playStripeUpdateCardToGetPlanBack": "Uuenda oma kaarti aadressil omi.me, et {plan} tagasi saada."
 }

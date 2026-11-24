@@ -15928,4 +15928,15 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Χρεώνεται μέσω omi.me. Ακυρώστε εδώ οποιαδήποτε στιγμή.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Χρεώνεται μέσω omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Ενημερώστε την κάρτα σας στο omi.me για να επανέλθει το $plan.';
+  }
 }

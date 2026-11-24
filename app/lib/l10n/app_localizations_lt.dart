@@ -15848,4 +15848,15 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Mokama per omi.me. Atšaukite čia bet kada.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Mokama per omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Atnaujinkite kortelę omi.me, kad susigrąžintumėte $plan.';
+  }
 }

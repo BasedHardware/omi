@@ -15955,4 +15955,15 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Facturé via omi.me. Annulez ici à tout moment.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Facturé via omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Mettez à jour votre carte sur omi.me pour retrouver $plan.';
+  }
 }

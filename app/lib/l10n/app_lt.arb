@@ -4763,5 +4763,8 @@
     "prepaidCodeFieldHint": "Įveskite savo kodą",
     "prepaidCodeRedeem": "Panaudoti",
     "prepaidCodeRedeemed": "Kodas panaudotas",
-    "prepaidCodeResult": "{reason, select, invalid{Šis kodas negalioja. Patikrinkite jį ir bandykite dar kartą.} used{Šis kodas jau panaudotas.} expired{Šio kodo galiojimas baigėsi.} hasPlan{Jau turite planą. Jūsų kodas nepanaudotas. Panaudokite jį, kai baigsis jūsų planas.} notPrepaid{Šio kodo čia panaudoti negalima. Panaudokite jį rinkdamiesi planą.} notEligible{Šio kodo negalima naudoti šioje paskyroje.} rateLimited{Per daug bandymų. Bandykite vėliau.} other{Kažkas nepavyko. Bandykite dar kartą.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Šis kodas negalioja. Patikrinkite jį ir bandykite dar kartą.} used{Šis kodas jau panaudotas.} expired{Šio kodo galiojimas baigėsi.} hasPlan{Jau turite planą. Jūsų kodas nepanaudotas. Panaudokite jį, kai baigsis jūsų planas.} notPrepaid{Šio kodo čia panaudoti negalima. Panaudokite jį rinkdamiesi planą.} notEligible{Šio kodo negalima naudoti šioje paskyroje.} rateLimited{Per daug bandymų. Bandykite vėliau.} other{Kažkas nepavyko. Bandykite dar kartą.}}",
+    "playStripeBilledOnWeb": "Mokama per omi.me. Atšaukite čia bet kada.",
+    "playStripeBilledOnWebShort": "Mokama per omi.me.",
+    "playStripeUpdateCardToGetPlanBack": "Atnaujinkite kortelę omi.me, kad susigrąžintumėte {plan}."
 }
