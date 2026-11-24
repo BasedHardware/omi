@@ -10,6 +10,7 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
+import 'package:omi/services/capture/optimistic_processing.dart';
 
 typedef ConversationsLiveFetcher = Future<ApiResult<api.ConversationsLiveRead>> Function();
 
@@ -49,6 +50,151 @@ class ConversationsV3Provider extends ChangeNotifier {
   bool _resolved = false;
   ServerConversation? _live;
   Future<void>? _reading;
+  ServerConversation? _finishRow;
+  String? _finishRecordingId;
+  String? _finishLiveId;
+  // An accepted finish that reached its deadline: Home reads the list once.
+  bool _reconcileOnHome = false;
+
+  // Counts manual finishes the server did not accept, so a latched End can be retried.
+  int _finishFailures = 0;
+  int get finishFailures => _finishFailures;
+
+  bool takeHomeReconcile() {
+    final due = _reconcileOnHome;
+    _reconcileOnHome = false;
+    return due;
+  }
+
+  bool _suppressListening = false;
+  String? _finishCaptureId;
+  bool _finishAccepted = false;
+  bool _finishExpired = false;
+  Timer? _finishExpiry;
+  Timer? _finishDeadline;
+
+  bool get finishFeedbackEnabled => v3 && !const bool.fromEnvironment('OMI_V3_FINISH_FEEDBACK_OFF');
+  ServerConversation? get finishRow => finishFeedbackEnabled && !_finishExpired ? _finishRow : null;
+
+  bool suppressListeningAfterFinish(String? captureId) =>
+      finishFeedbackEnabled && _suppressListening && _finishCaptureId == captureId;
+
+  void startManualFinish(ServerConversation row, String? recordingId, {String? liveConversationId, String? captureId}) {
+    if (!finishFeedbackEnabled) return;
+    _clearManualFinish();
+    _finishRow = row;
+    _suppressListening = true;
+    _finishCaptureId = captureId;
+    _finishRecordingId = recordingId;
+    // End supplies the exact ended conversation; infer from the cached live row only without it.
+    final live = _live;
+    if (liveConversationId != null) {
+      _finishLiveId = liveConversationId;
+    } else if (live != null &&
+        (live.id == recordingId || (recordingId != null && live.v3?.recordingIds.contains(recordingId) == true))) {
+      _finishLiveId = live.id;
+    }
+    _armFinishExpiry();
+    _finishDeadline = Timer(const Duration(minutes: 20), () {
+      _reconcileOnHome = _finishAccepted;
+      _clearManualFinish(keepClosedLive: _finishAccepted);
+      notifyListeners();
+    });
+    notifyListeners();
+  }
+
+  bool settleManualFinish(ServerConversation row, ServerConversation? result) {
+    if (!finishFeedbackEnabled || !identical(_finishRow, row)) return false;
+    if (result == null || result.discarded || result.status == ConversationStatus.in_progress) {
+      _finishFailures++;
+      _clearManualFinish();
+    } else {
+      _finishAccepted = true;
+      _finishExpired = false;
+      _suppressListening = true;
+      _finishExpiry?.cancel();
+      _finishRecordingId = result.id;
+      if (result.v3?.recording != true) {
+        _finishLiveId = result.id;
+      } else if (_live?.v3?.recordingIds.contains(result.id) == true) {
+        _finishLiveId ??= _live!.id;
+      }
+    }
+    notifyListeners();
+    return true;
+  }
+
+  /// A visible successor can take over the row while its summary is pending.
+  bool finishHasSuccessor(Iterable<ServerConversation> visibleRows) => _matchesFinish(visibleRows);
+
+  ServerConversation? finishTerminalMatch(Iterable<ServerConversation> rows) {
+    if (!_finishAccepted) return null;
+    for (final row in rows) {
+      if (row.v3?.recording == true) continue;
+      final terminal = switch (row.v3?.tileState) {
+        ConversationTileState.done || ConversationTileState.failed => true,
+        null => row.status == ConversationStatus.completed ||
+            row.status == ConversationStatus.failed ||
+            row.homeStep == 'failed',
+        _ => false,
+      };
+      if (terminal && _matchesFinishRow(row)) return row;
+    }
+    return null;
+  }
+
+  bool _matchesFinish(Iterable<ServerConversation> rows) => rows.any(_matchesFinishRow);
+
+  bool _matchesFinishRow(ServerConversation row) =>
+      row.v3?.tileState != ConversationTileState.live &&
+      row.status != ConversationStatus.in_progress &&
+      (row.id == _finishLiveId ||
+          (_finishAccepted &&
+              _finishLiveId == null &&
+              _finishRecordingId != null &&
+              (row.v3?.recordingIds.contains(_finishRecordingId) == true ||
+                  row.v3?.recordingPieces.any(
+                        (piece) => piece.recordingId == _finishRecordingId,
+                      ) ==
+                      true)));
+
+  bool acknowledgeManualFinish(ServerConversation row) {
+    if (!_finishAccepted || !identical(finishRow, row)) return false;
+    _clearManualFinish(keepClosedLive: true);
+    notifyListeners();
+    return true;
+  }
+
+  void _armFinishExpiry() {
+    _finishExpiry?.cancel();
+    _finishExpiry = Timer(OptimisticProcessingPlaceholder.timeout, () {
+      _finishExpired = true;
+      _suppressListening = false;
+      notifyListeners();
+    });
+  }
+
+  void _clearManualFinish({bool keepClosedLive = false}) {
+    _finishExpiry?.cancel();
+    _finishDeadline?.cancel();
+    _finishRow = null;
+    _finishRecordingId = null;
+    if (!keepClosedLive) {
+      _finishLiveId = null;
+      _finishCaptureId = null;
+      _suppressListening = false;
+    }
+    _finishAccepted = false;
+    _finishExpired = false;
+  }
+
+  Future<void> refreshAfterManualFinish() async {
+    final owner = _owner;
+    await _reading?.then<void>((_) {}, onError: (Object _) {});
+    if (owner != _uid()) return;
+    if (!_disposed && finishFeedbackEnabled) await refresh();
+  }
+
   Timer? _poll;
   bool Function()? _pollWhen;
   bool Function()? _rowsPending;
@@ -64,7 +210,8 @@ class ConversationsV3Provider extends ChangeNotifier {
   /// Episode and Home-feed reads wait for this: off for a v3 account, and until the first answer.
   bool get suppressesLegacy => !resolved || v3;
 
-  ServerConversation? get live => v3 ? _live : null;
+  ServerConversation? get live =>
+      v3 && ((_finishExpired && !_finishAccepted) || _live?.id != _finishLiveId) ? _live : null;
 
   @visibleForTesting
   bool get polling => _poll != null;
@@ -87,6 +234,7 @@ class ConversationsV3Provider extends ChangeNotifier {
   void _ensureOwner() {
     final uid = _uid();
     if (uid == _owner) return;
+    _clearManualFinish();
     _owner = uid;
     _v3 = false;
     _resolved = false;
@@ -118,6 +266,19 @@ class ConversationsV3Provider extends ChangeNotifier {
       case ApiSuccess(:final data):
         _v3 = data.v3;
         _live = data.v3 ? data.conversation : null;
+        // A finish accepted before the first read: bind the late live window of its recording.
+        if (_finishRow != null &&
+            _finishLiveId == null &&
+            _finishRecordingId != null &&
+            _live?.v3?.recordingIds.contains(_finishRecordingId) == true) {
+          _finishLiveId = _live!.id;
+        }
+        if (_live != null &&
+            _live!.id != _finishLiveId &&
+            (_finishRecordingId == null || _live!.v3?.recordingIds.contains(_finishRecordingId) != true)) {
+          _suppressListening = false;
+          if (_finishRow == null) _finishLiveId = null;
+        }
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
         // An older server: today's Home.
         _v3 = false;
@@ -194,6 +355,7 @@ class ConversationsV3Provider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _clearManualFinish();
     _poll?.cancel();
     super.dispose();
   }

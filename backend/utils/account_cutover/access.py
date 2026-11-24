@@ -18,6 +18,7 @@ from utils.account_cutover.control import build_account_cutover_control, minimum
 from utils.account_cutover.fence import background_job_should_skip_account
 from utils.account_cutover.telemetry import record_cutover_access_decision
 from utils.executors import db_executor, run_blocking
+from utils.other.raise_site import tag_raise_site
 
 logger = logging.getLogger(__name__)
 
@@ -259,7 +260,7 @@ def enforce_account_cutover_http_access(
             status_code = 503
         else:
             status_code = 403
-        raise HTTPException(status_code=status_code, detail=denial.detail) from denial
+        raise tag_raise_site(HTTPException(status_code=status_code, detail=denial.detail), denial.code) from denial
 
 
 def enforce_account_cutover_ws_access(

@@ -220,7 +220,7 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
     final ok = await payment_api.acceptRetentionOffer();
     if (!mounted) return;
     if (ok) {
-      await context.read<UsageProvider>().fetchSubscription();
+      await context.read<UsageProvider>().fetchSubscription(fresh: true);
       if (!mounted) return;
       OmiFeedback.confirm(context, context.l10n.retentionOfferApplied(offer.percentOff, offer.durationMonths));
       _flow.exit.close(context, false);

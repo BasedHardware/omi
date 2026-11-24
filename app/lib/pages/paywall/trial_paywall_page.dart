@@ -168,7 +168,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     final usage = context.read<UsageProvider>();
     setState(() => _busy = true);
     try {
-      await usage.fetchSubscription().timeout(const Duration(seconds: 4));
+      await usage.fetchSubscription(fresh: true).timeout(const Duration(seconds: 4));
     } catch (_) {
       return;
     } finally {

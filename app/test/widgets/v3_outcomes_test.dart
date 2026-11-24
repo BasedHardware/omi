@@ -150,7 +150,7 @@ void main() {
     PlatformManager.initializeForLocalHarness();
   });
 
-  group('X5: a failed conversation leaves Home for Activity and lights the bell', () {
+  group('X5: a failed conversation leaves Home for Activity without lighting the bell', () {
     test('one predicate reads the tile state first, then the legacy fields', () {
       expect(isFailedConversation(_decoded('failed')), isTrue, reason: 'status completed, tile failed');
       expect(isFailedConversation(_decoded('done', status: 'failed')), isFalse, reason: 'the tile wins');
@@ -158,17 +158,17 @@ void main() {
       expect(isFailedConversation(_decoded(null)), isFalse);
     });
 
-    // Tile state → (on Home, in Activity, bell dot).
-    const table = <(String, bool, bool, bool)>[
-      ('live', true, false, false),
-      ('transcribing', true, false, false),
-      ('writing', true, false, false),
-      ('done', true, false, false),
-      ('failed', false, true, true),
+    // Tile state → (on Home, in Activity).
+    const table = <(String, bool, bool)>[
+      ('live', true, false),
+      ('transcribing', true, false),
+      ('writing', true, false),
+      ('done', true, false),
+      ('failed', false, true),
     ];
 
     test('Home and Activity, per tile state', () {
-      for (final (tile, home, activity, _) in table) {
+      for (final (tile, home, activity) in table) {
         final c = _decoded(tile);
         expect(shownOnV3Home(c), home, reason: '$tile on Home');
         expect(failedActivityConversations(pending: const [], conversations: [c], v3Only: true).isNotEmpty, activity,
@@ -176,8 +176,8 @@ void main() {
       }
     });
 
-    testWidgets('the bell, per tile state; Activity having shown it clears the dot', (tester) async {
-      for (final (tile, _, _, dot) in table) {
+    testWidgets('summary tile states do not light the bell', (tester) async {
+      for (final (tile, _, _) in table) {
         final conversations = ConversationProvider(isSignedIn: () => false)..conversations = [_decoded(tile)];
         final store = _store();
         await tester.pumpWidget(_app(
@@ -187,20 +187,14 @@ void main() {
             ChangeNotifierProvider<ConversationsV3Provider>.value(value: _v3(true)),
           ],
         ));
-        expect(find.byKey(const ValueKey('home_activity_attention_dot')), dot ? findsOneWidget : findsNothing,
-            reason: '$tile dot');
-        if (dot) {
-          store.markFailedConversationsSeen(['c1']);
-          await tester.pump();
-          expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
-        }
+        expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing, reason: '$tile dot');
         await tester.pumpWidget(const SizedBox());
         conversations.dispose();
       }
     });
   });
 
-  testWidgets('a dismissed Needs attention conversation that is still failed does not light the bell', (tester) async {
+  testWidgets('an unseen or dismissed summary failure does not light the bell', (tester) async {
     final conversations = ConversationProvider(isSignedIn: () => false)..conversations = [_decoded('failed')];
     final store = PendingWorkStore(
       loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
@@ -212,10 +206,10 @@ void main() {
                 kind: 'conversation_summary_failed',
                 conversationId: 'c1',
                 retryable: true,
-                seen: true,
+                seen: false,
                 retryState: AttentionRetryState.none),
           ],
-          unseenCount: 0)),
+          unseenCount: 1)),
       dismiss: (_) async => const ApiSuccess(null),
       loadDismissed: (_) => const [],
       saveDismissed: (_, __) {},
@@ -228,7 +222,6 @@ void main() {
         ChangeNotifierProvider<ConversationsV3Provider>.value(value: _v3(true)),
       ],
     ));
-    // Listed under its attention row in Activity, never as a failed row: no dot owed for it.
     expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
     await store.dismiss(store.attention.single);
     await tester.pump();

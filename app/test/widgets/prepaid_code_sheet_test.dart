@@ -38,7 +38,7 @@ class _Usage extends UsageProvider {
   @override
   bool get billingProviderUnknown => false;
   @override
-  Future<void> fetchSubscription({bool force = false}) async => fetches++;
+  Future<void> fetchSubscription({bool fresh = false}) async => fetches++;
 }
 
 Widget _app(Widget child) => MaterialApp(

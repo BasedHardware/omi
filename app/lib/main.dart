@@ -724,6 +724,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               peopleProvider: people,
               usageProvider: usage,
               episodeProvider: episodes,
+              conversationsV3: context.read<ConversationsV3Provider>(),
             );
             return (previous?..updateExternalActions(externalActions)) ??
                 composeProductionCaptureProvider(
