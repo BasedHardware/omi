@@ -680,7 +680,9 @@ def _create_or_get_finalization_intent_txn(
             uid, loaded, conversation_ref, transaction
         ):
             # A finish inside the first 60 s archive window: the live session still holds the audio.
-            if trigger is not ProcessingTrigger.CLIENT_FINALIZE or not server_batch.user_finish_admits(loaded):
+            if trigger is not ProcessingTrigger.CLIENT_FINALIZE or not server_batch.user_finish_admits(
+                uid, loaded, now
+            ):
                 intent = _no_finalization_intent('no_content')
                 return intent
 

@@ -5,6 +5,7 @@ only when an archive window commits. A finish before that used to be answered ``
 ignored, so the recording stayed open until the socket closed or the quiet timer fired.
 """
 
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -29,8 +30,14 @@ def _live(**row):
         'record_lane_owner': 'batch_live_v1',
         server_batch.MARKER: True,
         'server_batch_audio_received': True,
+        'created_at': _now() - timedelta(seconds=37),
         **row,
     }
+
+
+@pytest.fixture(autouse=True)
+def _every_owner(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'on')
 
 
 def _intent(row, trigger):
@@ -62,8 +69,20 @@ def test_user_finish_before_the_first_archive_window_is_admitted():
         _live(server_batch_audio_closed=True),
         _live(record_lane_owner=None),
         {'status': 'in_progress', 'transcript_segments': []},
+        _live(listen_batch_producer={'version': 1, 'token': 't'}),
+        _live(created_at=_now() - timedelta(seconds=3)),
+        _live(created_at=None),
     ],
-    ids=['no-audio-yet', 'unknown-audio', 'closed-empty-archive', 'not-batch-owned', 'legacy-row'],
+    ids=[
+        'no-audio-yet',
+        'unknown-audio',
+        'closed-empty-archive',
+        'not-batch-owned',
+        'legacy-row',
+        'reconnect-producer',
+        'seconds-old-successor',
+        'no-creation-time',
+    ],
 )
 def test_a_recording_holding_no_live_audio_is_still_empty(row):
     assert _intent(row, ProcessingTrigger.CLIENT_FINALIZE)['status'] == 'no_content'
@@ -80,12 +99,24 @@ def test_kill_switch_restores_the_empty_answer(monkeypatch):
     assert _intent(_live(), ProcessingTrigger.CLIENT_FINALIZE)['status'] == 'no_content'
 
 
+@pytest.mark.parametrize(
+    'mode,member,status', [('cohort', False, 'no_content'), ('cohort', True, 'queued'), ('off', True, 'no_content')]
+)
+def test_early_admission_rolls_out_with_the_fast_finish_cohort(monkeypatch, mode, member, status):
+    asked = []
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', mode)
+    monkeypatch.setattr(server_batch, 'in_rollout_cohort', lambda uid, name: asked.append((uid, name)) or member)
+
+    assert _intent(_live(), ProcessingTrigger.CLIENT_FINALIZE)['status'] == status
+    assert asked == ([('uid-1', 'v3-fast-finish')] if mode == 'cohort' else [])
+
+
 def test_committed_audio_is_not_uncommitted():
     committed = _live(has_content=True, server_batch_audio_start=1.0, server_batch_audio_end=38.0)
 
     assert server_batch.live_audio_uncommitted(_live())
     assert not server_batch.live_audio_uncommitted(committed)
-    assert not server_batch.user_finish_admits(committed)
+    assert not server_batch.user_finish_admits('uid-1', committed, _now())
 
 
 def _worker(monkeypatch, first, later):
