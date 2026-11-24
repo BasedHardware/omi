@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
+from contextvars import ContextVar
 from collections.abc import Mapping
 from datetime import datetime
 from hashlib import sha256
@@ -210,6 +211,36 @@ def _observe_sync(state, run, leaves, url):
     from utils.episodes import finalize
     from utils.enrichment import callback
 
+    from utils.observability import owner_recognition_diagnostics as diagnostics
+    from utils.speakers import processing as speaker_processing
+
+    log_summary = diagnostics.log_summary
+    finish = speaker_processing.finish
+    build_evidence = speaker_processing.build_evidence
+    scoped = ContextVar('capture_evidence_owner', default=False)
+    state.speaker_trace = {'exits': [], 'evidence': []}
+
+    def observe_exit(event, data):
+        if event == 'resolver_exit' and data.get('uid') == state.uid and data.get('conversation') == state.cid:
+            state.speaker_trace['exits'].append(diagnostics.contract.summary(data))
+        return log_summary(event, data)
+
+    def observe_finish(token, uid, conversation, receipt, **kwargs):
+        bound = scoped.set(uid == state.uid and conversation.id == state.cid)
+        try:
+            return finish(token, uid, conversation, receipt, **kwargs)
+        finally:
+            scoped.reset(bound)
+
+    def observe_evidence(*args, **kwargs):
+        evidence = build_evidence(*args, **kwargs)
+        if scoped.get():
+            state.speaker_trace['evidence'].append(sha256(evidence.model_dump_json().encode()).hexdigest())
+        return evidence
+
+    leaves.enter_context(patch.object(diagnostics, 'log_summary', observe_exit))
+    leaves.enter_context(patch.object(speaker_processing, 'finish', observe_finish))
+    leaves.enter_context(patch.object(speaker_processing, 'build_evidence', observe_evidence))
     futures = []
     submit = executors.submit_with_context
 
@@ -338,6 +369,7 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                     if getattr(state, 'diag_missing_module', None):
                         out['errors'][side] = f'ModuleNotFoundError: {state.diag_missing_module}'
                     if side in out:
+                        out[side]['speaker_trace'] = getattr(state, 'speaker_trace', None)
                         out[side]['hourly_usage_replay_bucket'] = HOURLY_USAGE_REPLAY_TIME.strftime('%Y-%m-%d-%H')
                         if getattr(state, 'python_retry', None):
                             out[side]['python_retry'] = state.python_retry

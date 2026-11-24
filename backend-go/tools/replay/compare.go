@@ -29,7 +29,13 @@ type providerTokenCall struct {
 	Embedding bool   `json:"embedding"`
 }
 
+type speakerTrace struct {
+	Exits    []map[string]any `json:"exits"`
+	Evidence []string         `json:"evidence"`
+}
+
 type observation struct {
+	SpeakerTrace                   *speakerTrace              `json:"speaker_trace,omitempty"`
 	OwnerID                        string                     `json:"owner_id"`
 	ConversationID                 string                     `json:"conversation_id"`
 	SeededTokenHashes              []string                   `json:"seeded_token_hashes"`
