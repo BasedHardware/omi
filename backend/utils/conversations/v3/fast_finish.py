@@ -11,7 +11,8 @@ Constraints it upholds:
   these provisional segments inside the record span, and ``update_conversation_segments`` refuses
   this write once ``record_projection_revision`` is set, so a late fast pass can never overwrite it.
 - Best effort only. Every failure is counted and swallowed; admission never waits on it.
-- Rollout: ``CONVERSATIONS_V3_FAST_FINISH`` is ``off`` (default), ``on``, or a list of ``uid:`` members.
+- Rollout: ``CONVERSATIONS_V3_FAST_FINISH`` is ``cohort`` (default: members of the ``v3-fast-finish``
+  runtime rollout cohort, empty until someone is added), ``on`` or ``off``.
 """
 
 import logging
@@ -22,7 +23,7 @@ from typing import Any
 
 from prometheus_client import Counter, Histogram
 
-from config.rollout_cohorts import parse_cohort, valid_uid
+from config.rollout_cohorts import in_rollout_cohort
 
 logger = logging.getLogger(__name__)
 
@@ -54,21 +55,15 @@ for _outcome in (
     OUTCOMES.labels(_outcome)
 
 
+COHORT = 'v3-fast-finish'
+
+
 def enabled(uid: str) -> bool:
-    """``on`` admits every owner; a ``uid:`` list admits only its members; anything else is off."""
-    raw = os.getenv('CONVERSATIONS_V3_FAST_FINISH', 'off').strip()
-    mode = raw.lower()
-    if mode in {'on', 'true', '1'}:
+    """``cohort`` (default) admits members of the runtime rollout cohort; ``on`` every owner; ``off`` nobody."""
+    mode = os.getenv('CONVERSATIONS_V3_FAST_FINISH', 'cohort').strip().lower()
+    if mode == 'on':
         return True
-    if not raw or mode in {'off', 'false', '0', 'no'} or not valid_uid(uid):
-        return False
-    if not all(token.strip().lower().startswith('uid:') for token in raw.split(',')):
-        return False
-    parsed = parse_cohort(raw)
-    if parsed is None:
-        return False
-    members, _ = parsed
-    return not any(set(member) & set('*?[]') for member in members) and uid in members
+    return mode == 'cohort' and in_rollout_cohort(uid, COHORT)
 
 
 def eligible(row: dict) -> bool:

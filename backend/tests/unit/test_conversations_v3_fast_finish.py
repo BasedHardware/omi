@@ -38,13 +38,12 @@ def ref(path, start_frame, offset_frame, frames):
 @pytest.mark.parametrize(
     'value,member,expected',
     [
-        (None, UID, False),
-        ('off', UID, False),
-        ('on', UID, True),
-        (f'uid:{UID}', UID, True),
-        (f'uid:{UID}', 'someone-else-0000000000000000', False),
-        ('uid:*', UID, False),
-        ('25', UID, False),
+        (None, True, True),
+        (None, False, False),
+        ('cohort', True, True),
+        ('on', False, True),
+        ('off', True, False),
+        ('25', True, False),
     ],
 )
 def test_rollout_gate(monkeypatch, value, member, expected):
@@ -52,7 +51,21 @@ def test_rollout_gate(monkeypatch, value, member, expected):
         monkeypatch.delenv('CONVERSATIONS_V3_FAST_FINISH', raising=False)
     else:
         monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', value)
-    assert fast_finish.enabled(member) is expected
+    asked = []
+
+    def membership(uid, name):
+        asked.append((uid, name))
+        return member
+
+    monkeypatch.setattr(fast_finish, 'in_rollout_cohort', membership)
+    assert fast_finish.enabled(UID) is expected
+    assert all(call == (UID, 'v3-fast-finish') for call in asked)
+
+
+def test_cohort_is_registered_and_empty_without_a_resolver():
+    from config import rollout_cohorts
+
+    assert rollout_cohorts.COHORT_ENVS[fast_finish.COHORT]() == ''
 
 
 @pytest.mark.parametrize(

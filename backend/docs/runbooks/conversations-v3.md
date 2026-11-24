@@ -119,7 +119,8 @@ window is cut and locked when the batch transcript lands. `omi_conversations_v3_
 counts these by whether the transcript had already landed. Set `CONVERSATIONS_V3_BATCH_MANUAL_END=off`
 on the service that runs the finalization worker (`backend`) to stop storing the marker for later
 finishes; those windows then wait out the silence and lock timers again. Stored markers remain.
-`CONVERSATIONS_V3_FAST_FINISH` (default `off`; `on`, or a `uid:` member list) adds a first
+`CONVERSATIONS_V3_FAST_FINISH` (default `cohort`: members of the `v3-fast-finish` rollout cohort,
+added with `scripts/rollout_cohort.py --add`, no roll; `on` for every v3 owner; `off`) adds a first
 transcript for a manually finished recording. When batch record admission stages the sealed audio,
 `utils/conversations/v3/fast_finish.py` transcribes it once through the prerecorded provider for the
 recording's language and writes the result with `update_conversation_segments`. That write marks the
