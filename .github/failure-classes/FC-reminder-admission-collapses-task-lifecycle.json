@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-reminder-admission-collapses-task-lifecycle",
+  "family": "state-single-owner",
   "violated_contract": "Reminder arming must use the saved task's complete lifecycle, including canonical status, completion, deletion and due date. completed=False is not equivalent to active: cancelled and superseded tasks deliberately retain that boolean. A request snapshot or public response that omits lifecycle fields is not authority to deliver a reminder.",
   "canonical_prevention": "Use one admission predicate derived from canonical TaskStatus. Only incomplete, nondeleted, dated tasks with active or legacy-absent status may arm. Forward authoritative post-write lifecycle before public response cleaning; explicitly terminal or unknown states cancel existing client reminders and never enqueue new follow-ups. A failed derived post-commit read skips that row's reminder effects without guessing from stale input or changing a successful mutation receipt. Keep actual transport, registered HTTP, producer forwarding and read-failure contract tests.",
   "canonical_prevention_artifact": [

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:quick_actions/quick_actions.dart';
 
@@ -14,7 +16,9 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 const _kAddTask = 'add_task';
 const _kAskOmi = 'ask_omi';
@@ -26,14 +30,35 @@ const _kDeviceSettings = 'device_settings';
 
 class QuickActionsService {
   static final QuickActionsService _instance = QuickActionsService._();
-  QuickActionsService._();
+  QuickActionsService._()
+      : _quickActions = const QuickActions(),
+        _isSupported = Platform.isIOS,
+        _reportNonFatal = null;
+
+  @visibleForTesting
+  QuickActionsService.forTesting({
+    required QuickActions quickActions,
+    Future<void> Function(Object, StackTrace, {Map<String, String> userAttributes})? reportNonFatal,
+  })  : _quickActions = quickActions,
+        _isSupported = true,
+        _reportNonFatal = reportNonFatal;
   static QuickActionsService get instance => _instance;
 
-  final QuickActions _quickActions = const QuickActions();
+  final QuickActions _quickActions;
+  final Future<void> Function(Object, StackTrace, {Map<String, String> userAttributes})? _reportNonFatal;
+  final bool _isSupported;
   bool _initialized = false;
+  List<(String, String)>? _publishedShortcuts;
+  // Projections whose publication failed and may still be retried. The dedupe
+  // cache (_publishedShortcuts) is cleared on failure so natural later updates
+  // republish; retries must survive that clearing, so they are tracked here.
+  final Set<List<(String, String)>> _failedShortcutProjections = {};
+  static const _maxShortcutRetries = 2;
+  int _shortcutRetries = 0;
+  Timer? _shortcutRetryTimer;
 
   void initialize(BuildContext context) {
-    if (!Platform.isIOS || _initialized) return;
+    if (!_isSupported || _initialized) return;
     _initialized = true;
 
     _quickActions.initialize((shortcutType) {
@@ -46,10 +71,14 @@ class QuickActionsService {
   // Called from HomePage.dispose() so a rebuilt HomePage can re-register the callback.
   void reset() {
     _initialized = false;
+    _publishedShortcuts = null;
+    _failedShortcutProjections.clear();
+    _shortcutRetryTimer?.cancel();
+    _shortcutRetryTimer = null;
   }
 
   void updateShortcuts(BuildContext context) {
-    if (!Platform.isIOS) return;
+    if (!_isSupported) return;
     _updateShortcuts(context);
   }
 
@@ -79,7 +108,58 @@ class QuickActionsService {
       ShortcutItem(type: _kAddTask, localizedTitle: l10n.addTask),
     ];
 
-    _quickActions.setShortcutItems(items);
+    final projection = items.map((item) => (item.type, item.localizedTitle)).toList();
+    if (listEquals(projection, _publishedShortcuts)) return;
+    _publishedShortcuts = projection;
+    _failedShortcutProjections.clear();
+    _shortcutRetries = 0;
+    _shortcutRetryTimer?.cancel();
+    _shortcutRetryTimer = null;
+    _quickActions.setShortcutItems(items).catchError((Object error, StackTrace stack) {
+      FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack));
+      // A newer projection took over publication while this call was in
+      // flight: the failure is superseded. Re-arming the obsolete projection
+      // here would let its retry overwrite the current shortcuts with stale
+      // connect/mute actions, so ignore it entirely.
+      if (!listEquals(projection, _publishedShortcuts ?? const <(String, String)>[])) {
+        return;
+      }
+      // This call still owns publication. Keep the dedupe cache clear so any
+      // natural later update republishes...
+      _publishedShortcuts = null;
+      // ...and schedule a bounded retry in case quiet wiring never calls back.
+      // The retry must outlive the cache clearing above: it aborts only when a
+      // newer projection has taken over publication.
+      _failedShortcutProjections.add(projection);
+      _scheduleShortcutRetry(items, projection);
+    });
+  }
+
+  /// Re-publishes a failed publication after a short delay. Aborts once a
+  /// newer projection owns publication or the attempt budget is exhausted;
+  /// any successful publish cancels the pending retry.
+  void _scheduleShortcutRetry(List<ShortcutItem> items, List<(String, String)> projection) {
+    if (_shortcutRetries >= _maxShortcutRetries) return;
+    _shortcutRetries++;
+    _shortcutRetryTimer = Timer(const Duration(seconds: 5), () {
+      _shortcutRetryTimer = null;
+      // The failed publication cleared the dedupe cache, so compare against
+      // the retry-eligible set instead: abort only when a newer projection
+      // has published since (which clears the failed set).
+      if (!_failedShortcutProjections.any((failed) => listEquals(failed, projection))) return;
+      _quickActions.setShortcutItems(items).then((_) {
+        // Success: restore the dedupe cache so unchanged later updates stay
+        // free. The guard skips the restore if a newer projection took over
+        // (its publish cleared the failed set) while this retry was in flight.
+        if (_failedShortcutProjections.any((failed) => listEquals(failed, projection))) {
+          _failedShortcutProjections.clear();
+          _publishedShortcuts = projection;
+        }
+      }).catchError((Object error, StackTrace stack) {
+        FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack));
+        _scheduleShortcutRetry(items, projection);
+      });
+    });
   }
 
   void _handleShortcut(String shortcutType) {
@@ -129,10 +209,15 @@ class QuickActionsService {
 
   void _toggleMute(BuildContext context, {required bool mute}) {
     final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
-    if (mute) {
-      captureProvider.pauseCapture();
-    } else {
-      captureProvider.resumeCapture();
-    }
+    final toggle = mute ? captureProvider.pauseCapture() : captureProvider.resumeCapture();
+    // The shortcut has no screen to report on; keep a failed pendant write out of the uncaught handler.
+    unawaited(toggle.catchError((Object error, StackTrace stack) {
+      Logger.debug('QuickActions: ${mute ? 'mute' : 'unmute'} failed: $error');
+      return (_reportNonFatal ?? PlatformManager.instance.crashReporter.reportNonFatal)(
+        error,
+        stack,
+        userAttributes: {'capture_mute_source': 'quick_action', 'capture_mute_action': mute ? 'mute' : 'unmute'},
+      );
+    }));
   }
 }

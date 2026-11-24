@@ -1,4 +1,6 @@
 enabled: true
+podLabels:
+  service_name: batch-pipeline-worker
 image:
   repository: gcr.io/based-hardware/batch-pipeline-worker
   # gcp_diarizer.yml builds the prod image and supplies its immutable digest.
@@ -6,26 +8,25 @@ image:
 serviceAccountName: batch-pipeline-worker
 gcpServiceAccount: batch-pipeline-worker@based-hardware.iam.gserviceaccount.com
 bucket: based-hardware-batch-pipeline-staging
+audioDerivedBucket: null
 dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
-# GPU floor: 4 on-demand L4 workers held through vendor outages and L4
-# stockouts (vendor routing, vendorscope-ops option B; was 3, lead 114a22).
-# A stockout only fails scale-up, so the floor must already be standing. This
-# value and autoscaling.minReplicas are one floor setting; change both.
-# Rollback: 3. See docs/runbooks/batch-vendor-routing-capacity.md.
-replicaCount: 4
-# Latent queue scaler per the lead-accepted 100% capacity plan (f05065):
-# demand-driven, min 4 / max 16, OD-first - all replicas pin to the on-demand
-# pool; Spot stays opportunistic and out of this cutover. Above 16 only as a
-# second qualified step. This latent budget authorizes no capacity and creates
-# no HPA while enabled is false; op1 raises batch-pipeline-pool's node max (3
-# -> 16) in the same reviewed qualification window that enables it, using a
-# real scale-up during the 25% soak as the scheduling proof.
+# Floor 6 (David, 2026-11-20, superseding D4's floor 4 of 2026-11-06): over the
+# prior 3 days the HPA never asked for fewer than 6 workers, so the floor costs
+# ~0 extra machine-hours at current demand and keeps 6 L4s standing through an
+# L4 stockout (incident SCA-3274). The batch-pipeline-pool node minimum matches
+# it (operator-managed, docs/runbooks/batch-vendor-routing-capacity.md).
+# Ceiling 16 (David, 2026-11-16 16:41Z: backlog 25k ready at 8 pods; applied
+# live 16:50Z and persisted here so a worker Helm upgrade keeps it; node pool
+# max is 18). replicaCount and autoscaling.minReplicas are one floor setting;
+# change both with the matching node pool minimum (see the capacity runbook).
+# Routine tuning rollback keeps floor 6. OD-first placement stays unchanged.
+replicaCount: 6
 autoscaling:
   enabled: true
-  minReplicas: 4
+  minReplicas: 6
   maxReplicas: 16
   balancedPools:
     enabled: false
@@ -36,6 +37,17 @@ nodeSelector:
   cloud.google.com/gke-nodepool: batch-pipeline-pool
   service: batch-pipeline
   env: prod
+# L4 stockout fallback (11-01: 13 workers Pending on L4 at peak). Ships at zero
+# replicas; scale <release>-t4 up only while L4 workers are Pending, then back
+# to 0. Needs batch-pipeline-t4-pool (n1-standard-8 + T4, zones a/b/c/f).
+t4Fallback:
+  enabled: true
+  # The fallback has its own live scope and read/backfill policy.
+  preserveLiveEnv:
+    - BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY
+    - FIRESTORE_READ_LEVERS
+    - UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED
+    - UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS
 tolerations:
   - key: omi.ai/batch-pipeline
     operator: Equal
@@ -52,9 +64,63 @@ tolerations:
 # untouched. All three pools are on-demand g2-standard-8 + L4 with only the
 # nvidia.com/gpu taint. Kill switch: enabled false (removes -borrow and its HPA).
 borrowedNodePools:
+  # Streaming fleet retired (2026-11-04): enabling these pools now requires
+  # a new lead/principal ruling; never resume old streaming GPU spend.
   enabled: false
   pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
+  RECORD_FRESH_MERGE_ENABLED: null
+  projectionOutbox: null
+  packingSampleRate: null
+  capDispatchCohort: null
+  # The depth-only roll preserves each GPU Deployment's existing bindings,
+  # including keys absent from its pod template.
+  preserveLiveEnv:
+    - BATCH_PIPELINE_UID_ALLOWLIST
+    - RECORD_SEAL_REPAIR_FRESH_ENABLED
+    - ROLLOUT_POD_TEMPLATE_HASH
+  # Without live state, require a private binding before the pod can start.
+  uidAllowlist:
+    value: null
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: BATCH_PIPELINE_UID_ALLOWLIST_SECRET
+  heldDeadLetterEnabled: true
+  inputExpiringEnabled: true
+  # Two pump processes share each L4 (cl2-gpueff 2026-11-04, data/run-2026-11-04-gpueff
+  # in omi-workspace): prod is claim-path bound (GPU util 16%, ~1.6 units per
+  # 3.2s pull), so a second independent pump doubles concurrent claims per GPU.
+  # Dev L4 bench 1p 112.6 -> 2p 172.8 audio-h/GPU-h, 11.8 of 23 GB VRAM, same
+  # words/speakers. Pod sizing comes from processResources."2" (fits the
+  # g2-standard-8 node with daemons). The T4 fallback stays at t4Fallback.processes 1.
+  # Kill switch / rollback: processes: 1 (values-only Helm roll).
+  processes: 2
+  # Three pump lanes per process (cl2-gpueff 2026-11-05, queue v3 #2): after the claim-ceiling
+  # lift (#24626) the fleet is bound by per-lane claim/publish latency, not GPU-lock time; more
+  # lanes overlap more claims per GPU. Dev L4 bench under a 3.2 s simulated claim: 2 processes x 2
+  # lanes 124.7 vs x 4 lanes 180 audio-h/GPU-h. One step to 3 first to watch shard-claim contention.
+  # Decoded memory stays inside each process's shared 1800 audio-second prepare budget and the
+  # 7200 audio-second bound. Kill switch / rollback: pipelineDepth 2.
+  # Four lanes (2026-11-16, L4 stockout caps the fleet at ~9 pods while ready grows):
+  # 9 pods complete ~880 units/min against ~1,220 leases/min with GPU util ~37% and
+  # chain-busy ~35% of target, so per-pod claim overlap is the lever. Bench 2p x 4
+  # lanes 180 audio-h/GPU-h. 4 is the worker's WORKER_PIPELINE_DEPTH_MAX.
+  # Rollback: pipelineDepth 3 (values-only Helm roll).
+  pipelineDepth: 4
+  servingMetricsMinRefreshSeconds: 60
+  # Matches the prod backend hosts (deploy contract reader-split invariant):
+  # window allocation 100, replica recovery explicitly off, and the
+  # independently-approved language recovery activation.
+  parakeetWindowAllocationPercent: '100'
+  parakeetWindowReplicaRecoveryEnabled: 'false'
+  independentLanguageRecoveryEnabled: true
+  # Control-loop defaults; rollback independently with 64 / false / 2 / {}.
+  controlCandidateFanout: 16
+  admissionParallelCalls: true
+  idlePollMaxSeconds: 10
+  # Preserve the live worker read levers for the depth-only roll.
+  firestoreReadLevers: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}'
   # Preserve the measured profiling-on state across the scaler Helm upgrade.
   stageProfilingEnabled: true
   # #24213 IO 5 did not run in qualification (NO-GO 2026-11-01); hold the prior 3.
@@ -63,6 +129,7 @@ worker:
   # Matches the four Cloud Run roles; paid recovery keeps the 200/h base cap
   # (lead ruling 12:15Z reversing the #23964 zero pin). Rollback: 0.
   shadowPercent: 25
+  shadowLanguageOnly: false
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: "https://backend-integration-hhibjajaja-uc.a.run.app"
   # Strict-VAD shadow at 10% (batchdesign §9 PR-3, 2026-11-01): the shadow cost
@@ -76,3 +143,35 @@ worker:
   headPriorityEnabled: true
   workerSilenceDispositionEnabled: true
   correctnessMetricsEnabled: true
+# Seal repair runs in prod (lead2 2026-11-04 3b814c; omi-b3 c089a2). Committed here so a CI worker roll
+# keeps it on: the chart default (suspend: true, empty serverFlags) re-suspended repair on every roll.
+# serverFlags is the complete serving-role policy env (empty or invalid refuses IO). UID allowlists stay out of
+# git on purpose: batch is 100% and the final-pass allowlist only scopes one account's repair-time policy.
+# Rollback: recordSealRepair.suspend: true.
+recordSealRepair:
+  suspend: false
+  mode: apply
+  rowSeconds: 270
+  # Match live: eight row processes per pod. More processes in one 4-CPU pod regressed.
+  workers: 8
+  shards: 5
+  # CPU-only pool can autoscale from zero; one pod per hostname, no GPU contention.
+  nodePool: api-pool
+  tolerations: []
+  cpuRequest: "3"
+  serverFlags:
+    K_SERVICE: backend
+    BATCH_PIPELINE_ENABLED: 'true'
+    BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: 'false'
+    BATCH_PIPELINE_PERCENT: '100'
+    BATCH_LIVE_STT_RETIRE_PERCENT: '0'
+    TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: 'true'
+    TRANSCRIPTION_FINAL_PASS_DIARIZER: pyannote_shadow
+    TRANSCRIPTION_FINAL_PASS_PERCENT: '5'
+# recordSealWorker.serverFlags stays at the chart default {} (worker IO refused, as in live release r71). Running the
+# worker AND repair with IO would let both pick the same pending row: the transactional seal prevents a double seal,
+# but both would do the proof and audio reads (Luna r1 P2 on #24643). Enable one IO path at a time after measuring.
+recordSealWorker:
+  # Serve /metrics idle; an enabled runtime with the refused policy exits before readiness.
+  runtimeEnabled: false
+  preserveLiveFreshEnv: true

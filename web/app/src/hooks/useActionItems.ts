@@ -13,7 +13,13 @@ import {
 import { groupActionItems } from '@/lib/actionItemGroups';
 import { prependOrReplaceById } from '@/lib/actionItemList';
 import { onCacheInvalidation, invalidationPatterns } from '@/lib/cache';
-import { daysUntilDue } from '@/lib/taskDue';
+import {
+  taskDueDays,
+  editsDueAsDate,
+  editAllDayDue,
+  snoozeAllDayDue,
+} from '@/lib/taskDue';
+import { formatDateInputValue } from '@/lib/dateInput';
 import type { ActionItem, GroupedActionItems } from '@/types/conversation';
 
 /**
@@ -27,13 +33,16 @@ function getTaskCountsForDate(
     return { pending: 0, completed: 0 };
   }
 
-  const dateStr = date.toDateString();
+  const dateStr = formatDateInputValue(date);
   let pending = 0;
   let completed = 0;
 
   for (const item of items) {
-    if (!item.due_at) continue;
-    const itemDate = new Date(item.due_at).toDateString();
+    if (!item.due_at && item.due?.kind !== 'date') continue;
+    const itemDate =
+      item.due?.kind === 'date'
+        ? item.due.date
+        : formatDateInputValue(new Date(item.due_at!));
     if (itemDate === dateStr) {
       if (item.completed) {
         completed++;
@@ -185,7 +194,7 @@ export function useActionItems(): UseActionItemsReturn {
     const pending = items.filter((i) => !i.completed).length;
     const overdue = groupedItems.overdue.length;
     const noDueDateCount = groupedItems.noDueDate.length;
-    const todayItems = items.filter((i) => i.due_at && daysUntilDue(i.due_at) === 0);
+    const todayItems = items.filter((i) => taskDueDays(i) === 0);
     const todayCompleted = todayItems.filter((i) => i.completed).length;
 
     // Calculate weekly stats (last 7 days)
@@ -195,10 +204,8 @@ export function useActionItems(): UseActionItemsReturn {
     weekAgo.setDate(weekAgo.getDate() - 7);
 
     const weekItems = items.filter((i) => {
-      if (!i.due_at) return false;
-      const dueDate = new Date(i.due_at);
-      dueDate.setHours(0, 0, 0, 0);
-      return dueDate >= weekAgo && dueDate <= today;
+      const days = taskDueDays(i);
+      return days !== null && days >= -7 && days <= 0;
     });
     const weekCompleted = weekItems.filter((i) => i.completed).length;
     const weekPending = weekItems.filter((i) => !i.completed).length;
@@ -288,17 +295,20 @@ export function useActionItems(): UseActionItemsReturn {
 
     // Sort pending: by due date (soonest first), items without due date go last
     pending.sort((a, b) => {
+      if (a.due_at && b.due_at)
+        return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
       // Handle no due date (goes last)
-      if (!a.due_at && !b.due_at) {
+      const aDays = taskDueDays(a);
+      const bDays = taskDueDays(b);
+      if (aDays === null && bDays === null) {
         // Both no due date: sort by created_at (newest first)
         const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
         const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
         return bCreated - aCreated;
       }
-      if (!a.due_at) return 1;
-      if (!b.due_at) return -1;
-
-      return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
+      if (aDays === null) return 1;
+      if (bDays === null) return -1;
+      return aDays - bDays;
     });
 
     // Sort completed by completion date (most recent first)
@@ -371,6 +381,23 @@ export function useActionItems(): UseActionItemsReturn {
       const item = items.find((i) => i.id === id);
       if (!item) return;
 
+      if (editsDueAsDate(item)) {
+        const due = snoozeAllDayDue(item.due, days);
+        setItems((prev) =>
+          prev.map((i) => (i.id === id ? { ...i, due_at: null, due } : i)),
+        );
+        try {
+          await updateActionItemDueDate(id, null, due);
+        } catch (err) {
+          setItems((prev) =>
+            prev.map((i) =>
+              i.id === id ? { ...i, due: item.due, due_at: item.due_at } : i,
+            ),
+          );
+          setError(err instanceof Error ? err.message : 'Failed to snooze task');
+        }
+        return;
+      }
       const newDate = new Date();
       if (item.due_at) {
         const currentDate = new Date(item.due_at);
@@ -409,18 +436,23 @@ export function useActionItems(): UseActionItemsReturn {
       const item = items.find((i) => i.id === id);
       if (!item) return;
 
-      const newDueAt = date ? date.toISOString() : null;
+      const due = editsDueAsDate(item) && date ? editAllDayDue(item.due, date) : null;
+      const newDueAt = due ? null : date ? date.toISOString() : null;
 
       // Optimistic update
-      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, due_at: newDueAt } : i)));
+      setItems((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, due_at: newDueAt, due } : i)),
+      );
 
       try {
-        await updateActionItemDueDate(id, newDueAt);
+        await updateActionItemDueDate(id, newDueAt, due);
       } catch (err) {
         console.error('Failed to update due date:', err);
         // Revert on error
         setItems((prev) =>
-          prev.map((i) => (i.id === id ? { ...i, due_at: item.due_at } : i)),
+          prev.map((i) =>
+            i.id === id ? { ...i, due_at: item.due_at, due: item.due } : i,
+          ),
         );
         setError(err instanceof Error ? err.message : 'Failed to update due date');
       }
@@ -528,6 +560,10 @@ export function useActionItems(): UseActionItemsReturn {
   // Bulk snooze
   const bulkSnooze = useCallback(
     async (ids: string[], days: number) => {
+      if (items.some((i) => ids.includes(i.id) && editsDueAsDate(i))) {
+        await Promise.all(ids.map((id) => snooze(id, days)));
+        return;
+      }
       const newDate = new Date();
       newDate.setDate(newDate.getDate() + days);
       const newDueAt = newDate.toISOString();
@@ -548,12 +584,16 @@ export function useActionItems(): UseActionItemsReturn {
         setError(err instanceof Error ? err.message : 'Failed to snooze tasks');
       }
     },
-    [fetchItems],
+    [fetchItems, items, snooze],
   );
 
   // Bulk set due date (for no-due-date items)
   const bulkSetDueDate = useCallback(
     async (ids: string[], date: Date | null) => {
+      if (items.some((i) => ids.includes(i.id) && editsDueAsDate(i))) {
+        await Promise.all(ids.map((id) => setDueDate(id, date)));
+        return;
+      }
       const newDueAt = date ? date.toISOString() : null;
 
       // Optimistic update
@@ -572,7 +612,7 @@ export function useActionItems(): UseActionItemsReturn {
         setError(err instanceof Error ? err.message : 'Failed to set due dates');
       }
     },
-    [fetchItems],
+    [fetchItems, items, setDueDate],
   );
 
   return {

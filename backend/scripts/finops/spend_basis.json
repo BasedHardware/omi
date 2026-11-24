@@ -1,0 +1,331 @@
+{
+  "adjustments": {
+    "agent_tooling_excluded": {
+      "cap_usd_day": 80,
+      "rule": "Claude Code / Codex subscriptions are not product cost. Claude Code sits only inside the Mercury Anthropic line, so exclude min(cap, Mercury Anthropic 7d average). The OpenAI line is measured product usage and has no Codex in it.",
+      "ruled": "David 2026-11-04 07:02Z; rule shape from the cl2-cost meter fix 2026-11-04 13:10Z (cl2-helper audit, bus 9e1af0)"
+    },
+    "dev_excluded": {
+      "source": "10-29 billing day split: prod $2,202 + dev $140 (planscost bus cdf5c5, 11-02). The weekend value has no recorded source; dev deletions since then make both slightly high",
+      "weekday_usd_day": 140,
+      "weekend_usd_day": 137
+    },
+    "modulate_at_cash": {
+      "fallback_usd_day": 71.0,
+      "rule": "use the Mercury 7d cash line instead of the metered audio-hours estimate"
+    },
+    "pinecone_included": {
+      "basis": "measured serving run-rate (upper end of $17-25/day from GMP read units, cl2-cost decision list 10:46Z item 3); falls to ~$5-6/day after the namespace sweep, so re-measure then",
+      "one_off_not_in_run_rate": "October Pinecone invoice $2,366 (card basis), kept visible as a one-time item, not a daily line",
+      "previous": "usd_day 80 from evidence/2026-11-02-pinecone-cost.md (card basis)",
+      "ruled": "David 2026-11-04 ~14:05Z in chat: switch to measured (supersedes the 11-02 card-basis ruling)",
+      "usd_day": 25
+    },
+    "stripe_fees": {
+      "mode": "subscription_only",
+      "previous": "mode actual: 7-day average of all Stripe fees including non-MRR volume (~2.3x MRR), ~$217/d; ruled David 2026-11-04 07:02Z",
+      "rule": "subscription-only: 7-day effective Stripe fee rate (sum fee_usd / sum volume_usd, omi_finops.stripe_fee_daily) x subscription revenue per day (the MRR revenue basis above). Interim estimate until a per-product (subscription vs device/annual) fee split exists.",
+      "ruled": "David 2026-11-04 17:35Z (bus fbed95, relayed by omi-b3)"
+    }
+  },
+  "exclusions": [
+    {
+      "id": "vertex_pt_fee",
+      "identify": "GCP billing export SKU 'Vertex AI: Provisioned Throughput 1 Year' (service 'Vertex AI'); $296.88/day since the 11-01 billing day",
+      "not_excluded": "Vertex AI pay-as-you-go (embeddings etc.) stays in cost",
+      "ruled": "David 2026-11-04 10:15Z; clarified 10:52Z (rulings-1052 item 3: only the prepaid reservation is excluded)",
+      "usd_day": 296.88
+    }
+  ],
+  "line_classes": {
+    "Cloud Logging": {
+      "class": "fixed",
+      "driver": null,
+      "why": "infra noise dominates; no user measurably causes it"
+    },
+    "Cloud Run (small services)": {
+      "class": "fixed",
+      "driver": null,
+      "why": "admin/ops oneboxes"
+    },
+    "Cloud Run backend": {
+      "class": "variable",
+      "driver": "traffic",
+      "why": "scales with API traffic"
+    },
+    "Cloud Run backend-integration": {
+      "class": "variable",
+      "driver": "traffic",
+      "why": "scales with user capture/integration traffic"
+    },
+    "Cloud Run backend-sync": {
+      "class": "variable",
+      "driver": "traffic",
+      "why": "scales with sync traffic"
+    },
+    "Cloud Run frontend": {
+      "class": "fixed",
+      "driver": null,
+      "why": "minimum-instance floor dominates"
+    },
+    "Cloud Run omi-web": {
+      "class": "fixed",
+      "driver": null,
+      "why": "minimum-instance floor dominates"
+    },
+    "Firestore reads (billed doc-read ops)": {
+      "class": "variable",
+      "driver": "doc_reads",
+      "why": "user- and sync-driven reads"
+    },
+    "Firestore writes (billed doc-write ops)": {
+      "class": "variable",
+      "driver": "doc_writes",
+      "why": "capture/session-driven writes"
+    },
+    "GCS Class A+B ops": {
+      "class": "variable",
+      "driver": "audio_h",
+      "why": "audio upload/read volume tracks pipeline load"
+    },
+    "GKE CPU+RAM (audio pools: listen, pusher, ASR)": {
+      "class": "variable",
+      "driver": "audio_h",
+      "why": "pools scale with transcription/listen load"
+    },
+    "GKE CPU+RAM (fixed pools: monitoring, api, default)": {
+      "class": "fixed",
+      "driver": null,
+      "why": "always-on control pools"
+    },
+    "GPU L4 idle (prod pools)": {
+      "class": "fixed",
+      "driver": null,
+      "why": "idle capacity held for bursts"
+    },
+    "GPU L4 utilized (prod pools)": {
+      "class": "variable",
+      "driver": "audio_h",
+      "why": "busy GPU hours are transcription work"
+    },
+    "GPU T4 idle (prod pools)": {
+      "class": "fixed",
+      "driver": null,
+      "why": "idle capacity held for bursts"
+    },
+    "GPU T4 utilized (prod pools)": {
+      "class": "variable",
+      "driver": "audio_h",
+      "why": "busy GPU hours are diarization/VAD work"
+    },
+    "Infra non-GCP (Cloudflare, Hetzner)": {
+      "class": "fixed",
+      "driver": null,
+      "why": "flat vendor commitments"
+    },
+    "LLM Anthropic + other AI (xai/openrouter/replicate)": {
+      "class": "variable",
+      "driver": "llm_tokens",
+      "why": "per-request pricing"
+    },
+    "LLM OpenAI": {
+      "class": "variable",
+      "driver": "llm_tokens",
+      "why": "per-request pricing"
+    },
+    "Other GCP carry (unsplit; run calibrate_split.py)": {
+      "class": "fixed",
+      "driver": null,
+      "why": "unsplit fallback"
+    },
+    "Other GCP: Firestore storage/PITR/backup": {
+      "class": "fixed",
+      "driver": null,
+      "why": "stored bytes"
+    },
+    "Other GCP: GCE rate residual (disks/IPs/K8s fees)": {
+      "class": "fixed",
+      "driver": null,
+      "why": "rate/commitment residual"
+    },
+    "Other GCP: GCS storage + replication": {
+      "class": "fixed",
+      "driver": null,
+      "why": "stored bytes, not per-user activity"
+    },
+    "Other GCP: LB + Cloud Armor": {
+      "class": "fixed",
+      "driver": null,
+      "why": "flat LB minimums"
+    },
+    "Other GCP: Vertex paygo (Gemini/embeddings)": {
+      "class": "variable",
+      "driver": "llm_tokens",
+      "why": "per-token/requests pricing on Gemini live + embeddings"
+    },
+    "Other GCP: egress + network transfer": {
+      "class": "fixed",
+      "driver": null,
+      "why": "replication/inter-zone, not marginal per user"
+    },
+    "Other GCP: registry/SQL/Tasks/BQ/Secret misc": {
+      "class": "fixed",
+      "driver": null,
+      "why": "ops overhead"
+    },
+    "STT Modulate": {
+      "class": "variable",
+      "driver": "audio_h",
+      "why": "vendor bills live audio"
+    },
+    "STT Soniox (live)": {
+      "class": "variable",
+      "driver": "listen_conn_h",
+      "why": "vendor bills live listening"
+    },
+    "Vertex reserved (1yr committed)": {
+      "class": "excluded",
+      "driver": null,
+      "why": "the prepaid Vertex PT fee; excluded from both figures, workload priced at paygo instead"
+    },
+    "pinecone": {
+      "class": "variable",
+      "driver": "searches",
+      "why": "measured serving run-rate tracks app usage"
+    },
+    "stripe_fees": {
+      "class": "variable",
+      "driver": "revenue",
+      "why": "fees proportional to subscription revenue"
+    }
+  },
+  "lines": {
+    "agent_tooling_claude_code": {
+      "basis_class": "excluded",
+      "class_rule": null,
+      "in_all_in": false,
+      "in_margin_basis": false
+    },
+    "gcp:*": {
+      "basis_class": "fixed",
+      "class_rule": "Other GCP carry (unsplit; run calibrate_split.py)",
+      "in_all_in": true,
+      "in_margin_basis": true
+    },
+    "gcp_dev": {
+      "basis_class": "excluded",
+      "class_rule": null,
+      "in_all_in": false,
+      "in_margin_basis": false
+    },
+    "gcp_gemini_api": {
+      "basis_class": "variable",
+      "class_rule": "Other GCP: Vertex paygo (Gemini/embeddings)",
+      "in_all_in": true,
+      "in_margin_basis": true
+    },
+    "gcp_vertex_ai": {
+      "basis_class": "variable",
+      "class_rule": "Other GCP: Vertex paygo (Gemini/embeddings)",
+      "in_all_in": true,
+      "in_margin_basis": true
+    },
+    "gcp_vertex_provisioned_throughput": {
+      "basis_class": "excluded",
+      "class_rule": "Vertex reserved (1yr committed)",
+      "in_all_in": true,
+      "in_margin_basis": false
+    },
+    "infra_non_gcp": {
+      "basis_class": "fixed",
+      "class_rule": "Infra non-GCP (Cloudflare, Hetzner)",
+      "in_all_in": true,
+      "in_margin_basis": true
+    },
+    "llm_anthropic_api": {
+      "basis_class": "variable",
+      "class_rule": "LLM Anthropic + other AI (xai/openrouter/replicate)",
+      "in_all_in": true,
+      "in_margin_basis": true
+    },
+    "llm_openai": {
+      "basis_class": "variable",
+      "class_rule": "LLM OpenAI",
+      "in_all_in": true,
+      "in_margin_basis": true
+    },
+    "openrouter": {
+      "basis_class": "variable",
+      "class_rule": "LLM Anthropic + other AI (xai/openrouter/replicate)",
+      "in_all_in": false,
+      "in_margin_basis": true
+    },
+    "pinecone": {
+      "basis_class": "variable",
+      "class_rule": "pinecone",
+      "in_all_in": false,
+      "in_margin_basis": true
+    },
+    "replicate": {
+      "basis_class": "variable",
+      "class_rule": "LLM Anthropic + other AI (xai/openrouter/replicate)",
+      "in_all_in": false,
+      "in_margin_basis": true
+    },
+    "saas_anthropic_seats": {
+      "basis_class": "fixed",
+      "class_rule": null,
+      "in_all_in": false,
+      "in_margin_basis": false
+    },
+    "saas_tooling": {
+      "basis_class": "fixed",
+      "class_rule": null,
+      "in_all_in": true,
+      "in_margin_basis": false
+    },
+    "stripe_fees": {
+      "basis_class": "variable",
+      "class_rule": "stripe_fees",
+      "in_all_in": true,
+      "in_margin_basis": false
+    },
+    "stripe_fees_subscription": {
+      "basis_class": "variable",
+      "class_rule": "stripe_fees",
+      "in_all_in": false,
+      "in_margin_basis": true
+    },
+    "stt_deepgram": {
+      "basis_class": "variable",
+      "class_rule": "STT Soniox (live)",
+      "in_all_in": true,
+      "in_margin_basis": true
+    },
+    "stt_modulate_cash": {
+      "basis_class": "variable",
+      "class_rule": "STT Modulate",
+      "in_all_in": true,
+      "in_margin_basis": true
+    },
+    "stt_modulate_modelled": {
+      "basis_class": "variable",
+      "class_rule": "STT Modulate",
+      "in_all_in": true,
+      "in_margin_basis": false
+    },
+    "stt_soniox": {
+      "basis_class": "variable",
+      "class_rule": "STT Soniox (live)",
+      "in_all_in": true,
+      "in_margin_basis": true
+    },
+    "xai": {
+      "basis_class": "variable",
+      "class_rule": "LLM Anthropic + other AI (xai/openrouter/replicate)",
+      "in_all_in": false,
+      "in_margin_basis": true
+    }
+  },
+  "version": "2026-11-06.1"
+}

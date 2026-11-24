@@ -44,6 +44,29 @@
   },
   "workflows": [
     {
+      "id": "home_health_review_and_repair",
+      "risk": "high",
+      "sources": [
+        "backend/scripts/home_health_worker.py",
+        "backend/scripts/home_health_runtime.py",
+        "backend/services/home_health_repair.py",
+        "backend/services/home_health_review.py",
+        "backend/database/batch_summary_debt.py"
+      ],
+      "tests": [
+        "tests/unit/test_home_health_worker.py",
+        "tests/unit/test_batch_live_summary_arming.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "review reads only bounded indexed cohorts and emits content-free aggregates",
+        "private, hidden and intentionally short captures do not become repair candidates",
+        "production apply first verifies repair and admission on the receiving backend integration revisions",
+        "apply verifies protection, original generation, finalizer and outbox in the same transaction",
+        "repair arms only canonical summary scheduling fields with their original clock"
+      ]
+    },
+    {
       "id": "empty_capture_operator_recovery",
       "risk": "high",
       "sources": [
@@ -214,6 +237,21 @@
         "pending text is visible only to the first-party memory list and never to agent, developer, MCP, search, vector, or KG reads",
         "processing, review, and promotion use revision/content CAS and rebase after unrelated head advances",
         "negative user review remains authoritative across all derived projection rebuilds"
+      ]
+    },
+    {
+      "id": "gpu_worker_deployment_gate",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_diarizer.yml"
+      ],
+      "tests": [
+        "tests/unit/test_record_seal_cluster_repair_deploy.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "the immutable Firestore control checkout and serving-index gate remain unconditional and source-bound",
+        "worker builds, digest promotion and every deployment writer follow the serving-index gate"
       ]
     },
     {
@@ -572,6 +610,7 @@
         "tests/unit/utils/test_listen_pusher_session.py",
         "tests/unit/test_transcribe_teardown_flush.py",
         "tests/unit/test_listen_pusher_stack_ci_wiring.py",
+        "tests/unit/test_listen_pusher_stack_emulator_retry.py",
         "testing/e2e/test_listen_stt.py",
         "testing/e2e/test_listen_pusher_wire_contract.py"
       ],
@@ -605,10 +644,57 @@
       ]
     },
     {
+      "id": "runtime_env_composition",
+      "risk": "high",
+      "sources": [
+        "backend/deploy/compose_runtime_env.py",
+        "backend/deploy/runtime_env/**",
+        "backend/scripts/render_backend_runtime_env.py",
+        "backend/scripts/render_gke_backend_config.py"
+      ],
+      "tests": [
+        "tests/unit/test_runtime_env_sources.py",
+        "tests/unit/test_render_backend_runtime_env.py",
+        "tests/unit/test_render_gke_backend_config.py",
+        "tests/unit/test_cross_service_deploy_contract.py",
+        "tests/unit/test_backend_runtime_env_validator.py",
+        "tests/unit/test_runtime_env_manifest_compat.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "source overlays compose exactly to the deployed runtime manifest",
+        "Cloud Run and GKE rendering preserve same-environment service bindings"
+      ]
+    },
+    {
+      "id": "integration_canary_transport",
+      "risk": "high",
+      "sources": [
+        "backend/scripts/integration_canary_controller.py",
+        "backend/scripts/integration_canary_metrics.py",
+        "backend/scripts/runtime_env_canary_ops.py",
+        "backend/scripts/runtime_env_validation/**"
+      ],
+      "tests": [
+        "tests/unit/test_integration_canary_imports.py",
+        "tests/unit/test_integration_canary_controller.py",
+        "tests/unit/test_integration_canary_workflow.py",
+        "tests/unit/test_backend_runtime_env_validator.py",
+        "tests/unit/test_runtime_env_manifest_compat.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "controller mutations retain existing admission, exact-source, journal and rollback gates",
+        "canary composition preserves serving queue, secret and runtime environment bindings",
+        "manifest validation preserves released runtime schema compatibility"
+      ]
+    },
+    {
       "id": "backend_cloud_run_deploy",
       "risk": "high",
       "sources": [
         ".github/actions/deploy-backend-stack/**",
+        ".github/actions/deploy-projection-pump/**",
         ".github/actions/sync-backfill-lifecycle/**",
         ".github/actions/transcription-release-candidate-probe/**",
         ".github/workflows/gcp_backend*.yml",
@@ -617,11 +703,14 @@
         ".github/workflows/gcp_x_connector_sync_job.yml",
         ".github/workflows/sync_ledger_fence_cutover.yml",
         "backend/deploy/runtime_env.yaml",
+        "backend/deploy/cloud_run_gmp_projection_pump.yaml",
         "backend/scripts/preflight-cloud-run-deploy.py",
         "backend/scripts/check_cloud_run_env_drift.py",
         "backend/scripts/resolve_cloud_run_tagged_url.py",
         "backend/scripts/sync_ledger_fence_cutover.py",
         "backend/scripts/verify_backend_release_vector.py",
+        "backend/scripts/verify_projection_pump_shape.py",
+        "backend/scripts/verify_projection_pump_inverse.py",
         "backend/scripts/verify_sync_ledger_fence_transition.py",
         "backend/scripts/verify-llm-gateway-serving.py",
         "backend/scripts/probe-llm-gateway-from-cloud-run.sh",
@@ -649,11 +738,16 @@
         "tests/unit/test_verify_llm_gateway_serving.py",
         "tests/unit/test_llm_gateway_deploy_contract.py",
         "tests/unit/test_sync_two_lane.py",
+        "tests/unit/test_cloud_run_live_caps.py",
+        "tests/unit/test_cloud_run_service_selection.py",
+        "tests/unit/test_cloud_run_rightsizing_pins.py",
         "tests/unit/test_firebase_release_probe_token.py",
         "tests/unit/test_transcription_capability_probe.py",
         "tests/unit/test_validate_x_connector_sync_scheduler.py",
         "tests/unit/test_scheduler_reconcile.py",
-        "tests/unit/test_verify_sync_ledger_fence_transition.py"
+        "tests/unit/test_verify_sync_ledger_fence_transition.py",
+        "tests/unit/test_projection_pump_deploy_target.py",
+        "tests/unit/test_cloud_run_gmp_projection_pump_profile.py"
       ],
       "checks": [],
       "invariants": [
@@ -694,6 +788,7 @@
         "tests/unit/test_verify_pusher_rollout_budget.py",
         "tests/unit/test_verify_pusher_live_deployment_gate.py",
         "tests/unit/test_verify_pusher_promotion_evidence.py",
+        "tests/unit/test_verify_pusher_release_source.py",
         "tests/unit/test_verify_pusher_dev_observability.py",
         "tests/unit/test_pusher_deployment_control_workflow.py",
         "tests/unit/test_pusher_auto_deploy_paths.py",
@@ -709,6 +804,7 @@
         "Pusher's Kubernetes progress deadline and CI rollout wait both cover every configured healthy-availability wave at the committed HPA ceiling",
         "a chart change to Pusher startup/readiness/min-ready, HPA, or RollingUpdate inputs cannot silently make a healthy rollout appear failed",
         "production Pusher deploys only an exact digest attested by a successful automatic development rollout and never rebuilds that production artifact",
+        "an explicit production runtime pin must match its eligible development-qualified source and cannot downgrade immutable workflow controls or the Pusher/shared ConfigMap policy",
         "production Pusher promotion fails before any registry, config, or Helm mutation unless the exact source, image, rendered chart, live config, and live development deployment receipt agree",
         "development qualification exercises the deployed public listen route with the isolated Firebase release-probe principal and versioned real-audio fixture, then requires durable terminal finalization plus authenticated conversation read-back",
         "semantic-probe and separately protected attributable-canary outcomes must be explicit identity-bound PASS receipts with closed windows and samples; missing, NOT_RUN, failed, or contradictory evidence halts promotion",
@@ -779,7 +875,9 @@
         "scripts/changed-files",
         "scripts/install-git-hooks.sh",
         "scripts/pre-push",
-        "scripts/pre-push-singleflight"
+        "scripts/pre-push-singleflight",
+        "backend/runtime_images.json",
+        "backend/scripts/select_backend_unit_tests.py"
       ],
       "tests": [
         "tests/unit/test_changed_files_script.py",
@@ -789,7 +887,8 @@
       "invariants": [
         "deletions and both sides of renames select the checks owned by the old and new paths",
         "unmapped backend production paths cannot be hidden by adding one direct test",
-        "desktop-only pushes do not require a backend virtual environment"
+        "desktop-only pushes do not require a backend virtual environment",
+        "every registered deployment workflow has an exact-path source mapping selecting at least one discovered test"
       ]
     },
     {
@@ -859,7 +958,7 @@
       ],
       "checks": [],
       "invariants": [
-        "production Grafana changes require explicit prod dispatch with the production Environment secret",
+        "production alert changes require explicit prod dispatch with the production Environment secret; dashboard JSON applies to prod on push from the no-reviewer grafana-dashboards-prod environment",
         "alert upserts retain unknown live rules, preserve provenance, back up before writes, and verify complete definitions",
         "dashboard imports preserve folders and authenticated requests never follow redirects",
         "GMP addition preserves local sources, HPA routing, recording rules and the history warmup pin",
@@ -973,7 +1072,10 @@
         "backend/charts/batch-pipeline-worker/**"
       ],
       "tests": [
-        "tests/unit/test_cross_service_deploy_contract.py"
+        "tests/unit/test_cross_service_deploy_contract.py",
+        "tests/unit/test_batch_pipeline_hpa_capacity_replay.py",
+        "tests/unit/test_batch_pipeline_hpa_retune_replay.py",
+        "tests/unit/test_batch_pipeline_hpa_max_replay.py"
       ],
       "checks": [],
       "invariants": [
@@ -981,6 +1083,86 @@
         "every Cloud Tasks dispatcher targets a same-env service whose handler mode is on, whose audience matches, and whose timeout covers the dispatch deadline",
         "a flag read by a process is set on that process's deployment when its coupled flag is on elsewhere",
         "the public manifest gains no UID-shaped literal and no cross-environment service URL"
+      ]
+    },
+    {
+      "id": "desktop_backend_deployment",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/desktop_backend_prod.yml"
+      ],
+      "tests": [
+        "tests/unit/test_render_backend_runtime_env.py",
+        "tests/unit/test_tts_deploy_contract.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "registered deployment workflows select their existing backend contract tests"
+      ]
+    },
+    {
+      "id": "listen_helm_deployment",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_backend_listen_helm.yml"
+      ],
+      "tests": [
+        "tests/unit/test_listen_helm_env_overrides.py",
+        "tests/unit/test_listen_overlay_workflow.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "registered deployment workflows select their existing backend contract tests"
+      ]
+    },
+    {
+      "id": "scheduled_job_deployment",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_day3_reengagement_email_job.yml",
+        ".github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml",
+        ".github/workflows/gcp_frame_request_retention_job.yml"
+      ],
+      "tests": [
+        "tests/unit/test_scheduler_reconcile.py",
+        "tests/unit/test_workflow_contracts.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "registered deployment workflows select their existing backend contract tests"
+      ]
+    },
+    {
+      "id": "gpu_image_deployment",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_models.yml",
+        ".github/workflows/gcp_nllb_translation.yml",
+        ".github/workflows/gcp_parakeet.yml"
+      ],
+      "tests": [
+        "tests/unit/test_runtime_image_contracts.py",
+        "tests/unit/test_workflow_contracts.py",
+        "tests/unit/test_nllb_release_image.py",
+        "tests/unit/test_parakeet_helm_contract.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "registered deployment workflows select their existing backend contract tests"
+      ]
+    },
+    {
+      "id": "plugins_image_deployment",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_plugins.yml"
+      ],
+      "tests": [
+        "tests/unit/test_runtime_image_contracts.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "registered deployment workflows select their existing backend contract tests"
       ]
     }
   ]

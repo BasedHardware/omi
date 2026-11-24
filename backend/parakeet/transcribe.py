@@ -5,6 +5,7 @@ import wave as _wave
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 import httpx
+import language_gate
 import numpy as np
 from langdetect import detect as _langdetect_detect_raw  # type: ignore[reportUnknownVariableType]  # langdetect ships partial type info
 from langdetect.lang_detect_exception import LangDetectException
@@ -129,7 +130,7 @@ def _load_nemo_model(model_name: str) -> Any:
 
 def _init_stream_model() -> None:
     global _stream_model
-    if not STREAM_MODEL_NAME:
+    if language_gate.lid_only_enabled() or not STREAM_MODEL_NAME:
         logger.info("No PARAKEET_STREAM_MODEL set, streaming will be unavailable")
         return
     _stream_model = _load_nemo_model(STREAM_MODEL_NAME)

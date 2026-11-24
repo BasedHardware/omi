@@ -3,7 +3,10 @@
 # Declare variables to be passed into your templates.
 
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
-replicaCount: 2
+replicaCount: 0
+# Permanent streaming retirement. Keep the separate batch workers and diarizer.
+fleetRetired: true
+maintenanceMode: true
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
@@ -58,7 +61,8 @@ service:
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
-  enabled: true
+  # Shared Gateway remains; retire the dedicated streaming load balancer.
+  enabled: false
   className: ""
   annotations:
     kubernetes.io/ingress.class: "gce-internal"

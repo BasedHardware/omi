@@ -15,13 +15,18 @@ DUE = datetime(2026, 9, 20, 15, tzinfo=timezone.utc)
 
 def _delete_with_tasks(monkeypatch, tasks, vector_batch_fn=None, source_lookup=None):
     cancelled = []
-    monkeypatch.setattr(conversations_router.conversations_db, 'get_conversation', source_lookup or (lambda *a: {}))
+    monkeypatch.setattr(
+        conversations_router.conversations_db, 'get_conversation_raw_snapshot', source_lookup or (lambda *a, **kw: {})
+    )
     monkeypatch.setattr(conversations_router.conversation_tombstones, 'record_deletion', lambda *a: None)
+    # #25610's already-deleted short-circuit reads the tombstone first; this row was never deleted.
+    monkeypatch.setattr(conversations_router.conversation_tombstones, 'is_deleted', lambda *a, **kw: False)
     monkeypatch.setattr(conversations_router, 'delete_owner_prompt_embedding_cache', lambda *a: None)
     vectors = []
     monkeypatch.setattr(conversations_router, 'MemoryService', lambda db_client=None: object())
     monkeypatch.setattr(conversations_router, 'retraction_can_be_skipped', lambda *a, **k: True)
     monkeypatch.setattr(conversations_router, 'destructive_operation_gate', lambda *a, **k: nullcontext())
+    monkeypatch.setattr(conversations_router, '_legal_hold_defers_delete', lambda uid: False)
     monkeypatch.setattr(conversations_router, 'delete_conversation_screen_frames', lambda *a, **k: None)
     monkeypatch.setattr(conversations_router, 'delete_conversation_and_frame_evidence', lambda *a, **k: None)
     monkeypatch.setattr(conversations_router, 'delete_vector', lambda *a, **k: None)
@@ -101,16 +106,17 @@ def test_cascade_delete_cancels_reminders_even_if_vector_delete_raises(monkeypat
 
 
 @pytest.mark.parametrize('configured', [False, True])
-def test_donor_inventory_read_only_when_canonical_bucket_configured(monkeypatch, configured):
+def test_donor_inventory_read_with_or_without_canonical_bucket(monkeypatch, configured):
+    # Donor prefixes and their sync uploads hold the target's audio in every deployment.
     if configured:
         monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
     else:
         monkeypatch.delenv('BUCKET_CANONICAL_AUDIO', raising=False)
     reads = []
 
-    def lookup(uid, cid):
+    def lookup(uid, cid, **kwargs):
         reads.append((uid, cid))
         return {'sync_merged_from': ['donor']}
 
     _delete_with_tasks(monkeypatch, [], source_lookup=lookup)
-    assert reads == ([(UID, 'conv-1')] if configured else [])
+    assert reads == [(UID, 'conv-1')]

@@ -50,6 +50,10 @@ def ja_window_allocated(uid: str | None) -> bool:
 
 def window_endpoint(language: str) -> str:
     """Base URL the window posts to for a normalized language; empty means none."""
+    from config.live_stt_gpu_fleet import gpu_fleet_off
+
+    if gpu_fleet_off():
+        return ''
     if language == 'ja':
         return ja_window_url()
     # Unchanged value: replica routing compares it to the family URL verbatim.

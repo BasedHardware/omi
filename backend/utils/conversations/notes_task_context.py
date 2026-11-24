@@ -5,7 +5,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 import database.action_items as action_items_db
+from database.action_item_dedup import may_have_recent_dedup_candidates
 from database.vector_db import find_similar_action_items
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,20 @@ def fetch_dedup_candidates_for_query(uid: str, query: str, conversation: Any = N
     excluded_conversation_ids = _dedup_excluded_conversation_ids(conversation) if conversation else set()
 
     try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        try:
+            if not may_have_recent_dedup_candidates(uid, cutoff, excluded_conversation_ids):
+                return []
+        except Exception:
+            # An optional cost optimization must never remove dedup context
+            # on a Firestore timeout, index error, or malformed legacy row.
+            record_fallback(
+                component='conversation_notes',
+                from_mode='dedup_eligibility_probe',
+                to_mode='pinecone',
+                reason='unavailable',
+                outcome='recovered',
+            )
         similar = find_similar_action_items(uid, query, threshold=0.6, limit=10)
         if not similar:
             return []

@@ -23,8 +23,8 @@ def worker(monkeypatch):
     monkeypatch.setattr(sync_jobs, 'r', redis)
     monkeypatch.setattr(sync_redrive, 'get_firestore_client', lambda: database)
     monkeypatch.setattr(sync_redrive.firestore, 'transactional', lambda fn: lambda tx: fn(tx))
-    monkeypatch.setattr(router, '_delete_staged_blobs_async', AsyncMock())
-    monkeypatch.setattr(router, '_download_staged_files', Mock(side_effect=AssertionError('must not download')))
+    monkeypatch.setattr(router, 'delete_staged_blobs_async', AsyncMock())
+    monkeypatch.setattr(router, 'download_staged_files', Mock(side_effect=AssertionError('must not download')))
     app = FastAPI()
     app.include_router(router.router)
     app.dependency_overrides[router.verify_cloud_tasks_oidc] = lambda: 0
@@ -48,8 +48,8 @@ def test_missing_job_http_ack_follows_durable_custody(worker):
     assert response.json() == {'status': 'redrive_required'}
     row = database.collection(sync_redrive.COLLECTION).document('job').get().to_dict()
     assert row['payload'] == payload
-    router._download_staged_files.assert_not_called()
-    router._delete_staged_blobs_async.assert_not_awaited()
+    router.download_staged_files.assert_not_called()
+    router.delete_staged_blobs_async.assert_not_awaited()
 
 
 def test_legacy_retry_http_converges_real_redis_cas_without_provider(worker):
@@ -61,4 +61,4 @@ def test_legacy_retry_http_converges_real_redis_cas_without_provider(worker):
     assert response.status_code == 200
     assert response.json() == {'status': 'done', 'reconciled': True}
     assert sync_jobs.get_sync_job('job')['status'] == 'completed'
-    router._download_staged_files.assert_not_called()
+    router.download_staged_files.assert_not_called()

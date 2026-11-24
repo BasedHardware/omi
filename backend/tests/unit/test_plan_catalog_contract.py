@@ -30,6 +30,8 @@ from scripts.generate_plan_catalog import (
     validate_publishable_catalog,
 )
 
+pytestmark = pytest.mark.usefixtures('isolated_git_env')
+
 
 def test_catalog_is_valid_and_generated_projection_is_current():
     catalog = load_catalog()

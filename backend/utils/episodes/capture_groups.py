@@ -3,6 +3,7 @@
 from typing import Any, Mapping, Optional
 
 from database import episodes, conversations
+from config.episode_attach import duplicates_dedupe_enabled
 
 
 def primary_id(row: Mapping[str, Any]) -> Optional[str]:
@@ -24,11 +25,18 @@ def canonical_row(uid, conversation_id, row, *, firestore_client=None):
 
 def join_duplicates(
     uid: str, owner: Mapping[str, Any], cid: str, row: Mapping[str, Any], *, firestore_client: Any = None
-) -> None:
+):
     group = row.get('capture_group') or {}
     ids = [m['id'] for m in group.get('members') or [] if isinstance(m, Mapping) and m.get('id') and m['id'] != cid]
     if not ids:
-        return
+        return owner
+    if (
+        duplicates_dedupe_enabled()
+        and set(ids) <= set(owner.get('duplicate_conversation_ids') or [])
+        and set(ids) <= set(owner.get('conversation_ids') or [])
+        and episodes.duplicate_memberships_match(uid, owner, ids, firestore_client=firestore_client)
+    ):
+        return owner
     duplicates = sorted(set(owner.get('duplicate_conversation_ids') or []) | set(ids))
     content_removed = any(m.get('conversation_id') in duplicates for m in owner.get('moments') or [])
     updates: dict[str, Any] = {
@@ -37,7 +45,7 @@ def join_duplicates(
     }
     if content_removed:
         updates.update(title='', bullets=[], people=[], open_questions=[], summary_needs_regeneration=True)
-    episodes.update_episode(
+    return episodes.update_episode(
         uid,
         str(owner['id']),
         expected_version=int(owner.get('state_version') or 0),

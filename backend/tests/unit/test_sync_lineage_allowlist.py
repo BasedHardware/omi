@@ -241,7 +241,7 @@ def _prepare_coordinate(module, stubs, monkeypatch, config, *, processed=(), par
     )
 
     async def run():
-        await module._run_full_pipeline_background_async(
+        await module.run_full_pipeline_background_async(
             'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
         )
         return [captured.get(chunk['id'], 'SKIPPED') for chunk in chunks], enriched
@@ -439,7 +439,7 @@ def _reprocess(pipeline, monkeypatch, config, *, language='en', row_status='in_p
         created_at=at(gen_start(L)),
         structured={'title': 'Synthetic review'},
     )
-    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_args: deepcopy(row))
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_args, **_kwargs: deepcopy(row))
     process = MagicMock()
     monkeypatch.setattr(pipeline, 'process_conversation', process)
     pipeline._reprocess_conversation_after_update('u', row['id'], language)
@@ -522,7 +522,7 @@ async def test_coordinator_checkpoints_admitted_refresh_debt_before_marking_audi
     pipeline._update_sync_job_for_run = checkpoint
     pipeline._add_processed_segment_for_run = lambda *_args: events.append(('processed', None))
     pipeline._reprocess_merged_conversations = lambda *_a, **_k: None
-    await module._run_full_pipeline_background_async(
+    await module.run_full_pipeline_background_async(
         'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
     )
     assert len(captured) == 4

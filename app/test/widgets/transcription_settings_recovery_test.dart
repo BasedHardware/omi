@@ -8,6 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -28,6 +29,8 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
 class _Usage extends ChangeNotifier implements UsageProvider {
   @override
   bool get showSubscriptionUI => false;
+  @override
+  UserSubscriptionResponse? get subscription => null;
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -90,12 +93,24 @@ void main() {
   }
 
   Future<void> select(WidgetTester tester, TranscriptionMode mode) async {
-    await tester.tap(find.byType(DropdownButton<TranscriptionMode>));
+    final key = switch (mode) {
+      TranscriptionMode.omi => 'transcription_source_omi',
+      TranscriptionMode.onDevice => 'transcription_source_phone',
+      TranscriptionMode.omiParakeet => 'transcription_source_parakeet',
+      TranscriptionMode.cloudProvider => 'transcription_source_cloud_provider',
+    };
+    tester.testTextInput.hide();
     await tester.pumpAndSettle();
-    final dropdown = tester.widget<DropdownButton<TranscriptionMode>>(find.byType(DropdownButton<TranscriptionMode>));
-    final item = dropdown.items!.singleWhere((item) => item.value == mode);
-    await tester.tap(find.text((item.child as Text).data!).last);
+    await tester.ensureVisible(find.byKey(Key(key)));
+    await tester.tap(find.byKey(Key(key)));
     await tester.pumpAndSettle();
+  }
+
+  /// Omi, this phone and Omi Parakeet apply when picked: no Save, the page stays open.
+  Future<void> applied(WidgetTester tester) async {
+    expect(find.text('Save'), findsNothing);
+    expect(find.text('Open settings'), findsNothing);
+    expect(capture.changes, 1);
   }
 
   Future<void> save(WidgetTester tester) async {
@@ -126,8 +141,8 @@ void main() {
         ));
     final keyField = find.byWidgetPredicate((w) => w is TextField && w.obscureText);
     await tester.enterText(keyField, 'new-fixture-key');
-    await tester.ensureVisible(find.text('Advanced'));
-    await tester.tap(find.text('Advanced'));
+    await tester.ensureVisible(find.text('Advanced').last);
+    await tester.tap(find.text('Advanced').last);
     await tester.pumpAndSettle();
     await save(tester);
     final saved = SharedPreferencesUtil().customSttConfig;
@@ -149,7 +164,7 @@ void main() {
           ));
       await tester.enterText(find.byWidgetPredicate((w) => w is TextField && w.obscureText), '');
       await select(tester, mode);
-      await save(tester);
+      await applied(tester);
       expect(SharedPreferencesUtil().customSttConfig.provider, SttProvider.omi);
       expect(SharedPreferencesUtil().transcriptionModel, mode == TranscriptionMode.omi ? 'soniox' : 'parakeet');
       final inactive = SharedPreferencesUtil().getConfigForProvider(SttProvider.deepgramLive)!;
@@ -166,10 +181,26 @@ void main() {
             url: '/fixture/missing-model.bin',
           ));
       await select(tester, mode);
-      await save(tester);
+      await applied(tester);
       expect(SharedPreferencesUtil().customSttConfig.provider, SttProvider.omi);
       expect(SharedPreferencesUtil().transcriptionModel, mode == TranscriptionMode.omi ? 'soniox' : 'parakeet');
       await expectDataPreserved();
     });
   }
+
+  testWidgets('switching back from a pinned phone choice releases the pin', (tester) async {
+    const phone = CustomSttConfig(provider: SttProvider.onDeviceWhisper, language: 'en', sendRawAudioToOmi: false);
+    SharedPreferencesUtil().paywallOnDeviceSttConfigId = phone.sttConfigId;
+    await open(tester, phone);
+    expect(find.text('Save'), findsNothing, reason: 'This phone applies when picked');
+    await select(tester, TranscriptionMode.omi);
+    await applied(tester);
+    expect(SharedPreferencesUtil().customSttConfig.provider, SttProvider.omi);
+    expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, isEmpty);
+  });
+
+  testWidgets('the cloud provider keeps its Save bar', (tester) async {
+    await open(tester, const CustomSttConfig(provider: SttProvider.deepgramLive, apiKey: 'fixture-key'));
+    expect(find.text('Save'), findsOneWidget);
+  });
 }

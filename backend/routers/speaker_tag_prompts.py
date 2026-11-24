@@ -1,5 +1,6 @@
 """Speaker tag prompts ("Was this you?" / "Who is this?") and voice-profile preferences."""
 
+from utils.conversations.layer import read_product as read_product_conversation
 import base64
 import hashlib
 import logging
@@ -10,6 +11,7 @@ from fastapi.responses import Response
 from database import owner_confirmation as owner_confirmation_db
 from database import conversations as conversations_db
 from database import voice_profiles as voice_profiles_db
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from models.speaker_tag_prompts import (
     IgnoredVoicesResponse,
     SpeakerTagPromptAnswerRequest,
@@ -23,6 +25,7 @@ from models.speaker_tag_prompts import (
 )
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
+from utils.other.account_gate_http import account_gate_busy_http_exception
 from utils.speaker_tag_prompts import service
 from utils.speaker_tag_prompts.clips import (
     CLIP_SAMPLE_RATE,
@@ -73,6 +76,10 @@ def answer_speaker_tag_prompt(
 ):
     try:
         return service.apply_answer(uid, data, schedule=background_tasks.add_task)
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as error:
+        # apply_answer writes speaker assignments through the account fence; while
+        # a destructive operation owns the gate, the answer is retryable (409).
+        raise account_gate_busy_http_exception() from error
     except service.TagPromptInvalid as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except StaleOwnerConfirmation as error:
@@ -101,7 +108,7 @@ def get_speaker_tag_prompt_clip(
     """A short clip of the user's own stored conversation audio (base64 WAV, at most 12 s)."""
     if end <= start or end - start > MAX_CLIP_REQUEST_SECONDS:
         raise HTTPException(status_code=400, detail='Clip must be at most 12 seconds')
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversation.get('deleted'):
         raise HTTPException(status_code=404, detail='Conversation not found')
     if conversation.get('is_locked'):

@@ -1,18 +1,75 @@
 """Synthetic producer clocks and generation-pinned, bounded speaker evidence."""
 
 import time
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
 
 from models.structured import Structured
+from models.transcript_segment import TranscriptSegment
 from tests.unit.test_conversation_speaker_resolution_stage import _conversation, env, VOICES  # noqa: F401
 from utils.batch_pipeline import projection
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.projection_parts import bounded_projection_words, split_result
+from utils.batch_pipeline.source_audio import batch_timing_store
 from utils.conversations import speaker_resolution as stage
 from utils.other import audio_chunks, storage
 from utils.stt.pre_recorded import postprocess_words
+
+
+@pytest.mark.parametrize('timing_store', ['sync', 'batch', None])
+def test_record_origin_projection_retains_admitted_clock_through_conversation_rescope(monkeypatch, timing_store):
+    from utils.conversations import deterministic_minimum
+    from utils.sync import intake_completion
+
+    monkeypatch.setattr(deterministic_minimum, 'build_deterministic_minimum_structured', lambda *a, **k: Structured())
+    monkeypatch.setattr(intake_completion, 'apply_capture_evidence_dark_write', lambda *a: None)
+    monkeypatch.setattr(projection, 'cap_dispatch_enabled', lambda *a: False)
+    # The same staged URI and record-origin scope can describe WAL or live PCM.
+    item = WorkItem('unit', 'synthetic-owner', 1700000000.0, 'gs://synthetic/audio#1', 4, Priority.FRESH)
+    item = replace(item, timing_store=timing_store)
+    binding = ProjectionBinding(item.owner_id, 'job', 'content', (item.segment_id,), record_origin=True)
+    payload = {
+        'audio_seconds': 4,
+        'words_provider': 'parakeet',
+        'words': [{'word': 'Synthetic.', 'timestamp': [1, 3], 'speaker': 'SPEAKER_00'}],
+        'speech_spans': [{'start': 1, 'end': 3}],
+        'speech_seconds': 2,
+        'diarization': {'turns': [{'start': 1, 'end': 3, 'speaker': 'SPEAKER_00'}]},
+    }
+    part, partition = split_result(item, payload)[0]
+    incoming = projection.build_incoming(part, binding, partition, batch_segment_id=item.segment_id)
+    segment = TranscriptSegment(**incoming['transcript_segments'][0])
+    assert segment.speaker_id_scope == 'final:batch:unit'
+    if timing_store is None:
+        assert segment.provider_speaker is None
+    else:
+        assert segment.provider_speaker == {
+            'id': segment.speaker_id,
+            'scope': 'final:batch:unit',
+            'provider': 'parakeet',
+            'timing_store': timing_store,
+        }
+    segment.assign_resolved_speaker(7, 'final:batch:conversation:synthetic')
+    restored = TranscriptSegment(**segment.model_dump(mode='python'))
+    assert restored.provider_speaker.get('timing_store') == timing_store
+    assert restored.provider_speaker['scope'] == 'final:batch:unit'
+    assert 'provider_speaker' not in restored.model_dump(mode='json')
+
+
+@pytest.mark.parametrize(
+    'paths,expected',
+    [
+        (['a.batch.enc', 'b.batch.bin'], 'batch'),
+        (['a.opus.enc'], None),
+        (['a.batch.enc', 'b.opus.enc'], None),
+        (['raw-live/owner/conversation/unknown.enc'], None),
+        ([], None),
+    ],
+)
+def test_live_admission_requires_known_batch_custody_for_every_source(paths, expected):
+    assert batch_timing_store([{'path': path} for path in paths]) == expected
 
 
 def test_legacy_centisecond_rounding_is_not_a_valid_batch_pcm_clock():

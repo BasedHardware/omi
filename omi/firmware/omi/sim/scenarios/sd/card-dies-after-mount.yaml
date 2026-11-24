@@ -1,0 +1,16 @@
+id: sd/card-dies-after-mount
+summary: >
+  A card that mounts and then fails every IO must not take the pendant down:
+  writes are dropped or blocked, the watchdog keeps being fed and the 3 s
+  power-off still works.
+tags: [guard]
+timeline:
+  - {t: 10000, sd: dead}
+  - {t: 60000, hold: 3500}
+end: 90000
+expect:
+  boot_count: 1
+  final: "off"
+  boots:
+    - {exit: poweroff, log: ["Entering system off"]}
+  invariants: [no-watchdog]

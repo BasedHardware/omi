@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
+import 'package:omi/services/telemetry/client_telemetry_flags.dart';
+import 'package:omi/utils/analytics/firmware_update_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -44,6 +46,8 @@ void main() {
     expect(payload['type'], 'fieldy');
     expect(payload['device_vendor'], 'fieldlabs');
     expect(payload['hardware_family'], 'fieldy');
+    expect(payload['firmware_revision'], '3.0.20');
+    expect(payload['model'], 'Fieldy One');
   });
 
   test('Device Connected payload omits rssi when the stored value is meaningless', () async {
@@ -76,6 +80,36 @@ void main() {
     expect(payload['type'], 'fieldy');
     expect(payload['device_vendor'], 'fieldlabs');
     expect(payload['hardware_family'], 'fieldy');
+    expect(payload['firmware_revision'], '3.0.20');
+    expect(payload['model'], 'Fieldy One');
+  });
+
+  test('retirement keeps the firmware funnel and adoption dimensions at the adapter', () async {
+    ClientTelemetryFlags.posthogRetirementEnabledOverride = true;
+    addTearDown(ClientTelemetryFlags.debugReset);
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    final device = _wearable();
+    SharedPreferencesUtil().btDevice = device;
+    AnalyticsManager().deviceConnected(device);
+    AnalyticsManager().devicePaired('2026-01-15T00:00:00.000Z');
+    AnalyticsManager().deviceSessionEnded(device: device, duration: const Duration(seconds: 10));
+    final attempt = FirmwareUpdateTelemetry.start(device: device, protocol: 'mcumgr');
+    attempt.uploadFinished();
+    attempt.installRequested();
+    attempt.completed(observedVersion: '3.0.21');
+    await AnalyticsManager.flushPending(force: true);
+    for (final event in ['Device Connected', 'Device Paired', 'Device Session Ended']) {
+      final payload = adapter.payloadFor(event);
+      expect(payload['firmware_revision'], '3.0.20');
+      expect(payload['model'], 'Fieldy One');
+      expect(payload['hardware_family'], 'fieldy');
+    }
+    for (final stage in ['Started', 'Upload Finished', 'Install Requested', 'Completed']) {
+      expect(adapter.payloadFor('Firmware Update $stage')['firmware_update_attempt_id'], isA<String>());
+    }
+    expect(adapter.payloadFor('Firmware Update Completed')['verified'], isTrue);
   });
 
   test('the dump guard fails when toJson keys ride along with named fields', () {

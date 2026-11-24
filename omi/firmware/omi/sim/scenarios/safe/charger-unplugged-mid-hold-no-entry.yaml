@@ -1,0 +1,13 @@
+id: safe/charger-unplugged-mid-hold-no-entry
+summary: Pulling the charger during the 10 s hold aborts manual entry.
+committee: [1]
+tags: [fix]
+initial: {charging: true}
+timeline:
+  - {t: 0, hold: 11000}
+  - {t: 6000, charger: off}
+end: 15000
+expect:
+  boot_count: 1
+  boots:
+    - {exit: stop, safe: false}

@@ -2,6 +2,7 @@ part of 'capture_controller.dart';
 
 extension CaptureSpeakerEvents on CaptureController {
   void _handleSpeakerLabelSuggestionEvent(SpeakerLabelSuggestionEvent event) {
+    if (_excludedSpeakers.contains(event.speakerId)) return;
     final serving = ClientRefactorFlags.serving;
     ClientRefactorFlags.compare('speaker_owner', event.resolvesOwner == (event.personId == 'user'));
     switch (reconcileSpeakerSuggestion(event, segments, taggingSegmentIds, suggestionsBySegmentId,

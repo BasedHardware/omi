@@ -1,5 +1,6 @@
 import asyncio
 import contextvars
+from contextlib import nullcontext
 import logging
 import threading
 import time
@@ -17,6 +18,7 @@ from models.speaker_tag_prompts import (
     SpeakerTagPromptOrigin as O,
     SpeakerTagPromptQualityOutcome as Q,
 )
+from database.legal_holds import DestructiveOperationInProgress
 from utils import executors
 from utils import speaker_sample
 from utils.speaker_tag_prompts import service
@@ -48,8 +50,10 @@ class World:
         monkeypatch.setattr(service.users_db, 'get_person', lambda uid, pid: self.people.get(pid))
         monkeypatch.setattr(service.users_db, 'get_person_by_name', lambda uid, name: None)
         monkeypatch.setattr(service.users_db, 'create_person', lambda uid, data: self.created.append(data) or data)
+        monkeypatch.setattr(service, 'external_write_fence', lambda uid: nullcontext())
         monkeypatch.setattr(service.users_db, 'get_people', lambda uid: list(self.people.values()))
         monkeypatch.setattr(service.conversations_db, 'get_conversations', lambda *a, **k: [])
+        monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda *a, **k: {})
         monkeypatch.setattr(
             service, 'emit_product_event', lambda **kwargs: self.events.append((kwargs['event'], kwargs['properties']))
         )
@@ -122,6 +126,23 @@ def test_saving_other_voices_off_labels_without_teaching(monkeypatch):
     assert world.assignments[0]['use_for_speech_training'] is False
     assert world.scheduled == [] and not response.voice_sample_queued
     assert response.quality_outcome == Q.person_not_enrolled
+
+
+def test_new_person_answer_does_not_create_person_during_destructive_gate(monkeypatch):
+    world = World(monkeypatch)
+
+    def gate_busy(uid):
+        assert uid == 'u'
+        raise DestructiveOperationInProgress('external data write blocked by destructive operation')
+
+    monkeypatch.setattr(service, 'external_write_fence', gate_busy)
+
+    with pytest.raises(DestructiveOperationInProgress):
+        service.apply_answer('u', _request(K.identify, O.unnamed, A.new_person, name='Ana'), world.schedule, NOW)
+
+    assert world.created == []
+    assert world.assignments == []
+    assert world.scheduled == []
 
 
 def test_declined_durable_admission_still_queues_immediate_teaching(monkeypatch):
@@ -950,3 +971,92 @@ def test_free_user_can_reject_previously_served_paid_card(monkeypatch):
         'u', _request(K.confirm_person, O.auto_person, A.someone_else, suggested_person_id='p1'), world.schedule, NOW
     )
     assert world.assignments and world.assignments[0]['person_id'] is None
+
+
+def test_positive_card_answer_retires_a_prior_live_exclusion_marker(monkeypatch):
+    """A card "Me"/person answer replaces a live not_a_person exclusion, so the
+    ignored-voice marker must retire through the same shared reconciliation the
+    live sheet uses — not leave the positively assigned voice listed as ignored."""
+    world = World(monkeypatch)
+    cleared = []
+    monkeypatch.setattr(
+        service.voice_profiles_db, 'clear_ignored_voices', lambda *args, **kwargs: cleared.append((args, kwargs)) or 0
+    )
+
+    # The card's own assignment writes a receipt the shared helper can read.
+    def assign_with_receipt(uid, conversation_id, **kwargs):
+        world.assignments.append(kwargs)
+        segments = [
+            {'id': 's1', 'speaker_id': 1, 'start': 0, 'end': 9},
+            {'id': 's2', 'speaker_id': 1, 'start': 9, 'end': 12},
+        ]
+        raw = {
+            'id': conversation_id,
+            'transcript_segments': segments,
+            'manual_speaker_assignments': {
+                'generation': 5,
+                'speakers': {
+                    '1': {'generation': 5, 'person_id': kwargs.get('person_id'), 'is_user': kwargs.get('is_user')}
+                },
+            },
+        }
+        return raw, ['s1', 's2'], [], []
+
+    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assign_with_receipt)
+
+    service.apply_answer('u', _request(K.identify, O.unnamed, A.me), world.schedule, NOW)
+    assert cleared == [(('u', 'c1', [1]), {'assignment_generation': 5})]
+
+
+def test_not_me_card_answer_retires_a_prior_not_a_person_marker(monkeypatch):
+    """A newer non-not_a_person card answer supersedes an earlier exclusion.
+
+    not_me / not_person / unnamed answers commit a newer rejection of a
+    different kind through the same whole-voice branch; the stale not_a_person
+    marker must retire or the voice stays listed under Ignored Voices and
+    prompt suppression keeps treating it as a media exclusion.
+    """
+    world = World(monkeypatch)
+    cleared = []
+    monkeypatch.setattr(
+        service.voice_profiles_db, 'clear_ignored_voices', lambda *args, **kwargs: cleared.append((args, kwargs)) or 0
+    )
+
+    def assign_with_receipt(uid, conversation_id, **kwargs):
+        world.assignments.append(kwargs)
+        segments = [{'id': 's1', 'speaker_id': 1, 'start': 0, 'end': 9}]
+        raw = {
+            'id': conversation_id,
+            'transcript_segments': segments,
+            'manual_speaker_assignments': {
+                'generation': 6,
+                'speakers': {'1': {'generation': 6, 'rejection': {'kind': 'not_me'}, 'person_id': None}},
+            },
+        }
+        return raw, ['s1'], [], []
+
+    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assign_with_receipt)
+
+    service.apply_answer('u', _request(K.identify, O.unnamed, A.someone_else), world.schedule, NOW)
+    assert cleared == [(('u', 'c1', [1]), {'assignment_generation': 6})]
+
+
+@pytest.mark.parametrize(
+    'kind,answer,extra',
+    [
+        (K.identify, A.person, {'person_id': 'p1'}),
+        (K.owner_check, A.me, {'evidence_id': 'e1'}),
+    ],
+)
+def test_destructive_gate_propagates_from_every_answer_path(monkeypatch, kind, answer, extra):
+    """The fence must surface intact for the HTTP boundary to map; never a stale/500 crash."""
+
+    world = World(monkeypatch)
+
+    def gate_busy(*args, **kwargs):
+        raise DestructiveOperationInProgress('external data write blocked by destructive operation')
+
+    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', gate_busy)
+    with pytest.raises(DestructiveOperationInProgress):
+        service.apply_answer('u', _request(kind, O.unnamed, answer, **extra), world.schedule, NOW)
+    assert world.scheduled == []

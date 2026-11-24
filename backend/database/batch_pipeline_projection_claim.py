@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from database import redis_db
 from database.firestore_transaction_retry import transaction_retry_deadline_scope
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 LEASE_SECONDS = 300
@@ -26,6 +27,24 @@ def _redis_client():
     # The general Redis client has unbounded socket I/O. This advisory lease
     # must fail open promptly instead of holding the durable drain indefinitely.
     return redis_db.create_bounded_redis_client(REDIS_TIMEOUT_SECONDS)
+
+
+def projection_claim_held(namespace: str, hashed_owner: str) -> bool:
+    """Non-acquiring admission hint; outages must never suppress a wakeup."""
+    try:
+        return bool(_redis_client().get(f'batch_projection:{namespace}:{hashed_owner}'))
+    except Exception as error:
+        record_fallback(
+            component='batch_pipeline',
+            from_mode='claim_peek',
+            to_mode='enqueue',
+            reason='unavailable',
+            outcome='degraded',
+        )
+        logger.warning(
+            'event=batch_projection action=claim_peek outcome=unavailable exception_type=%s', type(error).__name__
+        )
+        return False
 
 
 @contextmanager

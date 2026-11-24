@@ -202,12 +202,12 @@ def test_captures_in_different_groups_are_not_bridged(store):
     assert store.rows == before and first != second
 
 
-@pytest.mark.parametrize('change', ['discarded', 'processing', 'deleted', 'missing', 'window'])
+@pytest.mark.parametrize('change', ['discarded', 'deferred', 'processing', 'deleted', 'missing', 'window'])
 def test_ineligible_or_changed_captures_are_fenced(store, change):
     store.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
     target = store.rows[path('desktop')]
-    if change == 'discarded':
-        target['discarded'] = True
+    if change in {'discarded', 'deferred'}:
+        target[change] = True
     elif change == 'processing':
         target['status'] = 'processing'
     elif change == 'deleted':
@@ -266,8 +266,11 @@ def test_delete_conversation_leaves_its_group_first(monkeypatch):
     fake_ref = MagicMock()
     fake_ref.collections.return_value = []
     fake_db = MagicMock()
+    fake_db.document.return_value.get.return_value.exists = False
     overlay_ref = MagicMock()
     owner = fake_db.collection.return_value.document.return_value
+    owner.get.return_value.to_dict.return_value = {}
+    fake_ref.get.return_value.to_dict.return_value = {'id': 'desktop'}
     captures, overlays = MagicMock(), MagicMock()
     captures.document.return_value = fake_ref
     overlays.document.return_value = overlay_ref

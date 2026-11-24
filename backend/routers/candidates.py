@@ -97,7 +97,10 @@ def _has_suggested_candidate_shape(
         return False
     if (
         candidate.capture_confidence < MINIMUM_CAPTURE_CONFIDENCE
-        or candidate.ownership_confidence < MINIMUM_CAPTURE_CONFIDENCE
+        or (
+            candidate.ownership_confidence < MINIMUM_CAPTURE_CONFIDENCE
+            and not (candidate.reminder_origin and candidate.reminder_origin.review_reason == 'owner_unresolved')
+        )
         or not candidate.evidence_refs
     ):
         return False

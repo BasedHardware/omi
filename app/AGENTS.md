@@ -135,7 +135,7 @@ Heavy: `bash app/tool/perf_device_run.sh` ([never-uninstall guide](tool/perf/REA
 - Firebase Auth; browser flows: [mobile auth](docs/mobile-browser-auth.md).
 
 ### Request Headers
-All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash, X-App-Version, plus Bearer token.
+Gated features show read-only on TestFlight by default; never money, entitlements or data: `backend/config/app_channel.py`.
 
 ### API Base URLs
 - Dev: configured in `.dev.env` → `Env.apiBaseUrl`

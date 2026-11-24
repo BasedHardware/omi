@@ -231,6 +231,79 @@ def test_takeover_provider_error_settles_failed_held(setup, monkeypatch, legacy_
     assert not job.get('result')
 
 
+class _SonioxTransport:
+    """HTTP-only fake behind the real soniox_batch.transcribe, so its authorization gate runs."""
+
+    def __init__(self, *args, **kwargs):
+        self.calls = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def request(self, method, url, **kwargs):
+        self.calls.append(method)
+        if method == 'DELETE':
+            body = {}
+        elif url.endswith('/files'):
+            body = {'id': '00000000-0000-4000-8000-000000000001'}
+        elif url.endswith('/transcriptions'):
+            body = {'id': '00000000-0000-4000-8000-000000000002', 'status': 'completed'}
+        else:
+            body = {
+                'text': 'Synthetic.',
+                'tokens': [{'text': 'Synthetic.', 'start_ms': 1000, 'end_ms': 2000, 'speaker': '1'}],
+            }
+        return Mock(status_code=200, json=Mock(return_value=body))
+
+
+def test_takeover_above_runtime_bound_passes_the_real_soniox_authorization(setup, monkeypatch, legacy_dependencies):
+    """11-02 prod: every take-over unit settled provider_failed with zero vendor calls, because the
+    Soniox client re-applied the runtime 60s bound. The scoped plan bound must reach authorization."""
+    from functools import partial
+    from utils.stt import soniox_batch
+
+    client, store, binding, artifacts, _, alternate, _ = prepared_setup(
+        setup, monkeypatch, legacy_dependencies, speech=30.0
+    )
+    transports = []
+
+    def factory(*args, **kwargs):
+        transports.append(_SonioxTransport())
+        return transports[-1]
+
+    real = importlib.reload(soniox_batch).transcribe
+    monkeypatch.setattr(soniox_batch, 'transcribe', partial(real, client_factory=factory, sleep=lambda _: None))
+    assert (
+        prepared_independent_one(
+            store, artifacts, 'bad', binding.owner_id, 190.0, server_flags=SERVING_ENV, clock=lambda: 100
+        )
+        == 'recovered'
+    )
+    assert transports and transports[0].calls[:2] == ['POST', 'POST']
+    assert row(client)['recovery']['recognizers']['soniox']['outcome'] == 'words'
+    alternate.assert_not_called()
+
+
+def test_takeover_refused_by_soniox_policy_never_spends_the_intent(setup, monkeypatch, legacy_dependencies):
+    from utils.stt import soniox_batch
+
+    client, store, binding, artifacts, _, alternate, soniox = prepared_setup(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setattr(soniox_batch, 'provider_is_enabled', lambda *args: False)
+    assert (
+        prepared_independent_one(
+            store, artifacts, 'bad', binding.owner_id, 190.0, server_flags=SERVING_ENV, clock=lambda: 100
+        )
+        == 'independent_budget_held'
+    )
+    job = row(client)
+    assert job['recovery_state'] == 'prepared' and not job['recovery'].get('started_at')
+    assert not job['recovery'].get('recognizers')
+    soniox.assert_not_called()
+
+
 def test_takeover_only_admits_the_scoped_bound(setup, monkeypatch, legacy_dependencies):
     client, store, binding, artifacts, _, alternate, soniox = prepared_setup(setup, monkeypatch, legacy_dependencies)
     assert (

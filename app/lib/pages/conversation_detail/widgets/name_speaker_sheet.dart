@@ -142,7 +142,11 @@ Future<void> showNameSpeakerSheet(
   ) onSpeakerAssigned,
   SpeakerLabelSuggestionEvent? suggestion,
   bool defaultApplyToSpeaker = false,
+  bool wholeRecording = false,
+  bool Function()? recordingCoverageComplete,
+  Future<List<TranscriptSegment>> Function()? loadRecordingLines,
   Future<bool> Function(SpeakerRejection kind)? onSpeakerRejected,
+  Future<bool> Function()? onNotAPerson,
   bool unresolvedSpeakers = false,
 }) {
   return showOmiSheet<void>(
@@ -156,14 +160,21 @@ Future<void> showNameSpeakerSheet(
       segments: segments,
       suggestion: suggestion,
       defaultApplyToSpeaker: defaultApplyToSpeaker,
+      wholeRecording: wholeRecording,
+      recordingCoverageComplete: recordingCoverageComplete,
+      loadRecordingLines: loadRecordingLines,
       onSpeakerAssigned: onSpeakerAssigned,
       onSpeakerRejected: onSpeakerRejected,
+      onNotAPerson: onNotAPerson,
       feedbackContext: context,
     ),
   );
 }
 
 class NameSpeakerBottomSheet extends StatefulWidget {
+  final bool wholeRecording;
+  final bool Function()? recordingCoverageComplete;
+  final Future<List<TranscriptSegment>> Function()? loadRecordingLines;
   final int speakerId;
   final String segmentId;
   final Future<bool> Function(
@@ -178,8 +189,11 @@ class NameSpeakerBottomSheet extends StatefulWidget {
   final bool defaultApplyToSpeaker;
 
   /// Says the current label is wrong without naming who it is: "Not Me", "Not <name>",
-  /// "Not a Person". Null hides those answers (the live transcript).
+  /// "Not a Person". Null hides the label rejections; [onNotAPerson] can still expose exclusion.
   final Future<bool> Function(SpeakerRejection kind)? onSpeakerRejected;
+
+  /// Exclude a media speaker cluster without assigning or teaching a person.
+  final Future<bool> Function()? onNotAPerson;
 
   /// The page that opened the sheet: its toasts land there once the sheet closes, so they keep the
   /// page's clearance above a pinned bottom action ([OmiFeedbackClearance]).
@@ -193,8 +207,12 @@ class NameSpeakerBottomSheet extends StatefulWidget {
     required this.segments,
     this.suggestion,
     this.defaultApplyToSpeaker = false,
+    this.wholeRecording = false,
+    this.recordingCoverageComplete,
+    this.loadRecordingLines,
     this.feedbackContext,
     this.onSpeakerRejected,
+    this.onNotAPerson,
   });
 
   @override
@@ -202,6 +220,28 @@ class NameSpeakerBottomSheet extends StatefulWidget {
 }
 
 class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
+  List<TranscriptSegment>? _recordingLines;
+  List<TranscriptSegment> get _segments => _recordingLines ?? widget.segments;
+
+  Iterable<TranscriptSegment> get _sameSpeakerLines {
+    // The detail loader supplies a proven voice across member conversations.
+    if (_recordingLines != null) return _recordingLines!;
+    final anchor = _segments.firstWhereOrNull((s) => s.id == widget.segmentId);
+    return _segments.where((s) => anchor?.sameRecordingVoice(s) ?? s.speakerId == widget.speakerId);
+  }
+
+  Future<void> _loadRecordingLines() async {
+    final load = widget.loadRecordingLines;
+    if (load == null) return;
+    final lines = await load();
+    if (!mounted || loading) return;
+    setState(() {
+      _recordingLines = lines;
+      if (_applyToSpeaker) _selectedSegmentIds = lines.map((line) => line.id).toList();
+      _isSegmentsExpanded = _applyToSpeaker && lines.length > 1;
+    });
+  }
+
   final TextEditingController _controller = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   String selectedPerson = '';
@@ -312,8 +352,11 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadRecordingLines();
+    });
     _applyToSpeaker = widget.defaultApplyToSpeaker;
-    final sameSpeaker = widget.segments.where((s) => s.speakerId == widget.speakerId);
+    final sameSpeaker = _sameSpeakerLines;
     _selectedSegmentIds = _applyToSpeaker ? sameSpeaker.map((s) => s.id).toList() : [widget.segmentId];
     if (!_selectedSegmentIds.contains(widget.segmentId)) {
       _selectedSegmentIds.add(widget.segmentId);
@@ -325,7 +368,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
       final people = peopleProvider.people;
       final userName = SharedPreferencesUtil().givenName;
 
-      final currentSegment = widget.segments.firstWhereOrNull((s) => s.id == widget.segmentId);
+      final currentSegment = _segments.firstWhereOrNull((s) => s.id == widget.segmentId);
       final sample = currentSegment?.text ?? "";
       setState(() {
         speakerTextSample = sample.isNotEmpty ? '"$sample"' : null;
@@ -402,7 +445,8 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                         _buildNewPersonInput(people, userName)
                       else
                         _buildPersonSelector(people, userName),
-                      if (widget.onSpeakerRejected != null && !_isCreatingNewPerson) _buildRejections(people),
+                      if ((widget.onSpeakerRejected != null || widget.onNotAPerson != null) && !_isCreatingNewPerson)
+                        _buildRejections(people),
                       const SizedBox(height: 16),
                       _buildUntaggedSegments(),
                       const SizedBox(height: 8),
@@ -527,7 +571,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
 
   Widget _buildPersonSelector(List<Person> ppl, String userName) {
     final personFrequencies = _personFrequencies();
-    final currentSegment = widget.segments.firstWhereOrNull((s) => s.id == widget.segmentId);
+    final currentSegment = _segments.firstWhereOrNull((s) => s.id == widget.segmentId);
 
     final List<Person> people = [
       // The owner is "You" in the app (contract §9), never "<name> (You)".
@@ -634,12 +678,13 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
 
   Future<void> _reject(SpeakerRejection kind) async {
     final reject = widget.onSpeakerRejected;
-    if (reject == null || loading) return;
+    final exclude = kind == SpeakerRejection.notAPerson ? widget.onNotAPerson : null;
+    if ((reject == null && exclude == null) || loading) return;
     final l10n = context.l10n;
     setLoading(true);
     var saved = false;
     try {
-      saved = await reject(kind);
+      saved = exclude != null ? await exclude() : await reject!(kind);
     } catch (_) {
       saved = false;
     }
@@ -661,21 +706,21 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   /// carries that label; "Not a Person" is always there (a TV, a voice assistant).
   Widget _buildRejections(List<Person> people) {
     final l10n = context.l10n;
-    final current = widget.segments.firstWhereOrNull((s) => s.id == widget.segmentId);
+    final current = _segments.firstWhereOrNull((s) => s.id == widget.segmentId);
     final person = people.firstWhereOrNull((p) => p.id == current?.personId);
     return Padding(
       padding: const EdgeInsets.only(top: OmiSpacing.sm),
       child: Wrap(
         spacing: OmiSpacing.xs,
         children: [
-          if (current?.isUser == true)
+          if (widget.onSpeakerRejected != null && current?.isUser == true)
             OmiButton.secondary(
               key: const Key('name_speaker_not_me'),
               label: l10n.speakerTagPromptNotMeAction,
               size: OmiButtonSize.compact,
               onPressed: () => _reject(SpeakerRejection.notMe),
             ),
-          if (person != null)
+          if (widget.onSpeakerRejected != null && person != null)
             OmiButton.secondary(
               key: const Key('name_speaker_not_person'),
               label: l10n.speakerLabelText('notPerson', person.name),
@@ -694,17 +739,20 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   }
 
   Widget _buildUntaggedSegments() {
-    final untaggedSegments =
-        widget.segments.where((s) => s.speakerId == widget.speakerId && s.id != widget.segmentId).toList();
+    final untaggedSegments = _sameSpeakerLines.where((s) => s.id != widget.segmentId).toList();
     final selectedUntaggedSegmentsCount = untaggedSegments.where((s) => _selectedSegmentIds.contains(s.id)).length;
 
     return Column(
       children: [
         CheckboxListTile(
           title: Text(
-            _isSegmentsExpanded && untaggedSegments.isNotEmpty
-                ? context.l10n.tagOtherSegmentsFromSpeaker(selectedUntaggedSegmentsCount, untaggedSegments.length)
-                : context.l10n.tagSpeakerIncludingLaterSpeech,
+            widget.wholeRecording
+                ? (widget.recordingCoverageComplete?.call() == true
+                    ? context.l10n.speakerWholeRecording
+                    : context.l10n.speakerRecordingCoverage('scope', 0))
+                : _isSegmentsExpanded && untaggedSegments.isNotEmpty
+                    ? context.l10n.tagOtherSegmentsFromSpeaker(selectedUntaggedSegmentsCount, untaggedSegments.length)
+                    : context.l10n.tagSpeakerIncludingLaterSpeech,
             style: OmiType.footnote,
           ),
           value: _applyToSpeaker,

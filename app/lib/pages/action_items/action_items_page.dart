@@ -1,3 +1,9 @@
+// The Tasks page: dated Today/Tomorrow/Later sections plus an expandable
+// No Deadline section, completion toggles, and task-integration entry points.
+//
+// Dated sections render complete lists on load while No Deadline is the only
+// section allowed to page, and completion state is driven through the shared
+// action-items provider so list, widget and integration views stay consistent.
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -39,6 +45,7 @@ class ActionItemsPage extends StatefulWidget {
 
 class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
+  bool _initialLoadScheduled = true;
 
   // Task -> goal mapping
   final Map<String, String> _taskGoalLinks = {};
@@ -87,6 +94,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     _loadTaskGoalLinks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      setState(() => _initialLoadScheduled = false);
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       final suggestions = provider.suggestions;
@@ -99,7 +107,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           phase == ApiViewPhase.terminal ||
           phase == ApiViewPhase.authenticationRequired ||
           phase == ApiViewPhase.empty;
-      if (provider.actionItems.isEmpty && !typedResultAlreadyProjected) {
+      if (!typedResultAlreadyProjected) {
         provider.ensureLoaded(showShimmer: true);
       }
       final taskIntegrationProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
@@ -158,7 +166,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   void _onScroll() {
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
-      if (!provider.isFetching && provider.hasMore) {
+      if (!provider.isFetching && provider.hasMore && !provider.loadMoreFailed) {
         provider.loadMoreActionItems();
       }
     }
@@ -349,10 +357,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  void _updateTaskCategory(ActionItemWithMetadata item, TaskCategory newCategory) {
+  /// A drop into another section moves the task at once; a save that fails moves it back and says
+  /// so, with Try Again (T3).
+  Future<void> _updateTaskCategory(ActionItemWithMetadata item, TaskCategory newCategory) async {
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
     final newDueDate = _getDefaultDueDateForCategory(newCategory);
-    provider.updateActionItemDueDate(item, newDueDate);
+    final saved = await provider.updateActionItemDueDate(item, newDueDate);
+    if (saved || !mounted) return;
+    OmiFeedback.error(
+      context,
+      context.l10n.couldNotMoveTask,
+      actionLabel: context.l10n.tryAgain,
+      onAction: () => _updateTaskCategory(item, newCategory),
+    );
   }
 
   /// Deleting a whole section at once cannot be undone: confirm every time (contract §4).
@@ -367,11 +384,18 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       destructive: true,
     );
     if (!shouldClear) return;
-    final deleted = await Future.wait(items.map(provider.deleteActionItem));
-    if (!mounted || deleted.every((ok) => ok)) return;
-    // The provider has already put each rejected row back; say so, as a single delete does
-    // (task_delete_undo.dart), instead of letting the rows reappear in silence.
-    OmiFeedback.error(context, l10n.failedToDeleteActionItem);
+    // One batch request, not one delete per task: concurrent single deletes for one owner
+    // contend on the same server route document and fail.
+    final result = await provider.clearSection(items);
+    if (!mounted) return;
+    if (result.failed > 0) {
+      // The provider has already put each rejected row back; say so, as a single delete does
+      // (task_delete_undo.dart), instead of letting the rows reappear in silence.
+      OmiFeedback.error(context, l10n.failedToDeleteActionItem);
+    } else if (result.lockedKept > 0) {
+      // Locked tasks stay by design; that is not a failure (T5).
+      OmiFeedback.info(context, l10n.lockedTasksKept(result.lockedKept));
+    }
   }
 
   int _getIndentLevel(ActionItemWithMetadata item) {
@@ -488,23 +512,33 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     OmiHaptics.medium();
                     return provider.forceRefreshActionItems();
                   },
-                  child: provider.isLoading && provider.actionItems.isEmpty
-                      ? _buildLoadingState()
-                      : showTypedStatus
-                          ? CustomScrollView(
-                              controller: _scrollController,
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              slivers: [
-                                SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
-                                SliverFillRemaining(
-                                  hasScrollBody: false,
-                                  child: Center(child: ActionItemsApiStatus(provider: provider)),
-                                ),
-                              ],
-                            )
-                          : categorizedItems.values.every((l) => l.isEmpty)
-                              ? _buildEmptyTasksList(provider)
-                              : _buildTasksList(categorizedItems, provider),
+                  // First load cross-fades the skeleton into the list in the same place (§10 Motion).
+                  child: AnimatedSwitcher(
+                    duration: OmiMotion.of(context).standard,
+                    child: (provider.isLoading ||
+                                (_initialLoadScheduled && !provider.hasLoaded && apiPhase == ApiViewPhase.data)) &&
+                            provider.actionItems.isEmpty
+                        ? KeyedSubtree(key: const ValueKey('tasks_loading'), child: _buildLoadingState())
+                        : KeyedSubtree(
+                            key: const ValueKey('tasks_content'),
+                            child: showTypedStatus
+                                ? CustomScrollView(
+                                    controller: _scrollController,
+                                    physics: const AlwaysScrollableScrollPhysics(),
+                                    slivers: [
+                                      SliverToBoxAdapter(
+                                          child: TaskSuggestionsSection(controller: provider.suggestions)),
+                                      SliverFillRemaining(
+                                        hasScrollBody: false,
+                                        child: Center(child: ActionItemsApiStatus(provider: provider)),
+                                      ),
+                                    ],
+                                  )
+                                : categorizedItems.values.every((l) => l.isEmpty)
+                                    ? _buildEmptyTasksList(provider)
+                                    : _buildTasksList(categorizedItems, provider),
+                          ),
+                  ),
                 ),
               ),
               // The empty state points to conversation capture on Home.
@@ -520,8 +554,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildLoadingState() {
+    // No scroll controller: it cross-fades with the list, which owns the controller.
     return CustomScrollView(
-      controller: _scrollController,
       physics: const NeverScrollableScrollPhysics(),
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 16)),
@@ -605,6 +639,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           const SliverPadding(padding: EdgeInsets.only(top: 6)),
           _buildDateSections(categorizedItems, provider),
         ],
+
+        // A page that failed to load says so where the list ends, one quiet line to retry (T1).
+        if (!isSearching && provider.loadMoreFailed)
+          SliverToBoxAdapter(
+            child: OmiLoadMoreFailed(key: const Key('tasks_load_more_failed'), onRetry: provider.loadMoreActionItems),
+          ),
 
         // Bottom padding so the last row scrolls clear of the nav bar
         SliverPadding(padding: EdgeInsets.only(bottom: homeBottomClearance(context))),
@@ -1199,9 +1239,20 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
+  /// Tasks whose tick is showing before the row moves to Completed.
+  final Set<String> _ticking = {};
+
   Future<void> _toggleCompleted(ActionItemsProvider provider, ActionItemWithMetadata item) async {
     OmiHaptics.light();
+    if (!item.completed) {
+      // The control answers first (ux-contract §10 Motion): the tick lands within quick, then the
+      // row leaves for Completed.
+      setState(() => _ticking.add(item.id));
+      await Future<void>.delayed(OmiMotion.of(context).quick);
+      if (!mounted) return;
+    }
     final saved = await provider.updateActionItemState(item, !item.completed);
+    if (mounted && _ticking.remove(item.id)) setState(() {});
     if (!saved && mounted) OmiFeedback.error(context, context.l10n.failedToUpdateActionItem);
     if (saved && !item.completed) _onActionItemCompleted();
   }
@@ -1310,7 +1361,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: SizedBox(
                     width: 44,
                     height: 44,
-                    child: Center(child: TaskCompletionMark(completed: item.completed)),
+                    child: Center(child: TaskCompletionMark(completed: item.completed || _ticking.contains(item.id))),
                   ),
                 ),
               ),

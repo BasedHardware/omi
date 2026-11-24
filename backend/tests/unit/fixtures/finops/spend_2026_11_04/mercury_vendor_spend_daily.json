@@ -1,0 +1,252 @@
+{
+  "status": "ready",
+  "start": "2026-10-06",
+  "end": "2026-11-04",
+  "rows": [
+    {
+      "date": "2026-10-06",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-07",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-08",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-09",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-10",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-11",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-12",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-13",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-14",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-15",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-16",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-17",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-18",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-19",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-20",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-21",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-22",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-23",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-24",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-25",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-26",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-27",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-28",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-29",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-30",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-10-31",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-11-01",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-11-02",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-11-03",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-11-04",
+      "vendor": "unmapped",
+      "category": "unmapped",
+      "amount_usd": "0",
+      "transaction_count": 0
+    },
+    {
+      "date": "2026-11-04",
+      "vendor": "modulate",
+      "category": "stt_vendor",
+      "amount_usd": "200",
+      "transaction_count": 2
+    },
+    {
+      "date": "2026-10-06",
+      "vendor": "vercel",
+      "category": "saas",
+      "amount_usd": "11421.671875",
+      "transaction_count": 1
+    },
+    {
+      "date": "2026-11-04",
+      "vendor": "vercel",
+      "category": "saas",
+      "amount_usd": "11421.671875",
+      "transaction_count": 1
+    },
+    {
+      "date": "2026-10-06",
+      "vendor": "cloudflare",
+      "category": "infra_non_gcp",
+      "amount_usd": "51.8959375",
+      "transaction_count": 1
+    },
+    {
+      "date": "2026-11-04",
+      "vendor": "cloudflare",
+      "category": "infra_non_gcp",
+      "amount_usd": "51.8959375",
+      "transaction_count": 1
+    }
+  ]
+}

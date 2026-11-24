@@ -26,7 +26,22 @@ from utils.batch_pipeline.intake import durable_status
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.pump import Pump
+from utils.batch_pipeline.retry_policy import quarantine_job
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
+
+
+def test_quarantine_rejects_conflicting_evidence_before_transaction_access():
+    tx = Mock()
+    with pytest.raises(ValueError, match='mutually exclusive'):
+        quarantine_job(
+            tx,
+            {},
+            1,
+            'worker_failed',
+            lease_expired=True,
+            worker_failure={'stage': 'vad_windows', 'reason': 'unsupported_language'},
+        )
+    assert tx.mock_calls == []
 
 
 @pytest.mark.parametrize('value,expected', [('1', 1), ('8', 8), ('20', 20), ('0', 5), ('21', 5), ('bad', 5)])
@@ -156,7 +171,7 @@ def test_persisted_sibling_leaves_sweep_without_success_or_claim_release(monkeyp
     assert store.hold_for_quarantine('good', binding, 100)
     assert store.hold_for_quarantine('good', binding, 101)
     entry = client.rows[('batch_pipeline_dev_results', 'good')]
-    assert entry['projection_state'] == 'quarantine_held'
+    assert entry['projection_state'] == 'ready'
     assert entry['projection'] == before[('batch_pipeline_dev_results', 'good')]['projection']
     assert client.rows[('users', binding.owner_id, 'sync_content_ledger', 'content')]['status'] == 'processing'
     assert store.prepare_accounting(binding, 102) is None
@@ -186,12 +201,24 @@ def test_quarantine_hold_settles_ready_sibling_hints_in_one_transaction(monkeypa
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', enabled)
     client, store, binding = ready_sibling_fixture()
+    for sid in ('good', 'other'):
+        client.rows[('batch_pipeline_dev_results', sid)]['projection_state'] = 'persisted'
     before = deepcopy(client.rows)
     assert store.hold_for_quarantine('good', binding, 100)
-    assert client.rows[('batch_pipeline_dev_results', 'good')]['projection_state'] == 'quarantine_held'
+    assert client.rows[('batch_pipeline_dev_results', 'good')]['projection_state'] == 'ready'
     other = client.rows[('batch_pipeline_dev_results', 'other')]
-    assert other['projection_state'] == ('quarantine_held' if enabled == 'true' else 'ready')
+    assert other['projection_state'] == ('ready' if enabled == 'true' else 'persisted')
+    for sid in binding.segment_ids:
+        assert client.rows[('batch_pipeline_dev_jobs', sid)] == before[('batch_pipeline_dev_jobs', sid)]
     assert other['projection'] == before[('batch_pipeline_dev_results', 'other')]['projection']
+    # CI writer invariant: only pre-fix legacy hints may be held without a
+    # quarantined receipt/part. This transaction must never create a new ghost.
+    for (collection, *_), row in client.rows.items():
+        if collection == 'batch_pipeline_dev_results' and row.get('projection_state') == 'quarantine_held':
+            assert any(
+                part.get('state') == 'quarantined'
+                for part in [row.get('projection') or {}, *(row.get('projection_parts') or {}).values()]
+            )
     assert client.rows[('users', binding.owner_id, 'sync_content_ledger', 'content')]['status'] == 'processing'
     assert all(not t.creates and not t.sets for t in client.transactions)
 
@@ -284,6 +311,13 @@ def test_quarantine_transaction_reads_before_writes_and_telemetry_cannot_escape(
     assert queue.fail('bad', lease.token, 1, worker_failure={'stage': 'vad_windows', 'reason': 'unsupported_language'})
     quarantined = client.rows[('batch_pipeline_dev_jobs', 'bad')]
     assert quarantined['state'] == 'quarantined' and quarantined['worker_failure']['reason'] == 'unsupported_language'
+    assert quarantined['quarantine_diagnostic'] == {
+        'exception_class': 'worker_validation',
+        'stage': 'vad_windows',
+        'worker_reason': 'unsupported_language',
+        'provider_error': 'unknown',
+        'artifact_kind': 'unknown',
+    }
     assert quarantined['audio_uri'] == 'gs://synthetic/bad'
     assert not queue.fail('bad', lease.token, 2)
 

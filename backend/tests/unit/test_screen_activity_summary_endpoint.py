@@ -134,6 +134,18 @@ def test_summary_http_preserves_sample_coverage_and_excludes_lookahead(monkeypat
         'first_observed_at': '2026-07-03 01:00:00.000' if rows else None,
         'last_observed_at': '2026-07-03 12:00:00.000' if rows else None,
         'capture_completeness': 'unknown',
+        'devices': (
+            [
+                {
+                    'device_id': 'unknown',
+                    'first_observed_at': '2026-07-03 01:00:00.000',
+                    'last_observed_at': '2026-07-03 12:00:00.000',
+                    'synced_through': None,
+                }
+            ]
+            if rows
+            else []
+        ),
     }
     assert client_db.requested_limit == 5001
     assert client_db.collection_names == ['users', 'screen_activity']

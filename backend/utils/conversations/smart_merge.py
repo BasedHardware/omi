@@ -53,6 +53,7 @@ from config.conversation_smart_merge import (
 )
 from config.jev_decisions import JEV_MODEL
 from config.merge_before_processing import enabled as merge_before_processing_enabled
+from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 from database import conversations as conversations_db
 from database import notifications as notification_db
 from database import smart_merge as smart_merge_db
@@ -60,7 +61,6 @@ from database.firestore_read_metrics import FirestoreReadSite
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable
 from database.sync_bridges import mark_sync_bridge_cleaned
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
-from utils.episodes.boundaries import merge_allowed
 from utils.conversations.action_item_refresh import transfer_donor
 from utils.sync import processing_hold
 from utils.enrichment import outbox as enrichment_outbox
@@ -68,6 +68,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.summary_delivery import PROCESS_CONTEXT, present as summary_present
 from config.merge_ancestry import flatten_updates
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
+from utils.episodes import member_notes
 from utils.conversations.process_conversation import process_conversation, save_structured_vector
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge_policy import (
@@ -104,6 +105,7 @@ from utils.metrics import (
     record_smart_merge_flatten,
 )
 from utils.observability.fallback import record_fallback
+from utils.observability.finalization import finalization_diagnostic_id
 from utils.other.storage import compute_audio_files_fingerprint, enqueue_conversation_artifact_build
 
 logger = logging.getLogger(__name__)
@@ -409,7 +411,7 @@ def _decide(
 ) -> Optional[_MergePlan]:
     """Ask (or reuse) the decision; a plan only in merge mode at or above the threshold."""
     new_row = conversations_db.get_conversation(uid, conversation_id, read_site=FirestoreReadSite.SMART_MERGE)
-    if not new_row:
+    if not new_row or not python_owns_finalization(new_row):
         return None
     new_row = dict(new_row, id=conversation_id)
     new_segments = _segments(new_row)
@@ -450,14 +452,11 @@ def _decide(
             )
 
     survivor = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
-    if not survivor:
+    if not survivor or not python_owns_finalization(survivor):
         _skip(mode, SkipReason.NO_PREDECESSOR, uid, conversation_id)
         return None
     survivor = dict(survivor, id=survivor_id)
     survivor_segments = _segments(survivor)
-    if not merge_allowed(uid, survivor, new_row):
-        _skip(mode, 'boundary', uid, conversation_id)
-        return None
     if smart_merge_db.has_intervening_discarded(uid, survivor, new_row):
         _skip(mode, SkipReason.INTERVENING_DISCARDED, uid, conversation_id)
         return None
@@ -797,6 +796,8 @@ def finish_absorb(uid: str, donor_id: str, *, owner: str, resumed: bool = False)
         _cleanup_flattened_ancestors(uid, donor_id, donor, survivor_id)
         step = 'refresh'
         refresh_survivor(uid, survivor_id, owner=owner)
+    except (member_notes.LiveMemberNotesDeferred, processing_hold.ProcessingDeferred):
+        raise  # Scheduling waits retain donor custody without spending retry budget.
     except Exception as error:
         # Bounded: no ids, no message text (provider errors can quote transcript).
         logger.warning('event=smart_merge outcome=incomplete step=%s cause=%s', step, _incomplete_cause(error))
@@ -804,7 +805,8 @@ def finish_absorb(uid: str, donor_id: str, *, owner: str, resumed: bool = False)
             raise
         raise SmartMergeIncomplete(type(error).__name__) from error
     if resumed:
-        logger.info('event=smart_merge outcome=resumed_ok')
+        # Closed vocabulary: the hash only, never the raw finalization job id.
+        logger.info('event=smart_merge outcome=resumed_ok job_hash=%s', finalization_diagnostic_id(owner))
 
 
 _DEFERRED_RETRACTION = (DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable)
@@ -885,6 +887,8 @@ def refresh_survivor(
     """Regenerate the survivor once for its current revision, under a short lease."""
     if processing_hold.owns_runtime() and not settled:
         row = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
+        if row is not None and not python_owns_finalization(row):
+            raise processing_hold.finalization_owner_deferral(target_id=survivor_id)
         if row and not row.get('deleted') and processing_hold.enabled_for(row) and processing_hold.sync_sourced(row):
             if not refresh_owed(row) or int(smart_merge_state(row).get('delegated_revision') or 0) >= revision(row):
                 return
@@ -929,6 +933,8 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str, sk
         if row and not row.get('deleted'):
             raise SmartMergeIncomplete('survivor_changed_before_refresh')
         return
+    if not python_owns_finalization(row):
+        raise processing_hold.finalization_owner_deferral(target_id=survivor_id)
     if skip_processing:
         # Unchanged/immaterial/capped content still settles the merge ledger.
         # Use both revision fences before releasing the owed refresh.
@@ -960,6 +966,10 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str, sk
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 smart_merge_refresh=(claimed, owner),
             )
+        except FinalizationOwnedElsewhere as error:
+            raise processing_hold.finalization_owner_deferral(target_id=survivor_id) from error
+        except member_notes.LiveMemberNotesDeferred:
+            raise  # Outer custody owner releases the lease and schedules the wait.
         except Exception:
             record_conversation_smart_merge_refresh('failed')
             raise

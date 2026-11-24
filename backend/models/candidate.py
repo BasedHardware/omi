@@ -11,6 +11,7 @@ from typing_extensions import TypeAliasType
 
 from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskStatus
 from models.task_intelligence import StableId, TaskWorkflowMode
+from models.task_due import ReminderOrigin
 
 
 class CandidateSubjectKind(str, Enum):
@@ -82,6 +83,7 @@ class CandidateEnvelope(BaseModel):
     evidence_refs: list[EvidenceRef] = Field(min_length=1)
     source_surface: str = Field(min_length=1, max_length=64)
     compatibility: Optional[CandidateCompatibilityMetadata] = None
+    reminder_origin: Optional[ReminderOrigin] = None
 
 
 class TaskCreateCandidate(CandidateEnvelope):
@@ -206,6 +208,10 @@ class CandidateCreate(RootModel[CandidateCreateUnion]):
         return self.root.source_surface
 
     @property
+    def reminder_origin(self) -> Optional[ReminderOrigin]:
+        return self.root.reminder_origin
+
+    @property
     def compatibility(self) -> Optional[CandidateCompatibilityMetadata]:
         return self.root.compatibility
 
@@ -225,6 +231,8 @@ class CandidateRecord(BaseModel):
     evidence_refs: list[EvidenceRef] = Field(min_length=1)
     source_surface: str = Field(min_length=1, max_length=64)
     compatibility: Optional[CandidateCompatibilityMetadata] = None
+    reminder_origin: Optional[ReminderOrigin] = None
+    creation_receipt: Optional[dict[str, Any]] = None
     candidate_id: StableId
     status: CandidateStatus = CandidateStatus.pending
     account_generation: int = Field(ge=0)
@@ -298,6 +306,7 @@ class CandidateRecord(BaseModel):
             return value
         record_fields = {
             'candidate_id',
+            'creation_receipt',
             'status',
             'account_generation',
             'idempotency_key',
@@ -336,6 +345,7 @@ class CandidateRecord(BaseModel):
     def as_proposal(self) -> CandidateCreate:
         record_fields = {
             'candidate_id',
+            'creation_receipt',
             'status',
             'account_generation',
             'idempotency_key',
@@ -373,6 +383,7 @@ class CandidateResolutionRequest(BaseModel):
 class CandidateResolutionReceipt(BaseModel):
     model_config = ConfigDict(extra='forbid', frozen=True)
 
+    creation_receipt: Optional[dict[str, Any]] = None
     candidate_id: StableId
     status: CandidateStatus
     receipt_id: StableId

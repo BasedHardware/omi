@@ -29,17 +29,14 @@ def test_levers_default_to_shadow_and_serve_only_a_cohort(monkeypatch):
     for name in dream_levers.PER_OWNER:
         monkeypatch.delenv(name, raising=False)
         monkeypatch.delenv(name + '_SERVE_PERCENT', raising=False)
-    # Retired 2026-10-30 from the 10-29 shadow day: idle-skip and no-progress default off.
+    # Idle skip remains off; the no-progress lever has been retired.
     assert dream_levers.arms('owner-a') == {
         'idle_skip': 'off',
         'material_budget': 'shadow',
-        'no_progress_stop': 'off',
-        'history_compact': 'shadow',
         'hunt_backoff': 'shadow',
         'prescan': 'shadow',
         # The verify hold only moves budget from searching to verifying, so it serves.
         'verify_hold': 'serve',
-        'liberal_verifier': 'shadow',
     }
     monkeypatch.setenv(dream_levers.IDLE_SKIP_MODE_ENV, 'shadow')
     monkeypatch.setenv(dream_levers.IDLE_SKIP_SERVE_PERCENT_ENV, '100')
@@ -68,7 +65,7 @@ def test_lever_errors_fail_open_to_off(monkeypatch):
         raise RuntimeError('parse')
 
     monkeypatch.setattr(dream_levers.refactor_modes, 'mode', broken)
-    assert dream_levers.arm(dream_levers.NO_PROGRESS_STOP_MODE_ENV, 'owner-a') == 'off'
+    assert dream_levers.arm(dream_levers.IDLE_SKIP_MODE_ENV, 'owner-a') == 'off'
     assert dream_levers.arm(dream_levers.PAYOFF_ORDER_MODE_ENV, None) == 'off'
 
 
@@ -354,81 +351,6 @@ def _scripted(owner_records, limits, monkeypatch):
     )
 
 
-def test_history_compaction_serve_elides_old_tool_results(runtime, monkeypatch):
-    monkeypatch.setenv(dream_levers.HISTORY_COMPACT_MODE_ENV, 'serve')
-    monkeypatch.setenv('DREAM_HISTORY_COMPACT_TRIGGER_TOKENS', '1000')
-    monkeypatch.setenv('DREAM_HISTORY_COMPACT_KEEP_RESULTS', '2')
-    monkeypatch.setattr(dream_agent, 'COMPACT_MIN_CHARS', 10)
-    limits = SessionLimits(bucket='light', turns=16, tools=16, read_bytes=640000, read_call_bytes=64000, tokens=900000)
-    owner_records = EvidenceRecords(records(runtime))
-    _scripted(owner_records, limits, monkeypatch)
-    seen = []
-
-    async def model(uid, lane, mount, messages):
-        if lane != MAIN_LANE:
-            pytest.fail('No staged work should need verification')
-        step = len(seen) + 1
-        seen.append(deepcopy(messages))
-        tool_call = (
-            call('read', {'refs': ['conversations/one']}, index=step)
-            if step <= 6
-            else call('finish', {'summary': 'Checked synthetic records', 'notes': ''}, index=step)
-        )
-        return Turn(
-            tokens=5000,
-            prompt_tokens=5000,
-            completion_tokens=0,
-            cached_tokens=0,
-            tool_calls=(tool_call,),
-            messages=({'role': 'assistant', 'content': None, 'tool_calls': [tool_call]},),
-        )
-
-    report = asyncio.run(dream_agent.run_pass(UID, turn=model, dry_run=True))
-    assert report['status'] == 'complete', report
-    final = seen[-1]
-    tools = [message for message in final if message.get('role') == 'tool']
-    elided = [message for message in tools if message['content'] == dream_agent.ELIDED_TOOL_RESULT]
-    assert elided and tools[-1]['content'] != dream_agent.ELIDED_TOOL_RESULT
-    assert len(tools) - len(elided) >= 2
-    # Seed and system prompt are untouched.
-    assert final[:2] == seen[0][:2]
-    compaction = report['levers']['history_compact']
-    assert compaction['arm'] == 'serve' and compaction['compactions'] >= 1 and compaction['elided_chars'] > 0
-
-
-def test_history_compaction_shadow_changes_nothing(runtime, monkeypatch):
-    monkeypatch.setenv(dream_levers.HISTORY_COMPACT_MODE_ENV, 'shadow')
-    monkeypatch.setenv('DREAM_HISTORY_COMPACT_TRIGGER_TOKENS', '1000')
-    monkeypatch.setenv('DREAM_HISTORY_COMPACT_KEEP_RESULTS', '2')
-    monkeypatch.setattr(dream_agent, 'COMPACT_MIN_CHARS', 10)
-    limits = SessionLimits(bucket='light', turns=16, tools=16, read_bytes=640000, read_call_bytes=64000, tokens=900000)
-    owner_records = EvidenceRecords(records(runtime))
-    _scripted(owner_records, limits, monkeypatch)
-    seen = []
-
-    async def model(uid, lane, mount, messages):
-        step = len(seen) + 1
-        seen.append(deepcopy(messages))
-        tool_call = (
-            call('read', {'refs': ['conversations/one']}, index=step)
-            if step <= 6
-            else call('finish', {'summary': 'Checked synthetic records', 'notes': ''}, index=step)
-        )
-        return Turn(
-            tokens=5000,
-            prompt_tokens=5000,
-            completion_tokens=0,
-            cached_tokens=0,
-            tool_calls=(tool_call,),
-            messages=({'role': 'assistant', 'content': None, 'tool_calls': [tool_call]},),
-        )
-
-    report = asyncio.run(dream_agent.run_pass(UID, turn=model, dry_run=True))
-    assert all(message.get('content') != dream_agent.ELIDED_TOOL_RESULT for message in seen[-1])
-    compaction = report['levers']['history_compact']
-    assert compaction['fired'] and compaction['compactions'] == 0 and compaction['would_elide_chars'] > 0
-
-
 def _idle_reader(count):
     async def model(uid, lane, mount, messages):
         if lane != MAIN_LANE:
@@ -452,24 +374,16 @@ def _idle_reader(count):
     return model
 
 
-@pytest.mark.parametrize('arm', ['shadow', 'serve'])
-def test_no_progress_stop(runtime, monkeypatch, arm):
-    monkeypatch.setenv(dream_levers.NO_PROGRESS_STOP_MODE_ENV, arm)
-    monkeypatch.setenv('DREAM_NO_PROGRESS_BATCHES', '3')
-    monkeypatch.setenv('DREAM_NO_PROGRESS_MIN_TOKEN_SHARE', '0.1')
+def test_no_progress_retirement_keeps_normal_completion(runtime, monkeypatch):
     limits = SessionLimits(bucket='light', turns=32, tools=32, read_bytes=640000, read_call_bytes=64000, tokens=400000)
     owner_records = EvidenceRecords(records(runtime))
     _scripted(owner_records, limits, monkeypatch)
     count = []
     report = asyncio.run(dream_agent.run_pass(UID, turn=_idle_reader(count), dry_run=True))
-    lever = report['levers']['no_progress_stop']
     assert report['status'] == 'complete', report
-    assert lever['arm'] == arm and lever['fired'] and lever['batch'] == 3
-    if arm == 'serve':
-        assert report['stop_reason'] == 'no_progress' and len(count) == 3
-    else:
-        assert report['stop_reason'] == 'finished' and len(count) == 13
-        assert lever['staged_after'] == 0 and lever['tokens_after'] > 0
+    assert report['stop_reason'] == 'finished' and len(count) == 13
+    assert report['token_limit'] == limits.tokens
+    assert 'no_progress_stop' not in report['levers']
 
 
 def test_material_budget_serve_shrinks_limits(runtime, monkeypatch):
@@ -703,7 +617,125 @@ def test_payoff_order_reorders_a_deep_backlog(queue):
         ('heavy', now - timedelta(days=2)),
         ('fruitful', now - timedelta(days=1)),
     ]
-    assert dream_scheduler.payoff_order(rows, now, firestore_client=queue) == ['fruitful', 'heavy', 'light']
+    assert dream_scheduler.payoff_order(rows, now, firestore_client=queue) == ['fruitful', 'light', 'heavy']
+
+
+def test_payoff_stratified_window_reaches_stranded_yielders(queue, monkeypatch):
+    rows = [(f'owner-{index}', NOW - timedelta(hours=160) + timedelta(minutes=index)) for index in range(4348)]
+    for uid, _ in rows:
+        queue.rows[('dream_users', uid)] = {'score': 8500, 'size_bucket': 'heavy'}
+    # A single recent edit outranks the capped score-only population, even
+    # outside the old head.
+    queue.rows[('dream_users', rows[2326][0])] = {'score': 4, 'last_yield': 1, 'size_bucket': 'light'}
+    fetched = []
+    original = queue.get_all
+
+    def get_all(refs, **kwargs):
+        assert len(refs) <= dream_scheduler.DISCOVERY_TRANSACTION_ROWS
+        fetched.extend(ref.id for ref in refs)
+        return original(refs, **kwargs)
+
+    monkeypatch.setattr(queue, 'get_all', get_all)
+    ranked = dream_scheduler.payoff_order(rows, NOW, firestore_client=queue)
+    assert ranked[0] == rows[2326][0]
+    assert len(fetched) == len(set(fetched)) == 1000
+    assert fetched[:300] == [uid for uid, _ in rows[:300]]
+    assert rows[4347][0] in fetched
+    assert any(2000 <= int(uid.split('-')[1]) <= 2400 for uid in fetched)
+    fetched_set = set(fetched)
+    assert ranked[1000:] == [uid for uid, _ in rows if uid not in fetched_set]
+    assert sorted(ranked) == sorted(uid for uid, _ in rows)
+
+
+@pytest.mark.parametrize('count', [0, 1, 299, 300, 999, 1000])
+def test_payoff_window_small_queues_keep_fifo_ties(queue, count):
+    rows = [(f'owner-{index}', NOW - timedelta(days=1) + timedelta(seconds=index)) for index in range(count)]
+    assert dream_scheduler.payoff_order(rows, NOW, firestore_client=queue) == [uid for uid, _ in rows]
+
+
+def test_payoff_window_just_over_cap_keeps_every_owner_and_samples_newest(queue):
+    rows = [(f'owner-{index}', NOW - timedelta(days=1) + timedelta(seconds=index)) for index in range(1001)]
+    ranked = dream_scheduler.payoff_order(rows, NOW, firestore_client=queue)
+    assert sorted(ranked) == sorted(uid for uid, _ in rows)
+    assert ranked[:300] == [uid for uid, _ in rows[:300]]
+    assert rows[-1][0] in ranked[:1000]
+
+
+def test_payoff_aging_guard_includes_unsampled_rows_beyond_oldest_floor(queue):
+    aged = [(f'aged-{index}', NOW - timedelta(days=31) + timedelta(seconds=index)) for index in range(302)]
+    younger = [(f'young-{index}', NOW - timedelta(days=1) + timedelta(seconds=index)) for index in range(4046)]
+    queue.rows[('dream_users', younger[-1][0])] = {'last_yield': 10}
+    ranked = dream_scheduler.payoff_order(aged + younger, NOW, firestore_client=queue)
+    assert ranked[:302] == [uid for uid, _ in aged]
+    assert ranked[302] == younger[-1][0]
+    assert sorted(ranked) == sorted(uid for uid, _ in aged + younger)
+    assert sum(path[0] == 'dream_users' for path in queue.reads) == 1000
+
+
+def test_payoff_clamps_existing_pre_epoch_due_without_aging_priority(queue):
+    rows = [
+        ('sentinel', dream_scheduler.EPOCH - timedelta(minutes=6)),
+        ('aged', NOW - timedelta(days=31)),
+        ('productive', NOW - timedelta(days=1)),
+    ]
+    queue.rows[('dream_users', 'productive')] = {'last_yield': 1}
+    assert dream_scheduler.payoff_order(rows, NOW, firestore_client=queue) == ['aged', 'productive', 'sentinel']
+
+
+def test_payoff_caps_yield_and_score_and_ignores_heavy_size(queue):
+    rows = [(uid, NOW - timedelta(hours=1)) for uid in ['capped', 'extreme', 'heavy', 'light']]
+    queue.rows[('dream_users', 'capped')] = {'score': 10, 'last_yield': 10}
+    queue.rows[('dream_users', 'extreme')] = {'score': 8500, 'last_yield': 999}
+    queue.rows[('dream_users', 'heavy')] = {'score': 0, 'last_yield': -10, 'size_bucket': 'heavy'}
+    queue.rows[('dream_users', 'light')] = {'score': -10, 'last_yield': 0, 'size_bucket': 'light'}
+    assert dream_scheduler.payoff_order(rows, NOW, firestore_client=queue) == [uid for uid, _ in rows]
+
+
+def test_first_dirty_writes_cannot_create_pre_epoch_due(queue):
+    before = datetime.now(timezone.utc)
+    for _ in range(6):
+        assert dream_store.mark_dirty(QUEUE_UID, [('conversations', 'synthetic')])
+    due = queue.rows[('dream_due', QUEUE_UID)]['due_at']
+    assert before <= due <= datetime.now(timezone.utc)
+    assert queue.rows[('dream_users', QUEUE_UID)]['score'] == 6
+
+
+@pytest.mark.parametrize('arm', ['off', 'shadow', 'serve'])
+def test_payoff_lever_shadow_records_new_window_without_serving_it(queue, monkeypatch, arm):
+    rows = [(f'owner-{index}', NOW - timedelta(days=2) + timedelta(seconds=index)) for index in range(4348)]
+    queue.rows[('dream_users', rows[-1][0])] = {'last_yield': 10}
+    monkeypatch.setenv(dream_levers.PAYOFF_ORDER_MODE_ENV, arm)
+
+    async def run_blocking(_executor, fn, selected, now):
+        return fn(selected, NOW, firestore_client=queue)
+
+    monkeypatch.setattr(dream_agent, 'run_blocking', run_blocking)
+    page = [uid for uid, _ in rows]
+    sweep = {}
+    ordered = asyncio.run(dream_agent._payoff_order(rows, page, sweep))
+    assert sweep['payoff_order'] == arm
+    if arm == 'off':
+        assert 'reordered' not in sweep and ordered == page
+    else:
+        ranked = dream_scheduler.payoff_order(rows, NOW, firestore_client=queue)
+        assert sweep['reordered'] == sum(before != after for before, after in zip(page, ranked)) > 0
+        assert ordered == (ranked if arm == 'serve' else page)
+
+
+@pytest.mark.parametrize('arm', ['shadow', 'serve'])
+def test_payoff_read_error_fails_open(queue, monkeypatch, arm):
+    def broken(*args, **kwargs):
+        raise RuntimeError('synthetic read failure')
+
+    async def run_blocking(_executor, fn, selected, now):
+        return fn(selected, NOW, firestore_client=queue)
+
+    monkeypatch.setenv(dream_levers.PAYOFF_ORDER_MODE_ENV, arm)
+    monkeypatch.setattr(queue, 'get_all', broken)
+    monkeypatch.setattr(dream_agent, 'run_blocking', run_blocking)
+    rows = [('first', NOW), ('second', NOW)]
+    page = [uid for uid, _ in rows]
+    assert asyncio.run(dream_agent._payoff_order(rows, page, {})) == page
 
 
 def test_discovery_parking_fails_open(monkeypatch):

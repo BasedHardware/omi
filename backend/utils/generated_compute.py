@@ -52,16 +52,21 @@ def generated_compute_allowed(
 
     if not funded_processing.consent_allows(uid):
         return False
-    if allow_byok:
-        from utils import byok
-
-        if byok.has_validated_byok_keys() and byok.get_byok_uid() == uid:
-            providers = (provider,) if provider in _LLM_PROVIDERS else (() if provider else _LLM_PROVIDERS)
-            if any(byok.get_byok_key(candidate) for candidate in providers):
-                return True
+    if allow_byok and validated_llm_byok(uid, provider=provider):
+        return True
     # Billing/provider imports remain lazy so flag-off clients keep import purity.
     kwargs = {'firestore_client': firestore_client} if firestore_client is not None else {}
     return funded_processing.processing_allowed(uid, **kwargs)
+
+
+def validated_llm_byok(uid: str | None, *, provider: str | None = None) -> bool:
+    """This request carries this UID's validated key for an LLM provider (``provider`` pins one)."""
+    from utils import byok
+
+    if not uid or not byok.has_validated_byok_keys() or byok.get_byok_uid() != uid:
+        return False
+    providers = (provider,) if provider in _LLM_PROVIDERS else (() if provider else _LLM_PROVIDERS)
+    return any(byok.get_byok_key(candidate) for candidate in providers)
 
 
 def require_generated_compute(

@@ -64,14 +64,7 @@ def test_chart_deploy_never_flips_any_listed_gate(monkeypatch, stage, component,
             env.get('SPEAKER_GROUPING_SHADOW', 'off') in ('owner', 'cohort')
             and uid in members(env, 'SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST')
         )
-        audio_hash = int.from_bytes(hashlib.sha256(('audio-archive:' + uid).encode()).digest()[:8], 'big') / 2**64 * 100
-        assert audio_archive.admitted(uid, 'COALESCE') == (
-            env.get('AUDIO_ARCHIVE_COALESCE_ENABLED', 'false') == 'true'
-            and (
-                uid in members(env, 'AUDIO_ARCHIVE_UID_ALLOWLIST')
-                or audio_hash < float(env.get('AUDIO_ARCHIVE_PERCENT', '0'))
-            )
-        )
+        assert audio_archive.admitted(uid, 'COALESCE')
         conversation = SimpleNamespace(private_cloud_sync_enabled=True, discarded=False, uses_custom_stt=False)
         shadow_hash = int.from_bytes(hashlib.sha256(uid.encode()).digest()[:4], 'big') / 2**32 * 100
         assert transcription_shadow._enabled(uid, conversation) == (

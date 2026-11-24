@@ -291,7 +291,7 @@ def _wire_incident(pipeline, monkeypatch, tmp_path, *, rows, word=None):
 
 
 async def _run_incident(pipeline, tmp_path, *, claims='default', target=None):
-    await pipeline._run_full_pipeline_background_async(
+    await pipeline.run_full_pipeline_background_async(
         'job-tiebreak',
         'u',
         [f'/tmp/{INCIDENT_BIN}'],

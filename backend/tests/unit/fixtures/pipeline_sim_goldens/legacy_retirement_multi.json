@@ -23,6 +23,13 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "vad_windows",
+     "worker_reason": "unsupported_language"
+    },
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,
@@ -62,6 +69,7 @@
    },
    "final_result": {
     "conversation_id": "conv-1",
+    "fresh_capture": false,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-1",
@@ -126,6 +134,13 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "vad_windows",
+     "worker_reason": "unsupported_language"
+    },
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,
@@ -165,6 +180,7 @@
    },
    "final_result": {
     "conversation_id": "conv-2",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-1",
@@ -229,6 +245,13 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "vad_windows",
+     "worker_reason": "unsupported_language"
+    },
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,
@@ -268,6 +291,7 @@
    },
    "final_result": {
     "conversation_id": "conv-3",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-2",
@@ -286,7 +310,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m quarantined recovery:running",
@@ -332,6 +356,13 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "vad_windows",
+     "worker_reason": "unsupported_language"
+    },
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,
@@ -371,6 +402,7 @@
    },
    "final_result": {
     "conversation_id": "conv-4",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-2",
@@ -389,7 +421,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m quarantined recovery:running",
@@ -435,6 +467,13 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "vad_windows",
+     "worker_reason": "unsupported_language"
+    },
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,
@@ -474,6 +513,7 @@
    },
    "final_result": {
     "conversation_id": "conv-5",
+    "fresh_capture": true,
     "late_capture": true,
     "log_sequence": 3,
     "owner_id": "owner-3",
@@ -492,7 +532,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m quarantined recovery:running",
@@ -538,6 +578,13 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "vad_windows",
+     "worker_reason": "unsupported_language"
+    },
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,
@@ -577,6 +624,7 @@
    },
    "final_result": {
     "conversation_id": "conv-6",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-3",
@@ -595,7 +643,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m quarantined recovery:running",
@@ -641,6 +689,13 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "vad_windows",
+     "worker_reason": "unsupported_language"
+    },
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,
@@ -680,6 +735,7 @@
    },
    "final_result": {
     "conversation_id": "conv-7",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-3",
@@ -698,7 +754,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m quarantined recovery:running",

@@ -21,12 +21,6 @@ def _http_client() -> TestClient:
     return TestClient(app)
 
 
-@pytest.fixture(autouse=True)
-def _entitled(monkeypatch):
-    """Default to an entitled account; the paywall gate has its own test."""
-    monkeypatch.setattr(integrations_router, 'is_trial_paywalled', lambda uid, platform: False)
-
-
 async def test_synthesize_connector_data_returns_without_persisting(monkeypatch):
     calls: dict[str, object] = {}
 
@@ -107,14 +101,3 @@ def test_synthesize_connector_data_keeps_502_for_untyped_failures(monkeypatch):
 
     assert response.status_code == 502
     assert response.json()['detail'] == 'connector_synthesis_failed'
-
-
-async def test_synthesize_connector_data_blocks_a_trial_expired_account(monkeypatch):
-    monkeypatch.setattr(integrations_router, 'is_trial_paywalled', lambda uid, platform: True)
-
-    with pytest.raises(HTTPException) as exc:
-        await integrations_router.synthesize_connector_data(
-            integrations_router.ConnectorSynthesisRequest(source='notes', items=['Bought a piano']),
-            uid=UID,
-        )
-    assert exc.value.status_code == 402

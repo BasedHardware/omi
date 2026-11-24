@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import json
 import subprocess
 import sys
 
@@ -14,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / ".github" / "scripts" / "listen_helm_env_overrides.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "gcp_backend_listen_helm.yml"
 PROD_VALUES = ROOT / "backend" / "charts" / "backend-listen" / "prod_omi_backend_listen_values.yaml"
+_WORKFLOW_STEPS: list[dict] | None = None
 
 
 def load_helper():
@@ -194,12 +196,14 @@ def test_workflow_exposes_optional_override_inputs_and_applies_them_on_both_helm
         ".github/scripts/listen_helm_env_overrides.py",
         'LISTEN_ENV_OVERRIDES=()',
         'done < "${LISTEN_HELM_ENV_OVERRIDES_ARGV}"',
-        '${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"}',
+        '.github/scripts/listen_overlay_evidence.py argv',
+        '--overrides-file "$LISTEN_HELM_ENV_OVERRIDES_ARGV"',
     ):
         assert fragment in text, fragment
     # Dry-run and real upgrade both expand the same override argv.
     assert text.count('done < "${LISTEN_HELM_ENV_OVERRIDES_ARGV}"') == 2
-    assert text.count('${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"}') == 2
+    assert 'DRY_RUN=("${DEPLOY_ARGV[@]}" --dry-run=client)' in text
+    assert '"${DEPLOY_ARGV[@]}"' in _step('Upgrade backend-listen Helm chart')['run']
     # Auto-push / blank overrides must still leave chart defaults authoritative:
     # the helper is only invoked with input env vars, never hard-coded modes.
     # FEATURE_MODE uses FEATURE_MODE_VALUE after mapping workflow token disabled -> off
@@ -258,7 +262,12 @@ def _render_env(values_file: Path, *extra: str) -> list[dict]:
 
 
 def _expected_env(values: dict) -> list[dict]:
-    expected = []
+    expected = [
+        {
+            "name": "ROLLOUT_POD_TEMPLATE_HASH",
+            "valueFrom": {"fieldRef": {"fieldPath": "metadata.labels['pod-template-hash']"}},
+        }
+    ]
     for entry in values["env"]:
         if entry["name"] == "GOOGLE_CLOUD_PROJECT":
             expected.append({"name": entry["name"], "value": values["runtimeGcpProjectId"]})
@@ -266,6 +275,16 @@ def _expected_env(values: dict) -> list[dict]:
             expected.append({"name": entry["name"], "value": str(entry["value"])})
         else:
             expected.append({"name": entry["name"], "valueFrom": entry["valueFrom"]})
+    secret_env = values.get("privateSecretEnv") or {}
+    keys = list(secret_env.get("keys") or [])
+    expected = [entry for entry in expected if entry["name"] not in keys]
+    for key in keys:
+        expected.append(
+            {
+                "name": key,
+                "valueFrom": {"secretKeyRef": {"name": secret_env["secretName"], "key": key, "optional": False}},
+            }
+        )
     return expected
 
 
@@ -280,7 +299,7 @@ def test_chart_without_private_env_renders_values_env_list_unchanged(values_file
 
 
 def test_chart_private_env_replaces_by_name_and_renders_each_name_once(tmp_path: Path):
-    values = _load_values(PROD_VALUES)
+    values = _load_values(DEV_VALUES)
     private = _write_private(
         tmp_path,
         "privateEnv:\n"
@@ -289,7 +308,7 @@ def test_chart_private_env_replaces_by_name_and_renders_each_name_once(tmp_path:
         '  STT_CAP_DISPATCH_LANES: "live"\n'
         '  LISTEN_PRIVATE_ONLY_FLAG: "007"\n',
     )
-    env = _render_env(PROD_VALUES, "-f", str(private))
+    env = _render_env(DEV_VALUES, "-f", str(private))
     names = [entry["name"] for entry in env]
     assert len(names) == len(set(names)), "duplicate env names break strategic-merge upgrades"
 
@@ -307,7 +326,7 @@ def test_chart_private_env_replaces_by_name_and_renders_each_name_once(tmp_path:
     }
     others = [entry for entry in env if entry["name"] not in private_names]
     assert others == [entry for entry in _expected_env(values) if entry["name"] not in private_names]
-    assert set(names) == {entry["name"] for entry in values["env"]} | {"LISTEN_PRIVATE_ONLY_FLAG"}
+    assert set(names) == {entry["name"] for entry in _expected_env(values)} | {"LISTEN_PRIVATE_ONLY_FLAG"}
 
 
 def test_chart_private_env_non_string_fails_without_echoing_value(tmp_path: Path):
@@ -320,7 +339,7 @@ def test_chart_private_env_non_string_fails_without_echoing_value(tmp_path: Path
             "backend-listen",
             str(CHART),
             "-f",
-            str(PROD_VALUES),
+            str(DEV_VALUES),
             "-f",
             str(private),
             "--set-string",
@@ -335,10 +354,10 @@ def test_chart_private_env_non_string_fails_without_echoing_value(tmp_path: Path
 
 
 def test_chart_with_dispatch_override_and_private_env_on_other_names(tmp_path: Path):
-    values = _load_values(PROD_VALUES)
+    values = _load_values(DEV_VALUES)
     argv = HELPER.resolve_env_override_argv(values, {"STT_SERVICE_MODELS": "dg-nova-3,parakeet"})
     private = _write_private(tmp_path, f'privateEnv:\n  STT_CAP_DISPATCH_COHORT: "{SENTINEL}"\n')
-    env = _render_env(PROD_VALUES, *argv, "-f", str(private))
+    env = _render_env(DEV_VALUES, *argv, "-f", str(private))
     by_name = {entry["name"]: entry for entry in env}
     assert by_name["STT_SERVICE_MODELS"]["value"] == "dg-nova-3,parakeet"
     assert by_name["STT_CAP_DISPATCH_COHORT"]["value"] == SENTINEL
@@ -397,7 +416,7 @@ def test_private_env_rejects_names_that_would_shadow_chart_or_dispatch(name: str
 @pytest.mark.parametrize("stage", ("dev", "prod"))
 @pytest.mark.parametrize("name", ("SERVICE_ACCOUNT_JSON", "GOOGLE_APPLICATION_CREDENTIALS"))
 def test_keyless_prod_rejects_private_key_credentials_before_helm(stage: str, name: str):
-    values = _load_values(PROD_VALUES.with_name(f"{stage}_omi_backend_listen_values.yaml"))
+    values = _load_values(DEV_VALUES.with_name(f"{stage}_omi_backend_listen_values.yaml"))
     if stage == "prod":
         with pytest.raises(ValueError, match="workloadIdentityOnly") as error:
             HELPER.check_private_env_against_chart({name: SENTINEL}, values, {})
@@ -407,7 +426,7 @@ def test_keyless_prod_rejects_private_key_credentials_before_helm(stage: str, na
 
 
 def test_private_env_allows_blank_dispatch_override_of_same_name():
-    values = _load_values(PROD_VALUES)
+    values = _load_values(DEV_VALUES)
     HELPER.check_private_env_against_chart(
         {"STT_SERVICE_MODELS": SENTINEL, "STT_CAP_DISPATCH_COHORT": SENTINEL},
         values,
@@ -507,8 +526,16 @@ def test_cli_redact_release_values_reads_stdin():
 
 
 def _workflow_steps() -> list[dict]:
-    document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    return document["jobs"]["helm-upgrade"]["steps"]
+    # The workflow is ~40 KB and ``_step`` is called several times per test; parse it
+    # once per process with the C loader instead of re-tokenizing it in Python.
+    global _WORKFLOW_STEPS
+    if _WORKFLOW_STEPS is None:
+        document = yaml.load(
+            WORKFLOW.read_text(encoding="utf-8"),
+            Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader),
+        )
+        _WORKFLOW_STEPS = document["jobs"]["helm-upgrade"]["steps"]
+    return _WORKFLOW_STEPS
 
 
 def _step(name: str) -> dict:
@@ -518,114 +545,102 @@ def _step(name: str) -> dict:
     raise AssertionError(f"no step {name}")
 
 
-MATERIALIZE = "Materialize private listen values (prod only)"
+MIGRATE = "Write private listen values to Secret Manager (no roll)"
+GUARD = "Prove private listen env is unchanged"
 
 
-def test_secret_reaches_only_the_prod_materialize_step_via_env():
+def test_prod_refuses_the_retired_private_env_overlay(tmp_path: Path):
+    helm = _helm_or_skip()
+    private = _write_private(tmp_path, f'privateEnv:\n  STT_CAP_DISPATCH_COHORT: "{SENTINEL}"\n')
+    result = subprocess.run(
+        [
+            helm,
+            "template",
+            "backend-listen",
+            str(CHART),
+            "-f",
+            str(PROD_VALUES),
+            "--set-string",
+            "image.tag=abc1234",
+            "-f",
+            str(private),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "privateEnv is retired" in result.stderr
+    assert SENTINEL not in result.stdout + result.stderr
+
+
+def test_secret_reaches_only_the_evidence_and_migrate_steps_via_env():
     text = WORKFLOW.read_text(encoding="utf-8")
-    assert text.count("secrets.LISTEN_PRIVATE_VALUES_YAML") == 1
-    step = _step(MATERIALIZE)
-    assert step["env"]["LISTEN_PRIVATE_VALUES_YAML"] == "${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}"
-    assert "github.event.inputs.environment == 'prod'" in step["if"]
-    assert "(github.event.inputs.mode || 'deploy') == 'deploy'" in step["if"]
-    assert "secrets." not in step["run"]
+    assert text.count("secrets.LISTEN_PRIVATE_VALUES_YAML") == 2
+    evidence = _step("Produce private-overlay effect receipt without mutation")
+    assert evidence["if"] == "${{ inputs.mode == 'evidence' }}"
+    assert evidence["env"]["LISTEN_PRIVATE_VALUES_YAML"] == "${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}"
+    assert "secrets." not in evidence["run"]
+    step = _step(MIGRATE)
+    # Never on the deploy path: a code deploy renders references only.
+    assert step["if"] == "${{ inputs.mode == 'private-env-migrate' }}"
+    assert step["env"] == {"LISTEN_PRIVATE_VALUES_YAML": "${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}"}
+    assert "listen_private_env.py migrate" in step["run"]
+    assert "umask 077" in step["run"]
     for leak in ("set -x", "cat ", "--debug", "echo \"$LISTEN_PRIVATE_VALUES_YAML", "tee "):
         assert leak not in step["run"], leak
-    assert "umask 077" in step["run"]
-    assert "unset LISTEN_PRIVATE_VALUES_YAML" in step["run"]
     for other in _workflow_steps():
         script = other.get("run") or ""
         for leak in ("--debug", "set -x", "set -o xtrace"):
             assert leak not in script, (other.get("name"), leak)
+        if other.get("name") not in (MIGRATE, "Produce private-overlay effect receipt without mutation"):
+            assert "LISTEN_PRIVATE_VALUES_YAML" not in json.dumps(other.get("env") or {}), other.get("name")
 
 
-def test_private_values_are_validated_before_any_cluster_mutation():
+def test_migrate_mode_installs_before_the_secret_and_never_rolls():
     names = [step.get("name") for step in _workflow_steps()]
-    materialize = names.index(MATERIALIZE)
-    for later in (
-        "Carry forward config this workflow does not own",
-        "Apply non-secret backend runtime config",
-        "Resolve optional listen env overrides",
-        "Helm diff (dry run)",
-        "Upgrade backend-secrets Helm chart",
-        "Upgrade backend-listen Helm chart",
-    ):
-        assert names.index(later) > materialize, later
-    assert names[-1] == "Remove private listen values file"
-    cleanup = _step("Remove private listen values file")
-    assert cleanup["if"] == "${{ always() && env.LISTEN_PRIVATE_VALUES_FILE != '' }}"
+    install = names.index("Install private-env parser before secret injection")
+    assert install < names.index(MIGRATE) < names.index("Apply the listen private-env ExternalSecret (no roll)")
+    assert "pip install" in _step("Install private-env parser before secret injection")["run"]
+    assert "prod only" in _step("Install private-env parser before secret injection")["run"]
+    migrate_steps = [
+        s for s in _workflow_steps() if "private-env-migrate" in str(s.get("if")) and "!=" not in str(s.get("if"))
+    ]
+    assert {s["name"] for s in migrate_steps} == {
+        "Install private-env parser before secret injection",
+        MIGRATE,
+        "Apply the listen private-env ExternalSecret (no roll)",
+        "Force-sync and verify private listen env against live (no roll)",
+    }
+    for step in migrate_steps:
+        assert "helm -n" not in (step.get("run") or "") and "rollout" not in (step.get("run") or ""), step["name"]
+    apply = _step("Apply the listen private-env ExternalSecret (no roll)")["run"]
+    assert '--show-only templates/listen-private-env.yaml | kubectl -n "$namespace" apply -f -' in apply
+    assert "deploy-backend-secrets.sh" not in apply
+    for name in ("Verify rollout", "Show Helm release history"):
+        assert "inputs.mode != 'private-env-migrate'" in _step(name)["if"], name
 
 
-def test_both_helm_paths_carry_private_file_via_argv_and_dry_run_withholds_manifest():
+def test_guard_runs_after_the_secret_sync_and_before_the_listen_upgrade():
+    names = [step.get("name") for step in _workflow_steps()]
+    assert (
+        names.index("Upgrade backend-secrets Helm chart")
+        < names.index(GUARD)
+        < names.index("Upgrade backend-listen Helm chart")
+    )
+    guard = _step(GUARD)
+    assert guard["if"] == _step("Upgrade backend-listen Helm chart")["if"]
+    assert "listen_private_env.py guard" in guard["run"]
+
+
+def test_deploy_path_renders_references_only():
     resolve = _step("Resolve optional listen env overrides")["run"]
-    assert '--private-values-file "$LISTEN_PRIVATE_VALUES_FILE"' in resolve
-    assert '${PRIVATE_VALUES_ARGS[@]+"${PRIVATE_VALUES_ARGS[@]}"}' in resolve
+    assert "--private-values-file" not in resolve
     dry_run = _step("Helm diff (dry run)")["run"]
-    assert "--redact-release-values" in dry_run
-    assert '"${DRY_RUN[@]}" > /dev/null' in dry_run
+    assert "--redact-release-values" in dry_run  # older releases still store privateEnv values
+    assert '"${DRY_RUN[@]}" > /dev/null' not in dry_run
     rollback = _step("Roll back backend-listen Helm release")["run"]
     assert "PRIVATE" not in rollback
-
-
-def _python3_stub(tmp_path: Path) -> Path:
-    """python3 on PATH that skips pip installs and runs everything else."""
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    stub = bin_dir / "python3"
-    stub.write_text(
-        "#!/bin/sh\n" 'if [ "$1" = "-m" ] && [ "$2" = "pip" ]; then exit 0; fi\n' f'exec "{sys.executable}" "$@"\n',
-        encoding="utf-8",
-    )
-    stub.chmod(0o755)
-    return bin_dir
-
-
-def _run_materialize(tmp_path: Path, secret: str, **dispatch: str) -> tuple[subprocess.CompletedProcess, Path, Path]:
-    step = _step(MATERIALIZE)
-    runner_temp = tmp_path / "runner-temp"
-    runner_temp.mkdir()
-    github_env = tmp_path / "github-env"
-    github_env.write_text("", encoding="utf-8")
-    env = {
-        "PATH": f"{_python3_stub(tmp_path)}:/usr/bin:/bin",
-        "RUNNER_TEMP": str(runner_temp),
-        "GITHUB_ENV": str(github_env),
-        "LISTEN_PRIVATE_VALUES_YAML": secret,
-        "VALUES_FILE": str(PROD_VALUES),
-        **dispatch,
-    }
-    result = subprocess.run(["bash", "-e", "-c", step["run"]], cwd=ROOT, env=env, capture_output=True, text=True)
-    return result, runner_temp, github_env
-
-
-def test_materialize_step_with_empty_secret_does_nothing(tmp_path: Path):
-    result, runner_temp, github_env = _run_materialize(tmp_path, "")
-    assert result.returncode == 0, result.stderr
-    assert github_env.read_text(encoding="utf-8") == ""
-    assert list(runner_temp.iterdir()) == []
-
-
-def test_materialize_step_writes_private_file_and_masks(tmp_path: Path):
-    secret = f'privateEnv:\n  STT_CAP_DISPATCH_ENFORCEMENT: "true"\n  STT_CAP_DISPATCH_COHORT: "{SENTINEL}"\n'
-    result, runner_temp, github_env = _run_materialize(tmp_path, secret)
-    assert result.returncode == 0, result.stderr
-    (path,) = runner_temp.iterdir()
-    assert path.stat().st_mode & 0o777 == 0o600
-    assert HELPER.load_private_env(path)["STT_CAP_DISPATCH_COHORT"] == SENTINEL
-    assert github_env.read_text(encoding="utf-8") == f"LISTEN_PRIVATE_VALUES_FILE={path}\n"
-    unmasked = [line for line in result.stdout.splitlines() if not line.startswith("::add-mask::")]
-    assert SENTINEL not in "\n".join(unmasked) + result.stderr
-    assert f"::add-mask::{SENTINEL}" in result.stdout.splitlines()
-
-
-def test_materialize_step_fails_closed_on_invalid_secret(tmp_path: Path):
-    secret = f"privateEnv:\n  STT_CAP_DISPATCH_COHORT: {SENTINEL}\n  STT_CAP_DISPATCH_ENFORCEMENT: true\nextra: 1\n"
-    result, runner_temp, github_env = _run_materialize(tmp_path, secret)
-    assert result.returncode != 0
-    assert SENTINEL not in result.stdout + result.stderr
-    # The path is recorded only so the always() cleanup step can remove it.
-    (path,) = runner_temp.iterdir()
-    assert github_env.read_text(encoding="utf-8") == f"LISTEN_PRIVATE_VALUES_FILE={path}\n"
+    assert "LISTEN_PRIVATE_VALUES_FILE" not in WORKFLOW.read_text(encoding="utf-8")
 
 
 def test_short_flag_values_are_not_masked_so_job_outputs_survive(tmp_path: Path):
@@ -642,29 +657,51 @@ def test_short_flag_values_are_not_masked_so_job_outputs_survive(tmp_path: Path)
     assert result.stdout.splitlines() == [f"::add-mask::{SENTINEL}"]
 
 
-def test_materialize_step_rejects_dispatch_collision_before_any_cluster_write(tmp_path: Path):
-    secret = f'privateEnv:\n  STT_SERVICE_MODELS: "{SENTINEL}"\n'
-    result, _, _ = _run_materialize(tmp_path, secret, STT_SERVICE_MODELS="parakeet")
-    assert result.returncode != 0
-    assert "conflicts with a workflow_dispatch override" in result.stderr
-    assert SENTINEL not in result.stdout + result.stderr
-    # Blank and chart-default dispatch inputs do not collide.
-    ok_tmp = tmp_path / "ok"
-    ok_tmp.mkdir()
-    result, _, _ = _run_materialize(
-        ok_tmp, secret, STT_SERVICE_MODELS="", GATEWAY_FEATURE_MODE="chart-default", CHAT_AGENT_ROUTE="chart-default"
+DEV_VALUES = ROOT / "backend" / "charts" / "backend-listen" / "dev_omi_backend_listen_values.yaml"
+
+
+@pytest.mark.parametrize("models", ["nllb", "luna,nllb", " NLLB ,luna"])
+def test_prod_rejects_translation_override_that_names_retired_nllb(models: str):
+    values = _load_values(PROD_VALUES)
+    with pytest.raises(ValueError, match="override names nllb, but this environment has no NLLB endpoint"):
+        HELPER.check_translation_endpoint(values, {"TRANSLATION_SERVICE_MODELS": models}, {})
+
+
+@pytest.mark.parametrize(
+    ("private_env", "message"),
+    [
+        ({"HOSTED_TRANSLATION_API_URL": "http://nllb"}, "HOSTED_TRANSLATION_API_URL is not allowed"),
+        ({"TRANSLATION_SERVICE_MODELS": "nllb,luna"}, "TRANSLATION_SERVICE_MODELS names nllb"),
+    ],
+)
+def test_prod_private_env_cannot_reselect_retired_nllb(private_env: dict, message: str):
+    values = _load_values(PROD_VALUES)
+    with pytest.raises(ValueError, match=message) as raised:
+        HELPER.check_translation_endpoint(values, {}, private_env)
+    assert "http://nllb" not in str(raised.value)
+
+
+def test_translation_override_allows_luna_in_prod_and_nllb_where_bound():
+    HELPER.check_translation_endpoint(_load_values(PROD_VALUES), {"TRANSLATION_SERVICE_MODELS": "luna"}, {})
+    HELPER.check_translation_endpoint(_load_values(PROD_VALUES), {"TRANSLATION_SERVICE_MODELS": ""}, {})
+    # Dev still binds its NLLB endpoint for experiments.
+    HELPER.check_translation_endpoint(_load_values(DEV_VALUES), {"TRANSLATION_SERVICE_MODELS": "nllb,luna"}, {})
+
+
+def test_cli_prod_translation_override_naming_nllb_fails_closed(tmp_path: Path):
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--values-file",
+            str(PROD_VALUES),
+            "--output-argv-file",
+            str(tmp_path / "overrides.argv"),
+            "--set",
+            "TRANSLATION_SERVICE_MODELS=nllb,luna",
+        ],
+        capture_output=True,
+        text=True,
     )
-    assert result.returncode == 0, result.stderr
-
-
-def test_materialize_step_installs_dependencies_before_the_secret_touches_disk():
-    run = _step(MATERIALIZE)["run"]
-    assert run.index("pip install") < run.index("umask 077") < run.index("mktemp")
-    for name in (
-        "GATEWAY_FEATURE_MODE",
-        "CHAT_AGENT_ROUTE",
-        "ALLOW_DIRECT_MODEL_EXCEPTION",
-        "STT_SERVICE_MODELS",
-        "TRANSLATION_SERVICE_MODELS",
-    ):
-        assert _step(MATERIALIZE)["env"][name] == _step("Resolve optional listen env overrides")["env"][name]
+    assert result.returncode == 1
+    assert "no NLLB endpoint" in result.stderr

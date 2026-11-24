@@ -24,6 +24,7 @@ from pydantic import ValidationError
 
 from database import conversations as conversations_db
 from database import voice_profiles as voice_profiles_db
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from models.other import Person
 from models.speaker_labels import RejectSpeakerRequest, VoiceMatch, VoiceMatchesResponse
 from models.transcript_segment import TranscriptSegment
@@ -180,6 +181,86 @@ def test_reject_route_rejects_malformed_body(client):
         json={'kind': 'not_person'},
     )
     assert response.status_code == 422
+
+
+def _seed_conversation(store):
+    path = ('users', UID, 'conversations', 'c1')
+    store.rows[path] = {
+        'id': 'c1',
+        'created_at': '2026-10-01T00:00:00Z',
+        'started_at': '2026-10-01T00:00:00Z',
+        'finished_at': '2026-10-01T00:01:00Z',
+        'structured': {},
+        'transcript_segments': [
+            {'id': 's1', 'speaker_id': 3, 'is_user': False, 'person_id': None, 'start': 0, 'end': 2, 'text': 'TV'}
+        ],
+    }
+    return path
+
+
+def test_reject_route_records_and_retires_markers_through_the_shared_helpers(client, monkeypatch):
+    """The reject endpoint must use the shared marker helpers, not a private copy.
+
+    not_a_person records through ``record_exclusion_markers`` (fail-open with
+    shared fallback telemetry) and not_me retires a superseded exclusion
+    marker through ``retire_exclusion_markers`` — the same contract the live
+    sheet and card answers follow (docs/listen_pusher_pipeline.mdx).
+    """
+    store = conversations_db.get_firestore_client()
+    _seed_conversation(store)
+    recorded, retired = [], []
+
+    def fake_record(uid, conversation_id, raw, resolved, *, speaker_id=None, **kwargs):
+        recorded.append((uid, conversation_id, speaker_id))
+
+    def fake_retire(uid, conversation_id, raw, resolved, *, speaker_id=None, **kwargs):
+        retired.append((uid, conversation_id, speaker_id))
+
+    monkeypatch.setattr(speaker_labels_router, 'record_exclusion_markers', fake_record)
+    monkeypatch.setattr(speaker_labels_router, 'retire_exclusion_markers', fake_retire)
+
+    response = client.post(
+        '/v1/conversations/c1/speakers/3/reject',
+        json={'kind': 'not_a_person'},
+    )
+    assert response.status_code == 200
+    assert recorded == [(UID, 'c1', 3)]
+    assert retired == []
+
+    # A later not_me rejection supersedes the exclusion and must retire its
+    # marker through the shared helper (a newer non-not_a_person decision
+    # wins; previously the route never retired anything).
+    response = client.post(
+        '/v1/conversations/c1/speakers/3/reject',
+        json={'kind': 'not_me'},
+    )
+    assert response.status_code == 200
+    assert retired == [(UID, 'c1', 3)]
+
+
+def test_reject_route_marker_persistence_failure_fails_open(client, monkeypatch):
+    """A post-commit marker failure must not surface a committed rejection as failed."""
+    from utils import ignored_voice_markers as markers_module
+
+    store = conversations_db.get_firestore_client()
+    _seed_conversation(store)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError('state store unavailable')
+
+    # Fail-open lives inside the shared helpers: the marker write raises, the
+    # committed rejection still returns 200 (the marker only powers Settings >
+    # Ignored Voices and restoration).
+    monkeypatch.setattr(markers_module.voice_profiles_db, 'record_ignored_voice', boom)
+    response = client.post(
+        '/v1/conversations/c1/speakers/3/reject',
+        json={'kind': 'not_a_person'},
+    )
+    # The rejection itself committed: the route must fail open (the marker
+    # only powers Settings > Ignored Voices) and the receipt still projects
+    # the exclusion on the wire.
+    assert response.status_code == 200
+    assert response.json()['excluded_speakers'] == [3]
 
 
 def test_voice_matches_route_returns_empty_list_without_voiceprint(client, monkeypatch):
@@ -563,3 +644,20 @@ def test_generated_ids_fit_the_released_doc_id_contract():
 
     for _ in range(1000):
         assert speaker_labels_router._valid_document_id(str(uuid.uuid4()))
+
+
+@pytest.mark.parametrize(
+    'error_type',
+    [DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable],
+)
+def test_reject_route_maps_destructive_gate_to_account_gate_busy(client, monkeypatch, error_type):
+    """A live account gate makes the reject retryable (409), never an unhandled 500."""
+
+    def gate_busy(*args, **kwargs):
+        raise error_type('external data write blocked by destructive operation')
+
+    monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', gate_busy)
+    response = client.post('/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_me'})
+    assert response.status_code == 409
+    assert response.json() == {'detail': 'account_gate_busy'}
+    assert response.headers['Retry-After'] == '2'

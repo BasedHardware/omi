@@ -34,6 +34,7 @@ def test_relax_retry_fires_without_date_filter(monkeypatch):
         ]
     )
     monkeypatch.setattr(vdb, 'index', fake)
+    monkeypatch.setattr(vdb, 'owner_index', lambda raw, uid, **kwargs: raw)
 
     result = vdb.query_vectors_by_metadata('u1', [0.0] * 8, [], ['alice'], [], [], [], limit=5)
 
@@ -44,6 +45,7 @@ def test_relax_retry_fires_without_date_filter(monkeypatch):
 def test_no_retry_when_structured_query_hits(monkeypatch):
     fake = _FakeIndex([{'matches': [{'id': 'u1-conv2', 'metadata': {'memory_id': 'conv2'}}]}])
     monkeypatch.setattr(vdb, 'index', fake)
+    monkeypatch.setattr(vdb, 'owner_index', lambda raw, uid, **kwargs: raw)
 
     result = vdb.query_vectors_by_metadata('u1', [0.0] * 8, [], ['alice'], [], [], [], limit=5)
 
@@ -55,6 +57,7 @@ def test_no_retry_for_date_only_query(monkeypatch):
     # uid + date range only (no structured $or): a no-match must NOT pop the date clause; returns [].
     fake = _FakeIndex([{'matches': []}])
     monkeypatch.setattr(vdb, 'index', fake)
+    monkeypatch.setattr(vdb, 'owner_index', lambda raw, uid, **kwargs: raw)
     d0 = datetime(2024, 1, 1, tzinfo=timezone.utc)
     d1 = datetime(2024, 1, 2, tzinfo=timezone.utc)
 

@@ -223,25 +223,73 @@ def test_ordinary_empty_response_keeps_worker_speech_and_spends_each_provider_on
     assert row(client)['recovery']['recognizers']['soniox']['outcome'] == 'empty'
 
 
-@pytest.mark.parametrize('outcome', ['words', 'error', 'privacy'])
-def test_ordinary_serving_async_preserves_receipts_and_privacy(setup, monkeypatch, legacy_dependencies, outcome):
+@pytest.mark.parametrize('outcome', ['words', 'error', 'error_words', 'error_error', 'privacy', 'privacy_after_error'])
+def test_ordinary_serving_async_preserves_receipts_and_privacy(
+    setup, monkeypatch, legacy_dependencies, caplog, outcome
+):
     import asyncio
 
     client, _, binding, artifacts, modulate, soniox, recovery, _ = ordinary(setup, monkeypatch, legacy_dependencies)
     worker_receipt(client, 1.5)
-    if outcome == 'error':
+    if outcome.startswith('error'):
         modulate.side_effect = RuntimeError('SYNTHETIC_PRIVATE_SENTINEL')
+        if outcome == 'error_words':
+            soniox.return_value = (WORDS, 'vi')
+        elif outcome == 'error_error':
+            soniox.side_effect = RuntimeError('SYNTHETIC_PRIVATE_SENTINEL')
+    elif outcome == 'privacy_after_error':
+        from database.batch_pipeline_privacy import privacy_owner_key
+
+        def revoke(*args, **kwargs):
+            client.rows[('batch_pipeline_privacy', privacy_owner_key(binding.owner_id))] = {'generation': 1}
+            raise RuntimeError('SYNTHETIC_PRIVATE_SENTINEL')
+
+        modulate.side_effect = revoke
     elif outcome == 'privacy':
         client.rows[('users', binding.owner_id)]['migration_status'] = 'pending'
     else:
         modulate.return_value = (WORDS, 'vi')
-    expected = {'words': 'recovered', 'error': 'failed_held', 'privacy': 'cancelled'}[outcome]
+    expected = {
+        'words': 'recovered',
+        'error': 'failed_held',
+        'error_words': 'recovered',
+        'error_error': 'failed_held',
+        'privacy': 'cancelled',
+        'privacy_after_error': 'cancelled',
+    }[outcome]
     assert asyncio.run(recovery.recover_async('bad', binding.owner_id)) == expected
     if outcome == 'privacy':
         modulate.assert_not_called()
-    else:
-        assert row(client)['recovery']['recognizers']['modulate']['outcome'] == outcome
+    elif outcome == 'privacy_after_error':
+        # Revocation fences receipt writes as well as the next provider call.
         modulate.assert_called_once()
-    if outcome != 'words':
+        assert not row(client)['recovery'].get('recognizers')
+    else:
+        assert row(client)['recovery']['recognizers']['modulate']['outcome'] == (
+            'words' if outcome == 'words' else 'error'
+        )
+        modulate.assert_called_once()
+    if expected != 'recovered':
         artifacts.persist_recovery_result.assert_not_called()
-    soniox.assert_not_called()
+    if outcome.startswith('error'):
+        # Provider failures intentionally use the same fenced independent path
+        # as empty answers, but the failed first call is never empty evidence.
+        soniox.assert_called_once()
+        receipts = row(client)['recovery']['recognizers']
+        assert receipts['modulate']['word_count'] is None
+        assert (
+            receipts['soniox']['outcome'] == {'error': 'empty', 'error_words': 'words', 'error_error': 'error'}[outcome]
+        )
+        if expected == 'failed_held':
+            assert row(client)['recovery']['failure'] == {'stage': 'provider', 'reason': 'provider_failed'}
+            assert row(client)['measured_held_vad_speech_seconds'] == 1.5
+        else:
+            assert_worker_vad_result(client, artifacts.persist_recovery_result.call_args.args[1], 1.5)
+        assert row(client)['audio_uri'] == 'gs://synthetic/audio'
+        assert asyncio.run(recovery.recover_async('bad', binding.owner_id)) == 'held'
+        modulate.assert_called_once()
+        soniox.assert_called_once()
+    else:
+        soniox.assert_not_called()
+    assert 'SYNTHETIC_PRIVATE_SENTINEL' not in caplog.text
+    assert 'SYNTHETIC_PRIVATE_SENTINEL' not in repr(row(client))

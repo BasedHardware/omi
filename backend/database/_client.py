@@ -1,9 +1,12 @@
+from contextlib import contextmanager
+from contextvars import ContextVar
+from functools import lru_cache
 import logging
 import random
 import re
 import time
 from threading import Lock
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 import os
 from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ResourceExhausted, ServiceUnavailable
@@ -34,6 +37,7 @@ __all__ = [
     "get_customer_firestore_client",
     "get_data_plane_firestore_client",
     "get_firestore_client",
+    "get_pinned_data_plane_firestore_client",
     "get_users_uid",
     "is_document_size_limit_error",
     "is_expired_transaction_error",
@@ -136,18 +140,6 @@ def _install_document_write_probe() -> None:
 _install_document_write_probe()
 
 
-def _install_action_item_write_fences() -> None:
-    # Match the SDK read probe's import-isolation seam. No clients or IO here.
-    try:
-        from database.action_item_write_fence import install_write_fences
-    except ImportError:
-        return
-    install_write_fences()
-
-
-_install_action_item_write_fences()
-
-
 def _install_memory_change_heads() -> None:
     try:
         from database.memory_change_head import install_write_heads
@@ -159,15 +151,19 @@ def _install_memory_change_heads() -> None:
 _install_memory_change_heads()
 
 
-def _install_list_projection_writer() -> None:
-    try:
-        from database.list_projection import install_list_projection_writer
-    except ImportError:
+def _install_batch_privacy_write_fence() -> None:
+    # Legacy bare-Python hygiene runners replace Firestore with a file-less
+    # ModuleType stub (there is no real SDK/write surface to fence there).
+    if not getattr(firestore, '__file__', None):
         return
-    install_list_projection_writer()
+    # This fence is mandatory for memo-enabled readers. Do not silently skip an
+    # ImportError and leave a process capable of unfenced customer-data writes.
+    from database.batch_privacy_write_fence import install_write_fence
+
+    install_write_fence()
 
 
-_install_list_projection_writer()
+_install_batch_privacy_write_fence()
 
 
 _firestore_client = None
@@ -304,8 +300,10 @@ def _build_data_plane_firestore_client() -> Any:
         if "desktop-backend" in service:
             raise RuntimeError("OMI_FIRESTORE_DATA_PLANE_PROJECT is required on desktop-backend")
         return get_firestore_client()
-    # Resolved only once a data-plane project is pinned: without one this seam is the default client,
-    # which applies its own (project-aware) named-DB check.
+    return _build_pinned_data_plane_firestore_client(data_plane_project)
+
+
+def _build_pinned_data_plane_firestore_client(data_plane_project: str) -> Any:
     database = _firestore_database_id(data_plane_project)
 
     # Bare ADC pinned to another project is not enough: the dev compute
@@ -335,6 +333,22 @@ def _build_data_plane_firestore_client() -> Any:
     if database:
         kwargs["database"] = database
     return firestore.Client(**kwargs)
+
+
+_pinned_data_plane_firestore_client_lock = Lock()
+
+
+@lru_cache(maxsize=1)
+def _pinned_data_plane_firestore_client(project: str) -> Any:
+    return _build_pinned_data_plane_firestore_client(project)
+
+
+def get_pinned_data_plane_firestore_client(project: str) -> Any:
+    """Use an explicit customer project without retargeting legacy client seams."""
+    if not project:
+        raise ValueError("customer data project is required")
+    with _pinned_data_plane_firestore_client_lock:
+        return _pinned_data_plane_firestore_client(project)
 
 
 def get_data_plane_firestore_client() -> Any:
@@ -508,6 +522,22 @@ def firestore_document_kind(error: BaseException) -> str:
     return 'other'
 
 
+_IN_TXN_BODY: ContextVar[bool] = ContextVar('in_transaction_body', default=False)
+
+
+def in_transaction_body() -> bool:
+    return _IN_TXN_BODY.get()
+
+
+@contextmanager
+def transaction_body() -> Iterator[None]:
+    token = _IN_TXN_BODY.set(True)
+    try:
+        yield
+    finally:
+        _IN_TXN_BODY.reset(token)
+
+
 def run_transactional(
     client: Any,
     transactional_callable: Any,
@@ -553,7 +583,8 @@ def run_transactional(
             transaction = (
                 initial_transaction if attempt == 1 and initial_transaction is not None else client.transaction()
             )
-            result = transactional_callable(transaction, *args, **kwargs)
+            with transaction_body():
+                result = transactional_callable(transaction, *args, **kwargs)
             if outcome is not None and attempt > 1:
                 outcome['status'] = 'retried_ok'
             return result

@@ -8,23 +8,20 @@ Controls (read per call, never at import):
 
 - ``CONVERSATION_NOTES_AGENT_ENABLED``: kill switch, default on. ``false``/``off``/``0``
   returns every conversation to the one-shot path.
-- ``CONVERSATION_NOTES_AGENT_PERCENT``: stable conversation-hash cohort, default 100.
-- ``CONVERSATION_NOTES_AGENT_UID_ALLOWLIST``: comma-separated UIDs always in the cohort.
 - ``CONVERSATION_NOTES_AGENT_LOOKUP_EFFICIENCY_ENABLED``: default on. Off restores
   legacy lookup charging, tool schema, prompt, packet and investigation floor.
 """
 
 from __future__ import annotations
 
-import hashlib
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
+from utils.other.request_deadline import capped_deadline_seconds
+
 FLAG = 'CONVERSATION_NOTES_AGENT_ENABLED'
-PERCENT = 'CONVERSATION_NOTES_AGENT_PERCENT'
 LOOKUP_EFFICIENCY = 'CONVERSATION_NOTES_AGENT_LOOKUP_EFFICIENCY_ENABLED'
-UID_ALLOWLIST = 'CONVERSATION_NOTES_AGENT_UID_ALLOWLIST'
 
 # A conversation this long is worth an agent on words alone.
 AGENT_MIN_WORDS = 1500
@@ -74,28 +71,9 @@ def lookup_efficiency_enabled() -> bool:
     return os.getenv(LOOKUP_EFFICIENCY, 'true').strip().lower() not in {'false', 'off', '0', 'no'}
 
 
-def _percent() -> int:
-    raw = os.getenv(PERCENT, '').strip()
-    if not raw:
-        return 100
-    try:
-        return max(0, min(100, int(raw)))
-    except ValueError:
-        # An unreadable ramp value must not silently widen the cohort.
-        return 0
-
-
 def in_cohort(uid: Optional[str], conversation_id: Optional[str]) -> bool:
-    allowlist = {item.strip() for item in os.getenv(UID_ALLOWLIST, '').split(',') if item.strip()}
-    if uid and uid in allowlist:
-        return True
-    percent = _percent()
-    if percent >= 100:
-        return True
-    if percent <= 0 or not conversation_id:
-        return False
-    bucket = int(hashlib.sha256(f'notes-agent:{conversation_id}'.encode()).hexdigest()[:8], 16) % 100
-    return bucket < percent
+    """Permanent full admission (David 2026-11-09 flag rulings)."""
+    return True
 
 
 def budget_for_words(words: int) -> NotesAgentBudget:
@@ -105,6 +83,35 @@ def budget_for_words(words: int) -> NotesAgentBudget:
     if words >= AGENT_MIN_WORDS:
         return NotesAgentBudget(max_turns=7, max_tool_calls=10, min_tool_calls=4)
     return NotesAgentBudget(max_turns=5, max_tool_calls=6, min_tool_calls=2)
+
+
+def _capped_budget(budget: NotesAgentBudget) -> NotesAgentBudget:
+    """Cap the agentic deadline to the request budget, when one is set.
+
+    The from-segments route sets a request deadline so a failing notes step
+    answers a retryable 503 inside the client's own 30 s pool deadline. The
+    force-submit point moves with it, so a capped run still submits before the
+    deadline instead of being cancelled mid-investigation.
+    """
+    deadline = capped_deadline_seconds(budget.deadline_seconds)
+    if deadline == budget.deadline_seconds:
+        return budget
+    return replace(
+        budget,
+        deadline_seconds=deadline,
+        force_submit_after_seconds=min(budget.force_submit_after_seconds, deadline * 0.6),
+    )
+
+
+def bounded_budget(budget: NotesAgentBudget) -> NotesAgentBudget:
+    """Re-derive the agentic deadline from the request's absolute deadline.
+
+    ``plan_notes_agent`` caps the budget when the plan is made, but packet
+    building runs before the agent starts. Re-deriving at the call site keeps
+    the agent's relative timeout anchored to the one absolute deadline instead
+    of to the moment the plan was built.
+    """
+    return _capped_budget(budget)
 
 
 def plan_notes_agent(
@@ -136,7 +143,7 @@ def plan_notes_agent(
         return NotesAgentDecision(False, 'below_threshold')
     if not in_cohort(uid, conversation_id):
         return NotesAgentDecision(False, 'cohort')
-    return NotesAgentDecision(True, reason, budget_for_words(words))
+    return NotesAgentDecision(True, reason, _capped_budget(budget_for_words(words)))
 
 
 def estimate_cost_usd(prompt_tokens: int, cached_tokens: int, completion_tokens: int) -> float:

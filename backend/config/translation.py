@@ -11,10 +11,6 @@ from typing import Mapping
 
 class TranslationProvider(str, Enum):
     luna = 'luna'
-    # Legacy provider names remain aliases for stored/runtime configuration.
-    # They resolve to the gateway-backed Luna provider and never select Google.
-    gemini = 'luna'
-    google = 'luna'
     nllb = 'nllb'
 
     @staticmethod
@@ -24,6 +20,11 @@ class TranslationProvider(str, Enum):
         if value == TranslationProvider.nllb:
             return 'NLLB-200 (self-hosted)'
         return str(value)
+
+
+# Retired TRANSLATION_SERVICE_MODELS spellings of Luna, still parsed so a stale
+# env cannot stop translation. They are reported as deprecated_tokens.
+DEPRECATED_LUNA_TOKENS = frozenset({'gemini', 'google'})
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class TranslationProfile:
     max_batch_size: int = 100
     unsupported_tokens: tuple[str, ...] = ()
     unavailable_tokens: tuple[str, ...] = ()
+    deprecated_tokens: tuple[str, ...] = ()
     policy_version: str = 'legacy'
     max_output_tokens: int = 0
     deadline_seconds: float = 0.0
@@ -52,8 +54,8 @@ def resolve_translation_profile(env: Mapping[str, str] | None = None) -> Transla
     """Resolve mutable environment at the translation call boundary.
 
     The configured list is an ordered provider policy. Unavailable providers
-    are filtered, unsupported tokens are retained as diagnostics, and NLLB is
-    used when the list is empty or no configured provider is usable.
+    are filtered, unsupported and deprecated tokens are retained as diagnostics,
+    and Luna is used when the list is empty or no configured provider is usable.
     """
 
     values = process_environ if env is None else env
@@ -64,11 +66,16 @@ def resolve_translation_profile(env: Mapping[str, str] | None = None) -> Transla
     usable_providers: list[TranslationProvider] = []
     unsupported_tokens: list[str] = []
     unavailable_tokens: list[str] = []
+    deprecated_tokens: list[str] = []
     for raw_token in raw_models.split(',') if raw_models else ():
         token = raw_token.strip().lower()
         if not token:
             continue
-        if token in {'gemini', 'google', 'luna'}:
+        if token in DEPRECATED_LUNA_TOKENS:
+            if token not in deprecated_tokens:
+                deprecated_tokens.append(token)
+            provider = TranslationProvider.luna
+        elif token == TranslationProvider.luna.value:
             provider = TranslationProvider.luna
         elif token == TranslationProvider.nllb.value:
             provider = TranslationProvider.nllb
@@ -85,7 +92,7 @@ def resolve_translation_profile(env: Mapping[str, str] | None = None) -> Transla
         if provider not in usable_providers:
             usable_providers.append(provider)
 
-    providers = tuple(usable_providers) or (TranslationProvider.nllb,)
+    providers = tuple(usable_providers) or (TranslationProvider.luna,)
 
     timeout = _positive_float(values.get('TRANSLATION_NLLB_TIMEOUT_SECONDS', '5.0'), 'TRANSLATION_NLLB_TIMEOUT_SECONDS')
     cache_ttl = _positive_int(values.get('TRANSLATION_CACHE_TTL', str(60 * 60 * 24 * 14)), 'TRANSLATION_CACHE_TTL')
@@ -103,6 +110,7 @@ def resolve_translation_profile(env: Mapping[str, str] | None = None) -> Transla
         configured_providers=tuple(configured_providers),
         unsupported_tokens=tuple(unsupported_tokens),
         unavailable_tokens=tuple(unavailable_tokens),
+        deprecated_tokens=tuple(deprecated_tokens),
     )
 
 
@@ -203,6 +211,7 @@ def viewed_translation_profile(legacy: TranslationProfile, config: OnDemandTrans
         nllb_timeout_seconds=legacy.nllb_timeout_seconds,
         cache_ttl_seconds=legacy.cache_ttl_seconds,
         negative_cache_ttl_seconds=legacy.negative_cache_ttl_seconds,
+        deprecated_tokens=legacy.deprecated_tokens,
         max_batch_size=min(config.max_segments, 50),
         policy_version='viewed_v1',
         max_output_tokens=config.max_output_tokens,

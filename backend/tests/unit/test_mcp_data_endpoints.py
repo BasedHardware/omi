@@ -635,6 +635,8 @@ async def test_conversation_index_failure_is_json_rpc_http_200(tool_name, argume
         patch.object(sse_transport, 'authenticate_mcp_request', return_value=auth_context),
         patch.object(sse_conversations.mcp_conversation_pages, 'get_mcp_conversation_cards_page', side_effect=failure),
         patch.object(sse_conversations, 'resolve_mcp_conversation_search_ids', side_effect=failure),
+        # A building vector index alone falls back to keyword search; with keyword down too it is the index error.
+        patch.object(sse_conversations, 'keyword_search_conversation_ids', side_effect=RuntimeError('keyword down')),
     ):
         response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
 
@@ -1074,6 +1076,14 @@ class TestScreenActivity:
             'first_observed_at': '2026-07-03 01:00:00.000',
             'last_observed_at': '2026-07-03 12:00:00.000',
             'capture_completeness': 'unknown',
+            'devices': [
+                {
+                    'device_id': 'synthetic-device',
+                    'first_observed_at': '2026-07-03 01:00:00.000',
+                    'last_observed_at': '2026-07-03 12:00:00.000',
+                    'synced_through': None,
+                }
+            ],
         }
         summary = {'apps': {}, 'total_screenshots': 5000, 'coverage': coverage}
         monkeypatch.setattr(

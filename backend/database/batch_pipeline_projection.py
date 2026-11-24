@@ -4,6 +4,10 @@ No transcript bodies are copied into scheduler metadata. Durable completion is
 separate from the Redis client projection, and can repair a lost Redis reply.
 """
 
+from database.batch_coalescing_capabilities import advertise
+from database.batch_pipeline_upload_metrics import observe_completion
+
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 import logging
 import re
@@ -11,31 +15,55 @@ from typing import Any
 
 from google.cloud import firestore
 
-from config.batch_pipeline import projection_followup_page_enabled
+from config.batch_pipeline import projection_followup_page_enabled, projection_source_deleted_enabled
+from config.record_latency import recent_native_record_notes, record_notes_eager_enabled
+from utils.enrichment import outbox as reprocess
+from database.outbox_firestore import FirestoreEnrichmentOutbox
+from config.sync_reprocess import settle_seconds
+from utils.batch_pipeline.held_terminal import OPERATOR_INTENTS, held_without_recovery
+from config.record_audio import record_identity, require_record_audio_barrier
+from config.server_batch import manual_end_marker_enabled
+from utils.conversations.v3 import metrics as v3_metrics, triggers as v3_triggers
+from utils.conversations.v3.live import FINISH_FIELDS, FINISH_WINDOW_FIELD, active, has_finish_content
+from utils.batch_pipeline.empty_transcription import EMPTY_OUTCOMES
 from database.batch_pipeline_policy import load_stage_policy
+from database.batch_pipeline_delivered_share import delivery_stamp
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from config.policy import ProjectionPolicy
 from database.fsr_read_cache import writing
 from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
+from database import batch_pipeline_coalescing_completion as coalescing_completion
+from database.batch_pipeline_projection_finish import (
+    PROJECTION_FINISH_ASYNC_CLOCK,
+    PROJECTION_FINISH_DUE_FIELD,
+    PROJECTION_FINISH_STATES,
+    projection_finish_state_fields,
+)
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, BatchPrivacyReason
 from database.batch_pipeline_projection_privacy import HOLD_REASONS
+from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE as ARTIFACT_MISSING_REASON
+from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
 from database.sync_ledger import (
     BATCH_PARTIAL_STATUS,
-    batch_projection_ledger_owner_matches,
     complete_batch_partial_in_transaction,
     sync_content_ledger_ref,
     is_valid_completed_sync_content_result,
 )
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import ProjectionBinding
+from utils.batch_pipeline.projection_hold_observability import log_projection_hold
 from utils.batch_pipeline.scheduler import owner_key
+from utils.sync.processing_hold import MAX_HOLD_SECONDS
+from utils.sync import capture_end, processing_hold
 from database.batch_pipeline_projection_protocol import (
+    PROJECTION_HEAD_BLOCK_TYPE,
+    PROJECTION_HEAD_BLOCKED_SINCE,
     ProjectionBlocked as ProjectionBlocked,
     ProjectionReplay as ProjectionReplay,
     normalized_binding,
 )
-from database.batch_pipeline_projection_session import ProjectionSession as ProjectionSession
+from database.batch_pipeline_projection_session import ProjectionSession as ProjectionSession, SOURCE_DELETED_JOBS
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +89,11 @@ def usage_stamp(now: datetime, usage_period: Any) -> datetime:
 class ProjectionStore:
     def __init__(self, store: FirestoreStore):
         self.store = store
+        try:
+            advertise(store)
+        except Exception:
+            # Missing capability advertisement keeps producers on legacy packing.
+            logger.warning('event=batch_coalescing outcome=capability_unavailable')
 
     @property
     def client(self):
@@ -85,6 +118,76 @@ class ProjectionStore:
             self._mirror(session.binding, erased)
         except Exception:
             logger.warning('event=jobstore_shadow op=refresh outcome=hook_error site=projection_assignment')
+
+    def _settle_allowance(self, binding: ProjectionBinding, now: float, accounting: dict, segment_ids) -> None:
+        """Post-billing shadow settlement; replay repairs a lost observer reply."""
+        if accounting.get('source_deleted'):
+            return
+        try:
+            from utils.stt.allowance_batch import observe_billed_batch
+
+            if not isinstance(accounting.get('updates'), dict) or 'seconds' not in accounting:
+                return
+            observe_billed_batch(
+                self.client,
+                binding.owner_id,
+                binding.content_id,
+                accounting.get('billing_generation'),
+                segment_ids,
+                now,
+            )
+        except Exception:
+            logger.warning('event=free_allowance_lease decision=settlement_unavailable')
+
+    @staticmethod
+    def _wake_notes(outbox: FirestoreEnrichmentOutbox, row_id: str, token: str) -> None:
+        """Post-commit notes wake. The due row is durable and the outbox sweep repairs a miss: never raise."""
+        try:
+            outbox.wake(row_id, token)
+        except Exception as error:
+            logger.warning(
+                'event=batch_projection action=notes_wake outcome=error exception_type=%s', type(error).__name__
+            )
+
+    def _observe_transcription(self, binding: ProjectionBinding, now: float, accounting: dict, result: dict) -> None:
+        """Fail-open C1 transcript-landed write: ``sealed -> transcribed``.
+
+        Runs after the durable completion that published this capture's
+        transcript, on the same event clock (``now``) the completion used. Only a
+        first completion reaches here: a replay returns an earlier result with
+        no write, and a source deletion keeps its erasure fence and gets no new
+        durable row. Speech counters come from the immutable completion summary,
+        never from a query.
+        """
+        capture_id = binding.target_conversation_id
+        if not isinstance(capture_id, str) or not capture_id:
+            return
+        if accounting.get('source_deleted') or (result or {}).get('reason_code') == 'source_deleted':
+            return
+        seconds = accounting.get('seconds')
+        speech_seconds = float(seconds) if isinstance(seconds, (int, float)) and not isinstance(seconds, bool) else 0.0
+        try:
+            from database import pipeline_ledger
+
+            owner_ref = self.client.collection('users').document(binding.owner_id)
+            source_ref = owner_ref.collection('conversations').document(capture_id)
+            pipeline_ledger.advance(
+                binding.owner_id,
+                capture_id,
+                pipeline_ledger.TRANSCRIBED,
+                now=now,
+                speech_seconds=speech_seconds,
+                has_speech=speech_seconds > 0,
+                speech_basis='transcript',
+                source_ref=source_ref,
+                owner_ref=owner_ref,
+                firestore_client=self.client,
+            )
+        except Exception as error:  # The durable completion is already authoritative.
+            logger.warning(
+                'event=batch_projection action=ledger outcome=error stage=transcribed exception_type=%s',
+                type(error).__name__,
+            )
 
     def read(self, segment_id: str) -> tuple[dict[str, Any], dict[str, Any], ProjectionBinding]:
         # This snapshot is a fetch hint only. Every mutation rereads it atomically.
@@ -139,10 +242,12 @@ class ProjectionStore:
             if not receipt:
                 raise ProjectionBlocked('projection must persist before enrichment acknowledgment')
             receipt['state'] = 'ready'
-            session.write_receipt(transaction, receipt)
-            return receipt
+            sibling_held = session.write_receipt(transaction, receipt)
+            return receipt, sibling_held
 
-        receipt = self.run(commit, policy=policy)
+        receipt, sibling_held = self.run(commit, policy=policy)
+        if sibling_held:
+            log_projection_hold('sibling')
         self._mirror(binding)
         return receipt
 
@@ -181,7 +286,7 @@ class ProjectionStore:
             session.prepare(transaction, replay=False)
             current = session.receipt()
             if current.get('conversation_id') != output:
-                return current
+                return current, False
             try:
                 session.guard(transaction, [output])
             except BatchPrivacyBlocked as error:
@@ -195,7 +300,7 @@ class ProjectionStore:
                 ):
                     raise
             else:
-                return current
+                return current, False
             settled = {
                 **current,
                 'state': 'ready',
@@ -204,12 +309,63 @@ class ProjectionStore:
                 'enrichment_required': False,
                 'disposition': 'output_deleted',
             }
-            session.write_receipt(transaction, settled)
-            return settled
+            sibling_held = session.write_receipt(transaction, settled)
+            return settled, sibling_held
 
-        settled = self.run(commit, policy=policy)
+        settled, sibling_held = self.run(commit, policy=policy)
+        if sibling_held:
+            log_projection_hold('sibling')
         receipt.update(settled)
         self._mirror(binding)
+
+    def retire_async_finish(self, segment_id: str) -> bool:
+        """Classify a legacy async receipt; never change its state or obligation.
+
+        The pinned job policy is authoritative. Re-read both documents before
+        writing so a concurrent completion or policy pin cannot retire sync work.
+        """
+
+        @firestore.transactional
+        def commit(transaction):
+            job = self.ref('jobs', segment_id).get(transaction=transaction).to_dict() or {}
+            ref = self.ref('results', segment_id)
+            row = ref.get(transaction=transaction).to_dict() or {}
+            raw = (job.get('policy_parts') or {}).get('projection')
+            if raw is None or not ProjectionPolicy.from_dict(raw).async_projection:
+                return False
+            if (
+                row.get('projection_state') not in PROJECTION_FINISH_STATES
+                or row.get(PROJECTION_FINISH_DUE_FIELD) == PROJECTION_FINISH_ASYNC_CLOCK
+            ):
+                return False
+            transaction.update(ref, {PROJECTION_FINISH_DUE_FIELD: PROJECTION_FINISH_ASYNC_CLOCK})
+            return True
+
+        return bool(self.run(commit))
+
+    def note_head_blocked(self, segment_id: str, now: float, block_type: str) -> bool:
+        """Stamp a bounded-retry chain head's first failure; one write per episode.
+
+        ``run`` requires a ``@firestore.transactional`` callable. The Projector
+        once passed a plain function here, so every read failed with
+        ``ValueError('Transaction not in progress')`` and the 24 h head bound
+        (``projection_blocked_since``) never started.
+        """
+
+        @firestore.transactional
+        def commit(transaction):
+            ref = self.ref('results', segment_id)
+            row = ref.get(transaction=transaction).to_dict() or {}
+            if row.get(PROJECTION_HEAD_BLOCKED_SINCE) is not None or row.get('projection_state') not in (
+                'pending',
+                'persisted',
+                'ready',
+            ):
+                return False
+            transaction.update(ref, {PROJECTION_HEAD_BLOCKED_SINCE: now, PROJECTION_HEAD_BLOCK_TYPE: block_type})
+            return True
+
+        return self.run(commit)
 
     def acknowledge(self, segment_id: str, binding: ProjectionBinding, now: float, *, policy=None):
 
@@ -221,7 +377,20 @@ class ProjectionStore:
             session.prepare(transaction, replay=False)
             if session.ledger.get('status') != 'completed':
                 raise ProjectionBlocked('client publication preceded durable completion')
-            transaction.update(session.result_ref, {'projection_state': 'completed'})
+            delivered_at, delivered_in_target = delivery_stamp(session.job, now)
+            transaction.update(
+                session.result_ref,
+                {
+                    'projection_state': 'completed',
+                    **projection_finish_state_fields('completed', now),
+                },
+            )
+            # The delivered-share sampler reads jobs, not results: a unit whose
+            # projection never completes still has an admission row there.
+            transaction.update(
+                session.job_ref,
+                {'delivered_at': delivered_at, 'delivered_in_target': delivered_in_target},
+            )
 
         self.run(commit, policy=policy)
         self._mirror(binding)
@@ -254,9 +423,6 @@ class ProjectionStore:
         part_index=None,
         policy=None,
     ):
-        from config.sync_reprocess import settle_seconds
-        from database.outbox_firestore import FirestoreEnrichmentOutbox
-        from utils.enrichment import outbox as reprocess
 
         if not reprocess.owns_runtime():
             raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
@@ -271,7 +437,52 @@ class ProjectionStore:
             session.guard(transaction, output_ids)
             if receipt.get('state') == 'ready':
                 return None
-            backfill = session.job.get('priority') != 0
+            complete_notes = (
+                session.job.get('record_notes_after_complete') is True
+                or session.ledger.get('record_notes_after_complete') is True
+            )
+            if record_notes_eager_enabled() and (complete_notes or recent_native_record_notes(session.job, now)):
+                # One recording-wide dispatch is owned by complete(), after
+                # every sibling receipt is ready in that same transaction.
+                # A missing/held sibling must not strand this owner forever.
+                # Reuse the normal settle deadline for one durable fallback
+                # per canonical output; completion can advance it to now.
+                # Do not renew the fallback as each later sibling projects.
+                prepared = set(session.ledger.get('record_notes_fallback_outputs') or [])
+                remaining = [cid for cid in output_ids if cid not in prepared]
+                result = None
+                if remaining:
+                    output_id = remaining[0]
+                    result = outbox.enqueue(
+                        reprocess.key(binding.owner_id, output_id),
+                        binding.owner_id,
+                        {
+                            'conversation_id': output_id,
+                            'language': language,
+                            'record_notes_producer': {
+                                'conversation_id': binding.target_conversation_id or canonical,
+                                'revision': session.job.get('record_input_upload_revision'),
+                            },
+                        },
+                        now + min(settle_seconds(), MAX_HOLD_SECONDS),
+                        tx=_ClientTransaction(self.client, transaction),
+                        now=now,
+                        coalesce='min',
+                        snapshot_summary=True,
+                        eager_if_unheld=True,
+                    )
+                    transaction.update(
+                        session.ledger_ref,
+                        {
+                            'record_notes_after_complete': True,
+                            'record_notes_fallback_outputs': sorted(prepared | {output_id}),
+                        },
+                    )
+                finished = len(remaining) <= 1
+                receipt.update(state='ready' if finished else 'persisted', record_notes_deferred=True)
+                return result, finished, session.write_receipt(transaction, receipt)
+            # A merge-promoted row keeps its admission class for dispatch and fair-use.
+            backfill = session.job.get('admitted_priority', session.job.get('priority')) != 0
             # The enrichment obligation and its exactly-once projection
             # receipt commit together, fenced against account deletion.
             completed = receipt.get('size_rollover_enriched', [])
@@ -291,15 +502,17 @@ class ProjectionStore:
             if len(output_ids) > 1:
                 receipt['size_rollover_enriched'] = completed
             receipt.update(state='ready' if finished else 'persisted', conversation_id=canonical)
-            session.write_receipt(transaction, receipt)
-            return result, finished
+            sibling_held = session.write_receipt(transaction, receipt)
+            return result, finished, sibling_held
 
         while True:
             committed = self.run(firestore.transactional(commit), policy=policy)
             if committed is None:
                 break
-            result, finished = committed
-            if result.wake_token:
+            result, finished, sibling_held = committed
+            if sibling_held:
+                log_projection_hold('sibling')
+            if result is not None and result.wake_token:
                 outbox.wake(result.row_id, result.wake_token)  # Durable before wake; the sweep repairs a miss.
             if finished:
                 break
@@ -309,7 +522,6 @@ class ProjectionStore:
     def _backfill_dispatch() -> dict[str, str] | None:
         """A backfill unit keeps the backfill queue binding on a new obligation (None: host binding)."""
         from utils.cloud_tasks import is_sync_backfill_routing_enabled
-        from utils.enrichment import outbox as reprocess
 
         if not is_sync_backfill_routing_enabled():
             return None
@@ -353,22 +565,27 @@ class ProjectionStore:
 
         policy = policy or self.policy(segment_id)
         group_ready = projection_followup_page_enabled()
+        outbox = FirestoreEnrichmentOutbox(self.client)
+        notes_wakes: list[tuple[str, str]] = []
 
         @firestore.transactional
         def commit(transaction):
+            notes_wakes.clear()
             session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
             if session.receipt().get('state') != 'ready':
                 return False
             held = False
+            unsettled = False
             ready = []
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
                 result = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
+                quarantined = False
                 if (result.get('projection') or {}).get('state') == 'quarantined':
                     if not job.get('projection_binding') or normalized_binding(job['projection_binding']) != binding:
                         raise ProjectionBlocked('quarantined sibling binding mismatch')
-                    held = True
+                    held = quarantined = True
                 if job.get('state') == 'quarantined':
                     if (
                         not job.get('projection_binding')
@@ -376,7 +593,12 @@ class ProjectionStore:
                         or job.get('merge_pending') is not False
                     ):
                         raise ProjectionBlocked('quarantined sibling binding mismatch')
-                    held = True
+                    held = quarantined = True
+                unsettled = unsettled or not (
+                    quarantined
+                    or result.get('projection_state') == 'erased'
+                    or (result.get('projection') or {}).get('state') == 'ready'
+                )
                 if (
                     group_ready
                     and (result.get('projection') or {}).get('state') == 'ready'
@@ -390,20 +612,85 @@ class ProjectionStore:
                         or result.get('segment_id') != sibling
                     ):
                         raise ProjectionBlocked('ready sibling binding mismatch')
-                    ready.append(self.ref('results', sibling))
+                    ready.append(
+                        (
+                            self.ref('results', sibling),
+                            ProjectionPolicy.from_dict((job.get('policy_parts') or {}).get('projection') or {}),
+                        )
+                    )
+            writes = []
+            if (
+                held
+                and not unsettled
+                and capture_end.enabled()
+                and binding.record_origin
+                and not binding.partial_record
+                and binding.target_conversation_id
+            ):
+                # Every other unit of the record landed; the held ones wait for
+                # recovery (about an hour). The sealed record's first notes need
+                # not: stamp the seal they cover, then pull the obligation to now.
+                target = (
+                    self.client.collection('users')
+                    .document(binding.owner_id)
+                    .collection('conversations')
+                    .document(binding.target_conversation_id)
+                )
+                row = target.get(transaction=transaction).to_dict() or {}
+                if capture_end.seal_barrier(row) is None:
+                    row_id = reprocess.key(binding.owner_id, binding.target_conversation_id)
+                    tx = _ClientTransaction(self.client, transaction)
+                    token = outbox.expedite(row_id, now=now, tx=tx, pending_writes=writes)
+                    if token:
+                        notes_wakes.append((row_id, token))
+                    # Only a held row's callback asks for proof; one stamp per seal.
+                    if (
+                        isinstance(row.get(processing_hold.FIELD), dict)
+                        and row.get('record_sealed_at')
+                        and not capture_end.units_settled(row)
+                    ):
+                        field = f'{processing_hold.FIELD}.{capture_end.UNITS_SETTLED_FIELD}'
+                        transaction.update(target, {field: row['record_sealed_at']})
+            for ref, data in writes:
+                transaction.set(ref, data)
             if held:
-                # One page's ready siblings share a completion probe. Settle
-                # their discovery hints together using the read set above;
-                # otherwise they would trickle out one row per later pass.
-                for ref in ready if group_ready else [session.result_ref]:
-                    transaction.update(ref, {'projection_state': 'quarantine_held'})
+                # Ready receipts have completed their follow-ups even when a
+                # sibling is held. Settle their hints without inventing holds.
+                for ref, ready_policy in ready if group_ready else [(session.result_ref, policy)]:
+                    transaction.update(
+                        ref,
+                        {
+                            'projection_state': 'ready',
+                            **projection_finish_state_fields(
+                                'ready', now, async_projection=ready_policy.async_projection
+                            ),
+                        },
+                    )
             return held
 
         held = self.run(commit, policy=policy)
+        for row_id, token in notes_wakes:
+            self._wake_notes(outbox, row_id, token)
         self._mirror(binding)
         return held
 
-    def prepare_accounting(self, binding: ProjectionBinding, now: float, *, held: bool = False) -> dict | None:
+    def completion_entries(self, binding: ProjectionBinding) -> dict[str, dict]:
+        """Read accounting's result rows once to rule out a known-mixed fast attempt.
+
+        These are hints only: completion still verifies every sibling in its
+        authorizing transaction. Stop at the same unready row as accounting.
+        """
+        entries = {}
+        for sid in binding.segment_ids:
+            entry = self.ref('results', sid).get().to_dict() or {}
+            entries[sid] = entry
+            if entry.get('projection_state') != 'erased' and (entry.get('projection') or {}).get('state') != 'ready':
+                break
+        return entries
+
+    def prepare_accounting(
+        self, binding: ProjectionBinding, now: float, *, held: bool = False, result_entries: dict | None = None
+    ) -> dict | None:
         """Resolve usage attribution outside the retryable completion transaction.
 
         ``held`` accounts a partial: quarantined siblings without a receipt are
@@ -415,10 +702,18 @@ class ProjectionStore:
 
         seconds = 0.0
         source = 'sync_backfill'
+        source_deleted = False
         for sid in binding.segment_ids:
-            entry = self.ref('results', sid).get().to_dict() or {}
+            entry = (
+                result_entries[sid] if result_entries is not None else self.ref('results', sid).get().to_dict() or {}
+            )
             if entry.get('projection_state') == 'erased':
                 continue
+            parts = entry.get('projection_parts')
+            source_deleted = source_deleted or any(
+                part.get('disposition') == 'source_deleted'
+                for part in (parts.values() if parts else [entry.get('projection') or {}])
+            )
             receipt = entry.get('projection') or {}
             if receipt.get('state') != 'ready':
                 # Only a unit nothing automatic will change; an open intent or a
@@ -433,7 +728,7 @@ class ProjectionStore:
                 raise ProjectionBlocked('validated speech accounting receipt required')
             seconds += value
             job = self.ref('jobs', sid).get().to_dict() or {}
-            if job.get('priority') == 0:
+            if job.get('admitted_priority', job.get('priority')) == 0:
                 source = 'sync_fresh'
         ledger = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id).get().to_dict() or {}
         if held and not batch_projection_ledger_owner_matches(
@@ -441,6 +736,19 @@ class ProjectionStore:
         ):
             # Charge nothing for a partial that cannot commit.
             return None
+        if source_deleted:
+            if not projection_source_deleted_enabled():
+                raise ProjectionBlocked('privacy disposition requires a source deletion tombstone')
+            # Settled deletion receipts are immutable. Suppress pre-completion
+            # fair-use dispatch and avoid resolving any new usage attribution.
+            # Completion rechecks every part in its transaction before writing.
+            return {
+                'seconds': seconds,
+                'source': source,
+                'updates': {},
+                'completed': ledger.get('status') == 'completed',
+                'source_deleted': True,
+            }
         charged = ledger.get('usage_committed_seconds', 0.0) if ledger.get('status') == BATCH_PARTIAL_STATUS else 0.0
         steps, step_times = charge_chain(ledger) if ledger.get('status') == BATCH_PARTIAL_STATUS else ([0.0], [])
         intake = self.ref('intakes', binding.job_id).get().to_dict() or {}
@@ -454,6 +762,11 @@ class ProjectionStore:
                 'charged': charged,
                 'steps': steps,
                 'step_times': step_times,
+                'billing_generation': (
+                    ledger.get('allowance_billing_started_at')
+                    if ledger.get('usage_committed_at') is not None
+                    else datetime.fromtimestamp(now, timezone.utc)
+                ),
             }
         stamp = datetime.fromtimestamp(now, timezone.utc)
         updates = {}
@@ -479,35 +792,125 @@ class ProjectionStore:
             'charged': charged,
             'steps': steps,
             'step_times': step_times,
+            'billing_generation': (
+                ledger.get('allowance_billing_started_at')
+                if ledger.get('usage_committed_at') is not None
+                else datetime.fromtimestamp(now, timezone.utc)
+            ),
         }
 
     def complete(
-        self, segment_id: str, binding: ProjectionBinding, now: float, accounting: dict, *, policy=None
+        self, segment_id: str, binding: ProjectionBinding, now: float, accounting: dict | None, *, policy=None
     ) -> dict | None:
         """Complete only after every bound sibling persisted and marked enrichment."""
         policy = policy or self.policy(segment_id)
+        completion_accounting = accounting if accounting is not None else {}
+        coalescing_receipts: list[tuple[str, str]] = []
+        notes_wakes = []
+        sealed_proofs: list[str] = []
+        delivered_uploads = []
+        completion_upload = {}
+        finish_resolution: list[tuple[str, str]] = []
 
         @firestore.transactional
         def commit(transaction):
+            nonlocal completion_accounting
+            finish_resolution.clear()
+            coalescing_receipts.clear()
+            zero_speech = accounting is None
+            notes_wakes.clear()
+            sealed_proofs.clear()
+            delivered_uploads.clear()
             session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
+            completion_upload.clear()
+            completion_upload.update(session.ledger)
+            if zero_speech and (
+                binding.record_origin
+                or binding.native_record
+                or session.ledger.get('status') == BATCH_PARTIAL_STATUS
+                or session.ledger.get('usage_committed_seconds', 0) != 0
+            ):
+                return None, False, 0
+            # Use the transaction's billing generation for both the zero-usage
+            # stamp and post-commit observers, including settlement on replay.
+            completion_accounting = (
+                {
+                    'seconds': 0.0,
+                    'updates': {},
+                    'charged': 0.0,
+                    'billing_generation': (
+                        session.ledger.get('allowance_billing_started_at')
+                        if session.ledger.get('usage_committed_at') is not None
+                        else datetime.fromtimestamp(now, timezone.utc)
+                    ),
+                }
+                if accounting is None
+                else accounting
+            )
+            members = coalescing_completion.prepare(
+                self.client, self.store.namespace, transaction, binding, session.ledger
+            )
+            delivered_uploads.extend(member for _, _, member, _ in members)
+            coalescing_receipts.extend(
+                ('intakes', member['job_id']) for member in (session.ledger.get('coalescing') or {}).get('members', [])
+            )
             receipts = []
             live_siblings = []
+            sibling_policies = {}
             erased_count = 0
             captured_seconds = 0.0
             terminal_empty_count = 0
+            silent_count = 0
             for sibling in binding.segment_ids:
-                job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
-                entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
+                if zero_speech and sibling == segment_id:
+                    job, entry = session.job, session.entry
+                else:
+                    job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
+                    entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
+                if zero_speech and (
+                    job.get('shadow')
+                    or job.get('owner_id') != binding.owner_id
+                    or job.get('privacy_generation') != binding.privacy_generation
+                    or job.get('result') != entry.get('result')
+                    or entry.get('owner_key') != owner_key(binding.owner_id)
+                    or entry.get('segment_id') != sibling
+                    or entry.get('result', {}).get('outcome') != 'silence'
+                    or entry.get('projection_parts')
+                    or entry.get('projection_state') not in {'ready', 'completed'}
+                    or (entry.get('projection') or {}).get('state') != 'ready'
+                    or (entry.get('projection') or {}).get('speech_seconds') != 0
+                    or any(
+                        (entry.get('projection') or {}).get(field)
+                        for field in (
+                            'conversation_id',
+                            'disposition',
+                            'privacy_reason',
+                            'audio_required',
+                            'enrichment_required',
+                            'size_rollover_outputs',
+                        )
+                    )
+                ):
+                    return None, False, 0
+                from utils.batch_pipeline.input_retention import input_expiring
+
+                if artifact_missing(job) or input_expiring(job):
+                    return None, False, 0
                 if entry.get('projection_state') == 'erased':
                     if entry.get('owner_key') != owner_key(binding.owner_id) or entry.get('segment_id') != sibling:
                         raise ProjectionBlocked('erased sibling owner mismatch')
                     receipts.append({'state': 'ready', 'conversation_id': None, 'created': False})
                     erased_count += 1
                     continue
+                if entry.get('result', {}).get('outcome') in EMPTY_OUTCOMES:
+                    silent_count += 1
                 if entry.get('result', {}).get('outcome') == 'no_recoverable_speech':
                     terminal_empty_count += 1
                 live_siblings.append(sibling)
+                sibling_policies[sibling] = ProjectionPolicy.from_dict(
+                    (job.get('policy_parts') or {}).get('projection') or {}
+                )
                 captured_seconds += job.get('duration_seconds', 0.0)
                 if not job.get('projection_binding') or normalized_binding(job['projection_binding']) != binding:
                     raise ProjectionBlocked('sibling binding mismatch')
@@ -516,11 +919,18 @@ class ProjectionStore:
                     return None, False, 0
                 parts = entry.get('projection_parts')
                 receipts.extend(parts.values() if parts else [receipt])
-            new, updated = self._visible(transaction, binding, receipts)
+            # This is a job-wide decision after collecting every sibling/part.
+            # A no-text receipt must suppress IDs from parts assigned earlier.
+            source_deleted = any(receipt.get('disposition') == 'source_deleted' for receipt in receipts)
+            conversation_rows = {}
+            new, updated = (
+                ([], []) if zero_speech else self._visible(transaction, binding, receipts, rows_out=conversation_rows)
+            )
             superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)
             deleted_output_count = sum(receipt.get('disposition') == 'output_deleted' for receipt in receipts)
             # Re-read canonical deletion fences before publishing any visible IDs.
-            session.guard(transaction, (*new, *updated))
+            if not zero_speech:
+                session.guard(transaction, (*new, *updated))
             result = {
                 'new_memories': new,
                 'updated_memories': updated,
@@ -544,7 +954,9 @@ class ProjectionStore:
                 result['superseded_segments'] = superseded_count
             if deleted_output_count:
                 result['deleted_output_segments'] = deleted_output_count
-            if (
+            if source_deleted:
+                result['reason_code'] = 'source_deleted'
+            elif (
                 not new
                 and not updated
                 and any(receipt.get('privacy_reason') == 'conversation_deleted' for receipt in receipts)
@@ -554,6 +966,20 @@ class ProjectionStore:
                 old = session.ledger.get('result')
                 if not isinstance(old, dict) or not is_valid_completed_sync_content_result(old):
                     raise ProjectionBlocked('invalid existing ledger completion')
+                if source_deleted:
+                    suppressed = {**old, 'new_memories': [], 'updated_memories': [], 'reason_code': 'source_deleted'}
+                    if suppressed != old:
+                        # Repair an older completion's output only. Its usage
+                        # and original part receipts remain unchanged.
+                        transaction.update(session.ledger_ref, {'result': suppressed})
+                        for sibling in live_siblings:
+                            transaction.update(self.ref('jobs', sibling), {'client_result': suppressed})
+                        # This job was already terminated. Repairing its output
+                        # is not a new completion and must not count again.
+                        coalescing_completion.write(transaction, members, suppressed, now)
+                        return suppressed, False, 0
+                    coalescing_completion.write(transaction, members, suppressed, now)
+                    return suppressed, False, 0
                 if deleted_output_count:
                     # Preserve historical usage; publish only destinations that
                     # remain visible after the user's output deletion.
@@ -563,18 +989,177 @@ class ProjectionStore:
                         'updated_memories': updated,
                         'deleted_output_segments': deleted_output_count,
                     }
+                coalescing_completion.write(transaction, members, old, now)
                 return old, False, 0
             # Part-level attribution need not sum to the worker's speech union
             # for older receipts. The immutable result summary owns metering.
-            seconds = sum(
-                (self.ref('results', sid).get(transaction=transaction).to_dict() or {})
-                .get('projection', {})
-                .get('speech_seconds', 0.0)
-                for sid in live_siblings
+            seconds = (
+                0.0
+                if zero_speech
+                else sum(
+                    (self.ref('results', sid).get(transaction=transaction).to_dict() or {})
+                    .get('projection', {})
+                    .get('speech_seconds', 0.0)
+                    for sid in live_siblings
+                )
             )
-            if seconds != accounting['seconds']:
+            if seconds != completion_accounting['seconds']:
                 raise ProjectionBlocked('speech accounting changed during completion')
-            self._commit_usage(transaction, session.ledger_ref, session.ledger, binding, accounting, seconds, now)
+            cid = binding.target_conversation_id
+            silent = silent_count == len(binding.segment_ids) or result['outcome'] == 'expected_silence'
+            recording_ref = None
+            finish_update = {}
+            if (
+                cid
+                and binding.native_record
+                and not binding.partial_record
+                and (silent or len(binding.segment_ids) > 1)
+                and not (result.get('reason_code') or erased_count or superseded_count or deleted_output_count)
+                and manual_end_marker_enabled()
+            ):
+                content, _ = record_identity(binding.owner_id, cid)
+                if binding.content_id == content and binding.job_id == 'bp_' + content:
+                    collection = self.client.collection('users').document(binding.owner_id).collection('conversations')
+                    recording_ref = collection.document(cid)
+                    row = conversation_rows.get(cid)
+                    if row is None and silent:
+                        row = recording_ref.get(transaction=transaction).to_dict()
+                    finish_update = self._v3_finish_update(
+                        transaction, collection, cid, row or {}, silent, session, now
+                    )
+            if (
+                record_notes_eager_enabled()
+                and not source_deleted
+                and any(receipt.get('record_notes_deferred') for receipt in receipts)
+                and (new or updated)
+            ):
+
+                outbox = FirestoreEnrichmentOutbox(self.client)
+                notes_writes = []
+                prepared = set(session.ledger.get('record_notes_prepared_outputs') or [])
+                outputs = sorted(set(new + updated) - prepared)
+                # Up to 128 siblings also need two completion writes each.
+                # Bound output writes so a size rollover cannot exceed the
+                # Firestore commit ceiling. Ready receipts remain discoverable.
+                for canonical in outputs[:128]:
+                    row = conversation_rows.get(canonical) or {}
+                    hold = row.get('sync_processing_hold') or {}
+                    producer_ready = (
+                        bool(row.get('record_audio_closed'))
+                        and not row.get('record_audio_partial')
+                        and not row.get('record_upload_failed')
+                        and (
+                            session.job.get('record_input_upload_revision') is None
+                            or session.job['record_input_upload_revision'] == row.get('record_upload_revision')
+                        )
+                    )
+                    if producer_ready:
+                        try:
+                            require_record_audio_barrier(row)
+                        except ValueError:
+                            producer_ready = False
+                    eager = (
+                        record_notes_eager_enabled()
+                        and recent_native_record_notes(session.job, now)
+                        and not hold.get('held')
+                        and producer_ready
+                    )
+                    due_at = now if eager else now + settle_seconds()
+                    hold_owns_delay = producer_ready and processing_hold.FIELD in row
+                    if hold_owns_delay:
+
+                        def sealed_record(row=row, canonical=canonical):
+                            # Every unit of this record is projected by now and this job
+                            # carries the row's current upload: the barrier is the proof.
+                            proven = bool(
+                                capture_end.enabled()
+                                and session.job.get('record_input_upload_revision') is not None
+                                and capture_end.seal_barrier(row) is None
+                            )
+                            if proven:
+                                sealed_proofs.append(canonical)
+                            return proven
+
+                        # The transcript arrival already started this clock.
+                        # Do not add another settle after its absolute deadline.
+                        # Only clocks are needed here: raw Firestore transcript
+                        # fields may be encrypted. The consumer owns fingerprints.
+                        _, held_until = (
+                            processing_hold.admission(
+                                {
+                                    'finished_at': row.get('finished_at'),
+                                    'smart_merge': row.get('smart_merge') or {},
+                                    processing_hold.FIELD: {
+                                        key: hold.get(key)
+                                        for key in ('pending_since', 'last_content_at', 'upload_watermark_at')
+                                    },
+                                },
+                                {'first_pending_at': now},
+                                now=now,
+                                end_proven=sealed_record,
+                            )
+                            if processing_hold.enabled_for(row)
+                            else ('ready', None)
+                        )
+                        due_at = now if held_until is None else held_until
+                    wake = outbox.enqueue(
+                        reprocess.key(binding.owner_id, canonical),
+                        binding.owner_id,
+                        {
+                            'conversation_id': canonical,
+                            'language': binding.language or row.get('language') or 'en',
+                            'record_notes_producer': {
+                                'conversation_id': binding.target_conversation_id or canonical,
+                                'revision': session.job.get('record_input_upload_revision'),
+                            },
+                            'record_notes_processing_hold': (
+                                {'merge_first': bool(hold.get('merge_first'))}
+                                if hold_owns_delay and processing_hold.enabled_for(row)
+                                else None
+                            ),
+                        },
+                        due_at,
+                        tx=_ClientTransaction(self.client, transaction),
+                        now=now,
+                        coalesce='min' if eager or hold_owns_delay else 'max',
+                        snapshot_summary=True,
+                        eager_if_unheld=eager,
+                        processing_hold_deadline=hold_owns_delay,
+                        pending_writes=notes_writes,
+                    )
+                    if wake.wake_token:
+                        notes_wakes.append((outbox, wake.row_id, wake.wake_token))
+                for ref, row in notes_writes:
+                    transaction.set(ref, row)
+                if len(outputs) > 128:
+                    transaction.update(
+                        session.ledger_ref, {'record_notes_prepared_outputs': sorted(prepared | set(outputs[:128]))}
+                    )
+                    return None, False, 0
+            elif capture_end.enabled() and binding.record_origin and not binding.partial_record and not source_deleted:
+                # Every unit of the record landed. A sealed live record without
+                # notes needs no first-summary deadline: its obligation is due
+                # now, and the wake follows the ledger's ``transcribed`` below.
+                outbox = FirestoreEnrichmentOutbox(self.client)
+                writes = []
+                for canonical in sorted(set(new + updated)):
+                    if capture_end.seal_barrier(conversation_rows.get(canonical) or {}) is None:
+                        row_id = reprocess.key(binding.owner_id, canonical)
+                        tx = _ClientTransaction(self.client, transaction)
+                        token = outbox.expedite(row_id, now=now, tx=tx, pending_writes=writes)
+                        if token:
+                            notes_wakes.append((outbox, row_id, token))
+                for ref, data in writes:
+                    transaction.set(ref, data)
+            if finish_update and recording_ref is not None:
+                transaction.update(recording_ref, finish_update)
+                finish_resolution.append(
+                    (recording_ref.id, 'consumed' if finish_update.get('v3_manual_end') else 'resolved_empty')
+                )
+            if not source_deleted:
+                self._commit_usage(
+                    transaction, session.ledger_ref, session.ledger, binding, completion_accounting, seconds, now
+                )
             from database.sync_ledger import complete_batch_projection_in_transaction
 
             complete_batch_projection_in_transaction(
@@ -587,24 +1172,109 @@ class ProjectionStore:
                 run_token=binding.run_token,
                 run_epoch=binding.run_epoch,
             )
+            coalescing_completion.write(transaction, members, result, now)
             for sibling in live_siblings:
                 # All assignment/enrichment receipts now exist. Wake held
                 # siblings in the same durable completion, including a crash
                 # before client publication or completion retention.
-                transaction.update(self.ref('results', sibling), {'projection_state': 'ready'})
+                transaction.update(
+                    self.ref('results', sibling),
+                    {
+                        'projection_state': 'ready',
+                        **projection_finish_state_fields(
+                            'ready', now, async_projection=sibling_policies[sibling].async_projection
+                        ),
+                    },
+                )
                 transaction.update(self.ref('jobs', sibling), {'client_status': 'completed', 'client_result': result})
             return result, True, captured_seconds
 
-        with writing('usage_month_cache', binding.owner_id):
+        with (
+            nullcontext()
+            if accounting is None or accounting.get('source_deleted')
+            else writing('usage_month_cache', binding.owner_id)
+        ):
             result, changed, seconds = self.run(commit, policy=policy)
-        self._mirror(binding)
+        if finish_resolution:
+            recording_id, outcome = finish_resolution[0]
+            v3_metrics.FINISH_NO_POINTER.labels(outcome).inc()
+            if outcome == 'consumed':
+                v3_triggers.enqueue_pending(binding.owner_id, manual_end_id=recording_id)
         if changed:
+            # Before any notes wake: the woken callback's seal proof reads this stage.
+            self._observe_transcription(binding, now, completion_accounting, result)
+        for _ in sealed_proofs:
+            capture_end.record_proof('sealed')  # Once per committed proof, never per retry.
+        for outbox, row_id, token in notes_wakes:
+            self._wake_notes(outbox, row_id, token)
+        self._mirror(binding, coalescing_receipts)
+        if result is not None and result.get('reason_code') != 'source_deleted':
+            self._settle_allowance(binding, now, completion_accounting, binding.segment_ids)
+        if changed:
+            if result.get('reason_code') == 'source_deleted':
+                SOURCE_DELETED_JOBS.inc()
+                logger.info('event=batch_projection action=completion outcome=source_deleted')
             record_correctness('projection_completed', seconds=seconds)
+        observe_completion(
+            completion_upload,
+            delivered_uploads,
+            merged=bool(coalescing_receipts),
+            changed=changed,
+            result=result,
+            now=now,
+        )
         return result
 
-    def _visible(self, transaction, binding: ProjectionBinding, receipts) -> tuple[list[str], list[str]]:
+    def _v3_finish_update(self, transaction, collection, cid, row, silent, session, now):
+        window_id = row.get(FINISH_WINDOW_FIELD)
+        upload_revision = session.job.get('record_input_upload_revision')
+        if (
+            not window_id
+            or not row.get('v3_manual_end_requested')
+            or row.get('v3_manual_end')
+            or not row.get('recording')
+            or row.get('status') != 'completed'
+            or not row.get('finished_at')
+            or any(
+                row.get(k)
+                for k in ('record_audio_partial', 'record_upload_failed', 'is_locked', 'deleted', 'sync_merged_into')
+            )
+            or row.get('data_protection_level') == 'private'
+            or (upload_revision is not None and upload_revision != row.get('record_upload_revision'))
+        ):
+            return {}
+        clock = datetime.fromtimestamp(now, timezone.utc)
+        if silent:
+            window = (
+                collection.document(window_id).get(transaction=transaction, field_paths=FINISH_FIELDS).to_dict() or {}
+            )
+            if (
+                row.get('discarded')
+                or not active([window], clock)
+                or window.get('is_locked')
+                or row['finished_at'] < (window.get('finished_at') or row['finished_at'])
+                or cid not in (window.get('v3_recording_ids') or ())
+                or not has_finish_content(row, window, cid)
+            ):
+                return {'v3_manual_end_requested': False}
+        elif row.get('discarded') or not row.get('record_projection_revision'):
+            return {}
+        return {
+            'v3_manual_end': True,
+            'v3_pending': True,
+            'v3_pending_since': row.get('v3_pending_since') or clock,
+        }
+
+    def _visible(
+        self, transaction, binding: ProjectionBinding, receipts, *, source_deleted=False, rows_out=None
+    ) -> tuple[list[str], list[str]]:
         """Earlier receipt IDs can have become bridge donors. Follow the same
         server redirects, retaining only visible canonical IDs."""
+        # Both full and partial completion pass their aggregated receipts here.
+        if source_deleted or any(receipt.get('disposition') == 'source_deleted' for receipt in receipts):
+            if not projection_source_deleted_enabled():
+                raise ProjectionBlocked('privacy disposition requires a source deletion tombstone')
+            return [], []
         mapped = []
         outputs = [output for receipt in receipts for output in (receipt.get('size_rollover_outputs') or [receipt])]
         for receipt in outputs:
@@ -627,6 +1297,8 @@ class ProjectionStore:
                 if not row or (row.get('deleted') and not row.get('sync_merged_into')):
                     raise ProjectionBlocked('projected conversation deleted')
                 if not row.get('sync_merged_into'):
+                    if rows_out is not None:
+                        rows_out[cid] = row
                     break
                 cid = row['sync_merged_into']
             if cid:
@@ -661,6 +1333,12 @@ class ProjectionStore:
         # each recent step's once-key: a write lost after any earlier commit
         # still lands on a later attempt while that key is live.
         steps, times = extend_chain(*(charge_chain(ledger) if partial else ([0.0], [])), seconds, now)
+        # Observer provenance only: the existing hourly write above remains the
+        # billing authority. Unknown pre-rollout partials remain unobserved.
+        previous_billed = ledger.get('allowance_billed_seconds') if partial else 0
+        billed = None
+        if type(previous_billed) is int and 0 <= previous_billed <= int(charged):
+            billed = previous_billed + (int(seconds) - int(charged) if accounting['updates'] else 0)
         transaction.update(
             ledger_ref,
             {
@@ -668,6 +1346,10 @@ class ProjectionStore:
                 'usage_committed_seconds': seconds,
                 'usage_steps': steps,
                 'usage_step_times': times,
+                'allowance_billed_seconds': billed,
+                'allowance_billing_started_at': (
+                    ledger.get('allowance_billing_started_at') if partial else datetime.fromtimestamp(now, timezone.utc)
+                ),
             },
         )
 
@@ -690,7 +1372,7 @@ class ProjectionStore:
             ledger_ref = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id)
             ledger = ledger_ref.get(transaction=transaction).to_dict() or {}
             if ledger.get('status') == 'completed':
-                return None, False
+                return None, False, []
             if (
                 ledger.get('dispatch_protocol') != 'batch_v1'
                 or ledger.get('batch_pipeline')
@@ -705,7 +1387,9 @@ class ProjectionStore:
             ):
                 raise ProjectionBlocked('content ledger owner lost')
             receipts, seconds, held = [], 0.0, 0
-            erased_count = terminal_empty_count = 0
+            settled_ids = []
+            source_deleted = False
+            erased_count = terminal_empty_count = missing_count = 0
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
                 entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
@@ -717,23 +1401,32 @@ class ProjectionStore:
                     continue
                 if not job.get('projection_binding') or normalized_binding(job['projection_binding']) != binding:
                     raise ProjectionBlocked('sibling binding mismatch')
+                parts = entry.get('projection_parts')
+                # A held entry can still contain a settled deletion part. Do
+                # not lose its privacy fence when skipping its output below.
+                source_deleted = source_deleted or any(
+                    part.get('disposition') == 'source_deleted'
+                    for part in (parts.values() if parts else [entry.get('projection') or {}])
+                )
                 if not entry and held_without_recovery(job):
                     held += 1
+                    missing_count += artifact_missing(job)
                     continue
                 if entry and assignment_held_without_recovery(job, entry):
                     held += 1
                     continue
                 receipt = entry.get('projection') or {}
                 if receipt.get('state') != 'ready':
-                    return None, False
+                    return None, False, []
                 if entry.get('result', {}).get('outcome') == 'no_recoverable_speech':
                     terminal_empty_count += 1
                 seconds += receipt.get('speech_seconds', 0.0)
+                settled_ids.append(sibling)
                 parts = entry.get('projection_parts')
                 receipts.extend(parts.values() if parts else [receipt])
             if not held:
-                return None, False
-            new, updated = self._visible(transaction, binding, receipts)
+                return None, False, []
+            new, updated = self._visible(transaction, binding, receipts, source_deleted=source_deleted)
             # Re-read canonical deletion fences before publishing any visible IDs.
             assert_batch_write_allowed(
                 self.client,
@@ -751,17 +1444,23 @@ class ProjectionStore:
                 'errors': [],
                 'outcome': 'partial',
             }
+            if missing_count:
+                # This publishes siblings while keeping the upload unacknowledged.
+                result['reason_code'] = ARTIFACT_MISSING_REASON
+            if source_deleted:
+                result['reason_code'] = 'source_deleted'
             if terminal_empty_count:
                 result['no_recoverable_speech_segments'] = terminal_empty_count
             superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)
             if superseded_count:
                 result['superseded_segments'] = superseded_count
             if ledger.get('status') == BATCH_PARTIAL_STATUS and ledger.get('result') == result:
-                return (result, charge_chain(ledger)), False
+                return (result, ([0.0], []) if source_deleted else charge_chain(ledger)), False, settled_ids
             if seconds != accounting['seconds']:
                 raise ProjectionBlocked('speech accounting changed during completion')
             chain = charge_chain(ledger) if ledger.get('status') == BATCH_PARTIAL_STATUS else ([0.0], [])
-            self._commit_usage(transaction, ledger_ref, ledger, binding, accounting, seconds, now)
+            if not source_deleted:
+                self._commit_usage(transaction, ledger_ref, ledger, binding, accounting, seconds, now)
             complete_batch_partial_in_transaction(
                 transaction,
                 ledger_ref,
@@ -772,10 +1471,12 @@ class ProjectionStore:
                 run_token=binding.run_token,
                 run_epoch=binding.run_epoch,
             )
-            return (result, extend_chain(*chain, seconds, now)), True
+            return (result, ([0.0], []) if source_deleted else extend_chain(*chain, seconds, now)), True, settled_ids
 
-        with writing('usage_month_cache', binding.owner_id):
-            outcome, changed = self.run(commit)
+        with nullcontext() if accounting.get('source_deleted') else writing('usage_month_cache', binding.owner_id):
+            outcome, changed, settled_ids = self.run(commit)
+        if outcome is not None and outcome[0].get('reason_code') != 'source_deleted':
+            self._settle_allowance(binding, now, accounting, settled_ids)
         if changed:
             logger.info('event=batch_held_partial outcome=completed held=%d', outcome[0]['held_segments'])
         return outcome
@@ -801,38 +1502,6 @@ def extend_chain(steps, times, seconds: float, now: float) -> tuple[list[float],
     if seconds > steps[-1]:
         return [*steps, seconds], [*times, now]
     return list(steps), list(times)
-
-
-# A reviewed operator intent that is not settled can still change its unit.
-OPERATOR_INTENTS = ('speech_redrive', 'terminal_disposition', 'silence_disposition')
-
-
-def held_without_recovery(job: dict) -> bool:
-    """A quarantined unit that nothing automatic will change.
-
-    Its recovery settled without words or hit the hard independent duration
-    limit before spending (``failed_held``), or its
-    recorded recovery policy is off and no paid call was ever authorized. Either
-    way its encrypted audio stays server-side for a reviewed operator redrive.
-    """
-    from config.policy import RecoveryPolicy
-
-    if job.get('state') != 'quarantined' or job.get('result'):
-        return False
-    if any(
-        isinstance(job.get(key), dict) and job[key].get('state') not in {'completed', 'failed_held'}
-        for key in OPERATOR_INTENTS
-    ):
-        return False
-    if job.get('recovery_state') == 'failed_held':
-        return True
-    raw = (job.get('policy_parts') or {}).get('recovery')
-    return (
-        job.get('recovery_state') == 'held'
-        and not job.get('recovery')
-        and isinstance(raw, dict)
-        and not RecoveryPolicy.from_dict(raw).recovery_enabled
-    )
 
 
 def assignment_held_without_recovery(job: dict, entry: dict) -> bool:

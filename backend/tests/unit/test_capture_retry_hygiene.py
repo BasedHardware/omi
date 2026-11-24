@@ -21,6 +21,9 @@ from utils.sync import uid_sequencer, retry_hygiene
 def isolate_modes(monkeypatch):
     monkeypatch.delenv('CAPTURE_COVERAGE_MODE_SERVE_PERCENT', raising=False)
     monkeypatch.delenv('CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S', raising=False)
+    # This file pins the legacy cohort decision (the CAPTURE_RETRY_CAP_ENFORCED
+    # rollback). The enforcing batch path is covered in test_backlog_state_machine.py.
+    monkeypatch.setenv('CAPTURE_RETRY_CAP_ENFORCED', 'false')
 
 
 @pytest.mark.parametrize(

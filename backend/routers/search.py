@@ -3,13 +3,14 @@
 import asyncio
 import logging
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, List, Optional
 
 from fastapi import APIRouter, Depends
 
 import database.conversations as conversations_db
 import database.daily_summaries as daily_summaries_db
 import database.folders as folders_db
+from database.ports.folders import FolderEntity
 import database.memories as memories_db
 import database.users as users_db
 from models.search import SearchOverviewFolder, SearchOverviewResponse
@@ -39,7 +40,7 @@ def _count_or_none(uid: str, field: str, count: Callable[[], int]) -> Optional[i
         return None
 
 
-def _list_folders(uid: str) -> List[Dict[str, Any]]:
+def _list_folders(uid: str) -> List[FolderEntity]:
     """The user's folders in display order; empty when the read fails.
 
     Read-only: unlike `GET /v1/folders`, this never initializes system folders.
@@ -56,7 +57,7 @@ def _list_folders(uid: str) -> List[Dict[str, Any]]:
             outcome='degraded',
         )
         return []
-    return [f for f in folders if f and f.get('id') and f.get('name')]
+    return [f for f in folders if f and f.id and f.name]
 
 
 @router.get('/v1/search/overview', tags=['search'], response_model=SearchOverviewResponse)
@@ -90,16 +91,16 @@ async def get_search_overview(uid: str = Depends(auth.get_current_user_uid)) -> 
         count('memories', memories_db.count_default_visible_memories),
         count('people', users_db.count_people),
         count('places', conversations_db.count_conversations_with_geolocation),
-        *(count('folder', conversations_db.get_conversations_count, folder_id=str(f['id'])) for f in folders),
+        *(count('folder', conversations_db.get_conversations_count, folder_id=str(f.id)) for f in folders),
     )
     return SearchOverviewResponse(
         starred=starred,
         folders=[
             SearchOverviewFolder(
-                id=str(folder['id']),
-                name=str(folder['name']),
-                icon=str(folder.get('icon') or 'folder'),
-                color=str(folder.get('color') or '#6B7280'),
+                id=str(folder.id),
+                name=str(folder.name),
+                icon=str(folder.icon or 'folder'),
+                color=str(folder.color or '#6B7280'),
                 count=folder_count,
             )
             for folder, folder_count in zip(folders, per_folder)

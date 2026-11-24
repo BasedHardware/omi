@@ -14,6 +14,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 while IFS= read -r var; do
   unset "$var"
 done < <(git rev-parse --local-env-vars)
+unset GIT_NAMESPACE
 TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/omi-make-setup.XXXXXX")"
 trap 'rm -rf "$TMPDIR"' EXIT
 

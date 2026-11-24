@@ -366,6 +366,14 @@ class GPUWorker:
             item.loop.call_soon_threadsafe(_safe_set_exception, item.future, exc)
 
     def _load_model(self) -> None:
+        if language_gate.lid_only_enabled():
+            if os.getenv("PARAKEET_DEVICE", "cuda:0") != "cpu":
+                raise ValueError("PARAKEET_LID_ONLY requires PARAKEET_DEVICE=cpu")
+            # Fail readiness if Whisper cannot preload; never load ASR or embeddings.
+            self._language_id = language_gate.load("cpu")
+            if self._language_id is None:
+                raise ValueError("PARAKEET_LID_ONLY requires an enabled LID model")
+            return
         model_name = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
         device = os.getenv("PARAKEET_DEVICE", "cuda:0")
         do_compile = os.getenv("PARAKEET_TORCH_COMPILE", "false").lower() in ("true", "1", "yes")

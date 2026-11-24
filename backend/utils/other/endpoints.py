@@ -11,6 +11,8 @@ from firebase_admin import auth
 from firebase_admin.auth import CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError
 import logging
 
+from database.directory import router as directory_router
+from config import directory_routing
 from config.rollout_cohorts import load_rollout_cohorts
 import redis as redis_pkg
 
@@ -23,6 +25,7 @@ from utils.account_cutover.access import (
     cutover_enforcement_enabled,
     enforce_account_cutover_http_access,
     enforce_account_cutover_ws_access,
+    is_cutover_control_path,
 )
 from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
@@ -34,6 +37,13 @@ from utils.byok import (
 )
 from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
+from utils.other.raise_site import tag_raise_site
+from utils.other.request_deadline import (
+    RequestDeadlineExceeded,
+    await_within_request_deadline,
+    call_within_request_deadline,
+    request_deadline_exceeded,
+)
 from database.fsr_read_cache import request_read_scope
 
 logger = logging.getLogger(__name__)
@@ -44,12 +54,36 @@ WS_AUTH_CODE_ACCOUNT_DELETION = 4005
 WS_AUTH_CODE_ACCOUNT_CUTOVER = 4006
 
 
+def _resolve_request_plane_or_503(uid, *, request=None, signup_platform=None, signup_os=None) -> None:
+    if is_cutover_control_path(getattr(getattr(request, 'url', None), 'path', '')):
+        return
+    try:
+        if not directory_router.routing_active():
+            return
+        directory_router.resolve(uid, signup_platform=signup_platform, signup_os=signup_os)
+    except (directory_router.DirectoryRoutingUnavailable, ValueError) as exc:
+        raise tag_raise_site(
+            HTTPException(status_code=503, detail={'code': 'directory_routing_unavailable', 'retryable': True}),
+            'directory_routing_unavailable',
+        ) from exc
+
+
+def _resolve_request_plane_ws(uid: str) -> None:
+    try:
+        _resolve_request_plane_or_503(uid)
+    except HTTPException as exc:
+        raise WebSocketException(code=1013, reason='directory_routing_unavailable') from exc
+
+
 def _executor_saturated_http_exception(error: ExecutorSaturatedError) -> HTTPException:
     """Return the retryable HTTP response for bounded critical-work overload."""
-    return HTTPException(
-        status_code=503,
-        detail='Service temporarily unavailable. Try again shortly.',
-        headers={'Retry-After': '1'},
+    return tag_raise_site(
+        HTTPException(
+            status_code=503,
+            detail='Service temporarily unavailable. Try again shortly.',
+            headers={'Retry-After': '1'},
+        ),
+        'executor_saturated',
     )
 
 
@@ -75,9 +109,12 @@ def _account_deletion_status(uid: str) -> str | None:
             'Account-deletion auth fence unavailable error_type=%s',
             type(error).__name__,
         )
-        raise HTTPException(
-            status_code=503,
-            detail={'code': 'account_deletion_state_unavailable', 'retryable': True},
+        raise tag_raise_site(
+            HTTPException(
+                status_code=503,
+                detail={'code': 'account_deletion_state_unavailable', 'retryable': True},
+            ),
+            'account_deletion_state_unavailable',
         ) from error
 
 
@@ -231,6 +268,47 @@ def _recover_locked_content_if_request(uid: str, request: Request | None) -> Non
         recover_locked_content(uid)
 
 
+def _auth_deadline_exceeded_exception() -> HTTPException:
+    """The tagged retryable 503 for a spent auth budget."""
+    return tag_raise_site(
+        HTTPException(
+            status_code=503,
+            detail={'code': 'auth_deadline_exceeded', 'retryable': True},
+            headers={'Retry-After': '1'},
+        ),
+        'auth_deadline_exceeded',
+    )
+
+
+def _enforce_auth_deadline() -> None:
+    """Answer a retryable 503 once the request's auth budget is spent.
+
+    Only the from-segments route sets a budget (``utils.other.request_deadline``);
+    every other caller is a no-op. The check runs between auth steps, so a chain
+    of slow Firestore reads cannot hold the request past the client's own pool
+    deadline. The whole chain is also bounded by
+    ``call_within_request_deadline``, which abandons a single in-flight call that
+    outlives the budget.
+    """
+    if not request_deadline_exceeded():
+        return
+    raise _auth_deadline_exceeded_exception()
+
+
+def get_current_user_uid_readonly(
+    authorization: str = Header(None),
+    request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request
+    _read_scope: Any = Depends(request_read_scope),
+) -> str:
+    """Verify owner and security fences without device/platform/recovery writes."""
+    uid = get_current_user_uid_for_deletion_status(authorization=authorization, _read_scope=_read_scope)
+    enforce_account_deletion_http_access(uid)
+    _enforce_cutover_http_if_request(uid, request)
+    _resolve_request_plane_or_503(uid, request=request)
+    validate_byok_request(uid)
+    return uid
+
+
 def get_current_user_uid(
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
@@ -239,7 +317,32 @@ def get_current_user_uid(
     request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
     _read_scope: Any = Depends(request_read_scope),
 ) -> str:
-    """Authenticate, enforce account fences and BYOK, then optional registration/recovery."""
+    """Authenticate, enforce account fences and BYOK, then optional registration/recovery.
+
+    The whole chain runs inside the request deadline when the route sets one, so
+    a single stalled identity or Firestore call cannot hold the request past the
+    client's own pool deadline. Every other caller has no budget and runs inline.
+    """
+    try:
+        return call_within_request_deadline(
+            _resolve_current_user_uid,
+            authorization,
+            x_app_platform,
+            x_device_id_hash,
+            x_app_version,
+            request,
+        )
+    except RequestDeadlineExceeded as error:
+        raise _auth_deadline_exceeded_exception() from error
+
+
+def _resolve_current_user_uid(
+    authorization: str | None,
+    x_app_platform: str | None,
+    x_device_id_hash: str | None,
+    x_app_version: str | None,
+    request: Request | None,
+) -> str:
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header not found")
     elif len(str(authorization).split(' ')) != 2:
@@ -257,6 +360,8 @@ def get_current_user_uid(
         raise HTTPException(status_code=401, detail="Invalid authorization token")
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
+    _resolve_request_plane_or_503(uid, request=request, signup_platform=x_app_platform)
+    _enforce_auth_deadline()
 
     # Content-free telemetry and surface intent avoid customer-store
     # registration/recovery writes; security fences above and BYOK still apply.
@@ -264,10 +369,12 @@ def get_current_user_uid(
         validate_byok_request(uid)
         return uid
 
+    _enforce_auth_deadline()
     try:
         record_user_platform(uid, x_app_platform)
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_user_platform swallowed error for uid=%s: %s", uid, e)
+    _enforce_auth_deadline()
 
     try:
         device_ctx = resolve_client_device(
@@ -275,21 +382,30 @@ def get_current_user_uid(
             x_device_id_hash=x_device_id_hash,
             x_app_version=x_app_version,
         )
-        record_client_device(
-            uid,
-            client_device_id=device_ctx.client_device_id,
-            platform=device_ctx.platform,
-            app_version=device_ctx.app_version,
-        )
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)
+    else:
+        _enforce_auth_deadline()
+        try:
+            record_client_device(
+                uid,
+                client_device_id=device_ctx.client_device_id,
+                platform=device_ctx.platform,
+                app_version=device_ctx.app_version,
+            )
+        except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
+            logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)
+    _enforce_auth_deadline()
 
     # BYOK enrollment is cached; requests without BYOK headers do no work.
     validate_byok_request(uid)
+    _enforce_auth_deadline()
 
     _recover_locked_content_if_request(uid, request)
+    _enforce_auth_deadline()
 
     load_rollout_cohorts(uid)
+    _enforce_auth_deadline()
     return uid
 
 
@@ -324,6 +440,7 @@ def get_current_user_uid_no_byok_validation(
         raise HTTPException(status_code=401, detail="Invalid authorization token")
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
+    _resolve_request_plane_or_503(uid, request=request, signup_platform=x_app_platform)
 
     try:
         record_user_platform(uid, x_app_platform)
@@ -456,6 +573,9 @@ async def get_current_user_uid_ws_listen(
             headers=websocket.headers,
         )
 
+    if not directory_routing.routing_off():
+        await run_blocking(db_executor, _resolve_request_plane_ws, uid)
+
     # Extract BYOK headers from the WS upgrade request and validate.
     if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # websocket is None outside WS context
         validated_byok_keys, error = await run_critical_ws(
@@ -484,6 +604,8 @@ def get_current_user_uid_ws(
             path=websocket.url.path,
             headers=websocket.headers,
         )
+
+    _resolve_request_plane_ws(uid)
 
     # Fail-open on Redis errors to avoid reintroducing handshake crashes
     try:
@@ -556,6 +678,8 @@ async def get_current_user_uid_from_ws_message(
             path=websocket.url.path,
             headers=websocket.headers,
         )
+    if not directory_routing.routing_off():
+        await run_blocking(db_executor, _resolve_request_plane_ws, uid)
     return uid
 
 
@@ -638,7 +762,9 @@ def _enforce_rate_limit(key: str, policy_name: str, *, fail_closed: bool = False
     except redis_pkg.exceptions.RedisError as e:  # type: ignore[reportAttributeAccessIssue]  # redis pkg exposes exceptions at runtime
         logger.error(f"Rate limit Redis error policy={policy_name} key={key}: {e}")
         if fail_closed:
-            raise HTTPException(status_code=503, detail="Rate limiter unavailable")
+            raise tag_raise_site(
+                HTTPException(status_code=503, detail="Rate limiter unavailable"), 'rate_limiter_unavailable'
+            )
         return
 
     if not allowed:
@@ -702,9 +828,13 @@ def with_rate_limit(
 
     async def dependency(uid: str = Depends(auth_dependency)) -> str:
         try:
-            await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name, fail_closed=fail_closed)
+            await await_within_request_deadline(
+                lambda: run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name, fail_closed=fail_closed)
+            )
         except ExecutorSaturatedError as error:
             raise _executor_saturated_http_exception(error) from error
+        except RequestDeadlineExceeded as error:
+            raise _auth_deadline_exceeded_exception() from error
         return uid
 
     return dependency

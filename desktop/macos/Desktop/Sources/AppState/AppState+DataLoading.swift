@@ -197,11 +197,13 @@ extension AppState {
 
   func loadConversationDetail(
     _ conversation: ServerConversation,
+    polling: Bool = false,
     onCached: ((ServerConversation) -> Void)? = nil
   ) async -> ServerConversation {
     (try? await conversationRepository.detail(
       id: conversation.id,
       seed: conversation,
+      polling: polling,
       onCached: onCached
     )) ?? conversation
   }
@@ -225,13 +227,14 @@ extension AppState {
     conversationRepository.cancelSearch()
   }
 
-  func deleteConversation(_ conversationId: String) async -> Bool {
+  func deleteConversation(_ conversationId: String) async -> ConversationDeleteOutcome {
     do {
-      try await conversationRepository.delete(id: conversationId)
-      return true
+      let outcome = try await conversationRepository.delete(id: conversationId)
+      if outcome.succeeded { HomeFailurePlacementStore.shared.forget(conversationId) }
+      return outcome
     } catch {
       logError("Conversations: Failed to delete conversation", error: error)
-      return false
+      return .failed(message: UserFacingErrorPresentation.message(for: error, while: .conversationDeletion))
     }
   }
 

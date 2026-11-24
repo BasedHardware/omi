@@ -17,6 +17,8 @@ import types
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 os.environ.setdefault('ENCRYPTION_SECRET', 'test-secret-for-ci')
 
 # ---------------------------------------------------------------------------
@@ -98,6 +100,13 @@ if _db_pkg is not None:
             delattr(_db_pkg, _attribute)
 
 
+@pytest.fixture(autouse=True)
+def legacy_transition_fixture(monkeypatch):
+    # These stubbed references test transition guards only. The emulator suite
+    # exercises those guards with the atomic writer and actual SDK transactions.
+    monkeypatch.setenv('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'false')
+
+
 def _make_snapshot(data):
     """Create a minimal mock snapshot object."""
     snap = types.SimpleNamespace()
@@ -135,7 +144,7 @@ def _run_claim(data, stale_after=timedelta(minutes=10), running_stale_after=user
         def get(self, transaction=None):
             return snapshot
 
-    result = raw_fn(txn, FakeDocRef(), stale_after, running_stale_after)
+    result = raw_fn(txn, FakeDocRef(), stale_after, running_stale_after, operation_id='claim')
     return result, txn._updates
 
 
@@ -144,7 +153,7 @@ def _run_task_claim(data):
     snapshot = _make_snapshot(data)
     doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
     raw_fn = getattr(users_db._claim_deletion_wipe_task_txn, 'to_wrap', users_db._claim_deletion_wipe_task_txn)
-    return raw_fn(txn, doc_ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER), txn._updates
+    return raw_fn(txn, doc_ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER, operation_id='task-claim'), txn._updates
 
 
 def _run_restore(data):
@@ -156,7 +165,7 @@ def _run_restore(data):
         'to_wrap',
         deletion_grace_db._restore_user_deletion_txn,
     )
-    return raw_fn(txn, doc_ref), txn._updates
+    return raw_fn(txn, doc_ref, operation_id='restore'), txn._updates
 
 
 def _run_mark_grace(data, due_at):
@@ -182,7 +191,7 @@ def _run_mark_billing_failed(data):
         def get(self, transaction=None):
             return snapshot
 
-    result = raw_fn(txn, FakeDocRef(), 'uid1', 'sub_123', 'stripe down')
+    result = raw_fn(txn, FakeDocRef(), 'uid1', 'sub_123', 'stripe down', operation_id='billing')
     return result, txn._sets
 
 
@@ -196,7 +205,7 @@ def _run_mark_completed(data):
         def get(self, transaction=None):
             return snapshot
 
-    result = raw_fn(txn, FakeDocRef())
+    result = raw_fn(txn, FakeDocRef(), operation_id='complete')
     return result, txn._sets
 
 
@@ -216,6 +225,7 @@ def _run_record_late_cleanup(data, expected_instance_id='707'):
         'omi-agent-late',
         'us-central1-a',
         expected_instance_id,
+        operation_id='late-cleanup',
     )
     return result, txn._sets
 
@@ -818,7 +828,7 @@ def test_task_delivery_can_retry_transient_billing_failure():
     snapshot = _make_snapshot({'uid': 'uid1', 'wipe_status': 'billing_failed', 'billing_error': 'Stripe timeout'})
     doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
     raw_fn = getattr(users_db._claim_deletion_wipe_task_txn, 'to_wrap', users_db._claim_deletion_wipe_task_txn)
-    assert raw_fn(txn, doc_ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER) == 'claimed'
+    assert raw_fn(txn, doc_ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER, operation_id='task-claim') == 'claimed'
     assert txn._updates[0][1]['wipe_status'] == 'retrying'
 
 
@@ -841,3 +851,160 @@ def test_heartbeat_keeps_running_wipe_unclaimable_without_resurrecting_other_sta
             assert _run_claim(data)[0] is None
         else:
             assert txn._updates == []
+
+
+# ---------------------------------------------------------------------------
+# R14 (David, 2026-11-08): legacy markers with no wipe_status stay quarantined
+# ---------------------------------------------------------------------------
+
+_LEGACY_MARKER = {
+    'uid': 'legacy1',
+    'reason': 'synthetic',
+    'reason_details': 'synthetic',
+    'timestamp': datetime(2026, 6, 1, tzinfo=timezone.utc),
+}
+
+
+class _StatusEqualityCollection:
+    """Serve every marker by real equality on its stored wipe_status."""
+
+    def __init__(self, docs):
+        self._docs, self.queried = docs, []
+
+    def where(self, field, op, value):
+        assert (field, op) == ('wipe_status', '==')
+        self.queried.append(value)
+        matched = _StatusEqualityCollection([d for d in self._docs if d.get('wipe_status') == value])
+        matched.queried = self.queried
+        return matched
+
+    def limit(self, n):
+        return self
+
+    def stream(self):
+        for data in self._docs:
+            yield _FakeDocSnapshot(data)
+
+
+def test_r14_legacy_marker_without_status_is_never_claimed_or_redriven():
+    # Neither claim path may write or enqueue a marker with no wipe_status,
+    # and the reconciler's equality-only queries can never return one.
+    result, updates = _run_claim(dict(_LEGACY_MARKER))
+    assert result is None and updates == []
+    result, updates = _run_task_claim(dict(_LEGACY_MARKER))
+    assert result == 'not_actionable' and updates == []
+
+    stale = datetime.now(timezone.utc) - timedelta(days=1)
+    collection = _StatusEqualityCollection(
+        [dict(_LEGACY_MARKER), {'uid': 'failed1', 'wipe_status': 'failed', 'wipe_failed_at': stale}]
+    )
+    with patch.object(users_db, 'account_deletion_collection', lambda **_kwargs: collection):
+        uids = [row['uid'] for row in users_db.get_pending_deletion_wipes(limit=100)]
+    assert 'legacy1' not in uids and collection.queried
+    assert None not in collection.queried
+
+
+def test_stale_task_cannot_claim_a_replacement_deletion_generation():
+    txn = _make_txn()
+    snapshot = _make_snapshot({'uid': 'uid1', 'wipe_status': 'pending', 'wipe_job_id': 'replacement'})
+    doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+    raw_fn = getattr(users_db._claim_deletion_wipe_task_txn, 'to_wrap', users_db._claim_deletion_wipe_task_txn)
+    assert (
+        raw_fn(txn, doc_ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER, operation_id='old', expected_job_id='original')
+        == 'not_actionable'
+    )
+    assert txn._updates == []
+    assert txn._sets == []
+
+
+def test_legacy_task_defers_if_wipe_arms_after_job_lookup():
+    result, updates = _run_task_claim(
+        {
+            'uid': 'uid1',
+            'wipe_status': 'failed',
+            'go_queue_erase_armed_at': datetime.now(timezone.utc),
+        }
+    )
+    assert result == 'erase_required'
+    assert updates == []
+
+
+def test_legacy_mark_running_uses_the_original_authority_merge():
+    from unittest.mock import Mock
+
+    client, document = Mock(), Mock()
+    with (
+        patch.object(users_db, 'account_deletion_firestore_client', return_value=client),
+        patch.object(users_db, 'account_deletion_document', return_value=document),
+        patch.object(users_db, 'merge_account_authority') as merge,
+    ):
+        assert users_db.mark_user_deletion_wipe_running('uid1') is None
+
+    merge.assert_called_once()
+    assert merge.call_args.args[:2] == (client, document)
+    assert set(merge.call_args.args[2]) == {'wipe_status', 'wipe_running_at'}
+    assert merge.call_args.args[2]['wipe_status'] == 'running'
+    client.transaction.assert_not_called()
+
+
+@pytest.mark.parametrize(('age', 'expected'), [(5, 'claimed'), (3, 'running')])
+def test_protected_task_reclaims_only_after_four_minutes(age, expected):
+    txn = _make_txn()
+    snapshot = _make_snapshot(
+        {
+            'uid': 'uid1',
+            'wipe_status': 'running',
+            'wipe_job_id': 'job',
+            'wipe_running_at': datetime.now(timezone.utc) - timedelta(minutes=age),
+            'go_queue_erase_armed_at': datetime.now(timezone.utc) - timedelta(minutes=age),
+        }
+    )
+    ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+    raw_fn = users_db._claim_deletion_wipe_task_txn.to_wrap
+    assert (
+        raw_fn(txn, ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER, operation_id='redelivery', expected_job_id='job')
+        == expected
+    )
+    assert bool(txn._sets or txn._updates) == (expected == 'claimed')
+
+
+def test_unprotected_wipe_heartbeat_refuses_armed_generation_without_writing():
+    txn = _make_txn()
+    snapshot = _make_snapshot(
+        {
+            'wipe_status': 'running',
+            'go_queue_erase_armed_at': datetime.now(timezone.utc),
+        }
+    )
+    ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+    assert users_db._heartbeat_user_deletion_wipe_txn.to_wrap(txn, ref) is False
+    assert not (txn._sets or txn._updates)
+
+
+def test_restore_and_a_new_intent_start_the_failed_admission_record_from_zero():
+    # A first deletion failed its admission cancel 5 times and went overdue, then finished and was restored.
+    marker = {
+        'uid': 'uid1',
+        'wipe_status': 'pending_deletion',
+        'wipe_due_at': datetime.now(timezone.utc) + timedelta(days=1),
+        'grace_actions_complete': True,
+        'grace_actions_failed_attempts': 5,
+        'grace_actions_last_failed_at': datetime.now(timezone.utc),
+        'grace_actions_overdue': True,
+    }
+    result, updates = _run_restore(marker)
+    assert result == 'restored'
+    marker = {**marker, **updates[0][1]}
+    assert marker['grace_actions_failed_attempts'] == 0 and marker['grace_actions_overdue'] is False
+    assert marker['grace_actions_last_failed_at'] is None
+
+    # The account is deleted again: the merged intent write resets the record even if a restore never ran.
+    stale = {**marker, 'grace_actions_failed_attempts': 5, 'grace_actions_overdue': True}
+    result, sets, _ = _run_mark_grace(stale, datetime.now(timezone.utc) + timedelta(days=14))
+    assert result['mode'] == 'created'
+    fields, kwargs = sets[0][1], sets[0][2]
+    assert kwargs.get('merge') is True
+    merged = {**stale, **fields}
+    assert merged['grace_actions_failed_attempts'] == 0
+    assert merged['grace_actions_overdue'] is False
+    assert merged['grace_actions_last_failed_at'] is None

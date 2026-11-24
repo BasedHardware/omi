@@ -34,6 +34,7 @@ class GeneratedTranscriptSegment {
   final String? personId;
   final String? speaker;
   final int? speakerId;
+  final String? speakerIdScope;
   final String? speakerLabelSource;
   final bool speechProfileProcessed;
   final double start;
@@ -49,6 +50,7 @@ class GeneratedTranscriptSegment {
     this.personId,
     this.speaker = "SPEAKER_00",
     this.speakerId,
+    this.speakerIdScope,
     this.speakerLabelSource,
     this.speechProfileProcessed = true,
     required this.start,
@@ -66,6 +68,7 @@ class GeneratedTranscriptSegment {
       personId: _readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString, requiredField: false, nullable: true),
       speaker: _readFieldValue<String>(_readField(json, const ["speaker"]), "speaker", _readString, requiredField: false, nullable: true, defaultValue: "SPEAKER_00"),
       speakerId: _readFieldValue<int>(_readField(json, const ["speaker_id"]), "speaker_id", _readInt, requiredField: false, nullable: true),
+      speakerIdScope: _readFieldValue<String>(_readField(json, const ["speaker_id_scope"]), "speaker_id_scope", _readString, requiredField: false, nullable: true),
       speakerLabelSource: _readFieldValue<String>(_readField(json, const ["speaker_label_source"]), "speaker_label_source", _readString, requiredField: false, nullable: true),
       speechProfileProcessed: _required(_readFieldValue<bool>(_readField(json, const ["speech_profile_processed"]), "speech_profile_processed", _readBool, requiredField: false, nullable: false, defaultValue: true), "speech_profile_processed"),
       start: _required(_readFieldValue<double>(_readField(json, const ["start"]), "start", _readDouble, requiredField: true, nullable: false), "start"),
@@ -84,6 +87,7 @@ class GeneratedTranscriptSegment {
       'person_id': personId,
       'speaker': speaker,
       'speaker_id': speakerId,
+      'speaker_id_scope': speakerIdScope,
       'speaker_label_source': speakerLabelSource,
       'speech_profile_processed': speechProfileProcessed,
       'start': start,
@@ -106,10 +110,13 @@ class GeneratedActionItem {
   final String? conversationId;
   final DateTime? createdAt;
   final String description;
+  final GeneratedTaskDue? due;
   final DateTime? dueAt;
   final String? dueCertainty;
   final String? ownerName;
   final double? ownershipConfidence;
+  final GeneratedReminderIntent? reminderIntent;
+  final GeneratedReminderOrigin? reminderOrigin;
   final List<String>? sourceSegmentIds;
   final String? targetTaskId;
   final DateTime? updatedAt;
@@ -126,10 +133,13 @@ class GeneratedActionItem {
     this.conversationId,
     this.createdAt,
     required this.description,
+    this.due,
     this.dueAt,
     this.dueCertainty,
     this.ownerName,
     this.ownershipConfidence,
+    this.reminderIntent,
+    this.reminderOrigin,
     this.sourceSegmentIds,
     this.targetTaskId,
     this.updatedAt,
@@ -148,10 +158,13 @@ class GeneratedActionItem {
       conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
       createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      due: _readFieldValue<GeneratedTaskDue>(_readField(json, const ["due"]), "due", (value) => _readObject(value, GeneratedTaskDue.fromJson), requiredField: false, nullable: true),
       dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
       dueCertainty: _readFieldValue<String>(_readField(json, const ["due_certainty"]), "due_certainty", _readString, requiredField: false, nullable: true),
       ownerName: _readFieldValue<String>(_readField(json, const ["owner_name"]), "owner_name", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: false, nullable: true),
+      reminderIntent: _readFieldValue<GeneratedReminderIntent>(_readField(json, const ["reminder_intent"]), "reminder_intent", (value) => _readObject(value, GeneratedReminderIntent.fromJson), requiredField: false, nullable: true),
+      reminderOrigin: _readFieldValue<GeneratedReminderOrigin>(_readField(json, const ["reminder_origin"]), "reminder_origin", (value) => _readObject(value, GeneratedReminderOrigin.fromJson), requiredField: false, nullable: true),
       sourceSegmentIds: _readFieldValue<List<String>>(_readField(json, const ["source_segment_ids"]), "source_segment_ids", _readStringList, requiredField: false, nullable: true),
       targetTaskId: _readFieldValue<String>(_readField(json, const ["target_task_id"]), "target_task_id", _readString, requiredField: false, nullable: true),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
@@ -171,13 +184,124 @@ class GeneratedActionItem {
       'conversation_id': conversationId,
       'created_at': createdAt?.toUtc().toIso8601String(),
       'description': description,
+      'due': due?.toJson(),
       'due_at': dueAt?.toUtc().toIso8601String(),
       'due_certainty': dueCertainty,
       'owner_name': ownerName,
       'ownership_confidence': ownershipConfidence,
+      'reminder_intent': reminderIntent?.toJson(),
+      'reminder_origin': reminderOrigin?.toJson(),
       'source_segment_ids': sourceSegmentIds,
       'target_task_id': targetTaskId,
       'updated_at': updatedAt?.toUtc().toIso8601String(),
+    };
+  }
+}
+
+class GeneratedTaskDue {
+  final String? date;
+  final String? expression;
+  final DateTime? instant;
+  final String kind;
+  final String? reason;
+  final String? timezone;
+  final String? yearBasis;
+
+  const GeneratedTaskDue({
+    this.date,
+    this.expression,
+    this.instant,
+    required this.kind,
+    this.reason,
+    this.timezone,
+    this.yearBasis,
+  });
+
+  factory GeneratedTaskDue.fromJson(Map<String, dynamic> json) {
+    return GeneratedTaskDue(
+      date: _readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: false, nullable: true),
+      expression: _readFieldValue<String>(_readField(json, const ["expression"]), "expression", _readString, requiredField: false, nullable: true),
+      instant: _readFieldValue<DateTime>(_readField(json, const ["instant"]), "instant", _readDateTime, requiredField: false, nullable: true),
+      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+      reason: _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: false, nullable: true),
+      timezone: _readFieldValue<String>(_readField(json, const ["timezone"]), "timezone", _readString, requiredField: false, nullable: true),
+      yearBasis: _readFieldValue<String>(_readField(json, const ["year_basis"]), "year_basis", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'date': date,
+      'expression': expression,
+      'instant': instant?.toUtc().toIso8601String(),
+      'kind': kind,
+      'reason': reason,
+      'timezone': timezone,
+      'year_basis': yearBasis,
+    };
+  }
+}
+
+class GeneratedReminderIntent {
+  final String? dueExpression;
+  final String kind;
+
+  const GeneratedReminderIntent({
+    this.dueExpression,
+    required this.kind,
+  });
+
+  factory GeneratedReminderIntent.fromJson(Map<String, dynamic> json) {
+    return GeneratedReminderIntent(
+      dueExpression: _readFieldValue<String>(_readField(json, const ["due_expression"]), "due_expression", _readString, requiredField: false, nullable: true),
+      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'due_expression': dueExpression,
+      'kind': kind,
+    };
+  }
+}
+
+class GeneratedReminderOrigin {
+  final DateTime extractedAt;
+  final String inputRevision;
+  final String policyRevision;
+  final String? reviewReason;
+  final DateTime? sourceAt;
+  final String speakerEvidenceRevision;
+
+  const GeneratedReminderOrigin({
+    required this.extractedAt,
+    required this.inputRevision,
+    this.policyRevision = "explicit-reminders-v1",
+    this.reviewReason,
+    this.sourceAt,
+    required this.speakerEvidenceRevision,
+  });
+
+  factory GeneratedReminderOrigin.fromJson(Map<String, dynamic> json) {
+    return GeneratedReminderOrigin(
+      extractedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["extracted_at"]), "extracted_at", _readDateTime, requiredField: true, nullable: false), "extracted_at"),
+      inputRevision: _required(_readFieldValue<String>(_readField(json, const ["input_revision"]), "input_revision", _readString, requiredField: true, nullable: false), "input_revision"),
+      policyRevision: _required(_readFieldValue<String>(_readField(json, const ["policy_revision"]), "policy_revision", _readString, requiredField: false, nullable: false, defaultValue: "explicit-reminders-v1"), "policy_revision"),
+      reviewReason: _readFieldValue<String>(_readField(json, const ["review_reason"]), "review_reason", _readString, requiredField: false, nullable: true),
+      sourceAt: _readFieldValue<DateTime>(_readField(json, const ["source_at"]), "source_at", _readDateTime, requiredField: false, nullable: true),
+      speakerEvidenceRevision: _required(_readFieldValue<String>(_readField(json, const ["speaker_evidence_revision"]), "speaker_evidence_revision", _readString, requiredField: true, nullable: false), "speaker_evidence_revision"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'extracted_at': extractedAt.toUtc().toIso8601String(),
+      'input_revision': inputRevision,
+      'policy_revision': policyRevision,
+      'review_reason': reviewReason,
+      'source_at': sourceAt?.toUtc().toIso8601String(),
+      'speaker_evidence_revision': speakerEvidenceRevision,
     };
   }
 }
@@ -299,6 +423,7 @@ class GeneratedSection {
 }
 
 class GeneratedParticipant {
+  final String? alias;
   final String? email;
   final String? evidence;
   final bool isAiAgent;
@@ -306,8 +431,10 @@ class GeneratedParticipant {
   final String? organization;
   final String? role;
   final String source;
+  final List<int>? speakerBindings;
 
   const GeneratedParticipant({
+    this.alias,
     this.email,
     this.evidence,
     this.isAiAgent = false,
@@ -315,10 +442,12 @@ class GeneratedParticipant {
     this.organization,
     this.role,
     required this.source,
+    this.speakerBindings,
   });
 
   factory GeneratedParticipant.fromJson(Map<String, dynamic> json) {
     return GeneratedParticipant(
+      alias: _readFieldValue<String>(_readField(json, const ["alias"]), "alias", _readString, requiredField: false, nullable: true),
       email: _readFieldValue<String>(_readField(json, const ["email"]), "email", _readString, requiredField: false, nullable: true),
       evidence: _readFieldValue<String>(_readField(json, const ["evidence"]), "evidence", _readString, requiredField: false, nullable: true),
       isAiAgent: _required(_readFieldValue<bool>(_readField(json, const ["is_ai_agent"]), "is_ai_agent", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_ai_agent"),
@@ -326,11 +455,13 @@ class GeneratedParticipant {
       organization: _readFieldValue<String>(_readField(json, const ["organization"]), "organization", _readString, requiredField: false, nullable: true),
       role: _readFieldValue<String>(_readField(json, const ["role"]), "role", _readString, requiredField: false, nullable: true),
       source: _required(_readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: true, nullable: false), "source"),
+      speakerBindings: _readFieldValue<List<int>>(_readField(json, const ["speaker_bindings"]), "speaker_bindings", _readIntList, requiredField: false, nullable: true),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'alias': alias,
       'email': email,
       'evidence': evidence,
       'is_ai_agent': isAiAgent,
@@ -338,6 +469,7 @@ class GeneratedParticipant {
       'organization': organization,
       'role': role,
       'source': source,
+      'speaker_bindings': speakerBindings,
     };
   }
 }
@@ -447,6 +579,7 @@ class GeneratedStructured {
   final String category;
   final String emoji;
   final List<GeneratedEvent>? events;
+  final String gist;
   final List<GeneratedInsight>? insights;
   final String? meetingType;
   final List<GeneratedNoteClaim>? noteClaims;
@@ -461,6 +594,7 @@ class GeneratedStructured {
     this.category = "other",
     this.emoji = "\ud83d\udcac",
     this.events,
+    this.gist = "",
     this.insights,
     this.meetingType,
     this.noteClaims,
@@ -477,6 +611,7 @@ class GeneratedStructured {
       category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: false, defaultValue: "other"), "category"),
       emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: "\ud83d\udcac"), "emoji"),
       events: _readFieldValue<List<GeneratedEvent>>(_readField(json, const ["events"]), "events", (value) => _readObjectList(value, GeneratedEvent.fromJson), requiredField: false, nullable: true),
+      gist: _required(_readFieldValue<String>(_readField(json, const ["gist"]), "gist", _readString, requiredField: false, nullable: false, defaultValue: ""), "gist"),
       insights: _readFieldValue<List<GeneratedInsight>>(_readField(json, const ["insights"]), "insights", (value) => _readObjectList(value, GeneratedInsight.fromJson), requiredField: false, nullable: true),
       meetingType: _readFieldValue<String>(_readField(json, const ["meeting_type"]), "meeting_type", _readString, requiredField: false, nullable: true),
       noteClaims: _readFieldValue<List<GeneratedNoteClaim>>(_readField(json, const ["note_claims"]), "note_claims", (value) => _readObjectList(value, GeneratedNoteClaim.fromJson), requiredField: false, nullable: true),
@@ -494,6 +629,7 @@ class GeneratedStructured {
       'category': category,
       'emoji': emoji,
       'events': events?.map((value) => value.toJson()).toList(),
+      'gist': gist,
       'insights': insights?.map((value) => value.toJson()).toList(),
       'meeting_type': meetingType,
       'note_claims': noteClaims?.map((value) => value.toJson()).toList(),
@@ -638,6 +774,8 @@ class GeneratedAudioFile {
   final String id;
   final double? playbackStart;
   final String provider;
+  final String? recordingFileId;
+  final String? recordingId;
   final String? sourceFingerprint;
   final DateTime? startedAt;
   final String uid;
@@ -650,6 +788,8 @@ class GeneratedAudioFile {
     required this.id,
     this.playbackStart,
     this.provider = "gcp",
+    this.recordingFileId,
+    this.recordingId,
     this.sourceFingerprint,
     this.startedAt,
     required this.uid,
@@ -664,6 +804,8 @@ class GeneratedAudioFile {
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       playbackStart: _readFieldValue<double>(_readField(json, const ["playback_start"]), "playback_start", _readDouble, requiredField: false, nullable: true),
       provider: _required(_readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString, requiredField: false, nullable: false, defaultValue: "gcp"), "provider"),
+      recordingFileId: _readFieldValue<String>(_readField(json, const ["recording_file_id"]), "recording_file_id", _readString, requiredField: false, nullable: true),
+      recordingId: _readFieldValue<String>(_readField(json, const ["recording_id"]), "recording_id", _readString, requiredField: false, nullable: true),
       sourceFingerprint: _readFieldValue<String>(_readField(json, const ["source_fingerprint"]), "source_fingerprint", _readString, requiredField: false, nullable: true),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: false, nullable: true),
       uid: _required(_readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: true, nullable: false), "uid"),
@@ -679,6 +821,8 @@ class GeneratedAudioFile {
       'id': id,
       'playback_start': playbackStart,
       'provider': provider,
+      'recording_file_id': recordingFileId,
+      'recording_id': recordingId,
       'source_fingerprint': sourceFingerprint,
       'started_at': startedAt?.toUtc().toIso8601String(),
       'uid': uid,
@@ -970,6 +1114,8 @@ class GeneratedConversation {
   final String? callPlatform;
   final String? captureCoverage;
   final GeneratedCaptureGroup? captureGroup;
+  final String? captureTimeTrust;
+  final String? captureTimezone;
   final String? clientDeviceId;
   final String? clientPlatform;
   final GeneratedClientProcessing? clientProcessing;
@@ -981,16 +1127,22 @@ class GeneratedConversation {
   final bool deferred;
   final bool discarded;
   final String? episodeId;
+  final List<int>? excludedSpeakers;
   final Map<String, dynamic>? externalData;
   final DateTime? finishedAt;
   final String? folderId;
   final GeneratedGeolocation? geolocation;
   final String? geolocationScope;
+  final bool? homeHidden;
+  final String? homeHiddenReason;
   final String id;
   final bool imported;
   final bool? isCall;
   final bool isLocked;
+  final String? kind;
   final String? language;
+  final GeneratedLiveSummaryPreview? liveSummary;
+  final bool? manualEnd;
   final double? meetingDedupSpeechS;
   final double? meetingDurationS;
   final bool meetingTreatmentEligible;
@@ -1003,9 +1155,12 @@ class GeneratedConversation {
   final bool processingDeferred;
   final String? processingMemoryId;
   final String? processingState;
+  final String? processingTier;
   final GeneratedRecordAudioPartial? recordAudioPartial;
   final DateTime? recordedEnd;
   final DateTime? recordedStart;
+  final bool? recording;
+  final List<GeneratedRecordingPiece>? recordingPieces;
   final bool screenshotSharingEnabled;
   final String? source;
   final GeneratedConversationSpeakers? speakerResolution;
@@ -1014,9 +1169,13 @@ class GeneratedConversation {
   final String? status;
   final GeneratedStructured structured;
   final List<String> suggestedSummarizationApps;
+  final DateTime? summaryCoversThrough;
+  final bool? summaryOnOpen;
   final bool? summaryRetryable;
   final int? syncContentRevision;
   final String? syncRelevance;
+  final String? tileState;
+  final bool? titleLocked;
   final List<GeneratedTranscriptSegment> transcriptSegments;
   final bool? transcriptSegmentsCompressed;
   final DateTime? updatedAt;
@@ -1037,6 +1196,8 @@ class GeneratedConversation {
     this.callPlatform,
     this.captureCoverage,
     this.captureGroup,
+    this.captureTimeTrust,
+    this.captureTimezone,
     this.clientDeviceId,
     this.clientPlatform,
     this.clientProcessing,
@@ -1048,16 +1209,22 @@ class GeneratedConversation {
     this.deferred = false,
     this.discarded = false,
     this.episodeId,
+    this.excludedSpeakers,
     this.externalData,
     required this.finishedAt,
     this.folderId,
     this.geolocation,
     this.geolocationScope,
+    this.homeHidden,
+    this.homeHiddenReason,
     required this.id,
     this.imported = false,
     this.isCall,
     this.isLocked = false,
+    this.kind,
     this.language,
+    this.liveSummary,
+    this.manualEnd,
     this.meetingDedupSpeechS,
     this.meetingDurationS,
     this.meetingTreatmentEligible = false,
@@ -1070,9 +1237,12 @@ class GeneratedConversation {
     this.processingDeferred = false,
     this.processingMemoryId,
     this.processingState,
+    this.processingTier,
     this.recordAudioPartial,
     this.recordedEnd,
     this.recordedStart,
+    this.recording,
+    this.recordingPieces,
     this.screenshotSharingEnabled = true,
     this.source = "omi",
     this.speakerResolution,
@@ -1081,9 +1251,13 @@ class GeneratedConversation {
     this.status = "completed",
     required this.structured,
     this.suggestedSummarizationApps = const [],
+    this.summaryCoversThrough,
+    this.summaryOnOpen,
     this.summaryRetryable,
     this.syncContentRevision,
     this.syncRelevance,
+    this.tileState,
+    this.titleLocked,
     this.transcriptSegments = const [],
     this.transcriptSegmentsCompressed = false,
     this.updatedAt,
@@ -1106,6 +1280,8 @@ class GeneratedConversation {
       callPlatform: _readFieldValue<String>(_readField(json, const ["call_platform"]), "call_platform", _readString, requiredField: false, nullable: true),
       captureCoverage: _readFieldValue<String>(_readField(json, const ["capture_coverage"]), "capture_coverage", _readString, requiredField: false, nullable: true),
       captureGroup: _readFieldValue<GeneratedCaptureGroup>(_readField(json, const ["capture_group"]), "capture_group", (value) => _readObject(value, GeneratedCaptureGroup.fromJson), requiredField: false, nullable: true),
+      captureTimeTrust: _readFieldValue<String>(_readField(json, const ["capture_time_trust"]), "capture_time_trust", _readString, requiredField: false, nullable: true),
+      captureTimezone: _readFieldValue<String>(_readField(json, const ["capture_timezone"]), "capture_timezone", _readString, requiredField: false, nullable: true),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
       clientProcessing: _readFieldValue<GeneratedClientProcessing>(_readField(json, const ["client_processing"]), "client_processing", (value) => _readObject(value, GeneratedClientProcessing.fromJson), requiredField: false, nullable: true),
@@ -1117,16 +1293,22 @@ class GeneratedConversation {
       deferred: _required(_readFieldValue<bool>(_readField(json, const ["deferred"]), "deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "deferred"),
       discarded: _required(_readFieldValue<bool>(_readField(json, const ["discarded"]), "discarded", _readBool, requiredField: false, nullable: false, defaultValue: false), "discarded"),
       episodeId: _readFieldValue<String>(_readField(json, const ["episode_id"]), "episode_id", _readString, requiredField: false, nullable: true),
+      excludedSpeakers: _readFieldValue<List<int>>(_readField(json, const ["excluded_speakers"]), "excluded_speakers", _readIntList, requiredField: false, nullable: true),
       externalData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["external_data"]), "external_data", _readMap, requiredField: false, nullable: true),
       finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime, requiredField: true, nullable: true),
       folderId: _readFieldValue<String>(_readField(json, const ["folder_id"]), "folder_id", _readString, requiredField: false, nullable: true),
       geolocation: _readFieldValue<GeneratedGeolocation>(_readField(json, const ["geolocation"]), "geolocation", (value) => _readObject(value, GeneratedGeolocation.fromJson), requiredField: false, nullable: true),
       geolocationScope: _readFieldValue<String>(_readField(json, const ["geolocation_scope"]), "geolocation_scope", _readString, requiredField: false, nullable: true),
+      homeHidden: _readFieldValue<bool>(_readField(json, const ["home_hidden"]), "home_hidden", _readBool, requiredField: false, nullable: true),
+      homeHiddenReason: _readFieldValue<String>(_readField(json, const ["home_hidden_reason"]), "home_hidden_reason", _readString, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       imported: _required(_readFieldValue<bool>(_readField(json, const ["imported"]), "imported", _readBool, requiredField: false, nullable: false, defaultValue: false), "imported"),
       isCall: _readFieldValue<bool>(_readField(json, const ["is_call"]), "is_call", _readBool, requiredField: false, nullable: true),
       isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
+      kind: _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: false, nullable: true),
       language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
+      liveSummary: _readFieldValue<GeneratedLiveSummaryPreview>(_readField(json, const ["live_summary"]), "live_summary", (value) => _readObject(value, GeneratedLiveSummaryPreview.fromJson), requiredField: false, nullable: true),
+      manualEnd: _readFieldValue<bool>(_readField(json, const ["manual_end"]), "manual_end", _readBool, requiredField: false, nullable: true),
       meetingDedupSpeechS: _readFieldValue<double>(_readField(json, const ["meeting_dedup_speech_s"]), "meeting_dedup_speech_s", _readDouble, requiredField: false, nullable: true),
       meetingDurationS: _readFieldValue<double>(_readField(json, const ["meeting_duration_s"]), "meeting_duration_s", _readDouble, requiredField: false, nullable: true),
       meetingTreatmentEligible: _required(_readFieldValue<bool>(_readField(json, const ["meeting_treatment_eligible"]), "meeting_treatment_eligible", _readBool, requiredField: false, nullable: false, defaultValue: false), "meeting_treatment_eligible"),
@@ -1139,9 +1321,12 @@ class GeneratedConversation {
       processingDeferred: _required(_readFieldValue<bool>(_readField(json, const ["processing_deferred"]), "processing_deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "processing_deferred"),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
+      processingTier: _readFieldValue<String>(_readField(json, const ["processing_tier"]), "processing_tier", _readString, requiredField: false, nullable: true),
       recordAudioPartial: _readFieldValue<GeneratedRecordAudioPartial>(_readField(json, const ["record_audio_partial"]), "record_audio_partial", (value) => _readObject(value, GeneratedRecordAudioPartial.fromJson), requiredField: false, nullable: true),
       recordedEnd: _readFieldValue<DateTime>(_readField(json, const ["recorded_end"]), "recorded_end", _readDateTime, requiredField: false, nullable: true),
       recordedStart: _readFieldValue<DateTime>(_readField(json, const ["recorded_start"]), "recorded_start", _readDateTime, requiredField: false, nullable: true),
+      recording: _readFieldValue<bool>(_readField(json, const ["recording"]), "recording", _readBool, requiredField: false, nullable: true),
+      recordingPieces: _readFieldValue<List<GeneratedRecordingPiece>>(_readField(json, const ["recording_pieces"]), "recording_pieces", (value) => _readObjectList(value, GeneratedRecordingPiece.fromJson), requiredField: false, nullable: true),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
       speakerResolution: _readFieldValue<GeneratedConversationSpeakers>(_readField(json, const ["speaker_resolution"]), "speaker_resolution", (value) => _readObject(value, GeneratedConversationSpeakers.fromJson), requiredField: false, nullable: true),
@@ -1150,9 +1335,13 @@ class GeneratedConversation {
       status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: true, defaultValue: "completed"),
       structured: _required(_readFieldValue<GeneratedStructured>(_readField(json, const ["structured"]), "structured", (value) => _readObject(value, GeneratedStructured.fromJson), requiredField: true, nullable: false), "structured"),
       suggestedSummarizationApps: _required(_readFieldValue<List<String>>(_readField(json, const ["suggested_summarization_apps"]), "suggested_summarization_apps", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "suggested_summarization_apps"),
+      summaryCoversThrough: _readFieldValue<DateTime>(_readField(json, const ["summary_covers_through"]), "summary_covers_through", _readDateTime, requiredField: false, nullable: true),
+      summaryOnOpen: _readFieldValue<bool>(_readField(json, const ["summary_on_open"]), "summary_on_open", _readBool, requiredField: false, nullable: true),
       summaryRetryable: _readFieldValue<bool>(_readField(json, const ["summary_retryable"]), "summary_retryable", _readBool, requiredField: false, nullable: true),
       syncContentRevision: _readFieldValue<int>(_readField(json, const ["sync_content_revision"]), "sync_content_revision", _readInt, requiredField: false, nullable: true),
       syncRelevance: _readFieldValue<String>(_readField(json, const ["sync_relevance"]), "sync_relevance", _readString, requiredField: false, nullable: true),
+      tileState: _readFieldValue<String>(_readField(json, const ["tile_state"]), "tile_state", _readString, requiredField: false, nullable: true),
+      titleLocked: _readFieldValue<bool>(_readField(json, const ["title_locked"]), "title_locked", _readBool, requiredField: false, nullable: true),
       transcriptSegments: _required(_readFieldValue<List<GeneratedTranscriptSegment>>(_readField(json, const ["transcript_segments"]), "transcript_segments", (value) => _readObjectList(value, GeneratedTranscriptSegment.fromJson), requiredField: false, nullable: false, defaultValue: const []), "transcript_segments"),
       transcriptSegmentsCompressed: _readFieldValue<bool>(_readField(json, const ["transcript_segments_compressed"]), "transcript_segments_compressed", _readBool, requiredField: false, nullable: true, defaultValue: false),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
@@ -1176,6 +1365,8 @@ class GeneratedConversation {
       'call_platform': callPlatform,
       'capture_coverage': captureCoverage,
       'capture_group': captureGroup?.toJson(),
+      'capture_time_trust': captureTimeTrust,
+      'capture_timezone': captureTimezone,
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,
       'client_processing': clientProcessing?.toJson(),
@@ -1187,16 +1378,22 @@ class GeneratedConversation {
       'deferred': deferred,
       'discarded': discarded,
       'episode_id': episodeId,
+      'excluded_speakers': excludedSpeakers,
       'external_data': externalData,
       'finished_at': finishedAt?.toUtc().toIso8601String(),
       'folder_id': folderId,
       'geolocation': geolocation?.toJson(),
       'geolocation_scope': geolocationScope,
+      'home_hidden': homeHidden,
+      'home_hidden_reason': homeHiddenReason,
       'id': id,
       'imported': imported,
       'is_call': isCall,
       'is_locked': isLocked,
+      'kind': kind,
       'language': language,
+      'live_summary': liveSummary?.toJson(),
+      'manual_end': manualEnd,
       'meeting_dedup_speech_s': meetingDedupSpeechS,
       'meeting_duration_s': meetingDurationS,
       'meeting_treatment_eligible': meetingTreatmentEligible,
@@ -1209,9 +1406,12 @@ class GeneratedConversation {
       'processing_deferred': processingDeferred,
       'processing_memory_id': processingMemoryId,
       'processing_state': processingState,
+      'processing_tier': processingTier,
       'record_audio_partial': recordAudioPartial?.toJson(),
       'recorded_end': recordedEnd?.toUtc().toIso8601String(),
       'recorded_start': recordedStart?.toUtc().toIso8601String(),
+      'recording': recording,
+      'recording_pieces': recordingPieces?.map((value) => value.toJson()).toList(),
       'screenshot_sharing_enabled': screenshotSharingEnabled,
       'source': source,
       'speaker_resolution': speakerResolution?.toJson(),
@@ -1220,9 +1420,13 @@ class GeneratedConversation {
       'status': status,
       'structured': structured.toJson(),
       'suggested_summarization_apps': suggestedSummarizationApps,
+      'summary_covers_through': summaryCoversThrough?.toUtc().toIso8601String(),
+      'summary_on_open': summaryOnOpen,
       'summary_retryable': summaryRetryable,
       'sync_content_revision': syncContentRevision,
       'sync_relevance': syncRelevance,
+      'tile_state': tileState,
+      'title_locked': titleLocked,
       'transcript_segments': transcriptSegments.map((value) => value.toJson()).toList(),
       'transcript_segments_compressed': transcriptSegmentsCompressed,
       'updated_at': updatedAt?.toUtc().toIso8601String(),
@@ -1230,6 +1434,130 @@ class GeneratedConversation {
       'user_overview': userOverview,
       'uses_custom_stt': usesCustomStt,
       'visibility': visibility,
+    };
+  }
+}
+
+class GeneratedLiveSummaryPreview {
+  final GeneratedStructured structured;
+  final DateTime summaryCoversThrough;
+
+  const GeneratedLiveSummaryPreview({
+    required this.structured,
+    required this.summaryCoversThrough,
+  });
+
+  factory GeneratedLiveSummaryPreview.fromJson(Map<String, dynamic> json) {
+    return GeneratedLiveSummaryPreview(
+      structured: _required(_readFieldValue<GeneratedStructured>(_readField(json, const ["structured"]), "structured", (value) => _readObject(value, GeneratedStructured.fromJson), requiredField: true, nullable: false), "structured"),
+      summaryCoversThrough: _required(_readFieldValue<DateTime>(_readField(json, const ["summary_covers_through"]), "summary_covers_through", _readDateTime, requiredField: true, nullable: false), "summary_covers_through"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'structured': structured.toJson(),
+      'summary_covers_through': summaryCoversThrough.toUtc().toIso8601String(),
+    };
+  }
+}
+
+class GeneratedRecordingPiece {
+  final String audioFileId;
+  final double end;
+  final String recordingId;
+  final double start;
+
+  const GeneratedRecordingPiece({
+    required this.audioFileId,
+    required this.end,
+    required this.recordingId,
+    required this.start,
+  });
+
+  factory GeneratedRecordingPiece.fromJson(Map<String, dynamic> json) {
+    return GeneratedRecordingPiece(
+      audioFileId: _required(_readFieldValue<String>(_readField(json, const ["audio_file_id"]), "audio_file_id", _readString, requiredField: true, nullable: false), "audio_file_id"),
+      end: _required(_readFieldValue<double>(_readField(json, const ["end"]), "end", _readDouble, requiredField: true, nullable: false), "end"),
+      recordingId: _required(_readFieldValue<String>(_readField(json, const ["recording_id"]), "recording_id", _readString, requiredField: true, nullable: false), "recording_id"),
+      start: _required(_readFieldValue<double>(_readField(json, const ["start"]), "start", _readDouble, requiredField: true, nullable: false), "start"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'audio_file_id': audioFileId,
+      'end': end,
+      'recording_id': recordingId,
+      'start': start,
+    };
+  }
+}
+
+class GeneratedLiveConversation {
+  final DateTime createdAt;
+  final DateTime? finishedAt;
+  final String id;
+  final DateTime startedAt;
+  final String status;
+  final GeneratedStructured structured;
+  final String? tileState;
+
+  const GeneratedLiveConversation({
+    required this.createdAt,
+    required this.finishedAt,
+    required this.id,
+    required this.startedAt,
+    required this.status,
+    required this.structured,
+    this.tileState,
+  });
+
+  factory GeneratedLiveConversation.fromJson(Map<String, dynamic> json) {
+    return GeneratedLiveConversation(
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime, requiredField: true, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      startedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: false), "started_at"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      structured: _required(_readFieldValue<GeneratedStructured>(_readField(json, const ["structured"]), "structured", (value) => _readObject(value, GeneratedStructured.fromJson), requiredField: true, nullable: false), "structured"),
+      tileState: _readFieldValue<String>(_readField(json, const ["tile_state"]), "tile_state", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'finished_at': finishedAt?.toUtc().toIso8601String(),
+      'id': id,
+      'started_at': startedAt.toUtc().toIso8601String(),
+      'status': status,
+      'structured': structured.toJson(),
+      'tile_state': tileState,
+    };
+  }
+}
+
+class GeneratedConversationsLiveResponse {
+  final GeneratedLiveConversation? conversation;
+  final bool v3;
+
+  const GeneratedConversationsLiveResponse({
+    this.conversation,
+    required this.v3,
+  });
+
+  factory GeneratedConversationsLiveResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedConversationsLiveResponse(
+      conversation: _readFieldValue<GeneratedLiveConversation>(_readField(json, const ["conversation"]), "conversation", (value) => _readObject(value, GeneratedLiveConversation.fromJson), requiredField: false, nullable: true),
+      v3: _required(_readFieldValue<bool>(_readField(json, const ["v3"]), "v3", _readBool, requiredField: true, nullable: false), "v3"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'conversation': conversation?.toJson(),
+      'v3': v3,
     };
   }
 }
@@ -1466,6 +1794,8 @@ class GeneratedConversationSearchItem {
   final String? callPlatform;
   final String? captureCoverage;
   final GeneratedCaptureGroup? captureGroup;
+  final String? captureTimeTrust;
+  final String? captureTimezone;
   final String? clientDeviceId;
   final String? clientPlatform;
   final GeneratedClientProcessing? clientProcessing;
@@ -1477,16 +1807,22 @@ class GeneratedConversationSearchItem {
   final bool deferred;
   final bool discarded;
   final String? episodeId;
+  final List<int>? excludedSpeakers;
   final Map<String, dynamic>? externalData;
   final DateTime? finishedAt;
   final String? folderId;
   final GeneratedGeolocation? geolocation;
   final String? geolocationScope;
+  final bool? homeHidden;
+  final String? homeHiddenReason;
   final String id;
   final bool imported;
   final bool? isCall;
   final bool isLocked;
+  final String? kind;
   final String? language;
+  final GeneratedLiveSummaryPreview? liveSummary;
+  final bool? manualEnd;
   final List<GeneratedTranscriptMatchSnippet> matchSnippets;
   final double? meetingDedupSpeechS;
   final double? meetingDurationS;
@@ -1500,9 +1836,12 @@ class GeneratedConversationSearchItem {
   final bool processingDeferred;
   final String? processingMemoryId;
   final String? processingState;
+  final String? processingTier;
   final GeneratedRecordAudioPartial? recordAudioPartial;
   final DateTime? recordedEnd;
   final DateTime? recordedStart;
+  final bool? recording;
+  final List<GeneratedRecordingPiece>? recordingPieces;
   final bool screenshotSharingEnabled;
   final String? source;
   final GeneratedConversationSpeakers? speakerResolution;
@@ -1511,9 +1850,13 @@ class GeneratedConversationSearchItem {
   final String? status;
   final GeneratedStructured structured;
   final List<String> suggestedSummarizationApps;
+  final DateTime? summaryCoversThrough;
+  final bool? summaryOnOpen;
   final bool? summaryRetryable;
   final int? syncContentRevision;
   final String? syncRelevance;
+  final String? tileState;
+  final bool? titleLocked;
   final List<GeneratedTranscriptSegment> transcriptSegments;
   final bool? transcriptSegmentsCompressed;
   final DateTime? updatedAt;
@@ -1534,6 +1877,8 @@ class GeneratedConversationSearchItem {
     this.callPlatform,
     this.captureCoverage,
     this.captureGroup,
+    this.captureTimeTrust,
+    this.captureTimezone,
     this.clientDeviceId,
     this.clientPlatform,
     this.clientProcessing,
@@ -1545,16 +1890,22 @@ class GeneratedConversationSearchItem {
     this.deferred = false,
     this.discarded = false,
     this.episodeId,
+    this.excludedSpeakers,
     this.externalData,
     required this.finishedAt,
     this.folderId,
     this.geolocation,
     this.geolocationScope,
+    this.homeHidden,
+    this.homeHiddenReason,
     required this.id,
     this.imported = false,
     this.isCall,
     this.isLocked = false,
+    this.kind,
     this.language,
+    this.liveSummary,
+    this.manualEnd,
     this.matchSnippets = const [],
     this.meetingDedupSpeechS,
     this.meetingDurationS,
@@ -1568,9 +1919,12 @@ class GeneratedConversationSearchItem {
     this.processingDeferred = false,
     this.processingMemoryId,
     this.processingState,
+    this.processingTier,
     this.recordAudioPartial,
     this.recordedEnd,
     this.recordedStart,
+    this.recording,
+    this.recordingPieces,
     this.screenshotSharingEnabled = true,
     this.source = "omi",
     this.speakerResolution,
@@ -1579,9 +1933,13 @@ class GeneratedConversationSearchItem {
     this.status = "completed",
     required this.structured,
     this.suggestedSummarizationApps = const [],
+    this.summaryCoversThrough,
+    this.summaryOnOpen,
     this.summaryRetryable,
     this.syncContentRevision,
     this.syncRelevance,
+    this.tileState,
+    this.titleLocked,
     this.transcriptSegments = const [],
     this.transcriptSegmentsCompressed = false,
     this.updatedAt,
@@ -1604,6 +1962,8 @@ class GeneratedConversationSearchItem {
       callPlatform: _readFieldValue<String>(_readField(json, const ["call_platform"]), "call_platform", _readString, requiredField: false, nullable: true),
       captureCoverage: _readFieldValue<String>(_readField(json, const ["capture_coverage"]), "capture_coverage", _readString, requiredField: false, nullable: true),
       captureGroup: _readFieldValue<GeneratedCaptureGroup>(_readField(json, const ["capture_group"]), "capture_group", (value) => _readObject(value, GeneratedCaptureGroup.fromJson), requiredField: false, nullable: true),
+      captureTimeTrust: _readFieldValue<String>(_readField(json, const ["capture_time_trust"]), "capture_time_trust", _readString, requiredField: false, nullable: true),
+      captureTimezone: _readFieldValue<String>(_readField(json, const ["capture_timezone"]), "capture_timezone", _readString, requiredField: false, nullable: true),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
       clientProcessing: _readFieldValue<GeneratedClientProcessing>(_readField(json, const ["client_processing"]), "client_processing", (value) => _readObject(value, GeneratedClientProcessing.fromJson), requiredField: false, nullable: true),
@@ -1615,16 +1975,22 @@ class GeneratedConversationSearchItem {
       deferred: _required(_readFieldValue<bool>(_readField(json, const ["deferred"]), "deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "deferred"),
       discarded: _required(_readFieldValue<bool>(_readField(json, const ["discarded"]), "discarded", _readBool, requiredField: false, nullable: false, defaultValue: false), "discarded"),
       episodeId: _readFieldValue<String>(_readField(json, const ["episode_id"]), "episode_id", _readString, requiredField: false, nullable: true),
+      excludedSpeakers: _readFieldValue<List<int>>(_readField(json, const ["excluded_speakers"]), "excluded_speakers", _readIntList, requiredField: false, nullable: true),
       externalData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["external_data"]), "external_data", _readMap, requiredField: false, nullable: true),
       finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime, requiredField: true, nullable: true),
       folderId: _readFieldValue<String>(_readField(json, const ["folder_id"]), "folder_id", _readString, requiredField: false, nullable: true),
       geolocation: _readFieldValue<GeneratedGeolocation>(_readField(json, const ["geolocation"]), "geolocation", (value) => _readObject(value, GeneratedGeolocation.fromJson), requiredField: false, nullable: true),
       geolocationScope: _readFieldValue<String>(_readField(json, const ["geolocation_scope"]), "geolocation_scope", _readString, requiredField: false, nullable: true),
+      homeHidden: _readFieldValue<bool>(_readField(json, const ["home_hidden"]), "home_hidden", _readBool, requiredField: false, nullable: true),
+      homeHiddenReason: _readFieldValue<String>(_readField(json, const ["home_hidden_reason"]), "home_hidden_reason", _readString, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       imported: _required(_readFieldValue<bool>(_readField(json, const ["imported"]), "imported", _readBool, requiredField: false, nullable: false, defaultValue: false), "imported"),
       isCall: _readFieldValue<bool>(_readField(json, const ["is_call"]), "is_call", _readBool, requiredField: false, nullable: true),
       isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
+      kind: _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: false, nullable: true),
       language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
+      liveSummary: _readFieldValue<GeneratedLiveSummaryPreview>(_readField(json, const ["live_summary"]), "live_summary", (value) => _readObject(value, GeneratedLiveSummaryPreview.fromJson), requiredField: false, nullable: true),
+      manualEnd: _readFieldValue<bool>(_readField(json, const ["manual_end"]), "manual_end", _readBool, requiredField: false, nullable: true),
       matchSnippets: _required(_readFieldValue<List<GeneratedTranscriptMatchSnippet>>(_readField(json, const ["match_snippets"]), "match_snippets", (value) => _readObjectList(value, GeneratedTranscriptMatchSnippet.fromJson), requiredField: false, nullable: false, defaultValue: const []), "match_snippets"),
       meetingDedupSpeechS: _readFieldValue<double>(_readField(json, const ["meeting_dedup_speech_s"]), "meeting_dedup_speech_s", _readDouble, requiredField: false, nullable: true),
       meetingDurationS: _readFieldValue<double>(_readField(json, const ["meeting_duration_s"]), "meeting_duration_s", _readDouble, requiredField: false, nullable: true),
@@ -1638,9 +2004,12 @@ class GeneratedConversationSearchItem {
       processingDeferred: _required(_readFieldValue<bool>(_readField(json, const ["processing_deferred"]), "processing_deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "processing_deferred"),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
+      processingTier: _readFieldValue<String>(_readField(json, const ["processing_tier"]), "processing_tier", _readString, requiredField: false, nullable: true),
       recordAudioPartial: _readFieldValue<GeneratedRecordAudioPartial>(_readField(json, const ["record_audio_partial"]), "record_audio_partial", (value) => _readObject(value, GeneratedRecordAudioPartial.fromJson), requiredField: false, nullable: true),
       recordedEnd: _readFieldValue<DateTime>(_readField(json, const ["recorded_end"]), "recorded_end", _readDateTime, requiredField: false, nullable: true),
       recordedStart: _readFieldValue<DateTime>(_readField(json, const ["recorded_start"]), "recorded_start", _readDateTime, requiredField: false, nullable: true),
+      recording: _readFieldValue<bool>(_readField(json, const ["recording"]), "recording", _readBool, requiredField: false, nullable: true),
+      recordingPieces: _readFieldValue<List<GeneratedRecordingPiece>>(_readField(json, const ["recording_pieces"]), "recording_pieces", (value) => _readObjectList(value, GeneratedRecordingPiece.fromJson), requiredField: false, nullable: true),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
       speakerResolution: _readFieldValue<GeneratedConversationSpeakers>(_readField(json, const ["speaker_resolution"]), "speaker_resolution", (value) => _readObject(value, GeneratedConversationSpeakers.fromJson), requiredField: false, nullable: true),
@@ -1649,9 +2018,13 @@ class GeneratedConversationSearchItem {
       status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: true, defaultValue: "completed"),
       structured: _required(_readFieldValue<GeneratedStructured>(_readField(json, const ["structured"]), "structured", (value) => _readObject(value, GeneratedStructured.fromJson), requiredField: true, nullable: false), "structured"),
       suggestedSummarizationApps: _required(_readFieldValue<List<String>>(_readField(json, const ["suggested_summarization_apps"]), "suggested_summarization_apps", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "suggested_summarization_apps"),
+      summaryCoversThrough: _readFieldValue<DateTime>(_readField(json, const ["summary_covers_through"]), "summary_covers_through", _readDateTime, requiredField: false, nullable: true),
+      summaryOnOpen: _readFieldValue<bool>(_readField(json, const ["summary_on_open"]), "summary_on_open", _readBool, requiredField: false, nullable: true),
       summaryRetryable: _readFieldValue<bool>(_readField(json, const ["summary_retryable"]), "summary_retryable", _readBool, requiredField: false, nullable: true),
       syncContentRevision: _readFieldValue<int>(_readField(json, const ["sync_content_revision"]), "sync_content_revision", _readInt, requiredField: false, nullable: true),
       syncRelevance: _readFieldValue<String>(_readField(json, const ["sync_relevance"]), "sync_relevance", _readString, requiredField: false, nullable: true),
+      tileState: _readFieldValue<String>(_readField(json, const ["tile_state"]), "tile_state", _readString, requiredField: false, nullable: true),
+      titleLocked: _readFieldValue<bool>(_readField(json, const ["title_locked"]), "title_locked", _readBool, requiredField: false, nullable: true),
       transcriptSegments: _required(_readFieldValue<List<GeneratedTranscriptSegment>>(_readField(json, const ["transcript_segments"]), "transcript_segments", (value) => _readObjectList(value, GeneratedTranscriptSegment.fromJson), requiredField: false, nullable: false, defaultValue: const []), "transcript_segments"),
       transcriptSegmentsCompressed: _readFieldValue<bool>(_readField(json, const ["transcript_segments_compressed"]), "transcript_segments_compressed", _readBool, requiredField: false, nullable: true, defaultValue: false),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
@@ -1675,6 +2048,8 @@ class GeneratedConversationSearchItem {
       'call_platform': callPlatform,
       'capture_coverage': captureCoverage,
       'capture_group': captureGroup?.toJson(),
+      'capture_time_trust': captureTimeTrust,
+      'capture_timezone': captureTimezone,
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,
       'client_processing': clientProcessing?.toJson(),
@@ -1686,16 +2061,22 @@ class GeneratedConversationSearchItem {
       'deferred': deferred,
       'discarded': discarded,
       'episode_id': episodeId,
+      'excluded_speakers': excludedSpeakers,
       'external_data': externalData,
       'finished_at': finishedAt?.toUtc().toIso8601String(),
       'folder_id': folderId,
       'geolocation': geolocation?.toJson(),
       'geolocation_scope': geolocationScope,
+      'home_hidden': homeHidden,
+      'home_hidden_reason': homeHiddenReason,
       'id': id,
       'imported': imported,
       'is_call': isCall,
       'is_locked': isLocked,
+      'kind': kind,
       'language': language,
+      'live_summary': liveSummary?.toJson(),
+      'manual_end': manualEnd,
       'match_snippets': matchSnippets.map((value) => value.toJson()).toList(),
       'meeting_dedup_speech_s': meetingDedupSpeechS,
       'meeting_duration_s': meetingDurationS,
@@ -1709,9 +2090,12 @@ class GeneratedConversationSearchItem {
       'processing_deferred': processingDeferred,
       'processing_memory_id': processingMemoryId,
       'processing_state': processingState,
+      'processing_tier': processingTier,
       'record_audio_partial': recordAudioPartial?.toJson(),
       'recorded_end': recordedEnd?.toUtc().toIso8601String(),
       'recorded_start': recordedStart?.toUtc().toIso8601String(),
+      'recording': recording,
+      'recording_pieces': recordingPieces?.map((value) => value.toJson()).toList(),
       'screenshot_sharing_enabled': screenshotSharingEnabled,
       'source': source,
       'speaker_resolution': speakerResolution?.toJson(),
@@ -1720,9 +2104,13 @@ class GeneratedConversationSearchItem {
       'status': status,
       'structured': structured.toJson(),
       'suggested_summarization_apps': suggestedSummarizationApps,
+      'summary_covers_through': summaryCoversThrough?.toUtc().toIso8601String(),
+      'summary_on_open': summaryOnOpen,
       'summary_retryable': summaryRetryable,
       'sync_content_revision': syncContentRevision,
       'sync_relevance': syncRelevance,
+      'tile_state': tileState,
+      'title_locked': titleLocked,
       'transcript_segments': transcriptSegments.map((value) => value.toJson()).toList(),
       'transcript_segments_compressed': transcriptSegmentsCompressed,
       'updated_at': updatedAt?.toUtc().toIso8601String(),
@@ -1975,6 +2363,7 @@ class GeneratedSyncJobStatusResponse {
   final int? retryAfter;
   final String status;
   final int successfulSegments;
+  final int totalFiles;
   final int totalSegments;
 
   const GeneratedSyncJobStatusResponse({
@@ -1990,6 +2379,7 @@ class GeneratedSyncJobStatusResponse {
     this.retryAfter,
     required this.status,
     this.successfulSegments = 0,
+    this.totalFiles = 0,
     this.totalSegments = 0,
   });
 
@@ -2007,6 +2397,7 @@ class GeneratedSyncJobStatusResponse {
       retryAfter: _readFieldValue<int>(_readField(json, const ["retry_after"]), "retry_after", _readInt, requiredField: false, nullable: true),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
       successfulSegments: _required(_readFieldValue<int>(_readField(json, const ["successful_segments"]), "successful_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "successful_segments"),
+      totalFiles: _required(_readFieldValue<int>(_readField(json, const ["total_files"]), "total_files", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_files"),
       totalSegments: _required(_readFieldValue<int>(_readField(json, const ["total_segments"]), "total_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_segments"),
     );
   }
@@ -2025,6 +2416,7 @@ class GeneratedSyncJobStatusResponse {
       'retry_after': retryAfter,
       'status': status,
       'successful_segments': successfulSegments,
+      'total_files': totalFiles,
       'total_segments': totalSegments,
     };
   }

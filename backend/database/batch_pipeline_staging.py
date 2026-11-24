@@ -40,6 +40,9 @@ def reap_one(store: Store, key: str, now: datetime) -> bool:
             return False
         job = tx.get('jobs', row['segment_id'])
         uri = row['uri'].split('#', 1)[0]
+        source = tx.get('coalesce_sources', row['segment_id'])
+        if source.get('uri', '').split('#', 1)[0] == uri:
+            return False  # Accepted pre-unit custody has no TTL, including OFF/outage.
         attached = job.get('audio_uri') if row['kind'] == 'audio' else (job.get('result') or {}).get('result_uri')
         if attached and attached.split('#', 1)[0] == uri:
             row.pop('write_pending_until', None)

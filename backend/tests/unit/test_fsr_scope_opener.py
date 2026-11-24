@@ -72,7 +72,7 @@ def attempt(monkeypatch):
         ('try_acquire_job_run_lock', 'lock-token'),
         ('release_job_run_lock', None),
         ('should_skip_background_account_mutation', False),
-        ('_download_staged_files', True),
+        ('download_staged_files', True),
         ('release_backfill_slot', None),
         ('get_sync_tasks_max_attempts', 3),
         ('mark_job_queued_for_retry', job),
@@ -80,7 +80,7 @@ def attempt(monkeypatch):
         effects[name] = MagicMock(return_value=value)
         monkeypatch.setattr(sync, name, effects[name])
     cleanup = AsyncMock()
-    monkeypatch.setattr(sync, '_delete_staged_blobs_async', cleanup)
+    monkeypatch.setattr(sync, 'delete_staged_blobs_async', cleanup)
     request = SimpleNamespace(
         json=AsyncMock(return_value={'job_id': 'job', 'uid': uid, 'raw_blob_paths': ['staged/audio'], 'lane': 'fresh'})
     )
@@ -109,7 +109,7 @@ async def test_task_attempt_two_scans_read_once_only_in_enabled_scope(monkeypatc
         for _ in range(2):
             pages.append(await run_blocking(db_executor, _scan, attempt.db, uid))
 
-    monkeypatch.setattr(sync, '_run_full_pipeline_background_async', pipeline)
+    monkeypatch.setattr(sync, 'run_full_pipeline_background_async', pipeline)
     response = await sync._run_sync_job_body(attempt.request, 0)
     assert (response.status_code, json.loads(response.body)) == (200, {'status': 'done'})
     assert pages[0] == pages[1]
@@ -118,9 +118,9 @@ async def test_task_attempt_two_scans_read_once_only_in_enabled_scope(monkeypatc
     attempt.effects['try_acquire_job_run_lock'].assert_called_once_with('job')
     attempt.effects['release_job_run_lock'].assert_called_once_with('job', 'lock-token')
     if lane == 'backfill':
-        attempt.effects['_download_staged_files'].assert_called_once_with(['staged/audio'], bounded_backfill=True)
+        attempt.effects['download_staged_files'].assert_called_once_with(['staged/audio'], bounded_backfill=True)
     else:
-        attempt.effects['_download_staged_files'].assert_called_once_with(['staged/audio'])
+        attempt.effects['download_staged_files'].assert_called_once_with(['staged/audio'])
     attempt.cleanup.assert_awaited_once_with(['staged/audio'], uid=uid, content_id=None, job_id='job')
     assert attempt.effects['release_backfill_slot'].call_count == (1 if lane == 'backfill' else 0)
     assert memories._historical_scan_memo.get() is None
@@ -139,7 +139,7 @@ async def test_retry_closes_failed_attempt_and_reads_fresh_pages(monkeypatch, at
         if len(memos) == 1:
             raise TimeoutError('retry')
 
-    monkeypatch.setattr(sync, '_run_full_pipeline_background_async', pipeline)
+    monkeypatch.setattr(sync, 'run_full_pipeline_background_async', pipeline)
     failed = await sync._run_sync_job_body(attempt.request, 0)
     assert (failed.status_code, json.loads(failed.body)) == (500, {'status': 'retry'})
     assert memos[0].closed and not memos[0].entries
@@ -172,7 +172,7 @@ async def test_executor_sees_memo_and_retained_context_is_closed_after_exit(monk
         # A raw executor submission gets no context, even after prior leaf work.
         assert await asyncio.get_running_loop().run_in_executor(db_executor, memories._historical_scan_memo.get) is None
 
-    monkeypatch.setattr(sync, '_run_full_pipeline_background_async', pipeline)
+    monkeypatch.setattr(sync, 'run_full_pipeline_background_async', pipeline)
     assert (await sync._run_sync_job_body(attempt.request, 0)).status_code == 200
     assert attempt.db.scans == 1
     memo, ctx = retained[0]
@@ -194,7 +194,7 @@ async def test_cancellation_closes_scope_and_preserves_run_lock(monkeypatch, att
         await run_blocking(db_executor, _scan, attempt.db, attempt.uid)
         raise asyncio.CancelledError()
 
-    monkeypatch.setattr(sync, '_run_full_pipeline_background_async', pipeline)
+    monkeypatch.setattr(sync, 'run_full_pipeline_background_async', pipeline)
     with pytest.raises(asyncio.CancelledError):
         await sync._run_sync_job_body(attempt.request, 0)
     assert memos[0].closed and not memos[0].entries
@@ -213,7 +213,7 @@ async def test_scope_excludes_admission_and_early_exits(monkeypatch, attempt, ea
     elif early_exit == 'terminal':
         attempt.effects['get_sync_job'].return_value = {'status': 'completed'}
     else:
-        attempt.effects['_download_staged_files'].return_value = False
+        attempt.effects['download_staged_files'].return_value = False
         monkeypatch.setattr(sync, '_finalize_sync_job_failure', AsyncMock())
     response = await sync._run_sync_job_body(attempt.request, 0)
     assert response.status_code == (409 if early_exit == 'locked' else 200)
@@ -238,7 +238,7 @@ async def test_existing_memory_write_fence_invalidates_attempt_pages(monkeypatch
         assert second[0][0]['content'] == 'changed'
         assert second == await run_blocking(db_executor, _scan, attempt.db, attempt.uid)
 
-    monkeypatch.setattr(sync, '_run_full_pipeline_background_async', pipeline)
+    monkeypatch.setattr(sync, 'run_full_pipeline_background_async', pipeline)
     assert (await sync._run_sync_job_body(attempt.request, 0)).status_code == 200
     assert (attempt.db.scans, attempt.db.reads) == (2, 2)
 
@@ -310,7 +310,7 @@ async def test_people_hint_scan_read_once_per_enabled_attempt(monkeypatch, peopl
         results.append(await run_blocking(db_executor, read))
         results.append(await run_blocking(db_executor, read))
 
-    monkeypatch.setattr(sync, '_run_full_pipeline_background_async', pipeline)
+    monkeypatch.setattr(sync, 'run_full_pipeline_background_async', pipeline)
     response = await sync._run_sync_job_body(people_attempt.request, 0)
     assert (response.status_code, json.loads(response.body)) == (200, {'status': 'done'})
     assert results[0] == results[1] == [{'name': 'Alice', 'id': 'p1'}]
@@ -329,7 +329,7 @@ async def test_people_attempt_retry_opens_a_fresh_memo(monkeypatch, people_attem
         if len(memos) == 1:
             raise TimeoutError('retry')
 
-    monkeypatch.setattr(sync, '_run_full_pipeline_background_async', pipeline)
+    monkeypatch.setattr(sync, 'run_full_pipeline_background_async', pipeline)
     failed = await sync._run_sync_job_body(people_attempt.request, 0)
     assert (failed.status_code, json.loads(failed.body)) == (500, {'status': 'retry'})
     assert people_attempt.db.scans == 1

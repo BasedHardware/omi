@@ -8,13 +8,16 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
+import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart' show walAttentionLabel;
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/sync/offline_sync_amounts.dart';
 import 'package:omi/utils/sync_confirmation.dart';
@@ -24,7 +27,9 @@ import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
+import 'widgets/too_old_recording_help.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
+import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
 
 Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
   return Padding(
@@ -57,6 +62,9 @@ class WalListItem extends StatelessWidget {
 
   (Color, String) _rowStatus(BuildContext context, bool hasError) {
     final l = context.l10n;
+    if (wal.status == WalStatus.uploaded && !wal.countsAsPendingWork()) {
+      return (Colors.grey.shade400, l.syncDetailsTranscribing);
+    }
     final state = wal.syncDisplayState;
     if (state == WalSyncDisplayState.syncing) {
       return (Colors.grey.shade300, l.syncStatusBackingUp);
@@ -68,7 +76,7 @@ class WalListItem extends StatelessWidget {
       case WalSyncDisplayState.synced:
         return (Colors.grey.shade500, l.statusProcessed);
       case WalSyncDisplayState.uploaded:
-        return (Colors.grey.shade400, l.syncStatusUploaded);
+        return (Colors.grey.shade400, l.syncDetailsTranscribing);
       case WalSyncDisplayState.retrying:
         return (Colors.orangeAccent, l.syncStatusRetrying);
       case WalSyncDisplayState.failed:
@@ -81,7 +89,7 @@ class WalListItem extends StatelessWidget {
         return (Colors.redAccent, l.syncStatusUnsupportedAudio);
       case WalSyncDisplayState.uploadRejected:
         // Which refusal it was, in On the Way's words.
-        return (Colors.redAccent, walAttentionLabel(state, l, rejectionReason: wal.uploadRejectionReason));
+        return (Colors.grey.shade500, walAttentionLabel(state, l, rejectionReason: wal.uploadRejectionReason));
       case WalSyncDisplayState.waiting:
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade500, l.syncStatusWaiting);
@@ -104,11 +112,11 @@ class WalListItem extends StatelessWidget {
       );
     }
     // No upload can resolve these, so offer removal rather than a chevron that
-    // leads to a detail page with nothing actionable on it.
+    // leads to a detail page with nothing actionable on it. A refusal is not
+    // offered here: the swipe still removes it, after confirmation.
     if (state == WalSyncDisplayState.corrupted ||
         state == WalSyncDisplayState.outsideRecoveryWindow ||
-        state == WalSyncDisplayState.unsupportedAudio ||
-        uploadRefusal) {
+        state == WalSyncDisplayState.unsupportedAudio) {
       return OmiButton.destructive(
         label: context.l10n.delete,
         size: OmiButtonSize.compact,
@@ -150,11 +158,12 @@ class WalListItem extends StatelessWidget {
             direction:
                 displayState == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
             confirmDismiss: (direction) {
-              final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
+              final copy =
+                  walDeleteConfirmation(context.l10n, [wal], notUploadedMessage: context.l10n.thisCannotBeUndone);
               return showOmiConfirm(
                 context,
-                title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
-                message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
+                title: copy.title,
+                message: copy.message,
                 confirmLabel: context.l10n.delete,
                 destructive: true,
               );
@@ -202,9 +211,30 @@ class WalListItem extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        _trailing(context, syncProvider, hasError),
+                        if (displayState != WalSyncDisplayState.outsideRecoveryWindow)
+                          _trailing(context, syncProvider, hasError),
                       ],
                     ),
+                    if (displayState == WalSyncDisplayState.outsideRecoveryWindow) ...[
+                      const SizedBox(height: 8),
+                      TooOldRecordingHelp(onDownload: () async {
+                        try {
+                          await syncProvider.shareRecordingAsWav([wal]);
+                        } catch (e) {
+                          Logger.error('Sync: failed to share too-old recording audio: $e');
+                          if (context.mounted) OmiFeedback.error(context, context.l10n.audioPlaybackFailed);
+                        }
+                      }, onDelete: () async {
+                        final confirmed = await showOmiConfirm(
+                          context,
+                          title: context.l10n.deleteRecording,
+                          message: context.l10n.thisCannotBeUndone,
+                          confirmLabel: context.l10n.delete,
+                          destructive: true,
+                        );
+                        if (confirmed) await syncProvider.deleteWal(wal);
+                      }),
+                    ],
                     if (showBar) ...[
                       const SizedBox(height: 12),
                       Row(
@@ -408,11 +438,34 @@ class _SyncPageState extends State<SyncPage> {
             confirmLabel: context.l10n.clear,
             destructive: true,
           );
-          if (confirmed && context.mounted) {
+          if (!confirmed || !context.mounted) return;
+          // Ring discovery rebuilds its virtual WAL with a new display timestamp.
+          (WalStorage, bool, String) pendingIdentity(Wal wal) {
+            final ring = wal.storage == WalStorage.sdcard && wal.fileNum == -1;
+            return (wal.storage, ring, ring ? wal.device : wal.id);
+          }
+
+          final targets = provider.pendingDeletableWals.map(pendingIdentity).toSet();
+          if (targets.isEmpty) return;
+          final uid = SharedPreferencesUtil().uid;
+          final hasDeviceRows = targets.any((row) => row.$1 != WalStorage.disk && row.$1 != WalStorage.mem);
+          final firmware = hasDeviceRows ? context.read<DeviceProvider>().currentFirmwareVersion : null;
+          var failed = false;
+          try {
             await provider.deleteAllPendingWals();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.pendingFilesDeleted);
+            if (hasDeviceRows && uid == SharedPreferencesUtil().uid) {
+              await provider.discoverDeviceWals(firmwareVersion: firmware);
             }
+          } catch (error) {
+            failed = true;
+            Logger.debug('Sync clear pending failed: ${error.runtimeType}');
+          }
+          if (!context.mounted || uid != SharedPreferencesUtil().uid) return;
+          final retained = provider.allWals.any((wal) => targets.contains(pendingIdentity(wal)));
+          if (failed || retained) {
+            OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+          } else {
+            OmiFeedback.confirm(context, context.l10n.pendingFilesDeleted);
           }
         },
         onClearAll: () async {
@@ -484,11 +537,14 @@ class _SyncPageState extends State<SyncPage> {
     }
 
     final isActive = syncProvider.isSyncing;
-    final uploaded = syncProvider.uploadedWals.length;
-    final readyToSync = syncProvider.missingWals.length;
-    final step = _runTracker.update(s, syncProvider.allWals);
+    final pending = syncProvider.derivedWals.pendingWork;
+    final uploaded = pending.where((w) => w.status == WalStatus.uploaded).length;
+    final readyToSync = pending.where((w) => w.status == WalStatus.miss).length;
+    final step = _runTracker.update(s, syncProvider.allWals, pendingWork: pending);
     String dur(int seconds) => OmiDuration.compact(seconds, l);
-    final bool showSpinner = (isActive || uploaded > 0) && !syncProvider.isRateLimited;
+    // An edge throttle clears by itself and needs nothing from the user, so it is not shown (David, 11-02).
+    final paused = syncProvider.isRateLimited && syncProvider.rateLimitReason != RateLimitReason.edgeThrottle;
+    final bool showSpinner = (isActive || uploaded > 0) && !paused;
 
     String title;
     String? subtitle;
@@ -525,21 +581,21 @@ class _SyncPageState extends State<SyncPage> {
           }
           break;
       }
-    } else if (syncProvider.isRateLimited) {
+    } else if (paused) {
       title = syncCooldownTitle(syncProvider.rateLimitReason, l);
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       // Audio length, never server jobs: "Processing 0/5914" was one job per 75 s file.
-      final job = syncProvider.offlineServerProcessingSeconds;
-      title = job.totalSeconds > 0 ? l.syncCardTranscribingAmount(dur(job.totalSeconds)) : l.syncCardProcessing;
-      subtitle = job.tracked && job.totalSeconds > 0
-          ? l.syncCardTranscribedOf(dur(job.doneSeconds), dur(job.totalSeconds))
-          : l.syncProcessingBackgroundHint;
+      final amounts = SyncPipelineAmounts.fromPending(pending);
+      title = amounts.processingSeconds > 0
+          ? '${l.syncDetailsTranscribing} · ${dur(amounts.processingSeconds)}'
+          : l.syncCardProcessing;
+      subtitle = l.syncProcessingBackgroundHint;
     } else if (syncProvider.needsAttentionWalsCount > 0) {
       title = l.syncCardNeedsAttention(syncProvider.needsAttentionWalsCount);
       titleColor = Colors.orangeAccent;
     } else if (readyToSync > 0) {
-      final seconds = syncProvider.missingWalsInSeconds;
+      final seconds = walSeconds(pending.where((w) => w.status == WalStatus.miss));
       title = seconds > 0 ? l.syncCardReadyAmount(dur(seconds)) : l.syncCardReadyCount(readyToSync);
       action = statusActionPill(l.sync, OmiColors.accent, () {
         if (context.read<ConnectivityProvider>().isConnected) {
@@ -548,6 +604,9 @@ class _SyncPageState extends State<SyncPage> {
           OmiFeedback.error(context, l.internetRequired);
         }
       });
+    } else if (syncProvider.derivedWals.stalledUploadsAt().isNotEmpty) {
+      title = l.deviceUploadsWaitingOnServer;
+      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
     } else {
       title = l.syncCardAllBackedUp;
       titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
@@ -782,6 +841,7 @@ class _SyncPageState extends State<SyncPage> {
                     children: [
                       const SizedBox(height: 16),
                       _buildProcessCard(syncProvider),
+                      const OnDeviceChargerWaitLine(),
                       const SizedBox(height: 16),
                       _buildConversationsCreatedCard(syncProvider),
                       _buildSettingsCard(),

@@ -62,7 +62,7 @@ class AuditSearchSource extends GlobalSearchSource {
 
   @override
   Future<ConversationSearchResult> conversations(String query,
-          {String? speakerId, DateTime? startDate, DateTime? endDate}) async =>
+          {String? speakerId, DateTime? startDate, DateTime? endDate, bool includeNoise = false}) async =>
       ConversationSearchResult(currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success, items: [
         _conversation('c1', 'Device Connection Troubleshooting', '🔧', _now.subtract(const Duration(hours: 1)),
             snippet: 'It should show the bluetooth connection level'),

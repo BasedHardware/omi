@@ -10,12 +10,13 @@ import sys
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from google.api_core.exceptions import PreconditionFailed
 from google.cloud.exceptions import NotFound
 
-from config import audio_archive
+from config import audio_archive, rollout_cohorts
 from utils.other import storage
 from utils.other.audio_singleflight import coalesce_rebuild
 from utils.other.live_audio_archive import LiveAudioArchive
@@ -23,7 +24,6 @@ from utils.other.raw_audio import CapturePack, WAL_FORMAT, decode_capture, prove
 from utils.other.raw_audio_read import list_packs, read_pack, verified_pcm_paths
 from utils.other.audio_opus import _get_opuslib
 from utils.other import audio_opus
-from utils import cloud_tasks
 from utils.other import audio_singleflight
 from utils.other import live_audio_archive
 
@@ -108,6 +108,8 @@ def isolate_live_archive_executor(monkeypatch):
 def buckets(monkeypatch):
     result = {'canonical': Bucket('canonical'), 'regional': Bucket('regional'), 'staging': Bucket('staging')}
     monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: result[name]))
+    # Live commits persist projection debt before acknowledging durable custody.
+    monkeypatch.setattr(live_audio_archive.record_projection_rebuild, 'mark_due', MagicMock())
     monkeypatch.setattr(storage, 'private_cloud_sync_bucket', 'canonical')
     monkeypatch.setattr(storage, 'syncing_local_bucket', 'staging')
     monkeypatch.setattr(storage.users_db, 'get_data_protection_level', lambda uid: 'standard')
@@ -118,7 +120,10 @@ def buckets(monkeypatch):
 
 def enable(monkeypatch, phase):
     monkeypatch.setenv(f'AUDIO_ARCHIVE_{phase}_ENABLED', 'true')
-    monkeypatch.setenv('AUDIO_ARCHIVE_UID_ALLOWLIST', 'owner')
+    monkeypatch.setenv('AUDIO_ARCHIVE_PERCENT', '0')
+    monkeypatch.setattr(
+        rollout_cohorts, '_membership_resolver', lambda uid, name, **kwargs: uid == 'owner' and name == 'audio-archive'
+    )
 
 
 @pytest.fixture
@@ -160,15 +165,17 @@ def test_fleet_phases_ignore_the_shared_cohort_percent(monkeypatch):
 def test_flags_default_on_for_fleet_phases_and_off_for_staged(monkeypatch):
     for var in ('AUDIO_ARCHIVE_LIVE_ENABLED', 'AUDIO_ARCHIVE_READ_ENABLED', 'AUDIO_ARCHIVE_STOP_PCM_ENABLED'):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.delenv('AUDIO_ARCHIVE_UID_ALLOWLIST', raising=False)
+    monkeypatch.setattr(rollout_cohorts, '_membership_resolver', lambda *args, **kwargs: False)
     monkeypatch.delenv('AUDIO_ARCHIVE_PERCENT', raising=False)
     monkeypatch.delenv('AUDIO_ARCHIVE_STOP_PCM_PERCENT', raising=False)
     # P71 2026-10-22 ruling: the raw Opus dual-write and read preference are
     # default-on for everyone, without a percent cohort.
     assert audio_archive.admitted('owner', 'LIVE')
     assert audio_archive.admitted('other', 'READ')
+    # COALESCE graduated on 2026-11-09 and is admitted unconditionally.
+    assert audio_archive.admitted('owner', 'COALESCE')
     # Staged phases stay default-off.
-    for phase in ('STOP_PCM', 'SYNC', 'REGIONAL_CACHE', 'COALESCE'):
+    for phase in ('STOP_PCM', 'SYNC', 'REGIONAL_CACHE'):
         monkeypatch.delenv(f'AUDIO_ARCHIVE_{phase}_ENABLED', raising=False)
         assert not audio_archive.admitted('owner', phase)
     # Kill switches.
@@ -180,7 +187,7 @@ def test_flags_default_on_for_fleet_phases_and_off_for_staged(monkeypatch):
 
 def test_stop_pcm_ramps_on_its_own_percent_not_the_shared_one(monkeypatch):
     enable(monkeypatch, 'STOP_PCM')
-    monkeypatch.delenv('AUDIO_ARCHIVE_UID_ALLOWLIST', raising=False)
+    monkeypatch.setattr(rollout_cohorts, '_membership_resolver', lambda *args, **kwargs: False)
     # The shared percent is pinned at 100 fleet-wide for COALESCE; that must
     # never expose STOP_PCM while its own ramp percent is 0.
     monkeypatch.setenv('AUDIO_ARCHIVE_PERCENT', '100')
@@ -198,7 +205,7 @@ def test_stop_pcm_ramps_on_its_own_percent_not_the_shared_one(monkeypatch):
 
 def test_regional_cache_ramps_on_its_own_percent_not_the_shared_one(monkeypatch):
     enable(monkeypatch, 'REGIONAL_CACHE')
-    monkeypatch.delenv('AUDIO_ARCHIVE_UID_ALLOWLIST', raising=False)
+    monkeypatch.setattr(rollout_cohorts, '_membership_resolver', lambda *args, **kwargs: False)
     # The shared percent is pinned at 100 fleet-wide for COALESCE; that must
     # never make REGIONAL_CACHE an instant 100% cutover when its enable flips,
     # and its own ramp percent gates the flip exactly like STOP_PCM's.
@@ -439,25 +446,6 @@ async def test_live_admission_is_session_stable_across_cohort_cache_expiry(monke
     # Exactly one LIVE evaluation per connection, taken while warm.
     assert calls['LIVE'] == 1
     assert not archive.packs
-
-
-def test_merge_worker_cohort_and_rollback_keep_pending_audience(monkeypatch):
-    enable(monkeypatch, 'SEPARATE_MERGE')
-    monkeypatch.setenv('AUDIO_MERGE_HANDLER_URL', 'https://sync.example/v2/audio-merge-jobs/run')
-    monkeypatch.setenv('AUDIO_MERGE_WORKER_URL', 'https://merge.example/v2/audio-merge-jobs/run')
-    assert cloud_tasks._audio_merge_handler_url('owner').startswith('https://merge.example')
-    assert cloud_tasks._audio_merge_handler_url('other').startswith('https://sync.example')
-    monkeypatch.setenv('AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED', 'false')
-    assert cloud_tasks._audio_merge_handler_url('owner').startswith('https://sync.example')
-    observed = []
-    monkeypatch.setattr(
-        cloud_tasks, 'verify_configured_cloud_tasks_oidc', lambda request, **kwargs: observed.append(kwargs) or 0
-    )
-    cloud_tasks.verify_audio_merge_cloud_tasks_oidc(SimpleNamespace())
-    assert observed[0]['audience'] == [
-        'https://sync.example/v2/audio-merge-jobs/run',
-        'https://merge.example/v2/audio-merge-jobs/run',
-    ]
 
 
 @pytest.mark.asyncio
@@ -731,13 +719,6 @@ def test_raw_playback_requires_read_phase(monkeypatch, buckets):
     assert storage.download_and_decode_chunk_blob(buckets['canonical'], 'raw-live/owner/c/a', 'owner', 16000) is None
 
 
-def test_missing_merge_worker_retains_current_handler(monkeypatch):
-    enable(monkeypatch, 'SEPARATE_MERGE')
-    monkeypatch.delenv('AUDIO_MERGE_WORKER_URL', raising=False)
-    monkeypatch.setenv('AUDIO_MERGE_HANDLER_URL', 'https://legacy/run')
-    assert cloud_tasks._audio_merge_handler_url('owner') == 'https://legacy/run'
-
-
 def test_conversation_purge_covers_raw_links_and_regional_objects(monkeypatch, buckets):
     monkeypatch.setenv('BUCKET_AUDIO_DERIVED', 'regional')
     for name in ('canonical', 'regional'):
@@ -786,26 +767,6 @@ def test_merged_into_links_owner_packs_before_raw_and_derived_cleanup(monkeypatc
         assert not buckets['canonical'].blobs and not buckets['regional'].blobs
 
 
-def test_retired_pcm_still_reaches_optional_owner_pack_archive(monkeypatch, buckets):
-    pcm = b'\x01\x00' * 160
-    pack = CapturePack('pcm16', 16000)
-    pack.append(pcm, 'conversation', 1000, 160)
-    raw, metadata = pack.encoded()
-    path = storage.archive_capture_bytes('owner', raw, 'raw-live', 'conversation/0/a', metadata)
-    enable(monkeypatch, 'READ')
-    enable(monkeypatch, 'STOP_PCM')
-    monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'true')
-    monkeypatch.setattr(storage.conversation_tombstones, 'is_deleted', lambda *args: False)
-    forward = object()
-    monkeypatch.setattr(storage, 'get_canonical_audio_bucket', lambda: forward)
-    seen = []
-    monkeypatch.setattr(storage.audio_packs, 'archive_capture', lambda *args, **kwargs: seen.append(args))
-    chunk = {'timestamp': 1000, 'data': pcm, 'span': {'sample_rate': 16000, 'samples': 160}}
-    assert storage.upload_audio_chunks_batch([chunk], 'owner', 'conversation', sample_rate=16000) == [path]
-    assert seen == [(forward, 'owner', pcm)]
-    assert not any(name.startswith('chunks/') for name in buckets['canonical'].blobs)
-
-
 @pytest.mark.asyncio
 async def test_live_audio_archive_uses_dedicated_bulkhead_and_disables_on_saturation(monkeypatch, buckets):
     enable(monkeypatch, 'LIVE')
@@ -836,7 +797,8 @@ async def test_live_audio_archive_uses_dedicated_bulkhead_and_disables_on_satura
     archive = LiveAudioArchive(host)
     await archive.append(b'packet', 'conversation', 1000, 160)
     await archive.close()
-    assert observed_executors == [executor]
+    assert observed_executors[0] is executor
+    assert all(pool is executor or pool is live_audio_archive.db_executor for pool in observed_executors)
 
     reasons = []
     monkeypatch.setattr(live_audio_archive, 'record_fallback', lambda **kwargs: reasons.append(kwargs['reason']))

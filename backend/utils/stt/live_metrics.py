@@ -89,6 +89,36 @@ WINDOW_REPLICA_ATTEMPTS = Counter(
     'omi_stt_window_replica_attempts_total', 'Direct GPU pod POST attempts with bounded causes', ['outcome']
 )
 WINDOW_LATENCY = Histogram('omi_stt_window_post_seconds', 'Window POST latency', buckets=(0.1, 0.5, 1, 2, 4, 8, 15))
+SHAPE_FIRST_TEXT = Histogram(
+    'omi_stt_shape_first_text_seconds',
+    'First VAD speech to emitted text, pinned shape experiment arm',
+    ['arm'],
+    buckets=(2, 5, 10, 15, 20, 25, 30, 45, 60),
+)
+SHAPE_POST = Histogram(
+    'omi_stt_shape_post_seconds',
+    'Window POST wall latency, actual shape destination',
+    ['arm'],
+    buckets=(0.1, 0.5, 1, 2, 3, 4, 8, 15),
+)
+SHAPE_OUTCOME = Counter('omi_stt_shape_posts_total', 'Window POST result by actual destination', ['arm', 'outcome'])
+# The closed shape-POST outcome vocabulary; anything outside it reports 'error'.
+SHAPE_OUTCOMES = frozenset({'success', 'empty', 'error', 'queue_timeout', 'cancelled'})
+
+
+def bounded_shape_outcome(outcome: str) -> str:
+    return outcome if outcome in SHAPE_OUTCOMES else 'error'
+
+
+SHAPE_SESSIONS = Counter('omi_stt_shape_sessions_total', 'Admitted window legs by pinned experiment arm', ['arm'])
+SHAPE_INFLIGHT = Gauge('omi_stt_shape_posts_inflight', 'Accepted listener POSTs by shape destination', ['arm'])
+for _shape_arm in ('control', 'canary'):
+    SHAPE_FIRST_TEXT.labels(arm=_shape_arm)
+    SHAPE_POST.labels(arm=_shape_arm)
+    SHAPE_SESSIONS.labels(arm=_shape_arm)
+    SHAPE_INFLIGHT.labels(arm=_shape_arm)
+    for _shape_outcome in ('success', 'empty', 'error', 'queue_timeout', 'cancelled'):
+        SHAPE_OUTCOME.labels(arm=_shape_arm, outcome=bounded_shape_outcome(_shape_outcome))
 WINDOW_FIRST_TEXT = Histogram(
     'omi_stt_window_first_text_seconds',
     'Wall seconds from first VAD speech sent to first nonempty windowed transcript',
@@ -188,9 +218,6 @@ for _cohort in DEMAND_COHORTS:
     initialize_metric(WINDOW_FIRST_TEXT, demand_cohort=_cohort)
 
 LEG_ATTEMPTS = Counter('omi_stt_leg_attempts_total', 'Configured-chain connection results', ['to_mode', 'outcome'])
-RECONNECT = Counter(
-    'omi_stt_reconnect_total', 'Bounded live STT reconnect decisions', ['provider', 'reason', 'outcome']
-)
 REPLAY_SECONDS = Counter('omi_stt_replay_seconds_total', 'Live STT audio replayed after reconnect', ['provider'])
 LANGUAGE_CONSTRAINT = Counter(
     'omi_stt_language_constraint_total',
@@ -381,12 +408,6 @@ class SonioxIdleMetrics(NamedTuple):
     failures: Counter
     avoided: Counter
     closes_by_trigger: Counter
-    cohort_closes: Counter
-    cohort_reopens: Counter
-    cohort_latency: Histogram
-    cohort_failures: Counter
-    cohort_avoided: Counter
-    cohort_closes_by_trigger: Counter
     drains: Counter
     close_refusals: Counter
     silence_gaps: Histogram
@@ -395,20 +416,11 @@ class SonioxIdleMetrics(NamedTuple):
 _soniox_idle_metrics: SonioxIdleMetrics | None = None
 _soniox_idle_lock = threading.Lock()
 
-SONIOX_IDLE_COHORT_ARMS = ('control', 'treatment')
-# Silence-gap buckets bracket the speech-gate close thresholds (hangover + 1 s
-# up to today's 45 s), so the connected time any threshold would save reads
-# straight off the histogram before a cohort runs.
 SONIOX_SILENCE_GAP_BUCKETS = (2, 4, 5, 6, 8, 10, 12, 15, 20, 30, 45, 60, 120, 300, 900)
 
 
 def soniox_idle_metrics() -> SonioxIdleMetrics:
-    """Register only when an enabled Soniox socket is constructed; no off series.
-
-    The ``omi_soniox_idle_cohort_*`` companions carry the session's treatment
-    arm (``config.soniox_idle`` uid-hash cohort) so a percent rollout compares
-    arms without relabelling the existing unlabeled family.
-    """
+    """Register only when an enabled Soniox socket is constructed."""
     global _soniox_idle_metrics
     with _soniox_idle_lock:
         if _soniox_idle_metrics is None:
@@ -428,37 +440,6 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                     'omi_soniox_idle_closes_by_trigger_total',
                     'Planned paid transport closes by trigger (vad silence, pre_speech silence or no client frames)',
                     ['trigger'],
-                ),
-                Counter(
-                    'omi_soniox_idle_cohort_closes_total',
-                    'Planned paid transport closes by treatment arm',
-                    ['arm'],
-                ),
-                Counter(
-                    'omi_soniox_idle_cohort_reopens_total',
-                    'Speech-triggered paid transport dials by treatment arm',
-                    ['arm'],
-                ),
-                Histogram(
-                    'omi_soniox_idle_cohort_reopen_seconds',
-                    'Onset to replacement audio admission by treatment arm',
-                    ['arm'],
-                    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
-                ),
-                Counter(
-                    'omi_soniox_idle_cohort_reopen_failures_total',
-                    'Failed speech-triggered transport dials by treatment arm',
-                    ['arm'],
-                ),
-                Counter(
-                    'omi_soniox_idle_cohort_connected_seconds_avoided_total',
-                    'Estimated wall seconds with transport closed by treatment arm',
-                    ['arm'],
-                ),
-                Counter(
-                    'omi_soniox_idle_cohort_closes_by_trigger_total',
-                    'Planned paid transport closes by trigger and treatment arm',
-                    ['arm', 'trigger'],
                 ),
                 Counter(
                     'omi_soniox_idle_drains_total',
@@ -482,12 +463,4 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
             _soniox_idle_metrics.close_refusals.labels(reason='cap')
             for _trigger in ('vad', 'pre_speech', 'no_frames'):
                 _soniox_idle_metrics.closes_by_trigger.labels(trigger=_trigger)
-                for _arm in SONIOX_IDLE_COHORT_ARMS:
-                    _soniox_idle_metrics.cohort_closes_by_trigger.labels(arm=_arm, trigger=_trigger)
-            for _arm in SONIOX_IDLE_COHORT_ARMS:
-                _soniox_idle_metrics.cohort_closes.labels(arm=_arm)
-                _soniox_idle_metrics.cohort_reopens.labels(arm=_arm)
-                _soniox_idle_metrics.cohort_latency.labels(arm=_arm)
-                _soniox_idle_metrics.cohort_failures.labels(arm=_arm)
-                _soniox_idle_metrics.cohort_avoided.labels(arm=_arm)
     return _soniox_idle_metrics

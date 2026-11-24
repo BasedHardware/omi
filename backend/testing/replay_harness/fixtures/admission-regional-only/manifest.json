@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "admission-regional-only",
+  "tier": "S",
+  "scrub": "synthetic-structure-only",
+  "seed_blob_sha256": [],
+  "created": "2026-11-04T00:00:00Z",
+  "prod_evidence": {},
+  "stages": {
+    "admission": {
+      "expect": "pass"
+    }
+  },
+  "expect": "pass",
+  "notes": "Synthetic regional-only PCM inventory models list_audio_chunks merging BUCKET_AUDIO_DERIVED with the private bucket, then generation-pinned admission reads from the declared regional bucket."
+}

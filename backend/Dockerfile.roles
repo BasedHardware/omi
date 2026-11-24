@@ -92,6 +92,13 @@ ARG OMI_RELEASE_SHA=unknown
 ENV OMI_RELEASE_SHA=${OMI_RELEASE_SHA}
 LABEL org.opencontainers.image.revision=${OMI_RELEASE_SHA}
 
+FROM app AS sync-backfill-worker
+ENV OMI_ROLE=workers
+CMD ["python", "-m", "utils.sync.worker_runtime"]
+ARG OMI_RELEASE_SHA=unknown
+ENV OMI_RELEASE_SHA=${OMI_RELEASE_SHA}
+LABEL org.opencontainers.image.revision=${OMI_RELEASE_SHA}
+
 FROM app AS realtime
 ENV OMI_ROLE=realtime
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop", "--timeout-graceful-shutdown", "60"]

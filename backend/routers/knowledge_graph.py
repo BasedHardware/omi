@@ -1,5 +1,6 @@
 from utils.generated_compute import generated_compute_allowed, require_generated_compute, generated_compute_configured
 import importlib
+import logging
 import sys
 from enum import Enum
 
@@ -12,12 +13,13 @@ from database._client import get_firestore_client
 from database.auth import get_user_name
 from utils.memory import canonical_graph as canonical_graph_service
 from utils.memory.memory_service import MemoryService
+from utils.memory.v3.account_generation_source import V3AccountGenerationFailureReason
 from utils.executors import db_executor, llm_executor, run_blocking
 from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
-from utils.subscription import is_trial_paywalled
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 Payload = Dict[str, Any]
 MemoryPayloads = List[Payload]
 RebuildKnowledgeGraph = Callable[[str, MemoryPayloads, str], Payload]
@@ -29,6 +31,14 @@ CANONICAL_GRAPH_MUTATION_CONFLICT = (
 CANONICAL_GRAPH_STATE_UNVERIFIED = (
     "Knowledge graph state could not be verified right now, so it was left untouched. Please try again."
 )
+_CANONICAL_READ_FAILURE_REASONS = frozenset(reason.value for reason in V3AccountGenerationFailureReason) | {
+    'malformed_memory_state_head',
+    'missing_cursor_secret',
+    'cursor_encoding_failed',
+    'malformed_cursor_boundary',
+    'missing_cursor_boundary',
+    'canonical_revision_changed_during_read',
+}
 
 
 def _knowledge_graph_llm_module() -> Any:
@@ -238,10 +248,20 @@ def get_canonical_knowledge_graph(
     except canonical_graph_service.CanonicalGraphCursorError as exc:
         raise HTTPException(status_code=400, detail='invalid_or_stale_cursor') from exc
     except canonical_graph_service.CanonicalGraphReadUnavailable as exc:
+        reason = str(exc)
+        # Emit one bounded reason for the final HTTP outcome, after service retries.
+        logger.info(
+            'canonical_graph_unavailable reason=%s',
+            reason if reason in _CANONICAL_READ_FAILURE_REASONS else 'unknown',
+        )
         # Positive absence is different from an unreadable/corrupt revision.
         # Keep the released status/body contract; new clients may use this
         # additive signal to distinguish a genuinely new account from outage.
-        headers = {'X-Omi-Knowledge-Graph-State': 'unestablished'} if str(exc) == 'missing_state_head' else None
+        headers = (
+            {'X-Omi-Knowledge-Graph-State': 'unestablished'}
+            if reason == V3AccountGenerationFailureReason.MISSING_STATE_HEAD.value
+            else None
+        )
         raise HTTPException(status_code=503, detail='canonical_graph_unavailable', headers=headers) from exc
     return CanonicalKnowledgeGraphResponse(
         nodes=page.nodes,
@@ -304,8 +324,6 @@ async def extract_knowledge_graph(
     """
     if generated_compute_configured():
         await run_blocking(db_executor, require_generated_compute, uid, 'knowledge_graph')
-    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
-        raise HTTPException(status_code=402, detail='trial_expired')
     kg_mod = _knowledge_graph_llm_module()
     resolved_name = body.user_name or await run_blocking(db_executor, get_user_name, uid)
     user_name = (resolved_name or "User").strip() or "User"

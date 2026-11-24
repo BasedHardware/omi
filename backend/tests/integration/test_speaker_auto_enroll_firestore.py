@@ -41,7 +41,12 @@ def test_pool_authority_publication_and_revocation_on_real_firestore(state, monk
         s['id']: dict(binding=policy.binding(s), window=[s['start'], s['end']], seconds=5, vector=voice)
         for s in segments
     }
+    from database.people_generation import generation_ref
+
+    head = generation_ref(user)
+    before_generation = (head.get().to_dict() or {}).get('generation', 0)
     assert db.publish(uid, person.id, 'source', ['s0', 's1'], evidence, stamp, 1, firestore_client=store.client)
+    assert head.get().to_dict()['generation'] == before_generation + 1
     old_person = person.get().to_dict()
     before = db.context(uid, firestore_client=store.client)
     cached = dict(embedding=policy.usable(uid, old_person, before), **policy.cache_authority(uid, old_person, before))

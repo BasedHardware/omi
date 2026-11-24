@@ -1,0 +1,70 @@
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+/* native_sim stand-ins for the CV1 board lines the application touches.
+ * Pins sit on the board's gpio_emul controller; the scenario timeline drives
+ * them (sim_power.c). No pull flags: the scripted level is the electrical one.
+ */
+/ {
+    safe_mode_fault: safe-mode-fault {
+        compatible = "omi,safe-mode-fault";
+        zephyr,deferred-init;
+    };
+
+    buttons: buttons {
+        compatible = "gpio-keys";
+        usr_btn: usr-btn {
+            gpios = <&gpio0 26 GPIO_ACTIVE_LOW>;
+            label = "USR";
+            zephyr,code = <INPUT_KEY_ENTER>;
+        };
+    };
+
+    bat_chg_pin: bat_chg_pin {
+        compatible = "omi,sim-gpio-pin";
+        gpios = <&gpio0 7 GPIO_ACTIVE_HIGH>;
+    };
+
+    pdm_en_pin: pdm_en_pin {
+        compatible = "omi,sim-gpio-pin";
+        gpios = <&gpio0 20 GPIO_ACTIVE_HIGH>;
+    };
+
+    /* SD card path (sim_sd.c): the raw-ring driver power-manages the SPI SD
+     * host and the shared SPI3 bus, and drives P1.10 (power) and P1.11 (CS). */
+    sdhc0: sdhc0 {
+        compatible = "omi,sim-dummy-device";
+    };
+
+    spi3: spi3 {
+        compatible = "omi,sim-dummy-device";
+    };
+
+    gpio1: gpio1 {
+        compatible = "zephyr,gpio-emul";
+        gpio-controller;
+        #gpio-cells = <2>;
+        rising-edge;
+        falling-edge;
+    };
+
+    sdcard_en_pin: sdcard-en {
+        compatible = "omi,sim-gpio-pin";
+        gpios = <&gpio1 10 GPIO_ACTIVE_HIGH>;
+    };
+
+    aliases {
+        buttons = &buttons;
+    };
+
+    chosen {
+        /* No host HCI device, even if Bluetooth is accidentally enabled later. */
+        /delete-property/ zephyr,bt-hci;
+    };
+};
+
+&gpio0 {
+    ngpios = <32>;
+};
+
+&bt_hci_userchan {
+    status = "disabled";
+};

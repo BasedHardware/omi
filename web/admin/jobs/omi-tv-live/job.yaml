@@ -1,0 +1,35 @@
+# Review artifact only. David supplies an immutable image digest built through
+# GitHub Actions after naming/authorizing a workflow. Do not deploy this placeholder.
+# Schedule (human, not agent): Cloud Scheduler every 5 minutes, POST to the job's
+# run endpoint with the job's invoker identity. Runs read Monitoring and write one
+# document; a failed run leaves the previous document in place.
+#
+# Identity: the existing finops-writer SA (the rollup's writer). It already holds
+# bigquery.dataEditor on based-hardware.omi_tv (where live_day lives) and
+# bigquery.jobUser. The only new grant is monitoring.viewer on based-hardware.
+# Scheduler: the job is invoked by finops-unit-cost-scheduler, which today holds
+# run.invoker only on omi-tv-rollup. Its run.invoker on THIS job is a new,
+# job-scoped grant, not made here. Table DDL: jobs/omi-tv-live/schema.sql.
+# Cloud Scheduler every 5 minutes (human-applied, not by the agent).
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: omi-tv-live
+  annotations:
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    spec:
+      parallelism: 1
+      taskCount: 1
+      template:
+        spec:
+          serviceAccountName: finops-writer@based-hardware.iam.gserviceaccount.com
+          maxRetries: 0
+          timeoutSeconds: "300"
+          containers:
+            - image: IMAGE_DIGEST_FROM_APPROVED_GITHUB_ACTIONS
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: 512Mi

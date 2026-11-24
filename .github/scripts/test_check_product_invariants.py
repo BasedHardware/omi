@@ -363,6 +363,32 @@ class RegistryAuditTests(unittest.TestCase):
             problems = audit_registry(root)
             self.assertTrue(any("does not exist: guards/present.py" in p for p in problems), problems)
 
+    def test_guard_tracked_at_head_satisfies_sparse_checkout(self):
+        # Cone-mode sparse checkouts do not materialise out-of-cone paths: a
+        # guard committed at HEAD but absent from the working tree is wired
+        # and must not be reported as missing.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _registry(
+                Path(tmp),
+                {"example.md": LOCKED_DOC},
+                "| INV-TEST-1 | Example | locked | [example.md](./example.md) |\n",
+            )
+            (root / "guards").mkdir()
+            (root / "guards" / "present.py").write_text("", encoding="utf-8")
+            env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+            identity = ["-c", "user.email=invariants@example.test", "-c", "user.name=Invariant Tests"]
+            subprocess.run(["git", "-C", str(root), "init", "-q"], check=True, env=env)
+            subprocess.run(["git", "-C", str(root), *identity, "add", "-A"], check=True, env=env)
+            subprocess.run(["git", "-C", str(root), *identity, "commit", "-qm", "fixture"], check=True, env=env)
+            (root / "guards" / "present.py").unlink()
+            self.assertEqual(audit_registry(root), [])
+            # A guard in neither the working tree nor HEAD still fails.
+            (root / "product" / "invariants" / "example.md").write_text(
+                LOCKED_DOC.replace("`guards/present.py`", "`guards/ghost.py`"), encoding="utf-8"
+            )
+            problems = audit_registry(root)
+            self.assertTrue(any("does not exist: guards/ghost.py" in p for p in problems), problems)
+
     def test_guard_present_but_unwired_check_script_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

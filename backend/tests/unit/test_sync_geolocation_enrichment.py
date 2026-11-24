@@ -3,7 +3,7 @@
 Offline-synced conversations were created with raw coordinates and no address
 (the sync path never ran ``resolve_geolocation`` like REST create, developer
 API, integration ingest, and live finalization do), so recap timeline rows for
-synced conversations showed "Unknown". ``_run_full_pipeline_background_async``
+synced conversations showed "Unknown". ``run_full_pipeline_background_async``
 — the single coordinator both the inline and Cloud Tasks dispatch branches
 call — now enriches the job's geolocation once, before any segment is
 processed.
@@ -198,7 +198,7 @@ async def test_coordinator_enriches_geolocation_once_before_segments(pipeline):
 
     pipeline.async_resolve_geolocation = _fake_resolver
 
-    await pipeline._run_full_pipeline_background_async(
+    await pipeline.run_full_pipeline_background_async(
         'job-geo-1', 'uid', ['/tmp/a.opus', '/tmp/b.opus'], 'omi', False, '/tmp/job-geo-1', geolocation=raw
     )
 
@@ -219,7 +219,7 @@ async def test_coordinator_keeps_raw_geolocation_when_geocode_fails(pipeline):
 
     pipeline.async_resolve_geolocation = _failing_resolver
 
-    await pipeline._run_full_pipeline_background_async(
+    await pipeline.run_full_pipeline_background_async(
         'job-geo-2', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job-geo-2', geolocation=raw
     )
 
@@ -250,7 +250,7 @@ async def test_coordinator_without_geolocation_never_attempts_a_geocode(pipeline
 
     pipeline.async_resolve_geolocation = _resolver
 
-    await pipeline._run_full_pipeline_background_async(
+    await pipeline.run_full_pipeline_background_async(
         'job-geo-3', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job-geo-3'
     )
 
@@ -306,7 +306,7 @@ async def test_partial_batch_carries_one_strike_and_keeps_the_healthy_sibling(pi
         return True
 
     pipeline.process_segment = process
-    await pipeline._run_full_pipeline_background_async(
+    await pipeline.run_full_pipeline_background_async(
         'job-partial-strike',
         'uid',
         ['/tmp/a.opus'],
@@ -359,7 +359,7 @@ async def test_finalize_internal_failure_does_not_blame_provider_in_job_result(p
         return False
 
     pipeline.process_segment = process
-    await pipeline._run_full_pipeline_background_async(
+    await pipeline.run_full_pipeline_background_async(
         'job-finalize', 'synthetic', ['/tmp/finalize.opus'], 'omi', False, '/tmp/job-finalize'
     )
     result = pipeline._finalize_sync_job_for_run.call_args.args[2]

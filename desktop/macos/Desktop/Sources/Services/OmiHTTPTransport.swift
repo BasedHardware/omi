@@ -17,6 +17,9 @@ struct OmiHTTPTransport {
 
   /// When set, `buildHeaders` uses this instead of calling AuthService (test-only).
   var testAuthHeader: String?
+  /// Explicit synthetic installation identity for intercepted transport tests.
+  /// Leaves the live Keychain/device identity outside the tested HTTP boundary.
+  var testDeviceIdHash: String?
 
   init() {
     let config = URLSessionConfiguration.default
@@ -81,7 +84,7 @@ struct OmiHTTPTransport {
       "X-Omi-Plan-Identity": "1",
       "X-App-Version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
       "X-App-Build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
-      "X-Device-Id-Hash": ClientDeviceService.shared.deviceIdHash,
+      "X-Device-Id-Hash": testDeviceIdHash ?? ClientDeviceService.shared.deviceIdHash,
       "X-Request-Start-Time": String(Date().timeIntervalSince1970),
       "X-Desktop-Request-ID": UUID().uuidString,
     ]
@@ -283,14 +286,15 @@ struct OmiHTTPTransport {
   }
 
   static func extractErrorDetail(from data: Data) -> String? {
-    if let payload = extractErrorPayload(from: data) {
-      return payload.preferredMessage
+    if let message = extractErrorPayload(from: data)?.preferredMessage {
+      return message
     }
     guard
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let detail = json["detail"] as? String
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     else { return nil }
-    return detail
+    if let detail = json["detail"] as? String { return detail }
+    // The attention retry contract returns this confirmation without a detail field.
+    return json["state"] as? String == "not_retryable" ? "not_retryable" : nil
   }
 
   static func extractErrorPayload(from data: Data) -> APIErrorPayload? {

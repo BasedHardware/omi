@@ -14,12 +14,6 @@ from utils.llm.knowledge_graph import ExtractedEdge, ExtractedNode, KnowledgeGra
 UID = 'uid-kg-extract'
 
 
-@pytest.fixture(autouse=True)
-def _entitled(monkeypatch):
-    """Default to an entitled account; the paywall gate has its own test."""
-    monkeypatch.setattr(kg_router, 'is_trial_paywalled', lambda uid, platform: False)
-
-
 async def test_extract_knowledge_graph_returns_client_graph_without_persisting(monkeypatch):
     calls: dict[str, object] = {}
 
@@ -80,19 +74,3 @@ async def test_extract_knowledge_graph_fails_closed_when_extractor_returns_none(
             uid=UID,
         )
     assert exc.value.status_code == 502
-
-
-async def test_extract_knowledge_graph_blocks_a_trial_expired_account(monkeypatch):
-    monkeypatch.setattr(kg_router, 'is_trial_paywalled', lambda uid, platform: True)
-    monkeypatch.setattr(
-        kg_router,
-        '_knowledge_graph_llm_module',
-        lambda: SimpleNamespace(extract_kg_from_text=MagicMock(), extraction_to_client_graph=MagicMock()),
-    )
-
-    with pytest.raises(HTTPException) as exc:
-        await kg_router.extract_knowledge_graph(
-            kg_router.ExtractKnowledgeGraphRequest(text='something memorable'),
-            uid=UID,
-        )
-    assert exc.value.status_code == 402

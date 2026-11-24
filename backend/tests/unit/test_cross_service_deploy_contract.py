@@ -60,7 +60,7 @@ class OverlaySource(contract.Source):
 
 
 def _manifest() -> dict:
-    return yaml.safe_load((REPO_ROOT / contract.MANIFEST).read_text(encoding='utf-8'))
+    return contract._load_yaml_path(REPO_ROOT / contract.MANIFEST)
 
 
 def _prod(manifest: dict) -> dict:
@@ -75,7 +75,8 @@ def _manifest_mutation(mutate: Callable[[dict], None]) -> Callable[[], dict[str,
     def overrides() -> dict[str, str]:
         manifest = _manifest()
         mutate(manifest)
-        return {contract.MANIFEST: yaml.safe_dump(manifest, sort_keys=False)}
+        dumper = getattr(yaml, 'CSafeDumper', yaml.SafeDumper)
+        return {contract.MANIFEST: yaml.dump(manifest, Dumper=dumper, sort_keys=False)}
 
     return overrides
 
@@ -105,12 +106,12 @@ def _unparseable_boolean(manifest: dict) -> None:
 
 
 def _unparseable_named_set_boolean(manifest: dict) -> None:
-    # LIVE_CAPTURE_WINDOW_RETENTION is compared against a named module-level frozenset (_TRUTHY), not a
+    # LIVE_CAPTURE_WINDOW_MERGE_UNION is compared against a named module-level frozenset (_TRUTHY), not a
     # literal tuple; a scanner that skips named sets never sees its tokens.
     for services in (_prod(manifest)['cloud_run']['services'],):
         for svc in services.values():
-            if 'LIVE_CAPTURE_WINDOW_RETENTION' in svc.get('env', {}):
-                svc['env']['LIVE_CAPTURE_WINDOW_RETENTION']['value'] = 'enabled'
+            if 'LIVE_CAPTURE_WINDOW_MERGE_UNION' in svc.get('env', {}):
+                svc['env']['LIVE_CAPTURE_WINDOW_MERGE_UNION']['value'] = 'enabled'
 
 
 def _sync_handler_wrong_route(manifest: dict) -> None:
@@ -176,18 +177,21 @@ def _worker_without_independent_recovery_chart() -> dict[str, str]:
 
 
 def _worker_without_independent_recovery() -> dict[str, str]:
-    # Prod recovery is declared on; dev stays off. Simulate a future source-default
-    # change as well: the explicit worker setting must still prevent a reader split
-    # in dev, where the recovery host remains pinned off.
-    overrides = _worker_without_independent_recovery_chart()
+    # The ship-on source default must not create a reader split in dev,
+    # where the recovery host remains pinned off.
+    return _worker_without_independent_recovery_chart()
+
+
+def _worker_without_independent_recovery_default_off() -> dict[str, str]:
+    # Retain coverage of the source rollback as well as today's ship-on default.
     config_path = 'backend/config/batch_language_recovery.py'
     source = (REPO_ROOT / config_path).read_text(encoding='utf-8')
     changed = source.replace(
-        "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')",
         "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')",
+        "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')",
     )
     assert changed != source
-    return {**overrides, config_path: changed}
+    return {**_worker_without_independent_recovery_chart(), config_path: changed}
 
 
 MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
@@ -206,13 +210,14 @@ MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
     'prod_url_in_dev': _manifest_mutation(_prod_url_in_dev),
     'worker_without_head_priority': _worker_without_head_priority,
     'worker_without_independent_recovery': _worker_without_independent_recovery,
-    'worker_without_independent_recovery_default_off': _worker_without_independent_recovery_chart,
+    'worker_without_independent_recovery_default_off': _worker_without_independent_recovery_default_off,
 }
 HELM_MUTATIONS = {
     'worker_without_head_priority',
     'worker_without_independent_recovery',
     'worker_without_independent_recovery_default_off',
 }
+SOURCE_DEFAULT_MUTATIONS = {'worker_without_independent_recovery_default_off'}
 
 
 @dataclass
@@ -234,7 +239,7 @@ def results(tmp_path_factory: pytest.TempPathFactory) -> Results:
         source = OverlaySource(tmp_path_factory.mktemp(name), overrides())
         # Source-default mutations need a fresh reader inventory; manifest/chart
         # mutations can reuse the baseline AST scan.
-        readers = None if name == 'worker_without_independent_recovery' else baseline.readers
+        readers = None if name in SOURCE_DEFAULT_MUTATIONS else baseline.readers
         context = contract.build_context(source, readers=readers)
         mutations[name], _, _ = contract.partition(contract.evaluate(context), gaps)
     return Results(baseline=baseline, baseline_new=baseline_new, mutations=mutations)
@@ -338,10 +343,10 @@ def test_unparseable_boolean_value_fails(results: Results) -> None:
 
 
 def test_unparseable_named_set_boolean_fails(results: Results) -> None:
-    # LIVE_CAPTURE_WINDOW_RETENTION is read via ``in _TRUTHY`` (a named frozenset); the scanner must
+    # LIVE_CAPTURE_WINDOW_MERGE_UNION is read via ``in _TRUTHY`` (a named frozenset); the scanner must
     # resolve named collections or this deployed flag is invisible to boolean-token.
     assert any(
-        v.invariant == 'boolean-token' and v.scope.endswith('/LIVE_CAPTURE_WINDOW_RETENTION')
+        v.invariant == 'boolean-token' and v.scope.endswith('/LIVE_CAPTURE_WINDOW_MERGE_UNION')
         for v in results.mutations['unparseable_named_set_boolean']
     ), results.mutations['unparseable_named_set_boolean']
 
@@ -404,9 +409,55 @@ def test_prod_service_url_in_dev_fails(results: Results) -> None:
 def test_constant_named_env_reads_are_resolved(results: Results) -> None:
     # Read through SMART_MERGE_FLATTEN_ENV; a literal-only scanner would call this kill switch dead.
     assert 'CONVERSATION_SMART_MERGE_FLATTEN_ENABLED' in results.baseline.readers.all_reads
+    assert (
+        'backend/config/batch_conversation_speakers.py'
+        in results.baseline.readers.all_reads['BATCH_FINAL_PASS_ENABLED'].modules
+    )
 
 
-def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path) -> None:
+def test_parakeet_stream_allocation_has_a_reader_on_each_deployment(results: Results) -> None:
+    key = 'PARAKEET_STREAM_ALLOCATION_PERCENT'
+    for model in results.baseline.models.values():
+        deployment = model.deployments['gke/parakeet']
+        assert deployment.entrypoint == 'parakeet.main'
+        reader = results.baseline.readers.by_entrypoint[deployment.entrypoint][key]
+        assert 'backend/parakeet/admission.py' in reader.modules
+        assert reader.defaults == {None}
+
+
+@pytest.mark.parametrize(
+    'key',
+    [
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
+    ],
+)
+def test_post_seal_kill_switches_have_readers_on_every_bound_host(results: Results, key: str) -> None:
+    for model in results.baseline.models.values():
+        for deployment in model.deployments.values():
+            if key not in deployment.env:
+                continue
+            assert deployment.entrypoint is not None, (model.env, deployment.id, key)
+            readers = results.baseline.readers.by_entrypoint[deployment.entrypoint]
+            assert key in readers, (model.env, deployment.id, key)
+            assert 'backend/config/record_latency.py' in readers[key].modules, (model.env, deployment.id, key)
+
+
+@pytest.mark.parametrize(
+    'helper',
+    [
+        '_default_on',
+        'default_on',
+        'modes_default_on',
+        'rollout_default_on',
+        '_default_off',
+        'default_off',
+        'modes_default_off',
+        'rollout_default_off',
+    ],
+)
+def test_boolean_wrapper_resolves_constant_env_key(tmp_path: Path, helper: str) -> None:
     rel = 'backend/config/synthetic_wrapped_switch.py'
     source = OverlaySource(
         tmp_path,
@@ -415,10 +466,10 @@ def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path) -> None:
                 "import os\n"
                 "SWITCH_ENV = 'SYNTHETIC_WRAPPED_SWITCH_ENABLED'\n"
                 "UNREAD_ENV = 'SYNTHETIC_UNREAD_SWITCH_ENABLED'\n"
-                "def _default_on(name):\n"
+                f"def {helper}(name):\n"
                 "    return os.getenv(name, 'true').lower() not in {'false', '0', 'off'}\n"
                 "def enabled():\n"
-                "    return _default_on(SWITCH_ENV)\n"
+                f"    return {helper}(SWITCH_ENV)\n"
                 "def unrelated():\n"
                 "    return lookup(UNREAD_ENV)\n"
             )
@@ -427,6 +478,14 @@ def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path) -> None:
     reads = contract.scan_env_reads(source, [rel])
     assert set(reads) == {'SYNTHETIC_WRAPPED_SWITCH_ENABLED'}
     assert reads['SYNTHETIC_WRAPPED_SWITCH_ENABLED'].modules == {rel}
+
+
+def test_kill_switch_logger_mapping_read_is_in_inventory() -> None:
+    key = 'BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED'
+    reads = contract.scan_env_reads(contract.Source(), ['backend/config/policy/kill_switches.py'])
+
+    assert key in reads
+    assert 'backend/config/policy/kill_switches.py' in reads[key].modules
 
 
 def test_ops_kill_without_reader_still_fails(results: Results) -> None:
@@ -479,3 +538,24 @@ def replayed_pair(request):
             source.close()
 
     return invariant, invariants_at(broken), invariants_at(fixed)
+
+
+@pytest.mark.skipif(not HAS_HELM, reason='Helm unavailable; worker chart render runs where helm is installed')
+def test_integration_cadence_exception_preserves_worker_role_boundary(results: Results) -> None:
+    model = results.baseline.models['prod']
+    integration = model.deployments['cloud_run/backend-integration']
+    worker = model.deployments['helm/batch-pipeline-worker']
+    expected = {
+        'BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS': ('200', '100'),
+        'BATCH_PIPELINE_SERVING_TICK_SECONDS': ('10', '20'),
+    }
+    cadence_gaps = {f'reader-split|prod|helm/batch-pipeline-worker/{key}' for key in expected}
+    violations = contract.check_reader_split(results.baseline)
+    assert cadence_gaps <= {v.key for v in violations}
+    for key, (admitted, retained_default) in expected.items():
+        assert integration.env[key] == admitted
+        assert key not in worker.env
+        assert contract.effective(worker, key, results.baseline.readers) == retained_default
+    # These remain observable violations, accepted only as two exact role-specific gaps.
+    # The existing head-priority and independent-recovery mutations still reject real drift.
+    assert cadence_gaps <= contract.load_known_gaps().keys()

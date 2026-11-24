@@ -8,9 +8,25 @@ Repo-enforceable inventory of expected prod scrape targets, routing labels, and
 no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.prod.yaml).
 
 - **Enforced in CI** by `backend/tests/unit/test_monitoring_telemetry_contract.py`.
-- Jobs marked `coverage_status: enforced` must appear in `omi-journey-scrape-missing`.
-- Jobs marked `coverage_status: declared` are wired in values/ServiceMonitors but
-  do not yet have a dedicated coverage alert (follow-up to expand the scrape-missing rule).
+- Jobs marked `coverage_status: enforced` must have their own `omi-scrape-<job>`
+  rule in [`alerts/scrape-health.json`](./alerts/scrape-health.json), mirrored exactly
+  in `alert-rules.json`. The Stackdriver job uses `omi-scrape-stackdriver-metrics`
+  to stay within Grafana's 40-character UID limit. The former `declared` status
+  is no longer accepted.
+- Exemptions require a reviewed reason and an explicit entry in the contract
+  test's reviewed exemptions; no jobs are currently exempt.
+- Scrape-health rules are muted agent-tier warnings sustained for 30m. Always-on
+  jobs cover down, absent and empty scrapes; kube-state-metrics keeps its existing
+  `omi-kube-state-metrics-empty` owner for empty scrapes. Opt-in batch releases
+  cover down/empty only while targets exist and treat NoData as OK.
+- Down and empty boolean results are added before thresholding above zero;
+  PromQL `or` would retain a healthy down-result zero and mask an empty-scrape
+  result one with the same labels. Always-on rules aggregate the absent/down
+  branch to a single unlabeled result before adding the empty branch.
+- These rules do not pin autoscaling target counts. For multi-release jobs
+  (Parakeet main/LID and the two Cloud Run exporters), a silently deleted release
+  is not detected while another release remains healthy. Whole-job absence takes
+  roughly 35m to fire, including Prometheus staleness and the 30m pending period.
 - Managed GKE control-plane exclusions (`kubeProxy` / `kubeScheduler` /
   `kubeControllerManager`) are documented here and owned by #9138 / PR #11093 —
   do not page `TargetDown` for those endpoints.
@@ -255,6 +271,17 @@ always records `cutover_authorized=false`, including a matched comparison.
 Note: Stackdriver exporter is scraped by Prometheus (job `prometheus-stackdriver-metrics`), then prometheus-adapter queries Prometheus for those metrics. The exporter does not feed the adapter directly.
 
 Cloud Run application metrics take a push-then-pull bridge because a public URL scrape reaches only one random autoscaled instance. Each `backend` and `desktop-backend` instance exposes its registry on loopback port 9090 to Google's Managed Service for Prometheus sidecar. The sidecar writes `prometheus.googleapis.com/omi_*` to Cloud Monitoring. A separate, rate-limited Stackdriver exporter imports Cloud Run backend, desktop-backend, sync services, and notifications-job, and Prometheus scrapes it as `cloud-run-application-metrics`. The checked-in namespace allowlist includes those services and `notifications-job`; deployed ingestion still requires each sidecar and the matching metrics-egress release (see below). Sync intake and sync conversation shape are readable today through Cloud Logging of `omi_sync_intake` and `omi_conversation_shape`. See [`../../docs/runbooks/cloud-run-metrics-ingestion.md`](../../docs/runbooks/cloud-run-metrics-ingestion.md).
+
+The Cloud Run exporter `metrics.interval: 10m` is the query lookback, not the
+polling cadence. Prometheus scrapes these exporters every 120s in prod, once per
+replica. Their one-hour `monitoring.descriptor-cache-ttl` caches descriptor
+discovery only; time series are still read inline on every scrape. New metric
+descriptors can take up to one hour to appear (restart the exporter to discover
+them immediately). This reduces descriptor API traffic and collection work,
+not the billed `ListTimeSeries` units. Verify `up`, scrape errors, family
+coverage and alert inputs after the metrics-egress release; keep the existing
+scrape interval, lookback, filters and family lists. Revert the extra argument
+to roll back descriptor caching.
 
 ## Components
 
@@ -841,7 +868,13 @@ It never prints contact-point settings or token material.
 
 The same script can classify every committed rule in `alerts/*.json` against
 live Grafana provisioning (`--mode fleet`). That run prints committed-but-absent,
-live-but-uncommitted, present-but-paused, and present-but-divergent UIDs. Default
+live-but-uncommitted, present-but-paused, and present-but-divergent UIDs.
+Paused rules also count as live-and-matching when the committed source explicitly
+sets `isPaused=true` and the rest of the definition matches. The paused bucket is
+informational; either direction of pause-state drift is divergent and fails the
+selected gate. An unapproved live unpause bypasses the source's reviewed hold,
+so it fails rather than merely warning. Missing or malformed live pause state fails too.
+Default
 `--fail-on none` reports drift without failing; `--fail-on gated` fails only on
 UIDs listed in `live-alert-gate.json`. The monitoring workflow uses `--mode
 import` to upsert, by stable UID (POST when absent, PUT when present), the
@@ -857,7 +890,8 @@ value still fails. The import verifies each rule's `alert_identity` and Telegram
 receiver and confirms that receiver exists with resolve notifications enabled;
 it never deletes or pauses other rules. It then runs `--mode fleet --alert-set live-stt
 --fail-on gated`, which covers the canaries and every gated UID. The `live-stt` verification scope includes those Redis rules and the gated finalization rules, and fails closed
-when any of them is absent, paused, or divergent. They are Grafana-managed alerts,
+when any of them is absent or divergent, including a pause state that differs
+from the committed source. They are Grafana-managed alerts,
 not PrometheusRule CRDs. Their `component="other"` selector matches the shared
 fallback bucket for `redis_cache`; cache-write children are initialized at zero.
 The token is read from a mode-0600 file and
@@ -1378,6 +1412,11 @@ once the operator stays running; verify `up` converges upward before chasing ind
 `backend/scripts/alert_backtest.py` is read-only and uses only the Python standard
 library. `--lint` runs offline in the existing local/CI checks manifest and the
 monitoring unit suite. Regenerate the committed metric-name snapshot with:
+
+The snapshot covers in-cluster Prometheus. `datasource_metrics` records separately
+observed families for another datasource, with its observation time and evidence.
+Those names admit rules only for that datasource; refreshing the local snapshot
+preserves them. A GMP-only histogram must not be presented as a local series.
 
 ```bash
 source ~/.local/bin/gcp-agent-env.sh ro-prod

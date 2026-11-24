@@ -22,6 +22,20 @@ AUDIO_DURATION_TOLERANCE_SECONDS = 0.1
 logger = logging.getLogger(__name__)
 
 
+def log_result_held(route, stage, *, exception_type='none', reason='exception'):
+    """Content-free diagnostics; logging must not chain a private exception."""
+    try:
+        logger.warning(
+            'event=batch_recovery_result_held route=%s stage=%s reason=%s exception_type=%s',
+            route,
+            stage,
+            reason,
+            exception_type,
+        )
+    except Exception:
+        pass
+
+
 class RecoveryFailure(ValueError):
     def __init__(self, stage: str, reason: str):
         self.stage = stage if stage in STAGES else 'provider'
@@ -230,6 +244,14 @@ class MultilingualEmpty(RecoveryFailure):
         self.duration, self.spans = duration, spans
         # Bound worker VAD seconds the independent recognizer may cite (see words_payload).
         self.worker_speech = worker_speech
+
+
+class RecoveryProviderFailed(RecoveryFailure):
+    """Provider failure with validated audio/VAD context for guarded failover."""
+
+    def __init__(self, duration, spans, worker_speech=None):
+        super().__init__('provider', 'provider_failed')
+        self.duration, self.spans, self.worker_speech = duration, spans, worker_speech
 
 
 class WordsWithoutVad(RecoveryFailure):

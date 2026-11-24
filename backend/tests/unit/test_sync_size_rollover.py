@@ -138,6 +138,9 @@ def _sized_row(store, key, timestamp, stored_bytes):
     """
     intake(store, chunk(key, timestamp))
     row = _row(store, key)
+    # The intake keep-provenance stamp is not part of the size fixture: these
+    # helpers pin exact byte boundaries that predate it.
+    row.pop('relevance_decision', None)
     row['structured'] = {'title': '', 'overview': ''}
     base = estimate_firestore_document_bytes(row, None)
     row['structured']['overview'] = 'x' * (stored_bytes - base)

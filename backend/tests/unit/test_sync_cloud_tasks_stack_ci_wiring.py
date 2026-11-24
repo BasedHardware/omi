@@ -59,7 +59,7 @@ def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -
         '\n  replay-harness-phase0a-gauntlet:\n', 1
     )[0]
 
-    assert 'timeout-minutes: 20' in job
+    assert 'timeout-minutes: 25' in job
     assert 'needs: scope' in job
     assert "if: needs.scope.outputs.applies == 'true'" in job
     assert 'uses: actions/setup-python@v6' in job

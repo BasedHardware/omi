@@ -19,9 +19,13 @@ class _RecordingMemoriesProvider extends MemoriesProvider {
   final List<String> deleted = [];
   final List<String> committed = [];
   int restored = 0;
+  VoidCallback? reportDeletionFailure;
 
   @override
-  Future<void> deleteMemory(Memory memory) async => deleted.add(memory.id);
+  Future<void> deleteMemory(Memory memory, {VoidCallback? onFailure}) async {
+    deleted.add(memory.id);
+    reportDeletionFailure = onFailure;
+  }
 
   @override
   Future<bool> restoreLastDeletedMemory({String? id}) async {
@@ -78,6 +82,20 @@ void main() {
 
   test('the provider holds a delete back longer than the Undo toast stays up', () {
     expect(MemoriesProvider.pendingDeletionWindow > OmiFeedbackTiming.undo, isTrue);
+  });
+
+  testWidgets('a refused delete reports failure after its edit sheet has closed', (tester) async {
+    final provider = _RecordingMemoriesProvider();
+    addTearDown(provider.dispose);
+    await _open(tester, provider, _memory());
+    await tester.tap(find.byTooltip('Delete Memory'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+    provider.reportDeletionFailure!();
+    await tester.pumpAndSettle();
+    expect(find.text('Failed to delete items'), findsOneWidget);
+    expect(provider.committed, ['mem-1']);
   });
 
   testWidgets('delete from the sheet is immediate, closes it and offers Undo without a close button', (tester) async {

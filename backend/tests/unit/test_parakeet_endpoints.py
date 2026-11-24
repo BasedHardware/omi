@@ -1077,3 +1077,55 @@ def test_language_probe_upload_is_capped():
     resp = client.post("/v2/language", files={"file": ("a.wav", big, "audio/wav")})
     assert resp.status_code == 413
     gpu.submit_language_sync.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_lid_only_lifespan_skips_asr_batch_and_stream_warmup(monkeypatch):
+    app, mod, worker, _ = _make_app_with_mocks()
+    monkeypatch.setenv('PARAKEET_LID_ONLY', 'true')
+    monkeypatch.setattr(mod, 'gpu_worker', None)
+    monkeypatch.setattr(mod, 'batch_engine', None)
+    worker_factory = MagicMock(return_value=worker)
+    monkeypatch.setattr(mod, 'GPUWorker', worker_factory)
+    batch_factory = MagicMock(side_effect=AssertionError('ASR batch engine started'))
+    monkeypatch.setattr(mod, 'BatchEngine', batch_factory)
+    warmup = MagicMock(side_effect=AssertionError('stream decoder warmed'))
+    monkeypatch.setattr(mod, 'warmup_rnnt_decoder', warmup)
+    async with mod.lifespan(app):
+        worker.start.assert_called_once()
+        assert mod.batch_engine is None
+    worker.stop.assert_called_once()
+    batch_factory.assert_not_called()
+    warmup.assert_not_called()
+
+
+def test_lid_only_routes_and_model_readiness(monkeypatch):
+    app, mod, worker, _ = _make_app_with_mocks()
+    monkeypatch.setenv('PARAKEET_LID_ONLY', 'true')
+    monkeypatch.setattr(app.router, 'routes', list(app.router.routes))
+    mod._restrict_lid_routes()
+    assert {r.path for r in app.router.routes} == {'/health', '/v2/language', '/metrics'}
+    client = TestClient(app)
+    assert client.post('/v2/transcribe').status_code == 404
+    assert client.get('/docs').status_code == 404
+    worker.language_id_model = None
+    assert client.get('/health').status_code == 503
+    worker.language_id_model = 'whisper-base'
+    assert client.get('/health').status_code == 200
+    worker.submit_language_sync.return_value = {'en': 0.99}
+    result = client.post('/v2/language', files={'file': ('probe.wav', _make_wav_bytes(duration_s=30), 'audio/wav')})
+    assert result.status_code == 200
+    assert result.json()['audio_seconds'] == 30
+    monkeypatch.setattr(mod, 'gpu_worker', None)
+    assert client.get('/health').status_code == 503
+
+
+def test_lid_only_skips_configured_stream_model(monkeypatch):
+    _, mod, _, _ = _make_app_with_mocks()
+    transcribe = sys.modules['transcribe']
+    monkeypatch.setenv('PARAKEET_LID_ONLY', 'true')
+    monkeypatch.setattr(transcribe, 'STREAM_MODEL_NAME', 'must-not-load')
+    load = MagicMock(side_effect=AssertionError('stream ASR loaded'))
+    monkeypatch.setattr(transcribe, '_load_nemo_model', load)
+    transcribe._init_stream_model()
+    load.assert_not_called()

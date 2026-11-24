@@ -58,19 +58,11 @@ def _situate(
     used_seconds: int = 0,
     byok_enrolled: bool = False,
     byok_header: bool = False,
-    paywalled: bool = False,
     reviewer: bool = False,
     usage_record: Any = None,
 ) -> None:
     monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', 'uid' if reviewer else 'someone-else')
 
-    def trial_paywalled(uid, source=None, *, required_byok_provider=None, **_kw):
-        # Mirrors the real helper: an enrolled BYOK request for the required provider is exempt.
-        if required_byok_provider and byok_enrolled and byok_header:
-            return False
-        return paywalled
-
-    monkeypatch.setattr(sub, 'is_trial_paywalled', trial_paywalled)
     monkeypatch.setattr(sub.users_db, 'is_byok_active', lambda uid: byok_enrolled, raising=False)
     monkeypatch.setattr(
         sub, 'get_byok_key', lambda provider: 'dg-user-key' if byok_header and provider == 'deepgram' else None
@@ -157,10 +149,10 @@ MATRIX = [
         0,
         'plan_allowance_exhausted',
     ),
-    ('trial paywalled desktop', dict(plan=PlanType.basic, paywalled=True), 'blocked', 0, 'trial_paywalled'),
+    ('desktop free, no account-age block', dict(plan=PlanType.basic), 'managed', BASIC_CAP, 'plan_within_allowance'),
     (
-        'trial paywalled but Deepgram BYOK (exempt, pays Deepgram)',
-        dict(plan=None, paywalled=True, byok_enrolled=True, byok_header=True),
+        'desktop Deepgram BYOK pays Deepgram',
+        dict(plan=None, byok_enrolled=True, byok_header=True),
         'managed',
         None,
         'byok',
@@ -173,8 +165,8 @@ MATRIX = [
         'marketplace_reviewer',
     ),
     (
-        'marketplace reviewer, trial paywalled',
-        dict(plan=PlanType.basic, paywalled=True, reviewer=True),
+        'desktop marketplace reviewer',
+        dict(plan=PlanType.basic, reviewer=True),
         'managed',
         None,
         'marketplace_reviewer',
@@ -236,125 +228,18 @@ def test_an_inactive_subscription_has_no_managed_minutes_for_either_question(mon
     assert sub.resolve_transcription_allowance('uid').reason == 'subscription_inactive'
 
 
-def test_the_release_probe_identity_is_never_admission_held_by_the_desktop_paywall(monkeypatch, sub) -> None:
-    """The fixed non-human release-probe uid exercises the full terminal desktop path
-    (utils/release_probe.py gate convention). Its Free-plan account never buys a plan
-    or BYOK keys, so once live STT cap-dispatch admission covers the whole fleet the
-    strict desktop trial paywall holds every probe packet and the pusher prod canary
-    finalization probe times out with zero transcripts (run 40190728003)."""
-    _situate(monkeypatch, sub, plan=PlanType.basic, paywalled=True)
+def test_desktop_free_and_release_probe_remain_managed_without_trial_state(monkeypatch, sub) -> None:
+    """Both keep the production-disabled trial's managed admission answer."""
+    _situate(monkeypatch, sub, plan=PlanType.basic)
     allowance = sub.resolve_transcription_allowance('omi-release-probe', source='desktop')
     assert (allowance.mode, allowance.remaining_seconds, allowance.reason) == ('managed', None, 'release_probe')
-    # An ordinary uid in the same expired-trial situation stays blocked: the
-    # exemption is the exact non-human identity, not the account state.
-    blocked = sub.resolve_transcription_allowance('uid', source='desktop')
-    assert (blocked.mode, blocked.remaining_seconds, blocked.reason) == ('blocked', 0, 'trial_paywalled')
-
-
-def test_a_paywall_lookup_failure_inside_the_real_helper_does_not_open_a_billed_socket(monkeypatch, sub) -> None:
-    """`is_trial_paywalled` fails open for every other caller (a Firebase blip never paywalls a paying
-    user). The allowance path asks it strictly, so the same blip resolves to the free path."""
-    real_is_trial_paywalled = sub.is_trial_paywalled  # captured before _situate replaces it
-    _situate(monkeypatch, sub, plan=PlanType.basic, used_seconds=0)
-    monkeypatch.setattr(sub, 'is_trial_paywalled', real_is_trial_paywalled)
-    monkeypatch.setattr(sub, 'TRIAL_PAYWALL_ENABLED', True)
-    monkeypatch.setattr(sub.redis_db, 'get_generic_cache', lambda key: None, raising=False)
-    monkeypatch.setattr(sub.redis_db, 'set_generic_cache', lambda *a, **k: None, raising=False)
-    monkeypatch.setattr(sub, 'has_validated_byok_keys', lambda: False)
-    monkeypatch.setattr(sub.users_db, 'get_byok_state', lambda uid, firestore_client=None: {}, raising=False)
-    monkeypatch.setattr(sub.users_db, 'is_byok_active', lambda uid, firestore_client=None: False, raising=False)
-    monkeypatch.setattr(
-        sub.users_db,
-        'get_user_valid_subscription',
-        lambda uid, firestore_client=None, provision=True: SimpleNamespace(plan=PlanType.basic, status='active'),
-        raising=False,
+    # Ordinary Free accounts keep their managed minutes too.
+    ordinary = sub.resolve_transcription_allowance('uid', source='desktop')
+    assert (ordinary.mode, ordinary.remaining_seconds, ordinary.reason) == (
+        'managed',
+        BASIC_CAP,
+        'plan_within_allowance',
     )
-    monkeypatch.setattr(sub, 'desktop_trial_paywall_eligible', lambda plan, subscription=None: True)
-
-    def firebase_down(uid):
-        raise RuntimeError('firebase auth unavailable')
-
-    monkeypatch.setattr(sub, '_get_user', firebase_down)
-    # Every other caller still sees the fail-open answer the trial UX relies on.
-    assert sub.is_trial_paywalled('uid', 'desktop') is False
-    allowance = sub.resolve_transcription_allowance('uid', source='desktop')
-    assert (allowance.mode, allowance.remaining_seconds, allowance.reason) == ('on_device', 0, 'allowance_unavailable')
-
-
-def _real_paywall(monkeypatch, sub, *, byok_enrolled: bool, fingerprints: dict, creation_ms, header: bool) -> None:
-    """Run the REAL `is_trial_paywalled` (paywall enabled, redis miss, eligible basic account)."""
-    real_is_trial_paywalled = sub.is_trial_paywalled  # captured before _situate replaces it
-    _situate(monkeypatch, sub, plan=PlanType.basic, used_seconds=0, byok_enrolled=byok_enrolled, byok_header=header)
-    monkeypatch.setattr(sub, 'is_trial_paywalled', real_is_trial_paywalled)
-    monkeypatch.setattr(sub, 'TRIAL_PAYWALL_ENABLED', True)
-    monkeypatch.setattr(sub.redis_db, 'get_generic_cache', lambda key: None, raising=False)
-    monkeypatch.setattr(sub.redis_db, 'set_generic_cache', lambda *a, **k: None, raising=False)
-    monkeypatch.setattr(sub, 'has_validated_byok_keys', lambda: header)
-    monkeypatch.setattr(
-        sub.users_db, 'get_byok_state', lambda uid, firestore_client=None: {'fingerprints': fingerprints}, raising=False
-    )
-    monkeypatch.setattr(sub.users_db, 'is_byok_active', lambda uid, firestore_client=None: byok_enrolled, raising=False)
-    monkeypatch.setattr(
-        sub.users_db,
-        'get_user_valid_subscription',
-        lambda uid, firestore_client=None, provision=True: SimpleNamespace(plan=PlanType.basic, status='active'),
-        raising=False,
-    )
-    monkeypatch.setattr(sub, 'desktop_trial_paywall_eligible', lambda plan, subscription=None: True)
-    monkeypatch.setattr(
-        sub, '_get_user', lambda uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=creation_ms))
-    )
-
-
-def test_a_stored_deepgram_fingerprint_without_the_header_does_not_lift_the_paywall_for_the_allowance(
-    monkeypatch, sub
-) -> None:
-    """The real helper exempts ordinary callers on a stored fingerprint alone. The allowance path
-    must not: without the key on this request the socket would run on Omi's Deepgram key."""
-    _real_paywall(
-        monkeypatch, sub, byok_enrolled=True, fingerprints={'deepgram': 'fp'}, creation_ms=1_000, header=False
-    )
-    assert sub.is_trial_paywalled('uid', 'desktop', required_byok_provider='deepgram') is False  # ordinary callers
-    allowance = sub.resolve_transcription_allowance('uid', source='desktop')
-    assert (allowance.mode, allowance.remaining_seconds, allowance.reason) == ('blocked', 0, 'trial_paywalled')
-    assert sub.has_transcription_credits('uid', source='desktop') is False
-    # With the validated key on the request, the same account is exempt and pays Deepgram itself.
-    _real_paywall(monkeypatch, sub, byok_enrolled=True, fingerprints={'deepgram': 'fp'}, creation_ms=1_000, header=True)
-    assert sub.resolve_transcription_allowance('uid', source='desktop').reason == 'byok'
-
-
-def test_an_ordinary_callers_cached_fail_open_answer_is_never_consumed_by_the_allowance(monkeypatch, sub) -> None:
-    """Production caches paywall answers in redis. An ordinary caller (fingerprint-only exemption)
-    caches False; the strict allowance path must not read that entry — it has its own key,
-    and the invalidator clears it with the others."""
-    cache: dict[str, Any] = {}
-    _real_paywall(
-        monkeypatch, sub, byok_enrolled=True, fingerprints={'deepgram': 'fp'}, creation_ms=1_000, header=False
-    )
-    monkeypatch.setattr(sub.redis_db, 'get_generic_cache', lambda key: cache.get(key), raising=False)
-    monkeypatch.setattr(
-        sub.redis_db, 'set_generic_cache', lambda key, value, ttl=None: cache.__setitem__(key, value), raising=False
-    )
-    deleted: list[str] = []
-    monkeypatch.setattr(sub.redis_db, 'delete_generic_cache', deleted.append, raising=False)
-    assert sub.is_trial_paywalled('uid', 'desktop', required_byok_provider='deepgram') is False  # ordinary caller
-    assert cache == {'trial_paywall:expired:uid:deepgram': False}
-    allowance = sub.resolve_transcription_allowance('uid', source='desktop')
-    assert (allowance.mode, allowance.reason) == ('blocked', 'trial_paywalled')
-    assert cache['trial_paywall:expired:uid:deepgram:strict'] is True
-    # The strict answer is cached and reused; a downgrade or BYOK change clears it with the rest.
-    sub.clear_trial_paywall_cache('uid')
-    assert set(cache) <= set(deleted)
-
-
-@pytest.mark.parametrize('creation_ms', [None, 0])
-def test_an_unreadable_account_record_inside_the_real_helper_does_not_open_a_billed_socket(
-    monkeypatch, sub, creation_ms
-) -> None:
-    _real_paywall(monkeypatch, sub, byok_enrolled=False, fingerprints={}, creation_ms=creation_ms, header=False)
-    assert sub.is_trial_paywalled('uid', 'desktop') is False  # ordinary callers keep the fail-open answer
-    allowance = sub.resolve_transcription_allowance('uid', source='desktop')
-    assert (allowance.mode, allowance.remaining_seconds, allowance.reason) == ('on_device', 0, 'allowance_unavailable')
 
 
 def test_transient_reasons_cover_only_unresolved_lookups_not_real_exhaustion(sub) -> None:
@@ -384,7 +269,6 @@ def test_both_wrappers_delegate_to_the_resolver_with_exact_arguments(monkeypatch
 @pytest.mark.parametrize(
     'broken',
     [
-        'is_trial_paywalled',
         'get_user_valid_subscription',
         'get_monthly_usage_for_subscription',
         'transcription_allowance_seconds',
@@ -440,30 +324,6 @@ def test_the_allowance_comes_from_the_catalog_not_the_environment(monkeypatch, s
     assert sub.has_transcription_credits('uid') is False  # the env's million minutes did not apply
 
 
-def test_the_paywall_only_fires_for_the_desktop_source(monkeypatch, sub) -> None:
-    calls: list = []
-
-    def paywalled(uid, source=None, **_kw):
-        calls.append(source)
-        return source == 'desktop'
-
-    monkeypatch.setattr(sub, 'is_trial_paywalled', paywalled)
-    monkeypatch.setattr(sub.users_db, 'is_byok_active', lambda uid: False, raising=False)
-    monkeypatch.setattr(sub, 'get_byok_key', lambda provider: None)
-    monkeypatch.setattr(
-        sub.users_db, 'get_user_valid_subscription', lambda uid: SimpleNamespace(plan=PlanType.basic), raising=False
-    )
-    monkeypatch.setattr(sub, 'get_monthly_usage_for_subscription', lambda uid: {})
-    assert sub.resolve_transcription_allowance('uid', source='desktop').mode == 'blocked'
-    assert sub.resolve_transcription_allowance('uid', source='omi').mode == 'managed'
-    assert calls == ['desktop', 'omi']
-    # Both wrappers pass the source through: a desktop-paywalled uid is blocked on desktop only.
-    assert sub.has_transcription_credits('uid', source='desktop') is False
-    assert sub.get_remaining_transcription_seconds('uid', source='desktop') == 0
-    assert sub.has_transcription_credits('uid', source='omi') is True
-    assert sub.get_remaining_transcription_seconds('uid', source='omi') == BASIC_CAP
-
-
 def test_the_answer_serialises_for_the_plan_endpoint(monkeypatch, sub) -> None:
     _situate(monkeypatch, sub, plan=PlanType.plus, used_seconds=PLUS_CAP - 10_000)
     assert sub.resolve_transcription_allowance('uid').as_dict() == {
@@ -515,15 +375,6 @@ def test_funded_request_cannot_use_deepgram_key_for_another_provider(sub, monkey
     _situate(monkeypatch, sub, plan=PlanType.plus, used_seconds=PLUS_CAP, byok_enrolled=True, byok_header=True)
     assert sub.resolve_transcription_allowance('uid').reason == 'byok'
     assert sub.resolve_transcription_allowance('uid', omi_funded=True).reason == 'plan_allowance_exhausted'
-
-
-def test_ladder_only_cohort_does_not_activate_legacy_launch_validation(sub, monkeypatch):
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
-    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live')
-    monkeypatch.delenv('SUBSCRIPTION_LAUNCH_DATE', raising=False)
-    assert sub.get_monthly_usage_for_subscription('synthetic') == {}
 
 
 def test_noncohort_owner_keeps_legacy_launch_parity(sub, monkeypatch):

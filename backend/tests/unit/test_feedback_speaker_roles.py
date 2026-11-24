@@ -12,6 +12,7 @@ from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.memories import SubjectAttribution
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
+from tests.support.memory_process_conversation import pc  # noqa: F401 - pytest fixture
 from utils.conversations import transcript_for_llm as renderer
 from utils.conversations.owner_attribution import (
     grounded_quote_segments,
@@ -24,7 +25,6 @@ from utils.conversations.owner_attribution import (
 from utils.conversations.render import conversations_to_string
 from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
 from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
-from tests.unit.test_memory_replace_policy import _memory_replace_import_isolation, _load_process_conversation
 from tests.unit.test_daily_summary_location_address_fill import ext, _configure, _Convo
 
 
@@ -53,11 +53,6 @@ def conversation(rows):
         transcript_segments=rows,
         structured={'title': 'Planning', 'overview': 'Sam prefers tea.', 'category': 'personal'},
     )
-
-
-@pytest.fixture(scope='module')
-def pc(_memory_replace_import_isolation):
-    return _load_process_conversation()
 
 
 @pytest.mark.parametrize('source', [None, 'carried'])

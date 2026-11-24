@@ -17,6 +17,7 @@ from database import speaker_learning as speaker_learning_db
 from database import speaker_learning_jobs as speaker_learning_jobs_db
 from database import speaker_auto_enroll
 from database import users
+from database import voice_profiles as voice_profiles_module
 from routers.listen import speakers
 from utils.audio import AudioRingBuffer
 from models.transcript_segment import TranscriptSegment
@@ -61,7 +62,7 @@ def world(monkeypatch):
     monkeypatch.setattr(
         users,
         'get_people',
-        lambda uid: [deepcopy(v) for k, v in store.rows.items() if k[:3] == ('users', uid, 'people')],
+        lambda uid, **kwargs: [deepcopy(v) for k, v in store.rows.items() if k[:3] == ('users', uid, 'people')],
     )
     monkeypatch.setattr(users, 'get_user_speaker_embedding', lambda uid: None)
     voice_settings = {'speaker_tag_prompts_enabled': True, 'save_other_voice_profiles': True}
@@ -349,6 +350,9 @@ def test_mobile_bulk_endpoint_teaches_corrects_and_rejects_foreign_person(world,
         return Conversation(created_at=now, finished_at=now, structured={}, **raw)
 
     monkeypatch.setattr(conversations.conversations_db, 'get_firestore_client', lambda: world.store)
+    # Positive bulk assignments retire ignored-voice markers through the shared
+    # marker helper's voice_profiles import; keep that write on the hermetic store.
+    monkeypatch.setattr(voice_profiles_module, 'get_firestore_client', lambda: world.store)
     # The fixture intentionally keeps its synthetic manifest minimal; exercise
     # the real command/transaction while leaving storage encryption out of scope.
     monkeypatch.setattr(

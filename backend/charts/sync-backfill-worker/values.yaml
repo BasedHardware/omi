@@ -1,0 +1,26 @@
+replicaCount: 1
+podLabels:
+  service_name: sync-backfill-worker
+image:
+  repository: ""
+  digest: ""
+serviceAccount:
+  name: sync-backfill-worker
+  gcpEmail: ""
+runtimeSecret: ""
+runtimeConfigMapName: prod-omi-backend-config
+worker:
+  apiUrl: ""
+  audience: ""
+nodeSelector:
+  cloud.google.com/gke-nodepool: sync-backfill-pool
+tolerations:
+  - key: sync-backfill
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+resources:
+  requests: {cpu: "1", memory: 3Gi}
+  limits: {cpu: "3", memory: 6Gi}
+podMonitoring:
+  enabled: true

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from google.cloud.firestore_v1._helpers import DocumentExtractorForUpdate
 
 from database import conversations as conversations_db, conversation_finalization_jobs as jobs_db
 from database import redis_db
@@ -22,6 +23,7 @@ from tests.unit.fixtures.strict_firestore_transaction import (
 from utils import encryption
 from utils.conversations import finalizer, lifecycle
 from utils.conversations.recovery import raw_transcript_bytes
+from utils.conversations.terminal_relevance import valid_decision
 
 pc = importlib.import_module('utils.conversations.process_conversation')
 UID, CID, JOB = 'recovery-user', 'recovery-conversation', 'recovery-job'
@@ -44,6 +46,7 @@ def pipeline(monkeypatch):
     # Keep the fixture's reference ownership and read-before-write enforcement.
     # This boundary also needs Firestore's merge=True document-set semantics.
     original_set = StrictFirestoreTransaction.set
+    original_update = StrictFirestoreTransaction.update
     writes = []
 
     def merge_set(transaction, ref, data, *, merge=False):
@@ -51,6 +54,14 @@ def pipeline(monkeypatch):
         payload = {**store.rows.get(ref.path, {}), **data} if merge else data
         original_set(transaction, ref, payload)
 
+    def record_update(transaction, ref, data):
+        # This observer tracks processor result writes. Fenced terminal repair
+        # already used update (and was never part of the legacy set observer).
+        if data.get('terminal_family') == 'success':
+            writes.append((ref.path, deepcopy(DocumentExtractorForUpdate(data).set_fields)))
+        original_update(transaction, ref, data)
+
+    monkeypatch.setattr(StrictFirestoreTransaction, 'update', record_update)
     monkeypatch.setattr(StrictFirestoreTransaction, 'set', merge_set)
     monkeypatch.setattr(StrictFirestoreDocument, 'id', property(lambda ref: ref.path[-1]), raising=False)
     monkeypatch.setattr(conversations_db, 'db', store)
@@ -72,7 +83,7 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(finalizer, '_maybe_start_shadow', lambda *args: None)
     monkeypatch.setattr(pc, 'is_release_probe_uid', lambda uid: False)
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args: None)
-    monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args: False)
+    monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args, **kwargs: False)
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
     monkeypatch.setattr(pc.redis_db, 'get_user_preferred_app', lambda uid: None)
@@ -156,6 +167,25 @@ async def _run_and_verify(pipeline):
 
 
 @pytest.mark.asyncio
+async def test_speaker_obligation_settles_after_canonical_persistence(pipeline, monkeypatch):
+    observed = []
+
+    def resolve(uid, conversation, *, on_persist):
+        assert pipeline.store.rows[CONVERSATION_PATH]['status'] == 'processing'
+
+        def settled(current):
+            observed.append((current, pipeline.store.rows[CONVERSATION_PATH]['status']))
+
+        on_persist(settled)
+        return True
+
+    monkeypatch.setattr(pc, 'resolve_speakers_for_processing', resolve)
+    _seed(pipeline, transcript=[{'text': 'hmm', 'start': 0, 'end': 1, 'speaker': 'SPEAKER_00', 'is_user': False}])
+    await _run_and_verify(pipeline)
+    assert observed == [(True, 'completed')]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('level', ['enhanced', 'standard'])
 @pytest.mark.parametrize('text', ['', 'hmm'])
 async def test_decoded_rule_discard_completes_and_verifies_without_rewriting_blob(pipeline, monkeypatch, level, text):
@@ -183,7 +213,13 @@ async def test_decoded_rule_discard_completes_and_verifies_without_rewriting_blo
 
 
 @pytest.mark.asyncio
-async def test_short_contentful_recovery_keeps_minimum_instead_of_creating_attention(pipeline, monkeypatch, capsys):
+@pytest.mark.parametrize(
+    ('stored_title', 'stored_gist'),
+    [('', ''), ('Discussion notes', ''), ('Discussion 3', ''), ('Discussion notes', '  ')],
+)
+async def test_short_contentful_recovery_keeps_minimum_instead_of_creating_attention(
+    pipeline, monkeypatch, capsys, stored_title, stored_gist
+):
     text = 'Call mom before five.'
 
     async def no_merge(*args, **kwargs):
@@ -193,6 +229,7 @@ async def test_short_contentful_recovery_keeps_minimum_instead_of_creating_atten
     _seed(
         pipeline,
         transcript=[{'id': 'seg-short', 'text': text, 'start': 0, 'end': 1, 'speaker': 'SPEAKER_00', 'is_user': True}],
+        structured={'title': stored_title, 'overview': '', 'gist': stored_gist},
     )
     monkeypatch.setattr(pc, 'conversation_transcripts_for_llm', lambda *_: (text, text, {}))
 
@@ -303,7 +340,8 @@ async def test_decode_failure_preserves_blob_and_uses_existing_terminal_path(pip
     assert response == {'status': 'dead_letter'}
     assert row['transcript_segments'] == blob
     assert row['status'] == 'completed' and row['discarded'] is False
-    assert 'relevance_decision' not in row
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     assert pipeline.store.rows[JOB_PATH]['last_failure_code'] == 'recovery_structure_unavailable'
     assert counters['verified'] == 0 and counters['refused'] == 1
     output = capsys.readouterr().out
@@ -339,7 +377,8 @@ async def test_post_read_protection_refuses_discard_transactionally(pipeline, mo
     assert response == {'status': 'dead_letter'}
     assert row['status'] == 'completed' and row['discarded'] is False
     assert row['transcript_segments'] == blob
-    assert 'relevance_decision' not in row
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     for key, value in protection.items():
         if key == 'structured':
             # Protected content survives; an untitled row also gains the
@@ -357,13 +396,104 @@ async def test_post_read_protection_refuses_discard_transactionally(pipeline, mo
 
 
 @pytest.mark.asyncio
+async def test_placeholder_title_does_not_block_a_rule_discard(pipeline, monkeypatch):
+    """A placeholder label is not content, so the discard commits."""
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
+    _seed(pipeline, transcript=[], structured={'title': 'Discussion notes', 'overview': ''})
+    response, counters = await _run_and_verify(pipeline)
+    row = pipeline.store.rows[CONVERSATION_PATH]
+    assert response == {'status': 'done'}
+    assert row['discarded'] is True
+    assert counters['refused'] == 0
+
+
+@pytest.mark.asyncio
+async def test_gist_blocks_a_rule_discard(pipeline, monkeypatch):
+    """A discard writes the empty discard structure, so a gist must refuse it."""
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
+    _seed(pipeline, transcript=[], structured={'title': 'Discussion notes', 'gist': 'Pilot budget approval'})
+    response, counters = await _run_and_verify(pipeline)
+    row = pipeline.store.rows[CONVERSATION_PATH]
+    assert response == {'status': 'dead_letter'}
+    assert row['discarded'] is False
+    assert row['structured']['gist'] == 'Pilot budget approval'
+    assert counters['refused'] == 1
+
+
+def _batch_stub(pipeline, monkeypatch, **overrides):
+    """The 2026-11-18 stuck shape: a batch-owned capture stamped with the placeholder title."""
+    register = MagicMock(return_value=True)
+    monkeypatch.setattr(finalizer, 'reserve_recording', lambda uid, data: data.get('record_lane_owner'))
+    monkeypatch.setattr(finalizer, 'register_recording', register)
+    monkeypatch.setattr(jobs_db, 'stop_quiet_check_for_conversation', lambda *args, **kwargs: None)
+    monkeypatch.setattr(jobs_db, 'invalidate_people_stats_cache', lambda *args: None)
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
+    _seed(
+        pipeline,
+        transcript=[],
+        structured={'title': 'Discussion notes', 'overview': ''},
+        record_lane_owner='batch_live_v1',
+        record_audio_closed=True,
+        private_cloud_sync_enabled=True,
+        has_content=True,
+        **overrides,
+    )
+    return register
+
+
+@pytest.mark.asyncio
+async def test_server_batch_stub_hands_off_to_batch_and_verifies(pipeline, monkeypatch):
+    """Admitted zero-preview stub: registration, batch handoff terminal, then a clean verification."""
+    start = (NOW - timedelta(days=30)).timestamp()
+    register = _batch_stub(
+        pipeline,
+        monkeypatch,
+        external_data={'server_batch_only': True},
+        server_batch_audio_received=True,
+        server_batch_audio_start=start,
+        server_batch_audio_end=start + 120,
+    )
+    response, counters = await _run_and_verify(pipeline)
+    row, job = pipeline.store.rows[CONVERSATION_PATH], pipeline.store.rows[JOB_PATH]
+
+    assert response == {'status': 'done'}
+    assert row['status'] == job['status'] == 'completed'
+    assert job['finalization_outcome'] == 'server_batch_capture'
+    assert row['discarded'] is False and row['home_transcription_pending_at'] == NOW
+    register.assert_called_once()
+    assert counters == {'verified': 1, 'refused': 0, 'errors': 0, 'skipped': 0}
+    pipeline.paid_notes.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_batch_owned_empty_preview_is_kept_and_registered_not_discarded(pipeline, monkeypatch, capsys):
+    """An empty live preview proves nothing about retained batch audio."""
+    register = _batch_stub(pipeline, monkeypatch)
+    response, counters = await _run_and_verify(pipeline)
+    row = pipeline.store.rows[CONVERSATION_PATH]
+
+    assert response == {'status': 'done'}
+    assert row['status'] == 'completed'
+    assert row['discarded'] is False
+    assert row['relevance_decision']['reason'] == 'batch_audio_owed'
+    assert row['structured']['title_provenance'] == 'server_minimum'
+    assert row['terminal_no_derived_effects'] is True
+    register.assert_called_once()
+    assert counters == {'verified': 1, 'refused': 0, 'errors': 0, 'skipped': 0}
+    pipeline.paid_notes.assert_not_called()
+    assert any('"reason": "batch_audio_owed"' in line for line in capsys.readouterr().out.splitlines())
+
+
+@pytest.mark.asyncio
 async def test_restore_before_finalizer_read_never_decides_discard(pipeline, capsys):
     blob = _seed(pipeline, sync_relevance_user_kept=True)
     response, counters = await _run_and_verify(pipeline)
     row = pipeline.store.rows[CONVERSATION_PATH]
     assert response == {'status': 'dead_letter'}  # kept minimum, existing terminal policy
     assert row['discarded'] is False and row['sync_relevance_user_kept'] is True
-    assert row['transcript_segments'] == blob and 'relevance_decision' not in row
+    assert row['transcript_segments'] == blob
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     assert pipeline.decisions and all(not decision.discard for decision in pipeline.decisions)
     assert counters['refused'] == 1 and 'verify_not_rich' not in capsys.readouterr().out
 
@@ -376,7 +506,9 @@ async def test_title_added_while_job_is_queued_remains_visible(pipeline, capsys)
     assert response == {'status': 'dead_letter'}
     assert row['status'] == 'completed' and row['discarded'] is False
     assert row['user_title'] == 'Title added after admission'
-    assert row['transcript_segments'] == blob and 'relevance_decision' not in row
+    assert row['transcript_segments'] == blob
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     assert counters['refused'] == 1 and 'verify_not_rich' not in capsys.readouterr().out
 
 
@@ -395,7 +527,9 @@ async def test_blob_corrupted_after_read_cannot_commit_discard(pipeline, monkeyp
     row = pipeline.store.rows[CONVERSATION_PATH]
     assert response == {'status': 'dead_letter'}
     assert row['status'] == 'completed' and row['discarded'] is False
-    assert row['transcript_segments'] == corrupted and 'relevance_decision' not in row
+    assert row['transcript_segments'] == corrupted
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     assert counters['refused'] == 1 and 'verify_not_rich' not in capsys.readouterr().out
 
 
@@ -419,7 +553,7 @@ async def test_rule_discard_keeps_stored_speaker_metadata_with_its_transcript(pi
     stored = {'status': 'capture', 'version': 1, 'participant_speaker_ids': [7]}
     transcript = [{'text': 'hmm', 'start': 0, 'end': 1, 'speaker': 'SPEAKER_07', 'speaker_id': 7, 'is_user': False}]
 
-    def resolve(uid, conversation):
+    def resolve(uid, conversation, **kwargs):
         conversation.speaker_resolution = ConversationSpeakers(
             status='resolved', participant_speaker_ids=[7, 100, 101, 102]
         )
@@ -439,13 +573,21 @@ async def test_rule_discard_keeps_stored_speaker_metadata_with_its_transcript(pi
 
 
 @pytest.mark.parametrize('level', ['enhanced', 'standard'])
-def test_kept_recovery_preserves_encoded_capture_and_later_audio(pipeline, level):
+@pytest.mark.parametrize('status', ['processing', 'failed'])
+def test_kept_recovery_preserves_encoded_capture_and_later_audio(pipeline, level, status):
     # A model round-trip can normalize legacy fields without changing speech.
     # Recovery must enrich the row without replacing its durable capture.
     text = 'The synthetic release meeting agreed to ship the tested repair tomorrow.'
     transcript = [{'text': text, 'start': 0, 'end': 30, 'legacy_capture_metadata': list(range(100))}]
     speaker_metadata = {'status': 'capture', 'version': 1, 'participant_speaker_ids': [7]}
-    blob = _seed(pipeline, level=level, transcript=transcript, speaker_resolution=speaker_metadata)
+    blob = _seed(
+        pipeline,
+        level=level,
+        transcript=transcript,
+        speaker_resolution=speaker_metadata,
+        status=status,
+        sync_relevance_user_kept=status == 'failed',
+    )
     row = pipeline.store.rows[CONVERSATION_PATH]
     row['audio_files'].append({'id': 'later-audio'})
     stored_audio = deepcopy(row['audio_files'])
@@ -460,6 +602,7 @@ def test_kept_recovery_preserves_encoded_capture_and_later_audio(pipeline, level
     }
     assert lifecycle.persist_processed_conversation(UID, payload)
     row = pipeline.store.rows[CONVERSATION_PATH]
+    assert row['status'] == 'completed' and row['terminal_family'] == 'success'
     assert row['transcript_segments'] == blob
     assert row['audio_files'] == stored_audio
     assert row['speaker_resolution'] == speaker_metadata
@@ -477,12 +620,30 @@ def test_kept_recovery_preserves_encoded_capture_and_later_audio(pipeline, level
     assert remaining == [] and counters['verified'] == 1 and counters['refused'] == 0
 
 
+@pytest.mark.asyncio
+async def test_server_recovery_of_failed_row_is_fenced_before_processor_persist(pipeline, monkeypatch):
+    _seed(pipeline, status='failed', discarded=True)
+    process = MagicMock(side_effect=AssertionError('failed terminal must not re-enter processing'))
+    monkeypatch.setattr(finalizer, 'process_conversation', process)
+
+    async def payload():
+        return {'job_id': JOB, 'dispatch_generation': 1}
+
+    response = await worker.run_listen_finalization_job(SimpleNamespace(json=payload), task_retry_count=0)
+    assert response.status_code == 200
+    assert pipeline.store.rows[CONVERSATION_PATH]['status'] == 'failed'
+    assert pipeline.store.rows[CONVERSATION_PATH]['discarded'] is True
+    process.assert_not_called()
+    assert not any(path == CONVERSATION_PATH for path, _ in pipeline.writes)
+
+
 @pytest.mark.parametrize(
     'trigger,has_audio,expected_calls',
     [
         ('server_recovery', True, 0),
         ('server_recovery', False, 0),
         ('capture_end', True, 1),
+        ('user_reprocess', True, 0),
     ],
 )
 def test_recovery_does_not_regenerate_admitted_audio(pipeline, monkeypatch, trigger, has_audio, expected_calls):
@@ -490,7 +651,14 @@ def test_recovery_does_not_regenerate_admitted_audio(pipeline, monkeypatch, trig
     from utils.conversations.processing_trigger import ProcessingTrigger
     from utils.conversations.relevance import RelevanceDecision
 
-    _seed(pipeline, private_cloud_sync_enabled=True, folder_id='existing-folder')
+    restoring = trigger == 'user_reprocess'
+    _seed(
+        pipeline,
+        private_cloud_sync_enabled=True,
+        folder_id='existing-folder',
+        status='failed' if restoring else 'processing',
+        discarded=restoring,
+    )
     if not has_audio:
         pipeline.store.rows[CONVERSATION_PATH]['audio_files'] = []
     conversation = Conversation(**conversations_db.get_conversation(UID, CID))
@@ -513,11 +681,16 @@ def test_recovery_does_not_regenerate_admitted_audio(pipeline, monkeypatch, trig
         'en',
         conversation,
         trigger=trigger,
+        user_kept=restoring,
         recovery_transcript_decoded=True,
         defer_derived_effects=True,
         derived_effects_observer=effects.append,
     )
     assert result.status.value == 'completed'
+    if restoring:
+        stored = pipeline.store.rows[CONVERSATION_PATH]
+        assert stored['sync_relevance_user_kept'] is True
+        assert stored['status'] == 'completed' and stored['terminal_family'] == 'success'
     effects[0]()
     assert factory.call_count == expected_calls
 

@@ -10,9 +10,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import os
 import tarfile
-from datetime import datetime, timezone
 from typing import Any
 
 from google.api_core.exceptions import NotFound, PreconditionFailed
@@ -29,10 +27,6 @@ class CaptureDeleted(ValueError):
     pass
 
 
-def enabled() -> bool:
-    return os.getenv('AUDIO_CANONICAL_PACKING_ENABLED', 'false').lower() == 'true'
-
-
 def owner_prefix(prefix: str, uid: str) -> str:
     if not uid or '/' in uid or uid in {'.', '..'}:
         raise ValueError('invalid archive owner')
@@ -45,85 +39,6 @@ def _json(value: Any) -> bytes:
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
-
-
-def archive_capture(
-    bucket: Any,
-    uid: str,
-    payload: bytes,
-    *,
-    format: str,
-    provenance: dict[str, Any],
-    conversation_ranges: list[dict[str, Any]],
-    identity: str,
-) -> str | None:
-    """Writer is gated by owner_storage_write_gate at the storage boundary.
-
-    Identity includes plaintext digest for randomized encryption retries. If a
-    receipt already exists the original ciphertext remains authoritative.
-    """
-    if not enabled():
-        return None
-    if len(payload) > MAX_CAPTURE_BYTES:
-        raise ValueError('canonical capture exceeds bounded intake size')
-    assert_capture_allowed(bucket, uid, conversation_ranges)
-    key = _sha(_json([identity, format, conversation_ranges]))
-    # Keep retry identity stable while retargeting late donor captures to the survivor.
-    conversation_ranges = [
-        (
-            {**row, 'conversation_id': conversation_chain(bucket, uid, row['conversation_id'])[-1]}
-            if row.get('conversation_id')
-            else row
-        )
-        for row in conversation_ranges
-    ]
-    # Day is derived from capture provenance, never retry/packing time.
-    day = str(provenance['capture_day'])
-    datetime.strptime(day, '%Y-%m-%d')
-    path = f'{owner_prefix(SOURCE_PREFIX, uid)}{day}/{key}'
-    # Permanent owner receipt prevents a retried upload recreating packed sources.
-    receipt = bucket.blob(f'{owner_prefix(INDEX_PREFIX, uid)}captures/{key}.json')
-    if receipt.exists():
-        return path
-    blob = bucket.blob(path)
-    blob.metadata = {
-        'capture': _json(
-            {'format': format, 'provenance': provenance, 'conversation_ranges': conversation_ranges}
-        ).decode()
-    }
-    try:
-        blob.upload_from_string(payload, if_generation_match=0)
-    except PreconditionFailed:
-        blob = bucket.get_blob(path)
-        if blob is None or blob.metadata != {
-            'capture': _json(
-                {'format': format, 'provenance': provenance, 'conversation_ranges': conversation_ranges}
-            ).decode()
-        }:
-            raise ValueError('canonical identity metadata conflict')
-    try:
-        assert_capture_allowed(bucket, uid, conversation_ranges)
-    except CaptureDeleted:
-        try:
-            blob.delete(if_generation_match=int(blob.generation))
-        except NotFound:
-            pass
-        raise
-    record = {'source': path, 'generation': str(blob.generation)}
-    try:
-        receipt.upload_from_string(_json(record), if_generation_match=0)
-    except PreconditionFailed:
-        pass
-    try:
-        assert_capture_allowed(bucket, uid, conversation_ranges)
-    except CaptureDeleted:
-        for object_to_delete in (blob, receipt):
-            try:
-                object_to_delete.delete(if_generation_match=int(object_to_delete.generation))
-            except NotFound:
-                pass
-        raise
-    return path
 
 
 def _read(bucket: Any, entry: dict[str, Any]) -> bytes:
@@ -199,72 +114,6 @@ def _finish(bucket: Any, index: Any, manifest: dict[str, Any]) -> None:
         raise ValueError('verified pack generation changed')
     _delete_sources(bucket, manifest)
     index.upload_from_string(_json({**manifest, 'state': 'complete'}), if_generation_match=int(index.generation))
-
-
-def pack_owner_day(bucket: Any, uid: str, day: str) -> int:
-    """One closed UTC day, bounded shards; caller holds account operation gate.
-
-    Resume every durable intent first; a crash after any source deletion cannot
-    change shard membership. Verified manifests are also the per-owner index.
-    """
-    if not enabled():
-        return 0
-    if day >= datetime.now(timezone.utc).date().isoformat():
-        raise ValueError('only closed capture days may be packed')
-    datetime.strptime(day, '%Y-%m-%d')
-    root = f'{owner_prefix(INDEX_PREFIX, uid)}{day}/'
-    claimed: set[str] = set()
-    count = 0
-    for index in bucket.list_blobs(prefix=root):
-        manifest = json.loads(index.download_as_bytes(if_generation_match=int(index.generation)))
-        _validate_owner(manifest, uid)
-        for entry in manifest['entries']:
-            assert_capture_allowed(bucket, uid, entry['conversation_ranges'])
-        _finish(bucket, index, manifest)
-        claimed.update(e['source'] for e in manifest['entries'])
-    entries: list[dict[str, Any]] = []
-    payloads: list[bytes] = []
-    size = 0
-
-    def flush() -> None:
-        nonlocal count, entries, payloads, size
-        if not entries:
-            return
-        data = _tar(entries, payloads)
-        shard = _sha(_json([(e['source'], e['generation']) for e in entries]))
-        manifest = {
-            'version': 1,
-            'owner': uid,
-            'day': day,
-            'state': 'pending',
-            'pack': f'{owner_prefix(PACK_PREFIX, uid)}{day}/{shard}.tar',
-            'sha256': _sha(data),
-            'entries': entries,
-        }
-        index = bucket.blob(f'{root}{shard}.json')
-        index.upload_from_string(_json(manifest), if_generation_match=0)
-        _finish(bucket, index, manifest)
-        count += 1
-        entries, payloads, size = [], [], 0
-
-    for blob in bucket.list_blobs(prefix=f'{owner_prefix(SOURCE_PREFIX, uid)}{day}/'):
-        if blob.name in claimed:
-            continue
-        if int(blob.size) > MAX_CAPTURE_BYTES:
-            raise ValueError('oversized capture')
-        if size + int(blob.size) > TARGET_BYTES or len(entries) >= 1024:
-            flush()
-            return count  # one new shard/run keeps the account gate bounded
-        capture = json.loads(blob.metadata['capture'])
-        assert_capture_allowed(bucket, uid, capture['conversation_ranges'])
-        entry = {'source': blob.name, 'generation': str(blob.generation), **capture}
-        data = _read(bucket, entry)
-        entry.update(member=f'{len(entries):06d}.audio', sha256=_sha(data), size=len(data))
-        entries.append(entry)
-        payloads.append(data)
-        size += len(data)
-    flush()
-    return count
 
 
 def _validate_owner(manifest: dict[str, Any], uid: str) -> None:

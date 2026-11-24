@@ -9,11 +9,17 @@ the owner-drain kill-switch path (``BATCH_PIPELINE_OWNER_DRAIN_ENABLED=false``);
 
 import asyncio
 import itertools
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
 from contextlib import contextmanager
 from unittest.mock import Mock
 
 import pytest
 
+from omi_logging import JsonFormatter
 from database.batch_pipeline_store import (
     PROJECTION_DISCOVERY_STATES,
     projection_page,
@@ -30,6 +36,8 @@ SWITCHES = ('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED', 'BATCH_PIPELINE_PROJECTI
 @pytest.fixture(autouse=True)
 def claims(monkeypatch):
     """Advisory owner claim that records nesting; a busy set refuses entry."""
+    # Trace assertions exercise the exact head-first discovery rollback.
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'off')
     state = SimpleClaims()
 
     @contextmanager
@@ -465,6 +473,120 @@ def test_finish_page_contention_on_async_receipts_still_logs_the_summary(monkeyp
     assert any('action=sweep outcome=summary' in record.getMessage() for record in caplog.records)
 
 
+@pytest.mark.parametrize('contention', [False, True])
+def test_blocked_summary_reconciles_both_pages_and_uses_only_the_committed_result(monkeypatch, caplog, contention):
+    switches(monkeypatch, chain_on=False, pending_on=True)
+    log = ResultLog(async_projection=False)
+    log.policy['projection_contention'] = contention
+    projector = projector_for(log)
+    a, b = ('sha256:' + digit * 64 for digit in 'ab')
+    private = 'synthetic-private@example.invalid'
+    cases = [
+        ('first', 'pending', a, projection.ProjectionPredecessorPending()),
+        ('second', 'pending', a, projection.ProjectionPredecessorPending()),
+        ('malformed', 'pending', private, projection.ProjectionBlocked(private)),
+        ('held', 'pending', b, ValueError()),
+        (
+            'finish',
+            'persisted',
+            b,
+            projection.ProjectionBlocked('privacy disposition requires a source deletion tombstone'),
+        ),
+        ('legacy', 'persisted', None, projection.BatchPrivacyBlocked('account_deleted')),
+        ('unread', 'persisted', a, projection.BatchPrivacyBlocked(private)),
+    ]
+    failures = {}
+    for sid, state, digest, error in cases:
+        log.commit('owner', sid, sid, [sid], state=state)
+        log.jobs[sid]['worker_image_digest'] = b
+        if digest is not None:
+            log.results[sid]['result']['worker_image_digest'] = digest
+        failures[sid] = error
+
+    real_read = log.read
+
+    def read(sid):
+        if sid == 'unread':
+            raise failures[sid]
+        return real_read(sid)
+
+    def project(sid, *args):
+        raise failures[sid]
+
+    monkeypatch.setattr(log, 'read', read)
+    monkeypatch.setattr(projector, '_project_read', project)
+    monkeypatch.setattr(projector, 'resolve_failing_head', lambda *args: True)
+    with caplog.at_level('INFO', logger=projection.logger.name):
+        counts = projector.sweep()
+    assert counts == {'completed': 0, 'waiting': 0, 'blocked': 7, 'error': 1}
+    action = 'sweep' if contention else 'sweep_blocked'
+    (summary,) = (r.getMessage() for r in caplog.records if 'blocked_groups=' in r.getMessage())
+    assert f'action={action} outcome=summary' in summary
+    assert private not in summary
+    assert 'blocked=7 error=1' in summary
+    assert json.loads(summary.split('blocked_groups=')[1]) == [
+        ['failing_head_held', b, 1],
+        ['other', 'unknown', 1],
+        ['predecessor_pending', a, 2],
+        ['privacy_account_deleted', 'unknown', 1],
+        ['privacy_unknown', 'unknown', 1],
+        ['source_deletion_tombstone_required', b, 1],
+    ]
+
+
+@pytest.mark.skipif(shutil.which('jq') is None, reason='Release readback requires jq')
+def test_release_command_reconciles_actual_sweep_logs(monkeypatch, tmp_path, caplog):
+    switches(monkeypatch, chain_on=False, pending_on=True)
+    revision = 'backend-integration-test'
+    formatter = JsonFormatter('backend-integration', 'test', None)
+    entries = []
+    for contention in (False, True):
+        log = ResultLog(async_projection=False)
+        log.policy['projection_contention'] = contention
+        for segment in ('first', 'second'):
+            log.commit('owner', segment, segment, [segment])
+        projector = projector_for(log)
+        monkeypatch.setattr(projector, '_project_read', Mock(side_effect=projection.ProjectionPredecessorPending()))
+        caplog.clear()
+        with caplog.at_level('INFO', logger=projection.logger.name):
+            assert projector.sweep()['blocked'] == 2
+        (record,) = (r for r in caplog.records if 'blocked_groups=' in r.getMessage())
+        entries.append(
+            {'jsonPayload': json.loads(formatter.format(record))}
+            if contention
+            else {'textPayload': record.getMessage()}
+        )
+
+    # Substitute only the Cloud Logging read. The production script, shell
+    # pipeline and jq program run unmodified against the emitted log records.
+    gcloud = tmp_path / 'gcloud'
+    gcloud.write_text('#!/bin/sh\ncat\n')
+    gcloud.chmod(0o755)
+    command = Path(__file__).resolve().parents[2] / 'scripts' / 'projection_sweep_blocked_counts.sh'
+
+    def readback():
+        return subprocess.run(
+            [str(command), 'synthetic-project', revision],
+            input=json.dumps(entries),
+            text=True,
+            capture_output=True,
+            env={**os.environ, 'PATH': f"{tmp_path}:{os.environ['PATH']}"},
+        )
+
+    valid = readback()
+    assert valid.returncode == 0, valid.stderr
+    assert json.loads(valid.stdout) == {
+        'revision': revision,
+        'summaries': 2,
+        'blocked': 4,
+        'groups': [{'reason': 'predecessor_pending', 'worker_image_digest': 'unknown', 'blocked': 4}],
+    }
+    entries[0]['textPayload'] = entries[0]['textPayload'].replace('blocked=2 ', 'blocked=3 ')
+    mismatch = readback()
+    assert mismatch.returncode != 0
+    assert 'blocked groups differ from sweep total' in mismatch.stderr
+
+
 def test_single_segment_contents_hand_off_the_page_row_too():
     """The row the page persisted is owed, not only the rows the walk persisted."""
     log = ResultLog()
@@ -591,7 +713,9 @@ def test_pending_page_skips_receipts_and_follow_ups_still_run(monkeypatch):
     projector.sweep()
     assert projector.has_async_followups
     pages = [call for call in recorder.calls if call[0] == 'projection_page']
-    assert [dict(call[2]).get('states') for call in pages] == [('pending',), ('persisted', 'ready')]
+    # The pending page is two queries since 2026-11-13: the newest commits, then the main cursor.
+    assert [dict(call[2]).get('states') for call in pages] == [('pending',), ('pending',), ('persisted', 'ready')]
+    assert [dict(call[2]).get('limit') for call in pages[:2]] == [50, 100]
     # Async receipts are not replayed through the assignment claim/check.
     assert [call for call in recorder.calls if call[0] in {'session', 'check'}] == []
 

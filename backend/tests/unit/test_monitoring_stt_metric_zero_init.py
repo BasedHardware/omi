@@ -139,3 +139,10 @@ def test_close_initializer_is_wired_for_streaming_and_direct_vendor_users():
     initializer = 'initialize_stt_stream_close_children'
     assert initializer in _module_calls(BACKEND / 'utils/stt/streaming.py')
     assert initializer in _module_calls(BACKEND / 'utils/stt/stream_close.py')
+
+
+def test_queue_wait_starts_with_both_lanes_and_no_fabricated_observations(startup_inventory):
+    metric = startup_inventory['omi_sync_queue_wait_seconds_count']
+    samples = [sample for family in metric.collect() for sample in family.samples]
+    assert {sample.labels['lane'] for sample in samples} == {'fresh', 'backfill'}
+    assert all(sample.value == 0 for sample in samples if sample.name.endswith(('_count', '_sum')))

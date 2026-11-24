@@ -158,9 +158,13 @@ def diagnose_promotion_lag(repository: str, tag: str, tag_sha: str) -> str:
             f"(.github/workflows/{AUTO_RELEASE_WORKFLOW})."
         )
     if status == "completed" and conclusion == "failure":
+        # The recovery workflow runs on dispatch only. check_url is the GitHub check page;
+        # the failed build ID is the last path segment of that check's Codemagic Details link.
         return (
             f"{CODEMAGIC_CHECK_NAME} failed on {tag}: {check_url}. "
-            f"Re-run that Codemagic build or dispatch \"Desktop Release Recovery Required\"."
+            f"Re-run that Codemagic build or dispatch \"Desktop Release Recovery Required\" "
+            f"(.github/workflows/desktop_codemagic_failure_recovery.yml, from main) with "
+            f"build_id=<the 24-hex ID at the end of the check's Codemagic Details link, codemagic.io/app/.../build/<id>>."
         )
     if status == "completed" and conclusion == "success":
         return (

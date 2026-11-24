@@ -14,7 +14,31 @@ relevance step (``utils/conversations/relevance.py``).
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from typing import Any
+
+from config.historical_tier import STAND_IN_TITLE_PROVENANCES
+from utils.conversations import phase_shadow
+
+BATCH_RECORD_OWNERS = frozenset({'batch_live_v1', 'batch_sync_v1'})
+SETTLING_ROW_MAX_SECONDS = 60
+# The batch timeliness alarm: a row still unsettled here is an incident to show, not a fragment to hide.
+SETTLING_MAX_HOLD_SECONDS = 2 * 60 * 60
+SETTLING_FIELDS = (
+    'summary_blocked_reason',
+    'record_lane_owner',
+    'record_projection_revision',
+    'record_upload_failed',
+    'record_audio_partial',
+    # Slim list/feed reads need the same positive STT-empty proof as full rows.
+    'record_transcription_empty',
+    'episode_transcription_pending_at',
+    'server_batch_audio_closed',
+    'server_batch_audio_start',
+    'server_batch_audio_end',
+    'record_audio_closed',
+    'record_upload_sessions',
+)
 
 
 def _value(value: Any) -> Any:
@@ -83,6 +107,25 @@ def superseded_intake_discard(data: Mapping[str, Any], content_changed: bool) ->
     )
 
 
+def is_automatic_discard(data: Mapping[str, Any]) -> bool:
+    """Whether a stored discard is only the pipeline's verdict, never the user's.
+
+    An explicit discard writes ``sync_relevance_user_kept=False`` (or carries no
+    relevance receipt at all); a restore marks the row curated. Either one
+    leaves the discard to the user.
+    """
+    decision = data.get('relevance_decision')
+    return bool(
+        data.get('discarded')
+        and isinstance(decision, Mapping)
+        and decision.get('verdict') == 'discard'
+        and decision.get('decided_by') in {'rule', 'model', 'jev', 'deterministic'}
+        and 'sync_relevance_user_kept' not in data
+        and not data.get('jev_discard_restored')
+        and not is_user_curated(data)
+    )
+
+
 def is_completed_rule_discard(data: Mapping[str, Any] | None) -> bool:
     """Whether ``data`` is a finished, uncurated row the rules already discarded.
 
@@ -110,3 +153,102 @@ def is_low_signal_sync_fragment(data: Mapping[str, Any] | None) -> bool:
     if data.get('sync_relevance') != 'review':
         return False
     return not is_user_curated(data)
+
+
+def is_completed_below_floor(data: Mapping[str, Any]) -> bool:
+    """A settled content verdict has no expiry; curation still releases it."""
+    decision = data.get('relevance_decision')
+    return bool(
+        _value(data.get('status')) == 'completed'
+        and not is_user_curated(data)
+        and (
+            data.get('summary_blocked_reason') == 'content_below_floor'
+            or (isinstance(decision, Mapping) and decision.get('reason') == 'content_below_floor')
+        )
+    )
+
+
+def _epoch(value: Any) -> float | None:
+    if isinstance(value, datetime):
+        return value.timestamp()
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def held_for_notes(data: Mapping[str, Any], *, now: float | None = None) -> bool:
+    """A kept legacy sync piece whose notes wait on its quiet hold or its open live bridge.
+
+    The only content evidence is intake's: ``keep`` (the deterministic rules did
+    not classify it as filler) and ``has_content``; no transcript is decoded. Discarded, blocked, below-floor, already-summarized and v3-layer
+    rows never qualify: a stale bridge field outlives a standalone run.
+    The wait counts from the last content arrival and ends with the settling
+    bound, so a lost obligation cannot keep a row processing.
+    """
+    hold = data.get('sync_processing_hold')
+    hold = hold if isinstance(hold, Mapping) else {}
+    bridge = data.get('sync_bridge_pending')
+    waiting = hold.get('held') is True or (isinstance(bridge, Mapping) and bool(bridge.get('target_id')))
+    if (
+        not waiting
+        or _value(data.get('status')) != 'completed'
+        or data.get('sync_relevance') != 'keep'
+        or not data.get('has_content')
+        or data.get('deleted')
+        or data.get('sync_merged_into')
+        or data.get('recording')
+        or data.get('v3_derived')
+        or data.get('summary_blocked_reason')
+        or data.get('summary_output_present')
+        or data.get('summary_completed_at')
+        or is_relevance_discarded(data)
+        or is_rule_discard_decision(data.get('relevance_decision'))
+        or is_completed_below_floor(data)
+    ):
+        return False
+    anchor = _epoch(hold.get('last_content_at')) or _epoch(data.get('finished_at'))
+    if anchor is None:
+        return False
+    current = datetime.now(timezone.utc).timestamp() if now is None else now
+    return current - anchor < SETTLING_MAX_HOLD_SECONDS
+
+
+@phase_shadow.compare('settling_hold')
+def is_settling_fragment(data: Mapping[str, Any], *, now: float | None = None, show_held: bool = False) -> bool:
+    """Hold minimum/floor rows across capture lanes, without discarding speech.
+
+    Batch-owned short provisional rows retain their existing hold too. User
+    curation releases every hold. Only unsettled rows expire after two hours;
+    a completed below-floor verdict stays off Home permanently. ``show_held``
+    (the legacy Home list of a non-v3 owner) shows a kept piece held for notes
+    as processing: a growing piece's ``finished_at`` keeps moving and would
+    otherwise hide it for as long as the capture lasts.
+    """
+    from config.episodes import home_hide_below_floor_rows_enabled
+
+    if not home_hide_below_floor_rows_enabled():
+        return False
+    if is_completed_below_floor(data):
+        return True
+    if is_user_curated(data) or (show_held and held_for_notes(data, now=now)):
+        return False
+    if data.get('record_projection_revision') or data.get('record_upload_failed') or data.get('record_audio_partial'):
+        return False
+    if _value(data.get('status')) != 'completed':
+        return False
+    started, finished = data.get('started_at'), data.get('finished_at')
+    if not isinstance(finished, datetime):
+        return False
+    current = datetime.now(timezone.utc).timestamp() if now is None else now
+    if current - finished.timestamp() >= SETTLING_MAX_HOLD_SECONDS:
+        return False
+    structured = data.get('structured')
+    server_minimum = (
+        isinstance(structured, Mapping) and structured.get('title_provenance') in STAND_IN_TITLE_PROVENANCES
+    )
+    batch_short = (
+        isinstance(started, datetime)
+        and data.get('record_lane_owner') in BATCH_RECORD_OWNERS
+        and (finished - started).total_seconds() < SETTLING_ROW_MAX_SECONDS
+    )
+    return server_minimum or batch_short

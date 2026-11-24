@@ -4,6 +4,7 @@ from datetime import datetime
 from collections.abc import Mapping
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
+from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD, python_owns_finalization
 from pydantic.json_schema import SkipJsonSchema
 
 import config.speaker_match_scores as match_scores
@@ -32,6 +33,7 @@ from models.geolocation import Geolocation
 from models.note_claims import compact_claim_projection, current_note_claims
 from pydantic import field_serializer
 from models.other import Person
+from models.speaker_exclusion import receipt_excluded_speakers
 from models.structured import MeetingType, Structured
 from models.transcript_segment import legacy_conversation_segment_id, TranscriptSegment
 from utils.capture_evidence import ledger_bound_incomplete
@@ -144,6 +146,7 @@ class SharedActionItem(BaseModel):
     completed: bool = False
     owner_name: Optional[str] = None
     due_at: Optional[datetime] = None
+    due_certainty: Optional[Literal['confirmed', 'tentative']] = None
     context: Optional[str] = None
 
     @field_validator('owner_name', mode='before')
@@ -430,6 +433,21 @@ class ConversationSpeakers(BaseModel):
     status: Literal['resolved', 'capture', 'unavailable']
     version: int = 1
     participant_speaker_ids: List[int] = []
+    input_membership_sha256: SkipJsonSchema[Optional[str]] = Field(default=None, exclude=True)
+
+    @model_serializer(mode='wrap')
+    def _serialize_membership(self, handler, info):
+        data = handler(self)
+        excluded = info.exclude if isinstance(info.exclude, (dict, set, frozenset)) else ()
+        included = info.include
+        if (
+            info.mode != 'json'
+            and self.input_membership_sha256 is not None
+            and 'input_membership_sha256' not in excluded
+            and (included is None or 'input_membership_sha256' in included)
+        ):
+            data['input_membership_sha256'] = self.input_membership_sha256
+        return data
 
 
 class CaptureEvidenceMetadata(BaseModel):
@@ -461,7 +479,21 @@ class RecordAudioPartial(BaseModel):
     applied_generation: int = 0
 
 
+class RecordingPiece(BaseModel):
+    recording_id: str
+    audio_file_id: str
+    start: float = Field(ge=0)
+    end: float = Field(ge=0)
+
+
+class LiveSummaryPreview(BaseModel):
+    structured: Structured
+    summary_covers_through: datetime
+
+
 class Conversation(BaseModel):
+    title_content_units: float = Field(default=0, exclude=True)
+    notes_quality_filter_input_hash: Optional[str] = Field(default=None, exclude=True)
     notes_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
     notes_llm_output_hash: Optional[str] = Field(default=None, exclude=True)
     l1_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
@@ -475,11 +507,37 @@ class Conversation(BaseModel):
     updated_at: Optional[datetime] = None
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
+    capture_timezone: Optional[str] = Field(default=None, max_length=128)
+    capture_time_trust: Optional[Literal['untrusted']] = None
     recorded_start: Optional[datetime] = None
     recorded_end: Optional[datetime] = None
     arrival_at: Optional[datetime] = None
     clock: Optional[RecordedClock] = None
     episode_id: Optional[str] = None
+
+    # Server-authored; absent on pre-v3 documents. Never trusted on create requests.
+    recording: Optional[bool] = None
+    kind: Optional[Literal['conversation', 'voice_work', 'media', 'background']] = None
+    home_hidden: Optional[bool] = None
+    home_hidden_reason: Optional[str] = None
+    outline_kind: SkipJsonSchema[Optional[str]] = None
+    tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done', 'failed']] = None
+    title_locked: Optional[bool] = None
+    recording_pieces: Optional[List[RecordingPiece]] = None
+    manual_end: Optional[bool] = None
+    summary_covers_through: Optional[datetime] = None
+    live_summary: Optional[LiveSummaryPreview] = None
+    v3_pending: SkipJsonSchema[Optional[bool]] = Field(default=None, exclude=True)
+    v3_derived: SkipJsonSchema[Optional[bool]] = None
+    v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None
+    v3_process_pending: SkipJsonSchema[Optional[bool]] = None
+    v3_rewrites: SkipJsonSchema[Optional[int]] = None
+    backfilled: SkipJsonSchema[Optional[bool]] = None
+    # Server-authored at create, never changed: old backfill (T1+, config/historical_tier.py)
+    # carries a transcript and deterministic title; its summary runs only on open.
+    processing_tier: Optional[Literal['historical']] = None
+    # Read projection, never stored: open this row through POST .../summary/open.
+    summary_on_open: Optional[bool] = None
 
     source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
@@ -517,6 +575,14 @@ class Conversation(BaseModel):
     # summarize. Successful enrichment clears it. A separate field rather than
     # a ``processing_state`` value: released clients decode that enum strictly.
     summary_retryable: Optional[bool] = None
+    # Server-authored Home row contract on list reads (utils/conversations/home_step.py):
+    # ready | transcribing | writing_notes | failed | noise. Omitted when unset.
+    home_step: SkipJsonSchema[Optional[Literal['ready', 'transcribing', 'writing_notes', 'failed', 'noise']]] = None
+    # Read-time projection (utils/conversations/transcribing_hold.py): the transcription wait ran out
+    # with no failure receipt, so the audio is still waiting. Omitted when unset.
+    transcription_wait: SkipJsonSchema[Optional[Literal['overdue']]] = None
+    # Read-time observation of a matching current batch job on the authenticated owner's recording.
+    transcription_admission: SkipJsonSchema[Optional[Literal['allowance_held', 'processing']]] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
@@ -548,6 +614,31 @@ class Conversation(BaseModel):
                 return {**data, 'capture_coverage': coverage}
         return data
 
+    # Voices whose whole-voice `not_a_person` decision still wins the manual
+    # speaker receipt. Server-authored projection of the internal receipt (the
+    # receipt itself is never serialized): clients use it to reconcile live
+    # exclusions against receipt authority — a partial manual-positive
+    # projection cannot distinguish a range-only label (the exclusion stands)
+    # from a selected-segment superseder (the exclusion is retired), but the
+    # receipt can. Null on conversations without any manual speaker decision.
+    excluded_speakers: Optional[List[int]] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def _project_excluded_speakers(cls, data):
+        if isinstance(data, dict) and 'excluded_speakers' not in data:
+            receipt = data.get('manual_speaker_assignments')
+            if isinstance(receipt, Mapping):
+                # Emit the projection whenever a manual receipt exists, empty
+                # set included: a selected-segment superseder or cross-client
+                # restoration that removed the last not_a_person decision must
+                # read as an authoritative `[]`. Leaving it null would make
+                # clients treat the response as an old server without the
+                # projection and fall back to the lossy whole-cluster
+                # heuristic, so the exclusion could never retire locally.
+                return {**data, 'excluded_speakers': receipt_excluded_speakers(receipt)}
+        return data
+
     # Absent on conversations processed before speakers were resolved: count no ids as people.
     speaker_resolution: Optional[ConversationSpeakers] = None
     speaker_match_scores: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
@@ -577,7 +668,7 @@ class Conversation(BaseModel):
     def _collect_match_scores(self):
         try:
             updates = [s.speaker_match_scores for s in self.transcript_segments if s.speaker_match_scores]
-            if updates and match_scores.enabled():
+            if updates:
                 self.speaker_match_scores = match_scores.merge(self.speaker_match_scores, updates)
         except Exception:
             self.speaker_match_scores = None
@@ -589,6 +680,14 @@ class Conversation(BaseModel):
         data = handler(self)
         if not self.processing_deferred and 'processing_deferred' not in self.model_fields_set:
             data.pop('processing_deferred', None)
+        if self.live_summary is None:
+            data.pop('live_summary', None)
+        for name in ('home_step', 'transcription_wait', 'transcription_admission'):
+            if getattr(self, name) is None:
+                data.pop(name, None)
+        for name in ('processing_tier', 'summary_on_open'):
+            if getattr(self, name) is None:
+                data.pop(name, None)
         if info.mode == 'python' and self.owner_recognition_diagnostics:
             excluded = info.exclude or ()
             included = info.include
@@ -621,7 +720,7 @@ class Conversation(BaseModel):
     apps_results: List[AppResult] = []
     suggested_summarization_apps: List[str] = []
 
-    # TODO: plugins_results for backward compatibility with the old memories routes and app
+    # plugins_results for backward compatibility with the old memories routes and app
     plugins_results: List[PluginResult] = []
 
     user_corrections: List[Dict] = Field(default_factory=list)
@@ -643,7 +742,7 @@ class Conversation(BaseModel):
     visibility: ConversationVisibility = ConversationVisibility.private
     starred: bool = False
 
-    # TODO: processing_memory_id for backward compatibility with the old memories routes and app
+    # processing_memory_id for backward compatibility with the old memories routes and app
     processing_memory_id: Optional[str] = None
 
     processing_conversation_id: Optional[str] = None
@@ -672,6 +771,10 @@ class Conversation(BaseModel):
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
 
+    # Preserve raw marker presence and type for the internal ownership check.
+    finalization_engine: SkipJsonSchema[Any] = Field(default=None, exclude=True, repr=False)
+    finalization_owner_epoch: SkipJsonSchema[Any] = Field(default=None, exclude=True, repr=False)
+
     # Read projection of the authoritative finalization-job meeting receipt.
     meeting_treatment_eligible: bool = False
     meeting_treatment_reason: Optional[str] = None
@@ -697,6 +800,12 @@ class Conversation(BaseModel):
         # Update plugins_results based on apps_results
         self.plugins_results = [PluginResult(plugin_id=app.app_id, content=app.content) for app in self.apps_results]
         self.processing_memory_id = self.processing_conversation_id
+
+    @property
+    def python_finalization_owned(self) -> bool:
+        return python_owns_finalization(
+            {field: getattr(self, field) for field in (ENGINE_FIELD, EPOCH_FIELD) if field in self.model_fields_set}
+        )
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         # Warn: missing transcript for workflow source, external integration source
@@ -815,6 +924,7 @@ class CreateConversation(BaseModel):
         # after validation carries that decision through the existing conversion.
         return None
 
+    capture_timezone: Optional[str] = Field(default=None, max_length=128)
     started_at: datetime
     finished_at: datetime
     transcript_segments: List[TranscriptSegment]
@@ -869,6 +979,9 @@ class CreateConversation(BaseModel):
 
 class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+    live_conversation_id: Optional[str] = Field(
+        default=None, description='Optional live v3 window to Finish when no active recording is found.'
+    )
 
     @field_validator('calendar_meeting_context', mode='before')
     @classmethod
@@ -907,6 +1020,20 @@ class ExternalIntegrationCreateConversation(BaseModel):
 
     source: ConversationSource = ConversationSource.workflow
     language: Optional[str] = None
+
+    # Server-resolved meeting identity for this capture, carried as a field the
+    # same way `CreateConversation` carries it. The pre-summarization resolver
+    # attaches it here; `_get_conversation_obj` moves it into
+    # `external_data['calendar_meeting_context']` on the persisted Conversation,
+    # which is the shape every reader already understands. Client input is
+    # discarded: only the server resolver may attach a context, so this cannot
+    # change which conversations get one.
+    calendar_meeting_context: SkipJsonSchema[Optional[CalendarMeetingContext]] = None
+
+    @field_validator('calendar_meeting_context', mode='before')
+    @classmethod
+    def ignore_client_meeting_context(cls, value):
+        return None
 
     app_id: Optional[str] = None
 
@@ -1043,3 +1170,21 @@ class ConversationAnalytics(BaseModel):
     words_per_minute: float
     speaker_count: int
     speakers: List[SpeakerAnalytics] = []
+
+
+class LiveConversation(BaseModel):
+    id: str
+    structured: Structured
+    started_at: datetime
+    finished_at: Optional[datetime]
+    created_at: datetime
+    status: ConversationStatus
+    tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done', 'failed']] = None
+
+    is_locked: SkipJsonSchema[Optional[bool]] = None
+    v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None
+
+
+class ConversationsLiveResponse(BaseModel):
+    v3: bool
+    conversation: Optional[LiveConversation] = None

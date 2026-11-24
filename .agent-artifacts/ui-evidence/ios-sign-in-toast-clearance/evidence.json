@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-before-light-toast-covers-google.png",
+      "platform": "mobile-ios",
+      "description": "Before (PR #25395 head), light: the Apple failure toast sits on Sign in with Google; the Google button is not hit-testable while it shows. iPhone 17 Pro simulator, iOS 26.4, prod flavor debug build (local_prod profile), no Apple Account, so Sign in with Apple returns AuthorizationError 1000 for real.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-after-light-toast-above-buttons.png",
+      "platform": "mobile-ios",
+      "description": "After, light: the same toast floats 12 pt above Sign in with Apple; both buttons stay tappable. Same position on 3 repeated failures. iPhone 17 Pro simulator, iOS 26.4, prod flavor debug build (local_prod profile), no Apple Account, so Sign in with Apple returns AuthorizationError 1000 for real.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-before-dark-toast-covers-google.png",
+      "platform": "mobile-ios",
+      "description": "Before, dark appearance: the toast covers Sign in with Google. iPhone 17 Pro simulator, iOS 26.4, prod flavor debug build (local_prod profile), no Apple Account, so Sign in with Apple returns AuthorizationError 1000 for real.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-after-dark-toast-above-buttons.png",
+      "platform": "mobile-ios",
+      "description": "After, dark appearance: the toast floats above both sign-in buttons. iPhone 17 Pro simulator, iOS 26.4, prod flavor debug build (local_prod profile), no Apple Account, so Sign in with Apple returns AuthorizationError 1000 for real.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-before-max-text-toast-covers-buttons.png",
+      "platform": "mobile-ios",
+      "description": "Before, largest accessibility text (scrolled to the buttons): the 480 pt toast covers Sign in with Apple. The clipped button labels are a separate, pre-existing defect. iPhone 17 Pro simulator, iOS 26.4, prod flavor debug build (local_prod profile), no Apple Account, so Sign in with Apple returns AuthorizationError 1000 for real.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-after-max-text-toast-above-apple.png",
+      "platform": "mobile-ios",
+      "description": "After, largest accessibility text: the toast ends above Sign in with Apple, which stays tappable. The clipped button labels are a separate, pre-existing defect. iPhone 17 Pro simulator, iOS 26.4, prod flavor debug build (local_prod profile), no Apple Account, so Sign in with Apple returns AuthorizationError 1000 for real.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

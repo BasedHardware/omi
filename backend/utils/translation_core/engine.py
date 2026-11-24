@@ -178,6 +178,12 @@ class TranslationEngine:
             logger.warning('Ignoring unsupported translation providers: %s', ','.join(profile.unsupported_tokens))
         if profile.unavailable_tokens:
             logger.warning('Ignoring unavailable translation providers: %s', ','.join(profile.unavailable_tokens))
+        if profile.deprecated_tokens:
+            logger.warning(
+                'Deprecated translation provider names resolve to luna: %s', ','.join(profile.deprecated_tokens)
+            )
+            for token in profile.deprecated_tokens:
+                get_translation_metrics().deprecated_provider(token)
 
 
 def _guard_value(source: str, value: CachedTranslation, target: str) -> CachedTranslation:

@@ -321,7 +321,15 @@ jobs:
       - name: Check C/C++ formatting
         if: needs.changes.outputs.has_firmware == 'true'
         run: |
+          # Pin clang-format to the version pre-commit uses. ubuntu-latest moved to
+          # ubuntu-26.04, whose clang-format adds a space before compound-literal
+          # braces that clang-format 18 removes, so the runner image must not decide.
+          CLANG_FORMAT_VENV="$RUNNER_TEMP/clang-format-18"
+          python3 -m venv "$CLANG_FORMAT_VENV"
+          "$CLANG_FORMAT_VENV/bin/pip" install --quiet clang-format==18.1.8
+          CLANG_FORMAT="$CLANG_FORMAT_VENV/bin/clang-format"
+          "$CLANG_FORMAT" --version
           FILES=$(grep -E '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs clang-format --dry-run --Werror
+            echo "$FILES" | xargs "$CLANG_FORMAT" --dry-run --Werror
           fi

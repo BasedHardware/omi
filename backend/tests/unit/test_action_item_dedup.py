@@ -118,6 +118,7 @@ def _setup_mocks(
     else:
         fake_index.query = MagicMock(return_value=query_response or {'matches': []})
     monkeypatch.setattr(vector_db, 'index', None if index_none else fake_index)
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
 
     fake_embeddings = MagicMock()
     if embed_raises is not None:

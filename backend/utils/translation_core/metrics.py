@@ -31,6 +31,8 @@ class TranslationMetrics(Protocol):
 
     def demand(self, state: str, mode: str, platform: str) -> None: ...
 
+    def deprecated_provider(self, token: str) -> None: ...
+
 
 class NoopTranslationMetrics:
     def demand(self, state: str, mode: str, platform: str) -> None:
@@ -60,6 +62,9 @@ class NoopTranslationMetrics:
         return None
 
     def decision(self, target_language: str, decision: str, reason: str) -> None:
+        return None
+
+    def deprecated_provider(self, token: str) -> None:
         return None
 
 
@@ -117,6 +122,11 @@ class PrometheusTranslationMetrics:
             'Socket-local transcript visibility reports and expiry decisions',
             ['state', 'mode', 'platform'],
         )
+        self._deprecated_providers = _counter(
+            'omi_translation_deprecated_provider_tokens_total',
+            'Translation calls whose TRANSLATION_SERVICE_MODELS used a retired Luna spelling',
+            ['token'],
+        )
 
     def demand(self, state: str, mode: str, platform: str) -> None:
         state_label = (
@@ -127,6 +137,9 @@ class PrometheusTranslationMetrics:
         mode_label = mode if mode in {'shadow', 'enforced'} else 'other'
         platform_label = platform if platform in {'ios', 'android', 'macos', 'web', 'unknown'} else 'other'
         self._demand.labels(state=state_label, mode=mode_label, platform=platform_label).inc()
+
+    def deprecated_provider(self, token: str) -> None:
+        self._deprecated_providers.labels(token=token if token in {'gemini', 'google'} else 'other').inc()
 
     def cache(self, layer: str, result: str) -> None:
         self._cache_ops.labels(layer=_bounded(layer), result=_bounded(result)).inc()
@@ -199,7 +212,7 @@ def _bounded(value: str) -> str:
 
 def _bounded_provider(value: str) -> str:
     normalized = _bounded(value)
-    return normalized if normalized in {'google', 'gemini', 'luna', 'nllb', 'cache'} else 'other'
+    return normalized if normalized in {'luna', 'nllb', 'cache'} else 'other'
 
 
 def _bounded_language(value: str) -> str:

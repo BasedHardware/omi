@@ -119,6 +119,13 @@ def create_goal(
             message="--target is required when using metric options",
             detail="Pass --target, or omit --type/--current/--min/--max/--unit to create a qualitative goal.",
         )
+    if min_value is not None and max_value is not None and min_value > max_value:
+        # A scale with an inverted range can never show progress; reject it before
+        # the request instead of letting the backend store a broken goal.
+        raise UsageError(
+            message="Invalid scale range: --min cannot be greater than --max",
+            detail=f"--min ({min_value}) cannot be greater than --max ({max_value}).",
+        )
     body: dict[str, object] = {"title": title}
     if unit is not None:
         body["unit"] = unit
@@ -166,6 +173,11 @@ def update_goal(
         body["unit"] = None
     elif unit is not None:
         body["unit"] = unit
+    if min_value is not None and max_value is not None and min_value > max_value:
+        raise UsageError(
+            message="Invalid scale range: --min cannot be greater than --max",
+            detail=f"--min ({min_value}) cannot be greater than --max ({max_value}).",
+        )
     if not body:
         raise UsageError(
             message="No fields to update",

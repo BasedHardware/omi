@@ -21,8 +21,12 @@ from unittest.mock import AsyncMock
 import pytest
 
 from config import live_stt_state
-from config.live_stt_registry import DEFAULT_TARGETS
-from tests.unit.test_live_cost_router import MemoryRedis, controls, seed_cost_interest  # noqa: F401 -- autouse fixture
+from tests.unit.test_live_cost_router import (  # noqa: F401 -- autouse fixture
+    DEFAULT_TARGETS,
+    MemoryRedis,
+    controls,
+    seed_cost_interest,
+)
 from utils.stt import live_chain, live_health, live_recovery, pod_drain, streaming as st
 from utils.stt.live_gate import GateState, transition
 from utils.stt.live_outcome import LiveLegOutcome

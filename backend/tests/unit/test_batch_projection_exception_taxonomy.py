@@ -64,6 +64,11 @@ TAXONOMY = {
     # Firestore contention-shaped ValueError stays retryable. A tampered
     # artifact body fails authenticated decryption as InvalidTag — permanent.
     'ValueError': 'payload contract: quarantine_held | contention retry',
+    # A ValueError subclass: a retained manifest that can never materialize.
+    'InvalidRetainedManifest': 'payload contract: quarantine_held (never contention)',
+    # A ValueError subclass: a pinned retained source confirmed changed under
+    # its manifest; same payload-violation classification, never contention.
+    'RetainedPcmDigestChanged': 'payload contract: quarantine_held (never contention)',
     'InvalidTag': 'payload contract: quarantine_held (tampered artifact body)',
     # Artifact authorization refusals (expired voice evidence, privacy
     # generation drift) are observable waits on the sweep, not dispositions.

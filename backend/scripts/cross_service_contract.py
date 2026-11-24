@@ -199,6 +199,11 @@ COUPLED_FLAGS: tuple[tuple[str, tuple[str, ...]], ...] = (
 READER_SPLIT_SCOPES: dict[str, tuple[str, ...]] = {
     'helm/batch-pipeline-worker': ('BATCH_PIPELINE_', 'STT_CAP_', 'PARAKEET_'),
 }
+# Backend hosts whose overrides are role-local by design, so they never define the fleet value a
+# reader-split compares against. SCA-3120: the projection pump derives integration's env and then
+# pins its own tick cadence and keeps recovery and serving off; the worker must still match the
+# serving fleet, not the pump.
+READER_SPLIT_ROLE_LOCAL: frozenset[str] = frozenset({'cloud_run/backend-projection-pump'})
 
 # Charts rendered with ``helm template`` exactly like their deploy workflow does. Values files are
 # ``{env}_omi_{name}_values.yaml``; ``image_set`` is the workflow's --set-string image argument.
@@ -208,7 +213,8 @@ HELM_CHARTS: tuple[tuple[str, str, str], ...] = (
 
 # Process entrypoints (module paths under backend/) per deployment kind, for "who reads this flag".
 BACKEND_ENTRYPOINT = 'main'
-GKE_ENTRYPOINTS = {'backend-listen': BACKEND_ENTRYPOINT, 'pusher': 'pusher.main'}
+PARAKEET_ENTRYPOINT = 'parakeet.main'
+GKE_ENTRYPOINTS = {'backend-listen': BACKEND_ENTRYPOINT, 'pusher': 'pusher.main', 'parakeet': PARAKEET_ENTRYPOINT}
 
 # Keys whose literal values must never carry user identifiers in this public repository.
 UID_KEY_PATTERN = re.compile(r'(UID|USER|OWNER)S?_?(ALLOW|DENY)?LIST|_UIDS$|COHORT_UIDS|TEST_UIDS')
@@ -641,8 +647,8 @@ def _literal_key(node: ast.AST, constants: dict[str, str]) -> str | None:
     return None
 
 
-def _is_env_call(node: ast.AST, constants: dict[str, str]) -> str | None:
-    """Env key for os.getenv(K), os.environ.get(K), os.environ[K], *env*(K) and _default_on(K) helpers."""
+def _is_env_call(node: ast.AST, constants: dict[str, str], *, reads_env_mapping: bool = False) -> str | None:
+    """Env key for os.getenv(K), os.environ.get(K), os.environ[K], *env*(K) and shared boolean helpers."""
     if isinstance(node, ast.Call) and node.args:
         key = _literal_key(node.args[0], constants)
         if key is None:
@@ -652,11 +658,22 @@ def _is_env_call(node: ast.AST, constants: dict[str, str]) -> str | None:
         if name == 'getenv' or (
             name == 'get'
             and isinstance(func, ast.Attribute)
-            and isinstance(func.value, ast.Attribute)
-            and func.value.attr == 'environ'
+            and (
+                (isinstance(func.value, ast.Attribute) and func.value.attr == 'environ')
+                or (reads_env_mapping and isinstance(func.value, ast.Name) and func.value.id == 'env')
+            )
         ):
             return key
-        if 'env' in name.lower() or name == '_default_on':
+        if 'env' in name.lower() or name in {
+            '_default_on',
+            'default_on',
+            'modes_default_on',
+            'rollout_default_on',
+            '_default_off',
+            'default_off',
+            'modes_default_off',
+            'rollout_default_off',
+        }:
             return key
     if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) and node.value.attr == 'environ':
         return _literal_key(node.slice, constants)
@@ -793,8 +810,14 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
     for rel, index in indexes.items():
         constants = {**shared, **index.constants}
         collections = {**shared_collections, **index.collections}
+        # Parakeet passes its process environment into StreamAdmissionController.from_env.
+        # These helpers receive an explicit env mapping instead of reading os.environ directly.
+        reads_env_mapping = rel in {
+            'backend/config/policy/kill_switches.py',
+            'backend/parakeet/admission.py',
+        }
         for node in index.candidates:
-            key = _is_env_call(node, constants)
+            key = _is_env_call(node, constants, reads_env_mapping=reads_env_mapping)
             if key:
                 read = reads.setdefault(key, EnvRead())
                 read.modules.add(rel)
@@ -827,6 +850,11 @@ def import_closure(source: Source, entrypoint: str) -> list[str]:
     paths: list[str] = []
     while stack:
         module = stack.pop()
+        # The standalone Parakeet image runs from its own source directory.
+        if entrypoint == PARAKEET_ENTRYPOINT and module and not module.startswith('parakeet.'):
+            local_module = f'parakeet.{module}'
+            if _module_path(source, local_module) is not None:
+                module = local_module
         if module in seen:
             continue
         seen.add(module)
@@ -1189,7 +1217,11 @@ def check_reader_split(ctx: Context) -> list[Violation]:
     never set on the separately deployed worker that also reads it)."""
     out: list[Violation] = []
     for model in ctx.models.values():
-        backend = [d for d in model.deployments.values() if d.entrypoint == BACKEND_ENTRYPOINT]
+        backend = [
+            d
+            for d in model.deployments.values()
+            if d.entrypoint == BACKEND_ENTRYPOINT and d.id not in READER_SPLIT_ROLE_LOCAL
+        ]
         for process in model.deployments.values():
             prefixes = READER_SPLIT_SCOPES.get(process.id)
             if not prefixes or process.entrypoint in (None, BACKEND_ENTRYPOINT):

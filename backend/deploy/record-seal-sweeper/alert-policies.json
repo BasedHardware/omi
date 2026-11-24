@@ -10,7 +10,7 @@
           "filter": "resource.type=\"k8s_container\" AND metric.type=\"logging.googleapis.com/user/omi_record_seal_nonempty_runs\"",
           "aggregations": [
             {
-              "alignmentPeriod": "600s",
+              "alignmentPeriod": "3600s",
               "perSeriesAligner": "ALIGN_SUM",
               "crossSeriesReducer": "REDUCE_SUM"
             }
@@ -25,7 +25,7 @@
           "denominatorFilter": "resource.type=\"k8s_container\" AND metric.type=\"logging.googleapis.com/user/omi_record_seal_runs\"",
           "denominatorAggregations": [
             {
-              "alignmentPeriod": "600s",
+              "alignmentPeriod": "3600s",
               "perSeriesAligner": "ALIGN_SUM",
               "crossSeriesReducer": "REDUCE_SUM"
             }
@@ -38,7 +38,7 @@
           "filter": "resource.type=\"k8s_container\" AND metric.type=\"logging.googleapis.com/user/omi_record_seal_old_runs\"",
           "aggregations": [
             {
-              "alignmentPeriod": "600s",
+              "alignmentPeriod": "3600s",
               "perSeriesAligner": "ALIGN_SUM",
               "crossSeriesReducer": "REDUCE_SUM"
             }
@@ -52,17 +52,17 @@
         }
       },
       {
-        "displayName": "No successful cycle for 30 minutes",
+        "displayName": "No successful hourly cycle for two hours",
         "conditionAbsent": {
           "filter": "resource.type=\"k8s_container\" AND metric.type=\"logging.googleapis.com/user/omi_record_seal_runs\"",
           "aggregations": [
             {
-              "alignmentPeriod": "600s",
+              "alignmentPeriod": "3600s",
               "perSeriesAligner": "ALIGN_SUM",
               "crossSeriesReducer": "REDUCE_SUM"
             }
           ],
-          "duration": "1800s",
+          "duration": "7200s",
           "trigger": {
             "count": 1
           }
@@ -70,11 +70,11 @@
       }
     ],
     "alertStrategy": {
-      "autoClose": "3600s"
+      "autoClose": "86400s"
     },
     "documentation": {
       "mimeType": "text/markdown",
-      "content": "Unsealed record_pending sample is nonempty for two hours, an observed unsealed finish is over four hours old, or no successful sweep for 30 minutes. Sample counts/ages are lower bounds at the 128-job discovery cap. Inspect aggregate dispositions and CronJob status; never clear upload_failed or attest producers stopped. Lead owns worker-image/chart deploy and kill switch. See backend/deploy/record-seal-sweeper/README.md."
+      "content": "Unsealed record_pending sample is nonempty for two hours, an observed unsealed finish is over four hours old, or no successful hourly sweep for two hours. Sample counts/ages are lower bounds at the configured discovery cap. Inspect aggregate dispositions and CronJob status; never clear upload_failed or attest producers stopped. Lead owns worker-image/chart deploy and kill switch. See backend/deploy/record-seal-sweeper/README.md."
     }
   },
   {

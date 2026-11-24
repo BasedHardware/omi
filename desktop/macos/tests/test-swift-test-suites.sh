@@ -139,7 +139,8 @@ if [[ "$*" == *"swift test"* ]]; then
   # suites alphabetically, which are not guaranteed to be AlphaTests/BetaTests.
   active_count="$(find "$active_dir" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
   if { has_suite AuthRefreshResilienceTests || has_suite AuthTokenStorageTests \
-    || has_suite OwnerAuthorityAdopterTests; } \
+    || has_suite OwnerAuthorityAdopterTests \
+    || has_suite TasksStoreOwnerBoundaryTests || has_suite TasksStoreEmptyCloudReconcileTests; } \
     && [ "$active_count" -ge 2 ]; then
     touch "$FAKE_XCRUN_SYNC_DIR/serial-overlap"
   fi
@@ -358,6 +359,60 @@ esac
 if [ -f "$FAKE_XCRUN_SYNC_DIR/serial-overlap" ]; then
   fail "direct auth UserDefaults mutation overlapped another suite"
 fi
+
+# The task-store suites mutate the same production-standard owner defaults
+# domain through a local `defaults` alias, so the derivation above (which
+# matches only a literal `UserDefaults.standard.set/removeObject`) cannot see
+# them. They must be listed explicitly in the runner's default serial cluster;
+# otherwise they rejoin the parallel pool and race the auth cluster on hosted
+# cfprefsd (SCA-2064 / SCA-2068). Unset the fixture override so the runner's
+# own default list is what is under test.
+cat >"$TMPDIR/tests/TasksStoreOwnerBoundaryTests.swift" <<'SWIFT'
+import XCTest
+final class TasksStoreOwnerBoundaryTests: XCTestCase {
+    func testOne() {
+        let defaults = UserDefaults.standard
+        defaults.set("fixture-owner", forKey: .authUserId)
+    }
+}
+SWIFT
+cat >"$TMPDIR/tests/TasksStoreEmptyCloudReconcileTests.swift" <<'SWIFT'
+import XCTest
+final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
+    func testOne() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: .authUserId)
+    }
+}
+SWIFT
+: >"$FAKE_XCRUN_SCRATCH_LOG"
+: >"$FAKE_XCRUN_LOG"
+rm -f "$FAKE_XCRUN_SYNC_DIR/serial-overlap"
+unset OMI_SWIFT_TEST_SERIAL_SUITES
+if "$RUNNER" >"$TMPDIR/task-store-serial-runner.out" 2>"$TMPDIR/task-store-serial-runner.err"; then
+  fail "task-store serial fixture run unexpectedly succeeded despite AlphaTests failure"
+fi
+for task_store_suite in TasksStoreOwnerBoundaryTests TasksStoreEmptyCloudReconcileTests; do
+  task_store_scratch="$(awk -F '\t' -v suite="$task_store_suite" '$1 == suite {print $2}' \
+    "$FAKE_XCRUN_SCRATCH_LOG")"
+  if [ -z "$task_store_scratch" ]; then
+    fail "runner did not execute $task_store_suite"
+  fi
+  case "$task_store_scratch" in
+    */serial-*.build) ;;
+    *) fail "runner did not serialize $task_store_suite" ;;
+  esac
+  task_store_selections="$(grep -o -- "--filter $task_store_suite/" "$FAKE_XCRUN_LOG" | wc -l | tr -d ' ')"
+  if [ "$task_store_selections" != "1" ]; then
+    fail "$task_store_suite was selected $task_store_selections times, expected exactly once"
+  fi
+done
+if [ -f "$FAKE_XCRUN_SYNC_DIR/serial-overlap" ]; then
+  fail "task-store owner-defaults suites overlapped another suite"
+fi
+rm -f "$TMPDIR/tests/TasksStoreOwnerBoundaryTests.swift" \
+  "$TMPDIR/tests/TasksStoreEmptyCloudReconcileTests.swift"
+export OMI_SWIFT_TEST_SERIAL_SUITES="AuthRefreshResilienceTests AuthTokenStorageTests"
 if ! grep -q -- "--skip ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest" "$FAKE_XCRUN_LOG"; then
   fail "runner did not pass ratcheted skips to SwiftPM"
 fi

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from config.stt_provider_policy import STTServingSurface, model_is_enabled, provider_for_service
 from utils.observability import demand_cohort as telemetry, fallback
 from utils.stt import (
@@ -33,6 +34,7 @@ def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def configured(monkeypatch):
+    enabled_live_targets(monkeypatch)
     monkeypatch.setattr(live_chain, '_recent_connect_failures', deque(maxlen=1000))
     monkeypatch.setenv('STT_SHED_CONNECT_FAILURES', '3')
     monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')

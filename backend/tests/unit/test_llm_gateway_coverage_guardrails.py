@@ -62,12 +62,14 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('routers/desktop_realtime.py', 'GEMINI_API_KEY'),
     DirectUse('routers/desktop_realtime.py', 'OPENAI_API_KEY'),
     DirectUse('routers/desktop_tts_updates.py', 'OPENAI_API_KEY'),
-    DirectUse('utils/llm/providers.py', 'ChatGoogleGenerativeAI'),
+    # utils/llm/providers.py ChatGoogleGenerativeAI and utils/llm/clients.py
+    # AsyncAnthropic / ChatAnthropic constructions moved behind lazy SDK
+    # materializers inside the same gateway seam files (deferred heavy imports),
+    # so the scanner no longer sees them as direct uses; the seam itself still
+    # owns every provider client construction.
     DirectUse('utils/llm/providers.py', 'ChatOpenAI'),
     DirectUse('utils/llm/providers.py', 'GEMINI_API_KEY'),
-    DirectUse('utils/llm/clients.py', 'AsyncAnthropic'),
     DirectUse('utils/llm/gateway_anthropic.py', 'AsyncAnthropic'),
-    DirectUse('utils/llm/clients.py', 'ChatAnthropic'),
     DirectUse('utils/llm/clients.py', 'ChatOpenAI'),
     DirectUse('utils/llm/clients.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'OpenAIEmbeddings'),
@@ -80,6 +82,16 @@ DIRECT_PROVIDER_ALLOWLIST = {
     # (OpenAI-compatible surface); these never reach a provider directly.
     DirectUse('utils/llm/gateway_client.py', 'AsyncOpenAI'),
     DirectUse('utils/llm/gateway_client.py', 'OpenAI'),
+    # summary_embeddings.py is the single bounded embedding request the episode
+    # composer makes for owner-memory retrieval. It enforces the generated-compute
+    # budget and resolves the BYOK key before any IO, and routes through the
+    # gateway whenever gateway feature mode is on (production). The direct client
+    # is the non-gateway (dev/local) branch only: same provider, key custody and
+    # model as clients.py OpenAIEmbeddings, with SDK retries off and the caller's
+    # absolute deadline. It lives outside clients.py so the notes routing digest
+    # and paid checkpoints stay unchanged (#25340). Both branches are exercised by
+    # tests/unit/test_episode_summary_provider_bounds.py.
+    DirectUse('utils/llm/summary_embeddings.py', 'AsyncOpenAI'),
     DirectUse('utils/retrieval/agentic.py', 'anthropic_client.messages'),
     DirectUse('routers/omni_relay.py', 'GEMINI_API_KEY'),
     DirectUse('routers/omni_relay.py', 'OPENAI_API_KEY'),
@@ -100,7 +112,6 @@ _RESOLVER_DEFINITION_FILE = 'utils/llm/model_config.py'
 # clients._so_gemini: iterates the active profile.
 # judge.py: model_feature defaults to the pinned screen_frame_judge key.
 # managed_compute.py: pass-through of authorize_managed_compute's feature into get_provider.
-# llm_input_dedupe.py: checkpoint identity follows the actual notes / L1 extractor route.
 KNOWN_DYNAMIC_FEATURE_SITES = frozenset(
     {
         ('utils/llm/persona.py', 'get_llm', 'feature'),
@@ -110,11 +121,6 @@ KNOWN_DYNAMIC_FEATURE_SITES = frozenset(
         ('utils/llm/clients.py', '_get_model_config', 'f'),
         ('utils/screen_frames/judge.py', 'get_llm', 'model_feature'),
         ('utils/managed_compute.py', 'get_provider', 'feature'),
-        (
-            'utils/conversations/llm_input_dedupe.py',
-            'get_route_ref',
-            "'conv_structure' if feature == 'notes' else 'memory_l1'",
-        ),
     }
 )
 _FEATURE_SCAN_SKIP_DIRS = {'.venv', 'venv', '.openapi-venv', '__pycache__', 'tests'}

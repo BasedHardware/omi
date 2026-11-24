@@ -10,7 +10,8 @@ from database.outbox import EnqueueResult
 from testing.store_fixtures import store_backend  # noqa: F401
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.merge import OrderedMerge
-from utils.batch_pipeline.provider_stt import ProviderSttStage, provider_enqueue, resolve_route
+from utils.batch_pipeline.provider_stt import ProviderSttStage
+from utils.batch_pipeline.provider_stt_admission import provider_enqueue, resolve_route
 from utils.batch_pipeline.scheduler import Scheduler
 
 pytestmark = pytest.mark.integration
@@ -106,7 +107,8 @@ def test_provider_custody_merges_once_and_replay_never_calls_vendor(store_backen
         artifacts,
         stt=stt,
         allowed=lambda *_: True,
-        inspect=lambda *_: (b'\0\0' * 80000, 5.0, [{'start': 0.5, 'end': 1.5}]),
+        # 2.5 s of speech: above the short-speech skip threshold, so the vendor is called.
+        inspect=lambda *_: (b'\0\0' * 80000, 5.0, [{'start': 0.5, 'end': 3.0}]),
         clock=lambda: 200.0,
     )
     assert runner.run(work.segment_id).outcome == 'done'

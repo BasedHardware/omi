@@ -76,6 +76,20 @@ compares both paths on CPU with random weights (exact VAD spans and turns;
 segmentation within 1e-5, embeddings within 1e-4) whenever torch and pyannote
 are installed.
 
+**Serial VAD segmentation reuse** (`BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED`,
+chart `vadSegmentationReuseEnabled`, **default on**; `false` is the kill
+switch). With flight packing off, a unit diarized at full length (speech-only
+off, dense units kept over 80%, no evidence) used to run the segmentation model
+twice: once in VAD, once in `get_segmentations`. `VadSegmentationReuse` keeps
+the raw multilabel scores the VAD inference passes to its
+`pre_aggregation_hook` and hands them to the diarizer for that same waveform
+array (identity, held weakly). It installs only when `unsupported_reason`
+proves the two inferences share the model, chunking and forward batch, so the
+scores are the ones the second forward would produce; the result does not
+change. Compacted waveforms, other units and shape mismatches run pyannote's
+own segmentation. Scores of VAD-silent units are dropped at once; the rest live
+no longer than the decoded waveform (about 11% of its bytes).
+
 **Enablement gate.** CPU equality does not cover the L4: packing moves a unit's
 last chunk out of its own batch-of-one forward into a shared batch, so cuDNN may
 pick a different kernel, and a ~1e-5 embedding move or a powerset frame near 0.5
@@ -171,20 +185,15 @@ must not launch a second chain on a live GPU. A's scheduler pool capacity gate
 and these worker limits both apply; durable conversation identity need not
 change when an integration layer introduces bounded compute pieces.
 
-`TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED=false` preserves the existing
-stored-audio path. When explicitly enabled, local Silero speech regions retain
-300 ms onset/500 ms tail margins, merge overlapping padded intervals and compact
-PCM before shadow Parakeet. Word clocks map back by original sample offsets;
-a word crossing a removed gap abstains to the original request. The shared
-pyannote final-pass seam also compacts sync/shadow diarization input and splits
-turns and overlaps back onto original intervals. Embeddings and source audio
-remain on the original timeline. Empty VAD skips shadow ASR, but existing sync
-words never lose all speaker evidence merely because VAD is empty. VAD failure
-retains original behavior and records the shared fallback.
+The stored-audio path stays on original audio: shadow ASR transcribes each
+bounded audio window and the shared pyannote final-pass seam diarizes the
+complete original PCM, so word, turn, overlap and embedding clocks stay on the
+original timeline. The optional local VAD compaction wrapper
+(`TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED`) served off on every surface
+and was retired 2026-11-22.
 
 The sync adapter already receives words; it makes no additional Parakeet call.
-Compacting its shared pyannote seam saves diarization work without retranscribing
-those words. No Nemotron routing or cascade is introduced. The selector remains
+No Nemotron routing or cascade is introduced. The selector remains
 available; pyannote stays the default.
 
 Pre-STT WAL coverage now emits `reason` in its existing aggregate log and

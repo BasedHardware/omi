@@ -1,0 +1,42 @@
+{
+  "about": "Every (status, reason_code, poll_after_ms) durable_status can answer, split by whether every unit is terminal. Produced by backend/tests/unit/test_batch_pipeline_custody_property.py; replayed through the phone's terminal policy by app/test/unit/custody_status_shapes_test.dart.",
+  "resolved": [
+    {
+      "poll_after_ms": 0,
+      "reason_code": null,
+      "status": "completed"
+    },
+    {
+      "poll_after_ms": 3000,
+      "reason_code": null,
+      "status": "processing"
+    },
+    {
+      "poll_after_ms": 300000,
+      "reason_code": "batch_unit_held",
+      "status": "processing"
+    }
+  ],
+  "unresolved": [
+    {
+      "poll_after_ms": 0,
+      "reason_code": null,
+      "status": "failed"
+    },
+    {
+      "poll_after_ms": 3000,
+      "reason_code": null,
+      "status": "processing"
+    },
+    {
+      "poll_after_ms": 3000,
+      "reason_code": null,
+      "status": "queued"
+    },
+    {
+      "poll_after_ms": 300000,
+      "reason_code": "batch_unit_held",
+      "status": "processing"
+    }
+  ]
+}

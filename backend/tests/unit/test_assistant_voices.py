@@ -334,8 +334,6 @@ async def test_desktop_omitted_voice_resolves_stored_preference(monkeypatch):
     async def run_blocking(_executor, function, *_args, **_kwargs):
         if function is desktop_router.get_assistant_voice:
             return 'Kore'
-        if function is desktop_router.is_desktop_trial_paywalled:
-            return False
         return 0, None
 
     monkeypatch.setattr(desktop_router, 'run_blocking', run_blocking)
@@ -359,8 +357,6 @@ def _desktop_legacy_mocks(monkeypatch, payloads):
         return _FakeUpstream()
 
     async def run_blocking(_executor, function, *_args, **_kwargs):
-        if function is desktop_router.is_desktop_trial_paywalled:
-            return False
         return 0, None
 
     monkeypatch.setattr(desktop_router, 'run_blocking', run_blocking)

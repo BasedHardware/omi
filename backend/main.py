@@ -28,8 +28,9 @@ configure_logging(os.getenv('K_SERVICE') or 'backend', default_format='text', ac
 logger = logging.getLogger(__name__)
 
 import firebase_admin
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
 
 from database.google_credentials import prepare_google_credentials
@@ -44,6 +45,8 @@ from utils.observability.external_lists import ExternalListMetricsMiddleware
 
 # app_roles imports every router (the route table) in the original order.
 from app_roles import mount_routers, role_from_env
+from config.process_role import ProcessRole, startup_process_role
+from database.batch_account_authority import ErasedAccountMutationRefused
 from routers import messaging  # also used directly for the adapter runtime below
 from routers.listen.registry import proactive_message_dispatcher
 
@@ -61,6 +64,7 @@ from utils.executors import (
     db_executor,
 )
 from utils.executors import start_background_task
+from utils.episodes.composer import retry_settled_composes
 from utils.batch_pipeline.serving import start_serving_from_env, stop_serving
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from utils.stt.streaming import validate_streaming_stt_env
@@ -74,6 +78,7 @@ from services.conversation_finalization import reconcile_stale_in_progress_conve
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from database.durable_queue_age import publish_all_queue_oldest_ready_ages
 from services.users.account_deletion import reconcile_pending_deletion_wipes
+from utils.conversations.deletion_batch_purge import reconcile_conversation_batch_purges
 from utils.other.local_storage import local_storage_root_from_env
 
 # Log LangSmith tracing status at startup
@@ -104,6 +109,12 @@ else:
 # Bind private cohort resolution once at the serving composition root.
 configure_rollout_runtime()
 app = FastAPI()
+
+
+@app.exception_handler(ErasedAccountMutationRefused)
+async def erased_account_mutation_refused(_request: Request, _error: ErasedAccountMutationRefused) -> JSONResponse:
+    return JSONResponse(status_code=410, content={'detail': 'Account has been erased.'})
+
 
 _local_storage_root = local_storage_root_from_env()
 if _local_storage_root is not None:
@@ -158,6 +169,7 @@ methods_timeout = {
 paths_timeout = {
     "/v2/cap-hold-recovery/sweep": 1710,  # Await bounded redrive under Scheduler's 1740s deadline.
     "/v2/batch-pipeline/recover-quarantine": 1500,  # Await paid STT and durable settlement within the task request.
+    "/v2/pipeline-ledger/census": 60,  # Bounded owner window read; fail closed rather than hold the request.
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/dream-agent/sweep": 150,  # Enabled Dream routes use the 1710s cap in TimeoutMiddleware.
     "/v2/candidate-integrations/sweep": 90,  # Sweep stops at 50s; Scheduler allows 120s.
@@ -166,7 +178,11 @@ paths_timeout = {
     "/v2/sync-backfill-sequencer/sweep": 150,  # Below Scheduler's 180s deadline.
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
     "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
+    # Same queue and dispatch deadline; a heavy owner's batch scan runs for minutes.
+    "/v1/conversations/deletion-batch-purges/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
     "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),
+    # One v3 backfill step: a partition's outline pass, then notes until a 20-minute step deadline.
+    "/v1/conversations-v3/backfill": 1500,
     # STT proxy: 30s slot wait + 300s parakeet client budget (get_stt_proxy_client)
     # + headroom for auth and the multipart spool read; the default POST timeout
     # would cut long files off mid-transcription.
@@ -185,6 +201,16 @@ from database.firestore_tier_context import FirestoreTierMiddleware
 app.add_middleware(FirestoreTierMiddleware)
 app.add_middleware(SyncUploadMetricsMiddleware)
 app.add_middleware(ExternalListMetricsMiddleware)
+
+# Compress buffered JSON responses for clients that send Accept-Encoding: gzip
+# (browsers, web admin, OkHttp); streaming endpoints are exempt so token/audio
+# chunk boundaries and first-byte latency survive. Registered before the
+# DesktopProxyDeadlineMiddleware so that one stays outermost (pinned by
+# test_desktop_proxy_lifetime.py).
+from utils.other.response_gzip import GatedGZipMiddleware
+
+app.add_middleware(GatedGZipMiddleware)
+
 app.add_middleware(DesktopProxyDeadlineMiddleware)
 
 
@@ -193,6 +219,10 @@ def _run_fsr_loop(loop_name, callback, interval_seconds):
     from database.firestore_read_origin import read_origin
     from database.durable_queue_age import withdraw_queue_oldest_ready_ages
     from utils.other.fsr_leader_lease import loop_lease
+    from config.process_role import is_projection_pump_process
+
+    if is_projection_pump_process():
+        return {}  # A projection pump never takes a reconciler lease (config/process_role.py).
 
     def attributed():
         with read_origin(f'job:{loop_name}'):
@@ -216,20 +246,32 @@ install_drain_signal_marker()
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
     from utils.messaging.adapters.runtime import start_adapters
+    from database.pinecone_partition_state import start_mutations, drain_mutations
+    from database.pinecone_mutation_lifecycle import install_shutdown_drain
 
-    app.state.messaging_runtime = await start_adapters(messaging.register_adapter)
+    # OMI_PROCESS_ROLE=projection_pump keeps only the pump's set; an unknown role fails here.
+    full = startup_process_role() is ProcessRole.ALL
+    if full:
+        start_mutations()
+        app.state.pinecone_restore_signal = install_shutdown_drain(drain_mutations)
+        app.state.messaging_runtime = await start_adapters(messaging.register_adapter)
     start_metrics_sidecar_server()
     start_background_task(refresh_stt_cap_cohort_forever(), name='stt_cap_cohort_refresh')
-    start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
-    from utils.held_content_cohort import refresh_held_content_cohort_forever
+    if full:
+        start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
+        from utils.held_content_cohort import refresh_held_content_cohort_forever
 
-    start_background_task(refresh_held_content_cohort_forever(), name='held_content_cohort_refresh')
-    batch_pressure.start_from_env()
+        start_background_task(refresh_held_content_cohort_forever(), name='held_content_cohort_refresh')
+        batch_pressure.start_from_env()
     app.state.batch_pipeline_serving = start_serving_from_env()
-    start_soniox_usage_if_configured(start_background_task)
+    if full:
+        start_soniox_usage_if_configured(start_background_task)
     validate_account_deletion_dispatch_configuration()
     validate_streaming_stt_env()
     start_background_task(log_executor_health(), name='executor_health')
+    start_background_task(retry_settled_composes(), name='episode_compose_settle')
+    if not full:
+        return
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
     start_background_task(
@@ -256,6 +298,14 @@ async def startup_event():
         name='startup_byok_abandonment_reconcile',
     )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
+    # Sole dispatcher of conversation batch-purge obligations (deletes only arm them).
+    start_background_task(
+        run_blocking(db_executor, _drain_conversation_batch_purges),
+        name='startup_conversation_batch_purge_reconcile',
+    )
+    start_background_task(
+        _periodic_conversation_batch_purge_reconcile(), name='periodic_conversation_batch_purge_reconcile'
+    )
     start_background_task(_periodic_durable_queue_age_publish(), name='periodic_durable_queue_age_publish')
     start_background_task(
         proactive_message_dispatcher(),
@@ -309,6 +359,50 @@ async def _periodic_deletion_wipe_reconcile(interval_seconds: int | None = None)
                 logger.info(f"Periodic deletion-wipe reconciliation: {result}")
         except Exception as e:
             logger.error(f"Periodic deletion-wipe reconciliation failed: {e}")
+
+
+def _drain_conversation_batch_purges():
+    """Best-effort dispatch of due batch-purge obligations right after a restart/deploy."""
+    try:
+        result = _run_fsr_loop(
+            'reconcile_conversation_batch_purges',
+            reconcile_conversation_batch_purges,
+            _conversation_batch_purge_reconcile_interval_seconds(),
+        )
+        if result.get('dispatched') or result.get('held_for_consumer'):
+            logger.info(f"Startup conversation batch-purge reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup conversation batch-purge reconciliation failed: {e}")
+
+
+def _conversation_batch_purge_reconcile_interval_seconds() -> int:
+    try:
+        seconds = int(os.getenv('CONVERSATION_BATCH_PURGE_RECONCILE_INTERVAL_SECONDS', '60'))
+    except ValueError:
+        seconds = 60
+    return max(1, seconds)
+
+
+async def _periodic_conversation_batch_purge_reconcile(interval_seconds: int | None = None):
+    """Dispatch due conversation batch-purge obligations (new, lost, exhausted, released holds)."""
+    if interval_seconds is None:
+        interval_seconds = _conversation_batch_purge_reconcile_interval_seconds()
+    from utils.other.fsr_leader_lease import poll_delay
+
+    while True:
+        await asyncio.sleep(poll_delay(interval_seconds))
+        try:
+            result = await run_blocking(
+                db_executor,
+                _run_fsr_loop,
+                'reconcile_conversation_batch_purges',
+                reconcile_conversation_batch_purges,
+                interval_seconds,
+            )
+            if any(result.get(key) for key in ('dispatched', 'queued', 'held_for_consumer', 'enqueue_failed')):
+                logger.info(f"Periodic conversation batch-purge reconciliation: {result}")
+        except Exception as e:
+            logger.error(f"Periodic conversation batch-purge reconciliation failed: {e}")
 
 
 def _drain_listen_finalization_jobs():
@@ -474,6 +568,14 @@ async def shutdown_event():
     import logging
 
     from utils.executors import db_executor, run_blocking
+    from database.pinecone_partition_state import drain_mutations
+    from database.pinecone_mutation_lifecycle import drain_on_shutdown
+
+    # Run before other bounded drains consume the platform shutdown grace.
+    # Do not queue behind the same DB workers whose provider calls are draining.
+    await drain_on_shutdown(drain_mutations)
+    if restore_signal := getattr(app.state, 'pinecone_restore_signal', None):
+        restore_signal()
 
     runtime = getattr(app.state, 'messaging_runtime', None)
     if runtime:

@@ -37,6 +37,10 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/experiments/capture_end_marker.dart';
+import 'package:omi/services/capture/capture_end.dart';
+import 'package:omi/backend/http/api/capture_end.dart';
 
 /// Aggregate of existing CaptureSeams types plus missing I/O boundaries.
 /// All fields required; supplying some fakes can never select production defaults.
@@ -63,6 +67,7 @@ class CaptureDependencies {
     required this.ensureDeviceConnection,
     this.pendantReconnect,
     this.pendantReconnectBlocked,
+    this.excludeSpeaker,
   });
   final Future<DeviceConnection?> Function(String) ensureDeviceConnection;
   final Future<void> Function(String deviceId)? pendantReconnect;
@@ -85,6 +90,7 @@ class CaptureDependencies {
   final Future<BleAudioCodec> Function(String) codec;
   final Future<bool> Function() microphonePermission;
   final Future<void> Function() refreshConversation;
+  final Future<bool> Function(String conversationId, List<String> segmentIds)? excludeSpeaker;
 }
 
 /// Production must use this exact constructor path too. No test-only subclass.
@@ -131,6 +137,7 @@ CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) => Capt
       deviceConnectionLoader: dependencies.ensureDeviceConnection,
       pendantReconnect: dependencies.pendantReconnect,
       pendantReconnectBlocked: dependencies.pendantReconnectBlocked,
+      excludeSpeaker: dependencies.excludeSpeaker,
     );
 
 /// Composition entry signature for main.dart. Builder must resolve defaults
@@ -248,6 +255,38 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
       ownerUid: () => SharedPreferencesUtil().uid,
       now: DateTime.now,
     );
+    final reporter = CaptureEndReporter(
+      post: (signal, {required pendingWals, required sentAt}) async => switch (await postSyncCaptureEnd(
+        recordingSessionId: signal.recordingSessionId,
+        endType: signal.type.wire,
+        lastSpeechAt: signal.lastSpeechAt,
+        endDecidedAt: signal.decidedAt,
+        sentAt: sentAt,
+        pendingWals: pendingWals,
+      )) {
+        ApiSuccess(:final data) => data,
+        // Kept by the reporter and retried on the next accepted file.
+        ApiFailure() => false,
+      },
+      // Observation only: the reporter never seals, flushes or publishes.
+      // Audio up to the end that is still being written or published counts
+      // as pending until the capture lifecycle seals it and it is accepted.
+      // Later chunks of trailing silence are not part of the ended recording.
+      pendingWals: (signal) async {
+        if (phone is! LocalWalSyncImpl) throw StateError('Capture-end WAL inventory unavailable');
+        final unregistered = await lane.buffer.pendingJournalCount(signal.recordingSessionId,
+            ownerUid: SharedPreferencesUtil().uid,
+            through: signal.decidedAt,
+            acceptedFileBytes: phone.captureEndAcceptedFileBytes(signal.recordingSessionId));
+        final registered = phone.pendingWalsForRecording(signal.recordingSessionId, through: signal.decidedAt);
+        return unregistered + registered;
+      },
+      disabled: () async => SharedPreferencesUtil().uid.isEmpty || await CaptureEndMarkerPolicy.disabled(),
+      scope: () => (SharedPreferencesUtil().uid, phone.sessionGeneration),
+      observationVersion: () => MobileBatchBuffer.journalRevision,
+    );
+    provider.captureEndReporter = reporter;
+    if (phone is LocalWalSyncImpl) phone.onRecordingUploadAccepted = reporter.uploadAccepted;
     provider.installMobileStandardBatch(lane);
   } catch (_) {
     // Directory/plugin availability cannot interrupt the existing live path.

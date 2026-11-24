@@ -5,6 +5,8 @@ The endpoint returned raw dicts under response_model=List[Conversation], so one 
 routers/folders.py has a heavy import graph, so we import it under a stub finder.
 """
 
+from database.ports.folders import FolderEntity, FolderUpdate
+
 import importlib.abc
 import importlib.machinery
 import importlib.util
@@ -96,6 +98,8 @@ finally:
     sys.meta_path.remove(_finder)
     _restore(_snap)
 
+folders_mod.FolderUpdate = FolderUpdate
+
 
 class _FakeConv(BaseModel):
     id: str
@@ -107,6 +111,8 @@ def test_malformed_conversation_skipped_not_500():
         folders_mod.folders_db, 'get_folder', return_value={'id': 'f1'}
     ), patch.object(folders_mod.folders_db, 'get_conversations_in_folder', return_value=page), patch.object(
         folders_mod, 'redact_conversations_for_list', lambda x: None
+    ), patch.object(
+        folders_mod.transcribing_hold, 'project', lambda row: row
     ):
         result = folders_mod.get_folder_conversations(
             folder_id='f1', limit=100, offset=0, include_discarded=False, uid='u1'
@@ -130,9 +136,9 @@ def test_update_folder_router_strips_explicit_null_non_nullable_fields():
         icon=None,
         order=None,
     )
-    with patch.object(folders_mod.folders_db, 'get_folder', return_value=existing), patch.object(
-        folders_mod.folders_db, 'update_folder'
-    ) as mock_update:
+    with patch.object(
+        folders_mod.folders_db, 'get_folder', return_value=FolderEntity.model_construct(**existing)
+    ), patch.object(folders_mod.folders_db, 'update_folder') as mock_update:
         folders_mod.update_folder(folder_id='f1', request=req, uid='u1')
 
-    mock_update.assert_called_once_with('u1', 'f1', {'name': 'Updated Work', 'description': None})
+    mock_update.assert_called_once_with('u1', 'f1', FolderUpdate(name='Updated Work', description=None))

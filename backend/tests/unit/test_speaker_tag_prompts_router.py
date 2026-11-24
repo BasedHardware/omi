@@ -1,9 +1,11 @@
 import base64
 from datetime import datetime, timezone
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from models.speaker_tag_prompts import SpeakerTagPromptQualityOutcome, SpeakerTagPromptsResponse
 from routers import speaker_tag_prompts as router_module
 
@@ -207,7 +209,7 @@ def test_answer_does_not_reflect_stored_transcript_decode_error(monkeypatch, cap
     client = _client(monkeypatch)
 
     def corrupt_transcript(*args, **kwargs):
-        router_module.conversations_db._decode_transcript_segments_blob('u', 12345, False)
+        router_module.conversations_db.decode_transcript_segments_blob('u', 12345, False)
 
     monkeypatch.setattr(router_module.service, 'apply_answer', corrupt_transcript)
     with caplog.at_level('WARNING', logger=router_module.logger.name):
@@ -241,3 +243,20 @@ def test_answer_keeps_stale_owner_confirmation_message(monkeypatch):
     res = client.post('/v1/speaker-tag-prompts/answer', json=_answer_body())
     assert res.status_code == 409
     assert res.json()['detail'] == 'Owner question is stale; refresh the conversation'
+
+
+@pytest.mark.parametrize(
+    'error_type',
+    [DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable],
+)
+def test_answer_maps_destructive_gate_to_account_gate_busy(monkeypatch, error_type):
+    """Answering a card applies a manual assignment through the account fence."""
+
+    def gate_busy(*args, **kwargs):
+        raise error_type('external data write blocked by destructive operation')
+
+    monkeypatch.setattr(router_module.service, 'apply_answer', gate_busy)
+    response = _client(monkeypatch).post('/v1/speaker-tag-prompts/answer', json=_answer_body())
+    assert response.status_code == 409
+    assert response.json() == {'detail': 'account_gate_busy'}
+    assert response.headers['Retry-After'] == '2'

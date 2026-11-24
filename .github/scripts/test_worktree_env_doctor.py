@@ -293,10 +293,16 @@ class ReportTests(DoctorTestCase):
         self.assertTrue(report.ok)
         self.assertEqual(len(report.skipped), 2)
 
-    def test_bootstrap_reports_missing_app_dependencies(self) -> None:
+    def test_bootstrap_defers_missing_app_dependencies(self) -> None:
         self.fx.venv()
+        self.assertFalse((self.fx.root / doctor.APP_PACKAGE_CONFIG).exists())
         report = doctor.run_all_checks(self.fx.root, which=which_from(ALL_TOOLS), probe=healthy_probe)
-        self.assertEqual([f.component for f in report.findings], ["app"])
+        self.assertEqual(report.findings, [])
+        self.assertNotIn("app dependencies", report.checked)
+        self.assertIn(
+            "app dependencies (deferred: flutter run, test and build resolve them on first use, or run `(cd app && flutter pub get)`; the pre-push check still requires them for Dart formatting and Flutter generated output)",
+            report.skipped,
+        )
 
     def test_push_hatch_exits_zero(self) -> None:
         os.environ[doctor.SKIP_HATCH] = "1"

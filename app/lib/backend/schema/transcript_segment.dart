@@ -25,6 +25,21 @@ class TranscriptSegment {
   List<Translation> translations = [];
   bool speechProfileProcessed;
   String? sttProvider;
+  String? speakerIdScope;
+
+  static final _streamSpeakerNumber = RegExp(r'^SPEAKER_(\d+)$');
+
+  (String, String)? get recordingVoice {
+    final scope = speakerIdScope;
+    final label = speaker;
+    if (scope == null || scope.isEmpty || label == null || label.isEmpty) return null;
+    final match = _streamSpeakerNumber.firstMatch(label);
+    return (scope, match == null ? label : 'SPEAKER_${int.parse(match[1]!)}');
+  }
+
+  bool sameRecordingVoice(TranscriptSegment other) => recordingVoice == null
+      ? other.recordingVoice == null && speakerId == other.speakerId
+      : recordingVoice == other.recordingVoice;
 
   /// How this label was made: `manual`, `auto`, `carried`, or null for an unnamed speaker.
   String? speakerLabelSource;
@@ -41,6 +56,7 @@ class TranscriptSegment {
     required this.translations,
     this.speechProfileProcessed = true,
     this.sttProvider,
+    this.speakerIdScope,
     this.speakerLabelSource,
     int? speakerId,
   }) {
@@ -79,6 +95,7 @@ class TranscriptSegment {
       translations: generated.translations ?? const [],
       speechProfileProcessed: generated.speechProfileProcessed,
       sttProvider: generated.sttProvider,
+      speakerIdScope: generated.speakerIdScope,
       speakerLabelSource: generated.speakerLabelSource,
     );
   }
@@ -97,6 +114,7 @@ class TranscriptSegment {
       translations: translations,
       speechProfileProcessed: speechProfileProcessed,
       sttProvider: sttProvider,
+      speakerIdScope: speakerIdScope,
       speakerLabelSource: speakerLabelSource,
     );
   }

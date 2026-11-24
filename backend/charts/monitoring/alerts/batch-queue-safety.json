@@ -1,0 +1,401 @@
+[
+  {
+    "uid": "omi-batch-queue-safety-blind",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Batch queue safety",
+    "title": "Batch queue safety measurement incomplete or stale",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 900) or vector(1)) + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0)) + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "E",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-03T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Batch queue safety cannot measure every queue/retry priority, or its sample has been stale for fifteen minutes.",
+      "user_impact": "Late batch transcripts may go unnoticed while a bounded scan is saturated or the worker sample is unavailable.",
+      "scope": "Production queue freshness and oldest/retry NaN samples. A saturated exempt prefix is incomplete, never proven late work or a healthy empty queue.",
+      "verification": "Inspect batch_safety metrics_blind and queue sample freshness; count the unmeasured priority with ro-prod metadata aggregates. The 900s freshness budget accommodates the worker-plane cadence measured at approximately 514s on 2026-11-08T14:05–14:59Z; the prior 120s arm falsely paged between healthy samples.",
+      "safe_next_action": "Classify the saturated prefix and real overdue work; retain all held audio and custody. Do not delete rows, reset paid intents, or waive allowance to silence the alarm.",
+      "runbook": "backend/docs/runbooks/batch-queue-safety.md",
+      "threshold": "$A > 0 for 5m; stale means at least 900s",
+      "evaluated_bad": "Synthetic: one oldest or retry NaN priority alongside a finite zero, or no successful queue sample for fifteen minutes.",
+      "evaluated_good": "Synthetic: all priority age samples are finite and the queue sample is fresh."
+    },
+    "labels": {
+      "alert_identity": "omi-batch-queue-safety-blind",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": []
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-batch-retry-age-over-24h",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Batch queue safety",
+    "title": "Batch retry item has been failing for over 24 hours",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 86400",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "E",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-08T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A batch audio item has been in compute retry for more than 24 hours.",
+      "user_impact": "That audio is delayed for its user until a retry succeeds or the item is terminalized.",
+      "scope": "Oldest retry item across all priorities and workers, from omi_batch_pipeline_retry_age_seconds (time since first compute failure). Alert-only; it changes no queue state.",
+      "verification": "Compare the max against the retry age series per priority on the omi-core-features dashboard. A stale or NaN series belongs to the metrics-blind alert, not this one.",
+      "safe_next_action": "Identify the priority and failing stage in the batch runbook. Do not delete audio, rows or custody, and do not reset attempts. This alert authorizes no runtime change.",
+      "evaluated_bad": "Synthetic: one priority with retry age 86401 sustained for ten minutes.",
+      "evaluated_good": "Synthetic: oldest retry age 86400 or below, or no retry series.",
+      "runbook": "backend/docs/runbooks/batch-queue-safety.md",
+      "threshold": "$A > 86400 for 10m"
+    },
+    "labels": {
+      "alert_identity": "omi-batch-retry-age-over-24h",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null,
+    "missingSeriesEvalsToResolve": 2
+  },
+  {
+    "uid": "omi-capture-retry-cap-shadow-7d",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Batch queue safety",
+    "title": "Capture retry cap has counted would-quarantine for seven days",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_capture_retry_cap_total{outcome=\"would_quarantine\"}[7d]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "E",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-08T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "1h",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "The shadow retry cap counted retries it would have terminalized in the last seven days.",
+      "user_impact": "Capture retries are not bounded by the cap yet, so failing capture work can keep retrying instead of stopping.",
+      "scope": "Sum of omi_capture_retry_cap_total with outcome would_quarantine over seven days. In shadow mode the cap never terminalizes work, so this measures exposure, not a stop.",
+      "verification": "Confirm CAPTURE_COVERAGE_MODE on the serving revision and compare the counter increase against the same window for each check label.",
+      "safe_next_action": "Decide with the pipeline owner whether to serve the retry cap or retire the shadow counter. Do not change the mode from this alert. This alert authorizes no runtime change.",
+      "evaluated_bad": "Synthetic: one would_quarantine increment inside the seven-day window sustained for one hour.",
+      "evaluated_good": "Synthetic: no would_quarantine increase in the seven-day window.",
+      "runbook": "backend/docs/runbooks/batch-queue-safety.md",
+      "threshold": "$A > 0 for 1h"
+    },
+    "labels": {
+      "alert_identity": "omi-capture-retry-cap-shadow-7d",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null,
+    "missingSeriesEvalsToResolve": 2
+  }
+]

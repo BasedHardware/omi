@@ -1,0 +1,19 @@
+id: ota/image1-rejected-in-safe
+summary: >
+  SAFE accepts only the application image: a network-core (image 1) chunk is
+  rejected before any erase, a later completion does not clear the latch, and
+  a warm reset stays in SAFE.
+tags: [guard]
+initial: {charging: true}
+timeline:
+  - {t: 0, hold: 10600}
+  - {t: 15000, dfu: chunk-image1}
+  - {t: 16000, dfu: pending}
+  - {t: 20000, power: soft_reset}
+end: 30000
+expect:
+  boot_count: 2
+  boots:
+    - {safe: true, latched: true, log: ["SIM: dfu chunk image 1 -> rejected (rc=3)"],
+       not_log: ["omi/bootstate=TRIAL", "Safe mode DFU finished"]}
+    - {reset: software, safe: true, latch_reason: 2}

@@ -48,12 +48,12 @@ def test_live_dry_run_reads_sources_but_never_firestore_or_uids(tier, capsys, en
     factory.assert_not_called()
     output = capsys.readouterr().out
     assert 'private-one' not in output and 'private-two' not in output
-    assert len(output.splitlines()) == len(migration.COHORT_ENVS)
+    assert len(output.splitlines()) == len(migration.MIGRATABLE)
     assert all('writes=0' in line for line in output.splitlines())
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
-@pytest.mark.parametrize('name', sorted(migration.COHORT_ENVS))
+@pytest.mark.parametrize('name', sorted(migration.MIGRATABLE))
 def test_verify_compares_sets_not_counts_and_never_writes(monkeypatch, capsys, environment, name):
     desired, _ = migration.inventory(sources())
 
@@ -167,7 +167,7 @@ def test_seed_atomic_leaf_merge_and_rerun_is_idempotent(monkeypatch, environment
         assert set(call.args[1]['cohorts']) == {environment}
         flags = call.args[1]['cohorts'][environment]
         assert 'messaging-telegram' not in flags and 'batch-pipeline-shadow' not in flags
-        assert set(flags) == set(migration.COHORT_ENVS) - {'messaging-telegram', 'batch-pipeline-shadow'}
+        assert set(flags) == set(migration.MIGRATABLE) - {'messaging-telegram', 'batch-pipeline-shadow'}
         assert set(flags.values()) == {True}
     batch.commit.assert_called_once_with(timeout=15.0, retry=None)
 
@@ -250,6 +250,30 @@ def test_live_cli_reads_serving_revision_and_installed_helm_values():
     assert all('based-hardware-dev' in call for call in calls if call[0] == 'gcloud')
     assert all('serving-revision' in call for call in calls if 'revisions' in call)
     assert all('--all' in call and 'explicit-context' in call for call in calls if call[0] == 'helm')
+
+
+def test_live_cli_reads_the_ingress_container_beside_a_sidecar():
+    app = {
+        'name': 'backend-1',
+        'ports': [{'containerPort': 8080}],
+        'env': [{'name': 'DREAM_AGENT_UID_ALLOWLIST', 'value': 'private-one'}],
+    }
+    collector = {'name': 'collector', 'env': [{'name': 'DREAM_AGENT_UID_ALLOWLIST', 'value': 'other'}]}
+
+    def command(argv, containers):
+        if argv[0] == 'helm':
+            return {'env': []}
+        if argv[2] == 'services':
+            return {'status': {'traffic': [{'percent': 100, 'revisionName': 'serving-revision'}]}}
+        return {'spec': {'containers': containers}}
+
+    result = migration.read_live('prod', 'ctx', command=lambda argv: command(argv, [collector, app]))
+    expected = {'DREAM_AGENT_UID_ALLOWLIST': 'private-one'}
+    assert all(result[f'cloud-run/{host}'] == expected for host in migration.CLOUD_RUN_HOSTS)
+    # Two port-bearing containers (or none) stay ambiguous rather than guessing.
+    for containers in ([app, dict(collector, ports=[{'containerPort': 4317}])], [collector, dict(app, ports=[])]):
+        with pytest.raises(ValueError, match='ambiguous serving container'):
+            migration.read_live('prod', 'ctx', command=lambda argv, c=containers: command(argv, c))
 
 
 def test_live_cli_requires_tier_and_sanitizes_command_errors(tier, capsys):

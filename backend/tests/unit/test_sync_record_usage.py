@@ -91,7 +91,7 @@ class TestRecordUsageImport:
 class TestV2RecordUsage:
     @staticmethod
     def _get_v2_body():
-        return _extract_function_body(_read_pipeline_source(), '_run_full_pipeline_background_async')
+        return _extract_function_body(_read_pipeline_source(), 'run_full_pipeline_background_async')
 
     def test_record_usage_called_in_v2(self):
         body = self._get_v2_body()

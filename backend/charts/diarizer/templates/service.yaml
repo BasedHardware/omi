@@ -1,3 +1,4 @@
+{{- if .Values.backendConfig.enabled }}
 apiVersion: cloud.google.com/v1
 kind: BackendConfig
 metadata:
@@ -11,15 +12,18 @@ spec:
     type: HTTP
     requestPath: /health  # Ensure this path returns 200 OK
 ---
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "diarizer.fullname" . }}
   labels:
     {{- include "diarizer.labels" . | nindent 4 }}
+  {{- if .Values.backendConfig.enabled }}
   annotations:
     cloud.google.com/neg: '{"ingress": true}'
     cloud.google.com/backend-config: '{"default": {{ .Values.backendConfig.name | quote }}}'  # Link to BackendConfig
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -28,4 +32,8 @@ spec:
       protocol: TCP
       name: http
   selector:
+    {{- if .Values.service.selectorLabels }}
+    {{- toYaml .Values.service.selectorLabels | nindent 4 }}
+    {{- else }}
     {{- include "diarizer.selectorLabels" . | nindent 4 }}
+    {{- end }}

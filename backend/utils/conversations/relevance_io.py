@@ -5,6 +5,7 @@ Firestore or metrics, so ``process_conversation`` only wires them together.
 """
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 import logging
 from datetime import timedelta
@@ -13,11 +14,12 @@ from typing import Any, Callable, Optional
 from config.recorded_time_tolerances import CLOCK_SKEW_SECONDS
 from database import conversations as conversations_db
 from models.conversation_continuity import DEFAULT_GAP_SECONDS
-from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, RelevancePolicy
 from utils.conversations.relevance import (
     RELEVANCE_DECISION_FIELD,
     Neighbor,
     RelevanceDecision,
+    content_free_rule,
     decide_relevance,
     find_neighbor,
 )
@@ -99,7 +101,8 @@ def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[st
             for other_id in episode.get('conversation_ids') or []:
                 if other_id == cid:
                     continue
-                other = conversations_db.get_conversation_raw_snapshot(
+                other = read_product_conversation(
+                    conversations_db.get_conversation_raw_snapshot,
                     uid,
                     other_id,
                     field_paths=[
@@ -202,6 +205,28 @@ def rules_only_relevance(
         calendar_retains=calendar_retains,
         occasion_retains=lambda: occasion_retention(uid, conversation),
     )
+
+
+def short_clip_relevance(
+    uid: str,
+    conversation: Any,
+    trigger: ProcessingTrigger,
+    calendar_retains: Callable[[str, Any, Any], bool],
+) -> RelevanceDecision:
+    """The floor spares a short clip paid notes; it must not stand "Thank you" up as a Home row."""
+    keep = RelevanceDecision('keep', 'rule', 'content_below_floor', trigger)
+    if PROCESSING_MODES[trigger].relevance is not RelevancePolicy.ASSESS or is_release_probe_uid(uid):
+        return keep
+    if getattr(conversation, 'starred', False) or getattr(conversation, 'folder_user_set', False):
+        return keep
+    segments = getattr(conversation, 'transcript_segments', None) or []
+    texts = [segment.text for segment in segments] or [getattr(conversation, 'text', None) or '']
+    rule = content_free_rule(texts, has_photos=False, trusted_wake_word=False)
+    if not rule or calendar_retains(
+        uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
+    ):
+        return keep
+    return RelevanceDecision('discard', 'rule', rule, trigger)
 
 
 def record_decision(decision: RelevanceDecision) -> None:

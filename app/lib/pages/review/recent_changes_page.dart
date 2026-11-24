@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/review.dart' as api;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/review.dart';
-import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/conversation_link_blocks.dart';
 import 'package:omi/pages/review/widgets/recent_change_groups.dart';
 import 'package:omi/pages/review/widgets/recent_change_row.dart';
@@ -11,25 +10,21 @@ import 'package:omi/pages/review/widgets/recent_change_sheet.dart';
 import 'package:omi/pages/review/widgets/review_parts.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/other/temp.dart';
 
 typedef ReviewChangesLoader = Future<ApiResult<ReviewChangesPage>> Function({String? cursor});
 typedef ReviewChangeToggler = Future<ApiResult<ReviewChange>> Function(String changeId, {required bool undone});
 
-/// What Omi changed on its own in the last 30 days, grouped by what changed. Each row shows the
-/// change itself (before → after) and opens every place it landed, in context, with Undo. A
-/// back-office screen reached from Review; nothing here is pushed at the user.
+/// What Omi changed on its own in the last 30 days, grouped by day. Each row shows the change's
+/// title with Undo, and opens every place it landed, in context. A back-office screen reached from
+/// Review; nothing here is pushed at the user.
 class RecentChangesPage extends StatefulWidget {
-  const RecentChangesPage({super.key, this.loadChanges, this.setUndone, this.openConversation, this.openTasks});
+  const RecentChangesPage({super.key, this.loadChanges, this.setUndone, this.openConversation});
 
   final ReviewChangesLoader? loadChanges;
   final ReviewChangeToggler? setUndone;
 
   /// Opens a source conversation; defaults to the conversation detail page.
   final void Function(BuildContext context, String conversationId)? openConversation;
-
-  /// Opens the task list from a task change; defaults to the Tasks page.
-  final void Function(BuildContext context)? openTasks;
 
   @override
   State<RecentChangesPage> createState() => _RecentChangesPageState();
@@ -39,11 +34,14 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
   /// Ticks whenever [_changes] or [_busy] change, so an open sheet follows the page.
   final _revision = ValueNotifier<int>(0);
   List<ReviewChange> _changes = const [];
-  Map<RecentChangeSection, List<RecentChangeGroup>> _groups = const {};
+  Map<DateTime, List<RecentChangeGroup>> _groups = const {};
   String? _cursor;
   bool _loading = true;
   bool _failed = false;
   bool _loadingMore = false;
+
+  /// Show More got no answer: a notice with Try Again where the list ends (V3).
+  bool _moreFailed = false;
   final Set<String> _busy = {};
 
   ReviewChangesLoader get _load => widget.loadChanges ?? api.getReviewChanges;
@@ -64,7 +62,7 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
   void _update(VoidCallback change) {
     setState(() {
       change();
-      _groups = groupRecentChanges(_changes);
+      _groups = groupRecentChangesByDay(_changes);
     });
     _revision.value++;
   }
@@ -82,6 +80,7 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
         case ApiSuccess(:final data):
           _changes = data.changes;
           _cursor = data.nextCursor;
+          _moreFailed = false; // a fresh first page restarts Show More (V3)
         case ApiFailure():
           _failed = true;
       }
@@ -91,14 +90,20 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
   Future<void> _more() async {
     final cursor = _cursor;
     if (cursor == null || _loadingMore) return;
-    setState(() => _loadingMore = true);
+    setState(() {
+      _loadingMore = true;
+      _moreFailed = false;
+    });
     final result = await _load(cursor: cursor);
     if (!mounted) return;
     _update(() {
       _loadingMore = false;
-      if (result case ApiSuccess(:final data)) {
-        _changes = [..._changes, ...data.changes];
-        _cursor = data.nextCursor;
+      switch (result) {
+        case ApiSuccess(:final data):
+          _changes = [..._changes, ...data.changes];
+          _cursor = data.nextCursor;
+        case ApiFailure():
+          _moreFailed = true;
       }
     });
   }
@@ -155,12 +160,6 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
     openChatBlockConversation(context, conversationId: conversationId);
   }
 
-  void _openTasks(BuildContext context) {
-    final open = widget.openTasks;
-    if (open != null) return open(context);
-    routeToPage(context, const ActionItemsPage());
-  }
-
   void _openGroup(RecentChangeGroup group) {
     showOmiSheet<void>(
       context: context,
@@ -183,24 +182,32 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final Widget body;
-    if (_loading) {
+    // A refresh keeps the rows on screen: the pull shows it is working, and a failure that has
+    // rows to keep says so above them instead of replacing them (V3).
+    if (_loading && _changes.isEmpty) {
       body = const OmiLoadingState();
-    } else if (_failed) {
+    } else if (_failed && _changes.isEmpty) {
       body = OmiErrorState(message: l10n.reviewChangesLoadFailed, onRetry: _refresh);
     } else if (_changes.isEmpty) {
       body = OmiEmptyState(icon: Icons.history, title: l10n.reviewNoChangesTitle, message: l10n.reviewNoChangesBody);
     } else {
       final rows = <Widget>[
+        if (_failed)
+          OmiPartialNotice(
+            key: const Key('recent_changes_refresh_failed'),
+            message: l10n.reviewChangesLoadFailed,
+            onRetry: _refresh,
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(OmiSpacing.xxs, 0, OmiSpacing.xxs, OmiSpacing.xs),
           child: Text(l10n.reviewChangesIntro, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
         ),
       ];
-      for (final MapEntry(key: section, value: groups) in _groups.entries) {
+      final dates = OmiDateFormat.of(context);
+      for (final MapEntry(key: day, value: groups) in _groups.entries) {
         rows.add(Padding(
           padding: const EdgeInsets.only(top: OmiSpacing.sm),
-          child: ReviewSectionLabel(
-              key: ValueKey('recent_changes_section_${section.name}'), label: _sectionLabel(context, section)),
+          child: ReviewSectionLabel(key: ValueKey('recent_changes_day_$day'), label: dates.dayHeader(day)),
         ));
         for (final group in groups) {
           rows.add(Padding(
@@ -210,12 +217,13 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
               busy: group.changes.any((c) => _busy.contains(c.changeId)),
               onOpen: () => _openGroup(group),
               onToggleAll: () => _toggleGroup(group),
-              onOpenTask: () => _openTasks(context),
             ),
           ));
         }
       }
-      if (_cursor != null) {
+      if (_cursor != null && _moreFailed) {
+        rows.add(OmiLoadMoreFailed(key: const Key('recent_changes_more_failed'), onRetry: _more));
+      } else if (_cursor != null) {
         rows.add(Center(
           child: OmiButton.tertiary(label: l10n.reviewShowMore, isLoading: _loadingMore, onPressed: _more),
         ));

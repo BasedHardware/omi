@@ -1,3 +1,10 @@
+// The capture-status card shown above the conversations list: streaming pill,
+// offline recording timer, paused indicator, and local-STT recovery notices.
+//
+// This is a projection of provider state, not a capture owner -- when a live
+// episode row is showing the streaming capture the card defers to it, and the
+// one-second elapsed timer is a cheap no-op while no offline session is active
+// so it can keep ticking behind disabled TickerModes.
 import 'package:omi/ui/components/local_stt_recovery_notice.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'dart:async';

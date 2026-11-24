@@ -38,6 +38,10 @@ _WHISPER_ALIASES = {'iw': 'he', 'jw': 'jv', 'yue': 'zh'}
 MODEL_IDS = {'whisper-base': 'openai/whisper-base'}
 
 
+def lid_only_enabled() -> bool:
+    return os.getenv('PARAKEET_LID_ONLY', 'false').strip().lower() in {'true', '1', 'yes', 'on'}
+
+
 def configured_model() -> str:
     """Default whisper-base; `off` (and any unknown value) disables the gate rather than guess."""
     value = os.getenv('PARAKEET_LID_MODEL', 'whisper-base').strip().lower()
@@ -102,7 +106,7 @@ def to_mono_16k(samples: np.ndarray, sample_rate: int) -> np.ndarray:
 
 
 class WhisperLanguageId:
-    """Whisper encoder plus one decoder step; softmax over language tokens only. GPU worker thread only."""
+    """Whisper encoder plus one decoder step; softmax over language tokens only. Worker thread only."""
 
     def __init__(self, model_key: str, device: str) -> None:
         import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv

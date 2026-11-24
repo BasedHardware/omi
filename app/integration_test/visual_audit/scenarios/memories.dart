@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/app_globals.dart';
+import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
@@ -66,27 +67,32 @@ final memoriesScenarios = <AuditScenario>[
     prefs: const {'givenName': 'Sam', 'familyName': 'Altman'},
     run: (a) async {
       await a.pump(
-          MemoryGraphPage(
-            trackOpenEvent: false,
-            loadGraph: () async => {
-              'nodes': [
-                {'id': 'ent_1611f3f21a8027b7c4f5', 'label': 'Sam Altman', 'node_type': 'person'},
-                {'id': 'contact-sam', 'label': 'Sam', 'node_type': 'person'},
-                {'id': 'ent_f33e07a0450b65412254', 'label': 'I', 'node_type': 'concept'},
-                {'id': 'user', 'label': 'user', 'node_type': 'person'},
-              ],
-              'edges': [
-                {'source_id': 'user', 'target_id': 'ent_1611f3f21a8027b7c4f5', 'label': 'knows'},
-                {'source_id': 'user', 'target_id': 'contact-sam', 'label': 'knows'},
-                {'source_id': 'user', 'target_id': 'ent_f33e07a0450b65412254', 'label': 'studies'},
-              ],
-            },
-          ),
-          scaffold: false);
+        MemoryGraphPage(
+          trackOpenEvent: false,
+          loadGraph: () async => {
+            'nodes': [
+              {'id': 'ent_1611f3f21a8027b7c4f5', 'label': 'Sam Altman', 'node_type': 'person'},
+              {'id': 'contact-sam', 'label': 'Sam', 'node_type': 'person'},
+              {'id': 'ent_f33e07a0450b65412254', 'label': 'I', 'node_type': 'concept'},
+              {'id': 'user', 'label': 'user', 'node_type': 'person'},
+            ],
+            'edges': [
+              {'source_id': 'user', 'target_id': 'ent_1611f3f21a8027b7c4f5', 'label': 'knows'},
+              {'source_id': 'user', 'target_id': 'contact-sam', 'label': 'knows'},
+              {'source_id': 'user', 'target_id': 'ent_f33e07a0450b65412254', 'label': 'studies'},
+            ],
+          },
+        ),
+        scaffold: false,
+      );
       void assertIdentities() {
         final graph = a.tester.state<MemoryGraphPageState>(find.byType(MemoryGraphPage)).simulation;
-        expect(graph.nodes.map((node) => node.id).toSet(),
-            {'user', 'ent_1611f3f21a8027b7c4f5', 'contact-sam', 'ent_f33e07a0450b65412254'});
+        expect(graph.nodes.map((node) => node.id).toSet(), {
+          'user',
+          'ent_1611f3f21a8027b7c4f5',
+          'contact-sam',
+          'ent_f33e07a0450b65412254',
+        });
         expect(graph.nodes.singleWhere((node) => node.isFixed).id, 'user');
         expect(graph.edges.length, 3);
       }
@@ -105,20 +111,21 @@ final memoriesScenarios = <AuditScenario>[
     state: 'A canonical page with saved memories and a signed cursor; a later page contains relationships',
     run: (a) async {
       await a.pump(
-          MemoryGraphPage(
-            trackOpenEvent: false,
-            loadGraph: () async => {
-              'nodes': [],
-              'edges': [],
-              'catalog_nodes': [
-                for (var i = 0; i < _listed.length; i++) {'id': 'memory:$i', 'label': _listed[i]}
-              ],
-              'has_more': true,
-              'next_cursor': 'fixture-page-2',
-            },
-            loadMoreGraph: (_) => _graphLoaded(),
-          ),
-          scaffold: false);
+        MemoryGraphPage(
+          trackOpenEvent: false,
+          loadGraph: () async => {
+            'nodes': [],
+            'edges': [],
+            'catalog_nodes': [
+              for (var i = 0; i < _listed.length; i++) {'id': 'memory:$i', 'label': _listed[i]},
+            ],
+            'has_more': true,
+            'next_cursor': 'fixture-page-2',
+          },
+          loadMoreGraph: (_) => _graphLoaded(),
+        ),
+        scaffold: false,
+      );
       await a.shot('Saved memories remain readable without invented relationships', step: 'catalog');
       await a.tap(find.byKey(const ValueKey('mind_map_load_more')));
       await a.shot('Load a later page containing supported relationships', step: 'graph');
@@ -130,8 +137,10 @@ final memoriesScenarios = <AuditScenario>[
     page: 'lib/pages/memories/widgets/memory_graph_page.dart (MemoryGraphPage)',
     state: 'A successful canonical read has no eligible memories or relationships',
     run: (a) async {
-      await a.pump(MemoryGraphPage(trackOpenEvent: false, loadGraph: () async => {'nodes': [], 'edges': []}),
-          scaffold: false);
+      await a.pump(
+        MemoryGraphPage(trackOpenEvent: false, loadGraph: () async => {'nodes': [], 'edges': []}),
+        scaffold: false,
+      );
       await a.shot('Refresh remains reachable on an empty Mind Map');
     },
   ),
@@ -243,4 +252,40 @@ final memoriesScenarios = <AuditScenario>[
       await a.shot('Open Memories with the graph loaded above the list');
     },
   ),
+  AuditScenario(
+    id: 'memories-locked',
+    title: 'Memories: a locked row beside an open one',
+    page: 'lib/pages/memories/page.dart (MemoriesPage)',
+    state: 'One locked memory and one open memory; Upgrade opens Plan & Usage on the demo catalog',
+    run: (a) async {
+      Memory row(String id, String content, {bool locked = false}) => Memory(
+            id: id,
+            uid: 'audit',
+            content: content,
+            category: MemoryCategory.manual,
+            visibility: MemoryVisibility.private,
+            createdAt: DateTime(2026, 9, 20),
+            updatedAt: DateTime(2026, 9, 20),
+            isLocked: locked,
+          );
+      await a.pump(
+        const MemoriesPage(showMindMap: false, loadGraph: _noGraph),
+        providers: [
+          ChangeNotifierProvider(
+            create: (_) => MemoriesProvider(
+              fetchMemoriesRequest: ({limit = 100, offset = 0, thisDeviceOnly = false}) async => GetMemoriesResult([
+                row('locked-mem', 'Prefers the pendant for long meetings', locked: true),
+                row('open-mem', 'Takes the train to the office on Tuesdays'),
+              ], true),
+            ),
+          ),
+        ],
+      );
+      expect(find.text('Upgrade'), findsOneWidget);
+      expect(find.text('Takes the train to the office on Tuesdays'), findsOneWidget);
+      await a.shot('Open Memories with a locked row');
+    },
+  ),
 ];
+
+Future<Map<String, dynamic>> _noGraph() async => {'nodes': [], 'edges': []};

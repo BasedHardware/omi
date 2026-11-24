@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -15,8 +16,11 @@ import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_header.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
+import 'package:omi/services/experiments/summary_generation_gate.dart';
 import 'package:omi/ui/ui.dart';
 import '../helpers/reprocess_fakes.dart';
+import '../helpers/transcription_hold_wire.dart';
 
 TranscriptSegment _segment(String text) => TranscriptSegment(
       id: 'seg',
@@ -67,6 +71,7 @@ Widget _app(ConversationDetailProvider detail, Widget body, {FolderProvider? fol
 Widget get _summary => const CustomScrollView(slivers: [GetAppsWidgets()]);
 
 void main() {
+  setUpAll(initHeldWireEnv);
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
@@ -101,6 +106,152 @@ void main() {
     await tester.pump();
     expect(detail.conversation.summaryRetryable, isFalse);
     expect(find.byKey(const Key('conversation_detail_summary_retry')), findsNothing);
+  });
+
+  testWidgets('a held row\'s Retry answered 409 shows the not-transcribed notice and no action', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    final calls = <String>[];
+    // The page opens with the Home row (a); its failed Home step offers Retry.
+    final detail = _detail(heldListRow(), reprocess: heldWireReprocess(409, heldReprocess409Body, calls: calls));
+    addTearDown(detail.dispose);
+
+    await tester.pumpWidget(_app(detail, _summary));
+    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)));
+    await tester.tap(find.text(l10n.retry));
+    await tester.pumpAndSettle();
+
+    expect(calls, [heldConversationId]);
+    expect(find.byKey(const Key('conversation_detail_transcription_pending')), findsOneWidget);
+    expect(find.text(l10n.summaryTranscriptionPendingTitle), findsOneWidget);
+    expect(find.text(l10n.retry), findsNothing);
+    expect(find.text(l10n.generateSummary), findsNothing);
+    expect(find.text(l10n.errorProcessingConversation), findsNothing);
+    // The expiry timer must not outlive the test body.
+    TranscriptionPendingConversations.reset();
+  });
+
+  testWidgets('a confirmed hold becomes processing and then shows its transcript and summary', (tester) async {
+    var fetched = ServerConversation.fromJson({
+      ...heldListRowJson(),
+      'transcription_admission': 'allowance_held',
+    });
+    final detail = ConversationDetailProvider(fetchConversation: (_) async => fetched)
+      ..selectedDate = conversationLocalDayKey(fetched.createdAt)
+      ..setCachedConversation(fetched);
+    addTearDown(detail.dispose);
+    await tester.pumpWidget(_app(detail, _summary));
+    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)));
+
+    expect(find.byKey(const Key('conversation_detail_held_recording')), findsOneWidget);
+    expect(find.text(l10n.waitingForTranscriptionAllowance), findsOneWidget);
+    expect(find.text(l10n.retry), findsNothing);
+    expect(find.text(l10n.upgrade), findsNothing);
+
+    fetched = ServerConversation.fromJson({
+      ...heldDetailJson(),
+      'status': 'processing',
+      'transcription_admission': 'processing',
+    });
+    expect(await detail.refreshConversation(), isTrue);
+    await tester.pump();
+    expect(detail.conversation.id, heldConversationId);
+    expect(detail.conversation.homeStep, 'transcribing');
+    expect(find.byKey(const Key('conversation_detail_held_recording')), findsNothing);
+    expect(find.text(l10n.processingConversationProgress), findsOneWidget);
+    expect(find.text(l10n.retry), findsNothing);
+
+    fetched = ServerConversation.fromJson({
+      ...heldDetailJson(),
+      'transcription_wait': null,
+      'structured': Structured('Venue planning', 'We picked Friday.', emoji: '🧠').toJson(),
+      'transcript_segments': [_segment('We picked Friday.').toJson()],
+    });
+    expect(await detail.refreshConversation(), isTrue);
+    await tester.pumpAndSettle();
+    expect(detail.conversation.id, heldConversationId);
+    expect(detail.conversation.transcriptSegments.single.text, 'We picked Friday.');
+    expect(find.text(l10n.processingConversationProgress), findsNothing);
+    expect(find.textContaining('We picked Friday.', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('redesign: a refresh that lands a transcript retires the not-transcribed card', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    SummaryGenerationV2Gate.debugOverride = true;
+    addTearDown(() => SummaryGenerationV2Gate.debugOverride = null);
+    var fetched = heldDetail();
+    final detail = ConversationDetailProvider(
+      reprocess: heldWireReprocess(409, heldReprocess409Body),
+      fetchConversation: (_) async => fetched,
+    )
+      ..selectedDate = conversationLocalDayKey(heldDetail().createdAt)
+      ..setCachedConversation(heldDetail());
+    addTearDown(detail.dispose);
+
+    await tester.pumpWidget(_app(detail, _summary));
+    expect(await detail.reprocessConversation(), isFalse);
+    await tester.pumpAndSettle();
+    expect(detail.summaryFailure?.kind, SummaryFailureKind.transcriptionPending);
+
+    // Still held: the card stays.
+    expect(await detail.refreshConversation(), isTrue);
+    expect(detail.summaryFailure?.kind, SummaryFailureKind.transcriptionPending);
+
+    // Transcribed since: the card goes, and so does the marker.
+    fetched = ServerConversation.fromJson({
+      ...heldDetailJson(),
+      'transcript_segments': [_segment('We picked Friday.').toJson()],
+    });
+    expect(await detail.refreshConversation(), isTrue);
+    await tester.pumpAndSettle();
+    expect(detail.summaryFailure, isNull);
+    expect(TranscriptionPendingConversations.contains(heldConversationId), isFalse);
+    TranscriptionPendingConversations.reset();
+  });
+
+  testWidgets('redesign: a busy card stays on a transcript-only refresh and goes once a summary lands', (tester) async {
+    SummaryGenerationV2Gate.debugOverride = true;
+    addTearDown(() => SummaryGenerationV2Gate.debugOverride = null);
+    var fetched = _conversation(summaryRetryable: false);
+    final detail = ConversationDetailProvider(
+      reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async => const ReprocessBusy(),
+      fetchConversation: (_) async => fetched,
+    )
+      ..selectedDate = conversationLocalDayKey(fetched.createdAt)
+      ..setCachedConversation(fetched);
+    addTearDown(detail.dispose);
+
+    await tester.pumpWidget(_app(detail, _summary));
+    expect(await detail.reprocessConversation(), isFalse);
+    expect(detail.summaryFailure?.kind, SummaryFailureKind.busy);
+    expect(await detail.refreshConversation(), isTrue);
+    expect(detail.summaryFailure?.kind, SummaryFailureKind.busy);
+
+    fetched = _conversation(overview: 'Picked Friday.', summaryRetryable: false);
+    expect(await detail.refreshConversation(), isTrue);
+    expect(detail.summaryFailure, isNull);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('failed Home projection survives a legacy detail read and offers retry without a spinner',
+      (tester) async {
+    final legacy = _conversation(summaryRetryable: false);
+    final processing = ServerConversation(
+        id: legacy.id,
+        createdAt: legacy.createdAt,
+        structured: legacy.structured,
+        status: ConversationStatus.processing);
+    final detail = ConversationDetailProvider(fetchConversation: (_) async => processing)
+      ..selectedDate = conversationLocalDayKey(processing.createdAt)
+      ..setCachedConversation(processing.withHomeStep('failed'));
+    addTearDown(detail.dispose);
+    await detail.refreshConversation();
+    expect(detail.conversation.homeStep, 'failed');
+    await tester.pumpWidget(_app(detail, _summary));
+    expect(find.byKey(const Key('conversation_detail_summary_retry')), findsOneWidget);
+    expect(find.byType(OmiLoadingState), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   testWidgets('an empty summary without the server marker keeps the ordinary Generate Summary prompt', (tester) async {

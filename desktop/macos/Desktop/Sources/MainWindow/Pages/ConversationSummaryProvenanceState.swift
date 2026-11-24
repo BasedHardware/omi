@@ -96,6 +96,8 @@ enum ConversationSummaryProvenanceState {
   // MARK: - Empty state
 
   enum Empty: Equatable {
+    /// The server is still waiting for the recording transcript.
+    case pendingTranscription
     /// A capable client is expected to deliver a summary and has not yet.
     case pendingOnDevice
     /// The transcript is stored; enrichment happens when the conversation opens.
@@ -107,6 +109,7 @@ enum ConversationSummaryProvenanceState {
 
     var title: String {
       switch self {
+      case .pendingTranscription: return "Transcribing…"
       case .pendingOnDevice: return "Summarizing on this Mac"
       case .pendingServer: return "Summary not generated yet"
       case .localProducedNothing: return "No summary for this conversation"
@@ -119,6 +122,8 @@ enum ConversationSummaryProvenanceState {
     /// the state is terminal.
     var message: String {
       switch self {
+      case .pendingTranscription:
+        return "Your recording is being transcribed. The transcript will appear here when it is ready."
       case .pendingOnDevice:
         return "This conversation is being summarized on your Mac. The transcript is already saved below."
       case .pendingServer:
@@ -140,8 +145,10 @@ enum ConversationSummaryProvenanceState {
   static func empty(
     deferred: Bool,
     localSummaryRuntime: String?,
-    isProcessing: Bool
+    isProcessing: Bool,
+    isTranscribing: Bool = false
   ) -> Empty {
+    if isTranscribing { return .pendingTranscription }
     let runtime = localSummaryRuntime?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if isProcessing {
       return runtime.isEmpty ? .pendingServer : .pendingOnDevice

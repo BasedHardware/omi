@@ -3,8 +3,9 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:uuid/uuid.dart';
 
 class FirmwareUpdateTelemetry {
-  FirmwareUpdateTelemetry.start({required BtDevice device, required this.protocol, AnalyticsManager? analytics})
-      : _analytics = analytics ?? AnalyticsManager(),
+  FirmwareUpdateTelemetry.start({required BtDevice device, required String protocol, AnalyticsManager? analytics})
+      : protocol = protocol == 'mcumgr' || protocol == 'nordic_dfu' ? protocol : 'unknown',
+        _analytics = analytics ?? AnalyticsManager(),
         _attemptId = const Uuid().v4(),
         _fromVersion = device.firmwareRevision {
     _analytics.track('Firmware Update Started', properties: _properties());
@@ -15,8 +16,27 @@ class FirmwareUpdateTelemetry {
   final String _fromVersion;
   final String protocol;
   bool _terminal = false;
+  final Set<String> _stages = {};
 
-  void completed({String? toVersion}) => _finish('Firmware Update Completed', toVersion: toVersion);
+  String get fromVersion => _fromVersion;
+
+  void uploadFinished() => _stage('Firmware Update Upload Finished');
+  void installRequested() => _stage('Firmware Update Install Requested');
+
+  void _stage(String event) {
+    if (_terminal || !_stages.add(event)) return;
+    _analytics.track(event, properties: _properties());
+  }
+
+  void completed({required String observedVersion}) {
+    final observed = _normalizeFirmwareVersion(observedVersion);
+    if (observed == 'unknown') {
+      failed(failureClass: 'no_reconnect');
+      return;
+    }
+    _finish('Firmware Update Completed', toVersion: observed);
+  }
+
   void failed({required String failureClass}) => _finish('Firmware Update Failed', failureClass: failureClass);
 
   void _finish(String event, {String? toVersion, String? failureClass}) {
@@ -32,12 +52,22 @@ class FirmwareUpdateTelemetry {
         'firmware_update_attempt_id': _attemptId,
         'protocol': protocol,
         'from_version': _normalizeFirmwareVersion(_fromVersion),
-        if (toVersion != null) 'to_version': toVersion,
+        if (toVersion != null) ...{'to_version': toVersion, 'verified': true},
         if (failureClass != null) 'failure_class': _normalizeFailureClass(failureClass),
       };
 
   static String _normalizeFailureClass(String failureClass) => switch (failureClass) {
-        'firmware_file_missing' || 'native_dfu_error' || 'unknown' => failureClass,
+        'disconnected' ||
+        'app_backgrounded' ||
+        'low_battery' ||
+        'upload_error' ||
+        'mark_error' ||
+        'not_installed' ||
+        'no_reconnect' ||
+        'firmware_file_missing' ||
+        'native_dfu_error' ||
+        'unknown' =>
+          failureClass,
         _ => 'unknown',
       };
 

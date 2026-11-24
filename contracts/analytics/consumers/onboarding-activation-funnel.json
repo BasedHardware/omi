@@ -10,11 +10,13 @@
     "onboardingGetStartedTapped",
     "signInStarted",
     "signInFailed",
+    "signInFailureDetail",
     "onboardingPermissionResult",
     "devicePairingBlocked",
     "deviceScanEmpty",
     "deviceConnectFailed",
-    "deviceConnectFailureShown"
+    "deviceConnectFailureShown",
+    "devicePairingSettingsOpened"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [

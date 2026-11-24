@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_revision": 12,
+  "catalog_revision": 13,
   "authority": {
     "plan_identity": "catalog",
     "price_identity": "repository_ledger",
@@ -479,7 +479,7 @@
     },
     {
       "id": "unlimited_v2",
-      "display_name": "Unlimited",
+      "display_name": "Omi Pro",
       "wire_aliases": [],
       "wire_fallback_plan": "unlimited",
       "lifecycle": "current",

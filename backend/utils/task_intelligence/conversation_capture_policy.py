@@ -67,6 +67,10 @@ def capture_signals_for_action_item(
             capture_kind = 'explicit_command'
     return BackendCaptureSignals(
         explicit_command=capture_kind == 'explicit_command',
+        reminder_owner_review=bool(
+            getattr(action_item, 'reminder_origin', None)
+            and action_item.reminder_origin.review_reason == 'owner_unresolved'
+        ),
         clear_commitment=capture_kind == 'clear_commitment',
         direct_request=capture_kind == 'direct_request' or capture_kind is None,
         inferred_next_step=capture_kind == 'inferred_next_step',

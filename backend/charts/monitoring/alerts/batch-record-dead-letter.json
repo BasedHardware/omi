@@ -1,0 +1,175 @@
+[
+  {
+    "uid": "omi-batch-record-dead-letter-volume",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Batch record dead letters",
+    "title": "Retained record batch dead-letter volume",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_batch_record_dead_letter_units and (time() - omi_batch_record_dead_letter_observed_at_seconds < 900)) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_batch_record_dead_letter_total[30m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(time() - max(omi_batch_record_dead_letter_observed_at_seconds)) or vector(1e9)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "($A > 100 && $C < 900) || $B > 10",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "E",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Record barrier dead letters exceed the retained-stock or new-expiry volume threshold.",
+      "user_impact": "Recorded audio remains retained but these units have no published transcript.",
+      "scope": "Only state=dead with dead_letter_reason=record_barrier_aged. Inflow counts committed CAS transitions, never retries. Stock samples require freshness under 15 minutes; each replica is filtered before max aggregation. Agent tier only.",
+      "verification": "Read omi_batch_record_dead_letter_units and omi_batch_record_dead_letter_total, then inspect reasoned rows using an authorized operator read.",
+      "safe_next_action": "Resolve the capture upload/finalization barrier, then use private OIDC requeue-record. Never delete audio, clear custody markers or bypass privacy fences. Requeue permits normal admission; this change does not replay providers.",
+      "runbook": "backend/utils/batch_pipeline/CONTRACT.md",
+      "threshold": "Fresh retained stock >100 or >10 expirations in 30m for 5m; initial agent thresholds, not calibrated from production.",
+      "evaluated_bad": "Synthetic: stock 101 sampled 300s ago, or 11 new expirations in 30m.",
+      "evaluated_good": "Synthetic: stock 100 and 10 new expirations, or stale stock without a rate breach."
+    },
+    "labels": {
+      "alert_identity": "omi-batch-record-dead-letter-volume",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  }
+]

@@ -62,6 +62,11 @@ def test_terminal_finalization_failure_records_once_after_dead_letter(monkeypatc
     dead_letter = MagicMock(return_value=True)
     accepted_at = datetime.now(timezone.utc) - timedelta(seconds=12)
     terminal = MagicMock()
+    monkeypatch.setattr(
+        conversation_finalization.jobs_db,
+        'grant_finalization_budget_requeue',
+        MagicMock(return_value='already_requeued'),
+    )
     monkeypatch.setattr(conversation_finalization.jobs_db, 'mark_finalization_dead_letter', dead_letter)
     monkeypatch.setattr(
         conversation_finalization.jobs_db,
@@ -71,7 +76,7 @@ def test_terminal_finalization_failure_records_once_after_dead_letter(monkeypatc
     monkeypatch.setattr(conversation_finalization, 'LISTEN_FINALIZATION_DEAD_LETTER_TOTAL', MagicMock())
     monkeypatch.setattr(conversation_finalization, 'record_capture_finalization_terminal', terminal)
 
-    assert conversation_finalization.final_attempt_failed('job-1', 2, 3, 4) is True
+    assert conversation_finalization.final_attempt_failed('job-1', 2, 3, 4) == 'dead_letter'
 
     dead_letter.assert_called_once_with('job-1', 2, 3, 4, firestore_client=None)
     terminal.assert_called_once_with('failure', accepted_at)
@@ -98,8 +103,10 @@ def test_listener_projects_the_closed_durable_finalization_states(monkeypatch):
         'queued': 1,
         'leased': 0,
         'dead_letter': 1,
+        'byok_abandoned_last_24h': 3,
         'oldest_nonterminal_age_seconds': 12.5,
         'oldest_blocked_byok_age_seconds': 42.0,
+        'oldest_dead_letter_age_seconds': 604801.0,
     }
     get_summary = MagicMock(side_effect=[RuntimeError('Firestore unavailable'), summary])
     monkeypatch.setattr(conversation_finalization.jobs_db, 'get_finalization_job_summary', get_summary)
@@ -121,6 +128,10 @@ def test_listener_projects_the_closed_durable_finalization_states(monkeypatch):
     exported = generate_registry_latest(registry).decode()
     assert 'listen_finalization_oldest_nonterminal_age_seconds 12.5' in exported
     assert 'listen_finalization_oldest_blocked_byok_age_seconds 42.0' in exported
+    assert 'listen_finalization_oldest_dead_letter_age_seconds 604801.0' in exported
+    assert 'listen_finalization_byok_session_abandoned_last_24h 3.0' in exported
+    backlog.labels.assert_any_call(status='dead_letter')
+    backlog.labels.return_value.set.assert_any_call(1.0)
     assert 'listen_finalization_summary_last_success_timestamp_seconds ' in exported
 
 

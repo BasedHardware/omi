@@ -21,7 +21,10 @@ from database.quiet_check_retirement import (
 from database._client import get_firestore_client
 from database import conversation_finalization_jobs as jobs_db
 from models.conversation_continuity import continuation_timeout
-from config.refactor_modes import serving_for
+from config.refactor_modes import serving_for, quiet_empty_exit_enabled
+from config.server_batch import owned, proven_empty
+from config import listen_reconnect
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 from utils.conversations.lifecycle_clocks import speech_clock
 
 QUIET_CHECK_KIND = 'listen_quiet_check'
@@ -35,6 +38,10 @@ ARM_METRICS = {
     'reused': ARM_OUTCOMES.labels(outcome='reused'),
     'refused': ARM_OUTCOMES.labels(outcome='refused'),
 }
+
+EMPTY_OUTCOMES = Counter(
+    'listen_quiet_check_empty_exit_total', 'Would-be empty exits, including dark observations', ['disposition', 'mode']
+)
 
 
 def _now() -> datetime:
@@ -56,7 +63,9 @@ def quiet_deadline(conversation: dict[str, Any], timeout: Any = 120, *, uid: str
     if not isinstance(finish, datetime):
         return None
     finish = finish if finish.tzinfo else finish.replace(tzinfo=timezone.utc)
-    return finish + timedelta(seconds=continuation_timeout(conversation, quiet_timeout(timeout)))
+    return listen_reconnect.deadline(
+        conversation, finish + timedelta(seconds=continuation_timeout(conversation, quiet_timeout(timeout))), now=_now()
+    )
 
 
 def arm_quiet_check(
@@ -77,6 +86,8 @@ def arm_quiet_check(
     def arm(transaction: Any) -> dict[str, Any] | None:
         row = row_ref.get(transaction=transaction).to_dict() or {}
         job = job_ref.get(transaction=transaction).to_dict() or {}
+        if not python_owns_finalization(row):
+            return None
         if row.get('source') not in QUIET_SOURCES or row.get('status') != 'in_progress':
             return None
         if any(
@@ -135,9 +146,25 @@ def arm_quiet_check(
     return result
 
 
-def evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any = None) -> dict[str, Any]:
+def quiet_empty_candidate(row: dict[str, Any]) -> bool:
+    """Metadata fence; storage emptiness and lease expiry are separate proofs."""
+    return bool(
+        proven_empty(row)
+        and not row.get('has_content')
+        and not row.get('audio_files')
+        and not row.get('record_audio_partial')
+        and row.get('server_batch_audio_start') is None
+        and row.get('server_batch_audio_end') is None
+    )
+
+
+def evaluate_quiet_check(
+    job_id: str, generation: int, *, firestore_client: Any = None, empty_storage_proof: Any = None
+) -> dict[str, Any]:
     try:
-        result = _evaluate_quiet_check(job_id, generation, firestore_client=firestore_client)
+        result = _evaluate_quiet_check(
+            job_id, generation, firestore_client=firestore_client, empty_storage_proof=empty_storage_proof
+        )
     except Exception:
         ensure_quiet_check_progress(job_id, firestore_client=firestore_client)
         raise
@@ -146,7 +173,9 @@ def evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any 
     return result
 
 
-def _evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any = None) -> dict[str, Any]:
+def _evaluate_quiet_check(
+    job_id: str, generation: int, *, firestore_client: Any = None, empty_storage_proof: Any = None
+) -> dict[str, Any]:
     """Re-read row + lease transactionally; reserve the next wake before returning.
 
     A reconnect/content update only defers this obligation. The fresh lease is
@@ -159,6 +188,8 @@ def _evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any
     @firestore.transactional
     def evaluate(transaction: Any) -> dict[str, Any]:
         job = job_ref.get(transaction=transaction).to_dict() or {}
+        if not python_owns_finalization(job):
+            return {'status': 'done', 'reason': FINALIZATION_OWNER_REFUSAL}
         if job.get('kind') != QUIET_CHECK_KIND or job.get('status') != QUIET_CHECK_STATUS:
             return {'status': 'stale'}
         if isinstance(job.get('dispatch_generation'), bool) or job.get('dispatch_generation') != generation:
@@ -168,11 +199,11 @@ def _evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any
             client.collection('users').document(job['uid']).collection('conversations').document(job['conversation_id'])
         )
         row = row_ref.get(transaction=transaction).to_dict() or {}
-        if not row:
+        if not row or not python_owns_finalization(row):
             transaction.update(
                 job_ref, {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD, 'updated_at': now}
             )
-            return {'status': 'done', 'reason': 'missing_conversation'}
+            return {'status': 'done', 'reason': FINALIZATION_OWNER_REFUSAL if row else 'missing_conversation'}
         deadline = quiet_deadline(row, job.get('quiet_timeout_seconds'), uid=job['uid'])
         lease_expiry = jobs_db.recording_session_lease_expiry(
             transaction,
@@ -187,17 +218,69 @@ def _evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any
         # Empty live generations must keep their obligation until their owner
         # leaves, since content may arrive after the first scheduled wake.
         empty = refusal == 'no_content' and serving_for('LIFECYCLE_V2_MODE', job['uid'])
-        if refusal is not None and not (refusal == 'no_content' and (active or empty)):
+        enabled_empty_exit = quiet_empty_exit_enabled() and refusal == 'no_content'
+        ready = lease_expiry is not None and not active and deadline is not None and deadline <= now
+        end_due = listen_reconnect.end_due(row, now)
+        # Quiet checks can publish the close barrier for a drained producer
+        # after its lease and grace expire. Keep that wake armed until then.
+        awaiting_archive = (
+            refusal == jobs_db.SERVER_BATCH_ARCHIVE_UNREADY
+            and lease_expiry is not None
+            and deadline is not None
+            and (not ready or (end_due and not row.get('server_batch_audio_closed')))
+        )
+        # Only an exact owned, closed, token-free empty archive may widen base
+        # admission. No storage read occurs for any other shape or while live.
+        empty_exit = bool(
+            enabled_empty_exit
+            and ready
+            and quiet_empty_candidate(row)
+            and empty_storage_proof is not None
+            and empty_storage_proof(transaction, job['uid'], job['conversation_id'])
+        )
+        if refusal == 'no_content':
+            try:
+                EMPTY_OUTCOMES.labels(
+                    disposition='delete_empty' if quiet_empty_candidate(row) else 'orphan_repair',
+                    mode='serve' if enabled_empty_exit else 'shadow',
+                ).inc()
+            except Exception:
+                pass  # Telemetry cannot alter admission.
+        if refusal is not None and not (
+            awaiting_archive or (refusal == 'no_content' and (active or empty or empty_exit))
+        ):
             transaction.update(
                 job_ref, {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD, 'updated_at': _now()}
             )
             return {'status': 'done', 'reason': refusal}
+        if (
+            enabled_empty_exit
+            and empty
+            and (lease_expiry is None or (ready and owned(row) and row.get('server_batch_audio_received') is not False))
+        ):
+            # Base V2 would retry forever: no attempt/deadline budget exists on
+            # quiet checks. Park the row, retire this obligation, name its exit.
+            reason = (
+                'record_orphan_repair'
+                if lease_expiry is not None and row.get('server_batch_audio_received') is True
+                else 'operator_review'
+            )
+            transaction.update(
+                job_ref,
+                {
+                    'status': 'quiet_done',
+                    'reconcile_after_at': firestore.DELETE_FIELD,
+                    'updated_at': now,
+                    'last_failure_code': reason,
+                },
+            )
+            return {'status': 'done', 'reason': reason, 'exit': 'record_orphan_repair'}
+        empty = empty or empty_exit
         if deadline is None:
             transaction.update(
                 job_ref, {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD, 'updated_at': _now()}
             )
             return {'status': 'done'}
-        ready = lease_expiry is not None and not active and deadline <= now
         # Short, bounded retry for a lost admission; live sessions get a minute
         # probe so an expired lease becomes due without waiting for a reconnect.
         due = max(now + timedelta(seconds=60), deadline, lease_expiry if lease_expiry is not None and active else now)
@@ -207,13 +290,22 @@ def _evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any
             'reconcile_after_at': due,
             'updated_at': now,
         }
+        if ready and owned(row) and end_due:
+            patch: dict[str, Any] = {'server_batch_audio_closed': True}
+            if not listen_reconnect.enabled():
+                patch[listen_reconnect.FIELD] = {**listen_reconnect.producer(row), 'phase': 'ended', 'deadline_at': now}
+            transaction.update(row_ref, patch)
         transaction.set(job_ref, updated)
         return updated | {
             'job_id': job_id,
             'status': ('empty_ready' if empty else 'ready') if ready else 'deferred',
+            **({'empty_exit': 'proven_empty_storage'} if empty_exit else {}),
             'recording_session_id': (row.get('external_data') or {}).get('recording_session_id'),
-            'recovery_cutoff': now
-            - timedelta(seconds=continuation_timeout(row, quiet_timeout(job.get('quiet_timeout_seconds')))),
+            'recovery_cutoff': (
+                now
+                if end_due
+                else now - timedelta(seconds=continuation_timeout(row, quiet_timeout(job.get('quiet_timeout_seconds'))))
+            ),
         }
 
     return evaluate(client.transaction())
@@ -232,7 +324,7 @@ def ensure_quiet_check_progress(job_id: str, *, firestore_client: Any = None) ->
     @firestore.transactional
     def repair(transaction: Any) -> bool:
         job = ref.get(transaction=transaction).to_dict() or {}
-        if job.get('kind') != QUIET_CHECK_KIND:
+        if job.get('kind') != QUIET_CHECK_KIND or not python_owns_finalization(job):
             return False
         now = _now()
         reconcile_at = job.get('reconcile_after_at')

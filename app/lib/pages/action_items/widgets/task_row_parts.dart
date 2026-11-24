@@ -18,18 +18,24 @@ class TaskCompletionMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (completed) {
-      return Container(
-        width: size,
-        height: size,
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: doneColor),
-        child: Icon(Icons.check, size: size * 0.64, color: OmiColors.onAccent),
-      );
-    }
-    // Dashed outline: quieter than a solid ring so the task title carries the visual weight.
-    return CustomPaint(
-      size: Size(size, size),
-      painter: _DashedCirclePainter(color: OmiColors.textTertiary, strokeWidth: 1.5, dashLength: 3, gapLength: 3),
+    // The mark changes in place at quick: a press answers before anything else moves.
+    return AnimatedSwitcher(
+      duration: OmiMotion.of(context).quick,
+      child: completed
+          ? Container(
+              key: const ValueKey('task_mark_done'),
+              width: size,
+              height: size,
+              decoration: const BoxDecoration(shape: BoxShape.circle, color: doneColor),
+              child: Icon(Icons.check, size: size * 0.64, color: OmiColors.onAccent),
+            )
+          // Dashed outline: quieter than a solid ring so the task title carries the visual weight.
+          : CustomPaint(
+              key: const ValueKey('task_mark_open'),
+              size: Size(size, size),
+              painter:
+                  _DashedCirclePainter(color: OmiColors.textTertiary, strokeWidth: 1.5, dashLength: 3, gapLength: 3),
+            ),
     );
   }
 }

@@ -13,6 +13,7 @@ from google.api_core.exceptions import (
 )
 
 from utils.other import storage
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.other.raw_audio_read import select_raw_pcm
 
 MAX_SPEAKER_DOWNLOADS = 32
@@ -88,6 +89,7 @@ class AudioChunkReadSession:
                 self._chunks = []
         return self._chunks
 
+    @object_get_reader(Reader.SPEAKER_EVIDENCE)
     def fetch(self, path: str) -> Optional[bytes]:
         from google.cloud.storage.retry import DEFAULT_RETRY
 
@@ -246,6 +248,7 @@ def iter_audio_chunk_pcm(
     max_downloads: Optional[int] = None,
     session: Optional[AudioChunkReadSession] = None,
     window_start: Optional[float] = None,
+    chunk_filter: Optional[Callable[[Dict[str, Any]], bool]] = None,
 ) -> Iterator[Tuple[float, bytes]]:
     """Yield individual decoded blobs; an optional session shares listing/cache/budget.
 
@@ -253,9 +256,10 @@ def iter_audio_chunk_pcm(
     """
     bucket = storage.get_private_cloud_sync_bucket()
     chunks = session.chunks if session is not None else storage.list_audio_chunks(uid, conversation_id)
-    chunks = sorted(chunks, key=chunk_start)
+    chunks = sorted((c for c in chunks if chunk_filter is None or chunk_filter(c)), key=chunk_start)
     indexes = range(len(chunks) - 1, -1, -1) if newest_first else range(len(chunks))
     downloads = 0
+    cached_path, cached_pcm = None, None
     for index in indexes:
         chunk = chunks[index]
         next_start = chunk_start(chunks[index + 1]) if index + 1 < len(chunks) else None
@@ -268,18 +272,23 @@ def iter_audio_chunk_pcm(
         upper_end = chunk_end_upper_bound(chunk, sample_rate)
         if window_start is not None and upper_end is not None and upper_end <= window_start:
             continue
-        if max_downloads is not None and downloads >= max_downloads:
+        needs_download = chunk['path'] not in session.cache if session is not None else cached_path != chunk['path']
+        if needs_download and max_downloads is not None and downloads >= max_downloads:
             if session is not None:
                 session.reason = 'download_limit'
             break
-        downloads += 1
+        if needs_download:
+            downloads += 1
         if session is not None:
             session.last_chunk = chunk
             pcm = session.fetch(chunk['path'])
         else:
-            with storage.get_storage_chunk_semaphore():
-                pcm = storage.download_and_decode_chunk_blob(bucket, chunk['path'], uid, sample_rate)
+            if needs_download:
+                with storage.get_storage_chunk_semaphore():
+                    cached_pcm = storage.download_and_decode_chunk_blob(bucket, chunk['path'], uid, sample_rate)
+                cached_path = chunk['path']
+            pcm = cached_pcm
         if pcm:
-            if chunk['path'].startswith(f'raw-live/{uid}/'):
+            if chunk['path'].startswith(f'raw-live/{uid}/') or 'raw_offset_samples' in chunk:
                 pcm = select_raw_pcm(pcm, chunk, sample_rate)
             yield chunk_start(chunk), pcm

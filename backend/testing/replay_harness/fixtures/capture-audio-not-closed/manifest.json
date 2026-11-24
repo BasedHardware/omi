@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "capture-audio-not-closed",
+  "tier": "S",
+  "scrub": "synthetic-structure-only",
+  "seed_blob_sha256": [
+    "6e252478e72ac4b3f0596e39257fe8735842997bc8f6871ec4a39c2e283fb6ed",
+    "a16e7a0a44f4ee954a4f23c74bd326662e901d894b7e15c61bb3aa79bbf35e0e"
+  ],
+  "created": "2026-11-04T00:00:00Z",
+  "prod_evidence": {},
+  "notes": "Synthetic mechanism; baseline measured against WP1 product source.",
+  "stages": {
+    "capture_upload": {
+      "expect_stop_stage": "capture_upload",
+      "expect_reason": "capture_upload:audio_not_closed"
+    }
+  }
+}

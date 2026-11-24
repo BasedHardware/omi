@@ -238,6 +238,20 @@ def find_neighbor(
     return best
 
 
+# Rule ids proving the text holds nothing worth keeping. These outrank occasion
+# retention and the short-clip floor. An empty transcript is excluded: it says
+# nothing about the speech, and its retention and calendar rules stand unchanged.
+_CONTENT_FREE_RULES = frozenset({'filler_only', 'mic_check', 'no_content_words'})
+
+
+def content_free_rule(texts: Sequence[str], *, has_photos: bool, trusted_wake_word: bool) -> Optional[str]:
+    """The rule id that proves ``texts`` carry no content, or None."""
+    if has_photos or trusted_wake_word:
+        return None
+    verdict, rule = deterministic_relevance(texts, None)
+    return rule if verdict == 'discard' and rule in _CONTENT_FREE_RULES else None
+
+
 def decide_relevance(
     *,
     trigger: ProcessingTrigger,
@@ -318,6 +332,12 @@ def decide_relevance(
         return keep('policy', 'exempt')
     if user_kept:
         return keep('user', 'restored')
+
+    # Text the rules prove content-free has nothing to transfer to a survivor, so
+    # it never stands as its own row, whatever occasion it was captured during.
+    rule_without_content = content_free_rule(texts, has_photos=has_photos, trusted_wake_word=trusted_wake_word)
+    if rule_without_content:
+        return discard_unless_calendar('rule', rule_without_content)
 
     # A member is evidence of the whole occasion. A continuation can only be
     # hidden after transactional absorption proves its content reached a survivor.

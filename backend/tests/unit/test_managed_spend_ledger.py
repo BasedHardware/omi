@@ -577,7 +577,6 @@ async def _run_relay(
     monkeypatch.setattr(omni_relay, 'extract_byok_from_websocket', lambda _ws: dict(validated))
     monkeypatch.setattr(omni_relay, 'validate_byok_websocket_keys', lambda _uid, keys: (dict(keys), None))
     monkeypatch.setattr(omni_relay, 'set_validated_byok_keys', lambda _keys, _uid: None)
-    monkeypatch.setattr(omni_relay, 'is_trial_paywalled', lambda *_a, **_k: False)
     monkeypatch.setattr(
         omni_relay.users_db, 'is_byok_active', lambda _uid: byok if byok_enrolled is None else byok_enrolled
     )

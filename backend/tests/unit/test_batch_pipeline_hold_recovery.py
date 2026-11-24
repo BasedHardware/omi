@@ -163,6 +163,12 @@ def test_landed_target_releases_projects_once_and_renews_episode_budget(real_pro
     lane.assign()  # old missing target: hold through the real assignment path
     row = lane.client.rows[(lane.namespace + '_results', 'unit')]
     assert row['projection_state'] == 'quarantine_held'
+    # New writers satisfy held hint -> quarantined receipt/part; only legacy
+    # pre-fix rows (seeded separately in ghost tests) may violate the invariant.
+    assert any(
+        part.get('state') == 'quarantined'
+        for part in [row['projection'], *(row.get('projection_parts') or {}).values()]
+    )
     lane.client.rows[lane.target_key] = deepcopy(lane.target)
     release = ProjectionReleaseStore(lane.projector.store)
     assert release.release('unit', 30001)
@@ -399,3 +405,129 @@ def test_explicit_off_restores_first_failure_strike_and_old_release_eligibility(
     lane.client.rows[lane.target_key] = deepcopy(lane.target)
     lane.client.rows[(lane.namespace + '_results', 'unit')]['projection_redriven_at'] = 20000
     assert not ProjectionReleaseStore(lane.projector.store).release('unit', 30001)
+
+
+# Prod 10-28..11-02: desktop records rule-discarded as empty before their batch
+# text landed; every unit then held as record_target_discarded with no release.
+AUTOMATIC_DISCARDS = [
+    {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'empty_transcript', 'trigger': 'sync_update'},
+    {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'no_content_words', 'trigger': 'sync_update'},
+    {'verdict': 'discard', 'decided_by': 'jev', 'reason': 'jev_discard', 'trigger': 'sync_update'},
+    {'verdict': 'discard', 'decided_by': 'model', 'reason': 'model_discard', 'trigger': 'sync_update'},
+]
+
+
+def _automatically_discarded(lane, decision):
+    return {**deepcopy(lane.target), 'discarded': True, 'relevance_decision': dict(decision)}
+
+
+def _projected_segments(lane):
+    projected = lane.client.rows[lane.target_key]
+    return conversations.decode_transcript_segments_verified(
+        lane.binding.owner_id, projected['transcript_segments'], bool(projected.get('transcript_segments_compressed'))
+    )
+
+
+@pytest.mark.parametrize('decision', AUTOMATIC_DISCARDS)
+def test_batch_text_supersedes_an_automatic_record_discard(real_projection, decision):
+    lane = real_projection
+    lane.client.rows[lane.target_key] = _automatically_discarded(lane, decision)
+    lane.assign()
+    row = lane.client.rows[(lane.namespace + '_results', 'unit')]
+    assert row['projection']['state'] == 'persisted'
+    assert not lane.client.rows[(lane.namespace + '_jobs', 'unit')].get('recovery_state')
+    target = lane.client.rows[lane.target_key]
+    # The verdict was made without this text; enrichment reassesses it.
+    assert target['discarded'] is False and target['relevance_decision'] is None
+    assert len(_projected_segments(lane)) == 1
+    assert row['projection']['enrichment_required'] is True
+    projected = deepcopy(target)
+    lane.assign()  # receipt replay
+    assert lane.client.rows[lane.target_key] == projected
+
+
+def test_silent_pass_keeps_an_automatic_discard_without_reassessment(real_projection):
+    lane = real_projection
+    for table in ('jobs', 'results'):
+        lane.client.rows[(lane.namespace + '_' + table, 'unit')]['result'] = {'outcome': 'silence'}
+    lane.client.rows[lane.target_key] = _automatically_discarded(lane, AUTOMATIC_DISCARDS[2])
+    lane.assign()
+    row = lane.client.rows[(lane.namespace + '_results', 'unit')]
+    assert row['projection']['state'] == 'persisted'
+    # Unchanged text must not rerun relevance: a fresh verdict could un-hide it.
+    assert row['projection']['enrichment_required'] is False
+    target = lane.client.rows[lane.target_key]
+    assert target['discarded'] is True and target['relevance_decision'] == AUTOMATIC_DISCARDS[2]
+    assert not any(key.startswith('_sync_') for key in target)
+
+
+def test_silent_pass_that_removes_provisional_text_still_reassesses(real_projection):
+    lane = real_projection
+    for table in ('jobs', 'results'):
+        lane.client.rows[(lane.namespace + '_' + table, 'unit')]['result'] = {'outcome': 'silence'}
+    target = _automatically_discarded(lane, AUTOMATIC_DISCARDS[3])
+    target['transcript_segments'] = [
+        {'id': 'old', 'text': 'Synthetic speech.', 'start': 1, 'end': 3, 'speaker_id': 0, 'is_user': False}
+    ]
+    lane.client.rows[lane.target_key] = target
+    lane.assign()
+    row = lane.client.rows[(lane.namespace + '_results', 'unit')]
+    assert row['projection']['state'] == 'persisted'
+    assert not _projected_segments(lane)
+    # The transcript changed, so the summary must be rebuilt.
+    assert row['projection']['enrichment_required'] is True
+
+
+def test_oversized_silent_pass_keeps_the_hold_instead_of_rolling_over(real_projection, monkeypatch):
+    from utils.sync import assignment
+
+    lane = real_projection
+    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 0)
+    for table in ('jobs', 'results'):
+        lane.client.rows[(lane.namespace + '_' + table, 'unit')]['result'] = {'outcome': 'silence'}
+    target = _automatically_discarded(lane, AUTOMATIC_DISCARDS[0])
+    lane.client.rows[lane.target_key] = target
+    before = {k: deepcopy(v) for k, v in lane.client.rows.items() if k[:3] == lane.target_key[:3]}
+    lane.assign()
+    assert lane.client.rows[(lane.namespace + '_results', 'unit')]['projection_state'] == 'quarantine_held'
+    assert {k: v for k, v in lane.client.rows.items() if k[:3] == lane.target_key[:3]} == before
+
+
+@pytest.mark.parametrize('decision', AUTOMATIC_DISCARDS)
+def test_release_frees_units_held_behind_an_automatic_record_discard(real_projection, decision):
+    lane = real_projection
+    lane.assign()  # an earlier hold, as on the binaries that held the prod cohort
+    row = lane.client.rows[(lane.namespace + '_results', 'unit')]
+    assert row['projection_state'] == 'quarantine_held'
+    lane.client.rows[lane.target_key] = _automatically_discarded(lane, decision)
+    release = ProjectionReleaseStore(lane.projector.store)
+    assert release.release('unit', 30001)
+    assert not release.release('unit', 30002)
+    lane.assign()
+    assert row['projection']['state'] == 'persisted'
+    assert lane.client.rows[lane.target_key]['discarded'] is False
+    assert len(_projected_segments(lane)) == 1
+    assert lane.client.rows[(lane.namespace + '_jobs', 'unit')]['audio_uri'] == lane.work.audio_uri
+    assert row['result'] == lane.result
+
+
+@pytest.mark.parametrize(
+    'user_state',
+    [
+        {},  # an explicit discard with no relevance receipt
+        {'sync_relevance_user_kept': False},  # the user's discard after an automatic one
+        {'jev_discard_restored': True},
+        {'starred': True},
+    ],
+)
+def test_user_discards_still_hold_and_never_release(real_projection, user_state):
+    lane = real_projection
+    target = _automatically_discarded(lane, AUTOMATIC_DISCARDS[0]) if user_state else deepcopy(lane.target)
+    target.update(discarded=True, **user_state)
+    lane.client.rows[lane.target_key] = target
+    lane.assign()
+    row = lane.client.rows[(lane.namespace + '_results', 'unit')]
+    assert row['projection_state'] == 'quarantine_held'
+    assert lane.client.rows[lane.target_key] == target
+    assert not ProjectionReleaseStore(lane.projector.store).release('unit', 30001)
+    assert lane.client.rows[lane.target_key] == target

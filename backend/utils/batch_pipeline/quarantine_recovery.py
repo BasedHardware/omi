@@ -12,6 +12,7 @@ import threading
 import time
 
 from prometheus_client import Counter
+from google.api_core.exceptions import NotFound
 
 from utils.batch_pipeline.admission import admitted_as_byok
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
@@ -33,13 +34,20 @@ from config.stt_provider_policy import HELD_RECOVERY_SECOND_PROVIDER
 from config.batch_language_recovery import (
     MAX_AUDIO_SECONDS,
     allowed as independent_allowed,
+    long_recovery_allowed,
     enabled as independent_enabled,
     language_guarded,
     below_silence_threshold,
 )
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
-from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
+from database.batch_pipeline_quarantine_recovery import (
+    RecoveryStore,
+    recovery_candidates,
+    cancel_fenced_recovery,
+    has_words_receipt,
+    MISSING_RESULT_DWELL_SECONDS,
+)
 from utils.batch_pipeline.contracts import (
     WorkItem,
     held_vad_census,
@@ -55,10 +63,12 @@ from utils.batch_pipeline.recovery_recognizers import (
     independent_ready,
 )
 from utils.batch_pipeline.recovery_steps import ProviderStep, run_sync, run_async
+from utils.batch_pipeline.source_audio import InvalidRetainedManifest, RetainedPcmDigestChanged
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     silence_payload,
     RecoveryFailure,
+    RecoveryProviderFailed,
     result_outcome,
     result_vad_evidence,
     MultilingualEmpty,
@@ -68,6 +78,7 @@ from utils.batch_pipeline.recovery_disposition import (
     TWO_PROVIDER_EMPTY_EVIDENCE,
     SECOND_CHANCE_EMPTY_EVIDENCE,
     independent_silence_payload,
+    log_result_held,
 )
 
 from utils.cloud_tasks import enqueue_named_task, named_task_exists
@@ -85,7 +96,7 @@ MAX_WAKE_PROBE_ERRORS = 3
 SECOND_PROVIDER = HELD_RECOVERY_SECOND_PROVIDER
 SECOND_PROVIDER_CALLS = Counter(
     'omi_batch_recovery_second_provider_total',
-    'Second multilingual recovery calls after a valid-empty Modulate response',
+    'Second multilingual recovery calls after an empty or failed Modulate response',
     ['provider', 'outcome'],
 )
 
@@ -219,6 +230,7 @@ class QuarantineRecovery:
             return payload
         if (
             outcome == 'empty'
+            and first_empty
             and bool(empty.spans)
             and policy.terminal_empty_disposition
             and terminal_empty_allowed(empty.spans)
@@ -245,6 +257,80 @@ class QuarantineRecovery:
 
     async def recover_async(self, segment_id, owner_id):
         return await run_async(self._recover_steps(segment_id, owner_id))
+
+    def _previous_result(self, job, item, token):
+        """Adopt a predecessor upload that finished after its missing-object probe."""
+        for entry in job['recovery'].get('missing_result_history', []):
+            previous = entry['token']
+            uri = self.artifacts.find_recovery_result(item, previous)
+            if uri:
+                payload = self.artifacts.load_result(item, uri)
+                outcome = result_outcome(payload)
+                measured = result_vad_evidence(payload)
+                independent = payload.get('words_provider') == 'independent_empty_strict_vad'
+                if not held_result_allowed(job, outcome, measured, independent=independent):
+                    continue
+                changed = self.protocol.settle(
+                    item.segment_id,
+                    token,
+                    self.clock(),
+                    uri,
+                    outcome=outcome,
+                    measured_held_vad_speech_seconds=measured,
+                    independent_silence=independent,
+                    previous_token=previous,
+                )
+                return 'reconciled' if changed else 'held'
+        return None
+
+    def _fetch_recovery_audio(self, segment_id: str, token: str, item: WorkItem) -> tuple[bytes, str | None]:
+        confirm_digest = kill_switch('BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED', log=False)
+        try:
+            return (
+                (
+                    self.artifacts.fetch_audio(item, confirm_retained_digest=True)
+                    if confirm_digest
+                    else self.artifacts.fetch_audio(item)
+                ),
+                None,
+            )
+        except NotFound:
+            # Only an authoritative missing object is terminal; outages still retry.
+            if not self.protocol.hold_input_missing(segment_id, token, self.clock(), audio_uri=item.audio_uri):
+                return b'', 'held'
+            record_fallback(
+                component='stt_selection',
+                from_mode='batch',
+                to_mode='none',
+                reason='input_missing',
+                outcome='degraded',
+            )
+            return b'', 'failed_held'
+        except InvalidRetainedManifest:
+            # Deterministic on the stored bytes: hold once instead of a 500 retry loop.
+            if not self.protocol.hold_invalid_manifest(segment_id, token, self.clock(), audio_uri=item.audio_uri):
+                return b'', 'held'
+            logger.info('event=batch_quarantine_recovery outcome=failed_held reason=invalid_retained_manifest')
+            return b'', 'failed_held'
+        except RetainedPcmDigestChanged:
+            if not confirm_digest:
+                # Confirmation is off on this delivery: keep the 500.
+                raise
+            # Two reads of the same pinned ref disagree with the manifest
+            # digest: no retry can satisfy it. Hold once, like a missing
+            # input; nothing is deleted or re-read.
+            if not self.protocol.hold_retained_digest_changed(
+                segment_id, token, self.clock(), audio_uri=item.audio_uri
+            ):
+                return b'', 'held'
+            record_fallback(
+                component='stt_selection',
+                from_mode='batch',
+                to_mode='none',
+                reason='retained_digest_changed',
+                outcome='degraded',
+            )
+            return b'', 'failed_held'
 
     def _recover_steps(self, segment_id, owner_id):
         try:
@@ -293,13 +379,22 @@ class QuarantineRecovery:
                         )
                         else 'held'
                     )
-                # Bound the scan dwell without allowing takeover. A very late
-                # provider reply is rejected after this terminal transition.
-                if self.clock() - job['recovery']['started_at'] > 900:
+                # Receipts contain counts, not the transcript. Requeue once
+                # under a new token; the normal task path rechecks funding and
+                # privacy before another call. Never run STT in this scan.
+                if self.clock() - job['recovery']['started_at'] > MISSING_RESULT_DWELL_SECONDS:
+                    if has_words_receipt(job['recovery']):
+                        retry = self.protocol.retry_missing_result(segment_id, token, self.clock())
+                        logger.warning('event=batch_recovery_missing_result outcome=%s', retry)
+                        return 'held'
+                    # No usable receipt: retain the existing bounded dwell.
                     failure = {'stage': 'provider', 'reason': 'abandoned_running'}
                     if self.protocol.settle(segment_id, token, self.clock(), failure=failure):
                         log_failure(failure)
                 return 'held'
+            previous = self._previous_result(job, item, token)
+            if previous is not None:
+                return previous
             byok = admitted_as_byok(job)
             if byok and not language_guarded(job):
                 record_decision(DispatchPath.QUARANTINE, True, DispatchReason.BYOK)
@@ -314,7 +409,9 @@ class QuarantineRecovery:
                 and not sync_allowed(owner_id, item.duration_seconds, lane='batch', path=DispatchPath.QUARANTINE)
             ):
                 return 'held'
-            audio = self.artifacts.fetch_audio(item)
+            audio, fetch_outcome = self._fetch_recovery_audio(segment_id, token, item)
+            if fetch_outcome is not None:
+                return fetch_outcome
             duration = item.duration_seconds
             # The input-bound worker VAD is acoustic evidence for ordinary
             # empty/ownership failures too. A later zero CPU VAD cannot turn
@@ -336,6 +433,7 @@ class QuarantineRecovery:
                 language_guarded(job)
                 and inspected_spans == []
                 and not independent_allowed(duration)
+                and not long_recovery_allowed(duration)
                 and not (independent_enabled() and worker is not None)
             ):
                 if duration > MAX_AUDIO_SECONDS and self.protocol.hold_duration_limit(
@@ -361,13 +459,18 @@ class QuarantineRecovery:
             # new-admission guard is rolled back.
             # The worker's bound VAD receipt is the only evidence that may
             # locate recognized words when strict CPU VAD finds no speech.
-            multilingual = (
-                safety_net_enabled()
-                or policy.speech_empty_multilingual
-                or ((job.get('worker_failure') or {}).get('reason') == 'unsupported_language')
-            )
+            multilingual = safety_net_enabled() or policy.speech_empty_multilingual or language_guarded(job)
+            # Downloads/VAD/funding checks may have taken minutes. Recheck the
+            # old upload immediately before minting the replacement's call.
+            previous = self._previous_result(job, item, token)
+            if previous is not None:
+                return previous
             if not self.protocol.start(
-                segment_id, token, self.clock(), provider='modulate' if multilingual else 'legacy_sync'
+                segment_id,
+                token,
+                self.clock(),
+                provider='modulate' if multilingual else 'legacy_sync',
+                local_silence=local_payload is not None,
             ):
                 return 'held'
             from database.batch_pipeline_projection_protocol import normalized_binding
@@ -380,7 +483,7 @@ class QuarantineRecovery:
                     reason='other',
                     outcome='degraded',
                 )
-            payload, empty, recognized_count = None, None, None
+            payload, empty, recognized_count, provider_failure = None, None, None, None
             try:
                 if inspection_failure is not None:
                     raise inspection_failure
@@ -420,6 +523,9 @@ class QuarantineRecovery:
             except BatchPrivacyBlocked:
                 raise
             except Exception as error:
+                if isinstance(error, RecoveryProviderFailed):
+                    provider_failure = error
+                    measured_vad = sum(span['end'] - span['start'] for span in error.spans)
                 recognized_count = error.word_count if isinstance(error, WordsWithoutVad) else None
                 failure = (
                     {'stage': error.stage, 'reason': error.reason}
@@ -464,21 +570,26 @@ class QuarantineRecovery:
                 )
             if (
                 failure
-                and language_guarded(job)
+                and multilingual
                 and empty is None
-                and inspected_spans is not None
                 and inspection_failure is None
+                and (language_guarded(job) or failure['reason'] == 'provider_failed')
+                and (inspected_spans is not None or provider_failure is not None)
             ):
-                record_recognizer(
-                    self.store,
-                    segment_id,
-                    token,
-                    'recovery',
-                    'modulate',
-                    'words' if recognized_count else 'error',
-                    recognized_count,
-                    measured_vad,
-                )
+                if provider_failure is not None:
+                    duration, inspected_spans = provider_failure.duration, provider_failure.spans
+                    measured_vad = sum(span['end'] - span['start'] for span in inspected_spans)
+                if language_guarded(job):
+                    record_recognizer(
+                        self.store,
+                        segment_id,
+                        token,
+                        'recovery',
+                        'modulate',
+                        'words' if recognized_count else 'error',
+                        recognized_count,
+                        measured_vad,
+                    )
                 empty = MultilingualEmpty(duration, inspected_spans, worker)
             # Outside the handler: neither metering nor a second provider may chain the first.
             if empty is not None:
@@ -494,7 +605,7 @@ class QuarantineRecovery:
                         audio,
                         empty,
                         policy,
-                        guarded=(job.get('worker_failure') or {}).get('reason') == 'unsupported_language',
+                        guarded=language_guarded(job),
                         token=token,
                         first_empty=first_empty,
                         job=job,
@@ -517,9 +628,11 @@ class QuarantineRecovery:
                 return 'held'
             # Storage/commit failures leave running intact: the deterministic
             # encrypted object can be reconciled without repeating STT.
+            stage = 'persist'
             try:
                 outcome = result_outcome(payload)
                 uri = self.artifacts.persist_recovery_result(item, payload, token)
+                stage = 'settle'
                 changed = self.protocol.settle(
                     segment_id,
                     token,
@@ -529,6 +642,8 @@ class QuarantineRecovery:
                     measured_held_vad_speech_seconds=result_vad_evidence(payload),
                     independent_silence=payload.get('words_provider') == 'independent_empty_strict_vad',
                 )
+                if not changed:
+                    log_result_held('quarantine', 'settle', reason='refused')
                 if changed and outcome == 'no_recoverable_speech':
                     log_terminal_empty()
                 if changed and outcome == 'silence':
@@ -542,7 +657,8 @@ class QuarantineRecovery:
                 return 'recovered' if changed else 'result_held'
             except BatchPrivacyBlocked:
                 raise
-            except Exception:
+            except Exception as error:
+                log_result_held('quarantine', stage, exception_type=type(error).__name__)
                 return 'result_held'
         except BatchPrivacyBlocked:
             cancel_fenced_recovery(self.store, segment_id)

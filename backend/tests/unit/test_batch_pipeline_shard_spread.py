@@ -84,7 +84,8 @@ def test_static_contention_operation_scope_restores_after_error():
             pass
 
 
-def test_worker_affinity_spreads_ties_but_never_overrides_service():
+def test_worker_affinity_spreads_ties_but_never_overrides_service(monkeypatch):
+    monkeypatch.delenv('BATCH_CONTROL_CANDIDATE_FANOUT', raising=False)
     query = Mock()
     for method in ('where', 'order_by', 'limit'):
         getattr(query, method).return_value = query
@@ -97,6 +98,15 @@ def test_worker_affinity_spreads_ties_but_never_overrides_service():
         for n in range(3)
     ]
     assert len(set(choices)) == 3
+    assert query.limit.call_args.args == (16,)
+    monkeypatch.setenv('BATCH_CONTROL_CANDIDATE_FANOUT', '64')
+    all_ids = store_module.control_candidates(client, 'batch_pipeline_dev', 0, 'batch', 1, worker_id='worker-0')
+    assert len(all_ids) == 8 and all_ids[0] == choices[0]
+    assert query.limit.call_args.args == (64,)
+    monkeypatch.setenv('BATCH_CONTROL_CANDIDATE_FANOUT', '1')
+    store_module.control_candidates(client, 'batch_pipeline_dev', 0, 'batch', 1, worker_id='worker-0', fanout=64)
+    assert query.limit.call_args.args == (64,)
+
     excluded = store_module.control_candidate(
         client, 'batch_pipeline_dev', 0, 'batch', 1, worker_id='worker-0', exclude={choices[0]}
     )
@@ -198,6 +208,14 @@ class SpreadMemoryStore(MemoryStore):
             raise
 
     def control_candidate(self, priority, pool, now, *, worker_id='', exclude=()):
+        return next(
+            (key for key in self.control_candidates(priority, pool, now, worker_id=worker_id) if key not in exclude),
+            None,
+        )
+
+    def control_candidates(self, priority, pool, now, *, worker_id='', fanout=None):
+        from config.batch_pipeline import control_candidate_fanout
+
         if self._round_view is not None:
             source = self._candidate_view()
         else:
@@ -206,26 +224,19 @@ class SpreadMemoryStore(MemoryStore):
         candidates = [
             (value[field(priority, 'service')], value[field(priority, pool + '_available_at')], key)
             for key, value in source.items()
-            if value.get(field(priority, 'active'))
-            and value[field(priority, pool + '_available_at')] <= now
-            and key not in exclude
+            if value.get(field(priority, 'active')) and value[field(priority, pool + '_available_at')] <= now
         ]
-        chosen = None
-        if candidates:
-            if worker_id:
-                # Mirrors the production query: service primary, worker
-                # affinity on ties, exclusions honored — the MemoryStore
-                # default ignores worker_id, the legacy single-shard shape.
-                candidates.sort(key=lambda row: (row[0], hashlib.sha256(f'{worker_id}:{row[2]}'.encode()).digest()))
-                chosen = candidates[0][2]
-            else:
-                chosen = min(candidates)[2]
-            # The candidate read is this puller's transaction snapshot.
-            self._selection.shard = chosen
-            self._selection.version = source[chosen].get('_version', self.control_versions[chosen])
-        return chosen
+        candidates.sort()
+        candidates = candidates[: control_candidate_fanout(fanout) if worker_id else 1]
+        if worker_id:
+            candidates.sort(key=lambda row: (row[0], hashlib.sha256(f'{worker_id}:{row[2]}'.encode()).digest()))
+        self._selection.source = source
+        return [row[2] for row in candidates]
 
     def acquire_pull_claim(self, shard, token, now, ttl):
+        source = getattr(self._selection, 'source', {})
+        self._selection.shard = shard
+        self._selection.version = source.get(shard, {}).get('_version', self.control_versions[shard])
         self.claim_attempts[shard] += 1
         return super().acquire_pull_claim(shard, token, now, ttl)
 

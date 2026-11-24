@@ -22,6 +22,13 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "assemble_words",
+     "worker_reason": "empty_asr"
+    },
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,
@@ -107,6 +114,7 @@
    },
    "final_result": {
     "conversation_id": "conv-2",
+    "fresh_capture": false,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-1",
@@ -158,6 +166,13 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "assemble_words",
+     "worker_reason": "empty_asr"
+    },
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,
@@ -193,6 +208,7 @@
    },
    "final_result": {
     "conversation_id": "conv-3",
+    "fresh_capture": false,
     "late_capture": true,
     "log_sequence": 2,
     "owner_id": "owner-2",
@@ -211,8 +227,8 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
-    "<5s quarantined recovery:held",
+    "<5s leased",
+    "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<30s quarantined recovery:running",
     "<30s result_ready recovery:recovered",
@@ -264,6 +280,7 @@
    },
    "final_result": {
     "conversation_id": "conv-4",
+    "fresh_capture": false,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-2",
@@ -281,9 +298,9 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
-    "<5s result_ready",
-    "<5s committed",
+    "<5s leased",
+    "<30s result_ready",
+    "<30s committed",
     "<30s committed client:completed"
    ],
    "owner": "owner-2",
@@ -297,7 +314,7 @@
     "words_provider": "parakeet"
    },
    "result_transitions": [
-    "<5s pending outcome:success",
+    "<30s pending outcome:success",
     "<30s completed outcome:success"
    ]
   },
@@ -321,6 +338,13 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "assemble_words",
+     "worker_reason": "empty_asr"
+    },
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,
@@ -356,6 +380,7 @@
    },
    "final_result": {
     "conversation_id": "conv-5",
+    "fresh_capture": false,
     "late_capture": true,
     "log_sequence": 3,
     "owner_id": "owner-3",
@@ -374,7 +399,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<1s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<30s quarantined recovery:running",
@@ -427,6 +452,7 @@
    },
    "final_result": {
     "conversation_id": "conv-6",
+    "fresh_capture": false,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-3",
@@ -444,7 +470,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<1s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -491,6 +517,7 @@
    },
    "final_result": {
     "conversation_id": "conv-7",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-3",
@@ -508,7 +535,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<1s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"

@@ -451,7 +451,7 @@ else:
             if _egress_sink:
                 _egress_sink({"event": "idempotency_boundary_defeated", "checkpoint": "staged_audio_cleanup"})
 
-        sync_router._delete_staged_blobs_async = _noop_delete_blobs
+        sync_router.delete_staged_blobs_async = _noop_delete_blobs
 
         _original_get_processed = sync_pipeline.get_processed_segments
         _original_get_durable = sync_pipeline.get_processed_sync_segment_ids

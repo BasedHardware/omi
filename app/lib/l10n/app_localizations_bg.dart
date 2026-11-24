@@ -563,11 +563,11 @@ class AppLocalizationsBg extends AppLocalizations {
   String get hardwareSection => 'Хардуер';
 
   @override
-  String get v2Undetected => 'V2 не е открит';
+  String get v2Undetected => 'Офлайн синхронизацията не е налична';
 
   @override
   String get v2UndetectedMessage =>
-      'Виждаме, че имате V1 устройство или устройството ви не е свързано. Функционалността на SD картата е налична само за V2 устройства.';
+      'Офлайн синхронизацията изисква свързано Omi устройство с SD карта. Текущото ви устройство не я поддържа.';
 
   @override
   String get endConversation => 'Край на разговор';
@@ -1126,6 +1126,11 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get nameUpdatedSuccessfully => 'Името е актуализирано успешно!';
+
+  @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Четене на избраните календари. Новите събития използват $calendar.';
+  }
 
   @override
   String get calendarSettings => 'Настройки на календар';
@@ -1996,6 +2001,15 @@ class AppLocalizationsBg extends AppLocalizations {
   String get memoryHistory => 'История';
 
   @override
+  String get recordingWithYourPhone => 'Записва с телефона ви';
+
+  @override
+  String get wrapUp => 'Приключи';
+
+  @override
+  String get recordingDiscarded => 'Записът е отхвърлен';
+
+  @override
   String get undo => 'Отмени';
 
   @override
@@ -2286,10 +2300,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get firmwareUsbWarning => 'USB връзката по време на актуализации може да повреди устройството ви.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Батерия над 15%';
+  String get firmwareBatteryRequirement => 'Батерия над 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Уверете се, че устройството ви има 15% батерия.';
+  String get firmwareEnsureBattery => 'Уверете се, че устройството ви има 30% батерия.';
 
   @override
   String get firmwareStableConnection => 'Стабилна връзка';
@@ -7055,6 +7069,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Неуспешно влизане с Apple, моля опитайте отново.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Влизането с Apple не успя. Опитайте отново или продължете с Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Неуспешно извличане на Firebase токен, моля опитайте отново.';
 
   @override
@@ -7062,6 +7079,26 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'Неочаквана грешка при влизане, моля опитайте отново';
+
+  @override
+  String get accountSignInMethods => 'Начини за вход';
+
+  @override
+  String get accountAddSignInMethod => 'Добавяне на начин за вход';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Добавете начин за вход в този акаунт в Omi. Планът, записите и интеграциите ви остават в този акаунт.';
+
+  @override
+  String get accountSignInConflictTitle => 'Този начин за вход е свързан с друг акаунт';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Все още сте влезли в този акаунт. Всеки акаунт в Omi запазва своя план, записи и интеграции.';
+
+  @override
+  String get accountSignInMethodAdded => 'Начинът за вход е добавен';
 
   @override
   String get authFailedToLinkGoogle => 'Неуспешно свързване с Google, моля опитайте отново.';
@@ -9100,7 +9137,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Този запис е качен, но Omi още създава разговора. Ако го изтриете сега и обработката се провали, той не може да бъде възстановен. Изтриване въпреки това?';
+      'Този запис вече е качен и Omi го обработва. Изтриването тук премахва копието на телефона. Ако обработката се провали, Omi няма да може да опита отново от този телефон.';
 
   @override
   String get syncCardAllBackedUp => 'Всички записи са синхронизирани';
@@ -9206,6 +9243,24 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Не може да се определи текущата версия на фърмуера';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Приложи към текущия план';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Кодът е приложен към текущия ви план.',
+        'refused': 'Кодът не може да бъде приложен. Проверете кода и необходимия план.',
+        'conflict': 'Кодът вече е използван или планът вече има отстъпка.',
+        'rateLimited': 'Твърде много опити. Изчакайте и опитайте по-късно.',
+        'other': 'Кодът не беше приложен. Опитайте отново.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Промо код';
@@ -10623,8 +10678,12 @@ class AppLocalizationsBg extends AppLocalizations {
       'Актуализацията не можа да бъде изтеглена и устройството не е променено. Проверете интернет връзката и опитайте отново.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Нивото на батерията все още не е налично. Изчакайте малко и се свържете отново, ако това продължи.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Батерията е $level%. Заредете устройството поне до 15%, преди да актуализирате.';
+    return 'Батерията е $level%. Заредете устройството поне до 30%, преди да актуализирате.';
   }
 
   @override
@@ -12236,7 +12295,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'От сдвояването: $drops прекъсвания, $failed неуспешни връзки.';
+    return 'От сдвояването: $drops повторни свързвания, $failed неуспешни връзки.';
   }
 
   @override
@@ -12558,43 +12617,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get reviewChangesSectionOther => 'Други промени';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count разговора',
-      one: '1 разговор',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count места',
-      one: '1 място',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Покажи всички ($count)';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Отмени всички';
 
   @override
-  String get reviewChangeSeeEvidence => 'Виж доказателствата';
-
-  @override
   String get reviewChangeViewConversation => 'Виж разговора';
-
-  @override
-  String get reviewChangeViewTask => 'Виж задачата';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12669,10 +12695,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get dreamReportTitle => 'Отчет на Dream';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Режим на визуализация: Dream показва какво би променил, но в профила ви засега нищо не се променя.';
-
-  @override
   String get dreamReportLiveBanner =>
       'Dream прилага тези промени сам. Можете да отмените всяка от тях в Скорошни промени.';
 
@@ -12719,11 +12741,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get dreamReportNothingFound => 'Няма какво да се поправи';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'Прочетени елементи: $records · токени: $tokens';
-  }
-
-  @override
   String get dreamReportWouldFix => 'Би поправил';
 
   @override
@@ -12739,27 +12756,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get dreamReportLearnedWords => 'Научени думи';
 
   @override
-  String get dreamReportFeedback => 'Докладвано на екипа на Omi';
-
-  @override
   String get dreamReportDeletedItem => 'Изтрит елемент';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return '$count от $limit изпълнения днес';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count промени чакат',
-      one: '1 промяна чака',
-      zero: 'Няма чакащи промени',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12787,28 +12784,6 @@ class AppLocalizationsBg extends AppLocalizations {
       one: '1 предложение',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count по-стари промени са пропуснати',
-      one: '1 по-стара промяна е пропусната',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count доклада са задържани заради поверителност',
-      one: '1 доклад е задържан заради поверителност',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13512,7 +13487,21 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Имате код за Omi Pro? Въведете го на следващия екран.';
+
+  @override
   String get paywallTrialCancelNote => 'Анулирайте по всяко време. Без такси, без неустойки.';
+
+  @override
+  String get paywallMonthlyFallbackTitle => 'Още не сте готови за цяла година?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'Започнете с месечен план. Същите $days дни безплатно, след това $price на месец. Анулирайте по всяко време.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'Пробвайте месечния безплатно';
 
   @override
   String paywallTrialStarted(int days) {
@@ -13547,28 +13536,9 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Превръщане на $amount в разговори';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Готово $done от $total · можете да напуснете екрана';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount готови за синхронизиране';
   }
-
-  @override
-  String get syncStepLabelDownload => 'Omi → телефон';
-
-  @override
-  String get syncStepLabelUpload => 'Качване';
-
-  @override
-  String get syncStepLabelTranscribe => 'Транскрипция';
 
   @override
   String get syncDetailsTitle => 'Подробности за синхронизацията';
@@ -13589,10 +13559,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Чака на този телефон';
 
   @override
-  String get syncDetailsTranscribing => 'Транскрибира се в Omi';
-
-  @override
-  String get syncDetailsForSupport => 'За поддръжката';
+  String get syncDetailsTranscribing => 'Качено, изчаква сървъра';
 
   @override
   String get syncDetailsAudioFiles => 'Аудиофайлове';
@@ -13780,6 +13747,9 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Повторно генериране на бележки';
 
   @override
   String get attentionSummaryFailed => 'Този разговор не можа да бъде обобщен';
@@ -14046,6 +14016,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi вече работи по този разговор. Обобщението ще се появи тук, когато приключи.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Все още не е транскрибирано';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Обобщението ще се появи, когато транскрипцията е готова.';
 
   @override
   String get summaryCheckAgain => 'Провери отново';
@@ -14454,6 +14430,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get processingProgress => 'Обработване на чакащите ви записи…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Изчаква се налична квота за транскрипция';
+
+  @override
   String get processingDeferred => 'Чака обработка';
 
   @override
@@ -14585,14 +14564,6 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'Наскоро';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Без връзка за $duration';
-  }
-
-  @override
   String get deviceControls => 'Управление';
 
   @override
@@ -14717,13 +14688,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Бележките започват, когато пристигне окончателната транскрипция.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Създават се на телефона ти, докато говориш. Пълните бележки идват с окончателната транскрипция.';
-
-  @override
-  String get episodeOnThisPhone => 'На този телефон';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Окончателната транскрипция изостава с около $duration';
   }
@@ -14733,9 +14697,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'Думите ти се появяват тук минута-две след като ги изговориш.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'Записва безопасно';
 
   @override
   String get livePreviewOnPhoneDivider => 'Току-що, на този телефон';
@@ -14748,11 +14709,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'при интернет връзка';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration се качва';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'Качва се автоматично. Разговорите се попълват, щом записите пристигнат.';
@@ -14776,34 +14732,6 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Неуспелите записи продължават да се опитват във фонов режим. Всичко, което не можем да транскрибираме, ни се докладва автоматично.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Подробности за поддръжката';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Скрити кратки записи: $count',
-      one: 'Скрит е 1 кратък запис',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Показвай';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Скрий кратки записи: $count',
-      one: 'Скрий 1 кратък запис',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -14996,6 +14924,20 @@ class AppLocalizationsBg extends AppLocalizations {
   String get episodeWritingNotes => 'Пишем бележките…';
 
   @override
+  String get homeStepTranscribing => 'Транскрибираме…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записа',
+      one: '$count запис',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Първо довършваме транскрипцията. Можете да напуснете страницата.';
 
   @override
@@ -15015,4 +14957,930 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Говорителите и окончателната транскрипция ще се появят тук при качването.';
+
+  @override
+  String get searchNoiseFilter => 'Кратки клипове';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговора',
+      one: '1 разговор',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count места',
+      one: '1 място',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Покажи всички ($count)';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Виж доказателствата';
+
+  @override
+  String get reviewChangeViewTask => 'Виж задачата';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Режим на визуализация: Dream показва какво би променил, но в профила ви засега нищо не се променя.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Прочетени елементи: $records · токени: $tokens';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Докладвано на екипа на Omi';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count от $limit изпълнения днес';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count промени чакат',
+      one: '1 промяна чака',
+      zero: 'Няма чакащи промени',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count по-стари промени са пропуснати',
+      one: '1 по-стара промяна е пропусната',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count доклада са задържани заради поверителност',
+      one: '1 доклад е задържан заради поверителност',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → телефон';
+
+  @override
+  String get syncStepLabelUpload => 'Качване';
+
+  @override
+  String get syncStepLabelTranscribe => 'Транскрипция';
+
+  @override
+  String get syncDetailsForSupport => 'За поддръжката';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Създават се на телефона ти, докато говориш. Пълните бележки идват с окончателната транскрипция.';
+
+  @override
+  String get episodeOnThisPhone => 'На този телефон';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Записва безопасно';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration се качва';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Подробности за поддръжката';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Скрити кратки записи: $count',
+      one: 'Скрит е 1 кратък запис',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Показвай';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Скрий кратки записи: $count',
+      one: 'Скрий 1 кратък запис',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'Прилагане към целия запис';
+
+  @override
+  String get speakerSelectionChanged => 'Говорителят се промени. Изберете редовете отново.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Записът е твърде голям. Изберете по-малко редове в един разговор.',
+        'partial': 'Някои редове са запазени. Изберете останалите и опитайте отново.',
+        'other': 'Някои редове са запазени. Изберете останалите и опитайте отново.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Преименувани са $count реда само в наличните разговори.',
+      one: 'Преименувани са 1 реда само в наличните разговори.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Други редове с този глас (обхватът на записа не е потвърден)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Завършване…';
+
+  @override
+  String get buildAndShareApp => 'Създайте и споделете персонализирано приложение';
+
+  @override
+  String get membersAndCounting => '8000+ членове и броят продължава да расте.';
+
+  @override
+  String get privacyIntro =>
+      'В Omi сме ангажирани със защитата на вашата поверителност. Тази страница ви позволява да контролирате как вашите данни се съхраняват и използват.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Вашите данни са защитени по подразбиране със силно криптиране. Прегледайте настройките си и бъдещите опции за поверителност по-долу.';
+
+  @override
+  String get transcriptionConfig => 'Конфигурирай STT доставчик';
+
+  @override
+  String get importDataConfig => 'Импортирайте данни от други източници';
+
+  @override
+  String get understandingSubtitle => 'Думи, разбрани от вашите разговори.';
+
+  @override
+  String get rememberingSubtitle => 'Факти и детайли, запомнени за вас.';
+
+  @override
+  String get debugLogsDesc => 'Помага за диагностициране на проблеми';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Това ще изтрие всички производни данни от графа на знанията (възли и връзки). Вашите оригинални спомени ще останат в безопасност. Графът ще бъде възстановен с течение на времето или при следващо запитване.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Изчисти всички възли и връзки';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'С подобряването на нашия модел, можем да предоставим по-добри резултати от транскрипцията за вашите записи.';
+
+  @override
+  String get bestInClassTranscription => 'Най-добра транскрипция в класа си без настройки';
+
+  @override
+  String get optimizedForConversation => 'Оптимизирано за разговор';
+
+  @override
+  String get highAccuracy => 'Висока точност';
+
+  @override
+  String get privacyFirst => 'Поверителност на първо място';
+
+  @override
+  String get keepGoing => 'Продължавайте, справяте се страхотно';
+
+  @override
+  String get personalGrowthJourney => 'Вашето пътешествие на личностен растеж с AI, който слуша всяка ваша дума.';
+
+  @override
+  String get memoryAllowUse => 'Разреши използване';
+
+  @override
+  String get memoryDontUse => 'Не използвай';
+
+  @override
+  String get alwaysInContext => 'Винаги в контекста';
+
+  @override
+  String get firmwareBatteryAbove15 => 'Батерия над 15%';
+
+  @override
+  String get configureSttProvider => 'Конфигуриране на доставчик на STT';
+
+  @override
+  String get clearAllNodesAndConnections => 'Изчистване на всички възли и връзки';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Добре дошли в Omi! Вашият AI спътник е готов да ви помогне с разговори, задачи и още.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Разговорите се обработват автоматично';
+
+  @override
+  String get getInsightsInstantly => 'Получавайте прозрения и обобщения моментално';
+
+  @override
+  String get dailyScoreDescription => 'Резултат, който ви помага\nда се фокусирате върху изпълнението.';
+
+  @override
+  String get startConversation => 'Започнете разговор и нека магията започне';
+
+  @override
+  String get wearableAiCompanion => 'Носим AI спътник';
+
+  @override
+  String get organizeAndControlMemories => 'Организирайте и контролирайте спомените си';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Задай всички спомени като частни';
+
+  @override
+  String get setAllMemoriesToPublic => 'Задай всички спомени като публични';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Изберете предпочитания език за най-добро Omi изживяване';
+
+  @override
+  String get enableFeaturesForBestExperience =>
+      'Активирайте функции за най-доброто Omi изживяване на вашето устройство.';
+
+  @override
+  String get deliveryTimeDescription => 'Кога да получавате дневното си резюме';
+
+  @override
+  String get configureSTTProvider => 'Конфигуриране на доставчик на STT';
+
+  @override
+  String get setConversationEndDescription => 'Задайте кога разговорите приключват автоматично';
+
+  @override
+  String get clearNodesDescription => 'Изчистване на всички възли и връзки';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Това ще изтрие всички производни данни от графа на знанието. Вашите оригинални спомени остават в безопасност.';
+
+  @override
+  String get createAndShareYourApp => 'Създайте и споделете вашето приложение';
+
+  @override
+  String get e2eeDescription =>
+      'Криптирането от край до край е златният стандарт за поверителност. Когато е активирано, вашите данни се криптират на вашето устройство, преди да бъдат изпратени до нашите сървъри. Това означава, че никой, дори Omi, не може да получи достъп до вашето съдържание.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Вашите данни са криптирани с ключ, уникален за вас, на нашите сървъри, хоствани в Google Cloud. Това означава, че вашето сурово съдържание е недостъпно за никого, включително персонала на Omi или Google, директно от базата данни.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Активирайте за максимална сигурност, при която само вие имате достъп до данните си. Докоснете, за да научите повече.';
+
+  @override
+  String get yourOmiUnleashed => 'Вашият Omi, освободен. Станете неограничени за безкрайни възможности.';
+
+  @override
+  String get privacyIntroText =>
+      'В Omi приемаме поверителността ви много сериозно. Искаме да бъдем прозрачни относно данните, които събираме и как ги използваме за подобряване на продукта. Ето какво трябва да знаете:';
+
+  @override
+  String get commitmentText =>
+      'Ние сме ангажирани да използваме събраните данни само за да направим Omi по-добър продукт за вас. Вашата поверителност и доверие са от първостепенно значение за нас.';
+
+  @override
+  String get thankYouText =>
+      'Благодарим ви, че сте ценен потребител на Omi. Ако имате въпроси или притеснения, не се колебайте да се свържете с нас на team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Това ще изтрие всички производни данни от графа на знанията (възли и връзки). Оригиналните ви спомени ще останат в безопасност. Графът ще бъде възстановен с времето или при следваща заявка.';
+
+  @override
+  String get howPeopleWorks =>
+      'След като създадете човек, можете да отидете в транскрипция на разговор и да му зададете съответните сегменти, така Omi ще може да разпознава и неговата реч!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Създайте и споделете персонализирано приложение';
+
+  @override
+  String get onboardingChooseYourPreference => 'Изберете предпочитанието си';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Дайте необходимия достъп';
+
+  @override
+  String get apiEnvironmentDescription => 'Изберете към кой сървър да се свържете';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Вашите обаждания остават лични и сигурни';
+
+  @override
+  String get omisStorageDesc =>
+      'Когато Omi не е свързан с телефона ви, той съхранява аудиото локално във вградената си памет. Никога няма да загубите запис.';
+
+  @override
+  String get permissionsSetupDescription => 'Активирайте няколко разрешения, за да може Omi да работи магически.';
+
+  @override
+  String get architectSubtitle => 'AI за напреднали — хиляди чатове + агентна автоматизация';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current от $total';
+  }
+
+  @override
+  String get newestFirst => 'Първо най-новите';
+
+  @override
+  String get backgroundModeNote => 'Засега работи само с устройства Omi и непрекъснато се подобрява.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Не е записано ($count)';
+  }
+
+  @override
+  String get speakerTagPromptSubtitle => 'Бърза проверка на гласовете от последните два дни';
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Чакащи транскрипции $count';
+  }
+
+  @override
+  String get captureRecoveryBanner => 'Omi не изпраща аудио — докоснете, за да се свържете отново';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi ще се свърже отново сам';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Запазете $name и очаквайте този човек във вашите разговори';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi пита, преди да съпостави близки гласове.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '„Да“ повишава сигурността за $name.';
+  }
+
+  @override
+  String get localCopiesSection => 'Локални копия';
+
+  @override
+  String get forYou => 'За вас';
+
+  @override
+  String get stopThese => 'Спри тези';
+
+  @override
+  String get addToTasks => 'Добави в Задачи';
+
+  @override
+  String get showInTranscript => 'Покажи в транскрипцията';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Срок около $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Предполагаем срок $date';
+  }
+
+  @override
+  String get openTask => 'Отвори задачата';
+
+  @override
+  String get completeTask => 'Завърши задачата';
+
+  @override
+  String get reopenTask => 'Отвори задачата отново';
+
+  @override
+  String get addingToTasks => 'Добавя се в Задачи';
+
+  @override
+  String get taskAddedToTasks => 'Задачата е създадена';
+
+  @override
+  String get completedStatus => 'Завършено';
+
+  @override
+  String get notCompletedStatus => 'В изчакване';
+
+  @override
+  String get referralAffiliate => 'Партньорска програма';
+
+  @override
+  String get referralCampaignTerms =>
+      'Приятелите получават 10% отстъпка за устройства Omi. Покупките на първите 2 различни приятели отключват 2 месеца Pro, покупките на следващите 3 различни приятели още 3. До 5 приятели и 5 месеца общо.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months месеца Pro · $count/$target покупки';
+  }
+
+  @override
+  String get referralClaim => 'Вземи наградата';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Получени $months месеца Pro';
+  }
+
+  @override
+  String get referralRewardPending => 'Наградата се запазва до края на платения абонамент.';
+
+  @override
+  String get referralCampaignTitle => 'Препоръчайте Omi. Получете Pro безплатно.';
+
+  @override
+  String get referralCampaignSubtitle => '10% отстъпка от Omi за тях. До 5 месеца Pro за теб.';
+
+  @override
+  String get referralShareInvite => 'Сподели покана';
+
+  @override
+  String get referralYourRewards => 'Твоите награди';
+
+  @override
+  String get referralRewardFirstTitle => '2 месеца Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'Когато 2 приятели купят Omi';
+
+  @override
+  String get referralRewardSecondTitle => 'Още 3 месеца';
+
+  @override
+  String get referralRewardSecondDetail => 'Когато още 3 приятели купят';
+
+  @override
+  String get referralClaimShort => 'Вземи';
+
+  @override
+  String get paymentDeclinedTitle => 'Картата ви беше отхвърлена';
+
+  @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Обновете картата или върнете $plan за $price на месец';
+  }
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Обновете картата, за да възстановите $plan';
+  }
+
+  @override
+  String get hasLinkedTasksLabel => 'Има свързани задачи';
+
+  @override
+  String get hasTasksFilter => 'Със задачи';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Актуализацията не се инсталира. Висулката ви продължава да работи с текущия фърмуер ($version). Моля, свържете се с поддръжката, вместо да опитвате актуализацията отново.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Преминете към месечен';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price на месец';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Заменя неплатеното годишно плащане от $yearly. Подновява се всеки месец. Отказ по всяко време.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Плащането е отказано. Планът ви не е променен.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Преминаването в момента не е достъпно. Вместо това обновете картата.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Вече плащате месечно';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Днес са платени $price. Подновява се всеки месец.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Списъкът за обработка се промени. Прегледайте го и опитайте отново.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Използвахте $minutes минути за този месец';
+  }
+
+  @override
+  String get freeCapBody => 'Omi продължава да записва. Изберете как да продължи транскрипцията.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Неограничена облачна транскрипция';
+
+  @override
+  String get freeCapProAccuracy => 'Най-добра точност';
+
+  @override
+  String get freeCapProWaiting => 'Транскрибира чакащите ви записи';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Безплатно. Остава включено, докато не превключите обратно.';
+
+  @override
+  String get transcribingOnThisPhone => 'Транскрибира се на този телефон';
+
+  @override
+  String get getPro => 'Вземете Pro';
+
+  @override
+  String get unlock => 'Отключване';
+
+  @override
+  String get transcribeWith => 'Транскрибиране чрез';
+
+  @override
+  String get omiCloud => 'Облак на Omi';
+
+  @override
+  String get thisPhone => 'Този телефон';
+
+  @override
+  String get onDeviceReady => 'Готово';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Остават $left от $limit мин · нулиране на $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Налични са $minutes облачни минути';
+  }
+
+  @override
+  String get switchBack => 'Превключване обратно';
+
+  @override
+  String get setUpThisPhone => 'Настройване на този телефон';
+
+  @override
+  String get speechRecognition => 'Разпознаване на реч';
+
+  @override
+  String get audioStaysOnPhone => 'Аудиото остава на телефона ви';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Изтегляне $size МБ';
+  }
+
+  @override
+  String get downloadNow => 'Изтегляне сега';
+
+  @override
+  String get onWifiLater => 'По-късно през Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Пишем вашето резюме…';
+
+  @override
+  String get onTheWayServerWork => 'Работа, отчетена от сървъра';
+
+  @override
+  String get finishNothingToProcess => 'Все още няма какво да се обработи.';
+
+  @override
+  String get finishStillProcessing => 'Все още се обработва. Ще се появи на началния екран.';
+
+  @override
+  String get finishBackToHome => 'Към началото';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Обобщение, когато този разговор приключи';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Качвания, чакащи на сървъра';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Аудиото ви е в безопасност на устройството или телефона';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Обобщение до $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Скорошен транскрипт';
+
+  @override
+  String get finishAlreadySaved => 'Вече е запазено. Намира се в „Начало“.';
+
+  @override
+  String get finishAudioNotReceived => 'Аудиото още е по пътя.';
+
+  @override
+  String get finishFailedOffline => 'Не успя. Аудиото ви е в безопасност.';
+
+  @override
+  String get finishFailed => 'Не успя. Аудиото ви е в безопасност.';
+
+  @override
+  String get micBlockedCannotRecord => 'Разрешете микрофона за запис.';
+
+  @override
+  String get couldNotStartRecording => 'Записът не можа да бъде стартиран.';
+
+  @override
+  String get restorePurchasesFailed => 'Планът ви не можа да бъде проверен.';
+
+  @override
+  String get firmwareCheckFailed => 'Проверката за актуализации не успя.';
+
+  @override
+  String get conversationStillPublic => 'Все още е споделено чрез връзка.';
+
+  @override
+  String get goalSaveFailed => 'Целта ви не можа да бъде запазена.';
+
+  @override
+  String get goalDeleteFailed => 'Изтриването не успя. Целта е възстановена.';
+
+  @override
+  String get goalsLoadFailed => 'Целите ви не можаха да бъдат заредени.';
+
+  @override
+  String get missingTargetEndedRecording => 'Този запис е приключил.';
+
+  @override
+  String get missingTargetMemory => 'Този спомен е изчезнал.';
+
+  @override
+  String get missingTargetTask => 'Тази задача е изчезнала.';
+
+  @override
+  String get missingTargetConversation => 'Този разговор не можа да бъде отворен.';
+
+  @override
+  String get couldNotRefreshConversations => 'Обновяването не успя.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Свържете вашия Omi, за да синхронизирате.';
+
+  @override
+  String get useDifferentAccountMessage =>
+      'Ще излезете от акаунта си, а настройките на Omi на този телефон ще бъдат нулирани.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Очилата не са открити. Включени ли са?';
+
+  @override
+  String get couldNotMoveTask => 'Задачата не можа да бъде преместена.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Изтрито. Запазени са $count заключени задачи.',
+      one: 'Изтрито. Запазена е 1 заключена задача.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Промяната не можа да бъде запазена.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Настройките ви не можаха да бъдат заредени.';
+
+  @override
+  String get waitForOmiToFinish => 'Изчакайте Omi да приключи.';
+
+  @override
+  String get voiceNoteTooShort => 'Твърде кратко. Задръжте за запис.';
+
+  @override
+  String get submitAppMissingFields => 'За да изпратите, добавете име, описание, изображение, категория и възможност.';
+
+  @override
+  String get appSetupNotFinished => 'Настройката още не е завършена.';
+
+  @override
+  String get finishNothingKeptTitle => 'Няма какво да се запази';
+
+  @override
+  String get submitAppFinishDetails => 'За да изпратите, попълнете отгоре данните за възможността и цените.';
+
+  @override
+  String get finishNothingNew => 'Все още няма нищо ново.';
+
+  @override
+  String get takingLongerThanUsual => 'Отнема повече време от обичайното. Скоро ще е в „Начало“.';
+
+  @override
+  String get couldNotCheckOnIt => 'Не можа да се провери. Опитайте отново.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Надградете, за да отворите този разговор.';
+
+  @override
+  String get missingTargetConversationGone => 'Този разговор беше изтрит.';
+
+  @override
+  String get cantConnectRightNow => 'Не може да се свърже в момента.';
+
+  @override
+  String get loadOlderFailed => 'По-старите не можаха да бъдат заредени. Докоснете, за да опитате отново.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Слушаме · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Изчакайте да приключи, за да го промените.';
+
+  @override
+  String get finishedSummaryReady => 'Обобщението е готово';
+
+  @override
+  String get writingSummaryStatus => 'Пише се обобщение…';
+
+  @override
+  String get stillWorkingOnIt => 'Все още работим по него.';
+
+  @override
+  String get deviceReadyToUse => 'Готово за използване';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Фърмуерът на устройството ви е твърде стар за тази актуализация. Свържете се с поддръжката за помощ с актуализирането на устройството.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Тази актуализация на фърмуера изисква по-нова версия на приложението Omi. Актуализирайте приложението от магазина си за приложения и проверете отново.';
+
+  @override
+  String get quietPayerTitle => 'Няма записи от 5 дни';
+
+  @override
+  String get quietPayerMessage => 'Проверете своя Omi.';
+
+  @override
+  String get quietPayerCheck => 'Провери';
+
+  @override
+  String get playManageSubscription => 'Управление на абонамента';
+
+  @override
+  String get playBilledByGoogle => 'Таксува се чрез Google Play';
+
+  @override
+  String get playPurchasePending => 'Плащането чака. Omi Pro започва, щом Google Play го потвърди.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Тази покупка в Google Play принадлежи на друг акаунт в Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Не успяхме да потвърдим покупката. Ще опитаме отново автоматично.';
+
+  @override
+  String get playRenewalTerms =>
+      'Подновява се автоматично на показаната цена, докато не го откажете. Управлявайте или отказвайте по всяко време в Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Не е налично за Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Тази страница не е достъпна в приложението.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Поръчката е направена. Проверете имейла си за потвърждението.';
+
+  @override
+  String get prepaidCodeEntry => 'Имате код?';
+
+  @override
+  String get prepaidCodeTitle => 'Активиране на код';
+
+  @override
+  String get prepaidCodeFieldHint => 'Въведете вашия код';
+
+  @override
+  String get prepaidCodeRedeem => 'Активирай';
+
+  @override
+  String get prepaidCodeRedeemed => 'Кодът е активиран';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Този код не е валиден. Проверете го и опитайте отново.',
+        'used': 'Този код вече е използван.',
+        'expired': 'Този код е изтекъл.',
+        'hasPlan': 'Вече имате план. Кодът ви не е използван. Активирайте го, след като планът ви приключи.',
+        'notPrepaid': 'Този код не може да се активира тук. Използвайте го, когато изберете план.',
+        'notEligible': 'Този код не може да се използва в този акаунт.',
+        'rateLimited': 'Твърде много опити. Опитайте по-късно.',
+        'other': 'Нещо се обърка. Опитайте отново.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Таксува се чрез omi.me. Откажете оттук по всяко време.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Таксува се чрез omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Планът ви $plan е на пауза.';
+  }
 }

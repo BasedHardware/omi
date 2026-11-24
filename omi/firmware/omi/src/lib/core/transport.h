@@ -3,6 +3,7 @@
 
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/atomic.h>
 #ifdef CONFIG_OMI_ENABLE_BATTERY
 extern uint8_t battery_percentage;
 #endif
@@ -14,6 +15,8 @@ extern uint8_t battery_percentage;
  * @return 0 if successful, negative errno code if error
  */
 int transport_start();
+int transport_start_safe(void);
+bool transport_advertising_started(void);
 
 /**
  * @brief Turn off the BLE transport
@@ -38,6 +41,8 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size);
  */
 struct bt_conn *get_current_connection();
 
+struct bt_conn *get_current_connection_ref(void);
+
 /**
  * @brief Acquire / release a shared BLE TX-throttle slot.
  *
@@ -51,5 +56,11 @@ struct bt_conn *get_current_connection();
  */
 int transport_bulk_tx_acquire(k_timeout_t timeout);
 void transport_bulk_tx_release(void);
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+extern atomic_t omi_live_persist_records_queued;
+extern atomic_t omi_live_persist_records_dropped;
+extern atomic_t omi_live_persist_frames_dropped;
+#endif
 
 #endif // TRANSPORT_H

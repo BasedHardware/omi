@@ -63,6 +63,7 @@ PEOPLE_STATS_BATCH = 100
 # rewrites person labels at read time. Anything else (title, structured) never
 # reaches the aggregator.
 PEOPLE_STATS_FIELD_PATHS = (
+    'recording',
     'id',
     'is_locked',
     'discarded',

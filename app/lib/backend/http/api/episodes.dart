@@ -37,6 +37,13 @@ Future<ApiResult<EpisodeRead>> getEpisodeForConversation(String conversationId) 
       decode: (body) => _read(_object(body)),
     );
 
+/// One episode by id. Opening the page is the server's trigger for a late episode's
+/// deferred compose, so the page reads it once and folds the composed copy back in.
+Future<ApiResult<Episode>> getEpisode(String episodeId) => executeApi(
+      request: ApiRequest(url: '${Env.apiBaseUrl}v1/episodes/${_id(episodeId)}', method: 'GET'),
+      decode: (body) => Episode.fromGenerated(wire.GeneratedEpisode.fromJson(_object(body))),
+    );
+
 /// "Wrap up now". With [conversationId] (the capture being finished) the server closes the episode
 /// once that conversation's notes are done.
 Future<ApiResult<Episode>> wrapUpEpisode(String episodeId, {String? conversationId}) => executeApi(
@@ -63,6 +70,8 @@ Future<ApiResult<EpisodePageRead>> getEpisodes(DateTime from, DateTime to, {Stri
           url: Uri.parse('${Env.apiBaseUrl}v1/episodes').replace(queryParameters: {
             'from': from.toUtc().toIso8601String(),
             'to': to.toUtc().toIso8601String(),
+            // The server's page cap: Home reads every page before it paints, so fewer round trips.
+            'limit': '100',
             if (cursor != null) 'cursor': cursor,
           }).toString(),
           method: 'GET'),

@@ -5,6 +5,7 @@ import json
 
 import pytest
 from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 
 import routers.listen.receiver as receiver_module
 from tests.unit.test_parakeet_window_live import Client, _flush_capture, _receiver_for_anchor_replay, runtime, window
@@ -21,6 +22,7 @@ from tests.unit.test_live_cost_router import MemoryRedis
 @pytest.fixture(autouse=True)
 def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+    enabled_live_targets(monkeypatch)
 
 
 class Replacement:
@@ -451,38 +453,6 @@ async def test_five_minutes_of_silence_on_replacement_keeps_recent_tail_and_forw
         assert actual._window_ring().buffered_bytes == 16 * 16000 * 2
         assert b''.join(modulate.sent) == capture + silence * 300
         assert not actual.host.state.stt_terminal_failure
-    finally:
-        await actual._drain_stt_sockets()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('timeline_v2', [False, True])
-async def test_enabled_soniox_reconnect_uses_full_window_obligation_not_fifteen_second_tail(monkeypatch, timeline_v2):
-    monkeypatch.setenv('STT_RESILIENT_RECONNECT', 'true')
-    monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if timeline_v2 else 'false')
-    actual, base, previous, legs, capture = await setup_chain(monkeypatch)
-    try:
-        assert await actual._failover_stt_socket()
-        pcm = b'\x02\x00' * 16000
-        for second in range(20):
-            await _flush_capture(actual, pcm, 1920 + second * 16000)
-        legs['modulate'][0].is_connection_dead = True
-        legs['modulate'][0].typed_death_reason = 'modulate_serve_error'
-        assert await actual._failover_stt_socket()
-        expected = capture + pcm * 20
-        assert b''.join(legs['soniox'][0].sent) == expected
-        legs['soniox'][0].is_connection_dead = True
-        legs['soniox'][0].typed_death_reason = 'provider_5xx'
-        ring_before = b''.join(data for _, data in actual._window_ring().snapshot())
-        assert await actual._failover_stt_socket()
-        assert len(legs['soniox']) == 2
-        sent = b''.join(legs['soniox'][1].sent)
-        assert sent and ring_before.endswith(sent)
-        assert actual._resilient_audio._replayed_samples == len(sent) // 2
-        legs['soniox'][0].callback([{'text': 'retired tail', 'start': 0.0, 'end': 20.12}])
-        assert base.emitted == []
-        bounds = actual._window_ring().capture_bounds
-        assert bounds[0] > 0 and bounds[1] == 321920
     finally:
         await actual._drain_stt_sockets()
 

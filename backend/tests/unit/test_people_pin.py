@@ -1,3 +1,4 @@
+from database.ports.people import PersonEntity
 from datetime import datetime, timezone
 
 from fastapi import FastAPI
@@ -15,13 +16,13 @@ def test_pin_and_unpin_stamp_pinned_at():
     store = StrictFirestore()
     store.rows[PATH] = {'id': 'p1', 'name': 'Maya Chen'}
     pinned = people_db.set_person_pinned('u', 'p1', True, now=NOW, firestore_client=store)
-    assert pinned['pinned'] is True and pinned['pinned_at'] == NOW
+    assert pinned.pinned is True and pinned.pinned_at == NOW
     assert store.rows[PATH]['pinned'] is True and store.rows[PATH]['pinned_at'] == NOW
     # Pinning again is a no-op that keeps the original timestamp.
     later = datetime(2026, 10, 1, tzinfo=timezone.utc)
-    assert people_db.set_person_pinned('u', 'p1', True, now=later, firestore_client=store)['pinned_at'] == NOW
+    assert people_db.set_person_pinned('u', 'p1', True, now=later, firestore_client=store).pinned_at == NOW
     unpinned = people_db.set_person_pinned('u', 'p1', False, now=later, firestore_client=store)
-    assert unpinned['pinned'] is False and store.rows[PATH]['pinned_at'] is None
+    assert unpinned.pinned is False and store.rows[PATH]['pinned_at'] is None
     assert people_db.set_person_pinned('u', 'missing', True, firestore_client=store) is None
 
 
@@ -45,9 +46,9 @@ def test_pin_route_returns_the_updated_person_and_404s(monkeypatch):
     def fake(uid, person_id, value):
         calls.append((uid, person_id, value))
         if person_id == 'p1':
-            return {'id': 'p1', 'name': 'Maya Chen', 'pinned': value, 'pinned_at': NOW if value else None}
+            return PersonEntity(id='p1', name='Maya Chen', pinned=value, pinned_at=NOW if value else None)
         if person_id == 'broken':
-            return {'id': 'broken'}
+            return PersonEntity.model_construct(id='broken')
         return None
 
     monkeypatch.setattr(router_module.people_db, 'set_person_pinned', fake)

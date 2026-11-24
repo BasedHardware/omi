@@ -210,6 +210,20 @@ class TestSendMap:
         assert translated[1]['start'] == 9.0
         assert translator.rejected_segments == 1
 
+    def test_segment_starting_on_post_gap_send_boundary_is_placed(self):
+        timeline = CaptureTimeline(sample_rate=RATE)
+        timeline.accept(_pcm(16000), arrival_wall=100.0, arrival_monotonic=0.0)
+        translator = ProviderEpochTranslator(timeline, RATE, project_times=False)
+        translator.note_accepted(0, 8000)
+        translator.note_accepted(11200, 4800)
+        segment = {'start': 0.5, 'end': 0.6, 'text': 'post_gap'}
+        translated = translator.translate([dict(segment)])
+        assert len(translated) == 1
+        assert translated[0]['text'] == 'post_gap'
+        assert translated[0].get('audio_alignment') != 'unplaced'
+        assert translated[0].get('_capture_start_sample') == 11200
+        assert translated[0].get('_capture_end_sample') == 11200 + int(0.1 * RATE)
+
     def test_edge_tolerance_accepts_provider_tail_overshoot(self):
         sm = SendMap(RATE)
         sm.add_accepted_spans([(0, RATE)])

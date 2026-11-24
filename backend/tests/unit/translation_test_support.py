@@ -81,7 +81,7 @@ class FallbackRecorder:
 
 
 def profile(
-    providers: tuple[TranslationProvider, ...] = (TranslationProvider.google,),
+    providers: tuple[TranslationProvider, ...] = (TranslationProvider.luna,),
     *,
     max_batch_size: int = 100,
 ) -> TranslationProfile:

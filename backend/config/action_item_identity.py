@@ -35,3 +35,11 @@ ACTION_ITEM_REFRESH_PRESERVE_ENV = 'ACTION_ITEM_REFRESH_PRESERVE_ENABLED'
 def action_item_refresh_preserve_enabled() -> bool:
     """Preserve tasks on automatic refresh only; unset/blank on, unknown off."""
     return _default_on(ACTION_ITEM_REFRESH_PRESERVE_ENV)
+
+
+ENRICHMENT_REVISION_RACE_RETRY_ENV = 'ENRICHMENT_REVISION_RACE_RETRY_ENABLED'
+
+
+def enrichment_revision_race_retry_enabled() -> bool:
+    """An enrichment run that loses the action-item revision race retries instead of failing; unset/blank on."""
+    return _default_on(ENRICHMENT_REVISION_RACE_RETRY_ENV)

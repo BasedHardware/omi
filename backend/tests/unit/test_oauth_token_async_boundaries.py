@@ -44,6 +44,10 @@ class _App:
     def works_externally(self) -> bool:
         return False
 
+    @classmethod
+    def deserialize_safe(cls, data: Any) -> '_App | None':
+        return cls(**data) if data else None
+
 
 @contextmanager
 def _loaded_oauth_router() -> Iterator[tuple[ModuleType, ModuleType, ModuleType]]:

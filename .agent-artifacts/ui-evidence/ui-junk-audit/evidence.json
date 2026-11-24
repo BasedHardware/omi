@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-before-stack.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): everything that can sit above Home conversations at once",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-after-questions-locked.png",
+      "platform": "mobile-ios",
+      "description": "After: only Questions for you above the list; held recordings as frosted locked rows with only Upgrade",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-locked-row-history.png",
+      "platform": "mobile-ios",
+      "description": "Locked row history from one fixture: Sep 30-Oct 14, Oct 14-main (Pending/View Usage), this PR (Upgrade, no Pending)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-short-clips-before-fold.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): the short clips hidden line at the end of a day on Home",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-short-clips-after-search.png",
+      "platform": "mobile-ios",
+      "description": "After: short clips are found in search under the Short clips filter",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-made-on-iphone-before.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): on-device provenance with its full explanation",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-made-on-iphone-after.png",
+      "platform": "mobile-ios",
+      "description": "After: one line; the explanation opens on tap",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-live-notes-before.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): live notes with the On this phone tag and caption",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-live-notes-after.png",
+      "platform": "mobile-ios",
+      "description": "After: live notes without the tag and caption",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-live-transcript-before.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): the Recording safely card",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-live-transcript-after.png",
+      "platform": "mobile-ios",
+      "description": "After: one quiet line",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-plan-usage-before.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): the waiting card on Plan & Usage (removed)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-ios-live-paused-banner-before.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): the paused upsell on the live page (removed)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

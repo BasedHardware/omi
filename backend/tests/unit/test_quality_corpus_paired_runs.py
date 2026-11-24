@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from scripts.parity import scorers  # noqa: F401  (loads scipy/jiwer at collection, not in a timed call)
-from testing.quality_corpus import corpus, paired_flight_batching as flight, paired_short_speech as short
+from testing.quality_corpus import corpus, paired_flight_batching as flight
 from testing.quality_corpus.audio import (
     Turn,
     crop_words,
@@ -24,7 +24,7 @@ PROD = '3533c8cf8e369892e6b79ff1bf80f7b0286a54ee'
 def test_prod_revision_constants_match_the_worker_pin():
     source = open('diarizer/batch_pipeline_startup.py').read()
     assert f"DIARIZER_REVISION = '{PROD}'" in source
-    assert short.PROD_DIARIZER_REVISION == flight.PROD_DIARIZER_REVISION == PROD
+    assert flight.PROD_DIARIZER_REVISION == PROD
 
 
 def test_rttm_and_ami_parsers():
@@ -51,37 +51,6 @@ def test_wav_roundtrip_and_quiet_bed_level():
     assert wav_seconds(wav_bytes(bed)) == pytest.approx(2.0)
 
 
-def test_isolated_turns_and_excerpt_plan_respect_the_gate_shape():
-    turns = {
-        's': [
-            Turn(0.0, 1.0, 'A'),
-            Turn(3.0, 3.5, 'B'),
-            Turn(6.0, 6.6, 'A'),
-            Turn(9.0, 9.4, 'B'),
-            Turn(12.0, 12.5, 'A'),
-            Turn(12.6, 13.0, 'B'),
-        ]
-    }
-    isolated = short.isolated_turns(turns['s'], 0.4, 2.0, isolation=0.25)
-    assert Turn(12.0, 12.5, 'A') not in isolated and Turn(3.0, 3.5, 'B') in isolated
-    specs = short.plan_excerpts(turns, seed=1, max_per_kind=10, isolation=0.25)
-    kinds = {s['kind'] for s in specs}
-    assert kinds == {'single', 'burst_same', 'burst_diff'}
-    for spec in specs:
-        if spec['pause'] is not None:
-            assert spec['pause'] <= 0.5
-            assert sum(e - s for _, s, e in spec['parts']) + spec['pause'] <= 2.0 + 1e-9
-    assert all(len(set(s['speakers'])) == 2 for s in specs if s['kind'] == 'burst_diff')
-
-
-def test_render_unit_places_excerpt_inside_a_30s_bed():
-    audio = {'s': np.ones(16000 * 4, dtype=np.float32) * 0.5}
-    unit = short.render_unit({'parts': [('s', 1.0, 1.5), ('s', 2.0, 2.4)], 'pause': 0.25}, audio, seed=3)
-    assert len(unit) == 30 * 16000
-    loud = np.flatnonzero(np.abs(unit) > 0.1)
-    assert (loud[-1] - loud[0] + 1) / 16000 == pytest.approx(0.5 + 0.25 + 0.4, abs=0.01)
-
-
 def unit(kind='single', fired=True, off_speakers=1, ref_speakers=1, identical=True):
     return {
         'kind': kind,
@@ -95,30 +64,6 @@ def unit(kind='single', fired=True, off_speakers=1, ref_speakers=1, identical=Tr
 
 
 IDENTITY = {'diarizer_revision': PROD, 'device': 'NVIDIA L4'}
-
-
-def test_short_speech_gate_pass_fail_and_insufficient():
-    units = [unit()] * 150 + [unit('burst_same')] * 30 + [unit('burst_diff', ref_speakers=2)] * 30
-    assert short.evaluate(units, IDENTITY, min_fired=200, min_fired_bursts=50)['status'] == 'pass'
-    bad = units + [unit('burst_diff', off_speakers=2, ref_speakers=2)]
-    result = short.evaluate(bad, IDENTITY, min_fired=200, min_fired_bursts=50)
-    assert result['status'] == 'fail' and result['disagreements'] == 1
-    assert result['by_kind']['burst_diff']['fired_full_multi_speaker'] == 1
-    assert (
-        short.evaluate(units[:100], IDENTITY, min_fired=200, min_fired_bursts=50)['status'] == 'insufficient_evidence'
-    )
-    # A unit the gate does not fire on can never be a disagreement.
-    quiet = units + [unit(fired=False, off_speakers=3)]
-    assert short.evaluate(quiet, IDENTITY, min_fired=200, min_fired_bursts=50)['status'] == 'pass'
-
-
-def test_short_speech_gate_refuses_wrong_revision_device_or_changed_words():
-    units = [unit()] * 250 + [unit('burst_same')] * 60
-    for identity in ({**IDENTITY, 'diarizer_revision': '8a52737'}, {**IDENTITY, 'device': 'Tesla T4'}):
-        assert short.evaluate(units, identity, min_fired=200, min_fired_bursts=50)['status'] == 'fail'
-    assert short.evaluate(units + [unit(identical=False)], IDENTITY, min_fired=200, min_fired_bursts=50)[
-        'failures'
-    ] == ['words_differ_between_passes']
 
 
 def qualify_receipt(**changes):

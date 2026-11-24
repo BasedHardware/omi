@@ -1,5 +1,19 @@
+"""Payments surface: plan catalog serving, checkout/upgrade/cancel, Stripe
+webhooks and Connect onboarding, PayPal details, and the customer portal.
+
+Prices come only from the generated plan catalog -- current Stripe amounts are
+import-blocked and must never be published or rebound from a code-change
+workflow -- and webhook handlers answer replays, so mutations stay idempotent
+under event re-delivery (.github/agent-docs/plan-source-of-truth.md,
+backend/docs/checkout-admission.md).
+"""
+
 from config.plan_catalog import configured_ladder_prices, validate_ladder_price
 from database.fsr_read_cache import fresh_reader, fresh_reads
+import database.play_subscriptions as play_subscriptions_db
+from utils import play_stripe_guard
+from config import prepaid_code_redeem as prepaid_code_config
+from config import play_billing as play_billing_config
 import os
 from datetime import datetime, timezone
 
@@ -7,7 +21,7 @@ from fastapi import BackgroundTasks, Request, Header, HTTPException, APIRouter, 
 from google.api_core.exceptions import NotFound as FirestoreNotFound
 import stripe
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from typing import List, Optional
+from typing import List, Mapping, Optional
 import uuid
 import time
 from urllib.parse import urljoin
@@ -19,7 +33,8 @@ from database import (
     action_items as action_items_db,
 )
 from database.locked_content import has_recoverable_locked_content
-from database.redis_db import set_credits_invalidation_signal
+from database.redis_db import claim_payment_recovery_notification, set_credits_invalidation_signal
+from database.redis_db import claim_trial_ending_notification
 from config.plan_catalog import _paid_period_still_open, plan_uses_overage
 from utils.subscription_state_machine import (
     project_subscription,
@@ -35,11 +50,19 @@ from utils.billing_currency import (
     subscription_currency,
 )
 from utils.storefront_copy import format_money
-from utils.billing_flags import webhook_ledger_enabled
+from utils.billing_flags import payment_recovery_notification_enabled, webhook_ledger_enabled
 from utils.stripe_webhook_ledger import dispatch_with_ledger, RetryableBillingSkip
 from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
 from utils.fair_use import clear_fair_use_on_upgrade
-from utils.notifications import send_notification, send_subscription_paid_personalized_notification
+from utils.notifications import send_subscription_paid_personalized_notification
+from utils.notification_dispatch import (
+    NotificationIntent,
+    NotificationKind,
+    dispatch_notification,
+    dispatch_notification_async,
+)
+from utils import billing_recovery
+from utils import trial_reminder
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
 from utils.subscription import (
     get_basic_plan_limits,
@@ -52,12 +75,12 @@ from utils.subscription import (
     desktop_to_consumer_plan_change_error,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
-    clear_trial_paywall_cache,
     find_active_paid_subscription_for_user,
     price_ids_match_plan_and_interval,
 )
 from utils.observability.fallback import record_fallback
 from utils.observability.subscription_events import record_subscription_event
+from utils.observability.renewal_observations import observe_verified_event
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -71,7 +94,8 @@ from utils import stripe as stripe_utils
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.apps import find_app_subscription, paid_app, set_user_app_sub_customer_id
 from utils.other import endpoints as auth
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.background import BackgroundTask
 
 from utils.stripe import base_url, create_connect_account, refresh_connect_account_link, is_onboarding_complete
 from utils import subscription as subscription_utils
@@ -83,7 +107,7 @@ from utils.overage import (
 )
 from utils.executors import db_executor, stripe_executor, run_blocking
 from utils.log_sanitizer import sanitize
-from utils import yearly_switch
+from utils import monthly_switch, yearly_switch
 import os
 import logging
 
@@ -108,6 +132,11 @@ async def _deletion_webhook_blocks_entitlement(uid: str, subscription_id: str | 
             logger.error('Stripe webhook could not cancel a deletion-fenced subscription: %s', type(error).__name__)
             raise HTTPException(503, 'Subscription cancellation must be retried') from error
     return True
+
+
+PREPAID_PLAN_DETAIL = (
+    "Your prepaid plan ends on its own and nothing will be charged. It can't be changed until it ends."
+)
 
 
 def _stripe_client_error_detail(e: stripe.error.StripeError, fallback: str) -> str:
@@ -267,11 +296,64 @@ class AvailablePlansResponse(BaseModel):
     plans: List[PricingOption]
 
 
+def _cancel_grace_window_open(stripe_sub: dict, now: int) -> bool:
+    """True when a canceled snapshot would be eligible for paid-through grace by its period alone."""
+    period_end = stripe_sub.get('current_period_end')
+    return stripe_sub.get('status') == 'canceled' and bool(period_end) and period_end > now
+
+
+def _latest_invoice_id(stripe_sub: dict) -> str | None:
+    latest = stripe_sub.get('latest_invoice')
+    if isinstance(latest, str):
+        return latest or None
+    if latest is not None and hasattr(latest, 'get'):
+        return latest.get('id')
+    return None
+
+
+def _cancel_grace_period_paid(stripe_sub: dict) -> bool:
+    """Whether the current period's latest invoice is paid (Stripe IO; call off the event loop).
+
+    No latest invoice, or one that is open, void, uncollectible or draft, means the
+    period was not paid. A Stripe read failure raises so the webhook is retried
+    rather than granting or revoking on a guess.
+    """
+    latest = stripe_sub.get('latest_invoice')
+    if not latest:
+        return False
+    if isinstance(latest, str):
+        try:
+            latest = stripe.Invoice.retrieve(latest)
+        except stripe.error.InvalidRequestError as e:
+            if e.code == 'resource_missing':
+                return False
+            raise
+    return latest.get('status') == 'paid'
+
+
+def _invoice_subscription_id(invoice: dict) -> str | None:
+    subscription_id = invoice.get('subscription')
+    if isinstance(subscription_id, str) and subscription_id:
+        return subscription_id
+    if subscription_id is not None and hasattr(subscription_id, 'get'):
+        return subscription_id.get('id')
+    details = ((invoice.get('parent') or {}).get('subscription_details') or {}) if hasattr(invoice, 'get') else {}
+    nested = details.get('subscription')
+    return nested if isinstance(nested, str) and nested else None
+
+
 def _build_subscription_from_stripe_object(
-    stripe_sub: dict, grant_cancel_grace: bool = False, now: int | None = None
+    stripe_sub: dict, grant_cancel_grace: bool = False, now: int | None = None, period_paid: bool = False
 ) -> Subscription | None:
-    """Builds a Subscription object from a Stripe Subscription object."""
+    """Builds a Subscription object from a Stripe Subscription object.
+
+    ``period_paid`` must be True for the paid-through grace to apply: it says the
+    current period's latest invoice is paid (see ``_cancel_grace_period_paid``).
+    """
     stripe_status = stripe_sub['status']
+    # A prepaid plan's term end is its real end: no paid-through grace, the user drops to Free now.
+    if prepaid_code_config.is_prepaid_subscription(stripe_sub):
+        grant_cancel_grace = False
 
     # For inactive subscriptions (canceled, unpaid, etc.), always downgrade to Basic
     # regardless of price ID — ensures deleted/canceled users don't keep paid access.
@@ -281,10 +363,14 @@ def _build_subscription_from_stripe_object(
     # survive the early terminal event. The candidate still routes through the
     # stale-downgrade shield in the webhook handler, so a newer stored paid
     # subscription or an adopted replacement always wins over this grace.
+    # Grace needs the period to have been paid: a renewal that dunning or a void
+    # left unpaid also ends in `canceled` with a future period end, and must not
+    # re-grant the plan for that unpaid period.
     if stripe_status not in ('active', 'trialing'):
         period_end = stripe_sub.get('current_period_end')
         if (
             grant_cancel_grace
+            and period_paid
             and stripe_status == 'canceled'
             and period_end
             and period_end > (now if now is not None else int(time.time()))
@@ -418,8 +504,13 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
         if status in stripe_utils.TERMINAL_SUBSCRIPTION_STATUSES:
             return None
 
-        # Check if subscription is active but scheduled to cancel
-        if status == 'active' and stripe_sub_dict.get('cancel_at_period_end') == True:
+        # Check if subscription is active but scheduled to cancel. A prepaid no-card subscription is
+        # never un-cancelled (it has no card to renew with): it falls through to the 409 below.
+        if (
+            status == 'active'
+            and stripe_sub_dict.get('cancel_at_period_end') == True
+            and not prepaid_code_config.is_prepaid_subscription(stripe_sub_dict)
+        ):
             current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
 
             # If resubscribing to the same plan, just remove cancellation
@@ -431,7 +522,6 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                 current_subscription.cancel_at_period_end = False
                 users_db.update_user_subscription(uid, current_subscription.model_dump())
                 set_credits_invalidation_signal(uid)
-                clear_trial_paywall_cache(uid)
                 if recovered_from_stripe:
                     record_fallback(
                         component='other',
@@ -708,6 +798,20 @@ def _validate_price_id(price_id: str) -> None:
             raise HTTPException(status_code=503, detail='Ladder price unavailable') from error
 
 
+def play_client_refusal(http_request: Optional[Request], uid: str) -> Optional[JSONResponse]:
+    """A build that buys through Google Play never starts a new Stripe charge; management routes stay open."""
+    if http_request is None:
+        return None
+    headers = http_request.headers
+    if not play_billing_config.client_uses_play(headers.get('X-App-Platform'), headers.get('X-App-Build'), uid):
+        return None
+    logger.info(f"Stripe charge refused for a Google Play client: {sanitize(http_request.url.path)}")
+    return JSONResponse(
+        status_code=409,
+        content={'detail': play_billing_config.USE_GOOGLE_PLAY_MESSAGE, 'code': play_billing_config.USE_GOOGLE_PLAY},
+    )
+
+
 @router.post(
     '/v1/payments/checkout-session',
     response_model=PaymentCheckoutSessionResponse,
@@ -718,6 +822,7 @@ def create_checkout_session_endpoint(
     request: CreateCheckoutRequest,
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    http_request: Request = None,
 ):
     # Retained currency prices are management-only; ordinary targets keep the
     # existing purchase and eligibility checks before promotion-code lookup.
@@ -727,16 +832,24 @@ def create_checkout_session_endpoint(
         _validate_price_id(request.price_id)
         # Check if user can make a new payment
         can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
+        if not can_pay and reason in subscription_utils.PLAY_REFUSAL_CODES:
+            code = subscription_utils.PLAY_REFUSAL_CODES[reason]
+            return JSONResponse(status_code=400, content={'detail': reason, 'code': code})
         if not can_pay:
             raise HTTPException(status_code=400, detail=reason)
 
     # Validate promotion code early — reject invalid codes before any subscription changes
     resolved_checkout_promo_id = None
+    resolved_checkout_attribution = None
     if request.promotion_code:
-        promo_list = stripe.PromotionCode.list(code=request.promotion_code, active=True, limit=1)
+        promo_list = stripe.PromotionCode.list(
+            code=request.promotion_code, active=True, limit=1, expand=['data.coupon']
+        )
         if not promo_list.data:
             raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
-        resolved_checkout_promo_id = promo_list.data[0].id
+        resolved_promotion = promo_list.data[0]
+        resolved_checkout_promo_id = resolved_promotion.id
+        resolved_checkout_attribution = stripe_utils.promotion_code_attribution(resolved_promotion)
 
     # Only the exact current JPY price may reactivate; never open new Checkout.
     if management_only and currency_binding is not None:
@@ -759,6 +872,10 @@ def create_checkout_session_endpoint(
     if reactivation_result:
         return reactivation_result
 
+    play_refusal = play_client_refusal(http_request, uid)
+    if play_refusal:
+        return play_refusal
+
     # Omi Pro only; runs after every subscriber escape (stale records can look basic).
     single_plan_error = subscription_utils.new_buyer_single_plan_violation(uid, request.price_id)
     if single_plan_error:
@@ -769,17 +886,22 @@ def create_checkout_session_endpoint(
     existing_customer_id = users_db.get_stripe_customer_id(uid)
     # A trial is only for a first-time subscriber. A client that asked for one on behalf of a former
     # subscriber promised something this checkout cannot give, so refuse rather than charge at once.
-    if request.trial_days and existing_customer_id:
+    if request.trial_days and (existing_customer_id or play_subscriptions_db.is_play_customer(uid)):
         raise HTTPException(status_code=400, detail="trial_unavailable")
     trial_period_days = request.trial_days or None
     try:
+        checkout_options = {
+            'customer_id': existing_customer_id,
+            'promotion_code_id': resolved_checkout_promo_id,
+            'trial_period_days': trial_period_days,
+        }
+        if resolved_checkout_attribution is not None:
+            checkout_options['promotion_attribution'] = resolved_checkout_attribution
         session = stripe_utils.create_subscription_checkout_session(
             uid,
             request.price_id,
             idempotency_key,
-            customer_id=existing_customer_id,
-            promotion_code_id=resolved_checkout_promo_id,
-            trial_period_days=trial_period_days,
+            **checkout_options,
         )
     except stripe.error.InvalidRequestError as e:
         detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
@@ -829,9 +951,42 @@ def _unlock_paid_content(uid: str) -> None:
     action_items_db.unlock_all_action_items(uid)
 
 
+def _store_modified_subscription(
+    uid: str, price_id: str, current_subscription: Subscription, updated_sub_dict: dict
+) -> Optional[Subscription]:
+    """Store an immediately modified subscription, or 402 if Stripe left it incomplete."""
+    if updated_sub_dict.get('status') not in ('active', 'trialing') or updated_sub_dict.get('pending_update'):
+        logger.warning(
+            f"Subscription upgrade payment incomplete for user {uid}: status={sanitize(str(updated_sub_dict.get('status')))}"
+        )
+        raise HTTPException(
+            status_code=402,
+            detail="Payment for the plan change could not be completed. Your current subscription remains active.",
+        )
+
+    new_subscription = _build_subscription_from_stripe_object(updated_sub_dict)
+    if new_subscription:
+        users_db.update_user_subscription(uid, new_subscription.model_dump())
+        set_credits_invalidation_signal(uid)
+        if is_paid_plan(new_subscription.plan):
+            conversations_db.unlock_all_conversations(uid)
+            memories_db.unlock_all_memories(uid)
+            action_items_db.unlock_all_action_items(uid)
+            clear_fair_use_on_upgrade(uid)
+            if funded_processing_enabled(uid):
+                from utils.processing_backlog_worker import plan_changed
+
+                plan_changed(uid, price_id, current_subscription, new_subscription, updated_sub_dict.get('status'))
+    return new_subscription
+
+
 @router.post('/v1/payments/upgrade-subscription', response_model=PaymentUpgradeSubscriptionResponse)
 @fresh_reader
-def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
+def upgrade_subscription_endpoint(
+    request: UpgradeSubscriptionRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,
+):
     """Upgrade or change a user's subscription plan.
 
     - Cross-plan changes (e.g. Unlimited→Pro): immediate swap via Subscription.modify(),
@@ -839,6 +994,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     - Same plan, different interval (e.g. monthly→annual): scheduled via SubscriptionSchedule,
       takes effect at end of current billing period.
     """
+    play_refusal = play_client_refusal(http_request, uid)
+    if play_refusal:
+        return play_refusal
     currency_binding = management_binding(request.price_id)
     if currency_binding is None:
         _validate_price_id(request.price_id)
@@ -853,6 +1011,8 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     try:
         # Retrieve current subscription to get current price ID
         stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id).to_dict()
+        if prepaid_code_config.is_prepaid_subscription(stripe_sub):
+            raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
         if stripe_sub.get('cancel_at_period_end') and (
             not stripe_sub.get('current_period_end') or stripe_sub['current_period_end'] > int(time.time())
         ):
@@ -953,37 +1113,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 modify_params.update(yearly_switch.charge_params(stripe_sub['id'], request.proration_date))
 
             updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
-            updated_sub_dict = updated_sub.to_dict()
-            if updated_sub_dict.get('status') not in ('active', 'trialing') or updated_sub_dict.get('pending_update'):
-                logger.warning(
-                    f"Subscription upgrade payment incomplete for user {uid}: status={sanitize(str(updated_sub_dict.get('status')))}"
-                )
-                raise HTTPException(
-                    status_code=402,
-                    detail="Payment for the plan change could not be completed. Your current subscription remains active.",
-                )
-
-            # Update our database immediately
-            new_subscription = _build_subscription_from_stripe_object(updated_sub_dict)
-            if new_subscription:
-                users_db.update_user_subscription(uid, new_subscription.model_dump())
-                set_credits_invalidation_signal(uid)
-                clear_trial_paywall_cache(uid)
-                if is_paid_plan(new_subscription.plan):
-                    conversations_db.unlock_all_conversations(uid)
-                    memories_db.unlock_all_memories(uid)
-                    action_items_db.unlock_all_action_items(uid)
-                    clear_fair_use_on_upgrade(uid)
-                    if funded_processing_enabled(uid):
-                        from utils.processing_backlog import allowance_increased
-                        from utils.processing_backlog_worker import upgrade
-
-                        if allowance_increased(current_subscription, new_subscription):
-                            upgrade(
-                                uid,
-                                f'plan-change:{new_subscription.stripe_subscription_id}:{request.price_id}:{new_subscription.current_period_start}',
-                                intent_at=time.time(),
-                            )
+            new_subscription = _store_modified_subscription(
+                uid, request.price_id, current_subscription, updated_sub.to_dict()
+            )
 
             logger.info(f"Immediate plan change for user {uid}: {current_plan.value} -> {target_plan.value}")
 
@@ -994,6 +1126,45 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                     new_subscription.model_dump() if new_subscription else current_subscription.model_dump()
                 ),
                 "days_remaining": 0,
+                "schedule_id": None,
+            }
+
+        # Same plan, different interval during a Stripe trial: swap the price in place. A schedule
+        # ends the trial and bills the full current price at once (#23298). Only Stripe's status
+        # says trialing; the stored status never does. Every swap issues a new latest_invoice, so
+        # the key replays a retry of this change, never a later switch back.
+        trial_end = stripe_sub.get('trial_end')
+        if stripe_sub.get('status') == 'trialing' and trial_end:
+            modify_params = {
+                'items': [{'id': current_item_id, 'price': request.price_id}],
+                'proration_behavior': 'none',
+                'payment_behavior': 'error_if_incomplete',
+                'trial_end': trial_end,
+                'metadata': {'uid': uid, 'upgrade_type': f'{current_plan.value}_{target_interval}'},
+                'idempotency_key': (
+                    f"omi-trial-interval-{stripe_sub['id']}-{stripe_sub.get('latest_invoice')}"
+                    f"-{request.price_id}-{trial_end}"
+                ),
+            }
+            if resolved_promo_id:
+                modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
+
+            updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
+            new_subscription = _store_modified_subscription(
+                uid, request.price_id, current_subscription, updated_sub.to_dict()
+            )
+
+            logger.info(f"Trial interval change for user {uid}: {current_plan.value} -> {target_interval}")
+
+            remaining_days = max(0, (trial_end - int(time.time())) // 86400)
+            label = {'month': 'monthly', 'year': 'annual'}.get(target_interval, target_interval)
+            return {
+                "status": "success",
+                "message": f"Your free trial continues for {remaining_days} more days, then your {label} plan starts.",
+                "subscription": (
+                    new_subscription.model_dump() if new_subscription else current_subscription.model_dump()
+                ),
+                "days_remaining": remaining_days,
                 "schedule_id": None,
             }
 
@@ -1071,16 +1242,21 @@ def cancel_subscription_endpoint(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     subscription = users_db.get_user_subscription(uid)
+    if subscription.provider == 'play':
+        raise HTTPException(status_code=409, detail=play_stripe_guard.PLAY_MANAGED_DETAIL)
     if not subscription.stripe_subscription_id:
         raise HTTPException(status_code=400, detail="No active Stripe subscription found.")
-
-    # Store cancellation reason
-    if request.reason:
-        users_db.set_user_cancellation_feedback(uid, request.reason, request.reason_details)
 
     try:
         # First, check if the subscription is managed by a subscription schedule
         stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+        if prepaid_code_config.is_prepaid_subscription(stripe_sub):
+            # Cancelling would move its end to this month's end and lose the prepaid months.
+            raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
+
+        # Store cancellation reason (a refused cancel records nothing)
+        if request.reason:
+            users_db.set_user_cancellation_feedback(uid, request.reason, request.reason_details)
 
         # Look for active subscription schedules for this customer
         customer_id = stripe_sub.get('customer')
@@ -1137,6 +1313,132 @@ def cancel_subscription_endpoint(
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
 
 
+async def _schedule_payment_recovery_notification(
+    background_tasks: BackgroundTasks | None,
+    uid: str,
+    subscription_obj: Mapping,
+    previous_attributes: Mapping | None,
+    persisted_subscription: Subscription,
+    billing_owner_confirmed: bool,
+) -> None:
+    """Claim and schedule only after persistence; pre-claim failures remain webhook-retryable."""
+    if (
+        not payment_recovery_notification_enabled()
+        or not billing_owner_confirmed
+        or persisted_subscription.stripe_subscription_id != subscription_obj.get('id')
+        or not billing_recovery.payment_recovery_transition(subscription_obj, previous_attributes)
+    ):
+        return
+
+    latest_invoice = subscription_obj.get('latest_invoice')
+    invoice = latest_invoice if isinstance(latest_invoice, Mapping) else None
+    if invoice is None and isinstance(latest_invoice, str) and latest_invoice:
+        invoice = await run_blocking(stripe_executor, lambda: stripe.Invoice.retrieve(latest_invoice).to_dict())
+    invoice_id = invoice.get('id') if invoice is not None else None
+    if not isinstance(invoice_id, str) or not invoice_id.strip():
+        invoice_id = latest_invoice if isinstance(latest_invoice, str) else None
+    if not isinstance(invoice_id, str) or not invoice_id.strip():
+        raise ValueError('Payment recovery notification requires a current invoice id')
+    if not billing_recovery.payment_recovery_notification_eligible(uid, subscription_obj, previous_attributes, invoice):
+        return
+    claimed = await run_blocking(db_executor, claim_payment_recovery_notification, uid, invoice_id.strip())
+    if not claimed:
+        return
+
+    intent = NotificationIntent(
+        user_id=uid,
+        title=billing_recovery.PAYMENT_RECOVERY_NOTIFICATION_TITLE,
+        body=billing_recovery.PAYMENT_RECOVERY_NOTIFICATION_BODY,
+        source='stripe_subscription_recovery',
+        kind=NotificationKind.PAYMENT_RECOVERY,
+        data={'type': 'payment_issue', 'navigate_to': '/conversations'},
+    )
+    if background_tasks is not None:
+        background_tasks.add_task(dispatch_notification, intent)
+    else:
+        # Direct Python callers have no FastAPI response task container.
+        await dispatch_notification_async(intent)
+
+
+async def _schedule_trial_ending_notification(
+    background_tasks: BackgroundTasks | None, subscription_obj: Mapping
+) -> None:
+    """Remind a trialing reader before the first charge (`customer.subscription.trial_will_end`).
+
+    Only the account whose stored subscription is this one is reminded; a stale or foreign
+    subscription sends nothing. Pre-claim failures propagate so Stripe retries the event.
+    """
+    subscription_id = subscription_obj.get('id')
+    uid = (subscription_obj.get('metadata') or {}).get('uid')
+    if not uid or not isinstance(subscription_id, str):
+        return
+    stored = await run_blocking(db_executor, users_db.get_user_subscription, uid)
+    if stored is None or stored.stripe_subscription_id != subscription_id:
+        return
+    body = trial_reminder.trial_ending_reminder_body(uid, subscription_obj, int(time.time()))
+    if body is None:
+        return
+    claimed = await run_blocking(
+        db_executor, claim_trial_ending_notification, uid, subscription_id, int(subscription_obj['trial_end'])
+    )
+    if not claimed:
+        return
+    intent = NotificationIntent(
+        user_id=uid,
+        title=trial_reminder.TRIAL_ENDING_NOTIFICATION_TITLE,
+        body=body,
+        source='stripe_trial_will_end',
+        kind=NotificationKind.TRIAL_ENDING,
+        data={'type': 'trial_ending', 'navigate_to': '/settings'},
+    )
+    if background_tasks is not None:
+        background_tasks.add_task(dispatch_notification, intent)
+    else:
+        await dispatch_notification_async(intent)
+
+
+def _update_checkout_subscription_metadata(uid: str, session: dict) -> None:
+    """Converge account and optional order attribution from verified Stripe objects."""
+    subscription_id = session.get('subscription')
+    if not subscription_id:
+        return
+    stripe_sub = stripe.Subscription.retrieve(subscription_id)
+    subscription_obj = stripe_sub.to_dict() if stripe_sub else {}
+    promotion_ids = stripe_utils.checkout_promotion_code_ids(session)
+    if not promotion_ids and (subscription_obj.get('discounts') or subscription_obj.get('discount')):
+        # Legacy or non-expanded Checkout payloads can omit total_details. Discount IDs
+        # themselves are not resolvable, so ask Stripe for the authoritative expansion.
+        stripe_sub = stripe.Subscription.retrieve(subscription_id, expand=['discounts'])
+        subscription_obj = stripe_sub.to_dict() if stripe_sub else {}
+        promotion_ids = stripe_utils.subscription_promotion_code_ids(subscription_obj)
+    items = (subscription_obj.get('items') or {}).get('data') or []
+    price_id = items[0]['price']['id'] if items else None
+    sub_type = get_plan_type_from_price_id(price_id).value if price_id else 'unknown'
+
+    if len(promotion_ids) > 1:
+        logger.warning('Ignoring ambiguous Checkout promotion attribution')
+    promotion_id = promotion_ids[0] if len(promotion_ids) == 1 else None
+    attribution = {}
+    if promotion_id:
+        # The signed Session supplies only the discount reference. Fresh server-side
+        # retrieval is the sole authority for issuer-written provenance and code ID.
+        promotion = stripe.PromotionCode.retrieve(promotion_id, expand=['coupon'])
+        if promotion.get('id') == promotion_id:
+            attribution = stripe_utils.promotion_code_attribution(promotion)
+        else:
+            logger.warning('Ignoring mismatched Checkout promotion attribution')
+
+    metadata = {
+        **(subscription_obj.get('metadata') or {}),
+        'uid': uid,
+        'sub_type': sub_type,
+    }
+    if promotion_id:
+        metadata['redeemed_promotion_code_id'] = promotion_id
+    metadata = stripe_utils.merge_promotion_attribution(metadata, attribution)
+    stripe.Subscription.modify(subscription_id, metadata=metadata)
+
+
 @router.post('/v1/stripe/webhook', tags=['v1', 'stripe', 'webhook'], response_model=PaymentMutationResponse)
 async def stripe_webhook(
     request: Request, stripe_signature: str = Header(None), background_tasks: BackgroundTasks = None
@@ -1153,20 +1455,146 @@ async def stripe_webhook(
     async def run_db(function, *args, **kwargs):
         return await run_blocking(db_executor, function, *args, **kwargs)
 
-    return await dispatch_with_ledger(event, lambda: _handle_stripe_event(event, background_tasks), run_db)
+    result = await dispatch_with_ledger(event, lambda: _handle_stripe_event(event, background_tasks), run_db)
+    if background_tasks is not None:
+        background_tasks.tasks.insert(0, BackgroundTask(observe_verified_event, event))
+    else:
+        await observe_verified_event(event)
+    return result
+
+
+PLAY_CHECKOUT_REFUSED = 'Checkout refused: Google Play already bills this user.'
+
+
+async def _restore_paid_cancel_grace(invoice: dict, subscription_obj: dict) -> None:
+    """Grant the paid-through grace once a canceled subscription's latest invoice is paid late.
+
+    A dunning cancel projects Basic while the renewal invoice is still open; paying
+    that invoice afterwards (hosted invoice link, a settling bank debit) pays the
+    period, so the grace that the cancel withheld applies now. Only the user's
+    stored subscription for this same canceled subscription is changed.
+    """
+    now = int(time.time())
+    invoice_id = invoice.get('id')
+    if (
+        not invoice_id
+        or invoice.get('status', 'paid') != 'paid'
+        or not _cancel_grace_window_open(subscription_obj, now)
+        or _latest_invoice_id(subscription_obj) != invoice_id
+    ):
+        return
+    uid = (subscription_obj.get('metadata') or {}).get('uid')
+    if not uid:
+        customer_id = subscription_obj.get('customer')
+        user = (
+            await run_blocking(db_executor, users_db.get_user_by_stripe_customer_id, customer_id)
+            if customer_id
+            else None
+        )
+        uid = user.get('uid') if user else None
+    if not uid:
+        return
+    subscription_id = subscription_obj.get('id')
+    if await _deletion_webhook_blocks_entitlement(uid, subscription_id):
+        return
+    current = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+    if current is None or current.stripe_subscription_id != subscription_id or is_paid_plan(current.plan):
+        return
+    restored = _build_subscription_from_stripe_object(
+        subscription_obj, grant_cancel_grace=True, now=now, period_paid=True
+    )
+    if restored is None or not is_paid_plan(restored.plan):
+        return
+    try:
+        await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)
+        await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
+        await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
+        await run_blocking(db_executor, users_db.update_user_subscription, uid, restored.model_dump())
+    except FirestoreNotFound:
+        logger.warning(f"Stripe webhook: user {uid} not found in Firestore, skipping late-paid grace restore")
+        return
+    await run_blocking(db_executor, set_credits_invalidation_signal, uid)
+    logger.info(
+        f"Early-cancel paid-through grace for user {uid}: invoice {invoice_id} paid after cancel of sub "
+        f"{subscription_id}; keeping plan until period end."
+    )
+
+
+async def _end_unpaid_cancel_grace(event: dict) -> dict:
+    """End a paid-through grace whose period's invoice was voided or marked uncollectible.
+
+    Acts only when the invoice is the latest invoice of a canceled subscription
+    and that subscription is the user's stored paid subscription, so a voided
+    invoice that a live subscription superseded (e.g. the monthly switch voiding
+    the old yearly invoice) never changes entitlement.
+    """
+    invoice = event['data']['object']
+    invoice_id = invoice.get('id')
+    subscription_id = _invoice_subscription_id(invoice)
+    if not subscription_id or not invoice_id:
+        return {"status": "success"}
+    try:
+        subscription_obj = await run_blocking(stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id))
+    except stripe.error.InvalidRequestError as e:
+        if e.code == 'resource_missing':
+            return {"status": "success"}
+        raise
+    if subscription_obj.get('status') != 'canceled' or _latest_invoice_id(subscription_obj) != invoice_id:
+        return {"status": "success"}
+    metadata = subscription_obj.get('metadata') or {}
+    if metadata.get('app_id'):
+        return {"status": "success"}
+    uid = metadata.get('uid')
+    if not uid:
+        customer_id = subscription_obj.get('customer')
+        user = (
+            await run_blocking(db_executor, users_db.get_user_by_stripe_customer_id, customer_id)
+            if customer_id
+            else None
+        )
+        uid = user.get('uid') if user else None
+    if not uid:
+        return {"status": "success"}
+    if await _deletion_webhook_blocks_entitlement(uid, subscription_id):
+        return {"status": "success", "message": "Account deletion is in progress."}
+    current = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+    if (
+        current is None
+        or current.stripe_subscription_id != subscription_id
+        or current.status != SubscriptionStatus.active
+        or not is_paid_plan(current.plan)
+    ):
+        return {"status": "success"}
+    basic = project_subscription(subscription_obj, None, get_basic_plan_limits())
+    try:
+        await run_blocking(db_executor, users_db.update_user_subscription, uid, basic.model_dump())
+    except FirestoreNotFound:
+        logger.warning(f"Stripe webhook: user {uid} not found in Firestore, skipping {event['type']} grace end")
+        return {"status": "success"}
+    await run_blocking(db_executor, set_credits_invalidation_signal, uid)
+    logger.info(
+        f"Ended paid-through grace for user {uid}: {event['type']} for invoice {invoice_id} "
+        f"of canceled sub {subscription_id}."
+    )
+    return {"status": "success"}
 
 
 @fresh_reader
 async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | None = None):
+    if event['type'] == 'customer.subscription.trial_will_end':
+        await _schedule_trial_ending_notification(background_tasks, event['data']['object'])
+        return {"status": "success", "message": "Trial ending reminder handled."}
+
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
         client_reference_id = session.get('client_reference_id')
 
         # App payments for creators
-        if session.get('metadata', {}).get('app_id'):
+        session_metadata = session.get('metadata') or {}
+        if session_metadata.get('app_id'):
             logger.info(f"Payment completed for session: {session['id']}")
-            app_id = session['metadata']['app_id']
-            uid = session['client_reference_id']
+            app_id = session_metadata['app_id']
+            uid = session.get('client_reference_id')
             if not uid or len(uid) < 4:
                 raise HTTPException(status_code=400, detail="Invalid client")
             uid = uid[4:]
@@ -1191,9 +1619,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             await run_blocking(db_executor, paid_app, app_id, uid, current_period_end)
 
         # Regular user subscription - check for sub_type metadata or client_reference_id
-        elif client_reference_id or session.get('metadata', {}).get('sub_type'):
+        elif client_reference_id or session_metadata.get('sub_type'):
             # Get uid from client_reference_id or fallback to metadata
-            uid = client_reference_id or session.get('metadata', {}).get('uid')
+            uid = client_reference_id or session_metadata.get('uid')
 
             if not uid:
                 # It should not happen, ref id might be missing but never the metadata
@@ -1218,6 +1646,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             # An incomplete Basic row is not a completed paid checkout;
             # preserve the existing duplicate/replacement decision in pure code.
             existing_subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
+            if play_stripe_guard.live_play_row(existing_subscription) and session.get('subscription'):
+                await play_stripe_guard.refuse_stripe_for_play_subscriber(uid, session['subscription'])
+                return {"status": "success", "message": PLAY_CHECKOUT_REFUSED}
             checkout_decision = transition(
                 existing_subscription,
                 ResolvedStripeEvent(event['type'], session.get('subscription'), None, int(time.time())),
@@ -1225,6 +1656,15 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             if checkout_decision.outcome in ('duplicate_checkout', 'replacement_checkout'):
                 if checkout_decision.outcome == 'duplicate_checkout':
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
+                    # Code-bearing replays can converge optional provenance, but legacy
+                    # discount-free duplicate Checkouts must not gain a Stripe dependency.
+                    if stripe_utils.checkout_promotion_code_ids(session):
+                        try:
+                            await run_blocking(stripe_executor, _update_checkout_subscription_metadata, uid, session)
+                        except Exception:
+                            logger.warning(
+                                'Optional Checkout attribution update failed; continuing entitlement reconciliation'
+                            )
                     # The paid plan is already stored. Stripe retries this
                     # delivery when unlock raises. Do not acknowledge it until
                     # unlock and the idempotent fair-use clear both finish:
@@ -1249,7 +1689,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
 
             persisted = await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
             # A stored paid label with a missing, zero, or past period is Basic
             # on get_user_valid_subscription. Unlock only an open paid period.
             subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
@@ -1262,33 +1701,19 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                 if funded_processing_enabled(uid):
-                    from utils.processing_backlog import allowance_increased
-                    from utils.processing_backlog_worker import upgrade_async
+                    from utils.processing_backlog_worker import checkout_completed_async
 
-                    if allowance_increased(existing_subscription, subscription):
-                        await upgrade_async(uid, f'checkout:{session.get("id")}', intent_at=event.get("created"))
+                    await checkout_completed_async(uid, event, session, existing_subscription, subscription)
             if persisted is False and webhook_ledger_enabled():
                 return RetryableBillingSkip(status='success')
             subscription_id = session.get('subscription')
             if subscription_id:
                 try:
-                    price_id = None
-                    stripe_sub = await run_blocking(
-                        stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
-                    )
-                    if stripe_sub:
-                        subscription_obj = stripe_sub.to_dict()
-                        if subscription_obj and subscription_obj['items']['data']:
-                            price_id = subscription_obj['items']['data'][0]['price']['id']
-                    sub_type = get_plan_type_from_price_id(price_id).value if price_id else "unknown"
-                    await run_blocking(
-                        stripe_executor,
-                        lambda: stripe.Subscription.modify(
-                            subscription_id, metadata={"uid": uid, "sub_type": sub_type}
-                        ),
-                    )
-                except Exception as e:
-                    logger.error(f"Error updating subscription metadata: {e}")
+                    await run_blocking(stripe_executor, _update_checkout_subscription_metadata, uid, session)
+                except Exception:
+                    # Optional provenance and the pre-existing best-effort metadata write
+                    # must never become an entitlement or notification dependency.
+                    logger.warning('Optional Checkout attribution update failed; continuing entitlement reconciliation')
 
                 # Send paid notification if applicable
                 try:
@@ -1319,9 +1744,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
         record_subscription_event(
             stripe_event_type=event['type'],
             subscription_obj=subscription_obj,
-            previous_attributes=event.get('data', {}).get('previous_attributes'),
+            previous_attributes=(event.get('data') or {}).get('previous_attributes'),
         )
-        uid = subscription_obj.get('metadata', {}).get('uid')
+        uid = (subscription_obj.get('metadata') or {}).get('uid')
 
         if not uid:
             customer_id = subscription_obj.get('customer')
@@ -1336,10 +1761,24 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             if await _deletion_webhook_blocks_entitlement(uid, subscription_obj.get('id')):
                 return {"status": "success", "message": "Account deletion is in progress."}
             now = int(time.time())
+            period_paid = _cancel_grace_window_open(subscription_obj, now) and await run_blocking(
+                stripe_executor, _cancel_grace_period_paid, subscription_obj
+            )
             new_subscription = _build_subscription_from_stripe_object(
-                subscription_obj, grant_cancel_grace=True, now=now
+                subscription_obj, grant_cancel_grace=True, now=now, period_paid=period_paid
             )
             if new_subscription:
+                if (
+                    is_paid_plan(new_subscription.plan)
+                    and subscription_obj.get('status') in ('active', 'trialing', 'past_due')
+                    and play_stripe_guard.live_play_row(
+                        await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+                    )
+                ):
+                    await play_stripe_guard.refuse_stripe_for_play_subscriber(
+                        uid, subscription_obj['id'], subscription_obj
+                    )
+                    return {"status": "success", "message": PLAY_CHECKOUT_REFUSED}
                 # Resolve prior entitlement before reconciliation; emit only
                 # after the authoritative write so stale deletion is not churn.
                 billing_owner_confirmed = False
@@ -1452,6 +1891,14 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     await run_blocking(
                         db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                     )
+                    await _schedule_payment_recovery_notification(
+                        background_tasks,
+                        uid,
+                        subscription_obj,
+                        event.get('data', {}).get('previous_attributes'),
+                        new_subscription,
+                        billing_owner_confirmed,
+                    )
                     # Emit after the durable write; replacement adoption is
                     # reconciliation, not an incoming-event start or churn.
                     if 'billing_telemetry' in decision.effects:
@@ -1474,17 +1921,14 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                             ),
                         )
                     await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-                    await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                     if 'clear_fair_use' in decision.effects:
                         await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                     if funded_processing_enabled(uid) and not adopted_active_paid:
-                        from utils.processing_backlog import allowance_increased
-                        from utils.processing_backlog_worker import upgrade_async
+                        from utils.processing_backlog_worker import subscription_changed_async
 
-                        if allowance_increased(current_subscription, new_subscription):
-                            await upgrade_async(
-                                uid, f'subscription-upgrade:{event.get("id")}', intent_at=event.get("created")
-                            )
+                        await subscription_changed_async(
+                            uid, event, subscription_obj, current_subscription, new_subscription
+                        )
                     logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
                 except FirestoreNotFound:
                     logger.warning(
@@ -1494,8 +1938,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             else:
                 subscription_id = subscription_obj.get('id', 'unknown')
                 price_id = 'unknown'
-                if subscription_obj.get('items', {}).get('data'):
-                    price_id = subscription_obj['items']['data'][0].get('price', {}).get('id', 'unknown')
+                sub_items = (subscription_obj.get('items') or {}).get('data') or []
+                if sub_items and isinstance(sub_items, list) and isinstance(sub_items[0], dict):
+                    price_id = (sub_items[0].get('price') or {}).get('id', 'unknown')
                 logger.warning(
                     f"Stripe webhook: could not build subscription for user {uid}, "
                     f"subscription {subscription_id}, price {price_id} — unknown price ID"
@@ -1509,7 +1954,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
         'subscription_schedule.canceled',
     ]:
         schedule_obj = event['data']['object']
-        uid = schedule_obj.get('metadata', {}).get('uid')
+        uid = (schedule_obj.get('metadata') or {}).get('uid')
 
         if uid:
             if await _deletion_webhook_blocks_entitlement(uid, schedule_obj.get('subscription')):
@@ -1537,7 +1982,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                                 db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                             )
                             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-                            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                             if 'clear_fair_use' in decision.effects:
                                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                             logger.info(
@@ -1579,7 +2023,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                                 db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                             )
                             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-                            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                             logger.info(
                                 f"Subscription schedule canceled for user {uid}. Subscription: {subscription_id}"
                             )
@@ -1595,14 +2038,22 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     if webhook_ledger_enabled():
                         raise HTTPException(503, "Subscription schedule update must be retried") from None
 
+    if event['type'] in ('invoice.voided', 'invoice.marked_uncollectible'):
+        return await _end_unpaid_cancel_grace(event)
+
     if event['type'] in ['invoice.paid', 'invoice.payment_succeeded']:
         invoice = event['data']['object']
-        subscription_id = invoice.get('subscription')
+        subscription_id = _invoice_subscription_id(invoice)
         if subscription_id:
             try:
-                subscription = await run_blocking(
-                    stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
-                )
+                try:
+                    subscription = await run_blocking(
+                        stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
+                    )
+                except (stripe.error.APIConnectionError, stripe.error.RateLimitError, stripe.error.APIError) as error:
+                    # A transient read failure must be retried: a 200 here would drop a late
+                    # renewal payment (grace restore) or a paid app renewal for good.
+                    raise HTTPException(503, f"Invoice subscription read: {type(error).__name__}") from None
                 metadata = subscription.get('metadata') or {}
                 app_id = metadata.get('app_id')
                 uid = metadata.get('uid')
@@ -1611,6 +2062,16 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         return {"status": "success", "message": "Account deletion is in progress."}
                     await run_blocking(db_executor, paid_app, app_id, uid, subscription.get('current_period_end'))
                     logger.info(f"Paid app entitlement renewed for user {uid}. App: {app_id}")
+                if not app_id:
+                    try:
+                        await _restore_paid_cancel_grace(invoice, subscription)
+                    except Exception as error:
+                        raise HTTPException(503, f"Late-paid grace restore: {type(error).__name__}") from None
+                if metadata.get(monthly_switch.SUPERSEDED_INVOICE_KEY):  # a failed void of the yearly invoice: retry
+                    try:
+                        await run_blocking(stripe_executor, monthly_switch.void_superseded, subscription)
+                    except Exception as error:
+                        raise HTTPException(503, f"Monthly switch void retry: {type(error).__name__}") from None
             except HTTPException:
                 raise
             except Exception as e:
@@ -1841,9 +2302,26 @@ def stripe_cancel():
     """)
 
 
+def _customer_has_prepaid_subscription(customer_id: str) -> bool:
+    """Any subscription that can still bill and carries the prepaid marker, read from Stripe itself."""
+    subscriptions = stripe.Subscription.list(customer=customer_id, status='all', limit=20)
+    return any(
+        sub.get('status') not in stripe_utils.TERMINAL_SUBSCRIPTION_STATUSES
+        and prepaid_code_config.is_prepaid_subscription(sub)
+        for sub in subscriptions.data
+    )
+
+
 @router.post('/v1/payments/customer-portal', response_model=CustomerPortalSessionResponse)
 def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Create a Stripe Customer Portal session for managing payment methods and subscriptions."""
+    # Released clients open this URL as-is; a Play subscriber is sent to Google Play's subscription center.
+    current = users_db.get_user_subscription(uid)
+    if current.provider == 'play':
+        return {"url": play_billing_config.manage_subscription_url()}
+    # The portal could renew, switch or cancel a prepaid no-card plan; it ends on its own.
+    if current.prepaid:
+        raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
 
     customer_id = users_db.get_stripe_customer_id(uid)
 
@@ -1858,6 +2336,25 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
 
     if not customer_id:
         raise HTTPException(status_code=400, detail="No Stripe customer found. Please create a subscription first.")
+
+    # The stored row gets the prepaid marker only when the webhook lands; Stripe has it from creation.
+    # A live paid non-prepaid row cannot sit next to a prepaid plan (redeem refuses a live plan), so only
+    # a free, ended or unmarked row can be in that window and needs the Stripe read.
+    live_paid_row = (
+        is_paid_plan(current.plan)
+        and current.status == SubscriptionStatus.active
+        and (current.current_period_end or 0) >= int(time.time())
+    )
+    # Switch off and no prepaid marker on the row: nobody can be mid-redemption, so the portal is exactly
+    # as before the feature (no extra Stripe read, no new failure mode). Cohort or on turns the read back on.
+    if not live_paid_row and prepaid_code_config.mode() != 'off':
+        try:
+            has_prepaid = _customer_has_prepaid_subscription(customer_id)
+        except stripe.error.StripeError as error:
+            logger.error(f"Customer portal: could not read subscriptions for {uid}: {sanitize(str(error))}")
+            raise HTTPException(status_code=503, detail="Could not verify your subscription. Please try again.")
+        if has_prepaid:
+            raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
 
     return_url = urljoin(base_url, 'v1/payments/portal-return')
 

@@ -19,8 +19,8 @@ logger.info(f"OMI_API_KEY present: {'Yes' if os.getenv('OMI_API_KEY') else 'No'}
 logger.info(f"NOTION_CLIENT_ID present: {'Yes' if os.getenv('NOTION_CLIENT_ID') else 'No'}")
 logger.info(f"NOTION_CLIENT_SECRET present: {'Yes' if os.getenv('NOTION_CLIENT_SECRET') else 'No'}")
 
-from fastapi import FastAPI, Request, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn

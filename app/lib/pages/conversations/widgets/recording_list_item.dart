@@ -127,8 +127,9 @@ class RecordingListItem extends StatelessWidget {
   }
 }
 
-/// A pending recording's on-device status ("Waiting for charger") while the on-device flag is on;
-/// otherwise [fallback], the row's usual status line.
+/// A pending recording's on-device status (setup, transcribing, waiting to transcribe) while the
+/// on-device flag is on; otherwise [fallback], the row's usual status line. A charger wait is not
+/// shown here: Offline Sync names it.
 class _OnDeviceStatus extends StatelessWidget {
   const _OnDeviceStatus({required this.recording, required this.fallback});
 

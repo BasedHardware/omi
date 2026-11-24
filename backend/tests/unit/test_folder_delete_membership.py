@@ -6,12 +6,13 @@ import pytest
 
 from database import folders
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.conversations.fragment_visibility import is_relevance_discarded, is_user_curated
 
 
 @pytest.mark.parametrize('target', ['target', None])
 def test_rehome_uses_current_membership_and_preserves_other_fields(target):
     rows = {
-        ('conversations', 'still_source'): {'folder_id': 'source', 'title': 'Keep title', 'folder_user_set': True},
+        ('conversations', 'still_source'): {'folder_id': 'source', 'title': 'Keep title', 'folder_user_set': False},
         ('conversations', 'moved'): {'folder_id': 'chosen'},
         ('conversations', 'unfiled'): {'folder_id': None},
         ('conversations', 'legacy'): {'title': 'No folder'},
@@ -26,12 +27,32 @@ def test_rehome_uses_current_membership_and_preserves_other_fields(target):
     assert client.rows[('conversations', 'still_source')] == {
         'folder_id': target,
         'title': 'Keep title',
-        'folder_user_set': True,
+        'folder_user_set': False,
     }
     for name in ('moved', 'unfiled', 'legacy'):
         assert client.rows[('conversations', name)] == rows[('conversations', name)]
     assert ('conversations', 'gone') not in client.rows
     assert client.transactions[0].updates == [(('conversations', 'still_source'), {'folder_id': target})]
+
+
+@pytest.mark.parametrize('target', ['target', None])
+@pytest.mark.parametrize('user_set', [None, False, True], ids=['unset', 'false', 'true'])
+def test_rehome_preserves_discard_eligibility_and_existing_curation(target, user_set):
+    data = {
+        'folder_id': 'source',
+        'discarded': False,
+        'relevance_decision': {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'filler_only'},
+        **({'folder_user_set': user_set} if user_set is not None else {}),
+    }
+    client = StrictFirestore({('conversations', 'c'): data})
+
+    folders._rehome_folder_conversations(client, [client.document('conversations/c')], 'source', target)
+
+    rehomed = client.rows[('conversations', 'c')]
+    assert rehomed == {**data, 'folder_id': target}
+    assert is_user_curated(rehomed) is (user_set is True)
+    assert is_relevance_discarded(rehomed) is (user_set is not True)
+    assert client.transactions[0].updates == [(('conversations', 'c'), {'folder_id': target})]
 
 
 def test_rehome_materializes_all_reads_before_the_first_write(monkeypatch):

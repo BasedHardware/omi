@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-delete-refusal.png",
+      "platform": "mobile-ios",
+      "description": "The shared delete UI shows an error and restores the selected synthetic conversation after an HTTP 409 in the iOS simulator fixture.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

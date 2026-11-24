@@ -23,6 +23,7 @@ import time
 from dataclasses import fields
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config.batch_paid_attempt import retryable
 from utils.rollout_cohorts import configure_rollout_runtime
 import batch_pipeline_held_disposition as held
 from google.cloud import firestore, storage
@@ -58,6 +59,7 @@ from utils.batch_pipeline.recovery_disposition import (
 )
 from utils.batch_pipeline.speech_redrive import prepared_independent_one, redrive_one
 from utils.batch_pipeline import redrive_scope as scope
+from utils.batch_pipeline.refused_attestation import checked_proof, refused_candidate
 from utils.executors import storage_executor
 
 OPERATION = 'speech-empty-multilingual-paid-epoch-2-v1'
@@ -79,6 +81,7 @@ def paid_digest(
     max_seconds=None,
     usd_cap=None,
     ordinary_empty=False,
+    retry_failed=False,
 ):
     # The prepared take-over binds its scoped bound and spend cap into the plan
     # the approver signs; existing epochs keep their byte-stable digests.
@@ -105,6 +108,8 @@ def paid_digest(
         body['max_units'] = ORDINARY_EMPTY_MAX_UNITS
         body['max_total_decoded_audio_seconds'] = ORDINARY_EMPTY_MAX_DECODED_AUDIO_SECONDS
         body['duration_decode_tolerance_seconds'] = AUDIO_DURATION_TOLERANCE_SECONDS
+    if retry_failed:
+        body['max_attempts_per_unit'] = 2
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
@@ -117,6 +122,8 @@ def epoch1_failure(job):
 
 
 def eligible(job, after, cutoff, independent=False, repair=False, ordinary_empty=False):
+    marker = job.get('speech_redrive') or {}
+    retry = retryable(marker, marker.get('state'))
     if ordinary_empty:
         return (
             after <= job.get('quarantined_at', 0) <= cutoff
@@ -132,12 +139,20 @@ def eligible(job, after, cutoff, independent=False, repair=False, ordinary_empty
             after <= job.get('quarantined_at', 0) <= cutoff
             and job.get('state') == 'quarantined'
             and job.get('recovery_state') == 'failed_held'
-            and not job.get('speech_redrive')
+            and (not marker or retry and marker.get('paid_epoch') == REPAIR_EPOCH)
             and not job.get('silence_disposition')
             and words_repair_eligible(job)
         )
     if not independent:
-        return scope.eligible(job, after, cutoff)
+        return scope.eligible(job, after, cutoff) or (
+            retry
+            and marker.get('paid_epoch') == 2
+            and marker.get('provider') == 'modulate'
+            and after <= job.get('quarantined_at', 0) <= cutoff
+            and job.get('state') == 'quarantined'
+            and job.get('recovery_state') == 'failed_held'
+            and not job.get('silence_disposition')
+        )
     marker = job.get('speech_redrive') or {}
     return (
         after <= job.get('quarantined_at', 0) <= cutoff
@@ -146,7 +161,7 @@ def eligible(job, after, cutoff, independent=False, repair=False, ordinary_empty
         and independent_redrive(job)
         and not independent_attempted(job)
         and not job.get('silence_disposition')
-        and (not marker or replaceable_modulate_intent(job, marker))
+        and (not marker or replaceable_modulate_intent(job, marker) or retry and marker.get('provider') == 'soniox')
     )
 
 
@@ -160,17 +175,20 @@ def prepared_eligible(job, after, cutoff, max_seconds):
     #23795's duration-limit refusal settles without ever starting the intent.
     """
     recovery = job.get('recovery') or {}
+    retry = retryable(recovery, job.get('recovery_state'))
     return (
         after <= job.get('quarantined_at', 0) <= cutoff
         and job.get('state') == 'quarantined'
         and job.get('quarantine_reason') == 'worker_failed'
         and language_guarded(job)
-        and (job.get('recovery_state') == 'prepared' and not recovery.get('settled_at') or duration_limited(job))
+        and (
+            job.get('recovery_state') == 'prepared' and not recovery.get('settled_at') or duration_limited(job) or retry
+        )
         and recovery.get('epoch') == 1
         and bool(recovery.get('token'))
-        and not recovery.get('started_at')
-        and not recovery.get('recognizers')
-        and not independent_attempted(job)
+        and (retry or not recovery.get('started_at'))
+        and (retry or not recovery.get('recognizers'))
+        and (retry or not independent_attempted(job))
         and not job.get('result')
         and not job.get('speech_redrive')
         and not job.get('silence_disposition')
@@ -199,7 +217,10 @@ def fingerprint(job, independent=False, repair=False, prepared=False, ordinary_e
         return scope.digest(
             {
                 'unit': held.fingerprint({**job, 'recovery': None}),
-                'intent': {key: recovery.get(key) for key in ('token', 'epoch', 'privacy_generation', 'prepared_at')},
+                'intent': {
+                    **{key: recovery.get(key) for key in ('epoch', 'privacy_generation', 'prepared_at')},
+                    'token': recovery.get('original_token', recovery.get('token')),
+                },
                 'provider': 'soniox',
             }
         )
@@ -212,15 +233,15 @@ def fingerprint(job, independent=False, repair=False, prepared=False, ordinary_e
     return scope.digest({'unit': held.fingerprint(job), 'prior_paid_intent': previous, 'provider': 'soniox'})
 
 
-def prepared_budget(durations, usd_cap):
+def prepared_budget(durations, usd_cap, *, max_attempts=1):
     """Refuse a sealed plan whose closed cost estimate exceeds the granted cap."""
     total = sum(durations)
-    estimated = total / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
+    estimated = max_attempts * total / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
     require(math.isfinite(usd_cap) and estimated <= usd_cap, 'spend_cap_exceeded')
     return total, estimated
 
 
-def ordinary_empty_budget(durations):
+def ordinary_empty_budget(durations, *, max_attempts=1):
     """Conservatively bound decoded audio for an exact-ID ordinary-empty plan."""
     require(1 <= len(durations) <= ORDINARY_EMPTY_MAX_UNITS, 'ordinary_empty_unit_budget')
     require(
@@ -232,7 +253,7 @@ def ordinary_empty_budget(durations):
         (Decimal(n) if type(n) is int else Decimal.from_float(n) for n in durations),
         Decimal(0),
     )
-    max_decoded = exact_total + Decimal(str(AUDIO_DURATION_TOLERANCE_SECONDS)) * len(durations)
+    max_decoded = max_attempts * (exact_total + Decimal(str(AUDIO_DURATION_TOLERANCE_SECONDS)) * len(durations))
     require(
         max_decoded <= Decimal(str(ORDINARY_EMPTY_MAX_DECODED_AUDIO_SECONDS)),
         'ordinary_empty_audio_budget',
@@ -246,7 +267,11 @@ def checked_prepared(store, sid, uid, key, after, cutoff, max_seconds):
     def check(tx):
         job, binding = RecoveryStore(store).checked(tx, sid, allow_completed_recovery=True)
         require(binding.owner_id == uid and fingerprint(job, prepared=True) == key, 'cohort_changed')
-        if job.get('recovery_state') == 'prepared' or duration_limited(job):
+        if (
+            job.get('recovery_state') == 'prepared'
+            or duration_limited(job)
+            or retryable(job.get('recovery') or {}, job.get('recovery_state'))
+        ):
             require(prepared_eligible(job, after, cutoff, max_seconds), 'unit_not_eligible')
             ledger = tx.get('content', f'{uid}/{binding.content_id}')
             require(batch_ledger_owes_held_units(ledger), 'completed_ledger')
@@ -359,6 +384,76 @@ def inspect_unit(
     return 'speech' if spans else 'silent'
 
 
+def attestation_dry_run(args, uid, after, cutoff, ids, scope_spec):
+    """Plan only: no secrets, audio, paid dispatch, or database writes."""
+    require(not args.apply, 'attestation_apply_not_supported')
+    require(bool(args.zero_vendor_files_proof) and ids is not None, 'recorded_zero_files_proof_required')
+    require(args.prepared_independent or args.independent_language, 'attestation_route_required')
+    require(args.expect_count == args.expect_speech_count == len(ids), 'attestation_exact_count_required')
+    proof = scope.read_json(args.zero_vendor_files_proof)
+    window = checked_proof(proof, scope_spec)
+    proof_sha = scope.digest(proof)
+    sealed_scope = {**scope_spec, 'zero_vendor_files_proof_sha256': proof_sha}
+    client = firestore.Client(project='based-hardware')
+    store = FirestoreStore('batch_pipeline_prod', firestore_client=client)
+    units = []
+    for sid in ids:
+
+        def check(tx):
+            job, binding = RecoveryStore(store).checked(tx, sid)
+            result = tx.get('results', sid)
+            ledger = tx.get('content', f'{uid}/{binding.content_id}')
+            require(
+                binding.owner_id == uid and not result and job.get('lease_until', 0) <= time.time(),
+                'active_or_receipted',
+            )
+            require(batch_ledger_owes_held_units(ledger), 'completed_ledger')
+            return refused_candidate(
+                job,
+                prepared=args.prepared_independent,
+                after=after,
+                cutoff=cutoff,
+                max_seconds=args.max_seconds or 0,
+                window=window,
+            )
+
+        units.append([sid, held.readonly_run(store, check), 'speech'])
+    manifest = {'scope': sealed_scope, 'units': sorted(units)}
+    path = Path(args.cohort_file)
+    if path.exists():
+        require(scope.load(path, sealed_scope, len(ids)) == manifest, 'attested_cohort_changed')
+    else:
+        scope.write(path, manifest)
+    census = scope.digest(manifest)
+    require(not args.source_census_sha256 or args.source_census_sha256 == census, 'source_census_changed')
+    print(
+        json.dumps(
+            {
+                'mode': 'dry_run',
+                'operation': 'attest-refused-before-call-plan-v1',
+                'apply_supported': False,
+                'units': len(units),
+                'source_census_sha256': census,
+                'zero_vendor_files_proof_sha256': proof_sha,
+                'plan_sha256': scope.digest(
+                    {
+                        'manifest': census,
+                        'proof': proof_sha,
+                        'prepared': args.prepared_independent,
+                        'max_seconds': args.max_seconds,
+                        'usd_cap': args.usd_cap,
+                    }
+                ),
+                'paid_stt_calls': 0,
+                'firestore_writes': 0,
+                'audio_downloads': 0,
+                'requires_followup_apply_implementation': True,
+            },
+            sort_keys=True,
+        )
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--stage', choices=['prod'], required=True)
@@ -396,6 +491,12 @@ def main():
         help='Scoped per-unit bound for --prepared-independent; must exceed the runtime 60s',
     )
     parser.add_argument('--usd-cap', type=float, help='Total estimated spend cap for --prepared-independent')
+    parser.add_argument(
+        '--attest-refused-before-call', action='store_true', help='Read-only historical refusal plan; never applies'
+    )
+    parser.add_argument(
+        '--zero-vendor-files-proof', help='Recorded complete vendor usage proof for the exact scope and attempt window'
+    )
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--approve-plan-sha256')
     parser.add_argument('--apply-limit', type=int, default=1, help='Fixed speech prefix, replay is idempotent')
@@ -428,6 +529,8 @@ def main():
     require(not repair or bool(args.unit_ids_file), 'exact_repair_units_required')
     require(not ordinary_empty or bool(args.unit_ids_file), 'exact_ordinary_empty_units_required')
     require(not ordinary_empty or args.silent, 'ordinary_empty_requires_silent')
+    require(not args.zero_vendor_files_proof or args.attest_refused_before_call, 'attestation_flag_required')
+    require(not args.attest_refused_before_call or not args.apply, 'attestation_apply_not_supported')
     require(
         not ordinary_empty or 1 <= args.expect_count == args.expect_speech_count <= ORDINARY_EMPTY_MAX_UNITS,
         'ordinary_empty_unit_budget',
@@ -458,6 +561,9 @@ def main():
     require(0 < after <= cutoff, 'invalid_time_window')
     ids = scope.unit_ids(args.unit_ids_file)
     scope_spec = scope.scope_body(uid, 'batch_pipeline_prod', after, cutoff, args.silent, ids)
+    if args.attest_refused_before_call:
+        attestation_dry_run(args, uid, after, cutoff, ids, scope_spec)
+        return
     require(not args.apply or bool(args.source_census_sha256), 'source_census_required')
     require(not args.apply or Path(args.cohort_file).is_file(), 'cohort_file_required')
     server_flags = held.load_server_flags(args.server_flags_file)
@@ -559,6 +665,7 @@ def main():
         max_seconds=args.max_seconds,
         usd_cap=args.usd_cap,
         ordinary_empty=ordinary_empty,
+        retry_failed=True,
     )
     for sid, key, decision in units:
         if prepared:
@@ -601,12 +708,14 @@ def main():
     counts = Counter(decision for _, _, decision in units)
     require(counts['speech'] == args.expect_speech_count, 'speech_count_changed')
     ordinary_audio_seconds, ordinary_max_decoded_seconds = (
-        ordinary_empty_budget([durations[sid] for sid, _, decision in units if decision == 'speech'])
+        ordinary_empty_budget([durations[sid] for sid, _, decision in units if decision == 'speech'], max_attempts=2)
         if ordinary_empty
         else (None, None)
     )
     total_audio_seconds, estimated_usd_total = (
-        prepared_budget([durations[sid] for sid, _, decision in units if decision == 'speech'], args.usd_cap)
+        prepared_budget(
+            [durations[sid] for sid, _, decision in units if decision == 'speech'], args.usd_cap, max_attempts=2
+        )
         if prepared
         else (0, 0)
     )
@@ -643,7 +752,8 @@ def main():
         'unpinned_policy': 'server_flags' if server_flags else 'refuse',
         'source_census_sha256': census,
         'plan_sha256': digest,
-        'maximum_additional_paid_calls': counts['speech'],
+        'maximum_additional_paid_calls': 2 * counts['speech'],
+        'max_attempts_per_unit': 2,
         'paid_stt_calls': 0,
         'firestore_writes': 0,
     }
@@ -651,13 +761,14 @@ def main():
         output['max_audio_seconds_per_unit'] = MAX_AUDIO_SECONDS
     if args.independent_language:
         # Soniox rate; a repair's Modulate call is metered by its own allowance.
-        output['estimated_usd_per_unit_at_cap'] = MAX_AUDIO_SECONDS / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
+        output['estimated_usd_per_unit_at_cap'] = 2 * MAX_AUDIO_SECONDS / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
     if prepared:
         output['runtime_max_audio_seconds'] = MAX_AUDIO_SECONDS
         output['max_audio_seconds_per_unit'] = args.max_seconds
-        output['estimated_usd_per_unit_at_cap'] = args.max_seconds / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
+        output['estimated_usd_per_unit_at_cap'] = 2 * args.max_seconds / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
         output['total_audio_seconds'] = total_audio_seconds
         output['estimated_usd_total'] = estimated_usd_total
+        output['maximum_attempt_audio_seconds'] = 2 * total_audio_seconds
         output['usd_cap'] = args.usd_cap
     if ordinary_empty:
         output['max_units_per_plan'] = ORDINARY_EMPTY_MAX_UNITS
@@ -698,6 +809,7 @@ def main():
                     independent_language=args.independent_language,
                     repair=repair,
                     ordinary_empty_independent=ordinary_empty,
+                    retry_failed=True,
                 )
             outcomes[outcome] += 1
             if not scope.successful(outcome):

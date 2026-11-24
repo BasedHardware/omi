@@ -1,3 +1,12 @@
+// Realtime capture execution engine: socket streaming, STT/codec configuration,
+// permissions, geolocation, and recording-preserving recovery for live sessions.
+//
+// Async work that can outlive a session checks a generation token and effects cross the
+// explicit seams in capture_seams.dart, because stale callbacks after stop or
+// device/account switches were the recurring capture-corruption incidents. The
+// ownership reducer lives in capture_coordinator.dart; this controller executes
+// (OWNERSHIP.md).
+import 'package:omi/services/capture/capture_speaker_assignment.dart';
 import 'package:omi/models/voice_question_result.dart';
 import 'package:omi/services/capture/live_held_audio_state.dart';
 import 'package:omi/models/stt_provider.dart';
@@ -11,6 +20,7 @@ import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:omi/utils/analytics/analytics_manager.dart' show AnalyticsManager;
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -22,6 +32,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:omi/services/capture/capture_evidence_identity.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -34,11 +45,13 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_coordinator.dart';
+import 'package:omi/services/capture/capture_end.dart';
 import 'package:omi/services/capture/capture_liveness_watchdog.dart';
 import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_lifetime.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
+import 'package:omi/services/capture/device_mute_sync.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/native_batch_geolocation.dart';
@@ -54,10 +67,11 @@ import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/capture_continuity_monitor.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
+import 'package:omi/services/capture/capture_start_errors.dart';
+import 'package:omi/services/capture/finish_outcome.dart';
 import 'package:omi/services/capture/live_finalize_gate.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/capture/speaker_suggestions.dart';
-import 'package:omi/backend/schema/capture_committed_event.dart';
 import 'package:omi/services/experiments/client_refactor_flags.dart';
 import 'package:omi/services/capture/manual_live_labels.dart';
 import 'package:omi/services/services.dart';
@@ -71,6 +85,7 @@ import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/services/audio_sources/ble_device_source.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
+import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/native_ble_transport.dart';
@@ -94,6 +109,7 @@ import 'package:omi/backend/schema/message_event.dart'
         MessageEvent,
         MessageServiceStatusEvent,
         ConversationProcessingStartedEvent,
+        ConversationSessionEvent,
         ConversationEvent,
         LastConversationEvent,
         SpeakerLabelSuggestionEvent,
@@ -109,13 +125,15 @@ part 'capture_transcript_snapshot.dart';
 part 'capture_uplink_policy.dart';
 part 'capture_live_recovery.dart';
 part 'capture_continuity_watch.dart';
+part 'capture_phone_discard.dart';
 part 'capture_voice_questions.dart';
+part 'capture_conversation_custody.dart';
 
 enum _VoiceCommandTrigger { toggle, legacyLongPress }
 
 class CaptureController extends ChangeNotifier
-    with MessageNotifierMixin
-    implements ITransctiptSegmentSocketServiceListener {
+    with MessageNotifierMixin, CaptureSpeakerAssignment
+    implements ITransctiptSegmentSocketServiceListener, ListenCustodyReceiptListener {
   static const MethodChannel _nativeBleTranscriptChannel = MethodChannel('com.friend.ios/native_ble_transcript');
   static const int _maxInProgressConversationRefreshAttempts = 30;
   static const Duration _inProgressConversationRefreshInterval = Duration(seconds: 2);
@@ -141,6 +159,8 @@ class CaptureController extends ChangeNotifier
   final Future<bool> Function(String deviceId, int level)? _speakerHaptic;
   final Future<CreateConversationResponse?> Function()? _processInProgressConversationOverride;
   final Future<InProgressProcessOutcome> Function()? _processInProgressOutcomeOverride;
+  final InProgressConversationRequestSender? _processRequestSender;
+  final _PhoneDiscardState _phoneDiscard;
   final Future<DeviceConnection?> Function(String deviceId)? _deviceConnectionLoader;
   final Future<void> Function(String deviceId)? _pendantReconnectLoader;
 
@@ -148,6 +168,7 @@ class CaptureController extends ChangeNotifier
   /// device service's own answer in the production reconnect path.
   final bool Function(String deviceId)? _pendantReconnectBlocked;
   final ValueListenable<PhoneCallState>? _omiCallState;
+  int _callCaptureEpoch = 0;
   final CaptureNativeWriterGate _nativeWriterGate;
   final CaptureWedgeMonitor? _wedgeMonitorOverride;
   void Function(String deviceId, int byteCount)? _ingressByteObserver;
@@ -157,6 +178,8 @@ class CaptureController extends ChangeNotifier
   late final NativeBatchGeolocationPreferenceFence _phoneBatchGeolocationPreference =
       NativeBatchGeolocationPreferenceFence(writer: _writePhoneBatchGeolocationPreference);
   final RecordingLifecycleTelemetry _recordingTelemetry;
+  final Future<bool?> Function(String deviceId)? _deviceMuteReader;
+  final Future<void> Function(String deviceId, bool muted)? _deviceMuteWriter;
   int _captureExplanationGeneration = 0;
   int? _deliveredExplanationGeneration;
   int? _announcedNoConversationGeneration;
@@ -165,12 +188,24 @@ class CaptureController extends ChangeNotifier
   bool _mobileStandardBatchAllowed = false;
   bool _mobileBatchOwnsSocketAudio = false;
 
+  /// End-of-recording clock for pendant audio the batch lane journals. Fed by
+  /// the lane's VAD; reports through [captureEndReporter] when one is installed.
+  final CaptureEndDetector _captureEnd = CaptureEndDetector();
+  CaptureEndReporter? captureEndReporter;
+
+  void _reportCaptureEnd(CaptureEndSignal? signal) {
+    final reporter = captureEndReporter;
+    if (signal == null || reporter == null) return;
+    unawaited(reporter.report(signal));
+  }
+
   void installMobileStandardBatch(MobileStandardBatch lane) {
     if (_captureControllerDisposed) {
       unawaited(lane.close());
       return;
     }
     _mobileStandardBatch = lane;
+    lane.onSpeech = _captureEnd.speech;
     lane.authorize(_mobileStandardBatchAllowed, localPreview: _localPreview.admitted);
     lifetime.listenTo(lane.visibility, lane.visibilityChanged);
     lifetime.own(lane.close);
@@ -194,23 +229,17 @@ class CaptureController extends ChangeNotifier
     return !phone.isFrameDurable(positioned);
   }
 
-  /// Account change with no open socket: the WAL cleanup that follows drops
-  /// its in-memory tail, so frames this router kept off the socket are
-  /// written to the batch journal for the OLD owner (recovered and uploaded
-  /// through the ordinary sync path when that owner is back).
+  /// Account cleanup discards the WAL tail. Preserve suppressed, not-yet-durable
+  /// frames in the old owner's batch journal for later sync.
   bool _preserveSuppressedForAccountChange(List<HeldPendantFrame> frames) =>
-      _mobileStandardBatch?.preserveForOwner(
-        [for (final frame in frames) (frame.payload, frame.capturedAt ?? _now())],
-        codec: _localPreview.pendantCodec,
-        recordingSessionId: activeRecordingId,
-      ) ??
-      false;
+      _localPreview.preserveForAccountChange(frames, _mobileStandardBatch, activeRecordingId);
   LivePreviewController? get livePreview => _localPreview.preview;
   bool get localPreviewAdmitted => _localPreview.admitted;
 
   void installLivePreview(LivePreviewController preview) {
     if (_captureControllerDisposed) return preview.dispose();
     lifetime.own(_localPreview.install(preview, _deviceAudioListeners, _phoneMicAudioListeners));
+    lifetime.listenTo(preview, _checkLocalPreviewEngine);
   }
 
   final CaptureLivenessWatchdog _livenessWatchdog = CaptureLivenessWatchdog();
@@ -230,7 +259,9 @@ class CaptureController extends ChangeNotifier
     return _captureEvidenceIdentity.rootFor(sync, sync.captureEvidenceGeneration, _preferences.uid);
   }
 
+  @override
   CaptureExternalActions externalActions;
+  final Future<bool> Function(String, List<String>)? _excludeSpeaker;
   DeviceOnboardingProvider? deviceOnboardingProvider;
 
   // Cache refresh for backend-created persons
@@ -332,6 +363,14 @@ class CaptureController extends ChangeNotifier
   /// How long the custom STT endpoint has been unreachable, or null if it is
   /// not in use or is currently healthy.
   LocalSttFailure? _localSetupFailure;
+
+  /// The plan's cloud minutes are spent and this phone is transcribing the session live (S17).
+  bool _transcribingOnPhoneAtCap = false;
+  bool get transcribingOnPhoneAtCap => _transcribingOnPhoneAtCap;
+
+  /// This session's socket transcribes on the phone: the cap switch or a persisted on-device choice.
+  bool _transcribingOnPhone = false;
+  bool get transcribingOnPhone => _transcribingOnPhone;
   LocalSttFailure? get localSttFailure => customSttPollingSocket(_socket?.socket)?.localFailure ?? _localSetupFailure;
   Future<void> retryLocalTranscription() async {
     final polling = customSttPollingSocket(_socket?.socket);
@@ -388,6 +427,7 @@ class CaptureController extends ChangeNotifier
 
   CaptureController({
     CaptureExternalActions? externalActions,
+    Future<bool> Function(String, List<String>)? excludeSpeaker,
     ConversationLocationCapture? conversationLocationCapture,
     Future<void> Function()? inProgressConversationLoader,
     Future<BleAudioCodec> Function(String deviceId)? audioCodecLoader,
@@ -407,7 +447,12 @@ class CaptureController extends ChangeNotifier
     CaptureConversationSocketOpen? openSocket,
     CaptureSessionOwner? sessionOwner,
     Future<CreateConversationResponse?> Function()? processInProgressConversation,
+    Future<bool?> Function(String deviceId)? deviceMuteReader,
+    Future<void> Function(String deviceId, bool muted)? deviceMuteWriter,
     Future<InProgressProcessOutcome> Function()? processInProgressOutcome,
+    @visibleForTesting InProgressConversationRequestSender? processRequestSender,
+    Future<bool> Function(String conversationId)? deleteDiscardedConversation,
+    List<Duration> discardDeleteRetryDelays = const [Duration(seconds: 5), Duration(seconds: 30), Duration(minutes: 2)],
     Future<DeviceConnection?> Function(String deviceId)? deviceConnectionLoader,
     Future<void> Function(String deviceId)? pendantReconnect,
     bool Function(String deviceId)? pendantReconnectBlocked,
@@ -416,7 +461,8 @@ class CaptureController extends ChangeNotifier
     CaptureWedgeMonitor? captureWedgeMonitor,
     CalendarCaptureGapMonitor? calendarGapMonitor,
     MobileStandardBatch? mobileStandardBatch,
-  })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
+  })  : _excludeSpeaker = excludeSpeaker,
+        externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
         _inProgressConversationLoader = inProgressConversationLoader,
         _audioCodecLoader = audioCodecLoader,
@@ -436,6 +482,11 @@ class CaptureController extends ChangeNotifier
         _sessionOwner = sessionOwner,
         _processInProgressConversationOverride = processInProgressConversation,
         _processInProgressOutcomeOverride = processInProgressOutcome,
+        _processRequestSender = processRequestSender,
+        _phoneDiscard = _PhoneDiscardState(
+          retryDelays: discardDeleteRetryDelays,
+          deleteOverride: deleteDiscardedConversation,
+        ),
         _deviceConnectionLoader = deviceConnectionLoader,
         _pendantReconnectLoader = pendantReconnect,
         _pendantReconnectBlocked = pendantReconnectBlocked,
@@ -443,7 +494,9 @@ class CaptureController extends ChangeNotifier
         _nativeWriterGate = nativeWriterGate ?? const NoopCaptureNativeWriterGate(),
         _wedgeMonitorOverride = captureWedgeMonitor,
         _calendarGapMonitor = calendarGapMonitor,
-        _preferences = preferences ?? SharedPreferencesUtil() {
+        _preferences = preferences ?? SharedPreferencesUtil(),
+        _deviceMuteReader = deviceMuteReader,
+        _deviceMuteWriter = deviceMuteWriter {
     var retainedOnPhone = OnDeviceTranscriptionController.instance.shouldKeepAudioLocal;
     void onOverflowChanged() {
       final next = OnDeviceTranscriptionController.instance.shouldKeepAudioLocal;
@@ -456,6 +509,9 @@ class CaptureController extends ChangeNotifier
     lifetime.own(() => OnDeviceTranscriptionController.instance.removeListener(onOverflowChanged));
     if (mobileStandardBatch != null) installMobileStandardBatch(mobileStandardBatch);
     _isConnected = _connectivity.initiallyConnected;
+    // Local mute lives in capturePolicy (isPaused). On reconnect,
+    // streamDeviceRecording() reads the pendant over BLE (device wins) and
+    // falls back to this policy for firmware without the mute characteristic.
     lifetime.listen(_connectivity.changes, onConnectionStateChanged);
     final ble = _bleListeners ?? const BleBridgeCaptureListeners();
     final ingress = _ingressPort;
@@ -469,6 +525,7 @@ class CaptureController extends ChangeNotifier
         Logger.debug('[CaptureProvider] capture restore recovery failed: $e');
       }),
     );
+    unawaited(_resumeDiscardDeletes().catchError((Object e) => Logger.debug('discard delete resume failed: $e')));
     lifetime.own(() => _calendarGapMonitor?.dispose());
     if (calendarGapMonitor != null) {
       lifetime.listenTo(calendarGapMonitor.localMeetings, _syncCalendarGapTimer);
@@ -731,6 +788,10 @@ class CaptureController extends ChangeNotifier
   /// chat, people, usage). Only an actual change of the backing actions is a
   /// capture state change; re-notifying here would rebuild every capture
   /// listener, and DeviceProvider after it, on each chat token or list refresh.
+  /// Called from the proxy provider on every upstream notify (conversations,
+  /// chat, people, usage). Only an actual change of the backing actions is a
+  /// capture state change; re-notifying here would rebuild every capture
+  /// listener, and DeviceProvider after it, on each chat token or list refresh.
   void updateExternalActions(CaptureExternalActions? actions) {
     final next = actions ?? const NoopCaptureExternalActions();
     if (next == externalActions) return;
@@ -745,6 +806,7 @@ class CaptureController extends ChangeNotifier
   /// recording-device notification so an in-flight socket/BLE open that awaited a
   /// codec or resolver result cannot install transport across a same-id ABA.
   int _deviceIdentityRevision = 0;
+  LimitlessDeviceConnection? _limitlessAudioConnection;
 
   /// Depth of in-flight `reconnectActiveCaptureForTesting` probes. Nonzero only
   /// under explicit testing probes; while held, `updateRecordingDevice` may
@@ -764,6 +826,21 @@ class CaptureController extends ChangeNotifier
 
   ServerConversation? _conversation;
   DateTime? get liveTranscriptStartedAt => _conversation?.startedAt;
+
+  /// The conversation the server last closed on its own (quiet or boundary check), when, and the
+  /// preview's word count and session then. Finish right after it, with nothing heard since, opens
+  /// that conversation instead of finishing the new, empty one.
+  ({String id, DateTime at, int previewWords, int previewSession})? _lastServerClose;
+  ({String id, DateTime at, int previewWords, int previewSession})? get lastServerClose => _lastServerClose;
+
+  /// The preview's word count and session when the reader last tapped Finish: a repeat Finish with
+  /// no new words has nothing to process. Set by [noteClientFinish].
+  ({DateTime at, int previewWords, int previewSession})? lastClientFinish;
+  void noteClientFinish() =>
+      lastClientFinish = (at: DateTime.now(), previewWords: _previewWords, previewSession: _previewSession);
+  int get _previewWords => _localPreview.preview?.totalWordsSeen ?? 0;
+  int get _previewSession => _localPreview.preview?.sessionGeneration ?? 0;
+  @override
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
 
@@ -773,24 +850,57 @@ class CaptureController extends ChangeNotifier
   /// Used to scope WAL queries to only this session's audio.
   int _sessionStartSeconds = 0;
 
-  /// Conversation/WAL-window identity for the active live capture.
-  ///
-  /// Unlike a transcript segment ID, this does not change when the backend
-  /// revises or deletes segments during the capture. It is derived from
-  /// [_sessionStartSeconds], which [_resetStateVariables] clears on
-  /// conversation-created / force-process paths and at device-recording start.
-  /// Phone-mic stop/next-start keeps the previous value so a late
-  /// ConversationEvent can still stamp that session's WALs. Sequential
-  /// phone-mic live captures can therefore report the same id.
-  ///
-  /// Per-recording identity is [activeRecordingId] (and the native mic session
-  /// id). Downstream semantic controls must use that fresh identity, not this
-  /// getter, as the authoritative live capture session.
-  String? get activeCaptureSessionId => _sessionStartSeconds == 0 ? null : 'live-$_sessionStartSeconds';
+  /// A factual clock anchor plus a sequence: several conversations can close in one second.
+  /// This identifies a conversation window, while [activeRecordingId] identifies its source.
+  int _conversationWindowRevision = 0;
+  @override
+  String? get activeCaptureSessionId =>
+      _sessionStartSeconds == 0 ? null : 'live-$_sessionStartSeconds-$_conversationWindowRevision';
 
   /// Client-minted UUID shared by capture, `/v4/listen`, and the resulting
   /// conversation so the pipeline can be joined without timing heuristics.
   String? get activeRecordingId => _recordingTelemetry.recordingId;
+
+  /// Live segments received by this capture, excluding account-wide snapshot-only segments.
+  Iterable<String> get locallyReceivedSegmentIds =>
+      segments.map((segment) => segment.id).where(_segmentArrivals.containsKey);
+
+  ({String uid, String? recordingId, CaptureSessionToken? token})? _liveSocketIdentity;
+
+  bool get _canReuseTranscriptionSocket {
+    final socket = _socket;
+    return socket != null &&
+        socket.state == SocketServiceState.connected &&
+        (!socket.audioCustodyEnabled ||
+            socket.hasCurrentListenOwner(_preferences.uid) && socket.clientConversationId == activeRecordingId);
+  }
+
+  /// Recording provenance from this phone's active listen connection. A
+  /// per-user in-progress pointer or a nearby timestamp cannot prove it.
+  String? get verifiedLiveServerRecordingId {
+    final identity = _liveSocketIdentity;
+    final socket = _socket;
+    if (identity == null ||
+        socket == null ||
+        !socket.localPreview ||
+        identity.recordingId == null ||
+        identity.uid.isEmpty ||
+        identity.uid != _preferences.uid ||
+        identity.recordingId != activeRecordingId ||
+        !_captureSessionIsCurrent(identity.token) ||
+        socket.state != SocketServiceState.connected ||
+        socket.stoppedIntentionally ||
+        !socket.hasCurrentListenOwner(identity.uid) ||
+        socket.clientConversationId != identity.recordingId) {
+      return null;
+    }
+    // Listen rotates its own recording-session identifier on silence, even
+    // when the direct connection and its client capture identifier stay valid.
+    return socket.liveRecording?.recordingId;
+  }
+
+  /// Whether the capture has seen the server close this exact recording.
+  bool hasClosedServerRecording(String recordingId) => _closedServerRecordings.contains(recordingId);
 
   // Identifies a conversation boundary within a continuous recording. This is
   // presentation/action identity, not another capture authorization generation.
@@ -936,32 +1046,20 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  /// Preserved session start for auto-sync after socket-driven conversation completion.
-  /// Set before _resetStateVariables() clears _sessionStartSeconds, consumed on ConversationEvent.
-  int _pendingAutoSyncSessionStart = 0;
+  final Map<String, _ConversationClose> _pendingConversationCloses = {};
+  final Set<String> _seenConversationCloses = {};
+  final Set<String> _closedServerRecordings = {};
+  final Set<_ConversationClose> _admittedConversationCloses = {};
+  final Set<_ConversationClose> _pendingProcessCloses = {};
+  int _conversationCustodyEpoch = 0;
+  bool _lastPublishedSocketCustomStt = false;
 
-  /// Fallback timer that fires if ConversationEvent doesn't arrive within 30s.
-  Timer? _autoSyncFallbackTimer;
-
-  /// The conversation ID from ConversationProcessingStartedEvent, kept for fallback sync.
-  String? _pendingAutoSyncConversationId;
-
-  /// True when the just-finished session crossed a socket interruption. A
-  /// later transcript proves the repaired socket worked, but not that audio
-  /// from before the reconnect arrived, so its WAL must still drain.
-  bool _pendingAutoSyncNeedsRepair = false;
-
-  /// Future tracking the in-progress _finalizeAndStampSession(), so the next
-  /// coordinated transfer wake cannot run before the durable stamp is ready.
+  /// Only durable stamping is ordered here; confirmation/recovery runs outside the chain.
   Future<void>? _pendingFinalizeAndStamp;
 
   /// When each live segment of the open conversation last arrived, in phone seconds. The saved
   /// transcript counts from the server's start, so these anchor it to the phone's own clock.
   final Map<String, int> _segmentArrivals = {};
-
-  /// [_segmentArrivals] of each conversation whose processing started, by id, until its ConversationEvent
-  /// arrives. The next conversation can close before that event does, so each close keeps its own.
-  final Map<String, Map<String, int>> _closingSegmentArrivals = {};
 
   /// Set in onClosed() when the socket drops during active device recording.
   /// Consumed in _initiateWebsocket() to trigger onNetworkSocketReconnected()
@@ -1025,8 +1123,24 @@ class CaptureController extends ChangeNotifier
   int _segmentsPhotosVersion = 0;
   int get segmentsPhotosVersion => _segmentsPhotosVersion;
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
-  final Map<int, String> _manualSpeakerDefaults = {};
-  List<String> taggingSegmentIds = [];
+  final Map<Object, String> _manualSpeakerDefaults = {};
+  final Set<int> _excludedSpeakers = {};
+
+  /// Monotonic decision epoch: bumped on every in-progress refresh request
+  /// start, every snapshot install, and every exclusion acknowledgement.
+  /// Exclusions record the epoch at their acknowledgement and each REST
+  /// refresh records the epoch at its request start, so a refresh whose
+  /// request predates the exclusion (its stale payload may still carry the
+  /// old manual label) can never retire it: only a refresh that started
+  /// after the acknowledgement — and therefore saw the committed exclusion
+  /// server-side — may retire it.
+  int _snapshotEpoch = 0;
+  final Map<int, int> _excludedAtEpoch = {};
+
+  /// Decision epoch as of now; lets hermetic scenarios construct installs
+  /// whose request predates a given exclusion acknowledgement.
+  @visibleForTesting
+  int get debugSnapshotEpoch => _snapshotEpoch;
 
   bool hasTranscripts = false;
 
@@ -1054,6 +1168,8 @@ class CaptureController extends ChangeNotifier
   static const _captureSnapshotKey = 'captureCoordinatorSnapshot';
 
   CaptureCoordinator? _captureInstance;
+  Timer? _reconnectGraceTimer;
+  DateTime? _reconnectGraceDeadline;
   bool _captureControllerDisposed = false;
   bool _uplinkReconcileNeeded = false;
   bool _uplinkReconcileRunning = false;
@@ -1068,11 +1184,26 @@ class CaptureController extends ChangeNotifier
         if (!_captureControllerDisposed) {
           _syncCaptureHealthTimer(state);
           _syncCalendarGapTimer();
+          _syncReconnectGraceTimer(state);
           _reconcileTranscriptionKeepAlive();
           notifyListeners();
         }
       },
     );
+  }
+
+  void _syncReconnectGraceTimer(CaptureCoordinatorState state) {
+    final entry = state.pendantSuspension;
+    final deadline = entry?.reason == SuspendReason.reconnect ? entry?.reconnectDeadline : null;
+    if (deadline == _reconnectGraceDeadline && _reconnectGraceTimer?.isActive == true) return;
+    _reconnectGraceTimer?.cancel();
+    _reconnectGraceTimer = null;
+    _reconnectGraceDeadline = deadline;
+    if (deadline == null) return;
+    final delay = deadline.difference(_now());
+    _reconnectGraceTimer = lifetime.once(delay.isNegative ? Duration.zero : delay, () {
+      unawaited(_dispatchLogged(const ReconnectGraceElapsed()));
+    });
   }
 
   SuspendedCapture? get _pendantSuspension => _capture.stagedReadModel.pendantSuspension;
@@ -1109,18 +1240,23 @@ class CaptureController extends ChangeNotifier
 
   /// Completes when the last Process Now request has an answer.
   Future<void>? _processInFlight;
-  Future<CreateConversationResponse?>? _lastProcessRequest;
+  Future<InProgressProcessOutcome>? _lastProcessRequest;
   bool _firstCaptureProcess = false;
 
-  /// Finish through the coordinator and return that exact Process Now response.
-  /// Used by onboarding to avoid attributing an unrelated list refresh to this capture.
-  Future<CreateConversationResponse?> finishCaptureWithResult() async {
+  /// Finish through the coordinator and return that exact Process Now answer, with why it has no
+  /// conversation when it has none (transport, not found, empty). Throws [StateError] when this
+  /// finish made no request (a phone Transcribe Later recording).
+  Future<InProgressProcessOutcome> finishCaptureWithOutcome({String? liveConversationId}) async {
     _lastProcessRequest = null;
     _firstCaptureProcess = true;
     try {
-      await finishCapture();
+      if (liveConversationId == null) {
+        await finishCapture();
+      } else {
+        await _requestFinish(FinishRequested(liveConversationId: liveConversationId));
+      }
       final request = _lastProcessRequest;
-      if (request == null) throw StateError('capture did not request live processing');
+      if (request == null) throw FinishMadeNoRequest();
       return await request;
     } finally {
       _firstCaptureProcess = false;
@@ -1222,7 +1358,8 @@ class CaptureController extends ChangeNotifier
   Future<void> _setIngressAuthorized(bool authorized) async {
     final port = _ingressPort;
     if (port == null) return;
-    final target = authorized && _recordingDevice?.type == DeviceType.omi ? _recordingDevice!.id : null;
+    final target =
+        authorized && !_omiCallActive && _recordingDevice?.type == DeviceType.omi ? _recordingDevice!.id : null;
     final previous = _ingressDeviceId;
     if (previous != null && previous != target) {
       if (port.supportsIngressHealth) await port.setCaptureAuthorized(previous, false);
@@ -1232,6 +1369,11 @@ class CaptureController extends ChangeNotifier
     _ingressDeviceId = target;
     if (target != null && port.supportsIngressHealth) {
       await port.setCaptureAuthorized(target, true);
+      if (_omiCallActive || _ingressDeviceId != target) {
+        await port.setCaptureAuthorized(target, false);
+        _wedgeMonitor.setNativeIngressOwner(target, false);
+        return;
+      }
       _wedgeMonitor.setNativeIngressOwner(target, true);
     }
     if (target != null && !port.supportsIngressHealth) _onIngressHealthChanged();
@@ -1307,6 +1449,7 @@ class CaptureController extends ChangeNotifier
   bool _deviceIdentityStale(int? revision) => revision != null && _deviceIdentityRevision != revision;
 
   void _rollCaptureSession(String identity) {
+    _liveSocketIdentity = null;
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
     _localPreview.end(send: _openSocketSender);
@@ -1360,7 +1503,7 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  void updateRecordingDevice(BtDevice? device) {
+  void updateRecordingDevice(BtDevice? device, {String? reconnectDeviceId}) {
     if (_captureControllerDisposed) return;
     _deviceIdentityRevision++;
     if (_testingReconnectProbeDepth > 0 &&
@@ -1371,10 +1514,10 @@ class CaptureController extends ChangeNotifier
     _recordingDevice = _recordingDevicePreservingNormalizedType(device);
     _syncContinuityWatch();
     notifyListeners();
-    unawaited(_dispatchLogged(DeviceUpdated(device)));
+    unawaited(_dispatchLogged(DeviceUpdated(device, reconnectDeviceId: reconnectDeviceId)));
   }
 
-  Future _resetStateVariables() async {
+  Future _resetStateVariables({bool rearmLive = false}) async {
     _systemSurfaceConversationRevision++;
     _stopInProgressConversationRefresh();
     segments = [];
@@ -1383,10 +1526,12 @@ class CaptureController extends ChangeNotifier
     hasTranscripts = false;
     suggestionsBySegmentId = {};
     _manualSpeakerDefaults.clear();
+    _excludedSpeakers.clear();
     _conversation = null;
     taggingSegmentIds = [];
     liveHeldAudio.reset();
-    _sessionStartSeconds = 0;
+    _sessionStartSeconds = rearmLive ? _nowSeconds : 0;
+    _conversationWindowRevision++;
     _endOfflineSession();
     notifyListeners();
   }
@@ -1530,6 +1675,7 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _transcriptionSettingsChangedBody() async {
     Logger.debug("Transcription settings changed, refreshing socket connection...");
+    _refreshLimitlessCustomLiveWatch();
     await _reconcileNativeBackgroundStreamingPolicy();
 
     final device = _recordingDevice;
@@ -1779,6 +1925,8 @@ class CaptureController extends ChangeNotifier
 
     LocalSttCustody.selectedLocalRoute =
         decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
+    _transcribingOnPhoneAtCap = decision.path == SttResolvedPath.onDevice;
+    _transcribingOnPhone = !decision.blockSocket && decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
     _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
         ? LocalSttFailure(
             FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
@@ -1823,7 +1971,7 @@ class CaptureController extends ChangeNotifier
     final refusal = allowed
         ? _localPreviewRefusal(codec, customStt: effectiveConfig != null)
         : LocalPreviewClientRefusal.killSwitch;
-    final localPreview = _localPreview.preview != null && refusal == null;
+    final localPreview = _localPreview.preview != null && refusal == null && !_localPreview.engineUnavailableForCapture;
     if (refusal != null) _localPreview.preview?.clientRefused(refusal.wireName, midSession: false);
     _localPreview.language = language;
 
@@ -1867,7 +2015,10 @@ class CaptureController extends ChangeNotifier
       return;
     }
     if (!identical(_socket, socket)) {
+      _socket?.unsubscribe(this);
       _socket = socket;
+      _liveSocketIdentity = (uid: _preferences.uid, recordingId: activeRecordingId, token: sessionToken);
+      _lastPublishedSocketCustomStt = socket.customSttMode;
       _localPreview.socketPublished(declared: socket.localPreview, send: _sendPendantToSocket);
       _socket?.subscribe(this, this);
       _transcriptServiceReady = true;
@@ -2152,7 +2303,15 @@ class CaptureController extends ChangeNotifier
         Logger.debug("Double tap: processing conversation");
         PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
         HapticFeedback.lightImpact(); // The tap's only feedback on the phone until the processing row.
-        forceProcessingCurrentConversation();
+        unawaited(
+          forceProcessingCurrentConversation(manualFinish: true).catchError(
+            (Object error, StackTrace stack) => _reportDetachedCaptureError(
+              'capture_process_now',
+              error,
+              stack,
+            ),
+          ),
+        );
       }
       return;
     }
@@ -2214,14 +2373,18 @@ class CaptureController extends ChangeNotifier
 
   Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec, {int? deviceRevision}) async {
     final revision = _preferences.capturePolicy.revision;
-    if (!_admitsCapture(revision)) return false;
+    if (!_admitsCapture(revision) || _omiCallActive || _deviceIdentityStale(deviceRevision)) return false;
     Logger.debug('streamAudioToWs in capture_provider');
-    _startMetricsTracking();
     _localPreview.pendantCodec = codec;
     final subscription = await _getBleAudioBytesListener(
       deviceId,
       onAudioBytesReceived: (List<int> value) {
-        if (_captureControllerDisposed || !_admitsCapture(revision) || _recordingDevice?.id != deviceId) return;
+        if (_captureControllerDisposed ||
+            !_admitsCapture(revision) ||
+            _omiCallActive ||
+            _recordingDevice?.id != deviceId) {
+          return;
+        }
         final snapshot = List<int>.from(value);
         if (snapshot.isEmpty || snapshot.length < 3) return;
         _deviceAudioListeners.emit(snapshot, deviceAudioTap);
@@ -2271,7 +2434,12 @@ class CaptureController extends ChangeNotifier
                 _recordingDevice?.type != DeviceType.omi,
             geolocation: _sessionGeolocation,
             recordingSessionId: activeRecordingId,
+            deviceId: deviceId,
+            packetCounter: snapshot[0] | (snapshot[1] << 8),
+            fragmentIndex: snapshot[2],
           );
+          // No wall timer: the silence end is checked as packets arrive.
+          if (batched) _reportCaptureEnd(_captureEnd.packet(activeRecordingId, DateTime.now()));
           if (batched != _mobileBatchOwnsSocketAudio) {
             _mobileBatchOwnsSocketAudio = batched;
             final handle = _wedgeSession?.handle;
@@ -2318,13 +2486,15 @@ class CaptureController extends ChangeNotifier
         }
       },
     );
-    if (!_admitsCapture(revision) || _deviceIdentityStale(deviceRevision)) {
+    if (!_admitsCapture(revision) || _omiCallActive || _deviceIdentityStale(deviceRevision)) {
       await subscription?.cancel();
       return false;
     }
+    if (subscription == null) return false;
+    _startMetricsTracking();
     _bleBytesStream = lifetime.takeSubscription(_bleBytesStream, subscription);
     notifyListeners();
-    return subscription != null;
+    return true;
   }
 
   LocalPreviewClientRefusal? _localPreviewRefusal(BleAudioCodec codec, {required bool customStt}) =>
@@ -2349,6 +2519,12 @@ class CaptureController extends ChangeNotifier
     _localPreview.refuseForSocket(send: _sendPendantToSocket);
     _mobileStandardBatch?.dropLocalPreview();
   }
+
+  void _checkLocalPreviewEngine() => _localPreview.refuseUnavailableEngine(
+      sendControl: (reason) =>
+          _socket?.sendText(jsonEncode({'type': 'local_preview_engine_unavailable', 'reason': reason.wireName})),
+      send: _sendPendantToSocket,
+      dropLocalPreview: () => _mobileStandardBatch?.dropLocalPreview());
 
   /// The pendant sender while a transcription socket is still connected.
   void Function(HeldPendantFrame frame)? get _openSocketSender =>
@@ -2376,14 +2552,16 @@ class CaptureController extends ChangeNotifier
     Logger.debug('resetState');
     await _cleanupCurrentState();
     final staged = _capture.stagedReadModel;
-    if (_pendantSuspension != null || staged.phoneOwnsCapture || staged.callActive) {
+    if (_pendantSuspension != null || staged.phoneOwnsCapture || staged.callActive || _omiCallActive) {
       notifyListeners();
       return;
     }
 
     // Always try to stream audio if a device is present
     await _ensureDeviceSocketConnection();
+    if (_omiCallActive) return;
     await _initiateDeviceAudioStreaming();
+    if (_omiCallActive) return;
 
     // Additionally, stream photos if the device supports it
     if (_recordingDevice != null) {
@@ -2437,7 +2615,7 @@ class CaptureController extends ChangeNotifier
       return Future.value(null);
     }
     if (_fenceUplinkForSync()) return null;
-    return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
+    return await connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
   }
 
   Future<StreamSubscription?> _getBleButtonListener(
@@ -2455,7 +2633,12 @@ class CaptureController extends ChangeNotifier
     final device = _recordingDevice;
     final staged = _capture.stagedReadModel;
     final pendantStreamPhase = staged.phase == CapturePhase.pendantLive || staged.phase == CapturePhase.pendantPaused;
-    if (isPaused || device == null || _pendantSuspension != null || staged.callActive || !pendantStreamPhase) {
+    if (isPaused ||
+        device == null ||
+        _pendantSuspension != null ||
+        staged.callActive ||
+        _omiCallActive ||
+        !pendantStreamPhase) {
       return;
     }
     final deviceRevision = _deviceIdentityRevision;
@@ -2474,6 +2657,8 @@ class CaptureController extends ChangeNotifier
     if (_deviceIdentityStale(deviceRevision)) return;
     LocalSttCustody.selectedLocalRoute =
         decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
+    _transcribingOnPhoneAtCap = decision.path == SttResolvedPath.onDevice;
+    _transcribingOnPhone = !decision.blockSocket && decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
     _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
         ? LocalSttFailure(
             FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
@@ -2488,7 +2673,7 @@ class CaptureController extends ChangeNotifier
 
     if (language != _socket?.language ||
         codec != _socket?.codec ||
-        _socket?.state != SocketServiceState.connected ||
+        !_canReuseTranscriptionSocket ||
         _socket?.sttConfigId != sttConfigId ||
         _sessionGeolocationDiffersFromSocket()) {
       await _initiateWebsocket(audioCodec: codec, force: true, source: _getConversationSourceFromDevice());
@@ -2499,7 +2684,7 @@ class CaptureController extends ChangeNotifier
     if (_fenceUplinkForSync()) return;
     final device = _recordingDevice;
     final staged = _capture.stagedReadModel;
-    if (device == null || _pendantSuspension != null || !staged.pendantOwns || staged.callActive) {
+    if (device == null || _pendantSuspension != null || !staged.pendantOwns || staged.callActive || _omiCallActive) {
       return;
     }
     final deviceId = device.id;
@@ -2518,6 +2703,7 @@ class CaptureController extends ChangeNotifier
       return;
     }
     await _wal.getSyncs().phone.configureDeviceAudio(codec, deviceId, device);
+    if (_deviceIdentityStale(deviceRevision) || _omiCallActive) return;
     await _saveNativeBleStreamConfig(device, codec);
     if (_deviceIdentityStale(deviceRevision) || !_capture.stagedReadModel.pendantOwns) return;
     await _setIngressAuthorized(!_preferences.capturePolicy.muted);
@@ -2553,6 +2739,9 @@ class CaptureController extends ChangeNotifier
     }
     if (foregroundAudioReady) {
       await _preferences.saveBool('nativeBleForegroundReady', true);
+    } else {
+      Logger.debug('[_initiateDeviceAudioStreaming] streamAudioToWs returned false for device $deviceId');
+      return;
     }
 
     // Update state (limitless is excluded: the pendant records on-device, so the
@@ -2565,9 +2754,89 @@ class CaptureController extends ChangeNotifier
     }
     if (_deviceIdentityStale(deviceRevision)) return;
     updateRecordingState(isPaused ? RecordingState.pause : RecordingState.deviceRecord);
+    if (connection is LimitlessDeviceConnection && connection.supportsCustomLiveRecovery) {
+      _limitlessAudioConnection = connection;
+      _refreshLimitlessCustomLiveWatch();
+    }
     _armUplinkSilence();
     notifyListeners();
   }
+
+  void _stopLimitlessCustomLiveWatch() {
+    _limitlessAudioConnection?.stopCustomLiveAudioWatch();
+    _limitlessAudioConnection = null;
+  }
+
+  void _refreshLimitlessCustomLiveWatch() {
+    final connection = _limitlessAudioConnection;
+    if (connection == null) return;
+    final device = _recordingDevice;
+    final session = _capture.stagedReadModel.state.active;
+    final recordingId = session?.recordingId;
+    final accountId = session?.accountId;
+    final captureRevision = _preferences.capturePolicy.revision;
+    final config = _preferences.customSttConfig;
+    if (device == null ||
+        session == null ||
+        recordingId == null ||
+        accountId == null ||
+        accountId.isEmpty ||
+        !config.isEnabled ||
+        config.provider != SttProvider.customLive) {
+      connection.stopCustomLiveAudioWatch();
+      return;
+    }
+    final configId = config.sttConfigId;
+
+    bool isCurrent() {
+      final capture = _capture.stagedReadModel;
+      final currentSession = capture.state.active;
+      // DeviceProvider publishes normalized metadata after starting capture.
+      // Use the admitted recording and link, which survive that refresh.
+      if (_captureControllerDisposed ||
+          !identical(_limitlessAudioConnection, connection) ||
+          !_admitsCapture(captureRevision) ||
+          !_auth.isSignedIn() ||
+          _preferences.uid != accountId ||
+          _recordingDevice?.id != device.id ||
+          currentSession?.sessionKey != session.sessionKey ||
+          currentSession?.recordingId != recordingId ||
+          activeRecordingId != recordingId ||
+          _bleBytesStream == null ||
+          _omiCallActive ||
+          _pendantSuspension != null ||
+          capture.phase != CapturePhase.pendantLive ||
+          _preferences.batchModeEnabled) {
+        return false;
+      }
+      return _preferences.customSttConfig.sttConfigId == configId;
+    }
+
+    if (!isCurrent()) {
+      connection.stopCustomLiveAudioWatch();
+      return;
+    }
+    _recordingTelemetry.observeCustomLiveAudioEligibility();
+    if (_customLiveAudioRecoveryKilled) {
+      connection.stopCustomLiveAudioWatch();
+      _recordingTelemetry.observeCustomLiveAudioDetection(enabled: false);
+      return;
+    }
+    connection.watchCustomLiveAudio(
+      captureIsCurrent: () => isCurrent() && !_customLiveAudioRecoveryKilled,
+      onEnabled: () => _recordingTelemetry.observeCustomLiveAudioDetection(enabled: true),
+      report: (outcome) {
+        if (activeRecordingId == recordingId) {
+          _recordingTelemetry.observeCustomLiveAudioStall(outcome);
+        }
+      },
+    );
+  }
+
+  // DeviceService's saved-reconnect policy already refreshes the shared flag cache.
+  bool get _customLiveAudioRecoveryKilled =>
+      !customLiveCaptureFixEnabled ||
+      AnalyticsManager().isBooleanFeatureEnabledCached('android-custom-live-audio-recovery-kill');
 
   Future<void> _saveNativeBleStreamConfig(BtDevice device, BleAudioCodec codec) async {
     final audioTarget = _nativeBleAudioTarget(device);
@@ -2794,6 +3063,12 @@ class CaptureController extends ChangeNotifier
   }
 
   void clearUserData() {
+    _retireConversationClosures(accountChanged: true);
+    _sessionStartSeconds = 0;
+    _conversationWindowRevision++;
+    _segmentArrivals.clear();
+    _liveSocketIdentity = null;
+    if (_captureInstance != null) unawaited(_dispatchLogged(const CaptureIdentityChanged()));
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
     _localPreview.end(send: _openSocketSender, preserveForAccountChange: _preserveSuppressedForAccountChange);
@@ -2805,6 +3080,7 @@ class CaptureController extends ChangeNotifier
     _terminalTranscriptionFailure = null;
     suggestionsBySegmentId = {};
     _manualSpeakerDefaults.clear();
+    _excludedSpeakers.clear();
     taggingSegmentIds = [];
     notifyListeners();
   }
@@ -2865,9 +3141,13 @@ class CaptureController extends ChangeNotifier
 
   @override
   void dispose() {
+    _stopLimitlessCustomLiveWatch();
     _clearIngressByteObserver();
     _uplinkSilence.cancel();
     _captureControllerDisposed = true;
+    _retireConversationClosures(accountChanged: false);
+    _reconnectGraceTimer?.cancel();
+    _reconnectGraceTimer = null;
     _captureHealthTimer?.cancel();
     _captureHealthTimer = null;
     _calendarGapTimer?.cancel();
@@ -2976,10 +3256,17 @@ class CaptureController extends ChangeNotifier
     }
   }
 
+  /// Set when the last phone start was refused because the microphone permission is denied.
+  bool _phoneStartMicDenied = false;
+
+  /// Throws [MicPermissionDenied] when the microphone is blocked, so the record button can say so
+  /// and offer Open Settings instead of a generic error (ux-contract §15, §17.8).
   streamRecording({bool resumeCapture = true}) async {
+    _phoneStartMicDenied = false;
     final outcome = await _capture.dispatch(PhoneStartRequested(resumePolicy: resumeCapture));
     outcome.throwIfFailed();
     if (outcome.result != true) {
+      if (_phoneStartMicDenied) throw MicPermissionDenied();
       throw StateError('phone recording start refused');
     }
   }
@@ -3012,6 +3299,7 @@ class CaptureController extends ChangeNotifier
     _prefetchedMicPermission = false;
     if (!micPermissionGranted) {
       Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic');
+      _phoneStartMicDenied = true;
       await _setCaptureForegroundRequired(false);
       _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
@@ -3119,11 +3407,19 @@ class CaptureController extends ChangeNotifier
     _phoneMic.stop();
     await _wal.getSyncs().phone.finalizeCurrentSession();
     updateRecordingState(RecordingState.stop);
-    await _socket?.stop(reason: 'stop stream recording');
+    await _socket?.stop(reason: 'stop stream recording', userStop: reason == 'user_stopped');
     _recordingTelemetry.complete(reason: reason);
     await _clearPhoneRestoreMarker();
     return true;
   }
+
+  /// Undo on Home's recording bar: end the phone's live recording and keep nothing of it; see
+  /// [_CapturePhoneDiscard]. Returns false when there was no live phone recording to discard.
+  Future<bool> discardPhoneRecording() => _discardPhoneRecording();
+
+  /// Discarded recordings whose server delete is running now; tests await it.
+  @visibleForTesting
+  Future<void> get pendingDiscardDeletes => Future.wait(_phoneDiscard.deletes.toList());
 
   Future<bool> _stopPhoneBatchBody({required String reason}) async {
     await _setCaptureForegroundRequired(false);
@@ -3153,8 +3449,10 @@ class CaptureController extends ChangeNotifier
   /// Finish the live capture: the one stop for the live page and the Home button. A phone
   /// recording is stopped and processed before a pendant it took over from resumes, so the
   /// processing request reaches the phone's conversation, not the pendant's next one.
-  Future<void> finishCapture() async {
-    final outcome = await _capture.dispatch(const FinishRequested());
+  Future<void> finishCapture() => _requestFinish(const FinishRequested());
+
+  Future<void> _requestFinish(FinishRequested event) async {
+    final outcome = await _capture.dispatch(event);
     outcome.throwIfFailed();
   }
 
@@ -3209,6 +3507,19 @@ class CaptureController extends ChangeNotifier
   }
 
   void _onOmiCallStateChanged() {
+    if (!_captureControllerDisposed && _omiCallActive) _callCaptureEpoch++;
+    final debt = _captureInstance?.readModel.pendantSuspension;
+    final reconnecting = debt?.reason == SuspendReason.reconnect || debt?.reconnectResumePending == true;
+    if (!_captureControllerDisposed &&
+        reconnecting &&
+        _omiCallActive &&
+        (_captureInstance?.stagedReadModel.pendantOwns ?? false)) {
+      // A queued call event cannot interrupt an awaited codec/socket/setup
+      // operation. Retire its physical tokens before that operation resumes.
+      _deviceIdentityRevision++;
+      _rollCaptureSession(_recordingDevice?.id ?? 'device');
+      unawaited(_setIngressAuthorized(false));
+    }
     // Conditions are re-read when the queued step runs: a phone handoff may have run first.
     unawaited(_dispatchLogged(const CallStateChanged()));
   }
@@ -3223,6 +3534,7 @@ class CaptureController extends ChangeNotifier
     _prefetchedMicPermission = false;
     if (!micPermissionGranted) {
       Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic batch');
+      _phoneStartMicDenied = true;
       await _setCaptureForegroundRequired(false);
       _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
@@ -3334,7 +3646,9 @@ class CaptureController extends ChangeNotifier
     outcome.throwIfFailed();
   }
 
-  Future<Object?> _startDeviceSessionBody({required bool deviceRequested, required bool promptLocation}) async {
+  Future<Object?> _startDeviceSessionBody(
+      {required bool deviceRequested, required bool promptLocation, bool deferForCall = false}) async {
+    final callEpoch = _callCaptureEpoch;
     if (deviceOnboardingProvider == null && _preferences.batchModeSuspendedForOnboarding) {
       await _restoreBatchAfterOnboardingBody();
     }
@@ -3358,6 +3672,8 @@ class CaptureController extends ChangeNotifier
     await _resetStateVariables();
     await _resetState();
 
+    if (deferForCall && (_omiCallActive || callEpoch != _callCaptureEpoch)) return null;
+    if (deviceRequested) _commitMutedStartAsPaused();
     if (recordingState == RecordingState.deviceRecord || recordingState == RecordingState.pause) {
       if (!_usesNativeIngress || _ingressPort?.supportsIngressHealth == false) _markCaptureStarted();
     } else if (deviceRequested) {
@@ -3386,6 +3702,12 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _deviceStopTelemetryBody({required bool cleanDevice}) async {
+    // A lost or removed pendant is not user intent; only an explicit stop is.
+    _reportCaptureEnd(_captureEnd.stopped(
+      activeRecordingId,
+      cleanDevice ? CaptureEndType.disconnect : CaptureEndType.userInitiated,
+      DateTime.now(),
+    ));
     _recordingTelemetry.complete(reason: cleanDevice ? 'device_disconnected' : 'user_stopped');
   }
 
@@ -3615,6 +3937,67 @@ class CaptureController extends ChangeNotifier
     _loadInProgressConversation();
   }
 
+  /// One authoritative in-progress snapshot when the socket path cannot order
+  /// a decision by generation. Coalesced: a burst of segments triggers one
+  /// refresh, and a queued refresh never stacks behind itself. Bound to the
+  /// capture lifetime: a stop/replace/dispose during the delay or the load
+  /// cancels the reconcile instead of installing into a later session.
+  @visibleForTesting
+  static Duration exclusionReconcileDelay = const Duration(milliseconds: 300);
+
+  void _scheduleExclusionReconcileRefresh() {
+    if (_exclusionReconcileRefresh != null) {
+      // A conflict arrived while another reconcile is in flight: its GET may
+      // have read before this write committed, so queue one follow-up refresh
+      // instead of discarding the event (the coalescing invariant still holds
+      // — at most one queued refresh behind the running one).
+      _exclusionReconcileQueued = true;
+      return;
+    }
+    var cancelled = false;
+    final owned = lifetime.own(() => cancelled = true);
+    // Per-recording identity (owner token) at schedule time: a stop, replace,
+    // or dispose during the delay or the load must not install into a later
+    // capture. activeCaptureSessionId is deliberately NOT used here — it can
+    // stay identical across sequential phone-mic stop/next-start.
+    final sessionToken = _sessionOwner?.token;
+    bool stillCurrent() => !cancelled && !lifetime.isClosed && _captureSessionIsCurrent(sessionToken);
+    _exclusionReconcileRefresh = Future<void>(() async {
+      // Give the in-flight decision writes a moment to settle, then let the
+      // persisted snapshot reconcile the local exclusion.
+      await Future<void>.delayed(exclusionReconcileDelay);
+      if (!stillCurrent()) return;
+      await _loadInProgressConversation(stillCurrent: stillCurrent);
+    }).catchError((Object error, StackTrace stack) {
+      // The reconcile is best-effort: a failed refresh leaves the exclusion
+      // standing, which is the safe default; never surface it as a capture
+      // error.
+      Logger.debug('Exclusion reconcile refresh failed: ${error.runtimeType}');
+    }).whenComplete(() async {
+      // Decide before release(): release() runs the cancel callback, which
+      // flips this closure's own cancelled flag.
+      final queueFollowUp = _exclusionReconcileQueued && stillCurrent();
+      _exclusionReconcileQueued = false;
+      // Free the in-flight slot and schedule any follow-up synchronously,
+      // before the first await in this completion: once this closure yields
+      // (release awaits a microtask boundary), a conflict can arrive, see
+      // _exclusionReconcileRefresh still set, queue itself, and return —
+      // and would then be stranded when the slot is nulled afterwards with
+      // the earlier queueFollowUp == false. With the slot freed first, that
+      // conflict instead schedules a fresh refresh itself.
+      _exclusionReconcileRefresh = null;
+      if (queueFollowUp) {
+        _scheduleExclusionReconcileRefresh();
+      }
+      // The reconcile finished on its own: stop tracking this cancellation
+      // so one-shot entries do not accumulate in the lifetime ledger.
+      await owned.release();
+    });
+  }
+
+  Future<void>? _exclusionReconcileRefresh;
+  bool _exclusionReconcileQueued = false;
+
   bool get _canRefreshInProgressConversation =>
       recordingDeviceServiceReady ||
       recordingState == RecordingState.initialising ||
@@ -3723,28 +4106,119 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  Future _loadInProgressConversation() async {
+  Future _loadInProgressConversation({bool Function()? stillCurrent}) async {
     if (_inProgressConversationLoader != null) {
       await _inProgressConversationLoader!();
       return;
     }
-    final convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
-    applyInProgressConversation(convos.isNotEmpty ? convos.first : null);
+    // Record the epoch at request start: a refresh whose request predates an
+    // exclusion acknowledgement may carry the old manual label, so its install
+    // must not retire that exclusion even though it lands later.
+    final requestEpoch = ++_snapshotEpoch;
+    final result = inProgressConversationFetchForTesting != null
+        ? await inProgressConversationFetchForTesting!()
+        : await getConversationsResult(statuses: [ConversationStatus.in_progress], limit: 1);
+    // A failed fetch is not an authoritative "no active conversation": the
+    // lossy wrapper used to convert transport/auth failure into an empty list,
+    // and installing null then cleared the live transcript, photos,
+    // suggestions and exclusions mid-capture. Skip the install instead and
+    // leave the current state standing.
+    if (!result.ok) return;
+    // The request may have straddled a stop/replace: installing a snapshot
+    // that landed after the session ended would mutate a later session's
+    // state, so the caller's session guard decides.
+    if (stillCurrent != null && !stillCurrent()) return;
+    applyInProgressConversation(result.items.isNotEmpty ? result.items.first : null, requestEpoch: requestEpoch);
+  }
+
+  /// Hermetic test seam for the in-progress snapshot fetch
+  /// ([getConversationsResult]): lets capture tests model authoritative
+  /// snapshots and transport failures without the non-injectable
+  /// [makeApiCall] singleton. Null in production.
+  @visibleForTesting
+  static Future<({List<ServerConversation> items, bool ok, bool truncated})> Function()?
+      inProgressConversationFetchForTesting;
+
+  /// Settings > Ignored Voices restoration signal for a live capture.
+  ///
+  /// Restoring a voice removes the ignored-voice marker and the rejection
+  /// receipt server-side but intentionally writes no positive label, so no
+  /// later snapshot can satisfy the manual-positive retirement condition in
+  /// [applyInProgressConversation] — without this signal the local exclusion
+  /// would keep blanking the voice and suppressing its suggestions until the
+  /// conversation changes. Retire the local exclusion for this conversation so
+  /// the voice is undecided again (unlabeled, eligible for prompts).
+  void onIgnoredVoiceRestored(String conversationId, int speakerId) {
+    if (_conversation?.id != conversationId) return;
+    if (_excludedSpeakers.remove(speakerId)) {
+      _excludedAtEpoch.remove(speakerId);
+      notifyListeners();
+    }
   }
 
   /// Install an acknowledged server snapshot. Shared by REST refresh and
   /// hermetic capture scenarios that control the conversation boundary.
-  void applyInProgressConversation(ServerConversation? nextConversation) {
+  /// [requestEpoch] is the decision epoch observed when the refresh's HTTP
+  /// request started; a null value means a direct install that began now
+  /// (hermetic scenario / test seam) and is treated as fresh.
+  void applyInProgressConversation(ServerConversation? nextConversation, {int? requestEpoch}) {
+    final isSameConversation = _conversation?.id == nextConversation?.id;
     if (_conversation?.id != nextConversation?.id) {
       suggestionsBySegmentId.clear();
       _manualSpeakerDefaults.clear();
+      _excludedSpeakers.clear();
+      _excludedAtEpoch.clear();
     } else if (nextConversation != null) {
       retainManualLiveLabels(segments, nextConversation.transcriptSegments, _manualSpeakerDefaults);
     }
+    _snapshotEpoch++;
+    final startedAt = requestEpoch ?? _snapshotEpoch;
     _conversation = nextConversation;
     if (_conversation != null) {
       segments = List<TranscriptSegment>.of(_conversation!.transcriptSegments)
         ..sort((a, b) => a.start.compareTo(b.start));
+      if (isSameConversation) {
+        // A persisted positive label only retires the exclusion when it
+        // carries whole-voice authority. The server's `excluded_speakers`
+        // projection IS that authority: it mirrors the manual receipt's
+        // still-winning whole-voice not_a_person set, which alone distinguishes
+        // a range-only positive (segment_only; the exclusion stands — its
+        // in-range manual label must not drop the speaker-wide exclusion) from
+        // a selected-segment superseder (bulk assign; the receipt already
+        // retired the exclusion even though only its segments project a
+        // manual label). Only a refresh that *started* after the exclusion's
+        // acknowledgement may retire it: one requested earlier can still be
+        // carrying the pre-exclusion manual label when it installs.
+        // Older servers without the projection fall back to the whole-cluster
+        // projection heuristic: a whole-voice positive labels EVERY segment of
+        // the speaker, so requiring full coverage never retires on a range-only
+        // label; it just cannot see selected-segment superseders.
+        final receiptExcluded = _conversation?.excludedSpeakers;
+        for (final speakerId in List<int>.of(_excludedSpeakers)) {
+          if (startedAt <= (_excludedAtEpoch[speakerId] ?? 0)) continue;
+          bool retire;
+          if (receiptExcluded != null) {
+            retire = !receiptExcluded.contains(speakerId);
+          } else {
+            final cluster = segments.where((segment) => segment.speakerId == speakerId).toList();
+            retire = cluster.isNotEmpty &&
+                cluster.every((segment) =>
+                    segment.speakerLabelSource == 'manual' &&
+                    (segment.isUser || (segment.personId?.isNotEmpty ?? false)));
+          }
+          if (retire) {
+            _excludedSpeakers.remove(speakerId);
+            _excludedAtEpoch.remove(speakerId);
+          }
+        }
+        for (final segment in segments) {
+          if (_excludedSpeakers.contains(segment.speakerId)) {
+            segment.isUser = false;
+            segment.personId = null;
+            segment.speakerLabelSource = null;
+          }
+        }
+      }
       // Merge server photos with locally-captured temp photos to avoid losing
       // photos that haven't been processed server-side yet.
       final serverPhotos = _conversation!.photos;
@@ -3768,47 +4242,53 @@ class CaptureController extends ChangeNotifier
   }
 
   @override
+  void onCustodyReceipt(
+    TranscriptSegmentSocketService socket,
+    MessageEvent event, {
+    required String owner,
+    String? recordingSessionId,
+  }) {
+    final identity = _liveSocketIdentity;
+    if (_captureControllerDisposed ||
+        !identical(_socket, socket) ||
+        socket.state != SocketServiceState.connected ||
+        socket.stoppedIntentionally ||
+        !socket.hasCurrentListenOwner(owner) ||
+        identity == null ||
+        identity.uid != owner ||
+        owner != _preferences.uid ||
+        !_captureSessionIsCurrent(identity.token) ||
+        recordingSessionId != socket.clientConversationId ||
+        (recordingSessionId != null && recordingSessionId != activeRecordingId)) {
+      return;
+    }
+    final phone = _wal.getSyncs().phone;
+    if (phone is LocalWalSyncImpl) {
+      unawaited(phone.recordCustodyReceipt(event, owner: owner, recordingSessionId: recordingSessionId).catchError(
+            (Object _) => Logger.debug('event=refactor_shadow lane=L5 check=custody_commit outcome=error'),
+          ));
+    }
+  }
+
+  @override
   void onMessageEventReceived(MessageEvent event) {
+    if (_captureControllerDisposed) return;
+    if (event is ConversationSessionEvent) {
+      notifyListeners();
+      return;
+    }
+
     if (event is ConversationProcessingStartedEvent) {
-      _closingSegmentArrivals[event.memory.id] = Map.of(_segmentArrivals);
-      // An event that never arrives leaves its entry behind, and a few closes back are plenty.
-      if (_closingSegmentArrivals.length > 8) _closingSegmentArrivals.remove(_closingSegmentArrivals.keys.first);
-      // Replace the optimistic Process Now placeholder once the server confirms
-      // a real processing row, so timeout/retry apply to the confirmed id.
+      _lastServerClose =
+          (id: event.memory.id, at: DateTime.now(), previewWords: _previewWords, previewSession: _previewSession);
+      // Keep the placeholder transition idempotent even when this ID was returned by Process Now.
       externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
       externalActions.addProcessingConversation(event.memory);
-      _pendingAutoSyncSessionStart = _sessionStartSeconds;
-      _pendingAutoSyncConversationId = event.memory.id;
-      _pendingAutoSyncNeedsRepair = _sessionTransportInterrupted;
-      _sessionTransportInterrupted = false;
-
-      // Force-drain tail buffer, stamp WALs with conversation ID, then clear state.
-      // Store the future so the coordinated transfer wake waits for the stamp.
-      _pendingFinalizeAndStamp = _finalizeAndStampSession(_sessionStartSeconds, event.memory.id);
-
-      _resetStateVariables();
-
-      // Start 30s fallback timer in case ConversationEvent never arrives (WS disconnect)
-      _autoSyncFallbackTimer?.cancel();
-      _autoSyncFallbackTimer = _scheduling.once(const Duration(seconds: 30), () {
-        if (_pendingAutoSyncSessionStart > 0 && _pendingAutoSyncConversationId != null) {
-          final sessionStart = _pendingAutoSyncSessionStart;
-          final convId = _pendingAutoSyncConversationId!;
-          final needsRepair = _pendingAutoSyncNeedsRepair;
-          _pendingAutoSyncSessionStart = 0;
-          _pendingAutoSyncConversationId = null;
-          _pendingAutoSyncNeedsRepair = false;
-          Logger.debug(
-            'Auto-sync fallback timer fired — syncing WALs to conversation $convId (needsRepair=$needsRepair)',
-          );
-          unawaited(_confirmSessionWalsRetained(sessionStart, convId, failClosedReason: 'missing_conversation_event'));
-        }
-      });
+      _onConversationProcessingStarted(event.memory.id);
       return;
     }
 
     if (event is ConversationEvent) {
-      final segmentArrivals = _closingSegmentArrivals.remove(event.memory.id) ?? const <String, int>{};
       event.memory.isNew = true;
       externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
       try {
@@ -3820,15 +4300,10 @@ class CaptureController extends ChangeNotifier
       } catch (_) {}
       externalActions.removeProcessingConversation(event.memory.id);
       _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
-      _autoSyncFallbackTimer?.cancel();
-      if (_pendingAutoSyncSessionStart > 0) {
-        final sessionStart = _pendingAutoSyncSessionStart;
-        final needsRepair = _pendingAutoSyncNeedsRepair;
-        _pendingAutoSyncSessionStart = 0;
-        _pendingAutoSyncConversationId = null;
-        _pendingAutoSyncNeedsRepair = false;
-        Logger.debug('Conversation ${event.memory.id} closed — confirming WAL retention (needsRepair=$needsRepair)');
-        unawaited(_confirmSessionTranscript(sessionStart, event.memory, segmentArrivals, needsRepair: needsRepair));
+      final close = _pendingConversationCloses.remove(event.memory.id);
+      if (close != null) {
+        close.fallback?.cancel();
+        unawaited(_confirmClosedConversation(close, event.memory));
       }
       return;
     }
@@ -3838,15 +4313,6 @@ class CaptureController extends ChangeNotifier
       return;
     }
 
-    if (event is CaptureCommittedEvent) {
-      final phone = _wal.getSyncs().phone;
-      if (phone is LocalWalSyncImpl) {
-        unawaited(phone.recordCaptureCommitted(event).catchError((Object _) {
-          Logger.debug('event=refactor_shadow lane=L5 check=custody_commit outcome=error');
-        }));
-      }
-      return;
-    }
     if (event is SpeakerLabelSuggestionEvent) {
       _handleSpeakerLabelSuggestionEvent(event);
       return;
@@ -3874,7 +4340,11 @@ class CaptureController extends ChangeNotifier
         );
         _mobileStandardBatchAllowed = event.mobileStandardBatch;
         _mobileStandardBatch?.authorize(event.mobileStandardBatch, localPreview: localPreview);
-        if (event.status == 'mobile_batch_admission') return;
+        if (event.status == 'mobile_batch_admission') {
+          // Absent means the server wants no silence end from this phone.
+          _captureEnd.silenceSeconds = event.endSilenceSeconds;
+          return;
+        }
       }
       // Handle freemium threshold event via status field
       if (event.status == 'freemium_threshold_reached') {
@@ -3936,84 +4406,124 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  Future<void> forceProcessingCurrentConversation() async {
-    final sessionStart = _sessionStartSeconds;
+  Future<void> forceProcessingCurrentConversation({bool manualFinish = false, String? liveConversationId}) async {
     final recordingSessionId = activeRecordingId;
     final conversationRevision = _systemSurfaceConversationRevision;
-
-    final phoneSync = _wal.getSyncs().phone;
-    // Show the Conversations-tab skeleton before the WAL drain. Awaiting
-    // finalizeCurrentSession first is the 30–60s dead window users hit today.
-    // Add the placeholder before reset so a concurrent rebuild cannot drop it.
+    final close = _admitConversationClose(processNow: true);
+    _pendingProcessCloses.add(close);
     final placeholderOwner = ++_processingPlaceholderOwner;
-    externalActions.addProcessingConversation(
-      OptimisticProcessingPlaceholder.conversation(targetConversationId: _conversation?.id),
-    );
-    _finalizeGate.markFinalized();
-    externalActions.onLiveFinalized(); // The live episode closes; the next counts from now.
-
-    await phoneSync.finalizeCurrentSession();
-    if (lifetime.isClosed ||
-        recordingSessionId != activeRecordingId ||
-        conversationRevision != _systemSurfaceConversationRevision) {
-      // Another path finished this conversation during the drain; never reset
-      // the next one, and never leave the skeleton stranded. A newer request that
-      // showed the same row since then still needs it.
-      if (placeholderOwner == _processingPlaceholderOwner) {
-        externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
-      }
-      return;
-    }
-    _clearSessionLocation();
-
-    _resetStateVariables();
+    var requestAdmitted = false;
     final confirmedProcessing = _firstCaptureProcess;
-    final Future<InProgressProcessOutcome> request;
-    if (_processInProgressOutcomeOverride != null) {
-      request = _processInProgressOutcomeOverride!();
-    } else if (_processInProgressConversationOverride != null) {
-      request = _processInProgressConversationOverride!().then(
-        (result) =>
-            InProgressProcessOutcome(response: result, absence: result == null ? ProcessAbsence.transport : null),
-      );
-    } else {
-      request = processInProgressConversationOutcome();
-    }
-    if (confirmedProcessing) {
-      _lastProcessRequest = request.then((outcome) => outcome.response);
-    }
-    _processInFlight = request.then((_) {}, onError: (_) {});
-    request.then<void>((outcome) async {
-      final conversationId = await OptimisticProcessingPlaceholder.applyProcessResult(
-        result: outcome.response,
-        absence: outcome.absence,
-        actions: externalActions,
-        onCreated: _processConversationCreated,
-        onNoConversation: _onProcessProducedNoConversation,
-        removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
-      );
-      if (sessionStart > 0 && conversationId != null) {
-        if (phoneSync is LocalWalSyncImpl) {
-          phoneSync.prepareConversationStamp(recordingSessionId);
-        }
-        await phoneSync.stampConversationId(sessionStart, conversationId);
-        _autoSyncSessionWals();
+    final showManualFinish = manualFinish || confirmedProcessing;
+    final placeholder = OptimisticProcessingPlaceholder.conversation(
+      targetConversationId: _conversation?.id,
+    );
+    final actions = externalActions;
+    final sourceId = verifiedLiveServerRecordingId ?? _conversation?.id;
+    try {
+      // Publish the skeleton before waiting for disk, preserving immediate Process Now feedback.
+      if (showManualFinish) {
+        final openSourceId = sourceId != null && hasClosedServerRecording(sourceId) ? null : sourceId;
+        actions.onManualFinishStarted(placeholder, openSourceId,
+            liveConversationId: liveConversationId, captureId: recordingSessionId);
       }
-    }).catchError((Object error, StackTrace stack) => OptimisticProcessingPlaceholder.handleFailure(
+      actions.addProcessingConversation(placeholder);
+      _finalizeGate.markFinalized();
+      externalActions.onLiveFinalized();
+      await close.snapshot;
+      if (lifetime.isClosed ||
+          !_closeStoreIsCurrent(close) ||
+          recordingSessionId != activeRecordingId ||
+          conversationRevision != _systemSurfaceConversationRevision) {
+        // A matching server close may already have bound this cut during the drain.
+        close.bind(null);
+        if (showManualFinish) actions.onManualFinishSettled(placeholder, null, showFailure: false);
+        if (placeholderOwner == _processingPlaceholderOwner) {
+          externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
+        }
+        return;
+      }
+      _resetLiveConversationWindow();
+      final Future<InProgressProcessOutcome> request = _processInProgressOutcomeOverride != null
+          ? _processInProgressOutcomeOverride!()
+          : _processInProgressConversationOverride != null
+              ? _processInProgressConversationOverride!().then((result) =>
+                  InProgressProcessOutcome(response: result, absence: result == null ? ProcessAbsence.transport : null))
+              : processInProgressConversationOutcome(
+                  liveConversationId: liveConversationId, sendRequest: _processRequestSender);
+      requestAdmitted = true;
+      if (confirmedProcessing) _lastProcessRequest = request;
+      _processInFlight = request.then((_) {}, onError: (_) {});
+      request.then<void>((outcome) async {
+        // Bind before any asynchronous publication and before awaiting the ordered stamp slot.
+        final saved = outcome.response?.conversation;
+        final conversationId = saved?.id;
+        close.bind(conversationId);
+        _pendingProcessCloses.remove(close);
+        if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
+        if (saved != null) {
+          // Always remembered: a later processing-started event for this id must not cut again.
+          final closed = saved.status != ConversationStatus.in_progress;
+          _rememberConversationClose(saved.id, closed: closed);
+          if (closed && saved.id == verifiedLiveServerRecordingId) notifyListeners();
+        }
+        if (showManualFinish) actions.onManualFinishSettled(placeholder, outcome, showFailure: !confirmedProcessing);
+        await OptimisticProcessingPlaceholder.applyProcessResult(
+          result: outcome.response,
+          absence: outcome.absence,
+          actions: externalActions,
+          onCreated: _processConversationCreated,
+          // A manual v3 finish that reports its own failure owns the user copy; keep analytics here.
+          onNoConversation: (absence) => _onProcessProducedNoConversation(absence,
+              finishOwnsCopy: showManualFinish && !confirmedProcessing && actions.v3FinishFeedbackEnabled),
+          removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
+        );
+        if (close.sessionStartSeconds > 0 && conversationId != null) {
+          if (saved != null && close.phone is LocalWalSyncImpl) {
+            await _confirmSessionTranscript(close.sessionStartSeconds, saved, close.segmentArrivals,
+                close: close, needsRepair: close.needsRepair, allowTranscriptCoverageFallback: close.customStt);
+          } else {
+            unawaited(_autoSyncSessionWals());
+          }
+        }
+      }).catchError((Object error, StackTrace stack) async {
+        close.bind(null);
+        _pendingProcessCloses.remove(close);
+        if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
+        if (showManualFinish) {
+          actions.onManualFinishSettled(placeholder, null, showFailure: !confirmedProcessing);
+        }
+        await OptimisticProcessingPlaceholder.handleFailure(
           actions: externalActions,
           removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
           error: error,
           stack: stack,
           report: (message, trace) => PlatformManager.instance.crashReporter.reportCrash(message, trace),
-        ));
+        );
+      });
+    } catch (_) {
+      close.bind(null);
+      if (showManualFinish) {
+        // The detail button is still available to retry a failed local drain.
+        actions.onManualFinishSettled(placeholder, null,
+            showFailure: !confirmedProcessing && liveConversationId == null);
+      }
+      if (placeholderOwner == _processingPlaceholderOwner) {
+        actions.removeProcessingConversation(
+          OptimisticProcessingPlaceholder.id,
+        );
+      }
+      rethrow;
+    } finally {
+      if (!requestAdmitted) _pendingProcessCloses.remove(close);
+    }
   }
 
   Future<void> _reportDetachedCaptureError(String operation, Object error, StackTrace stack) =>
       OptimisticProcessingPlaceholder.reportDetachedFailure(operation, error, stack,
           (message, trace) => PlatformManager.instance.crashReporter.reportCrash(message, trace));
 
-  /// Force-drain tail buffer and stamp all session WALs with conversation ID.
-  /// Called from synchronous onMessageEventReceived — fire-and-forget async.
+  /// Bind newly captured safety copies to the source recording before any conversation closes.
   void _bindSafetyWalRecordingSession() {
     final phone = _wal.getSyncs().phone;
     // Test doubles implement a narrower phone sync. Production phone storage
@@ -4022,135 +4532,15 @@ class CaptureController extends ChangeNotifier
     phone.setActiveRecordingSessionId(activeRecordingId);
   }
 
-  Future<void> _finalizeAndStampSession(int sessionStartSeconds, String conversationId) async {
-    final ownerToken = _sessionOwner?.token;
-    final locationGeneration = _sessionGeolocationGeneration;
-    // Capture before the flush. A device update can roll the session while
-    // finalize awaits disk, and the rolled session must not cancel this stamp —
-    // only an account/generation roll on the WAL store itself does.
-    final recordingSessionId = activeRecordingId;
-    try {
-      final phoneSync = _wal.getSyncs().phone;
-      final walGeneration = phoneSync is LocalWalSync ? phoneSync.sessionGeneration : null;
-      await phoneSync.finalizeCurrentSession();
-      if (sessionStartSeconds > 0 &&
-          (walGeneration == null || (phoneSync is LocalWalSync && phoneSync.sessionGeneration == walGeneration))) {
-        if (phoneSync is LocalWalSyncImpl) {
-          phoneSync.prepareConversationStamp(recordingSessionId);
-        }
-        await phoneSync.stampConversationId(sessionStartSeconds, conversationId);
-      }
-    } catch (e) {
-      Logger.debug('_finalizeAndStampSession error: $e');
-    } finally {
-      if (_captureSessionIsCurrent(ownerToken) && locationGeneration == _sessionGeolocationGeneration) {
-        _clearSessionLocation();
-      }
-    }
-  }
-
-  /// Moves the safety copies [conversation]'s saved transcript covers into synced retention, and
-  /// uploads the uncovered rest so the server can transcribe what it lost. When coverage cannot be
-  /// judged — an interrupted session, an empty or unusable transcript, or no anchor — confirmation
-  /// passes no spans and fails closed: every eligible stamped copy is kept for repair.
-  Future<void> _confirmSessionTranscript(
-    int sessionStartSeconds,
-    ServerConversation conversation,
-    Map<String, int> segmentArrivals, {
-    bool needsRepair = false,
-  }) {
-    List<(int, int)>? spans;
-    int? origin;
-    String? failClosedReason;
-    final saved = conversation.transcriptSegments;
-    if (needsRepair) {
-      failClosedReason = 'needs_repair';
-    } else if (saved.isEmpty) {
-      failClosedReason = 'empty_transcript';
-    } else {
-      final valid = [
-        for (final segment in saved)
-          if (segment.start.isFinite && segment.end.isFinite && segment.end > segment.start) segment,
-      ];
-      if (valid.isEmpty) {
-        failClosedReason = 'no_spans';
-      } else {
-        // Live segment times are seconds from the conversation's start on the server's clock, while
-        // the copies carry the phone's. Anchor that start to the phone through the moments the live
-        // segments arrived; without any, use the server's start, or this session's when the row has
-        // none.
-        final startedAt = conversation.startedAt;
-        final anchor =
-            transcriptStartOnDevice([for (final segment in valid) (segment.id, segment.end)], segmentArrivals) ??
-                (startedAt != null
-                    ? startedAt.millisecondsSinceEpoch ~/ 1000
-                    : (sessionStartSeconds > 0 ? sessionStartSeconds : null));
-        if (anchor == null || anchor <= 0) {
-          failClosedReason = 'anchor_unavailable';
-        } else {
-          origin = anchor;
-          spans = [for (final segment in valid) (anchor + segment.start.floor(), anchor + segment.end.ceil())];
-        }
-      }
-    }
-    return _confirmSessionWalsRetained(
-      sessionStartSeconds,
-      conversation.id,
-      transcriptSpans: spans,
-      conversationStartSeconds: origin,
-      failClosedReason: failClosedReason,
-    );
-  }
-
-  Future<void> _confirmSessionWalsRetained(
-    int sessionStartSeconds,
-    String conversationId, {
-    List<(int, int)>? transcriptSpans,
-    int? conversationStartSeconds,
-    String? failClosedReason,
-  }) async {
-    final token = _sessionOwner?.token;
-    final phone = _wal.getSyncs().phone;
-    final walGeneration = phone is LocalWalSync ? phone.sessionGeneration : null;
-    final pending = _pendingFinalizeAndStamp;
-    if (pending != null) {
-      await pending;
-      if (identical(_pendingFinalizeAndStamp, pending)) _pendingFinalizeAndStamp = null;
-    }
-    bool stillCurrent() =>
-        _captureSessionIsCurrent(token) &&
-        (walGeneration == null || phone is! LocalWalSync || phone.sessionGeneration == walGeneration);
-    if (!stillCurrent()) return;
-    var kept = 0;
-    if (phone is LocalWalSyncImpl) {
-      try {
-        final outcome = await phone.confirmSessionTranscription(
-          sessionStartSeconds,
-          conversationId,
-          transcriptSpans: transcriptSpans,
-          conversationStartSeconds: conversationStartSeconds,
-          failClosedReason: failClosedReason,
-        );
-        kept = outcome.kept;
-      } catch (e) {
-        Logger.debug('_confirmSessionWalsRetained error: $e');
-        kept = 1;
-      }
-    }
-    if (!stillCurrent()) return;
-    if (kept > 0 || phone is! LocalWalSyncImpl) {
-      _autoSyncSessionWals(trigger: WakeTrigger.dataStalled);
-    }
-  }
-
   Future<void> _autoSyncSessionWals({WakeTrigger trigger = WakeTrigger.cooldownElapsed}) async {
     final token = _sessionOwner?.token;
-    // Wait for finalize+stamp to complete so tail buffer WALs are on disk before querying.
-    final pending = _pendingFinalizeAndStamp;
-    if (pending != null) {
-      await pending;
-      if (identical(_pendingFinalizeAndStamp, pending)) _pendingFinalizeAndStamp = null;
+    // Follow new slots admitted while a prior one was settling. No stamp closure calls this.
+    while (true) {
+      final pending = _pendingFinalizeAndStamp;
+      if (pending != null) await pending;
+      if (identical(pending, _pendingFinalizeAndStamp)) break;
     }
+    if (_captureControllerDisposed) return;
     if (!_captureSessionIsCurrent(token)) return;
     final owner = _sessionOwner;
     if (owner != null) {
@@ -4209,12 +4599,13 @@ class CaptureController extends ChangeNotifier
     return null;
   }
 
-  void _onProcessProducedNoConversation(ProcessAbsence absence) {
+  void _onProcessProducedNoConversation(ProcessAbsence absence, {bool finishOwnsCopy = false}) {
     if (_conversationDeliveredForCurrentCapture) return;
     switch (absence) {
       case ProcessAbsence.emptyBody:
-        _announceNoConversation(EmptyRecordingReason.emptyDeleted);
+        _announceNoConversation(EmptyRecordingReason.emptyDeleted, showUserCopy: !finishOwnsCopy);
       case ProcessAbsence.notFound:
+        if (externalActions.v3FinishFeedbackEnabled) return;
         // POST /v1/conversations returns 404 both when nothing was captured and
         // when the conversation was already finalized. Let the conversation-created
         // path set [_deliveredExplanationGeneration] before treating this as empty.
@@ -4315,63 +4706,115 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<bool> assignSpeakerToConversation(
-    int speakerId,
-    String personId,
-    String personName,
-    List<String> segmentIds, {
-    bool applyToSpeaker = false,
-  }) async {
-    final conversationId = _conversation?.id;
-    final sessionId = activeCaptureSessionId;
-    if (segmentIds.isEmpty || conversationId == null || taggingSegmentIds.isNotEmpty) return false;
-    final targets = List<String>.of(segmentIds);
-    taggingSegmentIds = targets;
-    notifyListeners();
-    try {
-      final finalPersonId = personId.isEmpty ? (await externalActions.createPerson(personName))?.id : personId;
-      if (finalPersonId == null || finalPersonId.isEmpty) return false;
-      final saved = await externalActions.assignSpeaker(
-        conversationId,
-        targets,
-        finalPersonId,
-        speakerId: applyToSpeaker ? speakerId : null,
+  @override
+  ServerConversation? get speakerAssignmentConversation => _conversation;
+  @override
+  bool get speakerAssignmentClosed => lifetime.isClosed;
+  @override
+  Object get speakerAssignmentIdentity =>
+      (_preferences.uid, _sessionOwner?.token.generation, _sessionOwner?.token.identity);
+  @override
+  void speakerLabelsChanged() => _segmentsPhotosVersion++;
+  @override
+  void publishSpeakerAssignment(int speakerId, String finalPersonId, String personName, List<String> targets,
+      bool applyToSpeaker, int generation) {
+    final anchor = segments.where((line) => targets.contains(line.id)).firstOrNull;
+    final voiceKey = anchor?.recordingVoice ?? speakerId;
+    if (applyToSpeaker) {
+      _manualSpeakerDefaults[voiceKey] = finalPersonId;
+    } else {
+      _manualSpeakerDefaults.remove(voiceKey);
+    }
+    if (_socket?.state == SocketServiceState.connected &&
+        !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
+      _socket?.send(
+        jsonEncode({
+          'type': 'speaker_assigned',
+          'speaker_id': speakerId,
+          'person_id': finalPersonId,
+          'person_name': personName,
+          'segment_ids': targets,
+        }),
       );
+    }
+    suggestionsBySegmentId.removeWhere((key, value) => targets.contains(key));
+  }
+
+  @override
+  Future<bool> excludeSpeakerFromConversation(int speakerId, List<String> segmentIds) async {
+    final conversationId = speakerAssignmentConversation?.id;
+    final sessionId = activeCaptureSessionId;
+    if (segmentIds.isEmpty || conversationId == null || speakerAssignmentClosed) return false;
+    final targets = [
+      for (final segment in segments)
+        if (segment.speakerId == speakerId) segment.id,
+    ];
+    if (targets.isEmpty) return false;
+    taggingSegmentIds = [...taggingSegmentIds, ...targets];
+    speakerLabelsChanged();
+    if (!speakerAssignmentClosed) notifyListeners();
+    try {
+      final saved = await _excludeMediaSpeaker(conversationId, targets);
       if (!saved) return false;
       if (_conversation?.id != conversationId || activeCaptureSessionId != sessionId) return true;
-      if (applyToSpeaker) {
-        _manualSpeakerDefaults[speakerId] = finalPersonId;
-      } else {
-        _manualSpeakerDefaults.remove(speakerId);
+      _excludedSpeakers.add(speakerId);
+      // The acknowledgement is itself a decision event: bump the epoch so
+      // any refresh that starts afterwards is strictly newer and may retire
+      // this exclusion, while one already in flight (requestEpoch recorded
+      // earlier) stays fenced.
+      _excludedAtEpoch[speakerId] = ++_snapshotEpoch;
+      _manualSpeakerDefaults.remove(speakerId);
+      for (final voice in {
+        for (final segment in segments)
+          if (segment.speakerId == speakerId) segment.recordingVoice,
+      }) {
+        _manualSpeakerDefaults.remove(voice);
       }
       for (final segment in segments) {
-        if (applyToSpeaker ? segment.speakerId == speakerId : targets.contains(segment.id)) {
-          segment.isUser = finalPersonId == 'user';
-          segment.personId = segment.isUser ? null : finalPersonId;
-          segment.speakerLabelSource = 'manual';
+        if (segment.speakerId == speakerId) {
+          segment.isUser = false;
+          segment.personId = null;
+          segment.speakerLabelSource = null;
         }
       }
       _segmentsPhotosVersion++;
-      if (_socket?.state == SocketServiceState.connected &&
-          !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
+      if (_socket?.state == SocketServiceState.connected) {
         _socket?.send(
           jsonEncode({
             'type': 'speaker_assigned',
             'speaker_id': speakerId,
-            'person_id': finalPersonId,
-            'person_name': personName,
+            'person_id': null,
+            'assign_type': 'not_a_person',
+            'person_name': '',
             'segment_ids': targets,
           }),
         );
       }
-      suggestionsBySegmentId.removeWhere((key, value) => targets.contains(key));
+      suggestionsBySegmentId.removeWhere((key, value) => targets.contains(key) || value.speakerId == speakerId);
       return true;
     } catch (_) {
       return false;
     } finally {
-      taggingSegmentIds = [];
-      notifyListeners();
+      final remaining = List<String>.of(taggingSegmentIds);
+      for (final id in targets) {
+        remaining.remove(id);
+      }
+      taggingSegmentIds = remaining;
+      if (!speakerAssignmentClosed) notifyListeners();
     }
+  }
+
+  Future<bool> _excludeMediaSpeaker(String conversationId, List<String> segmentIds) async {
+    if (_excludeSpeaker != null) return _excludeSpeaker!(conversationId, segmentIds);
+    final result = await executeApi<ServerConversation>(
+      request: ApiRequest(
+        url: '${Env.apiBaseUrl}v1/conversations/${Uri.encodeComponent(conversationId)}/segments/assign-bulk',
+        method: 'PATCH',
+        body: jsonEncode({'segment_ids': segmentIds, 'assign_type': 'not_a_person'}),
+      ),
+      decode: (body) => ServerConversation.fromJson(jsonDecode(body) as Map<String, dynamic>),
+    );
+    return result is ApiSuccess<ServerConversation>;
   }
 
   @override
@@ -4427,6 +4870,54 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
+  Future<DeviceMuteResolved> _resolveDeviceMute() async =>
+      DeviceMuteResolved(await applyReconnectMute(deviceMuted: await _readDeviceMute()));
+
+  Future<bool?> _readDeviceMute() async {
+    final device = _recordingDevice;
+    if (device == null) return null;
+    try {
+      if (_deviceMuteReader != null) {
+        return await _deviceMuteReader!(device.id);
+      }
+      final connection = await _ensureDeviceConnection(device.id);
+      if (connection is OmiDeviceConnection) {
+        return await connection.getCaptureMuted();
+      }
+    } catch (e) {
+      Logger.debug('Failed to read device mute: $e');
+    }
+    return null;
+  }
+
+  Future<void> _writeDeviceMute(bool muted) async {
+    final device = _recordingDevice;
+    if (device == null) return;
+    if (_deviceMuteWriter != null) {
+      await _deviceMuteWriter!(device.id, muted);
+      return;
+    }
+    final connection = await _ensureDeviceConnection(device.id);
+    if (connection == null) throw StateError('Capture connection unavailable');
+    if (connection is OmiDeviceConnection) {
+      await connection.setCaptureMuted(muted);
+    }
+  }
+
+  /// Apply the device-reported mute (or local fallback) as the reconnect
+  /// pause bit. Device state wins when present (issue #5054).
+  @visibleForTesting
+  Future<bool> applyReconnectMute({required bool? deviceMuted}) async {
+    final paused = DeviceMuteSync.resolveReconnectPaused(
+      deviceMuted: deviceMuted,
+      localMuted: isPaused,
+    );
+    if (paused != isPaused) {
+      await _setCaptureMuted(paused);
+    }
+    return isPaused;
+  }
+
   /// Pause whichever source is live. The live page, the Home capture card and the quick actions
   /// all call this, so the rule for what a pause does lives in one place.
   Future<void> pauseCapture() async {
@@ -4435,10 +4926,7 @@ class CaptureController extends ChangeNotifier
   }
 
   /// Resume the source [pauseCapture] paused.
-  Future<void> resumeCapture() async {
-    final outcome = await _dispatchWithResumeFence(const ResumeCaptureRequested());
-    outcome.throwIfFailed();
-  }
+  Future<void> resumeCapture() => _resumeStartingIdlePendant(const ResumeCaptureRequested());
 
   /// Writes the phone source's buffered tail to the WAL and, when connected, the socket.
   void _flushPhoneFrames() {
@@ -4462,10 +4950,7 @@ class CaptureController extends ChangeNotifier
     outcome.throwIfFailed();
   }
 
-  Future<void> resumeDeviceRecording() async {
-    final outcome = await _dispatchWithResumeFence(const DeviceResumeRequested());
-    outcome.throwIfFailed();
-  }
+  Future<void> resumeDeviceRecording() => _resumeStartingIdlePendant(const DeviceResumeRequested());
 
   // -- Capture coordinator wiring -------------------------------------------------------------
 
@@ -4478,6 +4963,8 @@ class CaptureController extends ChangeNotifier
   }
 
   CaptureEnvironment _readCaptureEnvironment() => CaptureEnvironment(
+        now: _now,
+        accountId: _preferences.uid,
         livenessEpoch: _livenessEpoch,
         appSuspended: _appSuspended,
         appSuspendedAt: _appSuspendedAt,
@@ -4496,6 +4983,7 @@ class CaptureController extends ChangeNotifier
         socketConnected: _socket?.state == SocketServiceState.connected,
         deviceServiceReady: recordingDeviceServiceReady,
         callActive: _omiCallActive,
+        callEpoch: _callCaptureEpoch,
         deviceRecording: recordingState == RecordingState.deviceRecord,
         systemAudioRecording: recordingState == RecordingState.systemAudioRecord,
         micCapturing: recordingState == RecordingState.record ||
@@ -4514,7 +5002,7 @@ class CaptureController extends ChangeNotifier
             _closeBleStream(disableNativeBackground: disableNativeBackground),
         startBleStream: () => _initiateDeviceAudioStreaming(),
         openSocket: (spec) async {
-          if (spec.ensureOnly && _socket?.state == SocketServiceState.connected) return;
+          if (spec.ensureOnly && _canReuseTranscriptionSocket) return;
           await _initiateWebsocket(
             audioCodec: spec.codec,
             sampleRate: spec.sampleRate,
@@ -4522,7 +5010,7 @@ class CaptureController extends ChangeNotifier
             source: spec.source,
           );
         },
-        closeSocket: (reason) async => _socket?.stop(reason: reason),
+        closeSocket: (reason, {bool userStop = false}) async => _socket?.stop(reason: reason, userStop: userStop),
         startNativeMic: (mode) async {
           if (mode == PhoneMicSessionMode.live) {
             await _resumeMicRecording();
@@ -4544,6 +5032,7 @@ class CaptureController extends ChangeNotifier
         checkPhonePermission: () async {
           final granted = await _requestMicrophonePermission();
           _prefetchedMicPermission = granted;
+          if (!granted) _phoneStartMicDenied = true;
           return granted;
         },
         clearPhonePermissionGrant: () => _prefetchedMicPermission = false,
@@ -4556,12 +5045,16 @@ class CaptureController extends ChangeNotifier
       ? Future<Object?>.value(null)
       : switch (stage) {
           UpdateRecordingDeviceStage() => Future.sync(() => _updateRecordingDeviceBody(stage.device)),
+          ReconnectObservationStage() => Future.sync(() => _recordingTelemetry.reconnectOutcome(stage.outcome)),
+          ResolveDeviceMuteStage() => _resolveDeviceMute(),
           StartDeviceSessionStage() => _startDeviceSessionBody(
               deviceRequested: stage.deviceRequested,
               promptLocation: stage.promptLocation,
+              deferForCall: stage.deferForCall,
             ),
           StopDeviceSessionStage() => _stopDeviceSessionBody(cleanDevice: stage.cleanDevice),
           SilencePauseMarkerStage() => _preferences.saveBool(_silencePausedKey, stage.paused),
+          PersistDeviceMuteStage() => _writeDeviceMute(stage.muted),
           PauseDeviceTailStage() => _pauseDeviceTailBody(),
           ResumeDeviceTailStage() => _resumeDeviceTailBody(),
           SuspendPendantStage() => _suspendPendantBody(reason: stage.reason, wasPaused: stage.wasPaused),
@@ -4571,6 +5064,7 @@ class CaptureController extends ChangeNotifier
           WritePhoneRestoreMarkerStage() => _writePhoneRestoreMarker(stage.mutedBefore),
           ClearPhoneRestoreMarkerStage() => _clearPhoneRestoreMarker(),
           StopPhoneLiveStage() => _stopPhoneLiveBody(reason: stage.reason),
+          DiscardPhoneLiveStage() => _discardPhoneLiveBody(),
           StopPhoneBatchStage() => _stopPhoneBatchBody(reason: stage.reason),
           StopPhonePolicyRestoreStage() => _stopPhonePolicyRestoreBody(
               mutedBefore: stage.mutedBefore,
@@ -4580,7 +5074,7 @@ class CaptureController extends ChangeNotifier
           FlushPhoneFramesStage() => Future.sync(_flushPhoneFrames),
           RecordingMarkStage() => Future.sync(() => updateRecordingState(stage.state)),
           DeviceStopTelemetryStage() => _deviceStopTelemetryBody(cleanDevice: stage.cleanDevice),
-          ProcessConversationStage() => _processConversationBody(),
+          ProcessConversationStage() => _processConversationBody(stage.liveConversationId),
           SocketClosedStage() => _socketClosedBody(stage.closeCode),
           SocketConnectedStage() => _socketConnectedBody(),
           SocketErrorStage() => _socketErrorBody(stage.error),
@@ -4598,8 +5092,8 @@ class CaptureController extends ChangeNotifier
           StartPhoneBatchStage() => _startPhoneMicBatchBody(auto: stage.auto),
         };
 
-  Future<void> _processConversationBody() async {
-    await forceProcessingCurrentConversation();
+  Future<void> _processConversationBody(String? liveConversationId) async {
+    await forceProcessingCurrentConversation(liveConversationId: liveConversationId);
     await _processInFlight;
   }
 }

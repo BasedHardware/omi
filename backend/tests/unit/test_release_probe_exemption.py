@@ -3,6 +3,7 @@ path; every lookalike and real-shaped uid keeps the fenced/deferred gates."""
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 import sys
 
@@ -53,10 +54,22 @@ def test_desktop_gates_exempt_only_the_probe_uid() -> None:
     assert "from utils.release_probe import is_release_probe_uid" in process_source
     assert "probe_uid = is_release_probe_uid(uid)" in process_source
     assert "'omi-release-probe'" not in process_source
-    # Both surviving desktop deferral gates (trial paywall and legacy
-    # deferral) sit behind the exemption guard.
-    guarded = process_source.count('and not probe_uid')
-    assert guarded == 2, f'expected 2 exempted desktop gates, found {guarded}'
+    # The trial gate is gone. Inventory the remaining desktop conditions in
+    # the real processing entry point so an added gate cannot escape this check.
+    process_function = next(
+        node
+        for node in ast.parse(process_source).body
+        if isinstance(node, ast.FunctionDef) and node.name == 'process_conversation'
+    )
+    desktop_gates = [
+        node
+        for node in ast.walk(process_function)
+        if isinstance(node, ast.If) and 'conversation.source == ConversationSource.desktop' in ast.unparse(node.test)
+    ]
+    assert len(desktop_gates) == 1, f'expected only the legacy desktop deferral gate, found {len(desktop_gates)}'
+    condition = ast.unparse(desktop_gates[0].test)
+    assert 'should_defer_desktop_processing(uid)' in condition
+    assert 'not probe_uid' in condition
     # The discard verdict is another desktop post-processing gate: the probe
     # lane's terminal contract completes only through a kept conversation, so
     # both of its verdicts (the LLM discard decision and the empty-title

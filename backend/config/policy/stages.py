@@ -2,9 +2,9 @@
 
 from dataclasses import dataclass
 import math
+import os
 from typing import Literal, overload
 
-from config.policy.batch import COHORT_SALTS, parse_percent, cohort_bucket
 from config.policy.parts import PolicyPart, boolean, member, policy_environment, source_role
 
 
@@ -16,6 +16,17 @@ class ProjectionPolicy(PolicyPart):
     authoritative_labels: bool = False
     require_live_target: bool = False
     projection_timing: bool = False
+
+
+def projection_phase_sample_percent() -> int:
+    """Read live logging controls without changing persisted projection policy IDs."""
+    if os.environ.get('BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED', '').strip().lower() != 'true':
+        return 100
+    try:
+        percent = int(os.environ.get('BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT', '1'))
+    except ValueError:
+        return 100
+    return percent if 0 <= percent <= 100 else 100
 
 
 @dataclass(frozen=True)
@@ -125,11 +136,11 @@ def resolve_stage_policy(uid: str, stage: str, *, flags=None, obligation=None) -
             terminal_empty_disposition=boolean(env, 'BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED'),
         )
     if stage == 'first_summary':
-        master = boolean(env, 'FIRST_SUMMARY_DEADLINE_ENABLED')
+        # The first-summary deadline applies to every nonempty owner. Keep the
+        # independently owned preservation reader until its lane resolves it.
         existing_deadline = (obligation or {}).get('summary_deadline_at')
         preserved = bool(
-            master
-            and obligation
+            obligation
             and not obligation.get('summary_seen')
             and not obligation.get('effects_only')
             and isinstance(existing_deadline, (int, float))
@@ -137,16 +148,7 @@ def resolve_stage_policy(uid: str, stage: str, *, flags=None, obligation=None) -
             and math.isfinite(existing_deadline)
             and boolean(env, 'FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED')
         )
-        enabled = (
-            preserved
-            or master
-            and (
-                member(uid, env, 'first-summary', 'FIRST_SUMMARY_UID_ALLOWLIST', explicit=flags is not None)
-                or bool(uid)
-                and cohort_bucket(uid, COHORT_SALTS['first-summary'])
-                < parse_percent(env.get('FIRST_SUMMARY_DEADLINE_PERCENT', '0'))
-            )
-        )
+        enabled = preserved or bool(uid)
         try:
             deadline = int(env.get('FIRST_SUMMARY_DEADLINE_SECONDS', '120'))
         except ValueError:

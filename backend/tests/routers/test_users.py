@@ -148,20 +148,33 @@ def test_location_context_consent_requires_disclosure_before_enabling():
     assert exc.value.status_code == 422
 
 
-def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
+@pytest.mark.parametrize(('setting', 'armed'), [(None, False), ('false', False), ('true', False), ('false', True)])
+def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch, setting, armed):
+    from database import go_queue_erase as receipt
+
+    monkeypatch.setenv('K_SERVICE', 'backend-sync')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    if setting is None:
+        monkeypatch.delenv('GO_QUEUE_ERASE_REQUIRED', raising=False)
+    else:
+        monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', setting)
+    setting_store = MagicMock(side_effect=RuntimeError('Firestore setting unavailable'))
+    monkeypatch.setattr(receipt, 'account_deletion_firestore_client', setting_store)
+    protected = setting == 'true' or armed
     calls = []
 
     async def run_wipe(*args):
         calls.append((users_router.run_deletion_wipe_with_lease, args))
         return False
 
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         calls.append((fn, args))
         if fn is users_router.resolve_deletion_wipe_job_id:
-            return {'outcome': 'resolved', 'uid': 'uid1'}
+            return {'outcome': 'resolved', 'uid': 'uid1', 'erase_armed': armed}
         if fn is users_router.try_acquire_job_run_lock:
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
+            assert kwargs == ({'expected_job_id': 'job-1'} if protected else {})
             return 'claimed'
         if fn is users_router.release_job_run_lock:
             return None
@@ -177,23 +190,27 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
 
     assert response.status_code == 500
     assert json.loads(response.body) == {'status': 'retry'}
+    lease = (users_router.ERASE_LEASE_SECONDS,) if protected else ()
+    job = ('job-1',) if protected else ()
     assert calls == [
         (users_router.resolve_deletion_wipe_job_id, ('job-1',)),
-        (users_router.try_acquire_job_run_lock, ('account-deletion:uid1',)),
+        (users_router.try_acquire_job_run_lock, ('account-deletion:uid1', *lease)),
         (users_router.claim_deletion_wipe_for_task, ('uid1',)),
-        (users_router.run_deletion_wipe_with_lease, ('uid1', 0, False, 'lock-token')),
+        (users_router.run_deletion_wipe_with_lease, ('uid1', 0, False, 'lock-token', *job)),
         (users_router.release_job_run_lock, ('account-deletion:uid1', 'lock-token')),
     ]
+    setting_store.assert_not_called()
 
 
 def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
+    monkeypatch.setenv('GO_QUEUE_ERASE_REQUIRED', 'false')
     background_args = []
 
     async def run_wipe(*args):
         background_args.append(args)
         return False
 
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
         if fn is users_router.try_acquire_job_run_lock:
@@ -222,7 +239,7 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
 def test_run_account_deletion_wipe_defers_when_locked(monkeypatch):
     release = MagicMock()
 
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
         if fn is users_router.try_acquire_job_run_lock:
@@ -246,7 +263,7 @@ def test_run_account_deletion_wipe_defers_when_locked(monkeypatch):
 def test_run_account_deletion_wipe_drops_completed_job_without_mutation(monkeypatch):
     calls = []
 
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         calls.append((fn, args))
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'completed', 'uid': None}
@@ -267,7 +284,7 @@ def test_run_account_deletion_wipe_drops_completed_job_without_mutation(monkeypa
 def test_run_account_deletion_wipe_drops_unknown_or_ambiguous_job_without_mutation(monkeypatch, outcome):
     calls = []
 
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         calls.append((fn, args))
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': outcome, 'uid': None}
@@ -345,7 +362,7 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
         state['status'] = 'completed'
         return True
 
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         if fn is users_router.resolve_deletion_wipe_job_id:
             if state['status'] == 'completed':
                 return {'outcome': 'completed', 'uid': None}
@@ -376,7 +393,7 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
 
 
 def test_run_account_deletion_wipe_drops_non_actionable_job(monkeypatch):
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
         if fn is users_router.try_acquire_job_run_lock:
@@ -403,7 +420,7 @@ def test_run_account_deletion_wipe_preserves_lock_on_cancel(monkeypatch):
     async def run_wipe(*args):
         raise asyncio.CancelledError()
 
-    async def run_blocking(_executor, fn, *args):
+    async def run_blocking(_executor, fn, *args, **kwargs):
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
         if fn is users_router.try_acquire_job_run_lock:
@@ -526,6 +543,13 @@ def _stub_transcription_allowance():
     """
     with patch.object(users_router, 'resolve_transcription_allowance', MagicMock(return_value=_managed_allowance())):
         yield
+
+
+@pytest.fixture(autouse=True)
+def _no_play_history(monkeypatch):
+    """Trial eligibility also reads Google Play history; these readers have none."""
+    monkeypatch.setattr(users_router.play_subscriptions_db, 'is_play_customer', lambda uid: False)
+    monkeypatch.setattr(users_router.play_subscriptions_db, 'remember_account_once', lambda *args: None)
 
 
 @pytest.fixture
@@ -690,7 +714,6 @@ def _mock_desktop_quota_storage(monkeypatch, *, enrolled, questions):
         return enrolled
 
     monkeypatch.setattr(users_router.users_db, 'is_byok_active', is_byok_active)
-    monkeypatch.setattr(subscription_utils, 'is_trial_paywalled', lambda *args, **kwargs: False)
     monkeypatch.setattr(
         subscription_utils.users_db,
         'get_user_valid_subscription',
@@ -977,14 +1000,14 @@ def test_subscription_snapshot_survives_a_resolver_that_cannot_read_its_dependen
     and the snapshot the endpoint already built is still returned."""
     import utils.subscription as subscription_module
 
-    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
+    with patch.object(
+        subscription_module, 'get_byok_key', side_effect=RuntimeError('firestore unavailable')
+    ), patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
         users_router, 'request_has_llm_byok_key', MagicMock(return_value=True)
     ), patch.object(
         users_router, 'get_byok_key', MagicMock(side_effect=lambda p: 'dg-key' if p == 'deepgram' else None)
     ), patch.object(
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
-    ), patch.object(
-        subscription_module, 'is_trial_paywalled', MagicMock(side_effect=RuntimeError('firestore unavailable'))
     ), patch.object(
         users_router.users_db,
         'get_user_valid_subscription',
@@ -1039,8 +1062,6 @@ def test_an_expired_paid_subscription_is_downgraded_to_basic_by_the_real_lookup(
     with patch.object(genuine_users_db, 'get_user_subscription', MagicMock(return_value=expired_plus)), patch.object(
         subscription_module.users_db, 'get_user_valid_subscription', genuine_users_db.get_user_valid_subscription
     ), patch.object(subscription_module.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.object(
-        subscription_module, 'is_trial_paywalled', MagicMock(return_value=False)
-    ), patch.object(
         subscription_module, 'get_byok_key', MagicMock(return_value=None)
     ), patch.object(
         subscription_module, 'get_monthly_usage_for_subscription', MagicMock(return_value={'transcription_seconds': 0})
@@ -1073,8 +1094,6 @@ def test_llm_only_byok_snapshot_reads_monthly_usage_once_for_snapshot_and_allowa
         users_router, 'get_monthly_usage_for_subscription', usage_reads
     ), patch.object(
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
-    ), patch.object(
-        subscription_module, 'is_trial_paywalled', MagicMock(return_value=False)
     ), patch.object(
         subscription_module, 'get_byok_key', MagicMock(return_value=None)
     ), patch.object(
@@ -1217,16 +1236,15 @@ def test_closed_real_allowance_preserves_finite_snapshot_budget(monkeypatch, rea
     monkeypatch.setattr(
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
     )
-    monkeypatch.setattr(
-        subscription_module,
-        'is_trial_paywalled',
-        (
-            MagicMock(side_effect=RuntimeError('dependency unavailable'))
-            if reason == 'allowance_unavailable'
-            else lambda *args, **kwargs: False
-        ),
-    )
-    monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
+
+    def allowance_key(provider):
+        if reason == 'allowance_unavailable':
+            raise RuntimeError('dependency unavailable')
+        return None
+
+    monkeypatch.setattr(subscription_module, 'get_byok_key', allowance_key)
+    if reason == 'allowance_unavailable':
+        monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: True)
     monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', '')
     response = users_router.get_user_subscription_endpoint(
         # Shipped clients do not declare the new six-plan capability.
@@ -1272,7 +1290,7 @@ def test_subscription_http_negotiates_catalog_ids_before_response_validation(
     monkeypatch.setattr(users_router.users_db, 'is_byok_active', lambda uid: False)
     monkeypatch.setattr(users_router, 'get_user_subscription', lambda uid: subscription.model_copy())
     monkeypatch.setattr(users_router, 'get_user_valid_subscription', lambda uid: subscription.model_copy())
-    monkeypatch.setattr(users_router, 'reconcile_basic_plan_with_stripe', lambda *args: None)
+    monkeypatch.setattr(users_router, 'reconcile_basic_plan_with_stripe', lambda *args, **kwargs: None)
     monkeypatch.setattr(users_router, 'get_monthly_usage_for_subscription', lambda uid: {'transcription_seconds': 10})
     monkeypatch.setattr(users_router, 'get_paid_plan_definitions', lambda *args, **kwargs: [])
     monkeypatch.setattr(users_router, 'should_hide_subscription_ui', lambda *args: False)
@@ -1289,7 +1307,6 @@ def test_subscription_http_negotiates_catalog_ids_before_response_validation(
     monkeypatch.setattr(
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
     )
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda *args, **kwargs: False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', '')
     app = FastAPI()

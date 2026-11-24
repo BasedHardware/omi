@@ -4,6 +4,7 @@ from config.repeat_work import poll_backoff
 from database import redis_db
 from utils.observability.fallback import record_fallback
 from utils.sync import stage
+from utils.sync.poll_metrics import record_active_sync_uploader, record_first_terminal_read
 
 # Dart admits at most 18 polls/minute per app instance, with 20s per job.
 # Even two instances bursting simultaneously (36 requests) fit this window.
@@ -29,15 +30,26 @@ def admit_sync_job_poll(uid: str) -> bool:
         return True
 
 
-def with_poll_hint(status: dict, *, surface_open: bool = False) -> dict:
+def with_poll_hint(status: dict, *, uid: str | None = None, surface_open: bool = False) -> dict:
     """Use already loaded state only; never query all of an owner's work.
 
     Unknown/active jobs remain quick. A terminal job has no remaining work;
     queued work may wait 60s. A new/active job immediately selects the short
     interval, independent of previous hints. Surface-open callers can explicitly
     request foreground cadence on this read-only endpoint.
+
+    The authenticated job-status route uses sync_job_poll_response to record
+    cohort telemetry before calling this pacing helper.
     """
-    if not poll_backoff():
+    # Custody holds do not benefit from foreground polling or the generic
+    # backoff rollback. Five minutes also matches held-partial reconciliation.
+    if status.get('status') == 'processing' and status.get('reason_code') in {
+        'batch_unit_held',
+        'batch_artifact_missing',
+        'source_alignment_pending',
+    }:
+        return {**status, 'poll_after_ms': 300000}
+    if not poll_backoff(uid):
         return status
     result = dict(status)
     state = status.get('status')
@@ -47,3 +59,10 @@ def with_poll_hint(status: dict, *, surface_open: bool = False) -> dict:
         else 60000 if state == 'queued' and not surface_open else 20000
     )
     return result
+
+
+def sync_job_poll_response(status: dict, uid: str, surface_open: bool) -> dict:
+    """Record the resolved GET status before applying cohort-dependent pacing."""
+    record_active_sync_uploader(uid, status)
+    record_first_terminal_read(uid, status)
+    return with_poll_hint(status, uid=uid, surface_open=surface_open)

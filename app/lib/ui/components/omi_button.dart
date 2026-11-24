@@ -73,6 +73,7 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.pill = false,
     this.colors,
     this.width,
     this.height,
@@ -89,12 +90,13 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.pill = false,
+    this.maxLines = 1,
   })  : variant = OmiButtonVariant.secondary,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null,
-        maxLines = 1;
+        labelStyle = null;
 
   const OmiButton.destructive({
     super.key,
@@ -105,12 +107,13 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.pill = false,
+    this.maxLines = 1,
   })  : variant = OmiButtonVariant.destructive,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null,
-        maxLines = 1;
+        labelStyle = null;
 
   const OmiButton.tertiary({
     super.key,
@@ -121,12 +124,13 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.pill = false,
+    this.maxLines = 1,
   })  : variant = OmiButtonVariant.tertiary,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null,
-        maxLines = 1;
+        labelStyle = null;
 
   /// See [OmiButtonVariant.toolbar].
   const OmiButton.toolbar({
@@ -138,12 +142,13 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.pill = false,
+    this.maxLines = 1,
   })  : variant = OmiButtonVariant.toolbar,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null,
-        maxLines = 1;
+        labelStyle = null;
 
   final String label;
 
@@ -167,6 +172,9 @@ class OmiButton extends StatefulWidget {
   /// Fill the available width.
   final bool expand;
 
+  /// Use the pill radius for a compact action.
+  final bool pill;
+
   /// Legacy colour override; see [OmiButtonColors]. Wins over [variant].
   final OmiButtonColors? colors;
 
@@ -179,8 +187,8 @@ class OmiButton extends StatefulWidget {
   /// Legacy label style. Its colour is ignored; the foreground colour always wins.
   final TextStyle? labelStyle;
 
-  /// Lines before the label ellipsizes. Storefront prices use 2 so a backend CTA can wrap.
-  final int maxLines;
+  /// Lines before the label ellipsizes; null wraps the full label without truncation.
+  final int? maxLines;
 
   /// Reports [error] the same way a thrown [onPressed] future is reported.
   ///
@@ -266,7 +274,7 @@ class _OmiButtonState extends State<OmiButton> {
       widget.label,
       style: textStyle,
       maxLines: widget.maxLines,
-      overflow: TextOverflow.ellipsis,
+      overflow: widget.maxLines == null ? TextOverflow.visible : TextOverflow.ellipsis,
       textAlign: TextAlign.center,
     );
     if (widget.leading != null || widget.icon != null) {
@@ -303,10 +311,17 @@ class _OmiButtonState extends State<OmiButton> {
         foregroundColor: WidgetStatePropertyAll(colors.foreground),
         overlayColor: WidgetStatePropertyAll(colors.foreground.withValues(alpha: 0.12)),
         elevation: const WidgetStatePropertyAll(0),
-        padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: horizontalPadding)),
+        // A label that may wrap keeps space above and below its lines. One line still fits inside the
+        // minimum height, so single-line buttons are unchanged.
+        padding: WidgetStatePropertyAll(EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: widget.maxLines == null ? (compact ? OmiSpacing.xs : OmiSpacing.sm) : 0,
+        )),
         minimumSize: WidgetStatePropertyAll(Size(widget.width ?? visualHeight, visualHeight)),
         fixedSize: widget.width != null ? WidgetStatePropertyAll(Size(widget.width!, visualHeight)) : null,
-        shape: const WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: OmiRadius.mdAll)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: widget.pill ? OmiRadius.pillAll : OmiRadius.mdAll),
+        ),
         // A visual under 44pt gets padded out to a 48pt target; a 48pt button needs no padding.
         tapTargetSize: visualHeight < 44 ? MaterialTapTargetSize.padded : MaterialTapTargetSize.shrinkWrap,
         textStyle: WidgetStatePropertyAll(textStyle),

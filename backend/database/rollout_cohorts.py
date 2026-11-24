@@ -4,6 +4,7 @@ from collections.abc import Iterable, Mapping
 import math
 import re
 from typing import Any
+import uuid
 
 from google.cloud import firestore
 
@@ -77,7 +78,16 @@ RAMP_HISTORY_COLLECTION = 'history'
 RAMP_SCHEMA_VERSION = 1
 # A reader older than a name rejects the whole document (it serves last-known-good), so a new
 # name is written only after every `_ramp` reader runs a build that knows it.
-RAMP_NAMES = ('batch-pipeline', 'first-summary', 'batch-live-stt-retire', 'legacy-sync', 'batch-vendor-routing')
+RAMP_NAMES = (
+    'batch-pipeline',
+    'first-summary',
+    'batch-live-stt-retire',
+    'legacy-sync',
+    'batch-vendor-routing',
+    'new-owner-cell1',
+    # Strict switch for Go finalization (utils/rollout/go_finalization_admission.py): open only at 100.
+    'go-finalization',
+)
 # Names whose percent is a subset of the batch-pipeline bucket (same empty salt).
 BATCH_NESTED_RAMP_NAMES = ('batch-live-stt-retire', 'batch-vendor-routing')
 LEGACY_SYNC_MODES = ('on', 'draining', 'dark')
@@ -120,6 +130,19 @@ def _optional_str(value: Any, field: str, limit: int = 128) -> str | None:
     if not isinstance(value, str) or not value or len(value) > limit:
         raise RampDocumentError(f'ramp {field} malformed')
     return value
+
+
+def _audit_reason_base(reason: object) -> str:
+    # Full override evidence belongs to history. Keep the serving reason token
+    # readable by already deployed readers with the original 40-character schema.
+    if not isinstance(reason, str):
+        raise RampDocumentError('ramp reason malformed')
+    base_reason, sep, override = reason.partition(' accept_not_live:')
+    if not _is_token(base_reason, _TOKEN_RE) or (
+        sep and (len(override.strip()) < 15 or any(ord(c) < 32 for c in override))
+    ):
+        raise RampDocumentError('ramp reason malformed')
+    return base_reason
 
 
 def normalize_ramp_env(raw: Any) -> dict[str, Any]:
@@ -258,8 +281,7 @@ def write_ramp(
         raise RampDocumentError('ramp env unsupported')
     if not _is_token(actor, _ACTOR_RE):
         raise RampDocumentError('ramp actor malformed')
-    if not _is_token(reason, _TOKEN_RE):
-        raise RampDocumentError('ramp reason malformed')
+    base_reason = _audit_reason_base(reason)
     if not _is_revision(expected_revision):
         raise RampDocumentError('ramp expected_revision malformed')
     client = firestore_client or get_data_plane_firestore_client()
@@ -277,7 +299,7 @@ def write_ramp(
             raise RampRevisionConflict(expected_revision, current_revision)
         before: dict[str, Any] = current_envs.get(env) or empty_ramp_env()
         after = apply_ramp_change(before, change)
-        after.update(updated_at=at, updated_by=actor, reason=reason)
+        after.update(updated_at=at, updated_by=actor, reason=base_reason)
         revision = expected_revision + 1
         envs = {**current_envs, env: after}
         transaction.set(ref, {'schema_version': RAMP_SCHEMA_VERSION, 'revision': revision, 'envs': envs})
@@ -295,5 +317,80 @@ def write_ramp(
             },
         )
         return revision, before, after
+
+    return run_transactional(client, commit)
+
+
+# ---------------------------------------------------------------------------
+# Go finalization membership (SCA-3883): every change is atomic with its audit row.
+# ---------------------------------------------------------------------------
+
+GO_FINALIZATION_COHORT = 'go-finalization'
+# Audit rows live under the owner's own cohort document, so account erasure removes them with it
+# (database/user_data_deletion.py) and no shared store keeps the uid.
+GO_FINALIZATION_AUDIT_COLLECTION = 'go_finalization_audit'
+GO_FINALIZATION_ENVS = ('prod', 'dev', 'local', 'offline')
+
+
+def write_go_finalization_membership(
+    uid: str,
+    env: str,
+    member: bool,
+    *,
+    actor: str,
+    reason: str,
+    at: str,
+    firestore_client: Any | None = None,
+) -> tuple[bool | None, bool]:
+    """Set `cohorts.<env>.go-finalization` on `rollout_cohorts/{uid}` and append its audit row in one transaction.
+
+    Returns (before, after). `before` is None when the flag was absent. The audit row, at
+    `rollout_cohorts/{uid}/go_finalization_audit/{id}`, records the actor, reason, environment,
+    before and after; it is created, never updated, and erased with the account.
+    """
+    if not valid_uid(uid) or uid.startswith('_'):
+        raise ValueError('membership uid invalid')
+    if env not in GO_FINALIZATION_ENVS:
+        raise ValueError('membership env unsupported')
+    if type(member) is not bool:
+        raise ValueError('membership value must be boolean')
+    if not _is_token(actor, _ACTOR_RE):
+        raise ValueError('membership actor malformed')
+    if not _is_token(reason, _TOKEN_RE):
+        raise ValueError('membership reason malformed')
+    client = firestore_client or get_data_plane_firestore_client()
+    collection = client.collection(COLLECTION)
+    ref = collection.document(uid)
+    entry_ref = ref.collection(GO_FINALIZATION_AUDIT_COLLECTION).document(uuid.uuid4().hex)
+
+    @firestore.transactional
+    def commit(transaction):
+        snapshot = ref.get(transaction=transaction)
+        data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+        cohorts = data.get('cohorts', {})
+        # Same rule as _read_memberships: a malformed sibling flag would make readers reject the
+        # whole document, so refuse to write one back.
+        if not isinstance(cohorts, dict) or any(
+            not isinstance(flags, dict) or any(type(value) is not bool for value in flags.values())
+            for flags in cohorts.values()
+        ):
+            raise ValueError('invalid cohort document')
+        before = cohorts.get(env, {}).get(GO_FINALIZATION_COHORT)
+        # The snapshot was read in this transaction, so a full write keeps every other cohort flag.
+        updated = {**data, 'cohorts': {**cohorts, env: {**cohorts.get(env, {}), GO_FINALIZATION_COHORT: member}}}
+        transaction.set(ref, updated)
+        transaction.create(
+            entry_ref,
+            {
+                'cohort': GO_FINALIZATION_COHORT,
+                'env': env,
+                'before': before,
+                'after': member,
+                'actor': actor,
+                'reason': reason,
+                'at': at,
+            },
+        )
+        return before, member
 
     return run_transactional(client, commit)

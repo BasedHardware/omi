@@ -1,0 +1,483 @@
+{
+  "uid": "omi-tv-funnel",
+  "title": "Omi TV \u00b7 funnel",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "utc",
+  "refresh": "5m",
+  "editable": true,
+  "graphTooltip": 1,
+  "tags": [
+    "omi-tv",
+    "v3"
+  ],
+  "time": {
+    "from": "now-182d",
+    "to": "now"
+  },
+  "timepicker": {
+    "hidden": true
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "type": "barchart",
+      "title": "Funnel \u00b7 device vs organic",
+      "description": "Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as organic, and pairing is itself an early success, so the gap between the two is overstated. Latest matured weekly new-user cohort, except Kept, which uses the newest cohort old enough to measure it. Onboarded counts only people who arrived on iOS, Android or Mac, the clients that report it. Install is not shown because PostHog sees nobody before sign-up; first summary is not shown because it has no event.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/activation",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.funnel",
+          "columns": [
+            {
+              "selector": "step",
+              "text": "Step",
+              "type": "string"
+            },
+            {
+              "selector": "Device",
+              "text": "Device",
+              "type": "number"
+            },
+            {
+              "selector": "Organic",
+              "text": "Organic",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "fillOpacity": 88,
+            "gradientMode": "none",
+            "lineWidth": 0,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false
+          },
+          "noValue": "Loading\u2026",
+          "decimals": 0,
+          "min": 0,
+          "max": 100
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Device"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Device"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d55181"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Organic"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Organic"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#a8a69e"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "orientation": "vertical",
+        "barWidth": 0.8,
+        "groupWidth": 0.75,
+        "text": {
+          "valueSize": 13
+        },
+        "showValue": "never",
+        "stacking": "none",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "fullHighlight": false,
+        "barRadius": 0.08
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "Step": 0,
+              "Device": 1,
+              "Organic": 2
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 11,
+        "h": 27
+      },
+      "id": 1
+    },
+    {
+      "type": "timeseries",
+      "title": "Activated \u00b7 device vs organic",
+      "description": "Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as organic, and pairing is itself an early success, so the gap between the two is overstated. Week-one activation for each matured weekly cohort, dated by its last day.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/activation",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.funnelWeekly",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "Device",
+              "text": "Device",
+              "type": "number"
+            },
+            {
+              "selector": "Organic",
+              "text": "Organic",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": true,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "lineInterpolation": "smooth",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "Loading\u2026",
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Device"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Device"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d55181"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Organic"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Organic"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#a8a69e"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "date": 0,
+              "Device": 1,
+              "Organic": 2
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "timeFrom": "60d",
+      "hideTimeOverride": true,
+      "gridPos": {
+        "x": 11,
+        "y": 0,
+        "w": 7,
+        "h": 27
+      },
+      "id": 2
+    },
+    {
+      "type": "barchart",
+      "title": "Funnel by platform",
+      "description": "Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as organic, and pairing is itself an early success, so the gap between the two is overstated. Week-one activation in the latest matured weekly new-user cohort, by the platform users first arrived on, with its size in the label. Small platforms move a lot week to week.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/activation",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.funnelPlatforms",
+          "columns": [
+            {
+              "selector": "platform",
+              "text": "Platform",
+              "type": "string"
+            },
+            {
+              "selector": "Device",
+              "text": "Device",
+              "type": "number"
+            },
+            {
+              "selector": "Organic",
+              "text": "Organic",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "fillOpacity": 88,
+            "gradientMode": "none",
+            "lineWidth": 0,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false
+          },
+          "noValue": "Loading\u2026",
+          "decimals": 0,
+          "min": 0,
+          "max": 100
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Device"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Device"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d55181"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Organic"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Organic"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#a8a69e"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "orientation": "horizontal",
+        "barWidth": 0.8,
+        "groupWidth": 0.75,
+        "text": {
+          "valueSize": 13
+        },
+        "showValue": "always",
+        "stacking": "none",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "fullHighlight": false,
+        "barRadius": 0.08
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "Platform": 0,
+              "Device": 1,
+              "Organic": 2
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 27
+      },
+      "id": 3
+    }
+  ],
+  "links": [],
+  "description": "Device vs organic funnel, weekly activation and platform split. Its own rotation board: it fills the 1920\u00d71080 kiosk."
+}

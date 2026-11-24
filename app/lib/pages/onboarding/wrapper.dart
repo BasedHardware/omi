@@ -24,11 +24,13 @@ import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
+import 'package:omi/pages/onboarding/signup_offers.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/variants/pocket/pocket_onboarding_flow.dart';
 import 'package:omi/pages/onboarding/variants/yinka/yinka_onboarding_flow.dart';
 import 'package:omi/pages/paywall/trial_upsell_sheet.dart';
 import 'package:omi/pages/onboarding/web_onboarding_page.dart';
+import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/services/experiments/onboarding_variant_gate.dart';
 import 'package:omi/services/experiments/paywall_experiment.dart';
@@ -72,6 +74,11 @@ class OnboardingWrapper extends StatefulWidget {
         setupPageEnabled: setupPageEnabled,
         knowledgeGraphStepEnabled: knowledgeGraphStepEnabled,
       );
+
+  @visibleForTesting
+  static bool? signupPaywallAnswerForTesting(
+          {required bool shown, required bool purchased, Map<String, dynamic>? plans}) =>
+      _OnboardingWrapperState.signupPaywallAnswer(shown: shown, purchased: purchased, plans: plans);
 
   @visibleForTesting
   static int resumeStepForTesting(int saved) => _OnboardingWrapperState.resolveResumeStep(saved);
@@ -210,7 +217,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // account on a fresh install — sees the consent screen at least
           // once before any AI processing begins.
           if (!SharedPreferencesUtil().aiConsentGiven) {
-            OnboardingVariantGate.warm();
             _controller!.animateTo(kAiConsentPage);
           } else if (SharedPreferencesUtil().onboardingCompleted && !_rerunForTesting) {
             await _routeWithPermissionsCheck(context);
@@ -271,6 +277,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     SharedPreferencesUtil().onboardingCompleted = true;
     SharedPreferencesUtil().permissionsCompleted = true;
     SharedPreferencesUtil().remove(_resumeKey);
+    SignupOffers.clear(SharedPreferencesUtil().uid);
     _stepTelemetry.exit();
     _completeOnboardingTelemetry();
     PlatformManager.instance.analytics.onboardingCompleted();
@@ -288,50 +295,63 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// control, and never when subscription UI is hidden (the router checks that). The `trial` arm
   /// has its placement right after sign-up instead ([_maybeShowSignupPaywall]).
   Future<void> _maybeShowOnboardingPaywall() async {
-    final config = await PaywallExperiment.resolve();
+    final config = PaywallExperiment.current;
     if (!mounted || config.isControl || !config.onboardingPaywall) return;
     if (config.variant == PaywallVariant.trial) return;
     await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
   }
 
-  /// The `trial` arm's placement: once, right after sign-up and consent, before the first step.
-  /// Dismissing it (close button) just continues onboarding.
+  /// The `trial` arm's placement: once per onboarding run, right after sign-up and consent, before
+  /// the first step. Dismissing it (close button) just continues onboarding; a relaunch after that
+  /// resumes at the reader's step ([SignupOffers]).
   bool _signupPaywallPurchased = false;
 
   Future<void> _maybeShowSignupPaywall() async {
     if (_signupPaywallShown) return;
-    final config = await PaywallExperiment.resolve();
+    final config = PaywallExperiment.current;
     if (!mounted || config.variant != PaywallVariant.trial || !config.onboardingPaywall) return;
     _signupPaywallShown = true;
-    // The router needs the subscription (trial eligibility) that sign-in only started fetching.
-    final usage = context.read<UsageProvider>();
-    if (usage.subscription == null) await usage.fetchSubscription();
-    if (!mounted) return;
-    await PaywallRouter.openVariant(
-      context,
-      source: 'onboarding',
-      config: config,
-      onResult: (result) => _signupPaywallPurchased = result == true,
-    );
+    _signupPaywallPurchased = await SignupOffers.paywall(SharedPreferencesUtil().uid, () async {
+      // The router needs the subscription (trial eligibility) that sign-in only started fetching.
+      final usage = context.read<UsageProvider>();
+      if (usage.subscription == null) await usage.fetchSubscription();
+      if (!mounted) return null;
+      bool purchased = false;
+      final shown = await PaywallRouter.openVariant(
+        context,
+        source: 'onboarding',
+        config: config,
+        onResult: (result) => purchased = result == true,
+      );
+      return signupPaywallAnswer(shown: shown, purchased: purchased, plans: usage.availablePlans);
+    });
   }
 
-  /// Enters the steps after sign-in and consent: the arm of `onboarding-variant` for this reader
-  /// (Reid's web page, Yinka's flow) or the native step the reader left off at. A web page that
-  /// falls back lands on that same native step.
+  /// What the sign-up paywall's return counts as: bought, closed, or null (not stored) when no page
+  /// was shown or the page could not load the plans and so offered nothing.
+  static bool? signupPaywallAnswer({required bool shown, required bool purchased, Map<String, dynamic>? plans}) {
+    if (!shown) return null;
+    if (purchased) return true;
+    return PaywallOffer.fromCatalog(plans) == null ? null : false;
+  }
+
+  /// Enters the steps after sign-in and consent: Pocket's flow. The other arms are debug-only: Reid's
+  /// web page, Yinka's flow, or the native step the reader left off at. A web page that falls back
+  /// lands on that same native step.
   Future<void> _enterSteps() async {
     await _maybeShowSignupPaywall();
     if (!mounted) return;
-    final arm = await OnboardingVariantGate.resolve();
-    if (!mounted) return;
+    final arm = OnboardingVariantGate.arm;
     PlatformManager.instance.analytics.track('Onboarding Variant Shown', properties: {
       'variant': arm.variant.wireName,
       '\$feature/${OnboardingVariantGate.enabledFlag}': arm.variant.wireName,
     });
     switch (arm.variant) {
       case OnboardingVariant.pocket:
-        // Closing the sign-up trial paywall earns the 30-day downsell, once.
+        // Closing the sign-up trial paywall earns the 30-day downsell, once per onboarding run.
         if (_signupPaywallShown && !_signupPaywallPurchased) {
-          await TrialUpsellSheet.show(context, source: 'onboarding');
+          await SignupOffers.upsell(
+              SharedPreferencesUtil().uid, () => TrialUpsellSheet.show(context, source: 'onboarding'));
           if (!mounted) return;
         }
         // The flow offers no plan itself: skip the end placement only when sign-up already showed one.
@@ -495,7 +515,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   /// "Use a Different Account" on the consent step: sign out and start again from the beginning.
   Future<void> _useDifferentAccount() async {
-    OnboardingVariantGate.invalidate();
     _voiceController?.dispose();
     _voiceController = null;
     final navigator = Navigator.of(context, rootNavigator: true);
@@ -599,7 +618,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // state so a returning user signing in on a fresh install still
           // sees the consent screen before any AI processing begins.
           if (!SharedPreferencesUtil().aiConsentGiven) {
-            OnboardingVariantGate.warm();
             _controller!.animateTo(kAiConsentPage);
           } else if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);

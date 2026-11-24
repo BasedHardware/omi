@@ -6,6 +6,8 @@ from dataclasses import fields
 import time
 
 from database.batch_pipeline_policy import load_stage_policy, UnpinnedPolicyRefused
+from config.batch_paid_attempt import retryable
+from database.batch_pipeline_paid_attempt import mark_spent
 from config.prerecorded_stt import require_provider_environment, PrerecordedSTTService
 from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled
 from config.batch_pipeline_empty_asr import terminal_empty_allowed
@@ -21,11 +23,16 @@ from config.batch_language_recovery import (
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
-from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive, ordinary_empty_redrive
+from database.batch_pipeline_speech_redrive import (
+    SpeechRedriveStore,
+    independent_redrive,
+    ordinary_empty_redrive,
+    replaceable_modulate_intent,
+)
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from utils.batch_pipeline.contracts import WorkItem, held_vad_census, held_result_allowed, worker_vad_speech
 from utils.batch_pipeline.quarantine_recovery import log_failure, log_terminal_empty
-from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe
+from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe, independent_ready
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
@@ -43,6 +50,39 @@ from utils.batch_pipeline.admission import admitted_as_byok
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
 from utils.observability.fallback import record_fallback
 from utils.observability.stt_cap_dispatch import record_audio
+from utils.stt.soniox_batch import takeover_admitted
+from utils.stt.vendor_guard import breaker_refuses, ENDPOINT_STT
+
+
+def speech_preflight(job, artifacts, uid, *, independent, repair, protocol, now, expected_recovery):
+    """All local refusals precede creating or renewing a paid intent."""
+    protocol.observe_preflight(job['segment_id'], uid, expected_recovery, now, None)
+    item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
+    audio = artifacts.fetch_audio(item)
+    _, duration, spans = inspect_audio(item, audio)
+    protocol.observe_preflight(item.segment_id, uid, expected_recovery, now, sum(s['end'] - s['start'] for s in spans))
+    worker = worker_vad_speech(job)
+    if not spans and not independent and worker is None:
+        raise RecoveryFailure('strict_vad', 'no_speech')
+    if independent and (not independent_allowed(duration) or not independent_ready()):
+        return 'independent_budget_held', None
+    if repair and duration > MAX_AUDIO_SECONDS:
+        return 'repair_budget_held', None
+    provider = 'soniox' if independent else 'modulate'
+    if not independent and breaker_refuses(ENDPOINT_STT):
+        return 'provider_held', None
+    if admitted_as_byok(job) and not independent and not repair:
+        record_decision(DispatchPath.SPEECH_REDRIVE, True, DispatchReason.BYOK)
+    elif not sync_allowed(
+        uid,
+        max(duration, item.duration_seconds) if repair else item.duration_seconds,
+        provider,
+        lane='batch',
+        path=DispatchPath.SPEECH_REDRIVE,
+    ):
+        return 'allowance_held', None
+    require_provider_environment(provider)
+    return None, (audio, duration, spans, worker)
 
 
 def redrive_one(
@@ -62,8 +102,9 @@ def redrive_one(
     independent_language=False,
     repair=False,
     ordinary_empty_independent=False,
+    retry_failed=False,
 ):
-    """No automatic retry after dispatch, even on uncertain network/process loss.
+    """One explicit retry after a caught provider failure; uncertain process loss holds.
 
     `repair` is the explicit lead-7fa3d2 language-guard words repair: one
     Modulate call per unit (paid epoch 4) under bound worker VAD evidence. It
@@ -91,7 +132,28 @@ def redrive_one(
         return 'disabled'
     elif independent_redrive(original_job) != independent_language:
         return 'independent_plan_required'
-    protocol = SpeechRedriveStore(store, server_flags=server_flags)
+    protocol = SpeechRedriveStore(store, server_flags=server_flags, max_attempts=2 if retry_failed else 1)
+    prior_marker = original_job.get('speech_redrive') or {}
+    preflight = None
+    if (
+        not prior_marker
+        or prior_marker.get('state') == 'prepared'
+        or retryable(prior_marker, prior_marker.get('state'))
+        or not repair
+        and replaceable_modulate_intent(original_job, prior_marker, ordinary_empty=ordinary_empty_independent)
+    ):
+        refused, preflight = speech_preflight(
+            original_job,
+            artifacts,
+            uid,
+            independent=not repair and (independent_redrive(original_job) or ordinary_empty_independent),
+            repair=repair,
+            protocol=protocol,
+            now=clock(),
+            expected_recovery=expected_recovery,
+        )
+        if refused:
+            return refused
     job = protocol.prepare(
         sid,
         uid,
@@ -154,37 +216,27 @@ def redrive_one(
                 log_failure(failure)
                 return 'failed_held'
         return 'running_held'
-    audio = artifacts.fetch_audio(item)
-    _, duration, spans = inspect_audio(item, audio)
+    if preflight is None:
+        refused, preflight = speech_preflight(
+            job,
+            artifacts,
+            uid,
+            independent=independent,
+            repair=repair,
+            protocol=protocol,
+            now=clock(),
+            expected_recovery=expected_recovery,
+        )
+        if refused:
+            return refused
+    if preflight is None:
+        return 'fenced'
+    audio, duration, spans, worker = preflight
     measured = sum(span['end'] - span['start'] for span in spans)
     # The same bound acoustic proof applies to ordinary worker failures. This
     # changes neither the explicit paid epoch nor its ownership/privacy fences.
-    worker = worker_vad_speech(job)
     if independent and not protocol.observe_vad(sid, token, plan_digest, measured):
         return 'fenced'
-    if not spans and not independent and worker is None:
-        raise RecoveryFailure('strict_vad', 'no_speech')
-    if independent and not independent_allowed(duration):
-        return 'independent_budget_held'
-    # The decoded audio (up to 0.1 s past the declared duration) bounds the repair call.
-    if repair and duration > MAX_AUDIO_SECONDS:
-        return 'repair_budget_held'
-    if admitted_as_byok(job) and not independent and not repair:
-        record_decision(DispatchPath.SPEECH_REDRIVE, True, DispatchReason.BYOK)
-    elif not sync_allowed(
-        uid,
-        max(duration, item.duration_seconds) if repair else item.duration_seconds,
-        provider,
-        lane='batch',
-        path=DispatchPath.SPEECH_REDRIVE,
-    ):
-        return 'allowance_held'
-    # Check deployment dependencies before spending the sole intent. No fallback
-    # to Parakeet is permitted if the alternate provider is unconfigured.
-    if independent:
-        require_provider_environment(PrerecordedSTTService.SONIOX)
-    else:
-        require_provider_environment(PrerecordedSTTService.MODULATE)
     if not protocol.start(sid, token, plan_digest, clock()):
         return 'fenced'
     record_fallback(component='stt_selection', from_mode='batch', to_mode=provider, reason='other', outcome='degraded')
@@ -224,6 +276,9 @@ def redrive_one(
     except BatchPrivacyBlocked:
         raise
     except Exception as error:
+        if isinstance(error, (MultilingualEmpty, WordsWithoutVad)):
+            if not mark_spent(store, sid, token, 'speech_redrive', clock()):
+                return 'fenced'
         failure = (
             {'stage': error.stage, 'reason': error.reason}
             if isinstance(error, RecoveryFailure)
@@ -265,6 +320,8 @@ def redrive_one(
             payload = terminal_empty_payload(error.duration, error.spans)
             failure = None
     else:
+        if not mark_spent(store, sid, token, 'speech_redrive', clock()):
+            return 'fenced'
         failure = None
         if independent or repair:
             billable_independent = independent
@@ -332,13 +389,14 @@ def prepared_independent_one(
     clock=time.time,
     independent_stt=second_transcribe,
 ):
-    """Operator take-over of a sealed prepared epoch-1 intent; one Soniox call at most.
+    """Operator take-over of a sealed epoch-1 intent, with one bounded failed-call retry.
 
     Only this path may admit a language-guarded unit above the global 60s
     independent bound, and only up to ``max_seconds`` for ids the sealed plan
-    froze. The existing epoch-1 token fence (``RecoveryStore.start``) stays the
-    sole paid-intent CAS: no new intent is created, custody is preserved, and
-    nothing is deleted. A unit that #23795's duration-limit refusal already
+    froze. The initial epoch-1 token fence (``RecoveryStore.start``) remains the
+    paid-intent CAS. A caught provider failure may explicitly rotate that token
+    once while retaining its receipt; a running/uncertain or spent intent never
+    retries. Custody is preserved and nothing is deleted. A duration-limit refusal already
     settled without ever starting the intent is admitted through the mirrored
     ``RecoveryStore.start_duration_limited``; a spent intent never reopens. The
     sealed cohort file and the lead's approved plan sha are the audit trail;
@@ -366,7 +424,8 @@ def prepared_independent_one(
         return 'already_applied'
     # A duration-limit refusal (#23795) never spent the intent; it reopens here.
     reopen = duration_limited(job)
-    if job['recovery_state'] == 'failed_held' and not reopen:
+    retry = retryable(recovery, job.get('recovery_state'))
+    if job['recovery_state'] == 'failed_held' and not (reopen or retry):
         return 'failed_held'
     if job['recovery_state'] == 'running':
         # A crashed take-over reconciles its artifact without repeating STT.
@@ -403,25 +462,41 @@ def prepared_independent_one(
                 log_failure(failure)
                 return 'failed_held'
         return 'running_held'
-    if job['recovery_state'] != 'prepared' and not reopen:
+    if job['recovery_state'] != 'prepared' and not (reopen or retry):
         return 'unit_not_eligible'
     audio = artifacts.fetch_audio(item)
     _, duration, spans = inspect_audio(item, audio)
     measured = sum(span['end'] - span['start'] for span in spans)
     # Bound worker VAD may locate guarded words that strict CPU VAD missed.
     worker = worker_vad_speech(job)
-    if not reopen and not protocol.observe_vad(sid, token, measured):
+    if not (reopen or retry) and not protocol.observe_vad(sid, token, measured):
         return 'fenced'
     # The allowance is rechecked against the independent provider, exactly as
     # the runtime independent route does; the take-over never bypasses it.
     if not sync_allowed(uid, item.duration_seconds, 'soniox', lane='batch', path=DispatchPath.QUARANTINE):
         return 'allowance_held'
     require_provider_environment(PrerecordedSTTService.SONIOX)
-    started = (
-        protocol.start_duration_limited(sid, token, clock(), audio_uri=item.audio_uri, audio_seconds=duration)
-        if reopen
-        else protocol.start(sid, token, clock(), provider='modulate')
-    )
+    # The Soniox gate re-checks this same scoped bound. Check it before the CAS
+    # so a policy refusal holds the unit instead of spending its only intent.
+    if not takeover_admitted(duration, max_seconds):
+        return 'independent_budget_held'
+    if retry:
+        started = protocol.retry_paid_takeover(sid, token, clock())
+        if started:
+            token = started
+    else:
+        started = (
+            protocol.start_duration_limited(
+                sid,
+                token,
+                clock(),
+                audio_uri=item.audio_uri,
+                audio_seconds=duration,
+                operator_paid_attempt=True,
+            )
+            if reopen
+            else protocol.start(sid, token, clock(), provider='modulate', operator_paid_attempt=True)
+        )
     if not started:
         return 'fenced'
     record_fallback(component='stt_selection', from_mode='batch', to_mode='soniox', reason='other', outcome='degraded')
@@ -429,12 +504,17 @@ def prepared_independent_one(
         return 'running_held'
     payload, failure, billable = None, None, False
     try:
-        payload = independent_stt(item, audio, MultilingualEmpty(duration, spans, worker))
+        payload = independent_stt(
+            item, audio, MultilingualEmpty(duration, spans, worker), takeover_max_seconds=max_seconds
+        )
         if result_outcome(payload) != 'success' or not payload.get('words'):
             raise RecoveryFailure('payload_validation', 'invalid_payload')
     except BatchPrivacyBlocked:
         raise
     except Exception as error:
+        if isinstance(error, (MultilingualEmpty, WordsWithoutVad)):
+            if not mark_spent(store, sid, token, 'recovery', clock()):
+                return 'fenced'
         failure = (
             {'stage': error.stage, 'reason': error.reason}
             if isinstance(error, RecoveryFailure)
@@ -454,6 +534,8 @@ def prepared_independent_one(
             measured,
         )
     else:
+        if not mark_spent(store, sid, token, 'recovery', clock()):
+            return 'fenced'
         billable = True
         record_recognizer(store, sid, token, 'recovery', 'soniox', 'words', len(payload['words']), measured)
     if billable and cap_enabled(uid, 'batch'):

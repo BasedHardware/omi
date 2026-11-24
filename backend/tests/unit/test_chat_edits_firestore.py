@@ -9,6 +9,8 @@ import pytest
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 from database import chat_edits
+from config.policy import FirstSummaryPolicy
+from utils.conversations.summary_delivery import refusal
 from database.messaging import MessagingStore
 from utils.messaging.undo import UndoStore
 from utils.messaging.projection import SurfaceRuntime, chat_write_runtime
@@ -79,6 +81,76 @@ def test_exact_restore_including_missing_fields_and_timestamps(store, kind, coll
     assert ref.get().to_dict() == before
 
 
+@pytest.mark.parametrize('field', ['user_title', 'user_overview'])
+@pytest.mark.parametrize(
+    'refused',
+    [
+        {},
+        {'summary_completed_at': 150},
+        {'discarded': True},
+        {'status': 'processing'},
+        {'finalization_job_id': 'owned'},
+    ],
+)
+def test_manual_undo_restores_missing_fields_and_only_rearms_owed_debt(store, field, refused):
+    ref = store.user('owner').collection('conversations').document('target')
+    ref.set(
+        {
+            'status': 'completed',
+            'structured': {'title': 'Minimum', 'title_provenance': 'server_minimum'},
+            'summary_title_provenance': 'server_minimum',
+            'summary_first_pending_at': 100,
+            'summary_due_at': 160,
+            'first_summary_policy': FirstSummaryPolicy(first_summary_deadline_seconds=60).to_dict(),
+        }
+    )
+    previous = chat_edits.snapshot('owner', 'conversation', 'target', firestore_client=store.db)
+    expected = chat_edits.apply_update(
+        'owner', 'conversation', 'target', previous, {field: 'Manual'}, firestore_client=store.db
+    )
+    assert ref.get().to_dict()['summary_due_at'] is None
+    if refused:
+        ref.update(refused)
+    chat_edits.restore('owner', 'conversation', 'target', expected, previous, firestore_client=store.db)
+    restored = ref.get().to_dict()
+    assert 'user_title' not in restored and 'user_overview' not in restored
+    assert restored['summary_first_pending_at'] == 100
+    assert restored['summary_due_at'] == (None if refused else 160)
+    assert (refusal(restored) is None) == (not refused)
+
+
+@pytest.mark.parametrize('field', ['user_title', 'user_overview'])
+@pytest.mark.parametrize('remove', [None, firestore.DELETE_FIELD])
+@pytest.mark.parametrize('existing_due', [None, 211])
+def test_manual_update_removal_rearms_in_the_same_commit(store, field, remove, existing_due):
+    ref = store.user('owner').collection('conversations').document('target')
+    ref.set(
+        {
+            'status': 'completed',
+            'structured': {'title': 'Minimum'},
+            'summary_title_provenance': 'server_minimum',
+            'summary_first_pending_at': 100,
+            'summary_due_at': existing_due,
+            'first_summary_policy': FirstSummaryPolicy(first_summary_deadline_seconds=60).to_dict(),
+            field: 'Manual',
+        }
+    )
+    previous = chat_edits.snapshot('owner', 'conversation', 'target', firestore_client=store.db)
+    after = chat_edits.apply_update(
+        'owner', 'conversation', 'target', previous, {field: remove, 'summary_due_at': None}, firestore_client=store.db
+    )
+    restored = ref.get().to_dict()
+    assert restored.get(field) is None
+    assert (field not in restored) == (remove is firestore.DELETE_FIELD)
+    assert after == chat_edits.snapshot('owner', 'conversation', 'target', firestore_client=store.db)
+    assert refusal(restored) is None
+    assert restored['summary_due_at'] == (160 if existing_due is None else existing_due)
+    chat_edits.restore('owner', 'conversation', 'target', after, previous, firestore_client=store.db)
+    restored_manual = ref.get().to_dict()
+    assert refusal(restored_manual) == 'manual'
+    assert restored_manual['summary_due_at'] is None
+
+
 def test_app_owner_undo_once_audit_and_reloaded_message(store, monkeypatch):
     store.user('owner').set({'name': 'Synthetic'})
     store.user('owner').collection('chat_sessions').document('session').set({'id': 'session'})
@@ -115,3 +187,49 @@ def test_app_owner_undo_once_audit_and_reloaded_message(store, monkeypatch):
     assert 'Before' not in str(audit) and 'After' not in str(audit)
     blocks = store.user('owner').collection('messages').document('auto-document').get().to_dict()['content_blocks']
     assert blocks[0]['undoneAt'] and not blocks[0]['undoable']
+
+
+def test_task_completion_edit_writes_canonical_mirrors_and_undoes_exactly(store):
+    """A chat completion edit must pass the fence and undo back to the exact prior row.
+
+    Regression for `Unsupported chat edit field`: the write codec derives
+    `status` from `completed`, so the fence has to accept and snapshot it.
+    """
+    from database.action_item_codec import prepare_action_item_for_write
+
+    ref = store.user('owner').collection('action_items').document('target')
+    original = {'description': 'Task', 'completed': False, 'status': 'active', 'due_at': None}
+    ref.set(original)
+    previous = chat_edits.snapshot('owner', 'task', 'target', firestore_client=store.db)
+    updates = prepare_action_item_for_write(
+        {'completed': True, 'completed_at': datetime(2026, 11, 23, tzinfo=timezone.utc)}, partial=True
+    )
+    expected = chat_edits.apply_update('owner', 'task', 'target', previous, updates, firestore_client=store.db)
+    written = ref.get().to_dict()
+    assert written['completed'] is True
+    assert written['status'] == 'completed'
+    chat_edits.restore('owner', 'task', 'target', expected, previous, firestore_client=store.db)
+    assert ref.get().to_dict() == original
+
+
+def test_task_due_edit_clears_structured_due_and_undoes_exactly(store):
+    """A chat due-date edit writes the codec's `due` mirror and undo restores it."""
+    from database.action_item_codec import prepare_action_item_for_write
+
+    ref = store.user('owner').collection('action_items').document('target')
+    original = {
+        'description': 'Task',
+        'completed': False,
+        'status': 'active',
+        'due_at': datetime(2099, 1, 1, tzinfo=timezone.utc),
+        'due': {'kind': 'instant', 'instant': datetime(2099, 1, 1, tzinfo=timezone.utc), 'timezone': 'UTC'},
+    }
+    ref.set(original)
+    previous = chat_edits.snapshot('owner', 'task', 'target', firestore_client=store.db)
+    updates = prepare_action_item_for_write({'due_at': datetime(2099, 2, 2, tzinfo=timezone.utc)}, partial=True)
+    expected = chat_edits.apply_update('owner', 'task', 'target', previous, updates, firestore_client=store.db)
+    written = ref.get().to_dict()
+    assert written['due_at'] == datetime(2099, 2, 2, tzinfo=timezone.utc)
+    assert written['due'] is None
+    chat_edits.restore('owner', 'task', 'target', expected, previous, firestore_client=store.db)
+    assert ref.get().to_dict() == original

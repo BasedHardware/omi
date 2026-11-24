@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-referral-pocket-layout.png",
+      "platform": "mobile-ios",
+      "description": "Referral page in the Pocket layout for a preview-cohort owner: scannable QR of the referral link, two-line title, milestone timeline card, pinned full-width Share pill (OmiButton) and close control. iPhone 17 Pro simulator, light mode, default text, local backend with the preview cohort set.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-referral-pocket-reopen.png",
+      "platform": "mobile-ios",
+      "description": "Same page after closing and reopening it from Settings a third time; the same link and layout load each time.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-referral-pocket-dark.png",
+      "platform": "mobile-ios",
+      "description": "Dark mode: the QR card keeps its white background and black modules, the milestone card sits on the dark surface, and Share is the white accent pill with a black label.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-referral-pocket-max-text.png",
+      "platform": "mobile-ios",
+      "description": "Largest accessibility text size: the title wraps word by word without clipping, the page scrolls under the pinned Share pill, and the Share label grows inside the button without clipping.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-referral-pocket-copied-toast.png",
+      "platform": "mobile-ios",
+      "description": "Tapping the QR copies the link; the Copied toast floats above the pinned Share pill instead of covering it.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-referral-pocket-share-after-copy.png",
+      "platform": "mobile-ios",
+      "description": "Share tapped immediately after a copy, while the Copied toast was still showing: the native share sheet opens with the full referral link.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "007-mobile-ios-referral-pocket-claimable.png",
+      "platform": "mobile-ios",
+      "description": "iPhone 17 Pro simulator. State A: two friends attributed, checked out and paid (settle_order), nothing claimed, so 2 claimable months. Claim pill on the first reward row, beside its copy, with a filled check; light mode, default text. Local backend in preview mode reading the real Firestore-emulator ledger for preview owner mux-referral-owner, seeded through the backend's own ledger functions; final source 58d64127b7.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "008-mobile-ios-referral-pocket-claimable-dark.png",
+      "platform": "mobile-ios",
+      "description": "iPhone 17 Pro simulator. State A: two friends attributed, checked out and paid (settle_order), nothing claimed, so 2 claimable months. Same state in dark mode: white Claim pill with black label on the dark milestone card. Local backend in preview mode reading the real Firestore-emulator ledger for preview owner mux-referral-owner, seeded through the backend's own ledger functions; final source 58d64127b7.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "009-mobile-ios-referral-pocket-claimable-max-text.png",
+      "platform": "mobile-ios",
+      "description": "iPhone 17 Pro simulator. State A: two friends attributed, checked out and paid (settle_order), nothing claimed, so 2 claimable months. Largest accessibility text, scrolled to the rewards card: Claim moves under \"When 2 friends buy Omi\" so the copy wraps by whole words (before this fix the pill squeezed the column and split words); Share stays pinned below. Local backend in preview mode reading the real Firestore-emulator ledger for preview owner mux-referral-owner, seeded through the backend's own ledger functions; final source 58d64127b7.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "010-mobile-ios-referral-pocket-claimable-dark-max-text.png",
+      "platform": "mobile-ios",
+      "description": "iPhone 17 Pro simulator. State A: two friends attributed, checked out and paid (settle_order), nothing claimed, so 2 claimable months. Largest accessibility text in dark mode, scrolled to the rewards card: stacked Claim pill, whole-word wrapping. Local backend in preview mode reading the real Firestore-emulator ledger for preview owner mux-referral-owner, seeded through the backend's own ledger functions; final source 58d64127b7.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "011-mobile-ios-referral-pocket-pending.png",
+      "platform": "mobile-ios",
+      "description": "iPhone 17 Pro simulator. State B: the 2 months claimed while free (claim_months), then a paid Pro month installed, which requeues the grant behind the paid period (reward_status pending_paid_subscription). First milestone checked, no Claim pill, and the note \"Your reward is saved until your paid subscription ends.\" between the card and Share; light mode, default text. Local backend in preview mode reading the real Firestore-emulator ledger for preview owner mux-referral-owner, seeded through the backend's own ledger functions; final source 58d64127b7.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "012-mobile-ios-referral-pocket-pending-dark.png",
+      "platform": "mobile-ios",
+      "description": "iPhone 17 Pro simulator. State B: the 2 months claimed while free (claim_months), then a paid Pro month installed, which requeues the grant behind the paid period (reward_status pending_paid_subscription). Same state in dark mode; the note uses the secondary text color on the dark surface. Local backend in preview mode reading the real Firestore-emulator ledger for preview owner mux-referral-owner, seeded through the backend's own ledger functions; final source 58d64127b7.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "013-mobile-ios-referral-pocket-pending-max-text.png",
+      "platform": "mobile-ios",
+      "description": "iPhone 17 Pro simulator. State B: the 2 months claimed while free (claim_months), then a paid Pro month installed, which requeues the grant behind the paid period (reward_status pending_paid_subscription). Largest accessibility text, swiped to the end of the page: the full pending note sits above the pinned Share pill with nothing underneath it. Local backend in preview mode reading the real Firestore-emulator ledger for preview owner mux-referral-owner, seeded through the backend's own ledger functions; final source 58d64127b7.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "014-mobile-ios-referral-pocket-pending-dark-max-text.png",
+      "platform": "mobile-ios",
+      "description": "iPhone 17 Pro simulator. State B: the 2 months claimed while free (claim_months), then a paid Pro month installed, which requeues the grant behind the paid period (reward_status pending_paid_subscription). Largest accessibility text in dark mode, end of page: full pending note above Share. Local backend in preview mode reading the real Firestore-emulator ledger for preview owner mux-referral-owner, seeded through the backend's own ledger functions; final source 58d64127b7.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

@@ -134,6 +134,20 @@ def test_retrieve_file_paths_v2_bad_extension_still_400(tmp_path, monkeypatch):
     assert upload.filename not in exc_info.value.detail
 
 
+def test_retrieve_file_paths_v2_repeated_filename_refused_before_any_write(tmp_path, monkeypatch):
+    """Two bodies under one name would share one file; the app isolates each file after a 400."""
+    monkeypatch.chdir(tmp_path)
+    name = 'audio_omi_pcm16_16000_1_fs160_1704067200.bin'
+    first, second = _StubUploadFile(filename=name), _StubUploadFile(filename=name)
+
+    with pytest.raises(HTTPException) as exc_info:
+        mod._retrieve_file_paths_v2([first, second], 'u1', 'job-1')
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == {'code': 'invalid_file', 'message': 'Repeated sync filename'}
+    assert not (tmp_path / 'syncing').exists()
+
+
 def test_retrieve_file_paths_v2_write_failure_keeps_private_filename_out_of_response(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     upload = _StubUploadFile(filename='private-recording_1704067200.bin')

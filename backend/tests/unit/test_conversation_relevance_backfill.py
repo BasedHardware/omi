@@ -1,5 +1,7 @@
 """scripts/conversation_relevance_backfill.py: which stored rows it hides, and never more."""
 
+import pytest
+
 from scripts.conversation_relevance_backfill import Summary, backfill_user, decision_record, verdict_for
 
 
@@ -45,6 +47,14 @@ def test_rows_already_assessed_or_hidden_are_left_alone():
     assert verdict_for(_row(discarded=True)) is None
     assert verdict_for(_row(deleted=True)) is None
     assert verdict_for(_row(status='processing')) is None
+
+
+@pytest.mark.parametrize('reason', ['content_below_floor', 'occasion_member', 'occasion_neighbor', 'occasion_context'])
+def test_keeps_that_never_ran_the_rules_are_rejudged(reason):
+    decision = {'verdict': 'keep', 'reason': reason}
+    assert verdict_for(_row('Thank you', relevance_decision=decision)) == 'no_content_words'
+    assert verdict_for(_row('Call mom about the lease', relevance_decision=decision)) is None
+    assert verdict_for(_row('Thank you', relevance_decision=decision, starred=True)) is None
 
 
 def test_user_curation_and_calendar_evidence_protect_a_row():

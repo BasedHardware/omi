@@ -416,7 +416,7 @@ def screen_activity_core(
             'group_by': group_by,
             'buckets': buckets,
             **(
-                {'note': 'cursor ignored; aggregate covers the full requested window'}
+                {'note': 'cursor ignored; aggregate covers queried synced observations'}
                 if cursor_token is not None
                 else {}
             ),
@@ -425,7 +425,10 @@ def screen_activity_core(
                 'row_limit': cap,
                 'scanned_count': len(rows),
                 'truncated': truncated,
-                'complete_window': not truncated,
+                'complete_window': False,
+                'query_complete': not truncated,
+                'capture_completeness': 'unknown',
+                'devices': screen_activity_db.observed_device_coverage(localized),
                 'first_observed_at': localized[0].get('timestamp') if localized else None,
                 'last_observed_at': localized[-1].get('timestamp') if localized else None,
             },

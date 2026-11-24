@@ -4,6 +4,70 @@ import XCTest
 
 @MainActor
 final class ConversationRepositoryTests: XCTestCase {
+  func testAlreadyDeletedEvictsCacheAndConfirmsFeedback() async throws {
+    let row = makeConversation(revision: 1)
+    let remote = FakeConversationRemote(listResult: .success([row]), deleteResult: .success(()))
+    remote.deleteOutcome = .alreadyDeleted
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    let outcome = try await repository.delete(id: row.id)
+    let feedback = ConversationDeleteFeedback()
+    XCTAssertTrue(feedback.present(outcome))
+    XCTAssertNil(feedback.failure)
+    XCTAssertEqual(OmiToastCenter.shared.current?.message, "Conversation was already deleted")
+    XCTAssertTrue(repository.conversations.isEmpty)
+    XCTAssertEqual(local.deletedIds, [row.id])
+  }
+
+  func testBusyDeleteKeepsRowAndPresentsRetryableFailure() async throws {
+    let row = makeConversation(revision: 1)
+    let remote = FakeConversationRemote(listResult: .success([row]), deleteResult: .success(()))
+    remote.deleteOutcome = .busy(retryAfter: 2)
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    let outcome = try await repository.delete(id: row.id)
+    let feedback = ConversationDeleteFeedback()
+    XCTAssertFalse(feedback.present(outcome))
+    XCTAssertEqual(feedback.failure, .busy(retryAfter: 2))
+    XCTAssertEqual(repository.conversations, [row])
+    XCTAssertTrue(local.deletedIds.isEmpty)
+  }
+
+  func testHardDeleteFailureKeepsRowAndPresentsError() async {
+    let row = makeConversation(revision: 1)
+    let remote = FakeConversationRemote(listResult: .success([row]))
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    let feedback = ConversationDeleteFeedback()
+    do {
+      _ = try await repository.delete(id: row.id)
+      XCTFail("The server failure must be propagated")
+    } catch {
+      let message = UserFacingErrorPresentation.message(for: error, while: .conversationDeletion)
+      XCTAssertFalse(feedback.present(.failed(message: message)))
+      XCTAssertEqual(feedback.failure?.message, message)
+      XCTAssertFalse(message.isEmpty)
+    }
+    XCTAssertEqual(repository.conversations, [row])
+    XCTAssertTrue(local.deletedIds.isEmpty)
+  }
+
+  func testSuccessfulDeleteStillRemovesRowWhenCacheEvictionFails() async throws {
+    let row = makeConversation(revision: 1)
+    let remote = FakeConversationRemote(listResult: .success([row]), deleteResult: .success(()))
+    let local = FakeConversationLocal()
+    local.deleteError = TestFailure.offline
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    let outcome = try await repository.delete(id: row.id)
+    XCTAssertEqual(outcome, .deleted)
+    XCTAssertEqual(local.deletedIds, [row.id])
+    XCTAssertTrue(repository.conversations.isEmpty)
+  }
+
   func testDiscardedScopeReachesListCountAndSearch() async throws {
     let remote = FakeConversationRemote()
     let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
@@ -832,7 +896,7 @@ final class ConversationRepositoryTests: XCTestCase {
     await suspendedTitles.resume("First", with: .success(firstCanonical))
     try await titleTask.value
     do {
-      try await deleteTask.value
+      _ = try await deleteTask.value
       XCTFail("Expected queued delete cancellation")
     } catch is CancellationError {
       // Expected.
@@ -985,7 +1049,7 @@ final class ConversationRepositoryTests: XCTestCase {
     try await titleTask.value
     await suspendedDeletes.waitUntilRequested(initial.id)
     await suspendedDeletes.resume(initial.id, with: .success(()))
-    try await deleteTask.value
+    _ = try await deleteTask.value
 
     XCTAssertEqual(local.events, ["store:\(initial.id)", "delete:\(initial.id)"])
     XCTAssertTrue(repository.conversations.isEmpty)
@@ -1007,7 +1071,7 @@ final class ConversationRepositoryTests: XCTestCase {
     await suspendedDeletes.resume(initial.id, with: .success(()))
 
     do {
-      try await deleteTask.value
+      _ = try await deleteTask.value
       XCTFail("A delete acknowledgement from the previous session must be cancelled")
     } catch is CancellationError {
       // Expected.
@@ -1098,11 +1162,135 @@ final class ConversationRepositoryTests: XCTestCase {
       "the cleared state must be published so the UI empties and the page reloads")
   }
 
+  func testCacheRefreshCannotRestartKnownFailedRowWhenOffline() async {
+    let failed = makeConversation(status: .processing, homeStep: "failed", revision: 1)
+    let legacy = makeConversation(status: .processing, revision: 1)
+    let remote = FakeConversationRemote(listResult: .success([failed]))
+    let local = FakeConversationLocal(listResult: [legacy])
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all, includeCache: false)
+    remote.listResult = .failure(TestFailure.offline)
+    await repository.load(query: .all)
+    XCTAssertEqual(repository.conversations.first?.displayState, .failed)
+    // Only a fresh server page may remove the projection for older servers.
+    remote.listResult = .success([legacy])
+    await repository.load(query: .all)
+    XCTAssertEqual(repository.conversations.first?.displayState, .processing)
+  }
+
+  func testDetailRetainsFailedHomeProjection() async throws {
+    let failed = makeConversation(status: .processing, homeStep: "failed", revision: 1)
+    let detail = makeConversation(title: "Fresh detail", status: .merging, revision: 2, transcript: "Loaded content")
+    let remote = FakeConversationRemote(listResult: .success([failed]))
+    remote.detailResult = .success(detail)
+    let local = FakeConversationLocal(detailResult: detail)
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    var cached: ServerConversation?
+    let received = try await repository.detail(id: failed.id, seed: failed) { cached = $0 }
+    XCTAssertEqual(cached?.homeStep, "failed")
+    XCTAssertEqual(received.homeStep, "failed")
+    XCTAssertEqual(received.title, "Fresh detail")
+    XCTAssertEqual(received.transcriptSegments.first?.text, "Loaded content")
+    XCTAssertEqual(repository.conversations.first?.displayState, .failed)
+  }
+
+  func testAuthoritativeReplacementClearsFailureWhenRetryOmitsHomeStep() async throws {
+    for previousStatus: ConversationStatus in [.failed, .processing] {
+      for status: ConversationStatus in [.inProgress, .processing, .merging, .completed] {
+        let failed = makeConversation(status: previousStatus, homeStep: "failed", revision: 1)
+        let repository = ConversationRepository(
+          remote: FakeConversationRemote(listResult: .success([failed])), local: FakeConversationLocal())
+        await repository.load(query: .all, includeCache: false)
+        let placement = HomeFailurePlacementStore(load: { true }, owner: { "fixture" })
+        await placement.refresh()
+        placement.remember([failed], for: "fixture")
+        XCTAssertEqual(placement.activity(repository.conversations).map(\.id), [failed.id])
+
+        // Reprocess can return an active status without the list-only projection.
+        let retried = makeConversation(status: status, revision: 2)
+        repository.replace(retried)
+        placement.remember([retried], for: "fixture")
+        let updated = try XCTUnwrap(repository.conversations.first)
+        XCTAssertNil(updated.homeStep)
+        XCTAssertEqual(updated.status, status)
+        XCTAssertFalse(ConversationFailurePlacement.isFailed(updated))
+        XCTAssertTrue(placement.activity(repository.conversations).isEmpty)
+        XCTAssertEqual(ConversationFailurePlacement.home(repository.conversations, confirmed: true), [updated])
+        if status == .processing {
+          XCTAssertEqual(updated.displayState, .processing)
+          XCTAssertTrue(updated.needsProcessingDetailRefresh)
+        }
+      }
+    }
+  }
+
+  func testAuthoritativeReplacementHonorsExplicitFailureProjection() async {
+    let failed = makeConversation(status: .processing, homeStep: "failed", revision: 1)
+    let repository = ConversationRepository(
+      remote: FakeConversationRemote(listResult: .success([failed])), local: FakeConversationLocal())
+    await repository.load(query: .all, includeCache: false)
+    repository.replace(makeConversation(status: .processing, homeStep: "failed", revision: 2))
+    XCTAssertEqual(repository.conversations.first?.displayState, .failed)
+  }
+
+  func testFailedDetailWithoutCacheReturnsCurrentHomeProjection() async throws {
+    let seed = makeConversation(status: .processing, revision: 1)
+    let failed = makeConversation(status: .processing, homeStep: "failed", revision: 2)
+    let remote = FakeConversationRemote(listResult: .success([seed]))
+    let pending = SuspendedConversationResults()
+    remote.detailHandler = { id in try await pending.result(for: id) }
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: .all, includeCache: false)
+    let request = Task { try await repository.detail(id: seed.id, seed: seed) }
+    await pending.waitUntilRequested(seed.id)
+    repository.replace(failed)
+    await pending.resume(seed.id, with: .failure(TestFailure.offline))
+    let detail = try await request.value
+    XCTAssertEqual(detail.homeStep, "failed")
+    XCTAssertEqual(detail.displayState, .failed)
+    XCTAssertFalse(detail.needsProcessingDetailRefresh)
+  }
+
+  func testLegacyDetailAndReplacementKeepProcessingBehavior() async throws {
+    let processing = makeConversation(status: .processing, revision: 1)
+    let remote = FakeConversationRemote(listResult: .success([processing]))
+    remote.detailResult = .success(processing)
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: .all)
+    let detail = try await repository.detail(id: processing.id)
+    XCTAssertNil(detail.homeStep)
+    XCTAssertEqual(detail.displayState, .processing)
+    repository.replace(processing)
+    XCTAssertEqual(repository.conversations.first?.displayState, .processing)
+  }
+
+  func testCompletedDetailAndFreshLegacyPageCanClearHomeFailure() async throws {
+    let failed = makeConversation(status: .processing, homeStep: "failed", revision: 1)
+    let recovered = makeConversation(title: "Recovered", revision: 2)
+    let remote = FakeConversationRemote(listResult: .success([failed]))
+    remote.detailResult = .success(recovered)
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: .all)
+    let detail = try await repository.detail(id: failed.id)
+    XCTAssertNil(detail.homeStep)
+    XCTAssertNil(repository.conversations.first?.homeStep)
+    XCTAssertEqual(repository.conversations.first?.displayState, .titled("Recovered"))
+    remote.listResult = .success([makeConversation(status: .processing, homeStep: "failed", revision: 3)])
+    await repository.load(query: .all)
+    XCTAssertEqual(repository.conversations.first?.displayState, .failed)
+    remote.listResult = .success([makeConversation(status: .processing, revision: 4)])
+    await repository.load(query: .all)
+    XCTAssertNil(repository.conversations.first?.homeStep)
+    XCTAssertEqual(repository.conversations.first?.displayState, .processing)
+  }
+
   private func makeConversation(
     id: String = "conversation-1",
     title: String = "Title",
     overview: String = "Overview",
     status: ConversationStatus = .completed,
+    homeStep: String? = nil,
     starred: Bool = false,
     revision: TimeInterval?,
     transcript: String? = nil,
@@ -1147,6 +1335,7 @@ final class ConversationRepositoryTests: XCTestCase {
       source: .desktop,
       language: "en",
       status: status,
+      homeStep: homeStep,
       discarded: discarded,
       deleted: deleted,
       isLocked: false,
@@ -1179,6 +1368,7 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
   var listQueries: [ConversationListQuery] = []
   var countQueries: [ConversationListQuery] = []
   var searchDiscardedScopes: [Bool] = []
+  var deleteOutcome: ConversationDeleteOutcome = .deleted
   var deleteResult: Result<Void, Error>
   var listHandler: ((ConversationListQuery) async throws -> [ServerConversation])?
   var searchHandler: ((String) async throws -> [ServerConversation])?
@@ -1219,7 +1409,7 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
     countQueries.append(query)
     return try countResult.get()
   }
-  func detail(id: String) async throws -> ServerConversation {
+  func detail(id: String, polling: Bool) async throws -> ServerConversation {
     if let detailHandler { return try await detailHandler(id) }
     return try detailResult.get()
   }
@@ -1241,14 +1431,15 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
     return try titleResult.get()
   }
   func moveToFolder(id: String, folderId: String?) async throws -> ServerConversation { try folderResult.get() }
-  func delete(id: String) async throws {
+  func delete(id: String) async throws -> ConversationDeleteOutcome {
     if let deleteHandler {
       try await deleteHandler(id)
       deletedIds.append(id)
-      return
+      return deleteOutcome
     }
     try deleteResult.get()
     deletedIds.append(id)
+    return deleteOutcome
   }
 }
 
@@ -1261,6 +1452,7 @@ private final class FakeConversationLocal: ConversationLocalDataSource {
   var storeBatchCalls = 0
   var deletedIds: [String] = []
   var events: [String] = []
+  var deleteError: Error?
   var storeHandler: ((ServerConversation) async throws -> Void)?
 
   init(
@@ -1307,6 +1499,7 @@ private final class FakeConversationLocal: ConversationLocalDataSource {
     try scope.withCurrent(generation) {
       deletedIds.append(id)
       events.append("delete:\(id)")
+      if let deleteError { throw deleteError }
     }
   }
 }

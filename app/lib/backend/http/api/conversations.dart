@@ -1,4 +1,7 @@
+import 'package:omi/utils/analytics/lag_work_registry.dart';
 import 'sync_upload_refusal.dart';
+import 'conversation_page_headers.dart';
+export 'conversation_page_headers.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -14,16 +17,21 @@ import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
+import 'package:omi/services/wals/upload_trace.dart';
 
 part 'sync_job_fetch.dart';
+part 'conversation_home_list.dart';
+part 'conversation_search_decode.dart';
 
 /// Whether a non-200 response from POST /v1/conversations (process in-progress
 /// conversation) is a benign race rather than a failure worth crash-reporting.
@@ -35,17 +43,57 @@ part 'sync_job_fetch.dart';
 /// already finalized. Reporting it floods crash reporting with noise.
 bool isBenignInProgressConversationCreateStatus(int statusCode) => statusCode == 404;
 
+/// True only for the backend's typed, recoverable processing failure.
+@visibleForTesting
+bool isRetryableInProgressConversationResponse(http.Response? response) {
+  if (response?.statusCode != 503) return false;
+  try {
+    // omi-perf-allow: history-json-on-ui -- bounded typed error body, never conversation history
+    final decoded = jsonDecode(response!.body);
+    final detail = decoded is Map ? decoded['detail'] : null;
+    return detail is Map && detail['code'] == 'conversation_processing_retryable';
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Sends the serialized Process Now request.
+typedef InProgressConversationRequestSender = Future<http.Response?> Function(ApiRequest request);
+
 Future<CreateConversationResponse?> processInProgressConversation() async {
   return (await processInProgressConversationOutcome()).response;
 }
 
-Future<InProgressProcessOutcome> processInProgressConversationOutcome() async {
-  var response = await makeApiCall(
+Future<InProgressProcessOutcome> processInProgressConversationOutcome({
+  String? liveConversationId,
+  InProgressConversationRequestSender? sendRequest,
+  @visibleForTesting Future<void> Function(Duration)? waitBeforeRetry,
+  @visibleForTesting void Function(http.Response)? reportUnexpectedResponse,
+}) async {
+  final request = ApiRequest(
     url: '${Env.apiBaseUrl}v1/conversations',
-    headers: {},
+    headers: const {},
     method: 'POST',
-    body: jsonEncode({}),
+    body: jsonEncode({if (liveConversationId != null) 'live_conversation_id': liveConversationId}),
   );
+  Future<http.Response?> sendProductionRequest(ApiRequest request) => makeApiCall(
+        url: request.url,
+        headers: request.headers,
+        method: request.method,
+        body: request.body,
+        retries: 1,
+        retryServerErrors: false,
+      );
+
+  final send = sendRequest ?? sendProductionRequest;
+  var response = await send(request);
+  if (isRetryableInProgressConversationResponse(response)) {
+    final delay = parseApiRetryAfter(response!, DateTime.now) ?? const Duration(seconds: 2);
+    await (waitBeforeRetry ?? (duration) => Future<void>.delayed(duration))(delay);
+    // This typed failure rolls back admission, so replay the same request once.
+    // Other 5xx responses may have left work in flight.
+    response = await send(request);
+  }
   if (response == null) return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
@@ -57,12 +105,20 @@ Future<InProgressProcessOutcome> processInProgressConversationOutcome() async {
   } else if (isBenignInProgressConversationCreateStatus(response.statusCode)) {
     Logger.debug('processInProgressConversation: no in-progress conversation (already finalized), skipping');
     return const InProgressProcessOutcome(absence: ProcessAbsence.notFound);
+  } else if (isRetryableInProgressConversationResponse(response)) {
+    Logger.debug('processInProgressConversation: bounded retry exhausted; conversation remains recoverable');
+    return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
   }
-  PlatformManager.instance.crashReporter.reportCrash(
-    Exception('Failed to create conversation'),
-    StackTrace.current,
-    userAttributes: {'response': response.body},
-  );
+  final report = reportUnexpectedResponse;
+  if (report != null) {
+    report(response);
+  } else {
+    PlatformManager.instance.crashReporter.reportCrash(
+      Exception('Failed to create conversation'),
+      StackTrace.current,
+      userAttributes: {'response': response.body},
+    );
+  }
   return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
 }
 
@@ -94,8 +150,13 @@ Future<List<ServerConversation>> getConversations({
 // (no response / non-200, e.g. auth token not ready right after a cold
 // start) — which callers must NOT treat as "the user has no conversations".
 Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversationsResult({
+  Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
+  void Function(int)? onStorageCount,
+  void Function(ConversationPageHeaders)? onPageHeaders,
   int limit = 50,
   int offset = 0,
+  String? cursor,
+  String? homeMode,
   List<ConversationStatus> statuses = const [],
   bool includeDiscarded = false,
   DateTime? startDate,
@@ -113,9 +174,28 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
     endDate: endDate,
     folderId: folderId,
     starred: starred,
+    cursor: cursor,
   );
 
-  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+  final held = <String, ServerConversation>{};
+  final pairs = <String>[];
+  for (final entry in heldHomeEpisodes.entries) {
+    for (final member in entry.value) {
+      if (pairs.length == 50) break;
+      pairs.add('${entry.key}:${member.id}');
+      held[member.id] = member;
+    }
+    if (pairs.length == 50) break;
+  }
+  var response = await makeApiCall(
+      url: url,
+      headers: {
+        'X-Omi-Home-Ownership': '1',
+        if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(','),
+        if (homeMode != null) ConversationPageHeaders.homeModeHeader: homeMode,
+      },
+      method: 'GET',
+      body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
   if (response.statusCode == 200) {
     final bodyBytes = response.bodyBytes;
@@ -126,8 +206,14 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
         size: bodyBytes.length,
         threshold: conversationListBackgroundParseBytes,
         debugName: 'conversation_list_parse');
-    Logger.debug('getConversations length: ${memories.length}');
-    return (items: memories, ok: true, truncated: isOmiListTruncated(response));
+    onStorageCount?.call(int.tryParse(response.headers['x-omi-conversation-page-size'] ?? '') ?? memories.length);
+    onPageHeaders?.call(ConversationPageHeaders.parse(response.headers));
+    // Preserve an exact local fallback for each server omission. If a later
+    // overlay refresh drops this episode, its members can still render on Home.
+    final retained =
+        retainSuppressedHomeMembers(memories, held, (response.headers['x-omi-home-suppressed-ids'] ?? '').split(','));
+    Logger.debug('getConversations length: ${retained.length}');
+    return (items: retained, ok: true, truncated: isOmiListTruncated(response));
   }
   Logger.debug('getConversations error ${response.statusCode}');
   return (items: <ServerConversation>[], ok: false, truncated: false);
@@ -150,7 +236,8 @@ bool hasSpeakerReceiptSummaryCapability(Map<String, String> headers) => headers[
 sealed class ReprocessResult {
   const ReprocessResult();
 
-  /// The reprocessed conversation, only on [ReprocessSuccess].
+  /// The server's copy of the conversation: the reprocessed one on [ReprocessSuccess], the
+  /// still-transcribing one on a 200 [ReprocessTranscriptionPending].
   ServerConversation? get conversation => null;
 
   /// Adapts a call that only knows "a conversation or nothing" (older seams, list-row retries).
@@ -169,6 +256,18 @@ final class ReprocessSuccess extends ReprocessResult {
 /// `conversation_processing_in_progress`).
 final class ReprocessBusy extends ReprocessResult {
   const ReprocessBusy();
+}
+
+/// The audio has not been transcribed, so a summary retry cannot help. Two server answers mean
+/// this: HTTP 200 with the conversation back in Home step `transcribing` (still inside its
+/// transcription window; [conversation] is that copy, to apply as is), and HTTP 409
+/// `transcription_pending` (past the window; no copy). Neither promises the audio will be
+/// transcribed.
+final class ReprocessTranscriptionPending extends ReprocessResult {
+  const ReprocessTranscriptionPending([this.conversation]);
+
+  @override
+  final ServerConversation? conversation;
 }
 
 /// The hourly reprocess limit (HTTP 429). [retryAfter] when the server said how long.
@@ -206,20 +305,32 @@ Future<ReprocessResult> reProcessConversationServer(
   String? appId,
   bool requireSpeakerReceipt = false,
   bool forceOmi = false,
+  // Tests replace the transport; production sends through makeApiCall.
+  Future<http.Response?> Function(String url)? send,
 }) async {
   final route = '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess';
-  final response = await makeApiCall(
-    url: '$route${reprocessQuery(appId: appId, forceOmi: forceOmi)}',
-    headers: {},
-    method: 'POST',
-    body: '',
-    timeout: reprocessRequestTimeout,
-    retries: 0,
-  );
+  final url = '$route${reprocessQuery(appId: appId, forceOmi: forceOmi)}';
+  final response = await (send ?? _sendReprocess)(url);
   if (response == null) return const ReprocessFailed();
   Logger.debug('reProcessConversationServer: ${response.statusCode}');
-  return reprocessResultFromResponse(response, requireSpeakerReceipt: requireSpeakerReceipt);
+  final result = reprocessResultFromResponse(response, requireSpeakerReceipt: requireSpeakerReceipt);
+  // Only the 409 has no copy to carry the answer; a returned copy speaks for itself.
+  if (result is ReprocessTranscriptionPending && result.conversation == null) {
+    TranscriptionPendingConversations.mark(conversationId);
+  } else if (result.conversation != null) {
+    TranscriptionPendingConversations.unmark(conversationId);
+  }
+  return result;
 }
+
+Future<http.Response?> _sendReprocess(String url) => makeApiCall(
+      url: url,
+      headers: {},
+      method: 'POST',
+      body: '',
+      timeout: reprocessRequestTimeout,
+      retries: 0,
+    );
 
 /// Maps a reprocess response to its [ReprocessResult].
 @visibleForTesting
@@ -230,25 +341,32 @@ ReprocessResult reprocessResultFromResponse(
 }) {
   switch (response.statusCode) {
     case 200:
+      final ServerConversation conversation;
+      try {
+        conversation = ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      } catch (e) {
+        Logger.debug('reProcessConversationServer decode failed: ${e.runtimeType}');
+        return const ReprocessFailed(statusCode: 200);
+      }
+      // Audio still inside its transcription window: the server ran nothing and answered with the
+      // row's waiting state. No summary path ran, so the speaker receipt does not apply.
+      if (conversation.homeStep == 'transcribing') return ReprocessTranscriptionPending(conversation);
       // A pre-fix backend can return 200 with a summary made from stale speaker
       // labels. Keep the detail page's retry action until the receipt-aware
       // processor explicitly acknowledges its summary path.
       if (requireSpeakerReceipt && !hasSpeakerReceiptSummaryCapability(response.headers)) {
         return const ReprocessFailed(statusCode: 200);
       }
-      try {
-        return ReprocessSuccess(ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>));
-      } catch (e) {
-        Logger.debug('reProcessConversationServer decode failed: ${e.runtimeType}');
-        return const ReprocessFailed(statusCode: 200);
-      }
+      return ReprocessSuccess(conversation);
     case 409:
       // 409 is busy only with the structured `conversation_processing_in_progress` detail. The same
       // route answers 409 with a string detail when the selected app is disabled or not enabled:
       // that is the template failing, not the conversation being busy.
-      return _detailCode(response.body) == 'conversation_processing_in_progress'
-          ? const ReprocessBusy()
-          : const ReprocessFailed(statusCode: 409);
+      return switch (_detailCode(response.body)) {
+        'conversation_processing_in_progress' => const ReprocessBusy(),
+        'transcription_pending' => const ReprocessTranscriptionPending(),
+        _ => const ReprocessFailed(statusCode: 409),
+      };
     case 429:
       return ReprocessRateLimited(retryAfter: parseApiRetryAfter(response, now));
     default:
@@ -269,16 +387,46 @@ String? _detailCode(String body) {
   }
 }
 
-Future<bool> deleteConversationServer(String conversationId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId?cascade=true',
-    headers: {},
-    method: 'DELETE',
-    body: '',
-  );
-  if (response == null) return false;
-  Logger.debug('deleteConversation: ${response.statusCode}');
-  return response.statusCode == 204;
+/// How long a delete keeps retrying while another delete on the same account holds the server's
+/// gate (409 `account_gate_busy`).
+const conversationDeleteRetryBudget = Duration(seconds: 30);
+
+/// The pause before retrying a busy delete: the server's `Retry-After`, kept within 1–10 s, or 2 s
+/// when it is missing or unreadable.
+@visibleForTesting
+Duration conversationDeleteRetryDelay(http.Response response, DateTime Function() now) {
+  final delay = parseApiRetryAfter(response, now) ?? const Duration(seconds: 2);
+  if (delay < const Duration(seconds: 1)) return const Duration(seconds: 1);
+  if (delay > const Duration(seconds: 10)) return const Duration(seconds: 10);
+  return delay;
+}
+
+/// Deletes a conversation with everything derived from it; true only on 204. A 409 is retried
+/// after its Retry-After within [conversationDeleteRetryBudget]; any other answer fails at once.
+/// [send], [wait] and [now] are test seams.
+Future<bool> deleteConversationServer(
+  String conversationId, {
+  Future<http.Response?> Function()? send,
+  Future<void> Function(Duration)? wait,
+  DateTime Function()? now,
+}) async {
+  final clock = now ?? DateTime.now;
+  final deadline = clock().add(conversationDeleteRetryBudget);
+  while (true) {
+    final response = await (send?.call() ??
+        makeApiCall(
+          url: '${Env.apiBaseUrl}v1/conversations/$conversationId?cascade=true',
+          headers: {},
+          method: 'DELETE',
+          body: '',
+        ));
+    if (response == null) return false;
+    Logger.debug('deleteConversation: ${response.statusCode}');
+    if (response.statusCode != 409) return response.statusCode == 204;
+    final delay = conversationDeleteRetryDelay(response, clock);
+    if (clock().add(delay).isAfter(deadline)) return false;
+    await (wait?.call(delay) ?? Future<void>.delayed(delay));
+  }
 }
 
 Future<bool> unlinkCalendarEvent(String conversationId) async {
@@ -379,27 +527,40 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   return [];
 }
 
-Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
+typedef ConversationByIdResult = ({ServerConversation? item, bool ok, bool inaccessible});
+
+Future<ConversationByIdResult> getConversationDetailReadResult(String conversationId,
+    {bool userInitiated = false}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
-    headers: {},
+    headers: {if (userInitiated) 'X-Omi-Recording-Detail': '1'},
     method: 'GET',
     body: '',
   );
-  if (response == null) return (item: null, ok: false);
+  if (response == null) return (item: null, ok: false, inaccessible: false);
   if (response.statusCode == 200) {
-    return (item: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>), ok: true);
+    return (
+      item: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+      ok: true,
+      inaccessible: false
+    );
   } else if (response.statusCode == 402) {
     // Locked conversations are still returned by the list endpoint as a
     // redacted completed row, but their detail endpoint intentionally returns
     // 402. Treat that response as an authoritative terminal result for
     // lifecycle reconciliation so a stale Processing card is cleared.
     Logger.debug('Conversation is locked/redacted: $conversationId');
-    return (item: null, ok: true);
+    return (item: null, ok: true, inaccessible: true);
   } else if (response.statusCode == 404) {
-    return (item: null, ok: true);
+    return (item: null, ok: true, inaccessible: true);
   }
-  return (item: null, ok: false);
+  return (item: null, ok: false, inaccessible: response.statusCode == 401 || response.statusCode == 403);
+}
+
+Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId,
+    {bool userInitiated = false}) async {
+  final result = await getConversationDetailReadResult(conversationId, userInitiated: userInitiated);
+  return (item: result.item, ok: result.ok);
 }
 
 /// Per local day in [tz], how many noise/media clips the server folded away from Home
@@ -437,8 +598,8 @@ extension _Let<T> on T {
   R let<R>(R Function(T) f) => f(this);
 }
 
-Future<ServerConversation?> getConversationById(String conversationId) async {
-  return (await getConversationByIdResult(conversationId)).item;
+Future<ServerConversation?> getConversationById(String conversationId, {bool userInitiated = false}) async {
+  return (await getConversationByIdResult(conversationId, userInitiated: userInitiated)).item;
 }
 
 String conversationCollectionUrl(
@@ -451,6 +612,7 @@ String conversationCollectionUrl(
   DateTime? endDate,
   String? folderId,
   bool? starred,
+  String? cursor,
 }) {
   final root = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
   var url =
@@ -466,6 +628,9 @@ String conversationCollectionUrl(
   }
   if (starred != null) {
     url += '&starred=$starred';
+  }
+  if (cursor != null && cursor.isNotEmpty) {
+    url += '&cursor=${Uri.encodeQueryComponent(cursor)}';
   }
   return url;
 }
@@ -489,33 +654,26 @@ class ConversationApi {
     DateTime? endDate,
     String? folderId,
     bool? starred,
-  }) async {
-    final sent = await executeApi<String>(
-      request: ApiRequest(
-        url: conversationCollectionUrl(
-          _baseUrl,
+    Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
+    void Function(int)? onStorageCount,
+    void Function(ConversationPageHeaders)? onPageHeaders,
+    String? cursor,
+    String? homeMode,
+  }) =>
+      _listHomeConversations(this,
           limit: limit,
           offset: offset,
+          cursor: cursor,
+          homeMode: homeMode,
+          onPageHeaders: onPageHeaders,
           statuses: statuses,
           includeDiscarded: includeDiscarded,
           startDate: startDate,
           endDate: endDate,
           folderId: folderId,
           starred: starred,
-        ),
-        method: 'GET',
-      ),
-      send: _send,
-      decode: (body) => body,
-    );
-    return switch (sent) {
-      ApiFailure(:final problem) => ApiFailure(problem),
-      ApiSuccess(:final data, :final truncated) => switch (await _decodeOffUi(data, conversationRowsDecoder)) {
-          ApiSuccess(:final data, :final rejectedRows) => _rows(data, rejectedRows, truncated),
-          ApiFailure(:final problem) => ApiFailure(problem),
-        },
-    };
-  }
+          heldHomeEpisodes: heldHomeEpisodes,
+          onStorageCount: onStorageCount);
 
   static ApiResult<List<ServerConversation>> _rows(List<ServerConversation> rows, int rejectedRows, bool truncated) {
     // decodeApiRows' partial-decode report, raised here because the decode may run on another isolate.
@@ -532,16 +690,19 @@ class ConversationApi {
   /// runs on Home's load-more while the user scrolls, and on the detail open
   /// right after a tap. [decode] is read before the hop because the other
   /// isolate has its own copy of every global.
-  static Future<R> _decodeOffUi<R>(String body, R Function(String) decode) => offUiIsolate(
+  static Future<R> decodeOffUi<R>(String body, R Function(String) decode) => offUiIsolate(
         () => decode(body),
         size: body.length,
         threshold: conversationListBackgroundParseBytes,
         debugName: 'conversation_parse',
       );
 
-  Future<ApiResult<ServerConversation>> byId(String id) async {
+  Future<ApiResult<ServerConversation>> byId(String id, {bool userInitiated = false}) async {
     final sent = await executeApi<String>(
-      request: ApiRequest(url: '${_baseUrl}v1/conversations/$id', method: 'GET'),
+      request: ApiRequest(
+          url: '${_baseUrl}v1/conversations/$id',
+          method: 'GET',
+          headers: {if (userInitiated) 'X-Omi-Recording-Detail': '1'}),
       send: _send,
       decode: (body) => body,
     );
@@ -550,7 +711,7 @@ class ConversationApi {
         return ApiFailure(problem);
       case ApiSuccess(:final data, :final truncated):
         try {
-          return ApiSuccess(await _decodeOffUi(data, conversationDetailDecoder), truncated: truncated);
+          return ApiSuccess(await decodeOffUi(data, conversationDetailDecoder), truncated: truncated);
         } on FormatException {
           return const ApiFailure(ApiProblem(ApiProblemKind.decode));
         }
@@ -832,7 +993,11 @@ class SyncUploadHttpException implements Exception {
   /// server gave no pacing guidance (e.g. platform-generated 503s).
   final int? retryAfterSeconds;
 
-  const SyncUploadHttpException(this.statusCode, this.message, {this.retryAfterSeconds, this.reasonCode});
+  /// Body pacing for one recording's wait; never an account cooldown.
+  final int? recordingWaitSeconds;
+
+  const SyncUploadHttpException(this.statusCode, this.message,
+      {this.retryAfterSeconds, this.reasonCode, this.recordingWaitSeconds});
 
   @override
   String toString() => 'SyncUploadHttpException(status=$statusCode): $message';
@@ -1049,94 +1214,104 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   bool claimLiveCapture = false,
   Geolocation? geolocation,
 }) async {
-  assertWalSyncFilesAreFramedBins(files.map((file) => file.path));
-  String? captureManifest;
-  if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
-    captureManifest = await _createSyncCaptureManifest(files, conversationId!);
-  }
-  var url = '${Env.apiBaseUrl}v2/sync-local-files';
-  final query = <String, String>{
-    if (conversationId != null && conversationId.isNotEmpty) 'conversation_id': conversationId,
-    if (recordingSessionId != null && recordingSessionId.isNotEmpty) 'recording_session_id': recordingSessionId,
-    if (audioStartSeconds != null) 'audio_start_seconds': audioStartSeconds.toString(),
-    if (audioEndSeconds != null) 'audio_end_seconds': audioEndSeconds.toString(),
-  };
-  if (query.isNotEmpty) {
-    url += '?${query.entries.map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}').join('&')}';
-  }
-  var response = await makeMultipartApiCall(
-    url: url,
-    files: files,
-    headers: {
-      if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
-      if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
-      if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
-    },
-    onUploadProgress: onUploadProgress,
-  );
-
-  if (response.statusCode == 200) {
-    // Fast-path: server processed synchronously and returned the result. A
-    // legacy server can still encode partial work in a 200, which must follow
-    // the retry path rather than acknowledging/deleting the local WAL.
-    final completed = SyncLocalFilesResponse.fromGenerated(
-      wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-    );
-    return UploadFilesResult.done(requireCompleteSyncUpload(completed));
-  }
-  if (response.statusCode == 202) {
-    final start = SyncJobStartResponse.fromGenerated(
-      wire.GeneratedSyncJobStartResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-    );
-    if (start.jobId.isEmpty) {
-      throw Exception('Upload accepted but no job id returned');
+  final work = lagWork.begin(LagWork.upload);
+  try {
+    assertWalSyncFilesAreFramedBins(files.map((file) => file.path));
+    // Measurement only; absent when nothing was parked for this upload.
+    final uploadTrace = files.isEmpty ? null : UploadTrace.instance.take(files.first.path);
+    String? captureManifest;
+    if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
+      captureManifest = await _createSyncCaptureManifest(files, conversationId!);
     }
-    return UploadFilesResult.queued(start.jobId, pollAfterMs: start.pollAfterMs);
-  }
-  if (response.statusCode == 400) {
-    final refusal = switch (decodeSyncUploadRefusal(response)) {
-      ApiSuccess(:final data) => data,
-      ApiFailure() => const SyncUploadRefusalBody(),
+    var url = '${Env.apiBaseUrl}v2/sync-local-files';
+    final query = <String, String>{
+      if (conversationId != null && conversationId.isNotEmpty) 'conversation_id': conversationId,
+      if (recordingSessionId != null && recordingSessionId.isNotEmpty) 'recording_session_id': recordingSessionId,
+      if (audioStartSeconds != null) 'audio_start_seconds': audioStartSeconds.toString(),
+      if (audioEndSeconds != null) 'audio_end_seconds': audioEndSeconds.toString(),
     };
-    if (refusal.invalidCaptureTime) {
-      throw const SyncInvalidCaptureTimeException(serverReason: 'invalid_capture_time');
+    if (query.isNotEmpty) {
+      url += '?${query.entries.map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}').join('&')}';
     }
-    // Other 400s stay terminal, but the server's own reason travels with the
-    // refusal instead of being dropped at the HTTP boundary.
-    throw SyncUploadHttpException(
-      response.statusCode,
-      'Audio file could not be processed by server',
-      reasonCode: refusal.reasonCode,
+    var response = await makeMultipartApiCall(
+      url: url,
+      files: files,
+      headers: {
+        if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
+        if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
+        if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
+        if (uploadTrace != null) 'X-Omi-Upload-Trace': uploadTrace,
+      },
+      onUploadProgress: onUploadProgress,
     );
-  } else if (response.statusCode == 401 || response.statusCode == 403) {
-    throw SyncUploadHttpException(response.statusCode, 'Upload authentication failed');
-  } else if (response.statusCode == 413) {
-    throw SyncUploadHttpException(response.statusCode, 'Audio file is too large to upload', reasonCode: 'too_large');
-  } else if (isSyncContentInProgressResponse(response)) {
-    final existingJob = syncContentInProgressResult(response);
-    if (existingJob != null) return existingJob;
-    throw SyncRateLimitedException(
-      kind: SyncRateLimitKind.edgeThrottle,
-      retryAfterSeconds: max(60, _parseRetryAfterSeconds(response) ?? 60),
-      reasonCode: 'sync_content_in_progress',
-    );
-  } else if (isSyncUploadRateLimitResponse(response)) {
-    throw SyncRateLimitedException(
-      kind: syncRateLimitKindForResponse(response),
-      retryAfterSeconds: _parseRetryAfterSeconds(response),
-      reasonCode: syncRateLimitReasonCode(response),
-      statusCode: response.statusCode,
-    );
-  } else if (isSyncRecoveryWindowExceededResponse(response)) {
-    throw const SyncRecoveryWindowExceededException();
-  } else if (response.statusCode >= 500) {
-    throw SyncUploadHttpException(
-      response.statusCode,
-      'Server is temporarily unavailable',
-      retryAfterSeconds: _parseRetryAfterSeconds(response),
-    );
+
+    if (response.statusCode == 200) {
+      // Fast-path: server processed synchronously and returned the result. A
+      // legacy server can still encode partial work in a 200, which must follow
+      // the retry path rather than acknowledging/deleting the local WAL.
+      final completed = SyncLocalFilesResponse.fromGenerated(
+        wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+      );
+      return UploadFilesResult.done(requireCompleteSyncUpload(completed));
+    }
+    if (response.statusCode == 202) {
+      final start = SyncJobStartResponse.fromGenerated(
+        wire.GeneratedSyncJobStartResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+      );
+      if (start.jobId.isEmpty) {
+        throw Exception('Upload accepted but no job id returned');
+      }
+      return UploadFilesResult.queued(start.jobId, pollAfterMs: start.pollAfterMs);
+    }
+    if (response.statusCode == 400) {
+      final refusal = switch (decodeSyncUploadRefusal(response)) {
+        ApiSuccess(:final data) => data,
+        ApiFailure() => const SyncUploadRefusalBody(),
+      };
+      if (refusal.invalidCaptureTime) {
+        throw const SyncInvalidCaptureTimeException(serverReason: 'invalid_capture_time');
+      }
+      // Other 400s stay terminal, but the server's own reason travels with the
+      // refusal instead of being dropped at the HTTP boundary.
+      throw SyncUploadHttpException(
+        response.statusCode,
+        'Audio file could not be processed by server',
+        reasonCode: refusal.reasonCode,
+      );
+    } else if (response.statusCode == 401 || response.statusCode == 403) {
+      throw SyncUploadHttpException(response.statusCode, 'Upload authentication failed');
+    } else if (response.statusCode == 413) {
+      throw SyncUploadHttpException(response.statusCode, 'Audio file is too large to upload', reasonCode: 'too_large');
+    } else if (isSyncContentInProgressResponse(response)) {
+      final existingJob = syncContentInProgressResult(response);
+      if (existingJob != null) return existingJob;
+      throw SyncRateLimitedException(
+        kind: SyncRateLimitKind.edgeThrottle,
+        retryAfterSeconds: max(60, _parseRetryAfterSeconds(response) ?? 60),
+        reasonCode: 'sync_content_in_progress',
+      );
+    } else if (isSyncUploadRateLimitResponse(response)) {
+      throw SyncRateLimitedException(
+        kind: syncRateLimitKindForResponse(response),
+        retryAfterSeconds: _parseRetryAfterSeconds(response),
+        reasonCode: syncRateLimitReasonCode(response),
+        statusCode: response.statusCode,
+      );
+    } else if (isSyncRecoveryWindowExceededResponse(response)) {
+      throw const SyncRecoveryWindowExceededException();
+    } else if (response.statusCode >= 500) {
+      throw SyncUploadHttpException(
+        response.statusCode,
+        'Server is temporarily unavailable',
+        retryAfterSeconds: _parseRetryAfterSeconds(response),
+        reasonCode: syncUploadServerWaitReasonCode(response),
+        recordingWaitSeconds: syncUploadServerWaitSeconds(response),
+      );
+    }
+    throw SyncUploadHttpException(response.statusCode, 'Upload failed unexpectedly');
+  } finally {
+    lagWork.end(work);
   }
-  throw SyncUploadHttpException(response.statusCode, 'Upload failed unexpectedly');
 }
 
 /// Why a single job-status fetch did not yield a usable status.
@@ -1166,48 +1341,53 @@ SyncJobFetchOutcome syncJobFetchOutcomeForStatusCode(int statusCode) {
 /// Single GET of a sync job's status — no polling loop. The reconciler owns
 /// the polling cadence and decides what to do per [SyncJobFetchOutcome].
 Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
-  final response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/sync-local-files/$jobId',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) {
-    DebugLogManager.logEvent('fetch_sync_job_status', {'jobId': jobId, 'httpStatus': null, 'outcome': 'transient'});
-    return const SyncJobFetch(SyncJobFetchOutcome.transient);
-  }
-  final outcome = syncJobFetchOutcomeForStatusCode(response.statusCode);
-  if (outcome == SyncJobFetchOutcome.throttled) {
-    return SyncJobFetch.throttled(SyncRateLimitedException(
-      kind: syncRateLimitKindForResponse(response),
-      retryAfterSeconds: _parseRetryAfterSeconds(response),
-      reasonCode: syncRateLimitReasonCode(response),
-    ));
-  }
-  if (outcome == SyncJobFetchOutcome.notFound) {
-    DebugLogManager.logEvent('fetch_sync_job_status', {
-      'jobId': jobId,
-      'httpStatus': response.statusCode,
-      'outcome': 'notFound',
-    });
-    return const SyncJobFetch(SyncJobFetchOutcome.notFound);
-  }
-  if (outcome == SyncJobFetchOutcome.transient) {
-    DebugLogManager.logEvent('fetch_sync_job_status', {
-      'jobId': jobId,
-      'httpStatus': response.statusCode,
-      'outcome': 'transient',
-    });
-    return const SyncJobFetch(SyncJobFetchOutcome.transient);
-  }
+  final work = lagWork.begin(LagWork.reconcilePoll);
   try {
-    return SyncJobFetch(
-      SyncJobFetchOutcome.ok,
-      SyncJobStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    final response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v2/sync-local-files/$jobId',
+      headers: {},
+      method: 'GET',
+      body: '',
     );
-  } catch (e) {
-    Logger.debug('fetchSyncJobStatus parse error: $e');
-    return const SyncJobFetch(SyncJobFetchOutcome.transient);
+    if (response == null) {
+      DebugLogManager.logEvent('fetch_sync_job_status', {'jobId': jobId, 'httpStatus': null, 'outcome': 'transient'});
+      return const SyncJobFetch(SyncJobFetchOutcome.transient);
+    }
+    final outcome = syncJobFetchOutcomeForStatusCode(response.statusCode);
+    if (outcome == SyncJobFetchOutcome.throttled) {
+      return SyncJobFetch.throttled(SyncRateLimitedException(
+        kind: syncRateLimitKindForResponse(response),
+        retryAfterSeconds: _parseRetryAfterSeconds(response),
+        reasonCode: syncRateLimitReasonCode(response),
+      ));
+    }
+    if (outcome == SyncJobFetchOutcome.notFound) {
+      DebugLogManager.logEvent('fetch_sync_job_status', {
+        'jobId': jobId,
+        'httpStatus': response.statusCode,
+        'outcome': 'notFound',
+      });
+      return const SyncJobFetch(SyncJobFetchOutcome.notFound);
+    }
+    if (outcome == SyncJobFetchOutcome.transient) {
+      DebugLogManager.logEvent('fetch_sync_job_status', {
+        'jobId': jobId,
+        'httpStatus': response.statusCode,
+        'outcome': 'transient',
+      });
+      return const SyncJobFetch(SyncJobFetchOutcome.transient);
+    }
+    try {
+      return SyncJobFetch(
+        SyncJobFetchOutcome.ok,
+        SyncJobStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+      );
+    } catch (e) {
+      Logger.debug('fetchSyncJobStatus parse error: $e');
+      return const SyncJobFetch(SyncJobFetchOutcome.transient);
+    }
+  } finally {
+    lagWork.end(work);
   }
 }
 
@@ -1276,19 +1456,9 @@ Future<ConversationSearchResult> searchConversationsServerResult(
   if (response == null) return const ConversationSearchResult.failure();
   if (response.statusCode == 200) {
     try {
-      final data = wire.GeneratedSearchConversationsResponse.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>,
-      );
-      // Search items are ConversationSearchItem (includes match_snippets); parse via JSON so
-      // ServerConversation keeps seek-to-moment evidence without widening GeneratedConversation.
-      final convos = data.items.map((conversation) => ServerConversation.fromJson(conversation.toJson())).toList();
-      return ConversationSearchResult(
-        items: convos,
-        currentPage: data.currentPage,
-        totalPages: data.totalPages,
-        outcome: ConversationSearchResultOutcome.success,
-        statusCode: response.statusCode,
-      );
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      final generated = wire.GeneratedSearchConversationsResponse.fromJson(json);
+      return decodeConversationSearchResponse(json, generated: generated, statusCode: response.statusCode);
     } catch (e) {
       Logger.debug('searchConversationsServer parse error: $e');
       return ConversationSearchResult.failure(statusCode: response.statusCode);

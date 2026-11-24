@@ -1,0 +1,8 @@
+{
+  "admission": {
+    "rows": 1,
+    "drainers": 1,
+    "durable": true,
+    "chunk_bucket": "regional"
+  }
+}

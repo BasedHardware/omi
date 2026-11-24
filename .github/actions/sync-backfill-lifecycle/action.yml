@@ -3,7 +3,7 @@ description: Deploy and provision the bounded backend-sync-backfill worker lane
 
 inputs:
   mode:
-    description: 'worker (deploy backfill revision), platform (queue/IAM/TTL/alerts), or dispatch (queue reconciliation + dispatch-abort alert only)'
+    description: 'routing (read-only queue/URL overlay), worker (deploy backfill revision), platform (queue/IAM/TTL/alerts), or dispatch (queue reconciliation + dispatch-abort alert only)'
     required: true
   project_id:
     description: GCP project ID
@@ -56,6 +56,14 @@ inputs:
     description: Manifest-rendered backend-sync-backfill secrets overlay (mode=worker)
     required: false
     default: ''
+  sync_env_vars:
+    description: 'Rendered sync env; queue existence is required only when routed backfill is enabled'
+    required: false
+    default: ''
+  require_existing_queue:
+    description: 'Read-only queue existence gate for selected sync routing; never creates or updates a queue'
+    required: false
+    default: 'false'
   candidate_tag:
     description: Stable no-traffic candidate tag (mode=worker)
     required: false
@@ -88,7 +96,7 @@ runs:
   using: composite
   steps:
     - name: Resolve ops-owned backfill queues
-      if: ${{ inputs.mode == 'worker' }}
+      if: ${{ inputs.mode == 'worker' || inputs.mode == 'routing' }}
       id: ops-queues
       shell: bash
       env:
@@ -120,14 +128,28 @@ runs:
         echo "worker_queue=$worker_queue" >> "$GITHUB_OUTPUT"
 
     - name: Resolve backfill service URL
-      if: ${{ inputs.mode == 'worker' }}
+      if: ${{ inputs.mode == 'worker' || inputs.mode == 'routing' }}
       id: backfill-service
       shell: bash
       env:
         BACKFILL_QUEUE: ${{ steps.ops-queues.outputs.backfill_queue }}
+        REQUIRE_EXISTING_QUEUE: ${{ inputs.require_existing_queue }}
+        SYNC_ENV: ${{ inputs.sync_env_vars }}
       run: |
+        set -euo pipefail
         PROJECT_NUMBER="$(gcloud projects describe "${{ inputs.project_id }}" --format='value(projectNumber)')"
+        [[ "$PROJECT_NUMBER" =~ ^[0-9]+$ ]] || { echo "Invalid project number" >&2; exit 1; }
+        routing_enabled="$(sed -n 's/^SYNC_BACKFILL_ROUTING_ENABLED=//p' <<<"${SYNC_ENV:-}" | tail -n 1)"
+        if [[ "$REQUIRE_EXISTING_QUEUE" == true && "$routing_enabled" == true ]]; then
+          # A selected sync deploy omits shared provisioning. A missing queue
+          # must fail before it creates a candidate with an unusable route.
+          gcloud tasks queues describe "$BACKFILL_QUEUE" \
+            --project="${{ inputs.project_id }}" --location="${{ inputs.region }}" \
+            --format='value(name)' >/dev/null
+        fi
         URL="https://${{ inputs.service }}-sync-backfill-${PROJECT_NUMBER}.${{ inputs.region }}.run.app"
+        # The handler URL and OIDC audience use the same value.
+        echo "::add-mask::${URL}/v2/sync-jobs/run"
         echo "url=${URL}" >> "$GITHUB_OUTPUT"
         {
           echo "sync_backfill_env_vars<<EOF"
@@ -189,6 +211,7 @@ runs:
         fi
 
     - name: Resolve live sync-backfill maxScale
+      if: ${{ inputs.mode == 'worker' || inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
       id: live-max-scale
       shell: bash
       env:
@@ -221,6 +244,9 @@ runs:
         if (( DISPATCH_LIMIT < 1 )); then DISPATCH_LIMIT=1; fi
         echo "max_concurrent_dispatches=$DISPATCH_LIMIT" >> "$GITHUB_OUTPUT"
 
+    # margin-20: 7d app-memory p95 <=0.882GiB / max bucket <=1.149GiB at concurrency 6
+    # (concurrency 10 unqualified; Luna P2 on #24596). Rollback: prod memory 3Gi.
+    # maxScale stays Redis-guard owned.
     - name: Deploy ${{ inputs.service }}-sync-backfill to Cloud Run
       if: ${{ inputs.mode == 'worker' }}
       id: deploy-backend-sync-backfill
@@ -239,7 +265,7 @@ runs:
           --max=${{ steps.live-max-scale.outputs.max_scale }}
           --concurrency=6
           --cpu=2
-          --memory=${{ inputs.project_id == 'based-hardware' && '4Gi' || '8Gi' }}
+          --memory=${{ inputs.project_id == 'based-hardware' && '2Gi' || '8Gi' }}
           --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ inputs.remove_env_extra }}
           ${{ inputs.cloud_run_flags }}
           ${{ inputs.identity_flags }}
@@ -373,6 +399,19 @@ runs:
           --quiet
         gcloud firestore fields ttls list \
           --collection-group=sync_content_ledger \
+          --database='(default)' \
+          --project="$FIRESTORE_PROJECT_ID" \
+          --format='value(name)' | grep '/fields/expires_at$'
+        # The in-flight capture ledger is a sibling collection group. Terminal
+        # rows carry a 26h TTL; nonterminal rows carry a refreshed max lifetime.
+        gcloud firestore fields ttls update expires_at \
+          --collection-group=pipeline_ledger \
+          --database='(default)' \
+          --project="$FIRESTORE_PROJECT_ID" \
+          --enable-ttl \
+          --quiet
+        gcloud firestore fields ttls list \
+          --collection-group=pipeline_ledger \
           --database='(default)' \
           --project="$FIRESTORE_PROJECT_ID" \
           --format='value(name)' | grep '/fields/expires_at$'

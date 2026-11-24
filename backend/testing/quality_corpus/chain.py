@@ -94,7 +94,7 @@ def run_chain(units: Mapping[str, bytes], overrides: Mapping[str, str | None]) -
     """One worker build per pass (some flags are read at startup); returns payloads and outcomes.
 
     ``overrides`` are applied for both construction and processing, so flags
-    read per call (e.g. ``BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED``) and at
+    read per call (e.g. ``BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED``) and at
     startup (e.g. ``BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED``) both take effect.
     """
     from diarizer.batch_pipeline_startup import load_worker

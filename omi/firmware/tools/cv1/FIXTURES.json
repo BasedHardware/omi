@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "role": "public fixture and dependency pins; editable tool/firmware source is tested, not source-locked",
+  "files": [
+    {
+      "path": "checkout-dependencies.lock.json",
+      "sha256": "55c40ba41f47bfa95bcba68d6e06d078831940bc6ca9f38ae344b91c42d68bac",
+      "bytes": 11900
+    },
+    {
+      "path": "pinned-partitions.yml",
+      "sha256": "345f6b77aa32407ed2aaf33c8d2d7809b37e37a68f920ad30fd5fb647a4d1f5a",
+      "bytes": 2295
+    },
+    {
+      "path": "preflight-evidence/baseline-contract.json",
+      "sha256": "654435d71dd2c6eeff0863fd87062a7e80de0546a7333247eb3f28bc8140246b",
+      "bytes": 2820
+    },
+    {
+      "path": "preflight-evidence/baseline-public.raw",
+      "sha256": "f681aa213503faec007bee001252e461c1357bcafd72794333eab785e464f808",
+      "bytes": 64
+    },
+    {
+      "path": "preflight-evidence/corrected-actual-results.json",
+      "sha256": "e15c6b9e775e9f4585af24053ed6d9d1d80757fa22b6170728bbb3c8003588e8",
+      "bytes": 1063
+    },
+    {
+      "path": "preflight-evidence/later-candidate-public.raw",
+      "sha256": "76d48548dbdbf2e645db20cb2a35aa77fe0aa416a425487cca75968fc90004dd",
+      "bytes": 64
+    },
+    {
+      "path": "preflight-evidence/trust-comparison.json",
+      "sha256": "36a240ee7d429a27ed2179c591201025ffd17519956b302cb07e13c2e3dc31e5",
+      "bytes": 875
+    },
+    {
+      "path": "preflight-evidence/validation-evidence.json",
+      "sha256": "275745906413749fc6260e3d1de0f5f079ed46ec3c732b9c3255495035369cb6",
+      "bytes": 4174
+    },
+    {
+      "path": "preflight-evidence/validation-excerpts/b0n-effective-config.txt",
+      "sha256": "2c2b616844149d595640831bbdaab98ec7bc2169fb1aaac80e563662c657d2e3",
+      "bytes": 110
+    },
+    {
+      "path": "preflight-evidence/validation-excerpts/b0n-validation-Kconfig.txt",
+      "sha256": "eaca5dc1c439ee1db8e0672e7e66cf2d63b6f8c72742c820c870d22e479d22c3",
+      "bytes": 487
+    },
+    {
+      "path": "preflight-evidence/validation-excerpts/b0n-validation.c",
+      "sha256": "7f63d37063b24902952caccdec2eb60a5048d5cc9ef4dc0b552f40db986f52fa",
+      "bytes": 1316
+    },
+    {
+      "path": "preflight-evidence/validation-excerpts/generated-development-key.cmake",
+      "sha256": "31f23715798623e944b27bd503cc5dad4c5af3e7ac777389c9ecead63bc7853b",
+      "bytes": 969
+    },
+    {
+      "path": "preflight-evidence/validation-excerpts/imgtool-rsa.py",
+      "sha256": "30abcfff0dfc46f45ec0ff9f1de56e9ea58bdead44df735438529183c44868fb",
+      "bytes": 765
+    },
+    {
+      "path": "preflight-evidence/validation-excerpts/mcuboot-effective-config.txt",
+      "sha256": "5d006ca82c09244de5cdcd12c4e9320e488bac911edced7f0eb0521fb7e882c4",
+      "bytes": 309
+    },
+    {
+      "path": "preflight-evidence/validation-excerpts/mcuboot-rsa-verifier.c",
+      "sha256": "487c5ff5fe508c6896f26d79674b174e8c7083ab2d58fa09832398cb1b285e95",
+      "bytes": 1880
+    },
+    {
+      "path": "preflight-evidence/validation-excerpts/smp-gatt-permissions.c",
+      "sha256": "83bed5b768a067fcffb185b58e8548a62402c6ec988c66db1e95ffe3a3757664",
+      "bytes": 752
+    },
+    {
+      "path": "radio-fixture.json",
+      "sha256": "ec0b858287cfd09ae0c0432a337356103f6e2f26b3d14598434feb9ad1e51454",
+      "bytes": 406
+    },
+    {
+      "path": "startup-fixtures/manifest.json",
+      "sha256": "255a86cbbb263cfb524a84bd567646f5bfdf489e10c72a73aec49df2ed2cddf4",
+      "bytes": 1159
+    },
+    {
+      "path": "startup-fixtures/startup-1.log",
+      "sha256": "f516e7e8c20796fbbcf9045b387126c15d1260fcd2866f5c5390e6e6eda04533",
+      "bytes": 3610
+    },
+    {
+      "path": "startup-fixtures/startup-2.log",
+      "sha256": "8680ae39e2442307b88420fcb71bbae865da280a3e53fe7d96ee2a34f0a28f0c",
+      "bytes": 3576
+    }
+  ]
+}

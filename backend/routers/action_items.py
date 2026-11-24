@@ -1,3 +1,4 @@
+from utils.conversations.layer import read_product as read_product_conversation
 import asyncio
 import logging
 import uuid
@@ -13,7 +14,6 @@ import database.action_items as action_items_db
 import database.conversations as conversations_db
 import database.redis_db as redis_db
 from database.firestore_transaction_retry import FirestoreContentionExhausted
-from utils.list_version_check import ListVersionCheck
 from utils.task_intelligence.task_source_validation import TaskSourceValidationError
 from utils.retrieval.tool_services.action_items import (
     create_action_item as create_task,
@@ -182,6 +182,9 @@ def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
 
+    if action_item.get('deleted', False):
+        raise HTTPException(status_code=404, detail="Action item not found")
+
     if action_item.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
 
@@ -241,8 +244,12 @@ def get_pending_sync_items(
 ):
     """Get action items that need sync: pending export + already synced items for bidirectional sync."""
     result = action_items_db.get_pending_apple_reminders_sync(uid)
-    pending_export = [item for item in result["pending_export"] if not item.get('is_locked', False)]
-    synced_items = [item for item in result["synced_items"] if not item.get('is_locked', False)]
+    pending_export = [
+        item for item in result["pending_export"] if not item.get('deleted', False) and not item.get('is_locked', False)
+    ]
+    synced_items = [
+        item for item in result["synced_items"] if not item.get('deleted', False) and not item.get('is_locked', False)
+    ]
     return {
         "pending_export": _safe_action_item_responses(pending_export, uid=uid, context='pending_export'),
         "synced_items": _safe_action_item_responses(synced_items, uid=uid, context='synced_items'),
@@ -260,16 +267,20 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
     if not request.items:
         return {"status": "ok", "updated_count": 0}
 
-    # Pre-fetch items to skip locked ones
+    # Pre-fetch items to skip locked ones and filter deleted or nonexistent tombstones
     locked_ids = set()
+    skipped_ids = set()
     for item in request.items:
         existing = action_items_db.get_action_item(uid, item.id)
-        if existing and existing.get('is_locked', False):
+        if not existing or existing.get('deleted', False):
+            skipped_ids.add(item.id)
+            continue
+        if existing.get('is_locked', False):
             locked_ids.add(item.id)
 
     updates = []
     for item in request.items:
-        if item.id in locked_ids:
+        if item.id in locked_ids or item.id in skipped_ids:
             continue
         update_data = {}
         if item.description is not None:
@@ -292,6 +303,9 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
             updates.append({'id': item.id, 'data': update_data})
 
     result = action_items_db.batch_sync_update_action_items(uid, updates)
+    for sid in sorted(skipped_ids):
+        if sid not in result.missing_ids:
+            result.missing_ids.append(sid)
 
     updated_ids = set(result.updated_ids)
     desc_updates = [u for u in updates if u['id'] in updated_ids and 'description' in u['data']]
@@ -601,25 +615,17 @@ def get_action_items(
     enforce_stale_client_list_refusal(request)
     enforce_hot_client_list_ceiling(uid, request)
 
-    version_check = ListVersionCheck.start(request, uid, 'action_items')
-    if version_check.not_modified is not None:
-        return version_check.not_modified
-
-    cached_response = (
-        _serve_action_items_list_from_cache(
-            uid,
-            request=request,
-            limit=limit,
-            offset=offset,
-            completed=completed,
-            conversation_id=conversation_id,
-            start_date=start_date,
-            end_date=end_date,
-            due_start_date=due_start_date,
-            due_end_date=due_end_date,
-        )
-        if not (version_check.active and 'lp1-' in request.headers.get('if-none-match', ''))
-        else None
+    cached_response = _serve_action_items_list_from_cache(
+        uid,
+        request=request,
+        limit=limit,
+        offset=offset,
+        completed=completed,
+        conversation_id=conversation_id,
+        start_date=start_date,
+        end_date=end_date,
+        due_start_date=due_start_date,
+        due_end_date=due_end_date,
     )
     if cached_response is not None:
         return cached_response
@@ -687,7 +693,6 @@ def get_action_items(
             due_end_date=due_end_date,
         )
 
-    version_check.finish(response, truncated=truncated)
     return result
 
 
@@ -956,7 +961,7 @@ def batch_delete_action_items(
 )
 def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get all action items for a specific conversation."""
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
@@ -983,7 +988,7 @@ def get_conversation_action_items_count(conversation_id: str, uid: str = Depends
 
     A task-progress badge (e.g. 2 of 3 done) for a conversation without paging its items.
     """
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
@@ -1003,7 +1008,7 @@ class ConversationActionItemsDeleteResponse(BaseModel):
 )
 def delete_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete all action items for a specific conversation."""
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
@@ -1100,11 +1105,7 @@ def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_c
     """Create a shareable link for selected action items."""
     # Validate all task_ids belong to user and are not locked
     for task_id in request.task_ids:
-        item = action_items_db.get_action_item(uid, task_id)
-        if not item:
-            raise HTTPException(status_code=404, detail=f"Action item {task_id} not found")
-        if item.get('is_locked', False):
-            raise HTTPException(status_code=402, detail="Cannot share locked action items.")
+        _get_valid_action_item(uid, task_id)
 
     # Get sender display name
     display_name = get_user_display_name(uid)
@@ -1132,7 +1133,7 @@ def get_shared_action_items(token: str):
     tasks = []
     for task_id in task_ids:
         item = action_items_db.get_action_item(sender_uid, task_id)
-        if item and not item.get('is_locked', False):
+        if item and not item.get('deleted', False) and not item.get('is_locked', False):
             tasks.append(
                 {
                     "description": item.get('description', ''),
@@ -1166,7 +1167,7 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
     existing_items_count = 0
     for task_id in task_ids:
         item = action_items_db.get_action_item(sender_uid, task_id)
-        if item:
+        if item and not item.get('deleted', False):
             existing_items_count += 1
             if not item.get('is_locked', False):
                 eligible_ids.append(task_id)
@@ -1191,7 +1192,7 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
     try:
         for task_id in eligible_ids:
             original = action_items_db.get_action_item(sender_uid, task_id)
-            if not original or original.get('is_locked', False):
+            if not original or original.get('deleted', False) or original.get('is_locked', False):
                 continue
 
             new_item = {

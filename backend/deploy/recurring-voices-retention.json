@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "field": "expires_at",
+  "collection_groups": ["speaker_recurring_voices"],
+  "max_retention_days": 90,
+  "candidate_retention_days": 30
+}

@@ -1387,6 +1387,34 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
                 return False
         return True
 
+    for name in ('privacy_negative_lookup_total', 'omi_batch_projection_native_audio_prefetch_total'):
+        assert kept(name), name
+    for name in (
+        'omi_record_wal_handoff_sample_attempts_total',
+        'omi_record_wal_handoff_sample_io_total',
+        'omi_pipeline_record_wait_answers_total',
+        'omi_pipeline_record_wait_memo_hits_total',
+    ):
+        assert kept(name), name
+    assert not kept('omi_pipeline_record_wait_unreviewed_total')
+    assert not kept('omi_batch_projection_native_audio_prefetch_unreviewed_total')
+    # Pre-unit holds and strict election must survive every later drop rule.
+    for name in (
+        'omi_batch_upload_coalescing_total',
+        'omi_batch_upload_coalescing_scan_total',
+        'omi_batch_upload_coalescing_scan_seconds_bucket',
+        'omi_batch_upload_coalescing_scan_seconds_sum',
+        'omi_batch_upload_coalescing_scan_seconds_count',
+        'omi_batch_upload_coalescing_scan_last_success_seconds',
+        'omi_batch_leader_lease_total',
+    ):
+        assert kept(name), name
+        labels = {'__name__': name}
+        for rule in rules:
+            if rule['action'] == 'drop':
+                value = ';'.join(labels.get(label, '') for label in rule['sourceLabels'])
+                assert not re.fullmatch(rule['regex'], value), f'Cloud Run drops {name}'
+    assert not kept('omi_batch_upload_coalescing_unreviewed_total')
     # The existing dev/prod sync exporter is the authoritative bridge consumer.
     for env in ('dev', 'prod'):
         exporter = yaml.safe_load(
@@ -1400,9 +1428,27 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
             assert kept(family + ('events_total' if family.endswith('_') else ''))
             if family.endswith('_'):
                 assert kept(family + 'duration_seconds_bucket')
+    assert kept('omi_batch_projection_drains_skipped_total')
+    # The finish-backoff re-enable bar and its reads-per-completion alert read these two; only
+    # backend-integration runs the finish sweep, so a drop here makes both read 'no data'.
+    assert kept('omi_batch_projection_finish_reads_total')
+    assert kept('omi_batch_projection_finish_completed_total')
+    assert kept('omi_batch_projection_finish_classified_total')
+    assert kept('omi_batch_projection_finish_classification_failures_total')
+    assert kept('omi_batch_projection_claim_busy_backoffs_total')
+    assert kept('omi_batch_projection_privacy_blocked_stops_total')
+    assert kept('omi_batch_projection_privacy_backoffs_total')
+    assert kept('omi_batch_projection_live_target_backoffs_total')
+    assert kept('omi_batch_projection_privacy_row_changed_total')
+    assert kept('omi_batch_projection_privacy_resumes_attempted_total')
+    assert kept('omi_batch_projection_privacy_resumes_succeeded_total')
+    assert kept('omi_batch_projection_privacy_fallthroughs_total')
+    assert kept('omi_batch_projection_privacy_still_refused_total')
     # Direct GMP consumers: sentinel batch_metrics.py/completion_telemetry.py.
     # fleet_gate/david_gate use logs, durable state and native request_count.
     for name in (
+        'omi_listen_server_batch_suppression_total',
+        'omi_listen_preview_batch_custody_total',
         'omi_batch_pipeline_events_total',
         'omi_batch_pipeline_oldest_age_seconds',
         'omi_batch_ramp_heavy_owner_excluded_total',
@@ -1422,9 +1468,14 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_accept_to_summary_seconds_sum',
         'omi_summary_terminal_total',
         'omi_summary_debt_overdue',
+        'omi_summary_debt_expired_seen',
+        'omi_summary_debt_near_expiry_admitted',
+        'omi_summary_debt_repair_total',
+        'omi_summary_debt_repair_discovery_total',
         'omi_summary_debt_oldest_age_seconds',
         'omi_summary_debt_sample_timestamp_seconds',
         'omi_live_session_transcript_outcome_total',
+        'omi_sync_future_capture_recovery_total',
         'omi_firestore_documents_per_operation_bucket',
         # Cost lever G1: Parakeet pool request time by caller.
         'omi_parakeet_request_seconds_bucket',
@@ -1454,6 +1505,9 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_stt_cap_cohort_percent',
         'omi_held_recovery_pacing_intents_total',
         'omi_held_recovery_pacing_audio_seconds_total',
+        # Sync-hold recovery gate denominator: items skipped before any attempt.
+        'omi_held_content_recovery_total',
+        'omi_held_content_recovery_skipped_total',
         # #23388 cap enforcement: the watch readout for finite allowances
         # (stt-cap-dispatch.md) — decisions and metered provider audio.
         'omi_stt_cap_dispatch_decisions_total',
@@ -1463,6 +1517,20 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'conversation_llm_input_dedupe_skipped_total',
         'conversation_llm_input_dedupe_misses_total',
         'conversation_llm_input_dedupe_checkpoint_errors_total',
+        # Enrichment LLM cost/usage (SCA-2067, 2026-11-13): the SCA-1960 guardrail
+        # regression readout — attributable calls, shaped input tokens, notes-agent
+        # cost and episode-moment cost. Estimates, not billed dollars.
+        'omi_conversation_llm_calls_total',
+        'omi_shaped_agent_input_tokens_total',
+        'omi_notes_agent_runs_total',
+        'omi_notes_agent_estimated_cost_usd_bucket',
+        'omi_notes_agent_estimated_cost_usd_count',
+        'omi_notes_agent_estimated_cost_usd_sum',
+        'omi_notes_agent_tokens_total',
+        'omi_notes_agent_transport_skips_total',
+        'omi_episode_moment_cost_usd_total',
+        'omi_episode_moment_tokens_total',
+        'omi_episode_moment_updates_total',
     ):
         assert kept(name), name
     for component in ('sync', 'summary_delivery', 'storage'):
@@ -1479,8 +1547,28 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     shared = yaml.safe_load((root / 'backend/deploy/cloud_run_gmp_sidecar.yaml').read_text())
     # RunMonitoring name becomes native GMP job; direct shadow mappings pin it.
     assert config['metadata']['name'] == shared['metadata']['name']
-    assert shared['spec']['endpoints'][0]['interval'] == '30s'
-    assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == 'omi_.*|conversation_llm_input_dedupe_.*'
+    assert shared['spec']['endpoints'][0]['interval'] == '60s'
+    assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == (
+        'omi_.*|omi_listen_server_batch_suppression_total|listen_quiet_check_.*|conversation_llm_input_dedupe_.*'
+        '|privacy_(checks|check_calls|check_reads|decision_mismatch|decision_comparison|owner_comparison|owner_shadow_error|shadow_checks|memo_requests|memo_ineligible|ttl_cache|ttl_cache_switch_reads|negative_lookup)_total|privacy_ttl_cache_disabled'
+    )
+    # The privacy shadow kill switch reads these from Cloud Run (cl2-infracost 2026-11-04).
+    for name in (
+        'privacy_decision_mismatch_total',
+        'privacy_decision_comparison_total',
+        'privacy_owner_comparison_total',
+        'privacy_owner_shadow_error_total',
+        'privacy_ttl_cache_disabled',
+        'privacy_ttl_cache_switch_reads_total',
+        'privacy_shadow_checks_total',
+        'privacy_ttl_cache_total',
+        'privacy_negative_lookup_total',
+    ):
+        assert re.fullmatch(shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'], name)
+        assert kept(name), name
+    assert re.fullmatch(
+        shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'], 'omi_listen_preview_batch_custody_total'
+    )
 
 
 def test_legacy_config_preparation_does_not_log_secret_metadata(monkeypatch, tmp_path, capsys):

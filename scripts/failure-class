@@ -29,6 +29,12 @@ from typing import Any
 OUTPUT_SCHEMA_VERSION = 1
 DEFINITION_SCHEMA_VERSION = 1
 DEFINITIONS_RELATIVE_PATH = Path(".github/failure-classes")
+# The closed set of contract families every definition belongs to. It lives beside the
+# directory, not in it: every loader globs the directory for definitions.
+FAMILIES_RELATIVE_PATH = Path(".github/failure-class-families.json")
+FAMILIES_SCHEMA_VERSION = 1
+FAMILY_KEY_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+FAMILY_MEMBERS_SHOWN = 25
 FAILURE_CLASS_ID_RE = re.compile(r"^FC-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 FIX_SUBJECT_RE = re.compile(r"^fix(?:\([^)]+\))?!?:")
 DECLARATION_LINE_RE = re.compile(r"^[ \t]*Failure-Class:[ \t]*([^\r\n]*)[ \t]*$", re.MULTILINE)
@@ -98,6 +104,12 @@ def emit(payload: dict[str, Any], output_format: str) -> None:
     elif command == "explain":
         definition = payload["failure_class"]
         print(f"  {definition['id']}: {definition['violated_contract']}")
+        family = payload.get("family") or {}
+        if family.get("key"):
+            print(f"  family {family['key']}: {family.get('contract') or ''}")
+            shown = family.get("open_members_shown") or []
+            more = family.get("open_members_total", len(shown)) - len(shown)
+            print(f"  open members: {', '.join(shown) or 'none'}" + (f" (+{more} more)" if more > 0 else ""))
     elif command == "prepare":
         patch = payload["pr_body_patch"]
         print(f"  patch operation={patch['operation']}")
@@ -153,8 +165,68 @@ def repository_root(root: Path) -> Path:
     return root
 
 
+_HEAD_TREE_CACHE: dict[Path, frozenset[str] | None] = {}
+
+
+def tracked_at_head(root: Path) -> frozenset[str] | None:
+    """Repository paths tracked at HEAD, or None outside a usable git repo.
+
+    Cone-mode sparse checkouts do not materialise out-of-cone paths, and
+    prevention artifacts name guards across every surface, so existence is
+    judged against the working tree OR the HEAD tree; a path in neither
+    still fails.
+    """
+    key = root.resolve()
+    if key not in _HEAD_TREE_CACHE:
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(key), "ls-tree", "-r", "--name-only", "-z", "HEAD"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            ).stdout
+            _HEAD_TREE_CACHE[key] = frozenset(entry.decode("utf-8") for entry in out.split(b"\0") if entry)
+        except (OSError, subprocess.CalledProcessError):
+            _HEAD_TREE_CACHE[key] = None
+    return _HEAD_TREE_CACHE[key]
+
+
 def definitions_directory(root: Path) -> Path:
     return root / DEFINITIONS_RELATIVE_PATH
+
+
+def load_families(root: Path) -> tuple[dict[str, str], list[dict[str, Any]]]:
+    """The family catalogue: family key -> the violated contract that defines it.
+
+    Families exist so a recurring contract is visible even when each incident got its own
+    class name. A definition must name one of these keys; a typo would otherwise create a
+    silent one-member family and defeat the census.
+    """
+    path = root / FAMILIES_RELATIVE_PATH
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}, [error("missing_family_catalogue", f"missing {FAMILIES_RELATIVE_PATH}")]
+    except (OSError, json.JSONDecodeError) as exc:
+        return {}, [error("invalid_family_catalogue", str(exc), path=str(path))]
+    if not isinstance(data, dict) or data.get("schema_version") != FAMILIES_SCHEMA_VERSION:
+        return {}, [
+            error(
+                "invalid_family_catalogue",
+                f"{FAMILIES_RELATIVE_PATH} must be a schema_version {FAMILIES_SCHEMA_VERSION} object",
+                path=str(path),
+            )
+        ]
+    families = data.get("families")
+    if not isinstance(families, dict) or not families:
+        return {}, [error("invalid_family_catalogue", "'families' must be a non-empty object", path=str(path))]
+    errors = []
+    for key, definition in families.items():
+        if not FAMILY_KEY_RE.fullmatch(key):
+            errors.append(error("invalid_family_catalogue", f"family key '{key}' must be lower-kebab", path=str(path)))
+        if not isinstance(definition, str) or not definition.strip():
+            errors.append(error("invalid_family_catalogue", f"family '{key}' needs a non-empty definition", path=str(path)))
+    return ({} if errors else dict(families)), errors
 
 
 def validate_canonical_prevention_artifact(value: Any, path: Path, root: Path) -> list[dict[str, Any]]:
@@ -197,18 +269,25 @@ def validate_canonical_prevention_artifact(value: Any, path: Path, root: Path) -
                 )
             )
         elif not (root / candidate).exists():
-            errors.append(
-                error(
-                    "missing_canonical_prevention_artifact",
-                    f"'canonical_prevention_artifact' path does not exist: {item}",
-                    path=str(path),
+            tracked = tracked_at_head(root)
+            if tracked is None or item not in tracked:
+                errors.append(
+                    error(
+                        "missing_canonical_prevention_artifact",
+                        f"'canonical_prevention_artifact' path does not exist: {item}",
+                        path=str(path),
+                    )
                 )
-            )
     return errors
 
 
-def validate_definition(data: Any, path: Path, root: Path) -> list[dict[str, Any]]:
-    """Return schema errors without allowing malformed files to fail open."""
+def validate_definition(
+    data: Any, path: Path, root: Path, families: dict[str, str] | None = None
+) -> list[dict[str, Any]]:
+    """Return schema errors without allowing malformed files to fail open.
+
+    `families` is the loaded catalogue; when omitted it is read from the checkout.
+    """
     if not isinstance(data, dict):
         return [error("invalid_definition", "definition must be a JSON object", path=str(path))]
 
@@ -219,6 +298,7 @@ def validate_definition(data: Any, path: Path, root: Path) -> list[dict[str, Any
         "canonical_prevention",
         "evidence_prs",
         "status",
+        "family",
     }
     allowed = required | {"scope_hints", "dormant_since", "canonical_prevention_artifact"}
     errors: list[dict[str, Any]] = []
@@ -247,6 +327,20 @@ def validate_definition(data: Any, path: Path, root: Path) -> list[dict[str, Any
     for key in ("violated_contract", "canonical_prevention"):
         if not isinstance(data.get(key), str) or not data[key].strip():
             errors.append(error("invalid_definition_field", f"'{key}' must be a non-empty string", path=str(path)))
+    if "family" in data:
+        if families is None:
+            families, _ = load_families(root)
+        family = data["family"]
+        # An unreadable catalogue is reported once by load_definitions; do not also
+        # blame every definition for it.
+        if families and (not isinstance(family, str) or family not in families):
+            errors.append(
+                error(
+                    "unknown_failure_class_family",
+                    f"'family' must be one of the keys in {FAMILIES_RELATIVE_PATH}; got {family!r}",
+                    path=str(path),
+                )
+            )
 
     evidence_prs = data.get("evidence_prs")
     # May be empty. `evidence_prs` records *merged* PRs, so a class born in the PR that
@@ -326,7 +420,7 @@ def load_definitions(root: Path) -> tuple[list[Definition], list[dict[str, Any]]
         return [], [error("missing_definition_directory", f"missing {DEFINITIONS_RELATIVE_PATH}")]
 
     definitions: list[Definition] = []
-    errors: list[dict[str, Any]] = []
+    families, errors = load_families(root)
     ids: dict[str, Path] = {}
     paths = sorted(directory.glob("*.json"))
     if not paths:
@@ -337,7 +431,7 @@ def load_definitions(root: Path) -> tuple[list[Definition], list[dict[str, Any]]
         except (OSError, json.JSONDecodeError) as exc:
             errors.append(error("invalid_definition_json", str(exc), path=str(path)))
             continue
-        definition_errors = validate_definition(data, path, root)
+        definition_errors = validate_definition(data, path, root, families)
         errors.extend(definition_errors)
         if isinstance(data, dict) and isinstance(data.get("id"), str):
             if data["id"] in ids:
@@ -768,6 +862,7 @@ def prepare_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, Any
             {
                 "id": definition.id,
                 "status": definition.data["status"],
+                "family": definition.data.get("family"),
                 "violated_contract": definition.data["violated_contract"],
                 "canonical_prevention": definition.data["canonical_prevention"],
             }
@@ -777,9 +872,12 @@ def prepare_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, Any
         "candidates_total": len(definitions),
         "candidate_narrowing": narrowing,
         "candidate_source": "registry-only; no class was inferred from paths, diffs, or commit text",
+        "candidate_families": family_counts(shown),
         "next_action": (
             "Choose the declaration manually; replace 'none' in an appended patch if a class "
-            "applies. Declaring 'new' means adding one "
+            "applies. Prefer an existing class whose family's contract fits (`explain <id>` lists "
+            "its family members); declare 'new' only when no class in the family fits. "
+            "Declaring 'new' means adding one "
             ".github/failure-classes/FC-<lower-kebab-slug>.json in this same change; its "
             "'evidence_prs' may be [] because this PR is the evidence."
         ),
@@ -800,7 +898,26 @@ def explain_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, Any
     }
     if matches:
         payload["failure_class"] = public_definition(matches[0], root)
+        family = matches[0].data.get("family")
+        siblings = [d.id for d in definitions if family and d.data.get("family") == family and d.id != matches[0].id]
+        open_siblings = [d.id for d in definitions if d.id in siblings and d.data["status"] == "open"]
+        families, _ = load_families(root)
+        payload["family"] = {
+            "key": family,
+            "contract": families.get(family),
+            "members_total": len(siblings) + 1,
+            "open_members_shown": open_siblings[:FAMILY_MEMBERS_SHOWN],
+            "open_members_total": len(open_siblings),
+        }
     return payload, 0 if not errors else 1
+
+
+def family_counts(definitions: list[Definition]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for definition in definitions:
+        family = definition.data.get("family") or "unassigned"
+        counts[family] = counts.get(family, 0) + 1
+    return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
 
 
 def parse_duration(value: str) -> timedelta:

@@ -11,14 +11,6 @@ from utils.llm.memories import MemoryLogExtraction
 UID = 'uid-memories-extract'
 
 
-@pytest.fixture(autouse=True)
-def _entitled(monkeypatch):
-    """Default to an entitled account; the paywall gate has its own test."""
-    import utils.subscription as subscription
-
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda uid, platform: False)
-
-
 async def test_extract_memory_log_returns_without_persisting(monkeypatch):
     calls: dict[str, object] = {}
 
@@ -60,16 +52,3 @@ async def test_extract_memory_log_fails_closed_when_extractor_returns_none(monke
             uid=UID,
         )
     assert exc.value.status_code == 502
-
-
-async def test_extract_memory_log_blocks_a_trial_expired_account(monkeypatch):
-    import utils.subscription as subscription
-
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda uid, platform: True)
-
-    with pytest.raises(HTTPException) as exc:
-        await memories_router.extract_memory_log(
-            memories_router.ExtractMemoryLogRequest(text='something memorable'),
-            uid=UID,
-        )
-    assert exc.value.status_code == 402

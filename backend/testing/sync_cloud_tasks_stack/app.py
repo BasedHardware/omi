@@ -362,8 +362,8 @@ elif ROLE == 'worker':
         write_event('providers', {'event': 'conversation_persisted', 'conversation_id': completed.id})
         return completed
 
-    _original_delete_staged_blobs_async = sync_router._delete_staged_blobs_async
-    _original_run_full_pipeline = sync_router._run_full_pipeline_background_async
+    _originaldelete_staged_blobs_async = sync_router.delete_staged_blobs_async
+    _original_run_full_pipeline = sync_router.run_full_pipeline_background_async
     _original_mark_sync_content_completed = sync_pipeline.mark_sync_content_completed
 
     async def _run_full_pipeline_with_controlled_worker_failure(*args: Any, **kwargs: Any) -> Any:
@@ -381,7 +381,7 @@ elif ROLE == 'worker':
             _cleanup_failures_remaining -= 1
             write_event('jobs', {'event': 'intentional_cleanup_failure', 'blob_count': len(blob_paths)})
             raise RuntimeError('controlled Sync staged-cleanup failure')
-        await _original_delete_staged_blobs_async(blob_paths, **custody)
+        await _originaldelete_staged_blobs_async(blob_paths, **custody)
 
     def _mark_sync_content_completed_with_controlled_failure(*args: Any, **kwargs: Any) -> Any:
         global _pre_ledger_failures_remaining, _post_ledger_failures_remaining
@@ -405,5 +405,5 @@ elif ROLE == 'worker':
     sync_pipeline._download_audio_bytes = read_signed_url
     sync_pipeline.process_conversation = _local_process_conversation
     sync_pipeline.mark_sync_content_completed = _mark_sync_content_completed_with_controlled_failure
-    sync_router._run_full_pipeline_background_async = _run_full_pipeline_with_controlled_worker_failure
-    sync_router._delete_staged_blobs_async = _delete_staged_blobs_with_controlled_failure
+    sync_router.run_full_pipeline_background_async = _run_full_pipeline_with_controlled_worker_failure
+    sync_router.delete_staged_blobs_async = _delete_staged_blobs_with_controlled_failure

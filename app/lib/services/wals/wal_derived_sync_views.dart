@@ -15,12 +15,13 @@ mixin WalDerivedSyncViews on ChangeNotifier implements SyncProvider {
   @override
   WalDerivedViews get derivedWals {
     final rows = allWals;
-    if (_views == null || !identical(rows, _source) || rows.length != _length) {
-      _views?.dispose();
-      _source = rows;
-      _length = rows.length;
+    if (_views == null) {
       _views = WalDerivedViews(rows);
+    } else if (!identical(rows, _source) || rows.length != _length) {
+      _views!.sync(rows);
     }
+    _source = rows;
+    _length = rows.length;
     _views!.refresh();
     return _views!;
   }

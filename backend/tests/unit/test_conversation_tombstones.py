@@ -6,18 +6,20 @@ collaborators rather than importing network clients or asserting source strings.
 
 import ast
 import asyncio
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from pathlib import Path
 from types import SimpleNamespace, MethodType
 from unittest.mock import MagicMock, AsyncMock
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 import pytest
 
 from database import conversation_tombstones as tombstones
 from database import user_data_deletion
+from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked, StoragePrefixPurgeError
 from google.api_core.exceptions import AlreadyExists
 from testing.import_isolation import stub_modules, AutoMockModule
+from utils.log_sanitizer import sanitize
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -28,6 +30,21 @@ class Store:
 
     def collection(self, name):
         return Ref(self, name)
+
+    def batch(self):
+        return Batch()
+
+
+class Batch:
+    def __init__(self):
+        self.refs = []
+
+    def delete(self, ref):
+        self.refs.append(ref)
+
+    def commit(self):
+        for ref in self.refs:
+            ref.delete()
 
 
 class Ref:
@@ -60,8 +77,15 @@ class Ref:
 
 def function(path, name, namespace):
     if path == 'routers/conversations.py' and name == 'delete_conversation':
+        namespace['Response'] = Response
         namespace['nullcontext'] = nullcontext
+        namespace['ExitStack'] = ExitStack
+        namespace.setdefault('accepts_conversation_deletes', lambda: False)
         namespace.setdefault('destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+        namespace.setdefault('CONVERSATION_DELETE_GATE_WAIT_SECONDS', 0.0)
+        namespace.setdefault('deferred_batch_purges', lambda uid: nullcontext())
+        namespace.setdefault('_legal_hold_defers_delete', lambda uid: False)
+        function(path, '_delete_privacy_audio_after_response', namespace)
         function(path, '_delete_conversation_under_gate', namespace)
     node = next(
         n
@@ -102,7 +126,7 @@ def test_tombstone_contains_only_identity_and_point_lookup_is_owner_scoped(store
     assert not tombstones.is_deleted('other-user', 'c')
 
 
-def test_non_cascade_delete_purges_prompt_evidence_after_intent_without_purging_primary_audio(store):
+def test_non_cascade_delete_purges_prompt_evidence_and_primary_audio_after_intent(store):
     calls = []
 
     def purge(uid, cid):
@@ -112,24 +136,30 @@ def test_non_cascade_delete_purges_prompt_evidence_after_intent_without_purging_
         calls.append(('parent', tombstones.is_deleted(uid, cid)))
         store.rows.pop(f'users/{uid}/conversations/{cid}')
 
-    audio = MagicMock()
+    snapshots = MagicMock()
+    snapshots.get_conversation_raw_snapshot.return_value = {'sync_merged_from': ['donor']}
     namespace = {
         'logger': MagicMock(),
         'conversation_tombstones': tombstones,
+        'conversations_db': snapshots,
         'delete_owner_prompt_embedding_cache': purge,
         'delete_conversation_screen_frames': MagicMock(),
         'delete_conversation_and_frame_evidence': hard_delete,
-        'delete_privacy_conversation_audio': audio,
+        'delete_privacy_conversation_audio': MagicMock(),
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
         'record_product_event': MagicMock(),
     }
     delete = function('routers/conversations.py', 'delete_conversation', namespace)
+    background = MagicMock()
     # The handler returns no body: the route is 204 No Content, the contract the
     # released mobile client gates on (test_conversation_delete_wire_contract.py).
-    assert delete('c', MagicMock(), False, None, 'u') is None
+    assert delete('c', background, False, None, 'u').status_code == 204
     assert calls == [('prompt', True), ('parent', True)]
-    audio.assert_not_called()
+    # Audio is primary content: a non-cascade delete erases it after the response, donors included.
+    background.add_task.assert_called_once_with(
+        namespace['_delete_privacy_audio_after_response'], 'u', 'c', source_ids=['donor']
+    )
 
 
 @pytest.mark.parametrize('failure', ['retraction', 'cleanup', None])
@@ -155,7 +185,10 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         'logger': MagicMock(),
         'conversation_tombstones': tombstones,
         'db_client_module': SimpleNamespace(db=store),
-        'conversations_db': SimpleNamespace(get_conversation=lambda *args: {'sync_merged_from': ['donor']}),
+        'conversations_db': SimpleNamespace(
+            get_conversation_raw_snapshot=lambda *args, **kwargs: {'sync_merged_from': ['donor']}
+        ),
+        'object_lake': SimpleNamespace(LakeFetchError=type('LakeFetchError', (Exception,), {})),
         'os': SimpleNamespace(getenv=lambda *args: 'canonical'),
         'MemoryService': lambda **kw: SimpleNamespace(retract_conversation_memories=retract),
         'retraction_can_be_skipped': lambda *a, **kw: False,
@@ -177,12 +210,47 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         assert 'users/u/conversations/c' in store.rows
     else:
         tasks = MagicMock()
-        assert delete('c', tasks, True, None, 'u') is None
+        assert delete('c', tasks, True, None, 'u').status_code == 204
         tasks.add_task.assert_called_once_with(
-            namespace['delete_privacy_conversation_audio'], 'u', 'c', source_ids=['donor']
+            namespace['_delete_privacy_audio_after_response'], 'u', 'c', source_ids=['donor']
         )
         assert 'users/u/conversations/c' not in store.rows
     assert tombstones.is_deleted('u', 'c')
+
+
+@pytest.mark.parametrize(
+    ('error', 'outcome', 'reason'),
+    [
+        (
+            StoragePrefixPurgeError('owner storage list failed in sync: insufficientPermissions'),
+            'failed',
+            'insufficientPermissions',
+        ),
+        (
+            StoragePrefixPurgeBlocked({('sync', 'chunks/u/c/clip', 1): 'objectUnderActiveHold'}),
+            'blocked',
+            'objectUnderActiveHold',
+        ),
+    ],
+)
+def test_background_audio_purge_reports_provider_outcome_once(error, outcome, reason):
+    purge = MagicMock(side_effect=error)
+    logger = MagicMock()
+    namespace = {
+        'delete_privacy_conversation_audio': purge,
+        'logger': logger,
+        'sanitize': sanitize,
+    }
+    background_purge = function('routers/conversations.py', '_delete_privacy_audio_after_response', namespace)
+
+    background_purge('u', 'c', source_ids=['donor'])
+
+    purge.assert_called_once_with('u', 'c', source_ids=['donor'])
+    logger.error.assert_called_once()
+    assert logger.error.call_args.args[3] == outcome
+    assert reason in logger.error.call_args.args[4]
+    logger.warning.assert_not_called()
+    logger.exception.assert_not_called()
 
 
 def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch):
@@ -205,6 +273,8 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
         'delete_user_data',
         {
             'db': store,
+            'account_authority_writer_enabled': lambda: True,
+            'get_data_plane_firestore_client': lambda: store,
             'logger': MagicMock(),
             'delete_collection_recursive': purge,
         },

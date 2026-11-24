@@ -9,9 +9,17 @@ import json
 from pathlib import Path
 import sys
 
+# These observability settings are policy-owned live reads, outside the snapshot.
+LIVE_OBSERVABILITY_ENV_KEYS = frozenset(
+    {
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT',
+    }
+)
 
-# The E1 boundary follows declared snapshot ownership, not the BATCH_PIPELINE_
-# namespace. Worker/process keys belong to E1b and must not block other teams.
+
+# The E1 boundary follows declared ownership. Worker/process keys belong to
+# E1b and must not block other teams.
 # Read declarations with AST so this check remains stdlib-only and import-pure.
 def protected_env_keys():
     directory = Path(__file__).resolve().parent
@@ -30,7 +38,7 @@ def protected_env_keys():
         if isinstance(node, ast.Assign)
         and any(isinstance(target, ast.Name) and target.id == 'KILL_SWITCHES' for target in node.targets)
     )
-    return frozenset(owned) | frozenset(live)
+    return frozenset(owned) | frozenset(live) | LIVE_OBSERVABILITY_ENV_KEYS
 
 
 def env_reads(source):
@@ -194,11 +202,14 @@ def registry_violations(root: Path):
         for n in switches.body
         if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'KILL_SWITCHES' for t in n.targets)
     )
-    out = [
-        f'{key}: live switches require registry lifecycle ops_kill'
-        for key in keys
-        if rows.get(key, {}).get('lifecycle') != 'ops_kill'
-    ]
+    # The live-read helper also serves opt-in controls. Registry ops_kill means
+    # default on; default-off controls may instead be permanent knobs or ramps.
+    # Retain ops_kill for existing migration exceptions validated by the registry.
+    out = []
+    for key, default_on in keys.items():
+        allowed = {'ops_kill'} if default_on else {'ops_kill', 'config_switch', 'rollout'}
+        if rows.get(key, {}).get('lifecycle') not in allowed:
+            out.append(f"{key}: live switches require registry lifecycle {' or '.join(sorted(allowed))}")
     if 'nested' not in rows.get('BATCH_LIVE_STT_RETIRE_PERCENT', {}).get('notes', '').lower():
         out.append('BATCH_LIVE_STT_RETIRE_PERCENT: registry must declare the nested batch cohort')
     return out

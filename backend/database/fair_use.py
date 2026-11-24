@@ -32,7 +32,7 @@ from typing import Any, Dict, List, Optional, cast
 
 from google.cloud import firestore
 
-from ._client import db
+from ._client import db, get_firestore_client, run_transactional
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,66 @@ def set_fair_use_stage(uid: str, stage: str, **kwargs: Any) -> None:
     """Set enforcement stage with optional extra fields."""
     updates: Dict[str, Any] = {'stage': stage, **kwargs}
     update_fair_use_state(uid, updates)
+
+
+def update_fair_use_state_if_unchanged(
+    uid: str, expected: Dict[str, Any], updates: Dict[str, Any], *, firestore_client: Any = None
+) -> tuple[Dict[str, Any], bool]:
+    """Persist read-time decay only if the authoritative state has not changed.
+
+    A concurrent escalation or deadline renewal wins over a stale reader. Return
+    the authoritative row and whether this caller committed the update, so only
+    committed transitions emit decay telemetry.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection('fair_use_state').document('current')
+
+    @firestore.transactional
+    def apply(transaction: Any) -> tuple[Dict[str, Any], bool]:
+        snapshot = ref.get(transaction=transaction)
+        current = snapshot.to_dict() if snapshot.exists else {}
+        if not snapshot.exists or current != expected:
+            return current, False
+        written = {**updates, 'updated_at': datetime.now(timezone.utc)}
+        transaction.update(ref, written)
+        return {**current, **written}, True
+
+    return run_transactional(client, apply)
+
+
+def renew_fair_use_warning(
+    uid: str,
+    updates: Dict[str, Any],
+    *,
+    entry_updates: Dict[str, Any],
+    firestore_client: Any = None,
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    """Renew a warning or re-enter it after concurrent decay, preserving higher stages.
+
+    Return the transaction's before/after rows so escalation records the action
+    it actually committed, rather than the stage it read before the transaction.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection('fair_use_state').document('current')
+
+    @firestore.transactional
+    def apply(transaction: Any) -> tuple[Dict[str, Any], Dict[str, Any]]:
+        snapshot = ref.get(transaction=transaction)
+        current = snapshot.to_dict() if snapshot.exists else {}
+        stage = current.get('stage', 'none')
+        if stage not in ('none', 'warning'):
+            return current, current
+        written = {**updates, 'updated_at': datetime.now(timezone.utc)}
+        if stage == 'none':
+            written.update(entry_updates)
+            written['stage'] = 'warning'
+        if snapshot.exists:
+            transaction.update(ref, written)
+        else:
+            transaction.create(ref, written)
+        return current, {**current, **written}
+
+    return run_transactional(client, apply)
 
 
 # ---------------------------------------------------------------------------

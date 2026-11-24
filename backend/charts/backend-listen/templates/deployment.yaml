@@ -10,6 +10,42 @@
 {{- fail "workloadIdentityOnly forbids key credential environment variables" }}
 {{- end }}
 {{- end }}
+{{- range ((.Values.privateSecretEnv | default dict).keys | default list) }}
+{{- if has . $keyCredentialNames }}
+{{- fail "workloadIdentityOnly forbids key credential environment variables" }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- /*
+privateSecretEnv declares the NAMES of private env values (e.g. a cohort uid
+list) whose values live only in Secret Manager. The backend-secrets chart syncs
+them into secretName through External Secrets; this chart renders one
+secretKeyRef per name, so a deploy render never carries a private value and the
+drift gate compares references, not payloads. Once it is set, the retired
+privateEnv overlay must stay empty: a value change is a new Secret Manager
+version plus a rollout restart, never a code deploy.
+*/}}
+{{- $secretEnv := .Values.privateSecretEnv | default dict }}
+{{- $secretKeys := $secretEnv.keys | default list }}
+{{- if $secretKeys }}
+{{- if not $secretEnv.secretName }}
+{{- fail "privateSecretEnv.secretName is required when privateSecretEnv.keys is set" }}
+{{- end }}
+{{- if ne (len $secretKeys) (len (uniq $secretKeys)) }}
+{{- fail "privateSecretEnv.keys has a duplicate name" }}
+{{- end }}
+{{- if (.Values.privateEnv | default dict) }}
+{{- fail "privateEnv is retired once privateSecretEnv is set: add the value to the Secret Manager document instead" }}
+{{- end }}
+{{- range $secretKeys }}
+{{- if not (regexMatch "^[A-Z][A-Z0-9_]*$" .) }}
+{{- fail "privateSecretEnv.keys has a name that is not an env var name" }}
+{{- end }}
+{{- /* A secretKeyRef would silently replace a chart-derived value or a workflow_dispatch --set override. */}}
+{{- if has . (list "GOOGLE_CLOUD_PROJECT" "OMI_LLM_GATEWAY_FEATURE_MODE" "OMI_LLM_CHAT_AGENT_ROUTE" "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION" "STT_SERVICE_MODELS" "TRANSLATION_SERVICE_MODELS") }}
+{{- fail (printf "privateSecretEnv.keys cannot name %s: it is chart-derived or a workflow_dispatch override" .) }}
+{{- end }}
+{{- end }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment
@@ -68,6 +104,7 @@ spec:
           {{- end }}
           image: "{{ required "image.repository is required" .Values.image.repository }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ else }}:{{ required "image.tag is required" .Values.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- $v3StartupEnv := .Values.conversationsV3StartupEnv | default dict }}
           {{- with .Values.envFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}
@@ -80,8 +117,16 @@ spec:
           */}}
           {{- $privateEnv := .Values.privateEnv | default dict }}
           env:
+            # Immutable rollout exporter identity, including supervised GPU children.
+            - name: ROLLOUT_POD_TEMPLATE_HASH
+              valueFrom:
+                fieldRef: {fieldPath: "metadata.labels['pod-template-hash']"}
+            {{- if (.Values.parakeetShapeCanary | default dict).enabled }}
+            - name: PARAKEET_SHAPE_CANARY_FILE
+              value: /var/run/parakeet-shape/route.json
+            {{- end }}
             {{- range .Values.env }}
-            {{- if not (hasKey $privateEnv .name) }}
+            {{- if not (or (hasKey $privateEnv .name) (has .name $secretKeys) (hasKey $v3StartupEnv .name)) }}
             - name: {{ .name }}
               {{- if eq .name "GOOGLE_CLOUD_PROJECT" }}
               value: {{ required "runtimeGcpProjectId is required" $.Values.runtimeGcpProjectId | quote }}
@@ -93,7 +138,13 @@ spec:
               {{- end }}
             {{- end }}
             {{- end }}
+            {{- if $v3StartupEnv }}
+            {{- include "backend-listen.conversationsV3StartupEnv" . | nindent 12 }}
+            {{- end }}
             {{- range $name, $value := $privateEnv }}
+            {{- if hasKey $v3StartupEnv $name }}
+            {{- fail "privateEnv cannot override a conversationsV3StartupEnv key" }}
+            {{- end }}
             {{- if not (regexMatch "^[A-Z][A-Z0-9_]*$" $name) }}
             {{- fail "privateEnv has a key that is not an env var name" }}
             {{- end }}
@@ -102,6 +153,17 @@ spec:
             {{- end }}
             - name: {{ $name }}
               value: {{ $value | quote }}
+            {{- end }}
+            {{- range $secretKeys }}
+            {{- if hasKey $v3StartupEnv . }}
+            {{- fail "privateSecretEnv cannot override a conversationsV3StartupEnv key" }}
+            {{- end }}
+            - name: {{ . }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretEnv.secretName }}
+                  key: {{ . }}
+                  optional: false
             {{- end }}
           ports:
             - name: http
@@ -123,13 +185,27 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.volumeMounts }}
+          {{- if or .Values.volumeMounts (.Values.parakeetShapeCanary | default dict).enabled }}
           volumeMounts:
+            {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if (.Values.parakeetShapeCanary | default dict).enabled }}
+            - name: parakeet-shape-route
+              mountPath: /var/run/parakeet-shape
+              readOnly: true
+            {{- end }}
           {{- end }}
-      {{- with .Values.volumes }}
+      {{- if or .Values.volumes (.Values.parakeetShapeCanary | default dict).enabled }}
       volumes:
+        {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if (.Values.parakeetShapeCanary | default dict).enabled }}
+        - name: parakeet-shape-route
+          configMap:
+            name: parakeet-shape-route
+        {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

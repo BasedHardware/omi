@@ -10,13 +10,15 @@ from fastapi import WebSocketException
 
 from config.account_cutover import cutover_enforcement_enabled
 
+from database import redis_db
 from database import account_cutover as account_cutover_db
 from database.read_boundary import MalformedDocError
 from models.account_cutover import AccountCutoverClientAction, AccountCutoverRecord, AccountCutoverState
-from utils.account_cutover.control import build_account_cutover_control, parse_client_build
+from utils.account_cutover.control import build_account_cutover_control, minimum_builds_projection, parse_client_build
 from utils.account_cutover.fence import background_job_should_skip_account
 from utils.account_cutover.telemetry import record_cutover_access_decision
 from utils.executors import db_executor, run_blocking
+from utils.other.raise_site import tag_raise_site
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +111,17 @@ def evaluate_account_cutover_access(
     if is_cutover_control_path(path):
         return
 
+    # A newly deployed upgrade floor must also override bits from older builds.
+    universally_open_builds = not any(build.minimum_supported_build > 0 for build in minimum_builds_projection())
+    cache_epoch = account_cutover_db.cutover_cache_epoch(uid)
+    if (
+        not force
+        and cache_epoch is not None
+        and universally_open_builds
+        and redis_db.get_generic_cache(f'cutover-idle:{uid}')
+    ):
+        return
+
     try:
         record = account_cutover_db.get_account_cutover_record(uid, firestore_client=firestore_client)
     except MalformedDocError as error:
@@ -153,6 +166,8 @@ def evaluate_account_cutover_access(
                     'retryable': False,
                 },
             )
+        if not any(build.minimum_supported_build > 0 for build in control.minimum_supported_builds):
+            account_cutover_db.publish_cutover_idle(uid, cache_epoch)
         return
 
     if control.client_action == AccountCutoverClientAction.force_upgrade:
@@ -175,6 +190,7 @@ def evaluate_account_cutover_access(
     if (
         control.client_action == AccountCutoverClientAction.migration_maintenance
         and record.state != AccountCutoverState.rolled_back_stranded
+        and (record.state != AccountCutoverState.migrating or mutating)
     ):
         raise AccountCutoverAccessDenial(
             code='migration_maintenance',
@@ -205,6 +221,16 @@ def evaluate_account_cutover_access(
             },
         )
 
+    # A bit cannot preserve generation/header or per-platform upgrade checks.
+    # Cache only universally open generation-zero states; other open states
+    # retain the authoritative read rather than bypassing bridge safeguards.
+    if (
+        record.state in {AccountCutoverState.migrated, AccountCutoverState.rolled_back_stranded}
+        and record.account_generation == 0
+        and not any(build.minimum_supported_build > 0 for build in control.minimum_supported_builds)
+    ):
+        account_cutover_db.publish_cutover_idle(uid, cache_epoch)
+
 
 def enforce_account_cutover_http_access(
     uid: str,
@@ -234,7 +260,7 @@ def enforce_account_cutover_http_access(
             status_code = 503
         else:
             status_code = 403
-        raise HTTPException(status_code=status_code, detail=denial.detail) from denial
+        raise tag_raise_site(HTTPException(status_code=status_code, detail=denial.detail), denial.code) from denial
 
 
 def enforce_account_cutover_ws_access(

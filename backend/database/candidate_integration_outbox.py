@@ -1,5 +1,6 @@
 """Candidate integration outbox: claim, complete, list, redrive, and malformed dead-letter."""
 
+from database.action_item_fence import ActionItemCommitFence
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
 from uuid import uuid4
@@ -7,6 +8,7 @@ from uuid import uuid4
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from config.explicit_reminders import POLICY_REVISION, enabled as reminders_enabled
 from database import dream_dirty
 from database._client import db, get_firestore_client
 from database.action_items_cache import bump_action_items_list_version
@@ -187,6 +189,7 @@ def claim_candidate_integration_dispatch(
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
     control_ref = _control_ref(uid, firestore_client=client)
     transaction = client.transaction()
+    fence = ActionItemCommitFence(uid)
 
     @firestore.transactional
     def apply(write_transaction) -> _ClaimApply:
@@ -234,6 +237,17 @@ def claim_candidate_integration_dispatch(
             return _ClaimApply()
         if terminal or live_lease:
             return _ClaimApply()
+        if (
+            payload.get('policy_revision') == POLICY_REVISION
+            and not reminders_enabled()
+            and external_id is None
+            and payload.get('provider_attempt_outcome', 'not_sent') == 'not_sent'
+        ):
+            write_transaction.update(
+                outbox_ref,
+                {'status': 'suppressed', 'resolution_reason': 'reminder_policy_disabled', 'updated_at': claim_time},
+            )
+            return _ClaimApply()
         if external_id is not None:
             if action_ref is not None and action_snapshot is not None and action_snapshot.exists:
                 marker = recorded_export_action_fields(
@@ -256,6 +270,9 @@ def claim_candidate_integration_dispatch(
                         'external_task_id': external_id,
                     },
                 )
+                # The task and outbox writes are now staged; acquire only for
+                # this committing branch. Keep the ticket across SDK retries.
+                fence.before_commit()
                 return _ClaimApply(exported_task_id=task_id if isinstance(task_id, str) else None)
             write_transaction.update(outbox_ref, _in_doubt_dead_letter_patch(claim_time))
             return _ClaimApply()
@@ -292,7 +309,12 @@ def claim_candidate_integration_dispatch(
         )
         return _ClaimApply(lease_token=lease_token)
 
-    applied = apply(transaction)
+    committed = False
+    try:
+        applied = apply(transaction)
+        committed = True
+    finally:
+        fence.after_commit(committed)
     if applied.exported_task_id is not None:
         bump_action_items_list_version(uid)
         dream_dirty.notify(uid, [('action_items', applied.exported_task_id)])
@@ -375,6 +397,17 @@ def note_candidate_integration_provider_attempt(
             return False
         payload = _snapshot_dict(snapshot)
         if payload.get('status') != 'processing' or payload.get('lease_token') != lease_token:
+            return False
+        if (
+            payload.get('policy_revision') == POLICY_REVISION
+            and not reminders_enabled()
+            and payload.get('provider_attempt_outcome', 'not_sent') == 'not_sent'
+            and not _recorded_external_task_id(payload)
+        ):
+            write_transaction.update(
+                outbox_ref,
+                {'status': 'suppressed', 'resolution_reason': 'reminder_policy_disabled', 'updated_at': noted_at},
+            )
             return False
         patch: dict[str, Any] = {
             'provider_attempt_outcome': outcome,

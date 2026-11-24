@@ -47,14 +47,14 @@ spec:
 
         - alert: NLLBFallbackRateHigh
           expr: >-
-            sum(rate(omi_translation_requests_total{provider="google"}[10m]))
+            sum(rate(omi_fallback_total{from_mode="nllb",to_mode="luna"}[10m]))
             / sum(rate(omi_translation_requests_total[10m])) > 0.05
           for: 10m
           labels:
             severity: warning
           annotations:
-            summary: "NLLB→Google fallback rate >5%"
-            description: "More than 5% of translations are falling back to Google for 10 minutes."
+            summary: "NLLB→Luna fallback rate >5%"
+            description: "More than 5% of translations are falling back from NLLB to Luna for 10 minutes."
 
         - alert: NLLBMemoryPressure
           expr: >-

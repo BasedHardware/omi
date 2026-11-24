@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseStorefront, type PlanStorefront } from '@/lib/planStorefront';
+import { CHECKOUT_POPUP_BLOCKED } from '@/lib/checkoutWindow';
 
 const api = vi.hoisted(() => ({
   getStorefront: vi.fn(),
@@ -11,10 +12,11 @@ const api = vi.hoisted(() => ({
   getCustomerPortal: vi.fn(),
 }));
 
+const selected = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/api', () => api);
 vi.mock('@/lib/analytics/subscriptionFunnel', () => ({
   trackPaywallOpened: vi.fn(),
-  trackUpgradePlanSelected: vi.fn(),
+  trackUpgradePlanSelected: selected,
   trackUpgradeSucceeded: vi.fn(),
 }));
 
@@ -23,6 +25,17 @@ import {
   BudgetUpsellBanner,
   StorefrontPanel,
 } from '@/components/settings/storefront/StorefrontHost';
+
+beforeEach(() => {
+  Object.values(api).forEach((fn) => fn.mockReset());
+  selected.mockClear();
+  vi.stubGlobal('open', vi.fn());
+  window.localStorage.clear();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const GOLDEN_DIR = resolve(process.cwd(), '../../backend/tests/fixtures/storefront_v2');
 function golden(name: string): PlanStorefront {
@@ -106,9 +119,48 @@ describe('StorefrontPlans', () => {
 });
 
 describe('StorefrontPanel purchase routing', () => {
-  beforeEach(() => {
-    Object.values(api).forEach((fn) => fn.mockReset());
-    vi.stubGlobal('open', vi.fn());
+  it('keeps the selected annual offer retryable after a blocked checkout tab', async () => {
+    const checkout = { opener: window };
+    vi.stubGlobal('open', vi.fn().mockReturnValueOnce(null).mockReturnValue(checkout));
+    const data = golden('free_settings');
+    api.getStorefront.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return data;
+    });
+    api.createCheckoutSession.mockResolvedValue({
+      url: 'https://checkout.stripe.test/s',
+    });
+    const onUpdate = vi.fn();
+    render(
+      <StorefrontPanel
+        source="web_plans"
+        initial={data}
+        onSubscriptionUpdate={onUpdate}
+      />,
+    );
+    fireEvent.click(screen.getByRole('radio', { name: 'Yearly · 2 months free' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Get Plus' }));
+    expect(await screen.findByText(CHECKOUT_POPUP_BLOCKED)).toBeInTheDocument();
+    expect(
+      await screen.findByRole('radio', { name: 'Yearly · 2 months free' }),
+    ).toHaveAttribute('aria-checked', 'true');
+    expect(selected.mock.calls).toEqual([['plus', 'year', 'web_plans']]);
+    fireEvent.focus(window);
+    expect(onUpdate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Get Plus' }));
+    await waitFor(() => expect(api.createCheckoutSession).toHaveBeenCalledTimes(2));
+    expect(api.createCheckoutSession.mock.calls).toEqual([
+      ['price_plus_year'],
+      ['price_plus_year'],
+    ]);
+    expect(selected.mock.calls).toEqual([
+      ['plus', 'year', 'web_plans'],
+      ['plus', 'year', 'web_plans'],
+    ]);
+    await waitFor(() => expect(screen.queryByText(CHECKOUT_POPUP_BLOCKED)).toBeNull());
+    expect(checkout.opener).toBeNull();
+    fireEvent.focus(window);
+    expect(onUpdate).toHaveBeenCalledTimes(1);
   });
 
   it('same-tier annual requires backend confirmation before any billing call', async () => {
@@ -187,11 +239,6 @@ describe('StorefrontPanel purchase routing', () => {
 });
 
 describe('BudgetUpsellBanner', () => {
-  beforeEach(() => {
-    Object.values(api).forEach((fn) => fn.mockReset());
-    window.localStorage.clear();
-  });
-
   it('stays dark while the contextual gate is off', async () => {
     const readGate = vi.fn(async () => false);
     const { container } = render(

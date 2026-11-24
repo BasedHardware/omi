@@ -109,23 +109,29 @@ void main() {
       expect(number.toString(), contains('+19995550100'));
     });
 
-    test('the gate passes the flag key to both reads', () async {
-      final keys = <String>[];
-      final config = await ChatAppsGate.read(
-        readFlag: (key) async {
-          keys.add(key);
-          return true;
-        },
-        readPayload: (key) async {
-          keys.add(key);
-          return {
-            'telegram': {'provider': 'telegram', 'address': 'OmiBot'},
-          };
-        },
-      );
-      expect(keys, [ChatAppsGate.enabledFlag, ChatAppsGate.enabledFlag]);
-      expect(config.endpoint(ChatChannel.telegram)?.address, 'OmiBot');
-    });
+    for (final privateChannels in [false, true]) {
+      test('the gate selects the ${privateChannels ? "private" : "public"} payload key', () async {
+        final keys = <String>[];
+        final config = await ChatAppsGate.read(
+          readFlag: (key) async {
+            keys.add(key);
+            return key == ChatAppsGate.enabledFlag || (privateChannels && key == ChatAppsGate.allChannelsFlag);
+          },
+          readPayload: (key) async {
+            keys.add(key);
+            return {
+              'telegram': {'provider': 'telegram', 'address': 'OmiBot'},
+            };
+          },
+        );
+        expect(keys, [
+          ChatAppsGate.enabledFlag,
+          ChatAppsGate.allChannelsFlag,
+          privateChannels ? ChatAppsGate.allChannelsFlag : ChatAppsGate.enabledFlag
+        ]);
+        expect(config.endpoint(ChatChannel.telegram)?.address, 'OmiBot');
+      });
+    }
   });
 
   group('ChannelLink.handle', () {

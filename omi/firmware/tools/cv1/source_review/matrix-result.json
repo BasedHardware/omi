@@ -1,0 +1,1669 @@
+{
+  "schema": 1,
+  "kind": "source characterization; NOT whole loader execution",
+  "provenance": {
+    "loader_sha256": "c7fd7916441262e0f5acba84c9d5b400dc38d812a8afeb9ad78956a0473b7fc9",
+    "comparator_sha256": "9a74e5d2c9c903308de3c91aa1d9f022667abe34ddf4d736c99fa9eef4cb13a0",
+    "compiled": "exact comparator only; build-number define absent",
+    "public_sha256": "1bf0812387f8e980027d7437f6d02319a923a81e0e72f733ed26619802db9822"
+  },
+  "config": {
+    "overwrite_fast": true,
+    "primary_validation": true,
+    "downgrade_prevention": true,
+    "compare_build_number": false,
+    "hardware_counter": false,
+    "bootstrap": false
+  },
+  "image_bytes": 248516,
+  "copy_padding_bytes": 4,
+  "body_word_cutpoints_collapsed": 62121,
+  "cases": {
+    "conventional": {
+      "initial": "retry_copy",
+      "copy_reachable": true,
+      "states": 104,
+      "failures": [
+        {
+          "phase": "erase_symbolic",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_word_4",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_word_8",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_word_12",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_word_16",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_word_20",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_byte_class_20",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_byte_class_21",
+          "primary_version": [
+            1,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_byte_class_22",
+          "primary_version": [
+            1,
+            0,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_byte_class_23",
+          "primary_version": [
+            1,
+            0,
+            65280,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            254,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            253,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            251,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            247,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            239,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            223,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            191,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            127,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            254,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            253,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            251,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            247,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            239,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            223,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            191,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            127,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65534,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65533,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65531,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65527,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65519,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65503,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65471,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65407,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65279,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65023,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            64511,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            63487,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            61439,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            57343,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            49151,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            32767,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967294
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967293
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967291
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967287
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967279
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967263
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967231
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967167
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967039
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294966783
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294966271
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294965247
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294963199
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294959103
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294950911
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294934527
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294901759
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294836223
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294705151
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294443007
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4293918719
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4292870143
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4290772991
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4286578687
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4278190079
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4261412863
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4227858431
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4160749567
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4026531839
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            3758096383
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            3221225471
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            2147483647
+          ],
+          "outcome": "no_boot_source_erased"
+        }
+      ],
+      "state_digest": "e7a7ffcee2fc5837cc275571b78c6326e9a79d12de1385509ed527baeab53bd4",
+      "phase_classes": [
+        "body_incomplete",
+        "erase_symbolic",
+        "header_byte_class_20",
+        "header_byte_class_21",
+        "header_byte_class_22",
+        "header_byte_class_23",
+        "header_byte_class_24",
+        "header_byte_class_25",
+        "header_byte_class_26",
+        "header_byte_class_27",
+        "header_byte_class_28",
+        "header_word_0",
+        "header_word_12",
+        "header_word_16",
+        "header_word_20",
+        "header_word_24",
+        "header_word_28",
+        "header_word_32",
+        "header_word_4",
+        "header_word_8",
+        "request_confirmed",
+        "request_good_magic",
+        "request_not_pending",
+        "request_torn_image_ok",
+        "request_torn_magic",
+        "secondary_cleanup",
+        "signed_copy_complete",
+        "version_bit_class"
+      ]
+    },
+    "equal_conventional": {
+      "initial": "retry_copy",
+      "copy_reachable": true,
+      "states": 104,
+      "failures": [
+        {
+          "phase": "erase_symbolic",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_word_4",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_word_8",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_word_12",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_word_16",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_word_20",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_byte_class_20",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_byte_class_21",
+          "primary_version": [
+            3,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_byte_class_22",
+          "primary_version": [
+            3,
+            0,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "header_byte_class_23",
+          "primary_version": [
+            3,
+            0,
+            65301,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            254,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            253,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            251,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            247,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            239,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            223,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            191,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            127,
+            255,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            254,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            253,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            251,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            247,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            239,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            223,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            191,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            127,
+            65535,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65534,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65533,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65531,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65527,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65519,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65503,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65471,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65407,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65279,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65023,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            64511,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            63487,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            61439,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            57343,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            49151,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            32767,
+            4294967295
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967294
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967293
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967291
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967287
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967279
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967263
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967231
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967167
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294967039
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294966783
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294966271
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294965247
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294963199
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294959103
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294950911
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294934527
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294901759
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294836223
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294705151
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4294443007
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4293918719
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4292870143
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4290772991
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4286578687
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4278190079
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4261412863
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4227858431
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4160749567
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            4026531839
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            3758096383
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            3221225471
+          ],
+          "outcome": "no_boot_source_erased"
+        },
+        {
+          "phase": "version_bit_class",
+          "primary_version": [
+            255,
+            255,
+            65535,
+            2147483647
+          ],
+          "outcome": "no_boot_source_erased"
+        }
+      ],
+      "state_digest": "3b9bf3be87f64fc0d39e9448268d8c0b1b67320e4435818a019ced9e8c18e33f",
+      "phase_classes": [
+        "body_incomplete",
+        "erase_symbolic",
+        "header_byte_class_20",
+        "header_byte_class_21",
+        "header_byte_class_22",
+        "header_byte_class_23",
+        "header_byte_class_24",
+        "header_byte_class_25",
+        "header_byte_class_26",
+        "header_byte_class_27",
+        "header_byte_class_28",
+        "header_word_0",
+        "header_word_12",
+        "header_word_16",
+        "header_word_20",
+        "header_word_24",
+        "header_word_28",
+        "header_word_32",
+        "header_word_4",
+        "header_word_8",
+        "request_confirmed",
+        "request_good_magic",
+        "request_not_pending",
+        "request_torn_image_ok",
+        "request_torn_magic",
+        "secondary_cleanup",
+        "signed_copy_complete",
+        "version_bit_class"
+      ]
+    },
+    "maximum_bootstrap": {
+      "initial": "retry_copy",
+      "copy_reachable": true,
+      "states": 104,
+      "failures": [],
+      "state_digest": "c7dee3dbd894d8dda84438dd45a80e8bac213f590e75e1713e38cc80a21d7d37",
+      "phase_classes": [
+        "body_incomplete",
+        "erase_symbolic",
+        "header_byte_class_20",
+        "header_byte_class_21",
+        "header_byte_class_22",
+        "header_byte_class_23",
+        "header_byte_class_24",
+        "header_byte_class_25",
+        "header_byte_class_26",
+        "header_byte_class_27",
+        "header_byte_class_28",
+        "header_word_0",
+        "header_word_12",
+        "header_word_16",
+        "header_word_20",
+        "header_word_24",
+        "header_word_28",
+        "header_word_32",
+        "header_word_4",
+        "header_word_8",
+        "request_confirmed",
+        "request_good_magic",
+        "request_not_pending",
+        "request_torn_image_ok",
+        "request_torn_magic",
+        "secondary_cleanup",
+        "signed_copy_complete",
+        "version_bit_class"
+      ]
+    },
+    "maximum_future_equal": {
+      "initial": "retry_copy",
+      "copy_reachable": true,
+      "states": 104,
+      "failures": [],
+      "state_digest": "35c3de5c569de6204398d1e1877b71b925d963a4d26cd025c6783e38b237bd35",
+      "phase_classes": [
+        "body_incomplete",
+        "erase_symbolic",
+        "header_byte_class_20",
+        "header_byte_class_21",
+        "header_byte_class_22",
+        "header_byte_class_23",
+        "header_byte_class_24",
+        "header_byte_class_25",
+        "header_byte_class_26",
+        "header_byte_class_27",
+        "header_byte_class_28",
+        "header_word_0",
+        "header_word_12",
+        "header_word_16",
+        "header_word_20",
+        "header_word_24",
+        "header_word_28",
+        "header_word_32",
+        "header_word_4",
+        "header_word_8",
+        "request_confirmed",
+        "request_good_magic",
+        "request_not_pending",
+        "request_torn_image_ok",
+        "request_torn_magic",
+        "secondary_cleanup",
+        "signed_copy_complete",
+        "version_bit_class"
+      ]
+    },
+    "maximum_to_lower_rejected_before_copy": {
+      "initial": "primary_source_erased",
+      "copy_reachable": false,
+      "states": 1,
+      "failures": []
+    }
+  },
+  "symbolic_argument": "For maximum candidate, no unsigned major/minor/revision can exceed candidate. Arbitrary torn primary header therefore cannot trigger secondary downgrade erasure. Source remains intact until destination signed bytes complete; cleanup has valid destination. Repeated cuts reenter these same phases.",
+  "limits": [
+    "No functional supervisor/startup/recovery proof",
+    "No cryptographic signature execution; valid signed source assumed",
+    "No analog torn-flash/correlated corruption or permanent I/O failure model",
+    "Initial stable trailer copy_done UNSET required; unknown shipped cohorts not admitted",
+    "Maximum versions sacrifice root semantic antirollback: equal versions accepted; build ignored",
+    "No alternate functional fallback after old image overwrite; broken signed supervisor remains fatal",
+    "No signed maximum-version artifact created or adopted"
+  ]
+}

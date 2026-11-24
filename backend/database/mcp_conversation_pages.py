@@ -29,6 +29,7 @@ from .conversations import (
 )
 from .mcp_read_queries import MCP_CONVERSATION_CARD_QUERY_SPECS, MCP_CONVERSATION_CARD_FIELD_PATHS
 from .helpers import prepare_for_read
+from utils.conversations import transcribing_hold
 
 # Upper bound on raw documents a single page may scan while skipping
 # soft-deleted tombstones between visible rows (an offset page counts the rows
@@ -60,6 +61,8 @@ def _require_cursor() -> None:
 
 def _card_field_paths(extra_field_paths: Optional[Sequence[str]]) -> List[str]:
     paths: List[str] = list(MCP_CONVERSATION_CARD_FIELD_PATHS)
+    if transcribing_hold.home_transcription_presentation_gate_enabled():
+        paths.extend(transcribing_hold.READ_FIELDS)
     if extra_field_paths:
         paths.extend(extra_field_paths)
     # Firestore masks must not contain both a parent and its nested fields.
@@ -129,7 +132,7 @@ def get_mcp_conversation_cards(
                 conversation = document_data_with_revision(doc)
                 if conversation is None:
                     continue
-                if not is_visible_conversation(conversation):
+                if not is_visible_conversation(conversation, presentation=True):
                     continue
                 conversation.setdefault('id', doc.id)
                 conversations.append(conversation)
@@ -254,7 +257,7 @@ def get_mcp_conversation_cards_page(
             conversation = document_data_with_revision(doc)
             if conversation is None:
                 continue
-            if not is_visible_conversation(conversation):
+            if not is_visible_conversation(conversation, presentation=True):
                 continue
             conversation.setdefault('id', doc.id)
             visible.append(conversation)

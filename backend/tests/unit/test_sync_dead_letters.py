@@ -654,7 +654,7 @@ def _run_job_harness(monkeypatch, job, *, ensure_error=None):
         if ensure_error is not None:
             raise ensure_error
 
-    monkeypatch.setattr(sync_router, '_delete_staged_blobs_async', delete_blobs)
+    monkeypatch.setattr(sync_router, 'delete_staged_blobs_async', delete_blobs)
     monkeypatch.setattr(sync_router, 'release_backfill_slot', record('release_slot'))
     monkeypatch.setattr(sync_router, 'release_sync_content_claim', record('release_claim'))
     monkeypatch.setattr(sync_router.sync_dead_letters, 'ensure_dead_letter_confirmed', ensure)

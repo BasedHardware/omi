@@ -5429,7 +5429,8 @@ def continuity_contract_self_check_failures() -> list[str]:
     """Fail if hermetic INV-6 contract tests / harness filter drift out of the DoD gate.
 
     Live gauntlet suites exercise bridge/LLM continuity; they do NOT replace these
-    hermetic behavioral tests. See AGENTS.md → "Live gauntlet vs hermetic INV-6".
+    hermetic behavioral tests. See docs/chat-continuity-write-path.md →
+    "Live gauntlet vs hermetic INV-6".
     """
     failures: list[str] = []
     tests_dir = DESKTOP_DIR / "Desktop/Tests"

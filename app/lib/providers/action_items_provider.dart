@@ -14,6 +14,7 @@ import 'package:omi/pages/action_items/services/action_item_export_service.dart'
 import 'package:omi/pages/action_items/task_categorization.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/services/integrations/apple_reminders_service.dart';
+import 'package:omi/services/integrations/automatic_apple_reminders_export.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -41,6 +42,7 @@ typedef CreateActionItemRequest = Future<ActionItemWithMetadata?> Function({
   DateTime? dueAt,
   String? conversationId,
   bool completed,
+  String? idempotencyKey,
 });
 typedef UpdateDueDateRequest = Future<ActionItemWithMetadata?> Function(String id, {DateTime? dueAt, bool clearDueAt});
 
@@ -57,13 +59,19 @@ class ActionItemsProvider extends ChangeNotifier {
     UpdateDueDateRequest? updateDueDateRequest,
     api.ActionItemsApi? actionItemsApi,
     TaskSuggestionsApi? taskSuggestionsApi,
-  })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
+    AutomaticAppleRemindersExport? automaticAppleRemindersExport,
+    Future<ExportResult> Function(ActionItemWithMetadata, TaskIntegrationApp)? exportActionItem,
+    void Function(ActionItemWithMetadata item)? deleteLinkedReminder,
+  })  : _deleteLinkedReminder = deleteLinkedReminder,
+        _getActionItems = getActionItems ?? api.tryGetActionItems,
         _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
         _updateActionItemRequest = updateActionItemRequest ?? api.updateActionItem,
         _bulkDeleteActionItemsRequest = bulkDeleteActionItemsRequest ?? api.bulkDeleteActionItems,
         _createActionItemRequest = createActionItemRequest ?? api.createActionItem,
         _updateDueDateRequest = updateDueDateRequest ?? api.updateActionItem,
-        _actionItemsApi = actionItemsApi {
+        _actionItemsApi = actionItemsApi,
+        _automaticAppleRemindersExport = automaticAppleRemindersExport ?? AutomaticAppleRemindersExport(),
+        _exportActionItem = exportActionItem ?? ActionItemExportService.export {
     suggestions = taskSuggestionsApi == null
         ? null
         : TaskSuggestionsController(api: taskSuggestionsApi, onTaskSaved: receiveSavedTask);
@@ -73,6 +81,9 @@ class ActionItemsProvider extends ChangeNotifier {
 
   late final TaskSuggestionsController? suggestions;
 
+  /// Tests observe the linked Apple Reminder delete; production deletes it on Apple platforms.
+  final void Function(ActionItemWithMetadata item)? _deleteLinkedReminder;
+
   final ActionItemsFetcher _getActionItems;
   final DeleteActionItemRequest _deleteActionItemRequest;
   final UpdateActionItemRequest _updateActionItemRequest;
@@ -80,6 +91,8 @@ class ActionItemsProvider extends ChangeNotifier {
   final CreateActionItemRequest _createActionItemRequest;
   final UpdateDueDateRequest _updateDueDateRequest;
   final api.ActionItemsApi? _actionItemsApi;
+  final AutomaticAppleRemindersExport _automaticAppleRemindersExport;
+  final Future<ExportResult> Function(ActionItemWithMetadata, TaskIntegrationApp) _exportActionItem;
   ApiViewState<List<ActionItemWithMetadata>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   Future<void>? _initialLoad;
   bool _initialLoadCompleted = false;
@@ -484,6 +497,7 @@ class ActionItemsProvider extends ChangeNotifier {
     required bool decodedPageIsComplete,
     required int readOrdinal,
   }) async {
+    _loadMoreFailed = false; // a fresh first page restarts pagination (T1)
     // Snapshot server IDs before filtering so tombstone retirement is
     // based on the full server response, not the filtered subset.
     final serverIds = response.actionItems.map((e) => e.id).toSet();
@@ -540,8 +554,14 @@ class ActionItemsProvider extends ChangeNotifier {
     }
   }
 
+  /// The last load-more got no answer: the list shows a notice with Try Again at its end instead of
+  /// just ending (T1), and scrolling does not retry it on its own.
+  bool _loadMoreFailed = false;
+  bool get loadMoreFailed => _loadMoreFailed;
+
   Future<void> loadMoreActionItems() async {
     if (_isLoading || _isFetching || !_hasMore) return;
+    _loadMoreFailed = false;
     final generation = _sessionGeneration;
     final queryOwner = _latestTaskListRead;
     final writeRevision = _taskWriteRevision;
@@ -565,6 +585,9 @@ class ActionItemsProvider extends ChangeNotifier {
         },
       );
 
+      if (response == null && generation == _sessionGeneration && queryOwner == _latestTaskListRead) {
+        _loadMoreFailed = true;
+      }
       if (response != null &&
           generation == _sessionGeneration &&
           writeRevision == _taskWriteRevision &&
@@ -593,6 +616,7 @@ class ActionItemsProvider extends ChangeNotifier {
       }
     } catch (e) {
       Logger.debug('Error loading more action items: $e');
+      if (generation == _sessionGeneration && queryOwner == _latestTaskListRead) _loadMoreFailed = true;
     } finally {
       _activeListReads.remove(readOrdinal);
       if (generation == _sessionGeneration && queryOwner == _latestTaskListRead) setFetching(false);
@@ -657,6 +681,32 @@ class ActionItemsProvider extends ChangeNotifier {
       attempt.complete(ProductOutcome.failure, failure: ProductFailure.network);
       return false;
     }
+  }
+
+  /// Update a task linked from a conversation, even when it is outside the current task page.
+  Future<bool> updateActionItemStateById(String id, bool newState) async {
+    ActionItemWithMetadata? item;
+    for (final candidate in _actionItems) {
+      if (candidate.id == id) {
+        item = candidate;
+        break;
+      }
+    }
+    if (item == null && _actionItemsApi != null) {
+      final result = await _actionItemsApi!.getById(id);
+      if (result is ApiSuccess<ActionItemWithMetadata>) item = result.data;
+    }
+    return item == null ? false : await updateActionItemState(item, newState);
+  }
+
+  Future<ActionItemWithMetadata?> getActionItemById(String id) async {
+    for (final item in _actionItems) {
+      if (item.id == id) return item;
+    }
+    final apiClient = _actionItemsApi;
+    if (apiClient == null) return null;
+    final result = await apiClient.getById(id);
+    return result is ApiSuccess<ActionItemWithMetadata> ? result.data : null;
   }
 
   /// Returns whether the change reached the server; the caller decides what to tell the user.
@@ -825,8 +875,6 @@ class ActionItemsProvider extends ChangeNotifier {
 
   Future<bool> deleteActionItem(ActionItemWithMetadata item) async {
     final generation = _sessionGeneration;
-    // Delete linked Apple Reminder if one exists
-    _deleteAppleReminderIfLinked(item);
 
     // Track as pending-deletion so any background refresh doesn't re-insert it
     // while the server delete is in flight.
@@ -847,6 +895,9 @@ class ActionItemsProvider extends ChangeNotifier {
         _pendingDeletionIds.remove(item.id);
         _restoreDeletedItem(item, index);
       } else {
+        // The linked Apple Reminder goes only once the server confirmed (T4): a failed delete
+        // brings the task back, and its Reminder must still be there.
+        _deleteAppleReminderIfLinked(item);
         _deletionAcknowledgedAtRead[item.id] = _listReadOrdinal;
         SiriIntegration.current.queueDelete('task', item.id);
       }
@@ -904,7 +955,6 @@ class ActionItemsProvider extends ChangeNotifier {
     final generation = _sessionGeneration;
     final staged = _stagedDeletes.remove(id);
     if (staged == null) return false;
-    _deleteAppleReminderIfLinked(staged.item);
     var success = false;
     try {
       success = await _deleteActionItemRequest(id);
@@ -920,6 +970,7 @@ class ActionItemsProvider extends ChangeNotifier {
         notifyListeners();
       }
     } else {
+      _deleteAppleReminderIfLinked(staged.item);
       _deletionAcknowledgedAtRead[id] = _listReadOrdinal;
       SiriIntegration.current.queueDelete('task', id);
     }
@@ -941,6 +992,7 @@ class ActionItemsProvider extends ChangeNotifier {
     DateTime? dueAt,
     String? conversationId,
     bool completed = false,
+    String? idempotencyKey,
   }) async {
     final generation = _sessionGeneration;
     final optimisticItem = ActionItemWithMetadata(
@@ -962,14 +1014,20 @@ class ActionItemsProvider extends ChangeNotifier {
         dueAt: dueAt,
         conversationId: conversationId,
         completed: completed,
+        idempotencyKey: idempotencyKey,
       );
       if (generation != _sessionGeneration) return null;
 
       if (newItem != null) {
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
         _receiveCanonicalTask(newItem);
-        // Direct sync to Apple Reminders — no FCM roundtrip needed
-        _syncToAppleRemindersIfNeeded(newItem);
+        unawaited(() async {
+          final exported = await _automaticAppleRemindersExport.export(newItem,
+              canContinue: () => !_disposed && generation == _sessionGeneration);
+          if (exported && !_disposed && generation == _sessionGeneration) {
+            PlatformManager.instance.analytics.appleReminderDirectSync(actionItemId: newItem.id);
+          }
+        }());
         return newItem;
       } else {
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
@@ -1024,39 +1082,6 @@ class ActionItemsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Directly create an Apple Reminder without waiting for FCM roundtrip.
-  /// Fire-and-forget — doesn't block the UI.
-  void _syncToAppleRemindersIfNeeded(ActionItemWithMetadata item) {
-    if (!PlatformService.isApple) return;
-
-    final service = AppleRemindersService();
-    if (!service.isAvailable) return;
-
-    () async {
-      try {
-        if (!await service.hasPermission()) return;
-
-        final calendarItemId = await service.addReminder(
-          title: item.description,
-          notes: 'From Omi',
-          dueDate: item.dueAt,
-        );
-
-        if (calendarItemId != null) {
-          await api.updateActionItem(
-            item.id,
-            exported: true,
-            exportPlatform: 'apple_reminders',
-            appleReminderId: calendarItemId,
-          );
-          PlatformManager.instance.analytics.appleReminderDirectSync(actionItemId: item.id);
-        }
-      } catch (e) {
-        Logger.debug('Direct Apple Reminders sync failed: $e');
-      }
-    }();
-  }
-
   /// Push a field update to the linked Apple Reminder immediately.
   void _pushUpdateToAppleReminder(ActionItemWithMetadata item, {bool? completed, String? title, DateTime? dueDate}) {
     if (!PlatformService.isApple) return;
@@ -1072,6 +1097,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
   /// Delete the linked Apple Reminder when action item is deleted.
   void _deleteAppleReminderIfLinked(ActionItemWithMetadata item) {
+    if (_deleteLinkedReminder case final delete?) return delete(item);
     if (!PlatformService.isApple) return;
     if (item.appleReminderId == null || item.appleReminderId!.isEmpty) return;
 
@@ -1186,6 +1212,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _loadedTaskPageIds.clear();
     _loadedPageSetComplete = false;
     _hasMore = true;
+    _loadMoreFailed = false;
     _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   }
 
@@ -1327,39 +1354,61 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   // Bulk operations
-  Future<bool> deleteSelectedItems({BuildContext? context}) async {
-    if (_selectedItems.isEmpty) return false;
-    final generation = _sessionGeneration;
 
-    final itemsToDelete = _actionItems.where((item) => _selectedItems.contains(item.id)).toList();
+  /// The server commits a batch delete in 499-document Firestore batches, so a larger request
+  /// can fail after deleting part of it. At or under this size each request is all-or-nothing.
+  static const _bulkDeleteChunkSize = 450;
+
+  /// Deletes [itemsToDelete] with sequential batch-delete requests of at most
+  /// [_bulkDeleteChunkSize] ids. Many concurrent single deletes for one owner all write the
+  /// same server-side vector route document and fail with commit contention; a batch request
+  /// settles its ids as one mutation.
+  ///
+  /// Rows disappear at once. Rows the server did not confirm go back where they were, and
+  /// Apple Reminders are removed only for confirmed rows. `deleted` is null when nothing was
+  /// deleted because a request failed. `stale` means the session changed while a request was
+  /// in flight, so nothing was restored.
+  Future<({List<String>? deleted, bool stale})> _deleteItemsInBulk(List<ActionItemWithMetadata> itemsToDelete) async {
+    final generation = _sessionGeneration;
     final ids = itemsToDelete.map((item) => item.id).toList(growable: false);
+    final idSet = ids.toSet();
     // Snapshot positions so a failed bulk delete can re-insert the rows
     // back where the user expected them, instead of dumping them at the end.
     final snapshot = <int, ActionItemWithMetadata>{for (final item in itemsToDelete) _actionItems.indexOf(item): item};
-    final wasInSelection = _isSelectionMode;
 
     // Dismiss UI immediately — don't wait for API
-    _actionItems.removeWhere((item) => _selectedItems.contains(item.id));
+    _actionItems.removeWhere((item) => idSet.contains(item.id));
     // Register all bulk-deleted IDs as pending so a concurrent background
     // fetch cannot reinsert them while the server delete is in flight.
     _pendingDeletionIds.addAll(ids);
-    _selectedItems.clear();
-    _isSelectionMode = false;
     notifyListeners();
 
-    // Apple Reminders mirror lives client-side, so it still has to fan out
-    // per-item. The action-item record itself goes through the bulk endpoint.
+    final confirmed = <String>[];
+    var failed = false;
+    for (var start = 0; start < ids.length && !failed; start += _bulkDeleteChunkSize) {
+      final chunk = ids.sublist(start, (start + _bulkDeleteChunkSize).clamp(0, ids.length));
+      List<String>? chunkDeleted;
+      try {
+        chunkDeleted = await _bulkDeleteActionItemsRequest(chunk);
+      } catch (e) {
+        Logger.debug('Error bulk deleting action items: $e');
+      }
+      if (chunkDeleted == null) {
+        failed = true;
+      } else {
+        confirmed.addAll(chunkDeleted);
+      }
+      if (generation != _sessionGeneration) break;
+    }
+    // Apple Reminders mirror lives client-side, so it still fans out per item, but only for
+    // tasks the server confirmed: a rejected request must not strip reminders from rows
+    // that come back.
+    final confirmedSet = confirmed.toSet();
     for (final item in itemsToDelete) {
-      _deleteAppleReminderIfLinked(item);
+      if (confirmedSet.contains(item.id)) _deleteAppleReminderIfLinked(item);
     }
-
-    List<String>? deleted;
-    try {
-      deleted = await _bulkDeleteActionItemsRequest(ids);
-    } catch (e) {
-      Logger.debug('Error bulk deleting action items: $e');
-    }
-    if (generation != _sessionGeneration) return false;
+    if (generation != _sessionGeneration) return (deleted: null, stale: true);
+    final List<String>? deleted = failed && confirmed.isEmpty ? null : confirmed;
     if (deleted == null) {
       Logger.debug('bulkDeleteActionItems returned null — rolling back local list');
       // Clear tombstones on rollback so future refreshes don't filter the
@@ -1370,14 +1419,8 @@ class ActionItemsProvider extends ChangeNotifier {
       for (final entry in entries) {
         _restoreDeletedItem(entry.value, entry.key);
       }
-      _isSelectionMode = wasInSelection;
-      _selectedItems = ids.toSet();
       notifyListeners();
-
-      if (context != null && context.mounted) {
-        OmiFeedback.error(context, context.l10n.bulkDeleteFailed);
-      }
-      return false;
+      return (deleted: null, stale: false);
     }
     final deletedIDs = deleted.toSet();
     for (final id in deletedIDs) {
@@ -1393,15 +1436,56 @@ class ActionItemsProvider extends ChangeNotifier {
       }
       notifyListeners();
     }
+    return (deleted: deleted, stale: false);
+  }
+
+  Future<bool> deleteSelectedItems({BuildContext? context}) async {
+    if (_selectedItems.isEmpty) return false;
+    final itemsToDelete = _actionItems.where((item) => _selectedItems.contains(item.id)).toList();
+    final ids = itemsToDelete.map((item) => item.id).toSet();
+    final wasInSelection = _isSelectionMode;
+    _selectedItems.clear();
+    _isSelectionMode = false;
+
+    final result = await _deleteItemsInBulk(itemsToDelete);
+    if (result.stale) return false;
+    final deleted = result.deleted;
+    if (deleted == null) {
+      _isSelectionMode = wasInSelection;
+      _selectedItems = ids;
+      notifyListeners();
+      if (context != null && context.mounted) {
+        OmiFeedback.error(context, context.l10n.bulkDeleteFailed);
+      }
+      return false;
+    }
     return deleted.length == ids.length;
+  }
+
+  /// Deletes a whole section (for example every completed task) in one batch request.
+  /// Returns true only when the server deleted every row; rejected rows are already back.
+  Future<bool> deleteActionItems(List<ActionItemWithMetadata> items) async {
+    final result = await clearSection(items);
+    return result.failed == 0 && result.lockedKept == 0;
+  }
+
+  /// Deletes a section and says what happened to each row: deleted, kept because it is locked (by
+  /// design, not a failure: T5), or failed (already back in the list).
+  Future<({int deleted, int lockedKept, int failed})> clearSection(List<ActionItemWithMetadata> items) async {
+    if (items.isEmpty) return (deleted: 0, lockedKept: 0, failed: 0);
+    // The batch endpoint refuses the whole request (402) if any task is locked, where a
+    // single delete refused only that task. Leave locked tasks in place so the rest still go.
+    final deletable = items.where((item) => !item.isLocked).toList();
+    final lockedKept = items.length - deletable.length;
+    if (deletable.isEmpty) return (deleted: 0, lockedKept: lockedKept, failed: 0);
+    final result = await _deleteItemsInBulk(deletable);
+    final deleted = result.stale ? 0 : (result.deleted?.length ?? 0);
+    return (deleted: deleted, lockedKept: lockedKept, failed: deletable.length - deleted);
   }
 
   Future<bool> clearCompletedItems() async {
     final completed = _actionItems.where((item) => item.completed).toList();
-    if (completed.isEmpty) return true;
-
-    final results = await Future.wait(completed.map((item) => deleteActionItem(item)));
-    return results.every((success) => success);
+    return deleteActionItems(completed);
   }
 
   void startSelectionWithItem(String itemId) {
@@ -1445,7 +1529,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
     OmiFeedback.progress(context, context.l10n.bulkExportInProgress);
 
-    final results = await Future.wait(items.map((i) => ActionItemExportService.export(i, platform)));
+    final results = await Future.wait(items.map((i) => _exportActionItem(i, platform)));
     final successCount = results.where((r) => r == ExportResult.success).length;
 
     // Refresh from server so newly-flipped `exported`/`exportPlatform` fields surface.

@@ -16,7 +16,7 @@ def _record(database: StrictFirestore):
     return database.collection('users').document('user-1').collection('records').document('record')
 
 
-@pytest.mark.parametrize('write_method', ['set', 'update'])
+@pytest.mark.parametrize('write_method', ['set', 'update', 'delete'])
 def test_transaction_rejects_reads_after_any_write(write_method):
     database = StrictFirestore(
         {
@@ -31,8 +31,10 @@ def test_transaction_rejects_reads_after_any_write(write_method):
     source.get(transaction=transaction)
     if write_method == 'set':
         transaction.set(target, {'value': 'updated'})
-    else:
+    elif write_method == 'update':
         transaction.update(target, {'value': 'updated'})
+    else:
+        transaction.delete(target)
 
     with pytest.raises(ReadAfterWriteError, match='complete all reads'):
         source.get(transaction=transaction)
@@ -67,7 +69,22 @@ def test_named_opt_out_allows_reads_after_writes():
     assert record.get(transaction=transaction).to_dict() == {'value': 'after'}
 
 
-@pytest.mark.parametrize('write_method', ['set', 'update'])
+def test_app_review_config_merge_stores_the_updated_fields_and_preserves_other_fields():
+    path = ('app_review_config', 'ios')
+    database = StrictFirestore({path: {'hidden_versions': ['2.1.0'], 'other': 'kept'}})
+    reference = database.collection('app_review_config').document('ios')
+    transaction = database.transaction()
+
+    transaction.set(reference, {'hidden_versions': ['3.0.0'], 'reviewer_uids': ['reviewer']}, merge=True)
+
+    assert database.rows[path] == {
+        'hidden_versions': ['3.0.0'],
+        'reviewer_uids': ['reviewer'],
+        'other': 'kept',
+    }
+
+
+@pytest.mark.parametrize('write_method', ['set', 'update', 'delete'])
 def test_transaction_rejects_writes_to_a_different_store(write_method):
     database = StrictFirestore({('users', 'user-1', 'records', 'record'): {'value': 'before'}})
     foreign_database = StrictFirestore({('users', 'user-1', 'records', 'record'): {'value': 'before'}})
@@ -75,7 +92,10 @@ def test_transaction_rejects_writes_to_a_different_store(write_method):
     record = _record(foreign_database)
 
     with pytest.raises(ForeignTransactionError, match='same store'):
-        getattr(transaction, write_method)(record, {'value': 'after'})
+        if write_method == 'delete':
+            transaction.delete(record)
+        else:
+            getattr(transaction, write_method)(record, {'value': 'after'})
 
 
 def test_transaction_rejects_reads_from_a_different_store():
@@ -89,7 +109,6 @@ def test_transaction_rejects_reads_from_a_different_store():
 @pytest.mark.parametrize(
     'operation',
     [
-        pytest.param(lambda database, record: database.transaction().delete(record), id='transaction-delete'),
         pytest.param(lambda database, record: database.transaction().get(record), id='transaction-get'),
         pytest.param(lambda database, record: database.transaction().get_all([record]), id='transaction-get-all'),
         pytest.param(lambda _database, record: record.delete(), id='document-delete'),
@@ -120,6 +139,16 @@ def test_transaction_create_inserts_a_new_document_and_rejects_an_existing_one()
 
     with pytest.raises(RuntimeError, match='document already exists'):
         transaction.create(record, {'value': 'again'})
+
+
+def test_transaction_delete_removes_document_and_is_idempotent():
+    database = StrictFirestore({('users', 'user-1', 'records', 'record'): {'value': 'before'}})
+    record = _record(database)
+    transaction = database.transaction()
+    transaction.delete(record)
+    transaction.delete(record)
+    assert transaction.has_written and transaction.deletes == [record.path, record.path]
+    assert not record.get().exists
 
 
 def test_bounded_equality_id_query_filters_and_enforces_transaction_ordering():
@@ -184,3 +213,47 @@ def test_parent_navigation_preserves_owner_store_and_read_ordering():
     assert database.rows[('users', 'user-1', 'processing_attention_items', 'item')] == {'active': True}
     with pytest.raises(ReadAfterWriteError):
         sibling.get(transaction=transaction)
+
+
+@pytest.mark.parametrize('parent', [None, 42, {}, {'kept': 'old'}])
+def test_nested_update_matches_emulator_nonmap_replacement(parent):
+    # Proven against the real emulator in the phase 2a integration proof.
+    path = ('users', 'user-1', 'records', 'record')
+    database = StrictFirestore({path: {'nested': parent}})
+    transaction = database.transaction()
+    transaction.update(_record(database), {'nested.child': 2, '`literal.dot`.value': 3})
+    nested = {'child': 2, **({'kept': 'old'} if isinstance(parent, dict) and parent else {})}
+    assert database.rows[path] == {'nested': nested, 'literal.dot': {'value': 3}}
+
+
+def test_photo_probe_finds_a_child_and_enforces_transaction_ordering():
+    conversation = ('users', 'user-1', 'conversations', 'c')
+    database = StrictFirestore({conversation: {}, (*conversation, 'photos', 'p'): {'id': 'p'}})
+    photos = database.document('/'.join(conversation)).collection('photos')
+    empty = database.document('users/user-1/conversations/other').collection('photos')
+
+    assert [row.to_dict() for row in photos.limit(1).stream(transaction=database.transaction())] == [{'id': 'p'}]
+    assert list(empty.limit(1).stream(transaction=database.transaction())) == []
+
+    transaction = database.transaction()
+    transaction.update(database.document('/'.join(conversation)), {'status': 'processing'})
+    with pytest.raises(ReadAfterWriteError, match='before the first write'):
+        photos.limit(1).stream(transaction=transaction)
+    with pytest.raises(ForeignTransactionError, match='same store'):
+        photos.limit(1).stream(transaction=StrictFirestore().transaction())
+
+
+@pytest.mark.parametrize(
+    'probe',
+    [
+        pytest.param(lambda photos, _records: photos.limit(1).stream(), id='outside-a-transaction'),
+        pytest.param(lambda photos, _records: photos.limit(2), id='wider-limit'),
+        pytest.param(lambda _photos, records: records.limit(1), id='another-subcollection'),
+    ],
+)
+def test_photo_probe_models_nothing_else(probe):
+    database = StrictFirestore({('users', 'user-1', 'conversations', 'c'): {}})
+    conversation = database.document('users/user-1/conversations/c')
+
+    with pytest.raises(UnsupportedFirestoreOperationError, match='supports only'):
+        probe(conversation.collection('photos'), conversation.collection('records'))

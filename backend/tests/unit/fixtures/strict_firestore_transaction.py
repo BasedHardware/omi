@@ -1,7 +1,7 @@
 """Narrow Firestore transaction fixture for ordering-sensitive unit tests.
 
 This fixture models document-reference ``get(transaction=...)`` plus transaction
-``create``, ``set``, and ``update``, plus the emulator-proven People
+``create``, ``set``, ``update`` and ``delete``, plus the emulator-proven People
 generation merge increment. It enforces Firestore's rule that every
 transactional read must occur before the first transactional write.
 
@@ -10,12 +10,19 @@ Parent reference navigation preserves the owning store and performs no IO.
 It also supports the direct-document is_locked projection used at dispatch,
 and equality-only, document-id projections with a positive limit,
 proven by daily_memory_sweep_emulator_test.py for legacy window fence admission.
+Live V3 undo also uses a bounded conversation_id projection of linked tasks.
 Projected client BatchGet of folder membership is covered by
 test_folder_delete_concurrency_emulator.py; all of its reads obey the same
 read-before-write rule. BatchGet does not promise request-order results.
-It deliberately does not model other queries, deletes, commit/rollback visibility,
-or retry and contention semantics. Extend it only when an incident proves that
-one of those boundaries needs a hermetic guard.
+Finalization admission's transaction-bound ``photos.limit(1)`` existence probe is
+modelled as a read: a finish that reaches it after a write is rejected.
+Transaction deletes are proven by test_recurring_voice_privacy_firestore.py:
+removed profiles must disappear rather than leave documents outside TTL.
+It also models the app-review config document's top-level merge write, which
+backs the lifecycle persistence boundary. It deliberately does not model other
+queries, standalone deletes, commit/rollback visibility, or retry and
+contention semantics. Extend it only when an incident proves that one of those
+boundaries needs a hermetic guard.
 
 As fixture-integrity policy, a transaction accepts references created by its
 own ``StrictFirestore`` instance only. This prevents accidental mixing of
@@ -29,6 +36,7 @@ from threading import RLock
 from typing import Any
 
 from google.cloud.firestore_v1.transforms import Increment
+from google.cloud.firestore_v1.field_path import FieldPath
 
 
 class ReadAfterWriteError(RuntimeError):
@@ -59,8 +67,9 @@ def _assert_storable(value: Any, *, in_array: bool = False) -> None:
 
 
 _SUPPORTED_OPERATIONS = (
-    'document get/create, transaction-bound document get, transaction create/set/update, bounded equality id queries, '
-    'projected client folder-membership BatchGet'
+    'document get/create, transaction-bound document get, transaction create/set/update/delete, bounded equality id queries, '
+    'app-review config merge writes, projected client folder-membership BatchGet, '
+    'transaction-bound conversation photos.limit(1) existence probe'
 )
 
 
@@ -69,6 +78,14 @@ class StrictFirestoreSnapshot:
         self._data = deepcopy(data)
         self.exists = data is not None
         self.reference: Any = None
+
+    @property
+    def id(self) -> str:
+        return self._explicit_id if hasattr(self, '_explicit_id') else self.reference.id
+
+    @id.setter
+    def id(self, value: str) -> None:
+        self._explicit_id = value
 
     def to_dict(self) -> dict[str, Any] | None:
         return deepcopy(self._data)
@@ -98,7 +115,10 @@ class StrictFirestoreDocument:
         *,
         field_paths: list[str] | None = None,
         timeout: float | None = None,
+        retry: Any = None,
     ) -> StrictFirestoreSnapshot:
+        # Callers on bounded-read boundaries (canonical apply control) pass
+        # ``retry=None`` to disable the SDK's own retry deadline; model the kwarg.
         if timeout is not None:
             assert 0 < timeout <= 3
         if transaction is not None:
@@ -106,11 +126,18 @@ class StrictFirestoreDocument:
             transaction._assert_read_allowed()
         data = self._database.rows.get(self.path)
         if field_paths is not None and data is not None:
-            if field_paths not in (
+            # Additive v3 classification metadata uses the same field-mask
+            # semantics as the already supported projection below.
+            supported_field_paths = [field for field in field_paths if field != 'recording']
+            if supported_field_paths not in (
+                ['deleted'],
                 ["is_locked"],
                 ["folder_id"],
                 ["language"],
+                ["private_cloud_sync_enabled"],
+                ['uses_custom_stt', 'private_cloud_sync_enabled', 'data_protection_level'],
                 ['discarded', 'deleted', 'sync_merged_into'],
+                ['external_data', 'created_at', 'deleted', 'sync_merged_from', 'status'],
                 [
                     'discarded',
                     'deleted',
@@ -122,6 +149,54 @@ class StrictFirestoreDocument:
                     'user_title',
                     'starred',
                     'folder_user_set',
+                ],
+                [
+                    'discarded',
+                    'deleted',
+                    'sync_merged_into',
+                    'relevance_decision',
+                    'sync_relevance_user_kept',
+                    'has_photos',
+                    'photos',
+                    'user_title',
+                    'starred',
+                    'folder_user_set',
+                    'record_lane_owner',
+                    'record_projection_revision',
+                    'record_upload_failed',
+                    'record_audio_partial',
+                    'status',
+                    'started_at',
+                    'finished_at',
+                    'structured',
+                ],
+                [
+                    'discarded',
+                    'deleted',
+                    'sync_merged_into',
+                    'relevance_decision',
+                    'sync_relevance_user_kept',
+                    'has_photos',
+                    'photos',
+                    'user_title',
+                    'starred',
+                    'folder_user_set',
+                    'summary_blocked_reason',
+                    'record_lane_owner',
+                    'record_projection_revision',
+                    'record_upload_failed',
+                    'record_audio_partial',
+                    'record_transcription_empty',
+                    'episode_transcription_pending_at',
+                    'server_batch_audio_closed',
+                    'server_batch_audio_start',
+                    'server_batch_audio_end',
+                    'record_audio_closed',
+                    'record_upload_sessions',
+                    'status',
+                    'started_at',
+                    'finished_at',
+                    'structured',
                 ],
                 ['started_at', 'finished_at', 'discarded', 'deleted', 'sync_merged_into'],
                 [
@@ -174,6 +249,10 @@ class StrictFirestoreCollection:
         self._path = path
 
     @property
+    def id(self) -> str:
+        return self._path[-1]
+
+    @property
     def parent(self) -> StrictFirestoreDocument | None:
         if len(self._path) == 1:
             return None
@@ -187,8 +266,35 @@ class StrictFirestoreCollection:
             raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
         return StrictFirestoreIdQuery(self._database, self._path).where(filter=filter)
 
+    def limit(self, count: int) -> StrictFirestorePhotoProbe:
+        # Finalization admission asks whether a conversation still has a legacy photo child.
+        if self._path[-1] != 'photos' or len(self._path) % 2 == 0 or count != 1:
+            raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+        return StrictFirestorePhotoProbe(self._database, self._path)
+
     def stream(self, *args: Any, **kwargs: Any) -> None:
         raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+
+
+class StrictFirestorePhotoProbe:
+    """Transaction-bound ``photos.limit(1)`` existence probe; it is a read, so it must precede writes."""
+
+    def __init__(self, database: StrictFirestore, path: tuple[str, ...]):
+        self._database = database
+        self._path = path
+
+    def stream(self, *, transaction: StrictFirestoreTransaction | None = None):
+        if transaction is None:
+            raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+        if transaction._database is not self._database:
+            raise ForeignTransactionError('Firestore transaction and query must belong to the same store')
+        transaction._assert_read_allowed()
+        rows = [
+            StrictFirestoreSnapshot(value)
+            for path, value in sorted(self._database.rows.items())
+            if path[:-1] == self._path
+        ]
+        return iter(rows[:1])
 
 
 class StrictFirestoreIdQuery:
@@ -197,29 +303,30 @@ class StrictFirestoreIdQuery:
     def __init__(self, database: StrictFirestore, path: tuple[str, ...]):
         self._database = database
         self._path = path
-        self._filters: tuple[tuple[str, Any], ...] = ()
-        self._ids_only = False
+        self._filters: tuple[tuple[str, str, Any], ...] = ()
+        self._projection: tuple[str, ...] | None = None
         self._limit: int | None = None
 
     def _copy(self) -> StrictFirestoreIdQuery:
         result = StrictFirestoreIdQuery(self._database, self._path)
         result._filters = self._filters
-        result._ids_only = self._ids_only
+        result._projection = self._projection
         result._limit = self._limit
         return result
 
     def where(self, *, filter: Any) -> StrictFirestoreIdQuery:
-        if filter.op_string != '==':
+        task_query = self._path[-1] == 'action_items' and filter.field_path == 'conversation_id'
+        if filter.op_string != '==' and not (task_query and filter.op_string == 'in' and 1 <= len(filter.value) <= 30):
             raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
         result = self._copy()
-        result._filters += ((filter.field_path, filter.value),)
+        result._filters += ((filter.field_path, filter.op_string, filter.value),)
         return result
 
     def select(self, fields: tuple[str, ...]) -> StrictFirestoreIdQuery:
-        if fields:
+        if fields and not (self._path[-1] == 'action_items' and fields == ('conversation_id',)):
             raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
         result = self._copy()
-        result._ids_only = True
+        result._projection = fields
         return result
 
     def limit(self, count: int) -> StrictFirestoreIdQuery:
@@ -229,31 +336,41 @@ class StrictFirestoreIdQuery:
         result._limit = count
         return result
 
-    def stream(self, *, transaction: StrictFirestoreTransaction):
-        if not self._filters or not self._ids_only or self._limit is None:
+    def stream(self, *, transaction: StrictFirestoreTransaction | None = None):
+        if not self._filters or self._projection is None or self._limit is None:
             raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
-        if transaction._database is not self._database:
-            raise ForeignTransactionError('Firestore transaction and query must belong to the same store')
-        transaction._assert_read_allowed()
+        if transaction is not None:
+            if transaction._database is not self._database:
+                raise ForeignTransactionError('Firestore transaction and query must belong to the same store')
+            transaction._assert_read_allowed()
+        elif self._projection != ('conversation_id',):
+            raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
         rows = []
         for path, value in sorted(self._database.rows.items()):
             if path[:-1] == self._path and all(
-                field in value and value[field] == expected for field, expected in self._filters
+                field in value and (value[field] == expected if op == '==' else value[field] in expected)
+                for field, op, expected in self._filters
             ):
-                snapshot = StrictFirestoreSnapshot({})
+                snapshot = StrictFirestoreSnapshot(
+                    {field: value[field] for field in self._projection if field in value}
+                )
                 snapshot.reference = StrictFirestoreDocument(self._database, path)
                 rows.append(snapshot)
         return iter(rows[: self._limit])
 
 
 class StrictFirestoreTransaction:
-    def __init__(self, database: StrictFirestore, *, allow_reads_after_writes: bool = False):
+    def __init__(
+        self, database: StrictFirestore, *, allow_reads_after_writes: bool = False, require_begun: bool = False
+    ):
         self._database = database
+        self._require_begun = require_begun
         self._allow_reads_after_writes = allow_reads_after_writes
         self.lock = database.lock
         self.creates: list[tuple[tuple[str, ...], dict[str, Any]]] = []
         self.sets: list[tuple[tuple[str, ...], dict[str, Any]]] = []
         self.updates: list[tuple[tuple[str, ...], dict[str, Any]]] = []
+        self.deletes: list[tuple[str, ...]] = []
         self.has_written = False
         self._read_only = False
         self._max_attempts = 1
@@ -279,6 +396,9 @@ class StrictFirestoreTransaction:
             raise ReadAfterWriteError('Firestore transactions must complete all reads before the first write')
 
     def _assert_reference_belongs(self, ref: StrictFirestoreDocument) -> None:
+        # The SDK refuses an unbegun transaction; only @firestore.transactional begins one.
+        if self._require_begun and self._id is None:
+            raise ValueError('Transaction not in progress, cannot be used in API requests.')
         if ref._database is not self._database:
             raise ForeignTransactionError('Firestore transaction and document reference must belong to the same store')
 
@@ -289,16 +409,25 @@ class StrictFirestoreTransaction:
         payload = deepcopy(data)
         self.sets.append((ref.path, payload))
         if merge:
-            # Proven by fsr_people_generation_emulator_test.py: set+Increment
-            # without merge replaces the counter and repeatedly stores 1.
-            # Keep this fixture narrow: only the People generation transform
-            # has an emulator proof; do not approximate arbitrary merge masks.
-            if set(data) != {'generation'} or not isinstance(data['generation'], Increment):
-                raise UnsupportedFirestoreOperationError('only the People generation merge transform is supported')
-            prior = dict(self._database.rows.get(ref.path) or {})
-            value = prior.get('generation', 0)
-            prior['generation'] = (value if type(value) in (int, float) else 0) + data['generation'].value
-            self._database.rows[ref.path] = prior
+            if ref.path[0] in ('app_review_config', 'legal_holds') and len(ref.path) == 2:
+                # App-review persists a complete top-level config snapshot with
+                # merge=True, preserving fields owned by other writers. A legal
+                # hold merges flat top-level fields the same way (place keeps
+                # release fields, release keeps placement fields).
+                prior = deepcopy(self._database.rows.get(ref.path) or {})
+                prior.update(payload)
+                self._database.rows[ref.path] = prior
+            elif set(data) == {'generation'} and isinstance(data['generation'], Increment):
+                # Proven by fsr_people_generation_emulator_test.py: set+Increment
+                # without merge replaces the counter and repeatedly stores 1.
+                prior = dict(self._database.rows.get(ref.path) or {})
+                value = prior.get('generation', 0)
+                prior['generation'] = (value if type(value) in (int, float) else 0) + data['generation'].value
+                self._database.rows[ref.path] = prior
+            else:
+                raise UnsupportedFirestoreOperationError(
+                    'merge set is supported only for app-review config and People generation'
+                )
         else:
             self._database.rows[ref.path] = payload
 
@@ -320,10 +449,22 @@ class StrictFirestoreTransaction:
             raise RuntimeError('missing row')
         payload = deepcopy(patch)
         self.updates.append((ref.path, payload))
-        self._database.rows[ref.path].update(payload)
+        # Emulator proof: test_conversation_terminal_family_firestore.py covers
+        # nested updates, quoted keys, and replacement of non-map ancestors.
+        for key, value in payload.items():
+            parts = FieldPath.from_api_repr(key).parts
+            parent = self._database.rows[ref.path]
+            for part in parts[:-1]:
+                if not isinstance(parent.get(part), dict):
+                    parent[part] = {}
+                parent = parent[part]
+            parent[parts[-1]] = value
 
-    def delete(self, *args: Any, **kwargs: Any) -> None:
-        raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+    def delete(self, ref: StrictFirestoreDocument) -> None:
+        self._assert_reference_belongs(ref)
+        self.has_written = True
+        self.deletes.append(ref.path)
+        self._database.rows.pop(ref.path, None)
 
     def get(self, *args: Any, **kwargs: Any) -> None:
         raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
@@ -338,6 +479,8 @@ class StrictFirestore:
     ``allow_reads_after_writes`` is an explicit, greppable opt-out for tests
     that intentionally do not exercise Firestore transaction semantics. It
     defaults to ``False`` and must not be used by production-boundary tests.
+    ``require_begun`` rejects an unbegun transaction as the SDK does, for tests
+    that drive a full ``run`` path rather than an inner transaction body.
     """
 
     def __init__(
@@ -345,8 +488,10 @@ class StrictFirestore:
         rows: dict[tuple[str, ...], dict[str, Any]] | None = None,
         *,
         allow_reads_after_writes: bool = False,
+        require_begun: bool = False,
     ):
         self.rows = deepcopy(rows or {})
+        self._require_begun = require_begun
         self.lock = RLock()
         self._allow_reads_after_writes = allow_reads_after_writes
         self.transactions: list[StrictFirestoreTransaction] = []
@@ -361,7 +506,9 @@ class StrictFirestore:
         return StrictFirestoreDocument(self, segments)
 
     def transaction(self, max_attempts: int | None = None) -> StrictFirestoreTransaction:
-        transaction = StrictFirestoreTransaction(self, allow_reads_after_writes=self._allow_reads_after_writes)
+        transaction = StrictFirestoreTransaction(
+            self, allow_reads_after_writes=self._allow_reads_after_writes, require_begun=self._require_begun
+        )
         if max_attempts is not None:
             transaction._max_attempts = max_attempts
         self.transactions.append(transaction)
@@ -371,11 +518,12 @@ class StrictFirestore:
         self,
         references: list[StrictFirestoreDocument],
         *,
-        field_paths: list[str],
-        transaction: StrictFirestoreTransaction,
+        field_paths: list[str] | None = None,
+        transaction: StrictFirestoreTransaction | None = None,
     ) -> list[StrictFirestoreSnapshot]:
-        if field_paths != ['folder_id']:
-            raise UnsupportedFirestoreOperationError('only folder membership BatchGet is supported')
+        # Whole-document BatchGet (no field mask) and the folder-membership mask are modelled.
+        if field_paths is not None and field_paths != ['folder_id']:
+            raise UnsupportedFirestoreOperationError('only whole-document or folder membership BatchGet is supported')
         snapshots = []
         for reference in reversed(references):
             if reference._database is not self:

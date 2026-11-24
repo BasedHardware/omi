@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
+from utils.conversations.relevance_rules import RULES_VERSION
 from tests.unit.test_sync_donor_tombstone_visibility import _install_listing
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreTransaction
 
@@ -172,6 +173,13 @@ def test_restore_promotes_legacy_review_and_persists_user_choice(monkeypatch):
                 'discarded': False,
                 'sync_relevance': 'keep',
                 'sync_relevance_user_kept': True,
+                'relevance_decision': dict(
+                    verdict='keep',
+                    decided_by='user',
+                    reason='restored',
+                    trigger='user_restore',
+                    rules_version=RULES_VERSION,
+                ),
             },
         )
     ]
@@ -203,6 +211,11 @@ def test_stale_processor_result_cannot_rehide_restored_review(monkeypatch):
     class _Transaction:
         def set(self, ref, data, merge=False):
             ref.written = dict(data)
+
+        def update(self, ref, data):
+            from google.cloud.firestore_v1._helpers import DocumentExtractorForUpdate
+
+            ref.written = DocumentExtractorForUpdate(data).set_fields
 
     ref = _Ref()
     transaction = _Transaction()
@@ -277,7 +290,17 @@ def test_restore_of_any_row_persists_the_user_choice(monkeypatch):
     assert db.transactions[0].updates == [
         (
             ('users', 'u', 'conversations', 'restored'),
-            {'discarded': False, 'sync_relevance_user_kept': True},
+            {
+                'discarded': False,
+                'sync_relevance_user_kept': True,
+                'relevance_decision': dict(
+                    verdict='keep',
+                    decided_by='user',
+                    reason='restored',
+                    trigger='user_restore',
+                    rules_version=RULES_VERSION,
+                ),
+            },
         )
     ]
 
@@ -311,6 +334,13 @@ def test_restore_of_jev_discard_stamps_the_marker(monkeypatch):
                 'discarded': False,
                 'sync_relevance_user_kept': True,
                 'jev_discard_restored': True,
+                'relevance_decision': dict(
+                    verdict='keep',
+                    decided_by='user',
+                    reason='restored',
+                    trigger='user_restore',
+                    rules_version=RULES_VERSION,
+                ),
             },
         )
     ]
@@ -383,7 +413,9 @@ def test_restored_jev_discard_survives_reassessment_persist(monkeypatch):
 
     assert conversations.persist_processing_result_with_lifecycle('u', payload) is True
 
-    assert db.transactions[-1].merges == [(('users', 'u', 'conversations', 'restored'), True)]
+    assert len(db.transactions[-1].updates) == 1
+    assert db.transactions[-1].updates[0][0] == ('users', 'u', 'conversations', 'restored')
+    assert db.transactions[-1].merges == []
     stored = db.rows[('users', 'u', 'conversations', 'restored')]
     assert stored['relevance_decision']['decided_by'] == 'user'
     assert stored['relevance_decision']['verdict'] == 'keep'

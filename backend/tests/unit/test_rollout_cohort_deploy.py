@@ -37,7 +37,8 @@ def test_cloud_run_manifest_preserves_live_env_by_omitting_private_bindings():
 def test_helm_retains_legacy_fallbacks(component, stage):
     path = ROOT / f'backend/charts/{component}/{stage}_omi_{component.replace("-", "_")}_values.yaml'
     env = {row['name']: row.get('value', '') for row in yaml.load(path.read_text(), Loader=yaml.CSafeLoader)['env']}
-    assert 'AUDIO_ARCHIVE_UID_ALLOWLIST' in env
+    assert 'AUDIO_ARCHIVE_UID_ALLOWLIST' not in env
+    assert 'MOBILE_STANDARD_BATCH_UIDS' not in env
     assert 'DREAM_AGENT_UID_ALLOWLIST' in env
     if stage == 'prod':
         assert env['DREAM_AGENT_UID_ALLOWLIST']
@@ -46,11 +47,9 @@ def test_helm_retains_legacy_fallbacks(component, stage):
             for key in (
                 'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST',
                 'STT_LIVE_DEMAND_UID_ALLOWLIST',
-                'MOBILE_STANDARD_BATCH_UIDS',
             ):
                 assert env[key]
     if stage == 'dev':
-        assert env['AUDIO_ARCHIVE_UID_ALLOWLIST']
         if component == 'pusher':
             assert env['TRANSCRIPTION_SHADOW_UID_ALLOWLIST'] == 'omi-release-probe'
 
@@ -70,12 +69,9 @@ def test_cloud_run_merge_and_helm_replace_are_paired_with_cohort_aware_runtime(m
     assert callable(enabled_for) and callable(rollout_cohorts.in_rollout_cohort)
     from config import summary_guarantee
 
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
-    assert not summary_guarantee.enabled('nonmember')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
-    assert not summary_guarantee.enabled('nonmember')
+    assert summary_guarantee.first_summary_pending({'uid': 'nonmember'})
+    assert summary_guarantee.first_summary_pending({'uid': 'nonmember'})
     listen = (ROOT / 'backend/routers/transcribe.py').read_text()
     assert listen.index('await warm_rollout_cohorts(request.uid)') < listen.index('run_listen_session(request)')
 

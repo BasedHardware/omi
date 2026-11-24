@@ -1,3 +1,11 @@
+// The floating/notch control bar view: the SwiftUI projection of
+// FloatingControlBarState -- waveform, pills, composer viewport, and shortcut
+// hints.
+//
+// The view renders a viewport cursor over ChatProvider.messages and must never
+// own a second durable transcript; derived state lives in
+// FloatingControlBarState so the same projection serves notch and bar layouts
+// (FloatingControlBar/ARCHITECTURE.md).
 import AppKit
 import Combine
 import OmiSupport

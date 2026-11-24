@@ -26,13 +26,33 @@ def jobs(text):
 PR_SCHEMA_WRITERS = {"gcp_firestore_indexes.yml"}
 
 INTENTIONAL_BUDGET_CHANGES = {
+    # Lane 8 adds a port-map job to the reusable workflow. It is skipped on
+    # the pinned nightly, and its PR and main-push budget is fixed here.
+    ("backend-go-checks.yml", "port-tasks", "runs-on"): "ubuntu-latest",
+    ("backend-go-checks.yml", "port-tasks", "timeout-minutes"): "90",
+    ("backend-go-checks.yml", "port-task-tests", "runs-on"): "ubuntu-latest",
+    ("backend-go-checks.yml", "port-task-tests", "timeout-minutes"): "15",
+    # #25814 adds locked Python setup and an emulator replay to the Go check.
+    ("backend-go-checks.yml", "check", "timeout-minutes"): "30",
     # iOS Compile Check: the 40-min ceiling sat below the measured cold path
     # (39:25 real steps + ~1 min post-job Post Setup Flutter cache save, run
     # 39634604539 attempt 1), cancelling a healthy cold job after every real
     # step passed. 50 restores wedge headroom; budget_p50 stays 19.
     ("mobile-app-checks.yml", "ios-compile-check", "timeout-minutes"): "50",
+    # Dart Analyze & Tests: the 30-min ceiling sat below the measured suite
+    # path — main's healthy runs took 27-29.6 min (run 41736391155: 29:36 for
+    # 8207 tests) — so run 41693050609 was cancelled at the cap with all 7842
+    # executed tests passing and ~360 unexecuted, failing Mobile Release
+    # Eligibility downstream. 40 restores wedge headroom; budget_p50 stays 17.
+    ("mobile-app-checks.yml", "analyze-and-test", "timeout-minutes"): "40",
+    # SCA-3899 splits the far-timezone pass into one job per zone so each suite
+    # owns a 60-minute ceiling. The sequential pair spent 59m51s of steps on
+    # top of a 2m36s prelude on the 2026-11-23 scheduled run (45113684750) and
+    # was cancelled at the cap after both steps had passed.
+    ("mobile-app-checks.yml", "dart-tests-pago-pago", "runs-on"): "ubuntu-latest",
+    ("mobile-app-checks.yml", "dart-tests-pago-pago", "timeout-minutes"): "60",
     # Backend unit shard: the 15-min job ceiling includes runner setup, but
-    # the 720s step regression budget excludes it, leaving 180s for setup.
+    # the step regression budget excludes it, leaving 180s for setup.
     # Setup measured 73-92s typical, 227s worst (run 39741901310 attempt 2:
     # checkout 72s, apt-get 155s), so 227s + 720s crossed the ceiling and the
     # shard was cancelled mid-run while still inside its step budget — four
@@ -41,11 +61,36 @@ INTENTIONAL_BUDGET_CHANGES = {
     # cold-cache step needed recycling room. Run 40009383869 still exhausted
     # the Azure mirror slices; the step now uses official Ubuntu archives,
     # slices downloads only within 300s, and caps the whole install at 7m.
-    # 25m holds 720s tests + 72s checkout + 90s toolchain + 420s apt, leaving
+    # 25m held 720s tests + 72s checkout + 90s toolchain + 420s apt, leaving
     # 198s for cache save and post-actions (test_nightly_main_native_audio.py).
     # The test regression gate and warm-path walls stay unchanged, so
-    # budget_p50 stays 8.
-    ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "25",
+    # budget_p50 stays 8. 2026-10-26: the step budget rose 720s -> 900s with
+    # measured evidence (selection growth 1727 -> 2319 files since #21259
+    # drifted shard walls to 725-841s on unrelated PRs; see the workflow's
+    # env comment), so the ceiling rises with it: 30m holds 900s tests + 72s
+    # checkout + 90s toolchain + 420s apt, leaving 318s for cache save and
+    # post-actions. The weighted eight-shard rebalance (#23767) later kept
+    # the 720s step line and scaled the p50 forecast to 6; the 900s budget
+    # still bounds every shard with headroom.
+    ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "30",
+    # 2026-11-03 checkout stalls (run 41672443108): a trickling depth-one
+    # fetch exceeded 300s without tripping Git's low-speed retry. Increase the
+    # four test jobs' checkout caps 5->10 minutes and preserve test headroom
+    # with exactly five extra job minutes; unit shard hang caps are pinned
+    # above at 30.
+    ("backend-hermetic-e2e.yml", "hermetic-e2e", "timeout-minutes"): "20",
+    ("backend-hermetic-e2e.yml", "listen-pusher-stack-gauntlet", "timeout-minutes"): "25",
+    ("backend-hermetic-e2e.yml", "sync-cloud-tasks-stack-gauntlet", "timeout-minutes"): "25",
+    ("backend-hermetic-e2e.yml", "replay-harness-phase0a-gauntlet", "timeout-minutes"): "25",
+    # Linux package smoke: the apt runtime-deps step budget is 20m (cold
+    # cache on a degraded mirror measured ~40-45 KB/s pool throughput in
+    # jobs 120062237675 and 120074210159 — ~14.4 min of pure download), and
+    # a cold run also pays ~70s setup plus ~5m packaging/smoke. At the old
+    # 20m ceiling the cold path was cancelled mid-packaging, and a cancelled
+    # job never saves the apt cache (save-always: false), so every retry
+    # stayed cold. 30m fits the cold path; warm runs still finish in ~7m,
+    # so budget_p50 stays 7.
+    ("desktop-windows-ci.yml", "build-linux", "timeout-minutes"): "30",
 }
 
 
@@ -86,8 +131,14 @@ class WorkflowTests(unittest.TestCase):
             text = (WORKFLOWS / filename).read_text()
             with self.subTest(workflow=filename):
                 self.assertIn("  workflow_call:", text)
-                self.assertEqual(len(re.findall(r"uses: actions/checkout@", text)),
-                                 text.count("ref: ${{ inputs.nightly_main_sha || github.sha }}"))
+                checkout_scope = text
+                if filename == "backend-go-checks.yml":
+                    # Main-push port processing and pull-request scoping are
+                    # event-specific. Only the reusable check job participates
+                    # in the pinned nightly checkout contract.
+                    checkout_scope = jobs(text)["check"]
+                self.assertEqual(len(re.findall(r"uses: actions/checkout@", checkout_scope)),
+                                 checkout_scope.count("ref: ${{ inputs.nightly_main_sha || github.sha }}"))
                 # Scripts that read GITHUB_SHA see the workflow-file commit, not the checkout.
                 if "preflight_public_build_config.py" in text:
                     self.assertIn('--ref "${{ inputs.nightly_main_sha || github.sha }}"', text)
@@ -101,11 +152,19 @@ class WorkflowTests(unittest.TestCase):
         base = subprocess.run(["git", "merge-base", "origin/main", "HEAD"], cwd=ROOT,
                               capture_output=True, text=True, check=True).stdout.strip()
         for filename in self.calls.values():
-            baseline = subprocess.run(["git", "show", f"{base}:.github/workflows/{filename}"],
-                                      cwd=ROOT, capture_output=True, text=True, check=True).stdout
+            shown = subprocess.run(["git", "show", f"{base}:.github/workflows/{filename}"],
+                                   cwd=ROOT, capture_output=True, text=True)
+            if shown.returncode != 0:
+                # A workflow this PR adds has no earlier budget to keep; ci-budget.yaml covers it.
+                continue
+            baseline = shown.stdout
             before, after = jobs(baseline), jobs((WORKFLOWS / filename).read_text())
-            self.assertEqual(set(before), set(after), filename)
-            for name in before:
+            approved_jobs = {
+                name for workflow, name, field in INTENTIONAL_BUDGET_CHANGES
+                if workflow == filename and field == "runs-on"
+            }
+            self.assertEqual(set(before) | approved_jobs, set(after), filename)
+            for name in after:
                 for field in ("runs-on", "timeout-minutes"):
                     pattern = rf"(?m)^    {field}:.*$"
                     after_values = re.findall(pattern, after[name])
@@ -113,7 +172,7 @@ class WorkflowTests(unittest.TestCase):
                     if pinned is not None:
                         self.assertEqual([f"    {field}: {pinned}"], after_values, (filename, name, field))
                         continue
-                    self.assertEqual(re.findall(pattern, before[name]), after_values, (filename, name, field))
+                    self.assertEqual(re.findall(pattern, before.get(name, "")), after_values, (filename, name, field))
 
 
 if __name__ == "__main__":

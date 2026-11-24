@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from database.action_item_fence import fenced_action_item_commit
 from dataclasses import dataclass
 from database.dream_dirty import after_write
 from database.s5_candidates_cache import invalidate_after_write
@@ -208,7 +209,17 @@ def _canonical_request_value(value: Any) -> Any:
 
 
 def _proposal_request_hash(uid: str, account_generation: int, proposal: CandidateCreate) -> str:
-    canonical = _canonical_request_value(proposal.model_dump(mode='python'))
+    payload = proposal.model_dump(mode='python')
+    if payload.get('reminder_origin') is None:
+        payload.pop('reminder_origin', None)
+    for change in (payload.get('task_change'), (payload.get('workstream_proposal') or {}).get('anchor_task')):
+        if isinstance(change, dict) and change.get('due') is None:
+            change.pop('due', None)
+    origin = payload.get('reminder_origin')
+    if origin:
+        # Processing time is an observation, not retry identity.
+        origin.pop('extracted_at', None)
+    canonical = _canonical_request_value(payload)
     encoded = json.dumps(canonical, sort_keys=True, separators=(',', ':'))
     return _stable_contract_id('request', uid, account_generation, encoded)
 
@@ -258,6 +269,15 @@ def pending_candidate_semantic_identity(proposal: CandidateCreate) -> Optional[s
         workstream_id=proposal.workstream_id,
     )
     encoded = json.dumps(semantic_payload, sort_keys=True, separators=(',', ':'))
+    if proposal.reminder_origin is not None:
+        # Equal wording on unrelated days is not the same reminder. An event/alias
+        # authority can later supply cross-device identity; never guess one here.
+        scope = sorted(ref.id for ref in proposal.evidence_refs if ref.kind.value == 'conversation')
+        due = task_change.due
+        precision = (
+            (due.kind, due.date, due.timezone, due.expression if due.kind == 'unresolved' else None) if due else None
+        )
+        encoded = json.dumps([semantic_payload, scope, precision], sort_keys=True, separators=(',', ':'))
     return _stable_contract_id('semantic', PENDING_CANDIDATE_SEMANTIC_VERSION, encoded)
 
 
@@ -612,6 +632,20 @@ def create_candidate(
             and not candidate_has_lapsed(claimed_candidate, now=now_value)
         )
         if (
+            proposal.reminder_origin is not None
+            and claimed_candidate is not None
+            and claimed_candidate.status in {CandidateStatus.accepted, CandidateStatus.rejected}
+        ):
+            # A replay must not reopen completed/deleted/edited/rejected human work.
+            merged = _merge_candidate_annotations(claimed_candidate, proposal)
+            # Keep each supporting source revision intact, including after a human
+            # completes/edits the task. Creation history and task state stay immutable.
+            evidence_patch = [ref.model_dump(mode='python', exclude_none=True) for ref in merged.evidence_refs]
+            write_transaction.update(claimed_ref, {'evidence_refs': evidence_patch})
+            alias_payload['candidate_id'] = claimed_candidate.candidate_id
+            write_transaction.set(alias_ref, alias_payload)
+            return claimed_candidate.model_copy(update={'evidence_refs': merged.evidence_refs})
+        if (
             claimed_candidate is not None
             and (reusable_pending or reusable_active_accept)
             and claimed_ref is not None
@@ -806,6 +840,17 @@ def _task_create_storage(candidate: CandidateRecord, *, task_id: str, now: datet
     if not isinstance(candidate.task_change, TaskCreatePayload):
         raise CandidateConflictError('task create Candidate has invalid payload')
     task = candidate.task_change.model_dump(mode='python', exclude_none=True)
+    if candidate.task_change.due is not None and candidate.task_change.due.kind != 'instant':
+        # Released no-deadline readers distinguish an explicit null from a missing field.
+        task['due_at'] = None
+    if candidate.reminder_origin is not None:
+        task['reminder_origin'] = candidate.reminder_origin.model_dump(mode='python')
+        task['conversation_id'] = next(
+            (ref.id for ref in candidate.evidence_refs if ref.kind.value == 'conversation'), None
+        )
+        if candidate.reminder_origin.review_reason == 'owner_unresolved':
+            # Acceptance is an explicit user confirmation, never a capture gesture.
+            task['owner'] = TaskOwner.user.value
     task.update(
         {
             'id': task_id,
@@ -834,6 +879,10 @@ def _task_update_storage(candidate: CandidateRecord, *, current_task: dict[str, 
     if not isinstance(candidate.task_change, TaskChangePayload):
         raise CandidateConflictError('task mutation Candidate has invalid payload')
     patch = candidate.task_change.model_dump(mode='python', exclude_unset=True)
+    if candidate.task_change.due is not None:
+        patch['due_at'] = candidate.task_change.due.instant
+    elif 'due_at' in patch and 'due' not in patch:
+        patch['due'] = None
     if candidate.goal_id is not None:
         patch['goal_id'] = candidate.goal_id
     if candidate.workstream_id is not None:
@@ -871,6 +920,7 @@ def resolve_task_candidate(
 
     @firestore.transactional
     def apply(write_transaction):
+        tasks = action_items_db.FirestoreActionItems(uid, firestore_client=db, transaction=write_transaction)
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
         _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = candidate_ref.get(transaction=write_transaction)
@@ -901,15 +951,16 @@ def resolve_task_candidate(
                 raise CandidateConflictError('Summary action item is linked to another task')
         if candidate.status == CandidateStatus.accepted:
             if summary_row is not None:
-                task_snapshot = _task_ref(uid, cast(str, candidate.result_task_id)).get(transaction=write_transaction)
+                task_snapshot = tasks.read_snapshot(cast(str, candidate.result_task_id))
                 if not task_snapshot.exists:
                     raise CandidateNotFoundError('Linked task not found')
                 existing_task = _snapshot_dict(task_snapshot)
                 if existing_task.get('account_generation', 0) not in {0, account_generation}:
                     raise CandidateGenerationMismatchError('task account generation mismatch')
                 if not existing_task.get('conversation_id'):
-                    write_transaction.update(
-                        _task_ref(uid, cast(str, candidate.result_task_id)),
+                    tasks.stage_write(
+                        'update',
+                        cast(str, candidate.result_task_id),
                         {
                             'conversation_id': summary_row.conversation_id,
                             'updated_at': now or datetime.now(timezone.utc),
@@ -947,7 +998,7 @@ def resolve_task_candidate(
         if candidate.proposed_action == CandidateAction.create:
             task_id = task_id_for_candidate(uid, account_generation, candidate_id)
             task_ref = _task_ref(uid, task_id)
-            task_snapshot = task_ref.get(transaction=write_transaction)
+            task_snapshot = tasks.read_snapshot(task_ref.id)
             task_data = _task_create_storage(candidate, task_id=task_id, now=resolved_at)
             if summary_row is not None:
                 task_data['conversation_id'] = summary_row.conversation_id
@@ -967,11 +1018,11 @@ def resolve_task_candidate(
                 if existing_task.get('candidate_id') != candidate_id:
                     raise CandidateConflictError('deterministic task id collision')
             else:
-                write_transaction.set(task_ref, task_data)
+                tasks.stage_write('set', task_ref.id, task_data)
         else:
             task_id = cast(str, candidate.task_id)
             task_ref = _task_ref(uid, task_id)
-            task_snapshot = task_ref.get(transaction=write_transaction)
+            task_snapshot = tasks.read_snapshot(task_ref.id)
             if not task_snapshot.exists:
                 raise CandidateNotFoundError(f'task:{task_id}')
             current_task = _snapshot_dict(task_snapshot)
@@ -999,18 +1050,37 @@ def resolve_task_candidate(
                 )
             except action_items_db.TaskRelationshipConflictError as exc:
                 raise CandidateConflictError(str(exc)) from exc
-            write_transaction.update(task_ref, task_patch)
+            tasks.stage_write('update', task_ref.id, task_patch)
 
         if summary_row is not None:
             write_transaction.update(summary_row.reference, summary_row.linked_patch(task_id))
 
-        candidate_patch = {
+        creation_receipt = None
+        if candidate.proposed_action == CandidateAction.create and candidate.reminder_origin is not None:
+            creation_receipt = {
+                'receipt_id': _stable_contract_id('task-create', task_id, account_generation),
+                'task_id': task_id,
+                'revision': 1,
+                'operation': 'create',
+                'after_status': 'active',
+                'source_channel': 'conversation',
+                'actor_kind': 'authenticated_owner',
+                'actor_id': uid,
+                'event_at': resolved_at,
+                'evidence_refs': [ref.model_dump(mode='python', exclude_none=True) for ref in candidate.evidence_refs],
+                'idempotency_key': candidate.idempotency_key,
+                'history_coverage': 'reminder_creation_only',
+            }
+            tasks.stage_write('update', task_ref.id, {'creation_receipt': creation_receipt})
+        candidate_patch: dict[str, Any] = {
             'status': CandidateStatus.accepted.value,
             'resolution_reason': 'accepted',
             'result_task_id': task_id,
             'resolved_at': resolved_at,
             'expires_at': None,
         }
+        if creation_receipt is not None:
+            candidate_patch['creation_receipt'] = creation_receipt
         write_transaction.update(candidate_ref, candidate_patch)
         if candidate.proposed_action == CandidateAction.create:
             write_transaction.set(
@@ -1021,6 +1091,11 @@ def resolve_task_candidate(
                     'task_id': task_id,
                     'account_generation': account_generation,
                     'status': 'pending',
+                    **(
+                        {'policy_revision': candidate.reminder_origin.policy_revision}
+                        if candidate.reminder_origin
+                        else {}
+                    ),
                     'attempt_count': 0,
                     'created_at': resolved_at,
                     'updated_at': resolved_at,
@@ -1035,7 +1110,8 @@ def resolve_task_candidate(
             resolved_at=resolved_at,
         )
 
-    receipt = run_with_transaction_contention_retry(db.transaction, apply, operation_name='candidate_accept')
+    with fenced_action_item_commit(uid):
+        receipt = run_with_transaction_contention_retry(db.transaction, apply, operation_name='candidate_accept')
     # Accepting creates or updates the task directly (not through database.action_items),
     # so invalidate the cached GET /v1/action-items pages here too.
     bump_action_items_list_version(uid)

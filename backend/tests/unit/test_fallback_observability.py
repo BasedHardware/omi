@@ -230,6 +230,7 @@ def test_stt_selection_fallback_records_on_capability_mismatch(monkeypatch):
 
 
 def test_explicit_parakeet_preference_fallback_records_when_live_mode_is_incapable(monkeypatch):
+    monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'true')
     from utils.stt import streaming as streaming_mod
 
     counter = FakeCounter()
@@ -257,6 +258,7 @@ def test_explicit_parakeet_preference_fallback_records_when_live_mode_is_incapab
 
 
 def test_automatic_parakeet_capability_fallback_records_when_live_mode_is_incapable(monkeypatch):
+    monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'true')
     from utils.stt import streaming as streaming_mod
 
     counter = FakeCounter()

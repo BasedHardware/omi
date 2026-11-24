@@ -1,0 +1,15 @@
+{
+  "data": [
+    {
+      "end_time_iso": "2026-11-05T00:00:00Z",
+      "results": [
+        {
+          "amount": {
+            "value": "295.68"
+          },
+          "line_item": "api"
+        }
+      ]
+    }
+  ]
+}

@@ -14,6 +14,7 @@ STAGES = frozenset(
         'pull',
         'admission',
         'worker_flight',
+        'worker_flight_deep',
         'publication',
         'renew',
         'ordered_merge',

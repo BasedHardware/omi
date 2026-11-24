@@ -10,12 +10,22 @@ from uuid import uuid4
 from typing import Callable
 
 from utils.locked_content_flags import reset_recovery_enabled
+from utils.other.request_deadline import RequestDeadlineExceeded, request_deadline_remaining_seconds
 
 logger = logging.getLogger(__name__)
 PAGE_SIZE = 100
 LEASE_SECONDS = 300
 RETRY_SECONDS = 60
 _cap_audio_recovery: Callable[[str], None] | None = None
+
+
+def _request_deadline_timeout_kwargs() -> dict[str, float]:
+    remaining = request_deadline_remaining_seconds()
+    if remaining is None:
+        return {}
+    if remaining <= 0.0:
+        raise RequestDeadlineExceeded('request budget expired during locked-content recovery')
+    return {'timeout': remaining}
 
 
 def register_cap_audio_recovery(callback: Callable[[str], None]) -> None:
@@ -47,7 +57,7 @@ def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
     from database import action_items, conversations, memories, redis_db
     from database._client import db
     from utils.fair_use import invalidate_enforcement_cache
-    from utils.subscription import clear_trial_paywall_cache, resolve_transcription_allowance
+    from utils.subscription import resolve_transcription_allowance
     from utils.observability.fallback import record_fallback
 
     now = now or datetime.now(timezone.utc)
@@ -60,23 +70,27 @@ def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
     token = uuid4().hex
     acquired = False
     try:
-        if redis_db.r.get(done_key):
+        redis_client = redis_db.request_deadline_redis_client()
+        if redis_client.get(done_key):
             return
         # Coalesce retries before reading usage (up to ~744 hourly documents).
-        if not redis_db.r.set(f'{prefix}:retry', '1', nx=True, ex=RETRY_SECONDS):
+        if not redis_client.set(f'{prefix}:retry', '1', nx=True, ex=RETRY_SECONDS):
             return
-        acquired = bool(redis_db.r.set(lease_key, token, nx=True, ex=LEASE_SECONDS))
+        acquired = bool(redis_client.set(lease_key, token, nx=True, ex=LEASE_SECONDS))
         if not acquired:
             return
+        _request_deadline_timeout_kwargs()
         state = db.collection('users').document(uid).collection('locked_content_recovery').document('reset')
-        completed_period = (state.get().to_dict() or {}).get('completed_period')
+        completed_period = (state.get(**_request_deadline_timeout_kwargs()).to_dict() or {}).get('completed_period')
         if completed_period == period:
-            redis_db.r.set(done_key, '1', ex=period_ttl)
+            _request_deadline_timeout_kwargs()
+            redis_client.set(done_key, '1', ex=period_ttl)
             return
 
         # No reviewer/BYOK/trial override may authorize a persistent unlock.
         # Only the ordinary plan allowance, successfully resolved, qualifies.
         def eligible() -> bool:
+            _request_deadline_timeout_kwargs()
             allowance = resolve_transcription_allowance(uid, byok_active=False)
             return allowance.managed and allowance.reason in {'plan_within_allowance', 'plan_unlimited'}
 
@@ -86,22 +100,21 @@ def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
         # Children first; each collection drains independently over retries.
         # A page can expose a parent before all child pages finish.
         try:
+            _request_deadline_timeout_kwargs()
             memory_count = memories.unlock_all_memories(uid, limit=PAGE_SIZE)
             if not eligible():
                 return
+            _request_deadline_timeout_kwargs()
             action_count = action_items.unlock_all_action_items(uid, limit=PAGE_SIZE)
             if not eligible():
                 return
+            _request_deadline_timeout_kwargs()
             conversation_count = conversations.unlock_all_conversations(uid, limit=PAGE_SIZE)
         finally:
             # Repair access caches even when a later recheck denies or fails,
-            # or a helper raises after an already-committed page. A paywall
-            # cache error must not skip fair-use invalidation.
+            # or a helper raises after an already-committed page.
             redis_db.set_credits_invalidation_signal(uid)
-            try:
-                clear_trial_paywall_cache(uid)
-            finally:
-                invalidate_enforcement_cache(uid)
+            invalidate_enforcement_cache(uid)
         # Each memory collection has its own page. A full page stays incomplete
         # until a later short page proves the tail. Two short pages (60 + 60)
         # are drained even though their sum reaches PAGE_SIZE.
@@ -110,8 +123,9 @@ def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
             and action_count < PAGE_SIZE
             and conversation_count < PAGE_SIZE
         ):
-            state.set({'completed_period': period, 'completed_at': now})
-            redis_db.r.set(done_key, '1', ex=period_ttl)
+            state.set({'completed_period': period, 'completed_at': now}, **_request_deadline_timeout_kwargs())
+            _request_deadline_timeout_kwargs()
+            redis_client.set(done_key, '1', ex=period_ttl)
     except Exception as error:
         # Recovery is optional; auth still succeeds. No user/content in logs.
         logger.warning('locked_content_reset_recovery deferred error_type=%s', type(error).__name__)

@@ -171,3 +171,44 @@ def test_delete_agent_vm_for_account_success(agent_vm_account_cleanup):
         )
 
         mock_cleanup_migration.assert_called_once_with(uid, mock_plans, 'test-project', mock_client, headers)
+
+
+@pytest.mark.parametrize(
+    'expires_at',
+    [
+        pytest.param(10**400, id='huge-int'),
+        pytest.param(-(10**400), id='huge-negative-int'),
+        pytest.param('9' * 400, id='huge-numeric-string'),
+        pytest.param(float('inf'), id='inf'),
+        pytest.param(float('nan'), id='nan'),
+        pytest.param('not-a-number', id='non-numeric-string'),
+    ],
+)
+def test_migration_reconcile_lease_malformed_expiry_is_ambiguous(agent_vm_account_cleanup, expires_at):
+    vm = {'reconcile': {'lease': {'expiresAt': expires_at}}}
+
+    with pytest.raises(RuntimeError, match='Agent VM migration reconcile lease is ambiguous'):
+        agent_vm_account_cleanup._migration_reconcile_lease_active(vm, [{}], now=1000.0)
+
+
+@pytest.mark.parametrize('expires_at, expected', [(2000, True), ('2000.5', True), (500, False)])
+def test_migration_reconcile_lease_finite_expiry_is_evaluated(agent_vm_account_cleanup, expires_at, expected):
+    vm = {'reconcile': {'lease': {'expiresAt': expires_at}}}
+
+    assert agent_vm_account_cleanup._migration_reconcile_lease_active(vm, [{}], now=1000.0) is expected
+
+
+def test_delete_agent_vm_for_account_oversized_lease_expiry_raises_controlled_error(agent_vm_account_cleanup):
+    vm = {'vmName': 'test-vm', 'reconcile': {'lease': {'expiresAt': 10**400}}}
+    with (
+        patch.object(agent_vm_account_cleanup, 'users_db') as mock_users_db,
+        patch.object(agent_vm_account_cleanup, 'read_agent_vm_migration_journals') as mock_read_journals,
+        patch.object(agent_vm_account_cleanup, '_gce_project_id') as mock_gce_project_id,
+    ):
+        mock_users_db.get_agent_vm.return_value = vm
+        mock_read_journals.return_value = [{}]
+
+        with pytest.raises(RuntimeError, match='Agent VM migration reconcile lease is ambiguous'):
+            agent_vm_account_cleanup.delete_agent_vm_for_account('test-uid')
+
+        mock_gce_project_id.assert_not_called()

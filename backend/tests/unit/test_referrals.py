@@ -1,14 +1,12 @@
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Iterator
 
 import pytest
 from fastapi import HTTPException
 
-from routers import auth
-from testing.import_isolation import load_module_fresh, stub_modules
+from routers import auth, referrals as referrals_router
 from utils.referrals import (
     REFERRAL_COOKIE_NAME,
     ReferralCodeError,
@@ -19,15 +17,13 @@ from utils.referrals import (
 )
 
 TEST_SECRET = b'referral-test-secret-that-is-at-least-32-bytes'
-REFERRALS_ROUTER_PATH = Path(__file__).resolve().parents[2] / 'routers' / 'referrals.py'
 
 
 @contextmanager
 def _loaded_referrals_router() -> Iterator[ModuleType]:
-    endpoints = ModuleType('utils.other.endpoints')
-    endpoints.get_current_user_uid = lambda: 'test-user'
-    with stub_modules({'utils.other.endpoints': endpoints}):
-        yield load_module_fresh('routers.referrals', str(REFERRALS_ROUTER_PATH))
+    # Real module identity plus monkeypatch restoration avoids repeatedly
+    # compiling every route/schema and swapping the entire import graph.
+    yield referrals_router
 
 
 def test_referral_code_round_trips_and_rejects_tampering():

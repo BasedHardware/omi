@@ -6,6 +6,7 @@ and chat tools for managing pages, databases, and content.
 """
 import html
 import os
+import asyncio
 import re
 import sys
 import secrets
@@ -99,7 +100,7 @@ def get_valid_access_token(uid: str) -> Optional[str]:
     return tokens.get("access_token")
 
 
-def notion_api_request(uid: str, method: str, endpoint: str, params: dict = None, json_data: dict = None) -> Optional[dict]:
+async def notion_api_request(uid: str, method: str, endpoint: str, params: dict = None, json_data: dict = None) -> Optional[dict]:
     """Make an authenticated request to the Notion API."""
     access_token = get_valid_access_token(uid)
     if not access_token:
@@ -114,13 +115,13 @@ def notion_api_request(uid: str, method: str, endpoint: str, params: dict = None
 
     try:
         if method == "GET":
-            response = requests.get(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
+            response = await asyncio.to_thread(requests.get, url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
         elif method == "POST":
-            response = requests.post(url, headers=headers, data=encode_payload(json_data or {}), timeout=REQUEST_TIMEOUT)
+            response = await asyncio.to_thread(requests.post, url, headers=headers, data=encode_payload(json_data or {}), timeout=REQUEST_TIMEOUT)
         elif method == "PATCH":
-            response = requests.patch(url, headers=headers, data=encode_payload(json_data), timeout=REQUEST_TIMEOUT)
+            response = await asyncio.to_thread(requests.patch, url, headers=headers, data=encode_payload(json_data), timeout=REQUEST_TIMEOUT)
         elif method == "DELETE":
-            response = requests.delete(url, headers=headers, timeout=REQUEST_TIMEOUT)
+            response = await asyncio.to_thread(requests.delete, url, headers=headers, timeout=REQUEST_TIMEOUT)
         else:
             return None
 
@@ -153,11 +154,11 @@ def append_response_valid(result: Any) -> bool:
     return True
 
 
-def append_content_batches(uid: str, page_id: str, batches: list, confirmed: int, total: int) -> Optional[str]:
+async def append_content_batches(uid: str, page_id: str, batches: list, confirmed: int, total: int) -> Optional[str]:
     """Stop at the first unconfirmed write; replay could duplicate saved content."""
     for batch in batches:
         try:
-            result = notion_api_request(uid, "PATCH", f"/blocks/{page_id}/children", json_data=batch)
+            result = await notion_api_request(uid, "PATCH", f"/blocks/{page_id}/children", json_data=batch)
         except Exception:
             result = None
         if not append_response_valid(result):
@@ -225,7 +226,7 @@ BLOCK_CHILDREN_MAX_PAGES = 10
 PAGE_CONTENT_LIMIT = 1000
 
 
-def fetch_page_blocks(uid: str, page_id: str) -> Optional[dict]:
+async def fetch_page_blocks(uid: str, page_id: str) -> Optional[dict]:
     """Return a page's block children as a single list payload, following
     next_cursor while has_more. A failure on any page returns that page's
     error so the caller reports a failed read rather than a silently
@@ -239,7 +240,7 @@ def fetch_page_blocks(uid: str, page_id: str) -> Optional[dict]:
         if cursor:
             params["start_cursor"] = cursor
 
-        result = notion_api_request(uid, "GET", f"/blocks/{page_id}/children", params=params)
+        result = await notion_api_request(uid, "GET", f"/blocks/{page_id}/children", params=params)
         if not result or "error" in result:
             return result
 
@@ -598,7 +599,7 @@ async def tool_search(request: Request):
         if filter_type in ["page", "database"]:
             search_params["filter"] = {"property": "object", "value": filter_type}
 
-        result = notion_api_request(uid, "POST", "/search", json_data=search_params)
+        result = await notion_api_request(uid, "POST", "/search", json_data=search_params)
 
         if not result or "error" in result:
             return ChatToolResponse(error=f"Search failed: {result.get('error', 'Unknown error')}")
@@ -646,7 +647,7 @@ async def tool_list_pages(request: Request):
         if not access_token:
             return ChatToolResponse(error="Please connect your Notion workspace first in the app settings.")
 
-        result = notion_api_request(uid, "POST", "/search", json_data={
+        result = await notion_api_request(uid, "POST", "/search", json_data={
             "filter": {"property": "object", "value": "page"},
             "sort": {"direction": "descending", "timestamp": "last_edited_time"},
             "page_size": max_results
@@ -693,13 +694,13 @@ async def tool_get_page(request: Request):
             return ChatToolResponse(error="Please connect your Notion workspace first in the app settings.")
 
         # Get page properties
-        page = notion_api_request(uid, "GET", f"/pages/{page_id}")
+        page = await notion_api_request(uid, "GET", f"/pages/{page_id}")
 
         if not page or "error" in page:
             return ChatToolResponse(error=f"Page not found: {page.get('error', 'Unknown error')}")
 
         # Get page content (blocks), following Notion's cursor pagination
-        blocks = fetch_page_blocks(uid, page_id)
+        blocks = await fetch_page_blocks(uid, page_id)
 
         title = extract_title(page)
         url = page.get("url", "")
@@ -801,7 +802,7 @@ async def tool_create_page(request: Request):
                 return ChatToolResponse(error="Please specify a parent page or database ID.")
 
         batches = plan_content_requests(content or "", page_data)
-        result = notion_api_request(uid, "POST", "/pages", json_data=batches[0])
+        result = await notion_api_request(uid, "POST", "/pages", json_data=batches[0])
 
         page_id = result.get("id") if isinstance(result, dict) else None
         if not result or "error" in result or not isinstance(page_id, str) or not page_id.strip():
@@ -813,7 +814,7 @@ async def tool_create_page(request: Request):
             ))
 
         total = sum(len(batch.get("children", [])) for batch in batches)
-        error = append_content_batches(uid, page_id, batches[1:], len(batches[0].get("children", [])), total)
+        error = await append_content_batches(uid, page_id, batches[1:], len(batches[0].get("children", [])), total)
         if error:
             return ChatToolResponse(error=f"Page created, but not all content writes were confirmed.\n\n{error}")
 
@@ -866,7 +867,7 @@ async def tool_update_page(request: Request):
 
         if title:
             # First get the page to find the title property name
-            page = notion_api_request(uid, "GET", f"/pages/{page_id}")
+            page = await notion_api_request(uid, "GET", f"/pages/{page_id}")
             if page and "properties" in page:
                 # Find the title property
                 for prop_name, prop in page["properties"].items():
@@ -886,7 +887,7 @@ async def tool_update_page(request: Request):
         if not update_data:
             return ChatToolResponse(error="No updates provided. Specify title or archived.")
 
-        result = notion_api_request(uid, "PATCH", f"/pages/{page_id}", json_data=update_data)
+        result = await notion_api_request(uid, "PATCH", f"/pages/{page_id}", json_data=update_data)
 
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to update page: {result.get('error', 'Unknown error')}")
@@ -925,7 +926,7 @@ async def tool_append_content(request: Request):
 
         batches = plan_content_requests(content)
         total = sum(len(batch["children"]) for batch in batches)
-        error = append_content_batches(uid, page_id, batches, 0, total)
+        error = await append_content_batches(uid, page_id, batches, 0, total)
         if error:
             return ChatToolResponse(error=error)
 
@@ -951,7 +952,7 @@ async def tool_list_databases(request: Request):
         if not access_token:
             return ChatToolResponse(error="Please connect your Notion workspace first in the app settings.")
 
-        result = notion_api_request(uid, "POST", "/search", json_data={
+        result = await notion_api_request(uid, "POST", "/search", json_data={
             "filter": {"property": "object", "value": "database"},
             "page_size": max_results
         })
@@ -997,7 +998,7 @@ async def tool_query_database(request: Request):
         if not access_token:
             return ChatToolResponse(error="Please connect your Notion workspace first in the app settings.")
 
-        result = notion_api_request(uid, "POST", f"/databases/{database_id}/query", json_data={
+        result = await notion_api_request(uid, "POST", f"/databases/{database_id}/query", json_data={
             "page_size": max_results
         })
 
@@ -1225,7 +1226,8 @@ async def notion_callback(
         import base64
         credentials = base64.b64encode(f"{NOTION_CLIENT_ID}:{NOTION_CLIENT_SECRET}".encode()).decode()
 
-        response = requests.post(
+        response = await asyncio.to_thread(
+            requests.post,
             NOTION_TOKEN_URL,
             headers={
                 "Authorization": f"Basic {credentials}",

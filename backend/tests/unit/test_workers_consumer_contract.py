@@ -108,6 +108,13 @@ def test_run_push_settles_the_row_with_the_claim_lease_token(result, expected_ca
     assert outbox.calls[1][-1] == result.reason.value
 
 
+def test_defer_cause_is_what_the_outbox_records_and_metrics_keep_the_reason():
+    outbox = FakeOutbox()
+    result = Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=2_000.0, defer_cause='redirect_unresolved')
+    assert run_push(FakeConsumer(result), outbox, 'row-1', 'wk-1', now=1_000.0) == result
+    assert outbox.calls[1] == ('defer', 'lt-1', 2_000.0, 'redirect_unresolved')
+
+
 @pytest.mark.parametrize(
     'claimed, expected',
     [

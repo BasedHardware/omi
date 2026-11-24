@@ -190,6 +190,43 @@ void main() {
     ]);
   });
 
+  test('Parakeet reports a stream the server closed before ready', () async {
+    final channel = RecordingWebSocketChannel();
+    final transcriber = ParakeetTranscriber(apiUrl: 'https://parakeet.example', onTranscript: (_) {}, channel: channel);
+    final pcm = Uint8List.fromList([1, 0, 2, 0]);
+
+    // While ready is pending, PCM is dropped without an error.
+    transcriber.appendPcm(pcm);
+
+    // The server accepts the socket, then refuses it before ready (backend/parakeet/main.py).
+    channel.closeCode = 1013;
+    channel.closeReason = 'capacity_full';
+    channel.closeIncoming();
+    await Future<void>.delayed(Duration.zero);
+
+    final refused = isA<SttStreamClosedException>()
+        .having((e) => e.closeCode, 'closeCode', 1013)
+        .having((e) => e.closeReason, 'closeReason', 'capacity_full');
+    expect(() => transcriber.appendPcm(pcm), throwsA(refused));
+    await expectLater(transcriber.stop(), throwsA(refused));
+    expect(channel.sent.whereType<Uint8List>(), isEmpty);
+    expect(channel.closed, isTrue);
+  });
+
+  test('Parakeet reports a stream that failed before ready', () async {
+    final channel = RecordingWebSocketChannel();
+    final transcriber = ParakeetTranscriber(apiUrl: 'https://parakeet.example', onTranscript: (_) {}, channel: channel);
+    final failure = StateError('synthetic connection failure');
+
+    channel.addIncomingError(failure);
+    channel.closeIncoming();
+    await Future<void>.delayed(Duration.zero);
+
+    final failed = isA<SttStreamClosedException>().having((e) => e.error, 'error', same(failure));
+    expect(() => transcriber.appendPcm(Uint8List.fromList([1, 0])), throwsA(failed));
+    await expectLater(transcriber.stop(), throwsA(failed));
+  });
+
   test('Deepgram rejects PCM and a second CloseStream while draining', () async {
     final channel = RecordingWebSocketChannel(completeStreamOnCloseStream: false);
     final transcriber = DeepgramTranscriber(
@@ -225,6 +262,8 @@ class RecordingWebSocketChannel extends StreamChannelMixin implements WebSocketC
   final _incoming = StreamController<Object?>.broadcast();
 
   void addIncoming(Object? event) => _incoming.add(event);
+
+  void addIncomingError(Object error) => _incoming.addError(error);
 
   void closeIncoming() {
     if (!_incoming.isClosed) {

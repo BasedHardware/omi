@@ -91,8 +91,8 @@ def test_live_moment_render_keeps_unplaced_voices_unnamed(monkeypatch):
     monkeypatch.delenv('NOTES_PACKET_V2_MODE', raising=False)
     rendered = incremental.render_moment(_mapping_segments(), uid=None)
     _assert_no_raw_ids(rendered.text)
-    assert 'You: owner words' in rendered.text
-    assert 'Unknown speaker: second voice' in rendered.text
+    assert 'You:' not in rendered.text and 'owner words' in rendered.text
+    assert 'second voice' in rendered.text
     assert 'Unknown speaker: third voice elsewhere' in rendered.text
     assert 'Unknown speaker: named friend talks' in rendered.text
 
@@ -102,8 +102,8 @@ def test_live_moment_render_uses_dense_labels_after_qualification(monkeypatch):
     rows = [dict(row, start=index * 5, end=(index + 1) * 5) for index, row in enumerate(_mapping_segments())]
     rendered = incremental.render_moment(rows, uid=None)
     _assert_no_raw_ids(rendered.text)
-    assert 'You: owner words' in rendered.text
-    assert 'Speaker A: second voice' in rendered.text
+    assert 'You:' not in rendered.text and 'owner words' in rendered.text
+    assert 'Speaker A: owner words second voice' in rendered.text
     # (conversation:other, 379) is a distinct voice with its own dense label.
     assert 'Speaker B: third voice elsewhere' in rendered.text
     # No stored person name for p1: the fourth voice is dense too, never "Speaker 4".

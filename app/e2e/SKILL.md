@@ -532,6 +532,36 @@ widgets by stable `Key`s, and keep `expect(...)` checks that prove the intended 
 `app/test/visual_audit/visual_audit_smoke_test.dart` renders every registered scenario in the
 ordinary `app/test.sh` suite without writing images, so a scenario that breaks fails CI.
 
+## Demo walk (one simulator video of those same pages)
+
+`app/scripts/demo_walk.sh` plays a named list of visual-audit scenarios on one booted iOS
+simulator and records it with `simctl io recordVideo`. The pages, fakes, and expects are the
+scenarios above. The script generates the dev flavor files, boots the simulator, and records.
+The test pushes each page as a route, so the recording shows the app's transitions rather than
+a slideshow of PNGs.
+
+```bash
+app/scripts/demo_walk.sh --list
+app/scripts/demo_walk.sh --walk ui-cleanup --out /tmp/omi-demo-walk.mp4
+app/scripts/demo_walk.sh --walk ui-cleanup --device <UDID> --out /tmp/omi-demo-walk.mp4
+```
+
+**Add a page:** register an `AuditScenario` as in Visual audit, then add a `DemoWalkStep` with
+that id in `app/integration_test/visual_audit/walks.dart`. A step can `tap` a visible label.
+`afterTap` is text that tap must reveal; the walk holds it for four seconds. `revealPlans: true`
+waits for the plans sheet and fails if it shows the load-failure state.
+
+The plans sheet in this walk (and in the `settings-plans-ready` scenario) uses `DemoBillingUsage`
+from `app/integration_test/visual_audit/demo_billing.dart`. That catalog is local: no StoreKit
+charge and no payment request. Production billing is still `UsageProvider`'s real payment calls.
+The demo provider is not referenced from `lib/`. It has to sit above the navigator, because the
+sheet looks up `UsageProvider` from the overlay, which is not a child of the page route.
+
+The walk binding does not paint the test pointer crosshair. `OMI_DEMO_WALK_HOLD_MS` changes how
+long each frame is held (default 1600). The video is never committed; `--out` must be outside
+the repository. Recording starts when the test reporter shows the walk is running, then stops
+when the test passes. The walk itself runs in the simulator, so it cannot write a host marker file.
+
 ## Decision Tree
 
 | Problem | Solution |

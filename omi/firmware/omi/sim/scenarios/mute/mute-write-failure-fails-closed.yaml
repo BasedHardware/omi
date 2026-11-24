@@ -1,0 +1,20 @@
+id: mute/mute-write-failure-fails-closed
+summary: >
+  Committee item 7. The app asks to mute but the NVS write fails: capture must
+  still stop for this boot (the app sees the error and can retry).
+committee: [7]
+tags: [baseline-bug]
+faults:
+  - {op: settings_save, key: omi/muted, rc: -5}
+timeline:
+  - {t: 3000, app_mute: 1}
+end: 6000
+expect:
+  boots:
+    - {muted: 1, should_capture: false, sd_paused: true, log: ["Failed to persist mute=1"]}
+  invariants: [mute-blocks-capture]
+baseline_bug:
+  observed_at: c06b9bcd8749 (3.0.23)
+  expect:
+    boots:
+      - {muted: 0, should_capture: true, log: ["Failed to persist mute=1"]}

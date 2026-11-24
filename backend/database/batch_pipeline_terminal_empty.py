@@ -1,7 +1,6 @@
 """Non-paid terminal disposition CAS; immutable paid intents are never reset."""
 
 from copy import deepcopy
-from dataclasses import asdict
 from uuid import uuid4
 from config.batch_language_recovery import guarded_exhausted, language_guarded
 
@@ -171,7 +170,7 @@ class TerminalEmptyStore:
             ):
                 return False, 0, None
             outcome = marker['outcome']
-            result = asdict(WorkResult(sid, uri, outcome))
+            result = WorkResult(sid, uri, outcome).to_dict()
             if marker.get('state') == 'completed':
                 return job.get('result') == result, 0, outcome
             if marker.get('state') != 'prepared' or not idle(job, existing, now):

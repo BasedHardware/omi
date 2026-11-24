@@ -45,6 +45,31 @@ consent, and excluded rows alone never finish the choice to waiting-choice.
 This change adds no scheduler lifecycle or indexes; the pre-existing job and
 index prerequisites below are unchanged and are not deployed by this lane.
 
+## Monthly live held-storage quota
+
+Listen reserves capacity for the UTC month of capture before it uploads held
+audio or hands it to the encrypted staging journal. When quota blocks a
+reservation, the affected PCM stays in the bounded, process-local hold for the
+existing final flush attempt. Previously committed held audio and its redrive
+remain available. If the final attempt also hits quota, the pending PCM has no
+held receipt and can be lost when the sink is released. The held-seconds client
+receipt includes only published audio.
+
+Listen normally offers incoming frames to a separate raw archive before STT
+admission. That path depends on private cloud sync consent, the active archive
+lane, and a successful commit. A held-storage refusal alone therefore shows a
+gap in held custody. Complete audio loss occurs when no other copy committed.
+The quota refusal has no durable user-facing receipt of its own.
+
+Use `omi_held_content_live_storage_quota_refusals_total` and
+`event=stt_cap_live_held outcome=storage_quota_refused` to count affected
+sessions. Both count the first refusal per session, including a session whose
+final retry succeeds. For a post-deploy readback, confirm the serving digest
+and count quota-caused `stt_shutdown` task exceptions over the first full hour
+on that digest. The expected count is zero. The quota metric and warning
+contain no owner or session identifiers, so neither can produce daily unique
+owner counts.
+
 ## Deployment prerequisites
 
 1. Merge and approve the production Firestore index apply. Three new ascending
@@ -175,6 +200,31 @@ operator clear the affected `cursor_audio` or `cursor_text` field on that one
 `processing_backlog/current` document. Preserve its state,
 token, reservation, and all cap-hold receipts. Do not bulk-reset owners or
 manufacture new choices.
+
+## Fleet snapshot freshness alert
+
+`omi-held-content-snapshot-stale` is an agent-tier warning muted by
+`omi-tier-silent`. It fires when
+`time() - max(omi_held_content_fleet_snapshot_timestamp_seconds) > 3600` persists
+for ten minutes; `noDataState: Alerting` also catches a fleet that never published.
+The default 120-second cadence makes one hour about 30 missed publications.
+Select replicas using the newest snapshot timestamp, never the maximum held-content
+age: the fleet snapshot's age may stay fixed between publishes.
+
+Check cap-hold redrive completion, snapshot publication and supervised tick logs.
+Confirm the publisher is enabled, the scheduled sweep runs, and aggregation finishes
+within its documented budgets; verify a new timestamp and fresh held-content gauges.
+This alert authorizes no runtime changes. Preserve choices, leases, reservations
+and receipts; a stale snapshot does not justify data repair or changing drain policy.
+The N5 baseline measured 6859 seconds stale at 2026-11-08T14:08Z, so this warning is
+expected to fire on initial production import if that stall persists.
+
+After merge, an authorized deployer dispatches
+`grafana_dashboard_provisioning.yml` with `environment=prod`. Read back the UID,
+query, ten-minute pending window, agent tier, mute and no-data state with the
+provisioner's production drift check. Roll back by pausing this UID or reverting
+its split definition, regenerating the combined export and reapplying through that
+workflow. This alert has no backend lifecycle or storage side effects.
 
 ## Provider spend and uncertainty
 

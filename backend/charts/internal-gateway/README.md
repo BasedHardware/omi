@@ -305,8 +305,9 @@ Exact source/caller ownership as reviewed on origin/main:
   lead's batch feature commit adds `HOSTED_DIARIZATION_API_URL=$ML_BASE/diarizer-batch`
   only to final-pass hosts; pyannote adapter appends `/v2/diarization`. Do not change
   `HOSTED_NEMOTRON_DIARIZATION_API_URL` (the other rollout lane).
-- NLLB: backend-listen in each runtime overlay. The httpx client retains `/nllb`
-  when posting `/v1/translate`. Deploy through `gcp_backend_listen_helm.yml`.
+- NLLB: development backend-listen only (`dev.overlay.yaml`). Prod retired NLLB on
+  2026-11-02 and binds no endpoint; translation runs on Luna. The httpx client retains
+  `/nllb` when posting `/v1/translate`. Deploy through `gcp_backend_listen_helm.yml`.
 - VAD: backend-listen env in each `backend/charts/backend-listen/*_values.yaml`
   (not currently owned by runtime_env manifest). The two VAD clients POST the
   complete env URL, so include `/v1/vad`. This also covers speech-profile calls.

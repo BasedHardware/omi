@@ -15,6 +15,9 @@ import {
 } from "../wall-finops";
 import {
   allInCost,
+  OPENROUTER_DAILY_USD,
+  PINECONE_AS_OF,
+  PINECONE_DAILY_USD,
   estimateStatus,
   INFRA_AS_OF,
   INFRA_MONTHLY_USD,
@@ -1094,6 +1097,7 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
     (monthlyUsd / (365.25 / 12)) * MARGIN_DAYS_PER_MONTH;
   /** The margin scope per day: GCP ex reserved + OpenAI + Soniox console est.
    * + Modulate cash + Stripe-fee baseline est. */
+  // OpenRouter is counted at its configured $23/day (David 2026-11-02).
   const dayUsd =
     1_500 +
     100 -
@@ -1101,6 +1105,8 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
     250 +
     STT_MONTHLY_USD / (365.25 / 12) +
     20 +
+    OPENROUTER_DAILY_USD +
+    PINECONE_DAILY_USD +
     STRIPE_FEES_MONTHLY_USD / (365.25 / 12);
   const run = (vendor = {}, coverage = {}, feesCash?: Record<string, number>) =>
     variableMarginSeries(
@@ -1117,13 +1123,16 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
     // GCP keeps every net dollar except the prepaid reserved SKU…
     expect(last.gcpPerMonth).toBeCloseTo(monthly(1_505), 1);
     expect(last.vertexReservedPerMonth).toBeCloseTo(monthly(95), 1);
-    // …and the scope is exactly the five definition lines — Anthropic, SaaS,
-    // infra and Deepgram stay out (the all-in stack counts those).
+    // …and the scope is the five definition lines plus OpenRouter (counted
+    // 2026-11-02) — Anthropic, SaaS, infra and Deepgram stay out (the all-in
+    // stack counts those).
     expect(last.costPerMonth).toBeCloseTo(
       last.gcpPerMonth +
         monthly(250) +
         toMonth(STT_MONTHLY_USD) +
         monthly(20) +
+        monthly(OPENROUTER_DAILY_USD) +
+        monthly(PINECONE_DAILY_USD) +
         toMonth(STRIPE_FEES_MONTHLY_USD),
       0
     );
@@ -1141,6 +1150,16 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
       4
     );
     expect(last.goalCost).toBeCloseTo(60_000 * (1 - VARIABLE_MARGIN_TARGET), 6);
+  });
+
+  it("counts Pinecone at its dated configured constant and names it as an estimate", () => {
+    const last = run({ sttCash: cash }).at(-1)!;
+    expect(last.pineconePerMonth).toBeCloseTo(monthly(PINECONE_DAILY_USD), 1);
+    const line = variableMarginLineStatus(last, {
+      now: new Date(`${d(21)}T12:00:00Z`),
+    }).find((l) => l.startsWith("Pinecone:"));
+    expect(line).toContain("est.");
+    expect(line).toContain(PINECONE_AS_OF);
   });
 
   it("never borrows a neighbour's book: a day without MRR keeps its cost point", () => {
@@ -1235,7 +1254,7 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
       now: new Date("2026-10-23T00:00Z"),
     }).join(" · ");
     expect(lines).toContain("OpenAI: n/a (invoice leg off)");
-    expect(lines).toContain("Modulate: n/a (no modelled or Mercury-cash line)");
+    expect(lines).toContain("Modulate: n/a (no Mercury cash row)");
     expect(lines).toContain("Soniox: console est.");
     expect(lines).toContain(
       `Stripe fees: est. $${STRIPE_FEES_MONTHLY_USD.toLocaleString("en-US")}/mo`

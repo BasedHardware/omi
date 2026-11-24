@@ -1,0 +1,9 @@
+{
+  "admission": {
+    "rows": 1,
+    "drainers": 1,
+    "durable": true,
+    "capture_seconds": 2,
+    "chunk_seconds": 1
+  }
+}

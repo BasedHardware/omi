@@ -7,9 +7,12 @@ from typing import Any, Callable
 
 from google.cloud import firestore
 
+from models.finalization_owner import python_owns_finalization
+
 from database import conversation_finalization_jobs as jobs
 from database._client import get_firestore_client
 from database.conversation_finalization_values import parse_timestamp, uid_from_conversation_path
+from database.conversation_terminal_effects import refresh_terminal_visibility_after_commit
 from database.conversation_terminal_title import kept_row_terminal_update, user_time_zone
 from database.quiet_check_retirement import stop_quiet_check_for_conversation
 
@@ -38,7 +41,7 @@ def _stamp_processing_admission_if_absent_txn(
     if not getattr(snapshot, 'exists', False):
         return False
     data = snapshot.to_dict() or {}
-    if data.get('status') != 'processing':
+    if not python_owns_finalization(data) or data.get('status') != 'processing':
         return False
     if data.get('deleted') or data.get('discarded') or data.get('deferred'):
         return False
@@ -81,7 +84,7 @@ def _complete_unstampable_orphan_conversation_txn(
     if not getattr(snapshot, 'exists', False):
         return False
     data = snapshot.to_dict() or {}
-    if data.get('status') != 'processing':
+    if not python_owns_finalization(data) or data.get('status') != 'processing':
         return False
     if data.get('deleted') or data.get('discarded') or data.get('deferred'):
         return False
@@ -92,10 +95,22 @@ def _complete_unstampable_orphan_conversation_txn(
     last_written = parse_timestamp(getattr(snapshot, 'update_time', None))
     if last_written is None or last_written > stale_before:
         return False
-    transaction.update(conversation_ref, {'status': 'completed'})
+    uid = uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
+    terminal = kept_row_terminal_update(
+        uid or '',
+        data,
+        conversation_ref,
+        {'status': 'completed'},
+        None,
+        path='oversized_terminal',
+        transaction=transaction,
+        assess_empty_transcript=False,
+    )
+    transaction.update(conversation_ref, terminal)
     return True
 
 
+@refresh_terminal_visibility_after_commit
 def complete_unstampable_orphan_conversation(
     uid: str, conversation_id: str, *, stale_after: timedelta, firestore_client: Any = None
 ) -> bool:
@@ -142,7 +157,7 @@ def _complete_orphan_conversation_txn(
     if not getattr(snapshot, 'exists', False):
         return False
     data = snapshot.to_dict() or {}
-    if data.get('status') != 'processing':
+    if not python_owns_finalization(data) or data.get('status') != 'processing':
         return False
     if data.get('deleted') or data.get('discarded') or data.get('deferred'):
         return False
@@ -154,12 +169,20 @@ def _complete_orphan_conversation_txn(
         return False
     uid = uid or uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
     terminal: dict[str, Any] = {'status': 'completed'}
-    if uid:
-        terminal = kept_row_terminal_update(uid, data, conversation_ref, terminal, time_zone_for_uid)
+    terminal = kept_row_terminal_update(
+        uid or '',
+        data,
+        conversation_ref,
+        terminal,
+        time_zone_for_uid,
+        transaction=transaction,
+        assess_empty_transcript=False,
+    )
     transaction.update(conversation_ref, terminal)
     return True
 
 
+@refresh_terminal_visibility_after_commit
 def complete_orphan_conversation(
     uid: str, conversation_id: str, *, expected_admitted_at: datetime | None, firestore_client: Any = None
 ) -> bool:

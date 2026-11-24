@@ -78,18 +78,20 @@ async def test_deadline_preserves_partial_receipt_and_current_client_contract(mo
         calls.append(fn.__name__)
         if len(calls) == 3:
             try:
-                release.wait(2)
+                release.wait(5)
                 return original_run(fn)
             finally:
                 finished.set()
         return original_run(fn)
 
     monkeypatch.setattr(store, 'run', slow_second_read)
-    monkeypatch.setattr(admission, 'AUTHORIZE_SECONDS', 0.1)
+    # Allow the first decision's executor stages to start on a shared host.
+    # The second read still blocks longer than the entire admission deadline.
+    monkeypatch.setattr(admission, 'AUTHORIZE_SECONDS', 1)
     start = time.monotonic()
     try:
         receipt = await admission.authorize(store, leases, now=1)
-        assert time.monotonic() - start < 1
+        assert time.monotonic() - start < 2
         assert receipt == {
             'allowed': ['segment'],
             'retry_after': {'second': 30, 'unreached': 30},
@@ -107,7 +109,7 @@ async def test_deadline_preserves_partial_receipt_and_current_client_contract(mo
         assert client(client_leases) == receipt
     finally:
         release.set()
-        assert await admission.run_blocking(admission.db_executor, finished.wait, 2)
+        assert await admission.run_blocking(admission.db_executor, finished.wait, 5)
     assert calls == ['read', 'seal', 'read']
     assert reserve.call_count == 1
     assert 'compute_admission_token' not in store.rows['jobs', 'second']
@@ -118,40 +120,45 @@ async def test_deadline_preserves_partial_receipt_and_current_client_contract(mo
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('slow_stage', ['funding', 'restriction', 'backfill_reservation', 'seal'])
-async def test_slow_dependency_cannot_grant_after_deadline(monkeypatch, slow_stage):
+async def test_dependency_returning_after_deadline_cannot_grant(monkeypatch, slow_stage):
     store, _, lease, _ = setup(monkeypatch, fresh=slow_stage == 'restriction')
-    release, finished = threading.Event(), threading.Event()
+    clock = SimpleNamespace(value=0.0)
+    crossed = []
     monkeypatch.setattr(admission, 'AUTHORIZE_SECONDS', 0.05)
+    monkeypatch.setattr(admission, 'time', SimpleNamespace(monotonic=lambda: clock.value, time=time.time))
     monkeypatch.setattr(admission, 'cap_dispatch_enabled', lambda *a: slow_stage == 'funding')
 
-    def pause(result):
-        try:
-            release.wait(2)
-            return result()
-        finally:
-            finished.set()
+    async def run_inline(_executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    # Exercise each late-return boundary without requiring several executor
+    # stages to start inside 50 ms on a shared host. The preceding test retains
+    # the real executor timeout and partial-receipt coverage.
+    monkeypatch.setattr(admission, 'run_blocking', run_inline)
+
+    def after_deadline(result):
+        crossed.append(slow_stage)
+        clock.value = 1.0
+        return result()
 
     if slow_stage == 'funding':
-        monkeypatch.setattr(admission, 'batch_admission', lambda *a, **k: pause(lambda: (True, 'entitled')))
+        monkeypatch.setattr(admission, 'batch_admission', lambda *a, **k: after_deadline(lambda: (True, 'entitled')))
     elif slow_stage == 'restriction':
-        monkeypatch.setattr(admission, 'get_hard_restriction_status', lambda *a: pause(lambda: (False, None)))
+        monkeypatch.setattr(admission, 'get_hard_restriction_status', lambda *a: after_deadline(lambda: (False, None)))
     elif slow_stage == 'backfill_reservation':
         monkeypatch.setattr(
-            admission, 'reserve_backfill_speech', lambda *a: pause(lambda: SimpleNamespace(allowed=True))
+            admission, 'reserve_backfill_speech', lambda *a: after_deadline(lambda: SimpleNamespace(allowed=True))
         )
     else:
         original_run = store.run
         monkeypatch.setattr(
-            store, 'run', lambda fn: pause(lambda: original_run(fn)) if fn.__name__ == 'seal' else original_run(fn)
+            store,
+            'run',
+            lambda fn: after_deadline(lambda: original_run(fn)) if fn.__name__ == 'seal' else original_run(fn),
         )
-    try:
-        started = time.monotonic()
-        receipt = await admission.authorize(store, tokens(lease), now=1)
-        assert time.monotonic() - started < 1
-        assert receipt == {'allowed': [], 'retry_after': {'segment': 30}, 'held_reason': {}}
-    finally:
-        release.set()
-        assert await admission.run_blocking(admission.db_executor, finished.wait, 2)
+    receipt = await admission.authorize(store, tokens(lease), now=1)
+    assert crossed == [slow_stage]
+    assert receipt == {'allowed': [], 'retry_after': {'segment': 30}, 'held_reason': {}}
     assert receipt['allowed'] == []
     assert 'compute_admission_token' not in store.rows['jobs', 'segment']
 
@@ -253,6 +260,7 @@ def _release_cycles_while_held(monkeypatch, *, horizon=HOLD_CYCLE_HORIZON_SECOND
 
 
 def test_two_hour_hold_park_releases_four_times_not_twenty_four(monkeypatch):
+    monkeypatch.setenv("BATCH_ALLOWANCE_PARK_ENABLED", "off")
     releases, privacy_checks = _release_cycles_while_held(monkeypatch)
     # Hold window 1800 s: re-leases at 1800, 3600, 5400, 7200.
     assert releases == 4
@@ -262,6 +270,7 @@ def test_two_hour_hold_park_releases_four_times_not_twenty_four(monkeypatch):
 
 
 def test_hold_knob_at_sixty_restores_the_former_release_cycle(monkeypatch):
+    monkeypatch.setenv("BATCH_ALLOWANCE_PARK_ENABLED", "off")
     monkeypatch.setenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '60')
     releases, _ = _release_cycles_while_held(monkeypatch)
     # The 60 s request escalates 60, 60, 120, 240, then caps at 300: 26
@@ -405,41 +414,6 @@ def test_flag_off_never_parses_new_dispatch_duration(monkeypatch, enforce, durat
     gate.assert_not_called()
 
 
-@pytest.mark.parametrize('dispatch', [False, True])
-def test_ladder_rechecked_at_execution_after_queue_admission(monkeypatch, dispatch):
-    from utils import ladder_v1
-
-    store, queue, lease, reserve = setup(monkeypatch, fresh=True)
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    # A valid queued lease is not spend authority after the shared budget moves.
-    monkeypatch.setattr(ladder_v1, 'budget_snapshot', lambda *a, **k: {'budget_percent': 100})
-    if dispatch:
-        from utils import subscription
-
-        monkeypatch.setattr(
-            subscription,
-            'resolve_transcription_allowance',
-            lambda *a, **k: SimpleNamespace(managed=False, reason='usage_budget_exhausted'),
-        )
-    receipt = authorize(store, tokens(lease), now=1)
-    # dispatch=False keeps the ladder-only resolver, whose stub snapshot has no
-    # budget_units/used_units keys, so it degrades to allowance_unavailable.
-    # Either way the durable reason mirrors the bounded DispatchReason the
-    # dispatch counter records for the same decision.
-    expected_reason = 'budget_exhausted' if dispatch else 'allowance_unavailable'
-    # An exhausted budget parks for the hold window; an unavailable allowance
-    # is potentially transient and keeps the short retry.
-    expected_retry = 1800 if dispatch else 60
-    assert receipt == {
-        'allowed': [],
-        'retry_after': {'segment': expected_retry},
-        'held_reason': {'segment': expected_reason},
-    }
-    assert 'compute_admission_token' not in store.rows['jobs', 'segment']
-    reserve.assert_not_called()
-
-
 @pytest.mark.parametrize(
     'policy, held',
     [(None, True), ({}, True), ({'provider_reason': 'none'}, True), ({'provider_reason': 'byok'}, False)],
@@ -463,7 +437,7 @@ def test_byok_admission_is_not_re_held_at_dispatch(monkeypatch, policy, held):
         gate.assert_not_called()
 
 
-@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize('ladder', [False])
 @pytest.mark.parametrize(
     'cohort,lanes,held',
     [
@@ -487,7 +461,7 @@ def test_queued_authorization_uses_owner_and_batch_scope(monkeypatch, ladder, co
     assert result['allowed'] == ([] if held else ['segment'])
     assert allowance.call_count == int(held)
     if held:
-        allowance.assert_called_once_with('synthetic-owner', lane='batch')
+        allowance.assert_called_once_with('synthetic-owner', lane='batch', backfill=False)
 
 
 @pytest.mark.parametrize('access', ['capped', 'byok', 'reviewer', 'paid', 'kill_off'])
@@ -533,6 +507,7 @@ def test_allow_seals_latest_decision_with_the_lease_transition(monkeypatch):
 
 
 def test_latest_decision_overwrites_a_prior_hold(monkeypatch):
+    monkeypatch.setenv("BATCH_ALLOWANCE_PARK_ENABLED", "off")
     """The durable field is the latest decision, never a sticky last denial."""
     from utils import stt_cap_dispatch as cap
 
@@ -597,6 +572,7 @@ def test_privacy_fence_hold_records_its_reason(monkeypatch):
 
 
 def test_allowed_decision_ends_the_parked_hold_for_the_age_proxy(monkeypatch):
+    monkeypatch.setenv("BATCH_ALLOWANCE_PARK_ENABLED", "off")
     store, queue, lease, _ = setup(monkeypatch)
     assert queue.defer('segment', lease.token, 1, 60, held_reason='allowance_exhausted', admission_refused=True)
     assert store.rows['jobs', 'segment']['last_policy_hold'] == {'reason': 'allowance_exhausted', 'at': 1}

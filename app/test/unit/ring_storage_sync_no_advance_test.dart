@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -43,7 +44,7 @@ class _ManualTimer implements Timer {
 class _BlockedCustody implements PendantRingCustody {
   final firstRecord = Completer<bool>();
   @override
-  Future<bool> isDurableLiveRecord(String deviceId, int? ringId, int seq) =>
+  Future<bool> isDurableLiveRecord(String deviceId, int? ringId, int seq, {CustodyProofMemo? memo}) =>
       seq == 5 ? firstRecord.future : Future.value(false);
   @override
   bool isIncarnationInvalid(String deviceId, int epoch) => false;
@@ -229,8 +230,8 @@ void main() {
   });
 
   RingStorageSyncImpl syncWith(_FakeLocalSync local, _FakeRingDevice card, Wal wal,
-      {Timer Function(Duration, void Function())? transferTimer}) {
-    final sync = RingStorageSyncImpl(_Listener(), transferTimer: transferTimer)
+      {Timer Function(Duration, void Function())? transferTimer, DateTime Function()? clock}) {
+    final sync = RingStorageSyncImpl(_Listener(), transferTimer: transferTimer, clock: clock)
       ..testConnection = card
       ..testWals = [wal];
     sync.setLocalSync(local);
@@ -334,6 +335,87 @@ void main() {
       await sync.stop();
     });
   }
+
+  final clockNow = DateTime.utc(2026, 11, 15, 11);
+  final phoneSeconds = clockNow.millisecondsSinceEpoch ~/ 1000;
+  for (final raw in [1704067200, phoneSeconds + 86400, phoneSeconds + 86401, 1967677260, 0x7fffffff, 0x80000000, 0]) {
+    test('ring clock $raw changes only persisted time; ordinals still authorize reclaim', () async {
+      final card = _FakeRingDevice(
+          ringInfo: RingInfo(readSeq: 5, writeSeq: 6, capacityPackets: 100, droppedPackets: 0, packetSize: 444));
+      final local = _FakeLocalSync();
+      final wal = ringWal();
+      final sync = syncWith(local, card, wal, clock: () => clockNow);
+      addTearDown(sync.stop);
+      addTearDown(card.controller.close);
+      final transfer = sync.syncWal(wal: wal);
+      await _until(() => card.readCalls.isNotEmpty);
+      card.emit(_readBegin(5, 1));
+      card.emit(_record(timestamp: raw));
+      card.emit(_done(0, 6));
+      await transfer;
+      final persisted = local.added.single;
+      final decoded = raw & 0x80000000 != 0 ? 0 : raw;
+      final timed = useDeviceCaptureTime(decoded, phoneSeconds);
+      expect(
+          persisted.timerStart,
+          timed
+              ? decoded
+              : deviceCaptureClockRepairOff
+                  ? phoneSeconds
+                  : 0);
+      expect(persisted.clockRun, timed ? isNull : isNotNull);
+      expect(persisted.totalFrames, 1);
+      expect(wal.timerStart, 1000, reason: 'the virtual device identity is never repaired');
+      expect(card.readCalls, [5]);
+      expect(card.advanceCalls, [6], reason: 'only the identical durable ordinal range controls ADVANCE');
+    });
+  }
+
+  test('implausible clock resets keep separate run identities in ring order', () async {
+    if (deviceCaptureClockRepairOff) return;
+    final card = _FakeRingDevice(
+        ringInfo: RingInfo(readSeq: 5, writeSeq: 8, capacityPackets: 100, droppedPackets: 0, packetSize: 444));
+    final local = _FakeLocalSync();
+    final wal = ringWal()..storageTotalBytes = 3 * 444;
+    final sync = syncWith(local, card, wal, clock: () => clockNow);
+    addTearDown(sync.stop);
+    addTearDown(card.controller.close);
+    final transfer = sync.syncWal(wal: wal);
+    await _until(() => card.readCalls.isNotEmpty);
+    card.emit(_readBegin(5, 3));
+    card.emit(_record(timestamp: 1967677260));
+    card.emit(_record(timestamp: 1967677261));
+    card.emit(_record(timestamp: 1965269820)); // a different clock run, never a calendar anchor
+    card.emit(_done(0, 8));
+    await transfer;
+    expect(local.added.map((w) => w.totalFrames), [2, 1]);
+    expect(local.added.every((w) => w.timerStart == 0), isTrue);
+    expect(local.added.map((w) => w.clockRun).toSet(), hasLength(2));
+    expect(local.added.every((w) => w.clockRun != null), isTrue);
+    expect(card.advanceCalls, [8]);
+  });
+
+  test('R16b a bad phone clock keeps unset ring audio with unknown time', () async {
+    if (deviceCaptureClockRepairOff) return;
+    final card = _FakeRingDevice(
+        ringInfo: RingInfo(readSeq: 5, writeSeq: 6, capacityPackets: 100, droppedPackets: 0, packetSize: 444));
+    final local = _FakeLocalSync();
+    final wal = ringWal();
+    final sync = syncWith(local, card, wal, clock: () => DateTime.utc(1970));
+    addTearDown(sync.stop);
+    addTearDown(card.controller.close);
+    final transfer = sync.syncWal(wal: wal);
+    final finished = expectLater(transfer, completes);
+    await _until(() => card.readCalls.isNotEmpty);
+    card.emit(_readBegin(5, 1));
+    card.emit(_record(timestamp: 0));
+    card.emit(_done(0, 6));
+    await finished;
+    expect(local.added.single.timerStart, 0);
+    expect(local.added.single.clockRun, isNotNull);
+    expect(card.advanceCalls, [6]);
+    expect(wal.status, WalStatus.synced);
+  });
 
   test('a healthy DONE cancels the idle watchdog without a spurious STOP', () async {
     final card = _FakeRingDevice(

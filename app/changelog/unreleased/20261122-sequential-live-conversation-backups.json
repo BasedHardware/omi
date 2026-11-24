@@ -1,0 +1,3 @@
+{
+  "change": "Consecutive live conversations no longer leave already-transcribed backups waiting to upload again"
+}

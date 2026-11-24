@@ -123,18 +123,26 @@ def test_seeded_double_vendor_charge_is_detected(monkeypatch):
         assert_policy_invariants(result)
 
 
-def test_policy_window_recorded_policy_id_replays_the_golden_decision():
+@pytest.fixture
+def recorded_policy_window():
+    # Prepare the original admitted policy once. The deadline-drift replay
+    # stays in the timed test body.
     config = GOLDEN_CONFIGS['policy_window']()
-    expected = golden_trace('policy_window')
     recorded_run = simulate(config)
-    recorded = next(record.first_summary_policy for record in recorded_run.records if record.first_summary_policy)
+    return config, next(record.first_summary_policy for record in recorded_run.records if record.first_summary_policy)
+
+
+def test_policy_window_recorded_policy_id_replays_the_golden_decision(recorded_policy_window):
+    config, recorded = recorded_policy_window
+    expected = golden_trace('policy_window')
     assert recorded.policy_id
 
     replayed = replace(
         config,
-        flags={**config.flags, 'FIRST_SUMMARY_DEADLINE_PERCENT': '100'},
+        flags={**config.flags, 'FIRST_SUMMARY_DEADLINE_SECONDS': '60'},
         policy_parts={'first_summary': recorded.to_dict()},
     )
     actual = trace(replayed)
     assert actual == expected
-    assert actual['first_summary_policy']['recorded_enabled'] == [False]
+    assert recorded.first_summary_enabled
+    assert 'first_summary_policy' not in actual

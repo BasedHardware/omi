@@ -147,7 +147,10 @@ def enabled() -> bool:
 
 def _dispatch(claim: dict[str, Any]) -> None:
     payload = {**claim['payload'], 'sequencer_epoch': claim['epoch']}
-    enqueue_sync_job(payload, dispatch_attempt=claim.get('dispatch_attempt', 0))
+    options = {}
+    if claim.get('worker_fallback_at') is not None:
+        options['schedule_at'] = claim['worker_fallback_at']
+    enqueue_sync_job(payload, dispatch_attempt=claim.get('dispatch_attempt', 0), **options)
     latency = max(0.0, (datetime.now(timezone.utc) - claim['accepted_at']).total_seconds())
     logger.debug('event=sync_uid_sequencer action=dispatch outcome=enqueued latency_seconds=%.1f', latency)
 

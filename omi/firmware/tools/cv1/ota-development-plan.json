@@ -1,0 +1,246 @@
+{
+  "schema": 1,
+  "status": "proposed aligned ownership contract; no generally safe legacy bootstrap established",
+  "baseline": "e86cda5abb0ea7ff942ac1bcd07261140953812c",
+  "observed_stock_signed_bytes": 248516,
+  "observed_stock_data_bss_bytes": 336754,
+  "image_overhead_allowance": 4608,
+  "normal_ram": [
+    [
+      "pcd_reserved",
+      536870912,
+      536879104
+    ],
+    [
+      "secure_supervisor",
+      536879104,
+      536944640
+    ],
+    [
+      "nonsecure_app",
+      536944640,
+      537329664
+    ],
+    [
+      "radio_ipc",
+      537329664,
+      537395200
+    ]
+  ],
+  "options": {
+    "A": {
+      "description": "Current MCUboot plus OTA-installed secure supervisor/internal BLE recovery; proprietary inner personal images",
+      "bootloader_change_required": false,
+      "personal_container_cap": 393216,
+      "supervisor_signed_cap": 258048,
+      "internal": [
+        [
+          "current_mcuboot",
+          0,
+          65536
+        ],
+        [
+          "supervisor_and_guard",
+          65536,
+          327680
+        ],
+        [
+          "owner_journal",
+          327680,
+          344064
+        ],
+        [
+          "personal_slot",
+          344064,
+          983040
+        ],
+        [
+          "trial_journal",
+          983040,
+          999424
+        ],
+        [
+          "gap",
+          999424,
+          1007616
+        ],
+        [
+          "littlefs_existing",
+          1007616,
+          1032192
+        ],
+        [
+          "settings_existing",
+          1032192,
+          1040384
+        ],
+        [
+          "legacy_trailer_tail",
+          1040384,
+          1048576
+        ]
+      ],
+      "external": [
+        [
+          "legacy_official_app_stage",
+          0,
+          983040
+        ],
+        [
+          "legacy_network_stage",
+          983040,
+          1245184
+        ],
+        [
+          "personal_candidate",
+          1245184,
+          1638400
+        ],
+        [
+          "last_known_good",
+          1638400,
+          2031616
+        ],
+        [
+          "metadata",
+          2031616,
+          2097152
+        ]
+      ]
+    },
+    "B": {
+      "description": "New owner-delegating MCUboot with internal NS swap slots, secure monitor and external authenticated stock restore",
+      "bootloader_change_required": true,
+      "personal_container_cap": 393216,
+      "supervisor_signed_cap": 61440,
+      "internal": [
+        [
+          "new_mcuboot_budget",
+          0,
+          98304
+        ],
+        [
+          "secure_monitor_and_guard",
+          98304,
+          163840
+        ],
+        [
+          "owner_journal",
+          163840,
+          180224
+        ],
+        [
+          "personal_slot_a",
+          180224,
+          573440
+        ],
+        [
+          "personal_slot_b",
+          573440,
+          966656
+        ],
+        [
+          "swap_scratch",
+          966656,
+          983040
+        ],
+        [
+          "trial_journal",
+          983040,
+          999424
+        ],
+        [
+          "gap",
+          999424,
+          1007616
+        ],
+        [
+          "littlefs_existing",
+          1007616,
+          1032192
+        ],
+        [
+          "settings_existing",
+          1032192,
+          1040384
+        ],
+        [
+          "tail",
+          1040384,
+          1048576
+        ]
+      ],
+      "external": [
+        [
+          "official_maintenance_budget",
+          0,
+          983040
+        ],
+        [
+          "network_stage_budget",
+          983040,
+          1245184
+        ],
+        [
+          "authenticated_stock",
+          1245184,
+          1638400
+        ],
+        [
+          "metadata",
+          1638400,
+          1671168
+        ],
+        [
+          "unassigned",
+          1671168,
+          2097152
+        ]
+      ]
+    }
+  },
+  "baseline_observation_hashes": {
+    "signed_app_bin_sha256": "9cb09081653c10caf5e0028a279ed0322f427e71584034a4762cf5218f3eadcf",
+    "elf_sha256": "5f540abfcb679317c3c8490cea003b02feb09c8570457b0adf82f87782bbee16",
+    "partitions_sha256": "345f6b77aa32407ed2aaf33c8d2d7809b37e37a68f920ad30fd5fb647a4d1f5a"
+  },
+  "review_constraints": {
+    "conventional_version_bootstrap_safe": false,
+    "maximum_version_rule_adopted": false,
+    "baseline_nor_layout_page_bytes": 65536,
+    "original_candidate_page_rounded_overlap_bytes": 49152,
+    "safer_aligned_external": [
+      [
+        "legacy_official_app_stage",
+        0,
+        983040
+      ],
+      [
+        "legacy_network_stage",
+        983040,
+        1245184
+      ],
+      [
+        "personal_candidate",
+        1245184,
+        1638400
+      ],
+      [
+        "last_known_good",
+        1638400,
+        2031616
+      ],
+      [
+        "metadata",
+        2031616,
+        2097152
+      ]
+    ],
+    "monitor_recovery_composition": "unimplemented; propose reset-exclusive recovery, preserve locked PCD reservation",
+    "original_overlap_is_conditional_caller_rounding_not_spi_nor_driver": true,
+    "source_characterization": "source_review/matrix-result.json"
+  },
+  "observed_stock_allocated_ram_extent_bytes": 336088,
+  "observed_stock_allocated_ram_section_bytes": 336082,
+  "observed_stock_ram_end": 537215192
+}

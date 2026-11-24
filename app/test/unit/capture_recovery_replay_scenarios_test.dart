@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -166,7 +167,11 @@ void main() {
     final allWals = await world.wal.syncs.phone.getAllWals();
     expect(allWals.length, greaterThan(1), reason: 'live safety copies are checkpointed in bounded chunks');
     final storedFrames = await readStoredFramesFromWals(allWals);
-    expect(storedFrames, unorderedEquals(expectedFrames(0, 4600)),
+    // Lossless canonical strings keep exact bytes and multiplicity, while
+    // sorting avoids the unordered matcher's pairwise frame comparisons.
+    final actualMultiset = storedFrames.map(base64Encode).toList()..sort();
+    final expectedMultiset = expectedFrames(0, 4600).map(base64Encode).toList()..sort();
+    expect(actualMultiset, expectedMultiset,
         reason: 'recoverable audio identity: WAL chunks must contain every injected frame exactly once');
 
     final missing = await world.wal.syncs.phone.getMissingWals();

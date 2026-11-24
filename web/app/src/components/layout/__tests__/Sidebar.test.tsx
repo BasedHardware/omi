@@ -5,6 +5,13 @@ import { Sidebar } from '@/components/layout/Sidebar';
 
 let reducedMotion = false;
 
+// Framer Motion caches its media-query state across mounts. Control the hook
+// per test so the reduced-motion case cannot change later cases' preference.
+vi.mock('framer-motion', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('framer-motion')>()),
+  useReducedMotion: () => reducedMotion,
+}));
+
 vi.mock('canvas-confetti', () => ({ default: vi.fn() }));
 vi.mock('@tschk/moonshine-next/navigation', () => ({ usePathname: () => '/home' }));
 vi.mock('@tschk/moonshine-next/link', () => ({

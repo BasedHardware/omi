@@ -33,6 +33,7 @@ from utils.notification_dispatch import (
 )
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.render import redact_conversation_for_integration
+from utils.conversations import transcribing_hold
 from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.search import search_conversations
@@ -355,6 +356,7 @@ def get_conversations_via_integration(
         limit=limit,
         offset=offset,
         include_discarded=include_discarded,
+        presentation=True,
         statuses=statuses,
         start_date=cast(Optional[datetime], start_date),
         end_date=cast(Optional[datetime], end_date),
@@ -364,6 +366,7 @@ def get_conversations_via_integration(
     conversation_items: List[integration_models.ConversationItem] = []
     for conv in conversations_data:
         try:
+            conv = transcribing_hold.project(conv)
             redact_conversation_for_integration(conv)
             item = integration_models.ConversationItem.model_validate(conv)
 

@@ -1,3 +1,10 @@
+// App bootstrap: main() wraps runApp in a staged _start() that falls back to
+// BootRecoveryApp / StartupFailureApp instead of leaving a black screen.
+//
+// Launch must never wedge on the native storyboard -- a failed init step
+// renders a retry surface rather than exiting -- and background entry points
+// (Firebase messaging, on-device overflow) initialize only their own slice of
+// the app instead of the full UI tree.
 import 'package:omi/services/on_device/on_device_background.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/env/physical_qualification.dart';
@@ -60,6 +67,7 @@ import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/backend/http/action_items_api_contract.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -70,7 +78,10 @@ import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/conversation_task_presence_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
@@ -611,7 +622,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void _deinit() {
     unawaited(OnboardingSyncRuntime.dispose());
     Logger.debug("App > _deinit");
-    ServiceManager.instance().deinit();
+    unawaited(ServiceManager.instance().deinit().catchError((Object error) {
+      Logger.error('App service shutdown failed: ${error.runtimeType}');
+    }));
     ApiClient.dispose();
   }
 
@@ -675,12 +688,26 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ListenableProvider(create: (context) => ConnectivityProvider()),
         ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
         ChangeNotifierProvider(create: (context) => createProductionConversationProvider()),
+        // Recordings and conversations (v3): the per-account switch and the conversation in progress.
+        ChangeNotifierProvider(create: (context) => ConversationsV3Provider()),
+        ChangeNotifierProvider(create: (context) {
+          final v3 = context.read<ConversationsV3Provider>();
+          return HomeFeedProvider()
+            ..suppressed = (() => v3.suppressesLegacy)
+            ..observeConversations(context.read<ConversationProvider>());
+        }),
         ListenableProvider(create: (context) => AppProvider()),
         ChangeNotifierProvider(create: (context) => PeopleProvider()),
         ChangeNotifierProvider(create: (context) => SpeakerTagPromptsProvider()),
         ChangeNotifierProvider(create: (context) => ReviewProvider()),
-        // Live episodes overlay; reads the server capability on first use (Home's live row).
-        ChangeNotifierProvider(create: (context) => EpisodeProvider()),
+        // Live episodes overlay; reads the server capability on first use (Home's live row). Silent
+        // for a v3 account, which has no episodes.
+        ChangeNotifierProvider(
+          create: (context) {
+            final v3 = context.read<ConversationsV3Provider>();
+            return EpisodeProvider()..suppressed = (() => v3.suppressesLegacy);
+          },
+        ),
         ChangeNotifierProvider(create: (context) => UsageProvider()),
         ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
           create: (context) => MessageProvider(),
@@ -697,6 +724,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               peopleProvider: people,
               usageProvider: usage,
               episodeProvider: episodes,
+              conversationsV3: context.read<ConversationsV3Provider>(),
             );
             return (previous?..updateExternalActions(externalActions)) ??
                 composeProductionCaptureProvider(
@@ -739,6 +767,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ),
         ChangeNotifierProvider(create: (context) => UserProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => createProductionActionItemsProvider()),
+        ChangeNotifierProxyProvider2<ConversationProvider, ActionItemsProvider, ConversationTaskPresenceProvider>(
+          create: (_) => ConversationTaskPresenceProvider(),
+          update: (_, conversations, tasks, previous) => previous!..bind(conversations, tasks),
+        ),
         ChangeNotifierProvider(lazy: true, create: (context) => GoalsProvider()..init()),
         ChangeNotifierProvider(create: (context) => SyncProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => TaskIntegrationProvider()),

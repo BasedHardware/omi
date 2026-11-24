@@ -275,7 +275,6 @@ def client_app(monkeypatch):
     app.include_router(desktop_proxy.router)
     app.dependency_overrides[get_current_user_uid] = lambda: 'uid-test'
     monkeypatch.setattr(desktop_proxy, 'run_blocking', _passthrough_run_blocking)
-    monkeypatch.setattr(desktop_proxy, 'is_desktop_trial_paywalled', lambda *a, **k: False)
     monkeypatch.setattr(
         desktop_proxy,
         'authorize_managed_compute',
@@ -413,7 +412,6 @@ def _metering_failure(retryable: bool):
     'scenario',
     [
         'plan_gated',
-        'trial_expired',
         'authorization_unavailable',
         'rate_limited_retryable',
         'rate_limited_terminal',
@@ -440,10 +438,6 @@ def test_rejection_emits_one_fully_attributed_terminal(no_dispatch, capsys, monk
         )
         expected_status = 402
         expected_outcome = 'plan_gated'
-    elif scenario == 'trial_expired':
-        monkeypatch.setattr(desktop_proxy, 'is_desktop_trial_paywalled', lambda *a, **k: True)
-        expected_status = 402
-        expected_outcome = 'trial_expired'
     elif scenario == 'authorization_unavailable':
         monkeypatch.setattr(
             desktop_proxy,
@@ -472,8 +466,6 @@ def test_rejection_emits_one_fully_attributed_terminal(no_dispatch, capsys, monk
     assert response.status_code == expected_status
     if scenario == 'plan_gated':
         assert response.json()['detail']['error'] == 'plan_gated'
-    elif scenario == 'trial_expired':
-        assert response.json()['detail'] == 'trial_expired'
 
     events = _events(capsys)
     assert len(events) == 1

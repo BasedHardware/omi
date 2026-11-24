@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
+from google.api_core.exceptions import ServiceUnavailable
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 
@@ -23,7 +24,10 @@ def store(monkeypatch):
         pytest.skip('loopback FIRESTORE_EMULATOR_HOST required; no cloud fallback')
     monkeypatch.setenv('ENCRYPTION_SECRET', 'recorded_time_emulator_synthetic_key_32_bytes')
     client = firestore.Client(project='demo-recorded-time', credentials=AnonymousCredentials())
-    return client, 'recorded-test-' + uuid4().hex
+    try:
+        yield client, 'recorded-test-' + uuid4().hex
+    finally:
+        client.close()
 
 
 def test_simultaneous_late_devices_converge_on_one_closed_episode(store):
@@ -51,6 +55,58 @@ def test_simultaneous_late_devices_converge_on_one_closed_episode(store):
     assert len(owner['conversation_ids']) == 8
     assert owner['started_at'] == T0
     assert owner['last_activity_at'] == owner['closed_at'] == T0 + timedelta(seconds=158)
+    assert episodes.get_current_episode(uid, firestore_client=client) is None
+
+
+@pytest.mark.parametrize('optimizations', ['true', 'false'])
+@pytest.mark.parametrize('fraction', [0, 0.0000007])
+def test_batch_close_deadline_and_partition_replay_share_one_transaction(store, monkeypatch, optimizations, fraction):
+    client, uid = store
+    monkeypatch.setenv('EPISODE_ATTACH_OPTIMIZATIONS_ENABLED', optimizations)
+    root = client.collection('users').document(uid)
+    member = root.collection('conversations').document('batch-close')
+    row = {
+        'source': 'desktop',
+        'record_lane_owner': 'batch_live_v1',
+        'server_batch_audio_start': T0.timestamp() + fraction,
+        'server_batch_audio_end': (T0 + timedelta(minutes=2)).timestamp() + fraction,
+        'server_batch_audio_closed': True,
+        'transcript_segments': [],
+        'status': 'completed',
+    }
+    member.set(row)
+
+    def close(pending_at):
+        return episode_timeline.attach_recorded(
+            uid,
+            'batch-close',
+            'desktop',
+            datetime.fromtimestamp(row['server_batch_audio_start'], timezone.utc),
+            datetime.fromtimestamp(row['server_batch_audio_end'], timezone.utc),
+            choose=choose_recorded_episode,
+            new_episode={},
+            firestore_client=client,
+            attach_row=member.get().to_dict(),
+            pending_at=pending_at,
+        )
+
+    first = close(T0)
+    owner = root.collection('episodes').document(first['id'])
+    links = root.collection('episode_links')
+    before = [
+        ref.get().to_dict()
+        for ref in (member, owner, links.document('batch-close'), links.document('recorded_timeline'))
+    ]
+    assert before[0]['episode_id'] == first['id']
+    assert before[0]['episode_transcription_pending_at'] == T0
+    assert before[0]['episode_transcription_deadline_at'] == T0 + timedelta(hours=2)
+    assert 'attach_revision' not in before[2], 'metadata close cannot claim transcript recovery'
+    assert close(T0 + timedelta(hours=1))['id'] == first['id']
+    after = [
+        ref.get().to_dict()
+        for ref in (member, owner, links.document('batch-close'), links.document('recorded_timeline'))
+    ]
+    assert after == before
     assert episodes.get_current_episode(uid, firestore_client=client) is None
 
 
@@ -631,3 +687,247 @@ def test_discarded_anchor_keeps_occupied_canonical_id_and_retained_notes(store):
     replay = attach('fresh', T0, T0 + timedelta(minutes=2))
     assert replay['id'] == fresh['id']
     assert episodes.get_episode(uid, repaired['id'], firestore_client=client) == repaired
+
+
+def test_unchanged_attach_skips_queries_and_membership_sweep(store, monkeypatch):
+    client, uid = store
+    root = client.collection('users').document(uid)
+    member = dict(id='same', source='omi', recorded_start=T0, recorded_end=T0 + timedelta(minutes=1))
+    root.collection('conversations').document('same').set(member)
+
+    def attach():
+        return episode_timeline.attach_recorded(
+            uid,
+            'same',
+            'omi',
+            T0,
+            member['recorded_end'],
+            choose=choose_recorded_episode,
+            new_episode={},
+            firestore_client=client,
+        )
+
+    first = attach()
+    before = root.collection('episodes').document(first['id']).get().to_dict()
+
+    def unexpected(*a, **kw):
+        pytest.fail('unchanged attach did repartition reads')
+
+    with monkeypatch.context() as m:
+        m.setattr(episode_timeline, 'recorded_candidates', unexpected)
+        m.setattr(episodes, 'read_memberships', unexpected)
+        assert attach()['state_version'] == first['state_version']
+    assert root.collection('episodes').document(first['id']).get().to_dict() == before
+    member['recorded_end'] += timedelta(minutes=1)
+    root.collection('conversations').document('same').update({'recorded_end': member['recorded_end']})
+    assert attach()['last_activity_at'] == member['recorded_end']
+    root.collection('conversations').document('same').update({'deleted': True})
+    with pytest.raises(episodes.EpisodeConflict, match='conversation_hidden'):
+        attach()
+
+
+def test_fixed_boundary_fallback_reuses_candidates_in_same_attempt(store, monkeypatch):
+    client, uid = store
+    root = client.collection('users').document(uid)
+    end = T0 + timedelta(minutes=2)
+    root.collection('episodes').document('fixed').set(
+        dict(
+            id='fixed',
+            status='closed',
+            close_reason='user',
+            started_at=T0,
+            last_activity_at=end,
+            recorded_end=end,
+            conversation_ids=[],
+            state_version=1,
+        )
+    )
+    calls = []
+    real = episode_timeline.recorded_candidates
+
+    def counted(*a, **kw):
+        calls.append(kw['transaction'])
+        return real(*a, **kw)
+
+    monkeypatch.setattr(episode_timeline, 'recorded_candidates', counted)
+    result = episode_timeline.attach_recorded(
+        uid,
+        'new',
+        'omi',
+        T0 + timedelta(seconds=10),
+        T0 + timedelta(seconds=30),
+        choose=choose_recorded_episode,
+        new_episode={},
+        firestore_client=client,
+    )
+    assert result['id'] == 'fixed' and result['conversation_ids'] == ['new']
+    assert len(calls) == 1
+
+
+def test_candidate_cache_is_discarded_on_transaction_retry(store, monkeypatch):
+    client, uid = store
+    reads, decisions = [], []
+    real = episode_timeline.recorded_candidates
+
+    def counted(*args, **kwargs):
+        reads.append(kwargs['transaction'])
+        return real(*args, **kwargs)
+
+    def transient_once(*args):
+        decisions.append(True)
+        if len(decisions) == 1:
+            raise ServiceUnavailable('synthetic failure after candidate read')
+        return choose_recorded_episode(*args)
+
+    monkeypatch.setattr(episode_timeline, 'recorded_candidates', counted)
+    result = episode_timeline.attach_recorded(
+        uid,
+        'new',
+        'omi',
+        T0,
+        T0 + timedelta(seconds=30),
+        choose=transient_once,
+        new_episode={},
+        firestore_client=client,
+    )
+    assert result['conversation_ids'] == ['new']
+    assert len(reads) == 2
+    assert reads[0] is not reads[1]
+
+
+def test_completed_attach_memo_real_transactions_and_stale_input(store, monkeypatch):
+    """The link stamp, recovery completion and gate use the real SDK/commit path."""
+    from database import episode_attach_memo
+    from utils.episodes import service
+
+    client, uid = store
+    root = client.collection('users').document(uid)
+    member = dict(
+        id='memo',
+        source='omi',
+        started_at=T0,
+        finished_at=T0 + timedelta(minutes=1),
+        recorded_start=T0,
+        recorded_end=T0 + timedelta(minutes=1),
+        transcript_segments=[],
+    )
+    ref = root.collection('conversations').document('memo')
+    ref.set(member)
+    c = service.Collaborators(firestore_client=client, now=lambda: T0 + timedelta(hours=1))
+    assert service._attach_synced(uid, 'memo', member, c) == 'recorded'
+    link = root.collection('episode_links').document('memo').get().to_dict()
+    assert link['attach_revision'] == link['attach_completed']
+
+    def unexpected(*a, **kw):
+        pytest.fail('memo hit entered the episode stack')
+
+    original = episode_timeline.recorded_candidates
+    monkeypatch.setattr(episode_timeline, 'recorded_candidates', unexpected)
+    assert service._attach_synced(uid, 'memo', member, c) == 'attached_unchanged'
+    # Atomic validation of the current row refuses stale caller snapshots.
+    ref.update({'deleted': True})
+    assert not episode_attach_memo.matches(uid, 'memo', member, firestore_client=client)
+    ref.update({'deleted': False})
+    # A disabled memo takes the original recorded attach path.
+    monkeypatch.setenv('EPISODE_ATTACH_CONTENT_GATE_ENABLED', 'false')
+    monkeypatch.setattr(episode_timeline, 'recorded_candidates', original)
+    assert service._attach_synced(uid, 'memo', member, c) == 'recorded'
+
+
+def test_memo_is_not_completed_when_content_changes_during_recovery(store, monkeypatch):
+    from database import episode_attach_memo
+    from utils.episodes import service
+
+    client, uid = store
+    root = client.collection('users').document(uid)
+    member = dict(
+        id='race',
+        source='omi',
+        started_at=T0,
+        finished_at=T0 + timedelta(minutes=1),
+        recorded_start=T0,
+        recorded_end=T0 + timedelta(minutes=1),
+        transcript_segments=[],
+    )
+    ref = root.collection('conversations').document('race')
+    ref.set(member)
+    c = service.Collaborators(firestore_client=client, now=lambda: T0 + timedelta(hours=1))
+
+    def changed(*a, **kw):
+        ref.update({'transcript_segments': [{'id': 'new', 'text': 'changed', 'start': 0, 'end': 30}]})
+        return 'skipped_applied'
+
+    monkeypatch.setattr(service, '_record_recovered', changed)
+    assert service._attach_synced(uid, 'race', member, c) == 'recorded'
+    assert root.collection('episode_links').document('race').get().to_dict()['attach_completed'] is None
+    assert not episode_attach_memo.matches(uid, 'race', member, firestore_client=client)
+
+
+def test_discard_invalidates_pre_restore_memo_in_the_same_transaction(store):
+    from database import episode_attach_memo
+    from utils.episodes import service
+
+    client, uid = store
+    root = client.collection('users').document(uid)
+    member = dict(
+        id='restore',
+        source='omi',
+        sync_content_revision=7,
+        started_at=T0,
+        finished_at=T0 + timedelta(minutes=1),
+        recorded_start=T0,
+        recorded_end=T0 + timedelta(minutes=1),
+        transcript_segments=[],
+        sync_relevance_user_kept=True,
+    )
+    ref = root.collection('conversations').document('restore')
+    ref.set(member)
+    c = service.Collaborators(firestore_client=client, now=lambda: T0 + timedelta(hours=1))
+    assert service._attach_synced(uid, 'restore', member, c) == 'recorded'
+    visible = ref.get().to_dict()
+    episode_attach_memo.complete(uid, 'restore', visible, None, finalized=True, firestore_client=client)
+    hidden = {**visible, 'discarded': True, 'sync_relevance_user_kept': False}
+    ref.set(hidden)
+    assert service._attach_synced(uid, 'restore', hidden, c) == 'skipped_discarded'
+    ref.set(visible)
+    # A delayed completion from before discard cannot reactivate the proof.
+    episode_attach_memo.complete(uid, 'restore', visible, None, finalized=True, firestore_client=client)
+    assert not episode_attach_memo.matches(uid, 'restore', visible, finalized=True, firestore_client=client)
+
+
+@pytest.mark.parametrize('mutation', ['discarded', 'deleted'])
+def test_stale_durable_finalize_retires_currently_hidden_member(store, monkeypatch, mutation):
+    from database import episode_attach_memo
+    from utils.episodes import finalize, service
+
+    client, uid = store
+    monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'true')
+    monkeypatch.setattr(service, 'episodes_enabled_for', lambda _: True)
+    monkeypatch.setattr(service.client_gate, 'client_seen', lambda _: True)
+    monkeypatch.setattr(service.composer, 'after_finalized', lambda uid, cid, outcome, c, *, row=None: outcome)
+    monkeypatch.setattr(episode_attach_memo, 'get_firestore_client', lambda: client)
+    root = client.collection('users').document(uid)
+    ref = root.collection('conversations').document('stale-finalize')
+    member = dict(
+        id='stale-finalize',
+        source='omi',
+        started_at=T0,
+        finished_at=T0 + timedelta(minutes=1),
+        recorded_start=T0,
+        recorded_end=T0 + timedelta(minutes=1),
+        transcript_segments=[],
+    )
+    ref.set(member)
+    c = service.Collaborators(firestore_client=client, now=lambda: T0 + timedelta(hours=1))
+    assert service._attach_synced(uid, 'stale-finalize', member, c) == 'recorded'
+    visible = ref.get().to_dict()
+    episode_attach_memo.complete(uid, 'stale-finalize', visible, None, finalized=True, firestore_client=client)
+    ref.update({mutation: True})
+    assert not finalize.skip_unchanged_schedule(uid, 'stale-finalize', visible, finalized=True)
+    assert (
+        service.on_conversation_finalized(uid, 'stale-finalize', visible, trigger='sync_update', collaborators=c)
+        == 'skipped_discarded'
+    )
+    owner = episodes.get_episode(uid, visible['episode_id'], firestore_client=client)
+    assert 'stale-finalize' in owner['discarded_conversation_ids']
+    assert not root.collection('episode_links').document('stale-finalize').get().to_dict().get('attach_completed')

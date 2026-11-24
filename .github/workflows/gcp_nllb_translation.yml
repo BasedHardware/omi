@@ -8,9 +8,9 @@ on:
         required: true
         default: 'development'
         type: choice
+        # Prod NLLB is retired (all translation runs on Luna); development only.
         options:
           - development
-          - prod
       branch:
         description: 'Branch to deploy from'
         required: true
@@ -49,8 +49,8 @@ jobs:
     steps:
       - name: Validate Environment Input
         run: |
-          if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
-            echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
+          if [[ "${{ github.event.inputs.environment }}" != "development" ]]; then
+            echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development'; prod NLLB is retired."
             exit 1
           fi
 

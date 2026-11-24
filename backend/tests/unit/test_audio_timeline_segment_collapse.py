@@ -32,6 +32,7 @@ import httpx
 import numpy as np
 import pytest
 
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 import utils.stt.parakeet_window as window
 import utils.stt.live_session as live_session_module
 import utils.stt.provider_resilience as provider_resilience
@@ -451,55 +452,6 @@ class TestTranslatorDegenerateIntervals:
         assert translated[0]['_capture_end_sample'] == RATE + 1
         assert translator.rejected_segments == 0
 
-    @pytest.mark.parametrize('record_later_send', [False, True])
-    def test_point_at_previous_span_end_before_elapsed_gap_is_unplaced(self, monkeypatch, record_later_send):
-        monkeypatch.setenv('SONIOX_ELAPSED_AXIS', 'on')
-        timeline = CaptureTimeline(sample_rate=RATE)
-        timeline.accept(b'\x01\x00' * RATE, arrival_wall=T0, arrival_monotonic=0.0)
-        translator = ProviderEpochTranslator(timeline, RATE, project_times=True)
-        translator.provider_label = 'soniox'
-        translator.note_accepted(0, RATE)
-        if record_later_send:
-            timeline.accept(b'\x01\x00' * RATE, arrival_wall=T0 + 10, arrival_monotonic=10.0)
-            translator.note_accepted(RATE, RATE)
-        result = translator.translate([{'start': 1.0, 'end': 1.0, 'text': 'resume'}])
-        assert result[0]['audio_alignment'] == 'unplaced'
-        assert '_capture_start_sample' not in result[0]
-
-    @pytest.mark.parametrize('project_times', [False, True])
-    def test_shadow_measures_elapsed_candidate_with_off_identical_windows(self, monkeypatch, project_times):
-        timeline = CaptureTimeline(sample_rate=RATE)
-        timeline.accept(b'\x01\x00' * RATE, arrival_wall=T0, arrival_monotonic=0.0)
-        gate = vad_gate.VADStreamingGate(sample_rate=RATE, mode='active')
-        gate.process_audio(b'\x01\x00' * RATE, T0, start_sample=0)
-        seen = []
-        monkeypatch.setenv('SONIOX_ELAPSED_AXIS', 'shadow')
-        translator = ProviderEpochTranslator(timeline, RATE, project_times=project_times)
-        monkeypatch.setenv('SONIOX_ELAPSED_AXIS', 'off')
-        baseline = ProviderEpochTranslator(timeline, RATE, project_times=project_times)
-        translator.provider_label = 'soniox'
-        baseline.provider_label = 'soniox'
-        translator.set_validation_callback(
-            lambda provider, interval: seen.append(
-                (provider, gate.classify_capture_speech(*interval) if interval else 'unknown')
-            )
-        )
-        translator.note_accepted(0, RATE)
-        baseline.note_accepted(0, RATE)
-        timeline.accept(b'\x01\x00' * RATE, arrival_wall=T0 + 10, arrival_monotonic=10.0)
-        gate.process_audio(b'\x01\x00' * RATE, T0 + 10, start_sample=RATE)
-        translator.note_accepted(RATE, RATE)
-        baseline.note_accepted(RATE, RATE)
-        original = [{'start': 1.2, 'end': 1.5, 'text': 'later'}]
-        result = translator.translate(original)
-        assert result == baseline.translate(original)
-        assert result[0]['_capture_start_sample'] == int(1.2 * RATE)
-        assert result[0]['_capture_end_sample'] == int(1.5 * RATE)
-        assert result[0]['text'] == 'later'
-        assert seen == [('soniox', 'unknown')]
-        translator.translate([{'start': 10.2, 'end': 10.5, 'text': 'elapsed candidate'}])
-        assert seen[-1] == ('soniox', 'on_speech')
-
     def test_vad_validation_outcomes_and_modulate_control(self):
         gate = vad_gate.VADStreamingGate(sample_rate=RATE, mode='shadow')
         gate.process_audio(b'\x00\x00' * RATE, T0, start_sample=0)
@@ -522,8 +474,7 @@ class TestTranslatorDegenerateIntervals:
         translator.translate([{'start': 1.1, 'end': 1.4, 'text': 'control'}])
         assert seen == [('modulate', 'on_speech')]
 
-    def test_send_owner_callback_receives_each_capture_span(self, monkeypatch):
-        monkeypatch.setenv('SONIOX_ELAPSED_AXIS', 'shadow')
+    def test_send_owner_callback_receives_each_capture_span(self):
         timeline = self._timeline()
         calls = []
         translator = ProviderEpochTranslator(
@@ -768,6 +719,7 @@ class _RecordingSocket(STTSocket):
 )
 async def test_managed_prod_order_mints_fresh_epoch_after_failover(monkeypatch, first, second):
     """Drive the configured live-chain callback/leg rather than a bare translator."""
+    enabled_live_targets(monkeypatch)
     from utils.audio import AudioRingBuffer
 
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet'])
@@ -863,8 +815,8 @@ async def test_managed_prod_order_mints_fresh_epoch_after_failover(monkeypatch, 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('gap_seconds', [5, 9, 34])
-async def test_managed_soniox_elapsed_axis_covers_vad_gaps_without_extra_audio(monkeypatch, gap_seconds):
-    """Soniox elapsed offsets map through accepted sends while VAD stays gated.
+async def test_managed_soniox_compact_axis_covers_vad_gaps_without_extra_audio(monkeypatch, gap_seconds):
+    """Soniox compact offsets map through accepted sends while VAD stays gated.
 
     Exercise the receiver, managed-chain constructor, real VAD state machine,
     and Soniox's final-token parser. Only provider IO and Silero are doubles.
@@ -872,7 +824,7 @@ async def test_managed_soniox_elapsed_axis_covers_vad_gaps_without_extra_audio(m
     300 ms pre-roll budget evicts a 500 ms silent frame. Verify PCM independently of the
     clock ledger so a billing-changing passthrough cannot satisfy this test.
     """
-    monkeypatch.setenv('SONIOX_ELAPSED_AXIS', 'on')
+    monkeypatch.setenv('SONIOX_WIRE_LEDGER', 'false')
     monkeypatch.setattr(st, 'stt_service_models', ['soniox'])
     monkeypatch.setattr(live_session_module, 'is_gate_enabled', lambda: True)
     monkeypatch.setattr(live_session_module, 'vad_gate_mode', lambda **kwargs: 'active')
@@ -911,7 +863,7 @@ async def test_managed_soniox_elapsed_axis_covers_vad_gaps_without_extra_audio(m
     adapter._stream_transcript = raw_sockets[0].callback
     adapter._preseconds = 0
     adapter._pending_segment = None
-    start_ms = int((2 + gap_seconds + 0.2) * 1000)
+    start_ms = 6200
     adapter._handle_tokens([{'text': 'after pause ', 'start_ms': start_ms, 'end_ms': start_ms + 500, 'is_final': True}])
     await REAL_SLEEP(0)
     assert b''.join(raw_sockets[0].payloads) == (
@@ -919,14 +871,23 @@ async def test_managed_soniox_elapsed_axis_covers_vad_gaps_without_extra_audio(m
     )
     assert raw_sockets[0].sent_samples == 7 * RATE
     assert raw_sockets[0].finalizations >= 1
-    assert receiver.stt_socket._send_tracker.send_map.last_provider_sample == (3 + gap_seconds) * RATE
+    assert receiver.stt_socket._send_tracker.send_map.last_provider_sample == 7 * RATE
     assert len(receiver.collected) == 1
     assert receiver.collected[0].get('audio_alignment') != 'unplaced'
     assert receiver.collected[0]['start'] == pytest.approx(T0 + 2 + gap_seconds + 0.2)
     assert receiver.collected[0]['end'] == pytest.approx(T0 + 2 + gap_seconds + 0.7)
     assert receiver.stt_socket._send_tracker.rejected_segments == 0
-    # A token placed in the withheld interval has no accepted PCM behind it.
-    adapter._handle_tokens([{'text': 'no audio ', 'start_ms': 6200, 'end_ms': 6400, 'is_final': True}])
+    # An elapsed-looking offset beyond compact sends has no accepted PCM behind it.
+    adapter._handle_tokens(
+        [
+            {
+                'text': 'no audio ',
+                'start_ms': (2 + gap_seconds) * 1000 + 200,
+                'end_ms': (2 + gap_seconds) * 1000 + 400,
+                'is_final': True,
+            }
+        ]
+    )
     await REAL_SLEEP(0)
     assert receiver.collected[-1]['text'] == 'no audio'
     assert receiver.collected[-1]['audio_alignment'] == 'unplaced'

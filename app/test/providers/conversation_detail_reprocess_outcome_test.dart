@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 
 import '../helpers/summary_fixtures.dart';
 
@@ -55,11 +56,35 @@ void main() {
       expect(reprocessResultFromResponse(http.Response('not json', 200)), isA<ReprocessFailed>());
     });
 
+    test('200 back in Home step transcribing is the in-window wait, with its copy, receipt or not', () {
+      final waiting = {
+        ...summaryConversation().toJson(),
+        'status': 'processing',
+        'home_step': 'transcribing',
+      };
+      for (final requireSpeakerReceipt in [false, true]) {
+        final result = reprocessResultFromResponse(_json(200, waiting), requireSpeakerReceipt: requireSpeakerReceipt);
+        expect(result, isA<ReprocessTranscriptionPending>());
+        expect(result.conversation!.homeStep, 'transcribing');
+        expect(result.conversation!.status, ConversationStatus.processing);
+      }
+    });
+
     test('409 conversation_processing_in_progress is busy', () {
       final result = reprocessResultFromResponse(_json(409, {
         'detail': {'code': 'conversation_processing_in_progress', 'message': 'Already processing'},
       }));
       expect(result, isA<ReprocessBusy>());
+    });
+
+    test('409 transcription_pending is waiting for transcription, not a failure', () {
+      final result = reprocessResultFromResponse(_json(409, {
+        'detail': {
+          'code': 'transcription_pending',
+          'message': 'Audio is awaiting transcription; summary retry cannot transcribe it',
+        },
+      }));
+      expect(result, isA<ReprocessTranscriptionPending>());
     });
 
     test('409 with a string detail is the app selection failing, not busy', () {
@@ -105,6 +130,60 @@ void main() {
       expect(provider.summaryFailure!.kind, SummaryFailureKind.busy);
       expect(provider.summaryFailure!.conversationId, 'conv-summary');
       expect(provider.loadingReprocessConversation, isFalse);
+    });
+
+    test('409 transcription_pending is a waiting status, not an error, and marks the conversation', () async {
+      TranscriptionPendingConversations.reset();
+      addTearDown(TranscriptionPendingConversations.reset);
+      final errors = <String>[];
+      final infos = <String>[];
+      final provider = summaryProvider(
+        summaryConversation(),
+        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async =>
+            const ReprocessTranscriptionPending(),
+      );
+      addTearDown(provider.dispose);
+      provider.addListener(() {
+        if (provider.error case final e?) errors.add(e);
+        if (provider.info case final i?) infos.add(i);
+      });
+      final ok = await provider.reprocessConversation();
+      expect(ok, isFalse);
+      expect(provider.summaryFailure!.kind, SummaryFailureKind.transcriptionPending);
+      expect(provider.loadingReprocessConversation, isFalse);
+      expect(TranscriptionPendingConversations.contains('conv-summary'), isTrue);
+      expect(errors, isNot(contains('REPROCESS_FAILED')));
+      expect(infos, contains('REPROCESS_TRANSCRIPTION_PENDING'));
+    });
+
+    test('a 200 in-window wait applies the server copy and is a waiting status, not an error', () async {
+      TranscriptionPendingConversations.reset();
+      addTearDown(TranscriptionPendingConversations.reset);
+      final errors = <String>[];
+      final infos = <String>[];
+      final waiting = ServerConversation.fromJson({
+        ...summaryConversation().toJson(),
+        'status': 'processing',
+        'home_step': 'transcribing',
+      });
+      final provider = summaryProvider(
+        summaryConversation(),
+        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async =>
+            ReprocessTranscriptionPending(waiting),
+      );
+      addTearDown(provider.dispose);
+      provider.addListener(() {
+        if (provider.error case final e?) errors.add(e);
+        if (provider.info case final i?) infos.add(i);
+      });
+      final ok = await provider.reprocessConversation();
+      expect(ok, isFalse);
+      expect(provider.conversation.status, ConversationStatus.processing);
+      expect(provider.conversation.homeStep, 'transcribing');
+      expect(provider.summaryFailure!.kind, SummaryFailureKind.transcriptionPending);
+      expect(TranscriptionPendingConversations.contains('conv-summary'), isFalse);
+      expect(errors, isNot(contains('REPROCESS_FAILED')));
+      expect(infos, contains('REPROCESS_TRANSCRIPTION_PENDING'));
     });
 
     test('429 becomes the rate-limit failure', () async {
@@ -298,6 +377,22 @@ void main() {
     expect(writes, ['pg', null]);
   });
 
+  test('legacy Set Default persists the built-in through the shared writer', () async {
+    final writes = <String?>[];
+    final provider = summaryProvider(summaryConversation(), writePreferredSummaryApp: (id) async {
+      writes.add(id);
+      return true;
+    });
+    addTearDown(provider.dispose);
+    expect(await provider.setPreferredSummarizationApp(builtInSummaryTemplateAppId), isTrue);
+    expect(writes, [builtInSummaryTemplateAppId]);
+    expect(provider.preferredSummarizationAppId, builtInSummaryTemplateAppId);
+    expect(provider.defaultSummaryTemplateAppId, builtInSummaryTemplateAppId);
+    expect(await provider.setDefaultSummaryTemplateAppId(null), isTrue);
+    expect(writes, [builtInSummaryTemplateAppId, null]);
+    expect(provider.defaultSummaryTemplateAppId, isNull);
+  });
+
   test('a failed server preference write keeps the local default and reports false', () async {
     final provider = summaryProvider(
       summaryConversation(),
@@ -311,13 +406,13 @@ void main() {
   test('the default summary template is saved locally; null is Omi', () {
     final provider = summaryProvider(summaryConversation());
     addTearDown(provider.dispose);
-    expect(provider.defaultSummaryTemplateAppId, isNull);
+    expect(provider.defaultSummaryTemplateAppId, 'omi-default-summary');
     provider.setDefaultSummaryTemplateAppId('pg');
     expect(provider.defaultSummaryTemplateAppId, 'pg');
     final otherUser = summaryProvider(summaryConversation());
     addTearDown(otherUser.dispose);
     SharedPreferencesUtil().uid = 'someone-else';
-    expect(otherUser.defaultSummaryTemplateAppId, isNull, reason: 'the default is per signed-in user');
+    expect(otherUser.defaultSummaryTemplateAppId, 'omi-default-summary', reason: 'the default is per signed-in user');
     SharedPreferencesUtil().uid = '';
     expect(provider.defaultSummaryTemplateAppId, 'pg');
     provider.setDefaultSummaryTemplateAppId(null);

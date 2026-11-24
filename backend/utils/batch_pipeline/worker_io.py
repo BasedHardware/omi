@@ -41,6 +41,10 @@ class FirstDecode:
         if future is not None:
             future.cancel()
 
+    @property
+    def segment_ids(self):
+        return (self.item.segment_id,)
+
     def take(self, item):
         future = self.future
         if future is None or item is not self.item or self._closed or self.cancelled:
@@ -60,6 +64,66 @@ class FirstDecode:
             self.future = None
             self._closed = True
             self.budget.release(self.item)
+
+
+class PreparedFlight:
+    """A waiting lane's leading decodes, in admitted order, one receipt each.
+
+    Positional and identity-matched by the consumer; never a cache indexed by
+    segment identity. Cancelling discards the whole prefix: the pump then skips
+    (refunds) every prepared unit rather than let a cancelled fetch become a
+    fake decode failure.
+    """
+
+    def __init__(self, handles):
+        if not handles:
+            raise ValueError('prepared flight needs at least one decode')
+        self.handles = list(handles)
+        self.cancelled = False
+
+    @property
+    def item(self):
+        return self.handles[0].item
+
+    @property
+    def future(self):
+        return self.handles[0].future
+
+    @property
+    def segment_ids(self):
+        return tuple(handle.item.segment_id for handle in self.handles)
+
+    def decodes(self):
+        return [(handle.item, handle.future) for handle in self.handles]
+
+    def cancel(self):
+        self.cancelled = True
+        for handle in self.handles:
+            handle.cancel()
+
+    def release_settled(self):
+        """Close receipts whose IO already finished, without waiting on any.
+
+        The consuming chain calls this once its decoded waveforms are dropped,
+        so the shared budget and the buffers return at the end of the GPU
+        section rather than after publication. Running fetches keep their
+        reservation for the owner's final ``close`` (idempotent per receipt).
+        """
+        for handle in self.handles:
+            future = handle.future
+            if future is not None and future.done():
+                handle.close()
+
+    def close(self):
+        # Close every receipt even if one drain raises: each owns a reservation.
+        error = None
+        for handle in self.handles:
+            try:
+                handle.close()
+            except BaseException as exc:
+                error = error or exc
+        if error is not None:
+            raise error
 
 
 class DecodeBudget:

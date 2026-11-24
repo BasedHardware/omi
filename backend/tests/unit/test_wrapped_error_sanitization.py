@@ -104,9 +104,6 @@ class WrappedErrorSanitizationTests(unittest.TestCase):
 
         stubs["redis"] = MagicMock()
         stubs["cachetools"] = MagicMock()
-        prom = sys.modules.get("prometheus_client")
-        if prom is None or not hasattr(prom, "start_http_server"):
-            stubs["prometheus_client"] = MagicMock()
 
         generate_mock = ModuleType("utils.wrapped.generate_2025")
         generate_mock.generate_wrapped_2025 = MagicMock()

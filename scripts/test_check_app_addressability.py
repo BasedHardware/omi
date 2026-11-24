@@ -3,9 +3,12 @@
 import contextlib
 import io
 import json
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
+
+from git_test_env import clean_git_env
 
 import check_app_addressability as check
 import unittest
@@ -14,6 +17,11 @@ from check_app_addressability import calls, debt, validate_catalog
 
 
 class AddressabilityCheckTests(unittest.TestCase):
+    def setUp(self):
+        git_env = patch.dict(os.environ, clean_git_env(), clear=True)
+        git_env.start()
+        self.addCleanup(git_env.stop)
+
     def test_nested_key_does_not_cover_interactive_parent(self):
         source = "InkWell(onTap: () {}, child: IconButton(key: OmiKeys.send, onPressed: () {}))"
         self.assertEqual(debt(source, {'send': 'omi.chat.send'}), ['InkWell'])

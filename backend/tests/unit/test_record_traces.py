@@ -27,6 +27,8 @@ def _load():
     traces = []
     for path in sorted(TRACES.glob('*.json')):
         trace = json.loads(path.read_text())
+        if trace['schema'] == 'orphan-repair-trace/1':
+            continue  # Replayed through the real repair transaction in test_record_orphan_repair.
         assert trace['schema'] == SCHEMA, path.name
         assert trace['name'] == path.stem, path.name
         assert set(trace['expect']) == set(EXPECT), path.name
@@ -62,6 +64,24 @@ def test_corpus_is_content_free_and_well_formed():
     allowed = {'schema', 'name', 'source', 'row', 'durable', 'sessions', 'expect', 'known_gap'}
     for path in paths:
         trace = json.loads(path.read_text())
+        if trace['schema'] == 'orphan-repair-trace/1':
+            assert path.stem == trace['name'] == 'orphan_sealed_registered'
+            assert set(trace) == {'schema', 'name', 'source', 'row', 'retained_spans', 'expect'}
+            assert set(trace['row']) <= {
+                'status',
+                'record_lane_owner',
+                'server_batch_only',
+                'record_audio_closed',
+                'server_batch_audio_closed',
+                'server_batch_audio_received',
+            }
+            assert set(trace['expect']) == {'job_state', 'has_content'}
+            assert trace['retained_spans'] and len(trace['retained_spans']) <= 128
+            for span in trace['retained_spans']:
+                assert set(span) == {'start', 'seconds'}
+                assert all(type(span[key]) in (int, float) for key in span)
+                assert 0 < span['seconds'] <= 3600
+            continue
         assert set(trace) <= allowed, path.name
         assert set(trace['row']) <= {'record_lane_owner', 'record_upload_sessions'}, path.name
         for session in trace['sessions']:

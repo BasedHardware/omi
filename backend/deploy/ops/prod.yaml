@@ -1,13 +1,14 @@
 # Production ops values (B4). Applied only by the config-train
 # (.github/workflows/config_train.yml -> backend/scripts/ops_train.py).
 #
-# Ownership: every value here is `owner: ops`. A backend train must not
-# change it, and an out-of-band edit is break-glass followed by a same-day PR
+# Ownership: every value here is `owner: ops`. A backend train must honor
+# these values, and an out-of-band edit is break-glass followed by a same-day PR
 # to this file. Cohorts, percents and allowlists never live here; they live in
 # Firestore `rollout_cohorts` (ruling #8).
 #
 # Schema (validated by ops_train.py; unknown keys are rejected):
 #   cloud_run.<service>.env.<KEY>: string        ops-owned env value on the serving revision
+#   cloud_run.<service>.memory: Mi or Gi limit    ingress container memory
 #   cloud_run.<service>.max_instances: int        service-level run.googleapis.com/maxScale
 #     or {owner: <controller>, floor: int, ceiling: int}
 #                                                 a live controller owns the value; the
@@ -19,7 +20,7 @@
 #     Omitted fields are not managed. enabled: false declares a queue that the
 #     config-train must neither create nor update yet.
 #
-# Every env change creates a revision from the service template and routes 100%
+# Every env or memory change creates a revision from the service template and routes 100%
 # of traffic to that named revision explicitly: backend-sync-backfill pins
 # traffic to a named revision, so an unrouted env update never serves (10-19
 # 04:52Z). The config-train refuses when the template differs from the serving
@@ -37,6 +38,7 @@ region: us-central1
 # live_only.yaml instead; they belong in runtime_env.
 cloud_run:
   backend:
+    memory: 3Gi
     env:
       # live-only, 2026-10-20 inventory
       AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
@@ -52,6 +54,7 @@ cloud_run:
       OMI_LANGSMITH_PROMPT_CACHE_TTL_SECONDS: '3600'
       TYPESENSE_HOST_PORT: '443'
   backend-sync:
+    memory: 3Gi
     env:
       # 10-18 18:59Z stall: sync-jobs went into Cloud Tasks system backoff after
       # fast 500s. Root fix is the 409 retry contract (#22371).
@@ -70,13 +73,15 @@ cloud_run:
     # 2026-10-24 costcut (live 22:48Z): cap 80 -> 50; warm floor 1 -> 5 so the sync
     # pump keeps conversation-finalization headroom (min 5 x concurrency 20, the
     # shape deploy-backend-stack sizes its queue against).
-    # syncwall: source cap 50 -> 40; lead applies after fresh-latency review.
-    # 2026-11-01 margin G1: cap 40 -> 30 once #24264 (hourly re-poll of long-stuck
-    # custody deferrals) has served 7h and the syncdiet gates hold for 1h. Merging
-    # this does not apply it; the lead dispatches the config-train after the gates.
-    # Rollback: 40 (floor remains 5).
-    max_instances: 30
-    min_instances: 5
+    # SCA-3552: retain the live cap of 50 to preserve fresh-sync headroom.
+    # 2026-11-02 margin G1 dropped (cap 30 never applied): after #24264 removed the
+    # short deferred re-polls, sync runs long jobs at concurrency p95 18-20 of 20 on
+    # ~33 instances, so a lower cap would queue work rather than trim idle capacity.
+    # 2026-11-04 legacy-dark (David e53a35, rev 56 17:55Z): warm floor 5 -> 0. The long
+    # in-request legacy pipeline is gone and uploads arrive continuously, so the floor
+    # only bit when idle. Live service-level min applied 19:13Z by cl2-deploy. Rollback: 5.
+    max_instances: 50
+    min_instances: 0
   backend-sync-backfill:
     env:
       SYNC_TASKS_QUEUE: sync-backfill-fresh
@@ -103,11 +108,18 @@ cloud_run:
     max_instances: {owner: redis_guard, floor: 8, ceiling: 40}
   backend-integration:
     env:
+      # Margin-40 O1 inverse, 2026-11-17: preserve restored cadence; O3 stays 16.
+      # The former 100/20 source is held. A new lead/Release ruling must supersede this.
+      BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: '200'
+      BATCH_PIPELINE_SERVING_TICK_SECONDS: '10'
+      BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: '16'
       SYNC_TASKS_QUEUE: sync-jobs-fresh
-      # C4 (lane 9): summary-debt repair moves to the enrichment-maintenance Scheduler job,
-      # which targets backend-integration. The manifest enables it on backend-sync only,
-      # so without this the new owner's tick is a no-op.
+      # C4 (lane 9): enrichment-maintenance targets backend-integration.
+      # 2026-11-09 David (relay 3e764e): enable until the long-term fix.
+      # Keep aligned with runtime_env/prod.overlay.yaml; backend-sync stays disabled.
       SUMMARY_DEBT_REPAIR_ENABLED: 'true'
+      # lead2 8b9c8f (2026-11-10): keep the spend cap aligned; rollback 10.
+      SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT: '8'
       # live-only, 2026-10-20 inventory
       FAIR_USE_ENABLED: 'true'
       HTTP_DEFAULT_TIMEOUT: '600'
@@ -127,13 +139,31 @@ cloud_tasks:
     max_attempts: 5
     min_backoff: 5s
     max_backoff: 60s
+  conversations-v3:
+    # Isolate outline/summary latency from capture STT and finalization dispatch.
+    # 2026-11-18 incident: 8 slots held ~60 s each (outline + notes inline) let depth reach ~9.5k at beta.
+    max_concurrent_dispatches: 64
+    max_dispatches_per_second: 20
+    max_attempts: 10
+    min_backoff: 30s
+    max_backoff: 300s
+    log_sampling_ratio: 0.1
+  conversations-v3-backfill:
+    # Operator-planned per-owner v3 backfill/repair steps (utils/conversations/v3/backfill.py). One
+    # dispatch at a time keeps historical outline/notes work off the live conversations-v3 queue
+    # and bounds it to one owner partition; a 503 (owner busy) retries after a minute.
+    max_concurrent_dispatches: 1
+    max_dispatches_per_second: 1
+    max_attempts: 5
+    min_backoff: 60s
+    max_backoff: 600s
   sync-jobs-fresh:
     # Five attempts: sync's 409 leaves the retry to the queue (routers/sync.py), and
     # utils/cloud_tasks.py get_sync_tasks_max_attempts mirrors it. The config-train is
     # the only writer of this cap now that trains skip the ops-owned queues.
     max_concurrent_dispatches: 160
-    # Smooth fresh bursts; concurrency and the five-attempt contract stay fixed.
-    max_dispatches_per_second: 15
+    # SCA-3552: keep live dispatch capacity for fresh uploads while restoring five attempts.
+    max_dispatches_per_second: 25
     max_attempts: 5
     min_backoff: 60s
     max_backoff: 300s
@@ -153,8 +183,20 @@ cloud_tasks:
   enrichment:
     # Contract (a)/(d), lane 9: plan C3's queue for new sr- obligations (ENRICHMENT_ROUTE=enrichment_queue).
     # Created by the config-train before the backend roll that sets the route (planc, Plan C prod activation).
-    max_concurrent_dispatches: 50
+    # 2026-11-10 ruling 008024: reconcile primary live drift to 300/25 independently
+    # of fresh tuning; a fresh-only rollback must preserve this primary capacity.
+    max_concurrent_dispatches: 300
     max_dispatches_per_second: 25
+    max_attempts: -1
+    min_backoff: 10s
+    max_backoff: 300s
+  enrichment-fresh:
+    # 2026-11-10 ruling 008024: permanent 30/10 for first-summary catch-up.
+    # The operational Firestore-pressure guard may temporarily lower live concurrency
+    # to 15 (rate stays 10); Git stays 30. cl2-deploy alone applies prod changes.
+    # Re-evaluate the 168h age gate after the backlog drains; this changes no admission policy.
+    max_concurrent_dispatches: 30
+    max_dispatches_per_second: 10
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s
@@ -162,10 +204,9 @@ cloud_tasks:
     # Plan C8: provider-STT wakes for BYOK and non-Parakeet units, served by backend-integration. Idle while
     # legacy_sync=on (the provider route needs draining/dark); it must exist before draining
     # (DRAINING_PRECONDITIONS provider_stt_live). At 100% about 205k units/day take this route (2.4/s mean);
-    # 48 concurrent / 10 per second covers a 2x peak at ~10s per vendor call. One paid call per unit is
-    # enforced by the outbox intent, not by queue attempts.
-    max_concurrent_dispatches: 48
-    max_dispatches_per_second: 10
+    # SCA-3552: retain live provider capacity for fresh work. The outbox intent enforces one paid call per unit.
+    max_concurrent_dispatches: 96
+    max_dispatches_per_second: 20
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s

@@ -90,8 +90,8 @@ def test_sidecars_attach_before_readiness_and_promotion_for_all_three_services(c
     )
     assert attach < readiness
     script = steps[attach]['run']
-    for name in ('backend-sync', 'backend-sync-backfill', 'backend-integration'):
-        assert name in script
+    assert 'for service in $SELECTED_CLOUD_RUN_SERVICES' in script
+    assert '[[ \"$service\" != backend ]] || continue' in script
     assert '--config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml"' in script
     assert '--config-env' in script
     assert '--config-secret' not in script
@@ -208,7 +208,12 @@ elif args[:3] != ['run', 'services', 'replace']:
 ''')
     fake.chmod(0o755)
     scripts = [
-        step['run'].replace('${{ inputs.project_id }}', 'based-hardware').replace('${{ inputs.runtime_env }}', 'prod')
+        step['run']
+        .replace('${{ inputs.project_id }}', 'based-hardware')
+        .replace('${{ inputs.runtime_env }}', 'prod')
+        .replace(
+            "${{ inputs.cloud_run_service != 'all' && format('--service {0}', inputs.cloud_run_service) || '' }}", ''
+        )
         for step in prepare
     ]
     # Execute the checked-in preflight scripts before a representative mutation.
@@ -223,6 +228,7 @@ elif args[:3] != ['run', 'services', 'replace']:
             'GITHUB_WORKSPACE': str(ROOT),
             'GMP_TEST_CALLS': str(log),
             'GMP_TEST_FAILURE': failure or '',
+            'SELECTED_CLOUD_RUN_SERVICES': 'backend backend-sync backend-sync-backfill backend-integration',
         },
         text=True,
         capture_output=True,

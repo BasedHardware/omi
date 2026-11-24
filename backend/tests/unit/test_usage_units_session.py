@@ -76,9 +76,9 @@ def month_store(percent=95):
 
 
 def read(store, clock, cache):
-    return units.get_usage_units(
-        'u', clock[0][0], firestore_client=store, entitlements=entitlement(), session_cache=cache
-    )
+    # Exercise the reusable analytical session directly; serving enforcement is retired.
+    summary = cache.read('u', clock[0][0], store, entitlement())
+    return units._render_usage(summary, entitlement(), True, rate_card_version='v1')
 
 
 def test_minute_reads_only_open_buckets_and_reconciles_backdated_writes(clock):
@@ -131,7 +131,7 @@ def test_rollover_closes_old_buckets_once_and_matches_a_fresh_scan(clock, bounda
     if boundary != 'hour':
         store.docs[new_day], store.docs[new_api] = gateway(6_000_000), {'micro_units': 7_000_000}
     result = read(store, clock, cache)
-    expected = units.get_usage_units('u', clock[0][0], firestore_client=Store(store.docs), entitlements=entitlement())
+    expected = read(Store(store.docs), clock, UsageUnitsSession())
     assert result == expected
     clock[1](60)
     before = store.reads
@@ -153,95 +153,3 @@ def test_failed_refresh_does_not_commit_partial_cache_and_invalidation_rescans(c
     before = store.reads
     assert read(store, clock, cache) == initial
     assert store.reads - before == 442
-
-
-@pytest.mark.parametrize('dispatch', [False, True])
-@pytest.mark.parametrize('percent,cadence', [(0, 900), (50, 900), (95, 60)])
-async def test_real_live_admission_read_counts_and_local_debit(clock, monkeypatch, billing, dispatch, percent, cadence):
-    store = month_store(percent)
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
-    monkeypatch.setattr(ladder, 'account', lambda *a, **k: entitlement())
-    monkeypatch.setattr(units, 'get_customer_firestore_client', lambda: store)
-    subscription = billing
-
-    monkeypatch.setattr(subscription, 'is_marketplace_reviewer', lambda _: False)
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *a, **k: False)
-
-    async def run(executor, fn, *args, **kwargs):
-        return fn(*args, **kwargs)
-
-    monkeypatch.setattr(cap, 'run_blocking', run)
-    state = cap.LiveAdmission('u')
-    await state.refresh(subscription={'plan': 'basic'})
-    assert store.reads == 442
-    remaining = state.remaining_units
-    raw = Mock(send=Mock(return_value=True))
-    for second in range(1, cadence):
-        clock[1](1)
-        state.send(raw, b'\0' * 32000, 'modulate', 16000)
-        await state.refresh(force=False, subscription={'plan': 'basic'})
-    assert store.reads == 442
-    assert state.remaining_units < remaining
-    clock[1](1)
-    await state.refresh(force=False, subscription={'plan': 'basic'})
-    assert store.reads == 442 + (3 if percent == 95 else 442)
-    before = store.reads
-    await state.refresh(force=True, subscription={'plan': 'basic'})
-    assert store.reads - before == 442
-
-
-async def test_unavailable_snapshot_uses_bounded_exponential_retry_and_resets(clock, monkeypatch):
-    from utils.transcription_allowance import TranscriptionAllowance
-
-    resolver = Mock(return_value=TranscriptionAllowance('on_device', 0, 'allowance_unavailable'))
-    monkeypatch.setattr(cap, 'funded_allowance', resolver)
-
-    async def run(executor, fn, *args, **kwargs):
-        return fn(*args, **kwargs)
-
-    monkeypatch.setattr(cap, 'run_blocking', run)
-    state = cap.LiveAdmission('u')
-    await state.refresh()
-    for delay in [60, 120, 240, 480, 900, 900]:
-        count = resolver.call_count
-        clock[1](delay - 1)
-        await state.refresh(force=False)
-        assert resolver.call_count == count
-        clock[1](1)
-        await state.refresh(force=False)
-        assert resolver.call_count == count + 1
-    await state.refresh(force=True)  # Invalidation always bypasses backoff.
-    resolver.return_value = TranscriptionAllowance(
-        'managed', None, 'usage_budget_available', remaining_units=5000, budget_units=100000
-    )
-    await state.refresh(force=True)
-    assert state.failures == 0 and state.managed
-    clock[1](59)
-    assert not state.refresh_due()
-    clock[1](1)
-    assert state.refresh_due()
-
-
-async def test_membership_change_drops_old_full_scan_deadline(clock, monkeypatch):
-    from utils.transcription_allowance import TranscriptionAllowance
-
-    resolver = Mock(return_value=TranscriptionAllowance('managed', None, 'legacy_dispatch_disabled'))
-    monkeypatch.setattr(cap, 'funded_allowance', resolver)
-
-    async def run(executor, fn, *args, **kwargs):
-        return fn(*args, **kwargs)
-
-    monkeypatch.setattr(cap, 'run_blocking', run)
-    state = cap.LiveAdmission('u')
-    state.refreshed_at = state.usage_cache.full_at = 0
-    state.remaining_units, state.budget_units = 100000, 100000
-    clock[1](900)
-    await state.refresh(force=False)
-    assert state.usage_cache.full_at is None
-    for delay in [60, 60, 779]:
-        clock[1](delay)
-        await state.refresh(force=False)
-    assert resolver.call_count == 1
-    clock[1](1)
-    await state.refresh(force=False)
-    assert resolver.call_count == 2

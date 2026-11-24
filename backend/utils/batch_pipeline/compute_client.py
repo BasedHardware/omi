@@ -14,6 +14,11 @@ from google.oauth2.id_token import fetch_id_token
 
 from utils.batch_pipeline.contracts import LeasedWork
 
+# The server deadline this worker asks for, and the HTTP timeout that covers it
+# with transport headroom. A server that predates the header keeps its own 4s.
+ADMISSION_DEADLINE_SECONDS = 8.0
+AUTHORIZE_TIMEOUT_SECONDS = 9
+
 
 class InvalidReceipt(ValueError):
     """The authority replied, but did not supply a usable fenced receipt."""
@@ -57,10 +62,11 @@ class ComputeClient:
             headers={
                 'Content-Type': 'application/json',
                 'Authorization': f'Bearer {token}',
+                'X-Omi-Admission-Seconds': str(ADMISSION_DEADLINE_SECONDS),
             },
         )
         try:
-            with self._send(request, timeout=5) as response:
+            with self._send(request, timeout=AUTHORIZE_TIMEOUT_SECONDS) as response:
                 raw = response.read(65537)
             if len(raw) > 65536:
                 raise InvalidReceipt('oversized spend admission response')

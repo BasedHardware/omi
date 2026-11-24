@@ -1,0 +1,22 @@
+[
+  {
+    "label": "baseline",
+    "public_sha256": "f681aa213503faec007bee001252e461c1357bcafd72794333eab785e464f808",
+    "hash16": "f681aa213503faec007bee001252e461",
+    "network_ota_sha256": "55c32443acd422c670a6fc207d619863401930cd1557d230b1dda2144961960f",
+    "embedded": true,
+    "matches_installed_provision_metadata": true,
+    "installed_b0n_enforcement": "sha256_hash_only",
+    "signature_rejection_proven": false
+  },
+  {
+    "label": "later-candidate",
+    "public_sha256": "76d48548dbdbf2e645db20cb2a35aa77fe0aa416a425487cca75968fc90004dd",
+    "hash16": "76d48548dbdbf2e645db20cb2a35aa77",
+    "network_ota_sha256": "751f6195f86aea68a854f1654b94c180168bf9b30e6e140698617209f3fc6c9c",
+    "embedded": true,
+    "matches_installed_provision_metadata": false,
+    "installed_b0n_enforcement": "sha256_hash_only",
+    "signature_rejection_proven": false
+  }
+]

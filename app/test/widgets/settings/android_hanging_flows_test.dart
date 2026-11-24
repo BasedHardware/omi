@@ -95,7 +95,13 @@ void main() {
 
   testWidgets('referral opens outside WebView and exposes a retry if launch fails', (tester) async {
     browser.opened = false;
-    await pumpPage(tester, const ReferralPage());
+    // An old backend answers the campaign snapshot with 404, which keeps the affiliate page.
+    await pumpPage(
+        tester,
+        ReferralPage(
+            accountChanges: const Stream.empty(),
+            createSession: () => ReferralLinkSession(
+                isCurrent: () => true, load: () async => throw StateError('Referral campaign unavailable'))));
     expect(browser.launches.single, ('https://affiliate.omi.me/', false, false));
     expect(find.text('Try Again'), findsOneWidget);
     expect(find.byType(OmiSpinner), findsNothing);

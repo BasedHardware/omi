@@ -1,6 +1,34 @@
 {
   "entries": [
     {
+      "path": "utils/ai_profile_refresh.py",
+      "function": "schedule_refresh",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "AI profile refresh (2026-11-16), at most MAX_CONCURRENT_AUTOMATIC per process: a daily, idempotent rewrite of a derived summary; losing it at SIGKILL only leaves the profile stale until the next trigger once its hourly cooldown expires"
+    },
+    {
+      "path": "utils/sync/worker_runtime.py",
+      "function": "Runtime.execute",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "Joined child-process exit observer, not detached pipeline work. The supervisor awaits it and kills its owned process group in finally, even if the root child already exited. SIGKILL of the entire pod leaves the durable owner and unchanged Redis silence fence for the existing Cloud Tasks redrive. test_sync_worker_execution.py proves lease loss and root crash stop the descendant before handoff."
+    },
+    {
+      "path": "utils/sync/worker_job.py",
+      "function": "execute",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "Redis token renewal is scoped to one awaited pipeline and stopped/joined in finally. Renewal rejection cancels execution, retains the lock, and exits the isolated job process; the parent reaps every process-group member. Existing 1800s TTL and token-fenced pipeline writes prevent overlap with fallback. The cancelled-worker lock/custody and process-group death proofs are in test_sync_worker_execution.py."
+    },
+    {
+      "path": "utils/sync/worker_runtime.py",
+      "function": "create_app.lifespan",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "Dedicated pull-process lifecycle, not post-response pipeline work. The poll loop is stopped and joined during lifespan shutdown. At S2 it executes no audio; an unexpected accepted lease is handed back. Losing the process at SIGKILL retains the durable sequencer reservation and named Cloud Tasks fallback, recovered through the unchanged 1800s owner lease. Empty authenticated pulls and interruptible shutdown are exercised by test_sync_worker_runtime.py."
+    },
+    {
       "path": "routers/sync.py",
       "function": "_run_sync_job_attempt",
       "kind": "start_background_task",
@@ -43,6 +71,13 @@
       "why": "lease-renewal heartbeat for the awaited wipe worker; stopped in finally"
     },
     {
+      "path": "utils/batch_pipeline/packing_counterfactual.py",
+      "function": "PackingMetrics.observe",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "Optional packing telemetry after a successful lease commit. The process admits at most one metadata-only observer with a bounded read and no retries. SIGKILL can lose a diagnostic sample. Job state, custody, billing, recovery and the returned lease have no dependency on the observer."
+    },
+    {
       "path": "utils/batch_pipeline/projection.py",
       "function": "Projector._start_candidate",
       "kind": "executor.submit",
@@ -71,6 +106,13 @@
       "why": "reviewed recoverable: unfinished follow-ups stay in the durable projection_pending query and are re-launched by the next serving pass after restart"
     },
     {
+      "path": "utils/batch_pipeline/projection_followup.py",
+      "function": "ProjectionFollowups.launch_targeted",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed recoverable: this is only a wakeup after the result receipt is persisted; process loss leaves the same receipt pending for the serving pass, and failed steps retry from that receipt. test_batch_pipeline_recovery_owner_only.py and test_batch_pipeline_projection_followup.py cover owner scope and retry custody"
+    },
+    {
       "path": "utils/batch_pipeline/projection_prefetch.py",
       "function": "ChainPrefetch._scout",
       "kind": "executor.submit",
@@ -85,6 +127,13 @@
       "why": "reviewed safe: read-only successor-link scout; nothing is written, and a lost scout only means the walk reads its own successor"
     },
     {
+      "path": "utils/batch_pipeline/projection_prefetch.py",
+      "function": "NativeAudioPrefetch.context",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "Read-only staging and source verification. The owner turn keeps the future across step deadlines, and close cancels queued reads. Process loss leaves the durable result and assignment obligation pending for replay. An unfinished read cannot publish a receipt, change custody, or authorize cleanup."
+    },
+    {
       "path": "utils/batch_pipeline/serving.py",
       "function": "start_serving_from_env",
       "kind": "start_background_task",
@@ -95,7 +144,7 @@
       "path": "utils/batch_pipeline/shadow_intake.py",
       "function": "offer_upload",
       "kind": "start_background_task",
-      "count": 4,
+      "count": 3,
       "why": "reviewed safe (#23003): best-effort shadow reserve, late-reserve drop and staging of private copies; legacy keeps its own paths, ledger and processing, so a loss at SIGKILL drops one shadow sample. A stranded shadow job is settled as error by the worker reaper after 1h and its control rows carry TTLs; copies live in the dying container's temp directory. #23748 adds one tracked pair-only qualification offer, which awaits its pair and cleanup internally: SIGKILL can lose a sample, never serving work, routing, projection or usage. Durable intents prevent repeat spend; occupied slots fail closed after a crash until verified operator drain/reset. Private copies remain only in that container's temp directory. No qualification completeness or automatic slot recovery is promised. Owner astrabatch2/batch lane; lead adfec6 accepts this one task, remove with the temporary qualification mode (review 2026-10-29)."
     },
     {
@@ -111,6 +160,13 @@
       "kind": "threading.Thread",
       "count": 1,
       "why": "reviewed safe: refreshes only a cached health snapshot so allows() never blocks on Redis; no paid call, no unit state. Its one write is an atomic WATCH/MULTI breaker update that the next refresh or settle recomputes from the shared buckets; if killed, allows() answers from the process-local twin until a later refresh succeeds"
+    },
+    {
+      "path": "utils/batch_pipeline/provider_drain.py",
+      "function": "OwnerDrainCoalescer._start",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "Coalesced owner merge wake after a provider-STT settle (2026-11-13). It holds no obligation: the settled job row is already durable as result_ready, and the drain only asks the ordered merge to commit it. Losing the task at SIGKILL delays that owner until its next settle or the maintenance ready page, which was the only path before this change. Awaiting it in the request would hold a provider-stt queue slot through the 60 s head wait; a request-backed owner-wake task is the durable replacement once a queue for it exists."
     },
     {
       "path": "utils/conversations/action_item_refresh.py",
@@ -331,7 +387,7 @@
     },
     {
       "path": "utils/sync/pipeline.py",
-      "function": "_run_full_pipeline_background_async",
+      "function": "run_full_pipeline_background_async",
       "kind": "start_background_task",
       "count": 2,
       "why": "pre-existing; unreviewed; one site is the inline lease heartbeat (awaited in finally, safe); the other is the fair-use soft-cap classifier (advisory LLM)"
@@ -370,6 +426,27 @@
       "kind": "submit_with_context",
       "count": 1,
       "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/v3/context.py",
+      "function": "outline_sources",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "Read-only, deadline-bounded context load for the v3 outline prompt (profile, people, earlier titles). The caller waits on it up to the outline deadline and falls back to no context; it writes nothing, so losing it at SIGKILL only drops optional prompt context from a request that is itself lost."
+    },
+    {
+      "path": "utils/conversations/v3/renewal.py",
+      "function": "leased_work",
+      "kind": "start_background_task",
+      "count": 2,
+      "why": "Joined worker and lease keeper, not detached work: leased_work awaits (shielded) the worker and then the keeper before returning, so both live exactly as long as the request. At SIGKILL the v3 builder lease expires and the named Cloud Tasks reconcile plus the sweeper redrive the user; no partial write is committed without the lease token."
+    },
+    {
+      "path": "utils/batch_pipeline/live.py",
+      "function": "_manual_finish_admitted",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "Manual-finish first transcript (SCA-3024), at most one per recording and two at a time per process, only for owners admitted by CONVERSATIONS_V3_FAST_FINISH: a best-effort early provider transcript started after record admission has committed. Losing it at SIGKILL loses only the early transcript; the admitted batch job still owns and delivers the canonical one, a single-unit recording's manual-end cut is stored before the task starts, and a multi-unit cut is stored only after the transcript write."
     }
   ]
 }

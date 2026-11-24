@@ -29,7 +29,7 @@ class _Ref:
         self.db = db
         self.path = path
 
-    def get(self):
+    def get(self, **_kwargs):
         if self.path not in self.db.docs:
             return _Snapshot(None, exists=False)
         return _Snapshot(self.db.docs[self.path])
@@ -54,7 +54,7 @@ class _Db:
 
 
 class _UnreadableRef:
-    def get(self):
+    def get(self, **_kwargs):
         raise RuntimeError("transport unavailable")
 
 

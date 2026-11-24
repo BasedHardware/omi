@@ -34,7 +34,7 @@ class _Usage extends UsageProvider {
   Future<void> loadAvailablePlans() async {}
 
   @override
-  Future<void> fetchSubscription() async {
+  Future<void> fetchSubscription({bool fresh = false}) async {
     if (!clearCancelOnFetch || subscription == null) return;
     final current = subscription!;
     debugSetSubscription(
@@ -175,10 +175,10 @@ Future<_Usage> _pump(
   return usage;
 }
 
-/// 2026-11-03 00:00:00 UTC. Far-east and far-west zones put that instant on different
+/// 2099-11-03 00:00:00 UTC, far enough ahead that the period never ends during a run. Far-east and far-west zones put that instant on different
 /// local calendar days, so the expected label is the local day of the same epoch
 /// the sheet formats.
-final int _periodEndSeconds = DateTime.utc(2026, 11, 3).millisecondsSinceEpoch ~/ 1000;
+final int _periodEndSeconds = DateTime.utc(2099, 11, 3).millisecondsSinceEpoch ~/ 1000;
 
 String _date(WidgetTester tester) {
   final context = tester.element(find.byType(PlansSheet));
@@ -195,9 +195,10 @@ void main() {
   testWidgets('resubscribe uses the current price and replaces the ends line', (tester) async {
     final usage = await _pump(
       tester,
-      clearCancelOnFetch: true,
       sessionResult: {'status': 'reactivated', 'message': 'ok', 'next_billing_date': _periodEndSeconds},
     );
+    // The server clears the cancel only after Resubscribe, not on the sheet's opening read.
+    usage.clearCancelOnFetch = true;
     final l10n = AppLocalizations.of(tester.element(find.byType(PlansSheet)));
     final date = _date(tester);
 

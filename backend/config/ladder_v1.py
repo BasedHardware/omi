@@ -27,12 +27,6 @@ def pro_trigger(feature: str) -> str | None:
     return None
 
 
-def budget_enforcement_enabled() -> bool:
-    return rollout_default_off(
-        'LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', os.getenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false') == 'true'
-    )
-
-
 def mcp_daily_caps_enabled() -> bool:
     return rollout_default_off(
         'LADDER_V1_MCP_DAILY_CAPS_ENABLED', os.getenv('LADDER_V1_MCP_DAILY_CAPS_ENABLED', 'false') == 'true'

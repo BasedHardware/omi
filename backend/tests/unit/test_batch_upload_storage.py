@@ -64,6 +64,11 @@ def merge():
     tombstones_stub.is_deleted = MagicMock(return_value=False)
     tombstones_stub.record_deletion = MagicMock()
 
+    record_audio_stub = ModuleType("database.record_audio")
+    record_audio_stub.fence_record_audio_removal = MagicMock(
+        side_effect=AssertionError('copy cannot remove source custody')
+    )
+
     vector_db_stub = ModuleType("database.vector_db")
     vector_db_stub.delete_vector = MagicMock()
     vector_db_stub.delete_action_item_vectors_batch = MagicMock()
@@ -133,6 +138,8 @@ def merge():
         "database._client": client_stub,
         "database.conversations": conversations_stub,
         "database.conversation_tombstones": tombstones_stub,
+        "database.record_audio": record_audio_stub,
+        "database.conversations_v3_backfill_runs": ModuleType("database.conversations_v3_backfill_runs"),
         "database.vector_db": vector_db_stub,
         "utils.cloud_tasks": cloud_tasks_stub,
         "utils.other.storage": storage_stub,
@@ -394,6 +401,7 @@ class TestListAudioChunksBatchAware:
             mock_blob = MagicMock()
             mock_blob.name = name
             mock_blob.size = 1000
+            mock_blob.metadata = None
             mock_blobs.append(mock_blob)
         mock_bucket.list_blobs.return_value = mock_blobs
         storage_mod.storage_client.bucket.return_value = mock_bucket
@@ -584,6 +592,7 @@ class TestDownloadAudioChunksMergeBatchAware:
             mb = MagicMock()
             mb.name = name
             mb.size = size
+            mb.metadata = None
             list_blobs.append(mb)
         mock_bucket.list_blobs.return_value = list_blobs
 

@@ -30,7 +30,7 @@ from utils import rollout_cohorts
         ('', '100', 'owner', False),
         ('false', '100', 'owner', False),
         ('true', '0', '', False),
-        ('true', '0', 'owner', True),
+        ('true', '0', 'owner', False),
         ('true', 'bad', '', False),
         ('true', '101', '', False),
         ('true', '100', '', True),
@@ -66,7 +66,7 @@ def test_cohort_is_stable_and_bounded(monkeypatch):
 )
 async def test_consumer_admission(monkeypatch, apps, webhook, custom, private, allowed):
     monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'true')
-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_UIDS', 'owner')
+    monkeypatch.setenv('MOBILE_STANDARD_BATCH_PERCENT', '100')
     monkeypatch.setattr(runtime_module.user_db, 'get_user_private_cloud_sync_enabled', lambda uid: private)
     monkeypatch.setattr(runtime_module, 'get_enabled_apps', lambda uid: apps)
     monkeypatch.setattr(runtime_module, 'get_audio_bytes_webhook_seconds', lambda uid: webhook)
@@ -87,7 +87,7 @@ async def test_consumer_admission(monkeypatch, apps, webhook, custom, private, a
 @pytest.mark.asyncio
 async def test_developer_transcript_webhook_keeps_live_stream(monkeypatch):
     monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'true')
-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_UIDS', 'owner')
+    monkeypatch.setenv('MOBILE_STANDARD_BATCH_PERCENT', '100')
     monkeypatch.setattr(runtime_module.user_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
     monkeypatch.setattr(runtime_module, 'get_enabled_apps', lambda uid: [])
     monkeypatch.setattr(runtime_module, 'get_audio_bytes_webhook_seconds', lambda uid: None)
@@ -108,7 +108,7 @@ async def test_developer_transcript_webhook_keeps_live_stream(monkeypatch):
 @pytest.mark.asyncio
 async def test_inventory_failure_is_live_only_and_kill_switch_is_immediate(monkeypatch):
     monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'true')
-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_UIDS', 'owner')
+    monkeypatch.setenv('MOBILE_STANDARD_BATCH_PERCENT', '100')
     runtime = object.__new__(ListenSessionRuntime)
     runtime.request = SimpleNamespace(uid='owner')
     runtime.private_cloud_sync_enabled = True
@@ -331,7 +331,7 @@ async def test_mobile_lease_preserves_shared_live_demand_and_visibility_tracking
 async def test_mobile_renewal_awaits_expired_membership_and_warm_packets_cost_zero_reads(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'true')
-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_UIDS', 'owner')
+    monkeypatch.setenv('MOBILE_STANDARD_BATCH_PERCENT', '100')
     monkeypatch.setenv('MOBILE_STANDARD_BATCH_PERCENT', '0')
     monkeypatch.setattr(runtime_module.user_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
     monkeypatch.setattr(runtime_module, 'get_enabled_apps', lambda uid: [])

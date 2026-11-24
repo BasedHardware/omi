@@ -27,7 +27,7 @@ from tests.unit.test_wal_audio_coverage_pipeline import (
 
 
 async def _run(module, tmp_path):
-    await module._run_full_pipeline_background_async(
+    await module.run_full_pipeline_background_async(
         'job-coverage',
         'uid',
         [f'/tmp/{BIN_NAME}'],
@@ -51,42 +51,6 @@ def _ledger(pipeline, monkeypatch):
     writer = Mock(return_value=True)
     monkeypatch.setattr(sync_cap_holds, 'mark_content_held', writer)
     return writer
-
-
-@pytest.mark.parametrize('dispatch', [False, True])
-async def test_full_hold_contains_only_wal_audio_not_already_committed(coordinator, monkeypatch, tmp_path, dispatch):
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    _coverage_env(monkeypatch)
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    state = _wire(
-        pipeline,
-        monkeypatch,
-        tmp_path,
-        lineage_rows=[generation(1, capture_evidence=_committed_envelope(range(7)))],
-    )
-    writer = _ledger(pipeline, monkeypatch)
-    monkeypatch.setattr(
-        cap_hold, 'funded_allowance', lambda uid, **kw: SimpleNamespace(managed=False, reason='usage_budget_exhausted')
-    )
-    retained = []
-
-    async def retain(uid, path, metadata, reason, receipt):
-        retained.append((_read_payload(path), metadata))
-        receipt.update(id='held-source', seconds=1.5)
-
-    monkeypatch.setattr(cap_hold, '_hold_capture', retain)
-    await _run(module, tmp_path)
-    assert len(retained) == 1
-    assert retained[0][0] == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in (7, 8, 9))
-    assert retained[0][1]['source_frame_map']['claim']['source_frame_start'] == 7
-    assert retained[0][1]['recording_session_id'] == ORIGIN
-    assert state.vad_seen == state.processed == []
-    pipeline.record_usage.assert_not_called()
-    pipeline.mark_sync_content_completed.assert_not_called()
-    assert writer.call_args.args[3]['held_audio'] is True
-    assert writer.call_args.kwargs['hold_ids'] == ['held-source']
 
 
 async def test_late_hold_reports_custody_and_charges_only_dispatched_speech(coordinator, monkeypatch, tmp_path):
@@ -124,7 +88,7 @@ async def test_late_hold_reports_custody_and_charges_only_dispatched_speech(coor
     assert pipeline.record_usage.call_args.kwargs['speech_seconds'] == 2
 
 
-@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize('ladder', [False])
 @pytest.mark.parametrize('cohort,lanes', [('', 'sync'), ('uid:other', 'sync'), ('all', 'live')])
 async def test_actual_v2_coordinator_does_not_hold_outside_scope(
     coordinator, monkeypatch, tmp_path, ladder, cohort, lanes
@@ -155,3 +119,38 @@ async def test_v2_default_offline_scope_holds_before_vad(coordinator, monkeypatc
     await test_full_hold_contains_only_wal_audio_not_already_committed(
         coordinator, monkeypatch, tmp_path, dispatch=False
     )
+
+
+@pytest.mark.parametrize('dispatch', [True])
+async def test_full_hold_contains_only_wal_audio_not_already_committed(coordinator, monkeypatch, tmp_path, dispatch):
+    module, stubs = coordinator
+    pipeline = stubs['pipeline']
+    _coverage_env(monkeypatch)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
+    state = _wire(
+        pipeline,
+        monkeypatch,
+        tmp_path,
+        lineage_rows=[generation(1, capture_evidence=_committed_envelope(range(7)))],
+    )
+    writer = _ledger(pipeline, monkeypatch)
+    monkeypatch.setattr(
+        cap_hold, 'funded_allowance', lambda uid, **kw: SimpleNamespace(managed=False, reason='usage_budget_exhausted')
+    )
+    retained = []
+
+    async def retain(uid, path, metadata, reason, receipt):
+        retained.append((_read_payload(path), metadata))
+        receipt.update(id='held-source', seconds=1.5)
+
+    monkeypatch.setattr(cap_hold, '_hold_capture', retain)
+    await _run(module, tmp_path)
+    assert len(retained) == 1
+    assert retained[0][0] == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in (7, 8, 9))
+    assert retained[0][1]['source_frame_map']['claim']['source_frame_start'] == 7
+    assert retained[0][1]['recording_session_id'] == ORIGIN
+    assert state.vad_seen == state.processed == []
+    pipeline.record_usage.assert_not_called()
+    pipeline.mark_sync_content_completed.assert_not_called()
+    assert writer.call_args.args[3]['held_audio'] is True
+    assert writer.call_args.kwargs['hold_ids'] == ['held-source']

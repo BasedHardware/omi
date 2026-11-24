@@ -4,9 +4,36 @@ A separate commit in the same PR migrates NLLB, VAD and speaker embeddings in
 both environments. Parakeet STT stays on its existing hostname; only Parakeet's
 speaker-embedding fallback moves. A read-only refresh on 2026-10-14 found dev's
 newly reserved `dev-ml-gateway-ilb-ip` at `172.16.48.49`; prod uses
-`172.16.160.20`. Both environments now bind concrete IPs. Reservation alone does
-not prove Gateway programming, health or caller reachability. Qualify every
-route from GKE and Cloud Run before deploying these caller values.
+`172.16.160.20`. Reservation alone does not prove Gateway programming, health
+or caller reachability. Qualify every route from GKE and Cloud Run before
+deploying these caller values.
+
+## Status: dev Gateway removed, dev callers on the rollback endpoints
+
+The dev shared Gateway (VIP `172.16.48.49`) was deleted on 2026-11-02. Dev
+caller bindings were therefore restored to the rollback endpoints below:
+embeddings `http://diarizer.omiapi.com:80` on every listen/pusher/Cloud Run
+speaker-ID host, VAD `http://vad.omiapi.com:80/v1/vad`, NLLB
+`http://nllb.omiapi.com`. Prod is unchanged on `172.16.160.20`. Parakeet's
+chart fallback is NOT repointed: the audio-fleet contract
+(`test_audio_fleet_helm`) freezes the parakeet chart against main, so its dev
+fallback still binds the dead VIP (`http://172.16.48.49/diarizer`) until the
+audio-fleet owner lands the separately qualified switch (its rollback value is
+`http://dev-omi-diarizer.dev-omi-backend.svc.cluster.local:8080`). The dev
+`diarizer`/`vad`/`nllb` legacy Ingress
+rules, services and DNS records are the live rollback path and must not be
+removed while these bindings point at them; `nllb.omiapi.com` had no public A
+record on 2026-11-05, so confirm it resolves from Cloud Run/GKE before relying
+on the NLLB binding. Reinstalling the dev Gateway requires re-reserving
+`dev-ml-gateway-ilb-ip`, re-running the Gateway runbook and re-qualifying every
+route before switching callers back.
+
+The 2026-11-02 ic-devlb map also found `dev-omi-llm`, an orphaned Helm release
+(`llm-0.1.0`, no chart on main; Ingress `llm.omiapi.com` at `172.16.63.230`
+behind reserved address `dev-llm-ilb-ip-address`, deployment 0/0, zero traffic
+over 14 days, no covenant names it). No repo value references it; removal is
+operator-owned: `helm uninstall dev-omi-llm -n dev-omi-backend`, drop the
+`llm.omiapi.com` DNS record, then release `dev-llm-ilb-ip-address`.
 
 Deploy order (dev first, then prod):
 

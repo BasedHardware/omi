@@ -14,7 +14,8 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
-from database.jobstore.connection import Pool
+from database.batch_pipeline_store import PROJECTION_DISCOVERY_STATES
+from database.jobstore.connection import Pool, sql
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
 from testing.pipeline_sim.store import CustomerData, SimStore
 
@@ -30,10 +31,18 @@ class PgRows(Mapping):
 
     def _all(self) -> dict[tuple[str, str], dict]:
         namespace = self._store.pg.namespace
-        sql = ' UNION ALL '.join(f"SELECT '{t}', key, doc FROM {t} WHERE namespace = %s" for t in _TYPED)
-        sql += ' UNION ALL SELECT tbl, key, doc FROM docs WHERE namespace = %s'
+        psycopg_sql = sql()
+        queries = [
+            psycopg_sql.SQL('SELECT {t_literal}, key, doc FROM {t_ident} WHERE namespace = %s').format(
+                t_literal=psycopg_sql.Literal(table), t_ident=psycopg_sql.Identifier(table)
+            )
+            for table in _TYPED
+        ]
+        query = psycopg_sql.SQL(' UNION ALL ').join(
+            [*queries, psycopg_sql.SQL('SELECT tbl, key, doc FROM docs WHERE namespace = %s')]
+        )
         with self._store.pg.pool.connection() as conn:
-            rows = conn.execute(sql, (namespace,) * (len(_TYPED) + 1)).fetchall()
+            rows = conn.execute(query, (namespace,) * (len(_TYPED) + 1)).fetchall()
         return {(table, key): doc for table, key, doc in rows}
 
     def __getitem__(self, address: tuple[str, str]) -> dict:
@@ -67,6 +76,9 @@ class _Recording:
     def get(self, table: str, key: str) -> dict:
         return self._tx.get(table, key)
 
+    def get_existing(self, table: str, key: str) -> dict | None:
+        return self._tx.get_existing(table, key)
+
     def put(self, table: str, key: str, value: dict) -> None:
         self._tx.get(table, key)  # first touch caches the committed row (the observers' "previous")
         self._tx.put(table, key, value)
@@ -78,8 +90,20 @@ class _Recording:
     def first_pending(self, owner_key: str) -> dict | None:
         return self._tx.first_pending(owner_key)
 
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]:
+        return self._tx.pending_page(owner_key, limit)
+
+    def fresh_first_pending(self, owner_key: str) -> dict | None:
+        return self._tx.fresh_first_pending(owner_key)
+
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None:
+        return self._tx.fresh_first_ready_pending(owner_key)
+
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return self._tx.ready_predecessor(owner_key, priority, segment_id)
+
+    def protected_ready(self, owner_key, priority, now, *, after=None):
+        return self._tx.protected_ready(owner_key, priority, now, after=after)
 
     def service_frontier(self, priority: int) -> float:
         return self._tx.service_frontier(priority)
@@ -89,6 +113,15 @@ class _Recording:
 
 
 class PgSimStore(SimStore):
+    def packing_candidates(self, owner_key: str) -> list[dict]:
+        return self.pg.packing_candidates(owner_key)
+
+    def projection_finish_backfill_complete(self) -> bool:
+        return self.pg.projection_finish_backfill_complete()
+
+    def projection_followup_backfill_complete(self) -> bool:
+        return self.pg.projection_followup_backfill_complete()
+
     def __init__(self, customer: CustomerData, *, namespace: str, pool: Pool):
         super().__init__(customer, namespace=namespace)
         self.pg = PostgresStore(namespace, pool=pool, customer_client=customer.client, harness_customer_tables=True)
@@ -117,6 +150,9 @@ class PgSimStore(SimStore):
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:
         return self.pg.due(state, now, limit)
 
+    def protected_retries(self, now, limit, *, after=None):
+        return self.pg.protected_retries(now, limit, after=after)
+
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
         return self.pg.oldest(priority, ready_only=ready_only)
 
@@ -131,6 +167,11 @@ class PgSimStore(SimStore):
 
     def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
         return self.pg.control_candidate(priority, pool, now, worker_id=worker_id, exclude=exclude)
+
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]:
+        return self.pg.control_candidates(priority, pool, now, worker_id=worker_id, fanout=fanout)
 
     def first_pending(self, owner_key: str) -> dict | None:
         return self.pg.run(lambda tx: tx.first_pending(owner_key))
@@ -150,13 +191,41 @@ class PgSimStore(SimStore):
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
         return self.pg.fresh_pending(owner_key, limit)
 
+    def ready_pending(self, owner_key: str, limit: int, *, after=None) -> list[dict]:
+        return self.pg.ready_pending(owner_key, limit, after=after)
+
+    def ready_owners(
+        self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
+    ) -> list[tuple[str, str | None]]:
+        return self.pg.ready_owners(after_owner_key, limit, ceiling_owner_key=ceiling_owner_key, descending=descending)
+
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         return self.pg.held_merge_owners(limit, after=after)
 
     def projection_page(
-        self, limit: int = 100, *, after=None, states: tuple[str, ...] | None = None
+        self,
+        limit: int = 100,
+        *,
+        after: tuple | None = None,
+        states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+        due_before: float | None = None,
+        exclude_async: bool = False,
+        followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
-        return self.pg.projection_page(limit, after=after, states=states)
+        return self.pg.projection_page(
+            limit,
+            after=after,
+            states=states,
+            due_before=due_before,
+            exclude_async=exclude_async,
+            followup_due_before=followup_due_before,
+        )
+
+    def projection_outbox_page(self, now: float, limit: int):
+        return self.pg.projection_outbox_page(now, limit)
+
+    def projection_page_with_outbox(self, **scope):
+        return self.pg.projection_page_with_outbox(**scope)
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         return self.pg.projection_successor(owner_key, previous)
@@ -193,7 +262,11 @@ class PgSimStore(SimStore):
     def delete(self, table: str, key: str) -> None:
         with self.pg.pool.connection() as conn:
             if table in _TYPED:
-                conn.execute(f'DELETE FROM {table} WHERE namespace = %s AND key = %s', (self.pg.namespace, key))
+                psycopg_sql = sql()
+                query = psycopg_sql.SQL('DELETE FROM {} WHERE namespace = %s AND key = %s').format(
+                    psycopg_sql.Identifier(table)
+                )
+                conn.execute(query, (self.pg.namespace, key))
             else:
                 conn.execute(
                     'DELETE FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.pg.namespace, table, key)

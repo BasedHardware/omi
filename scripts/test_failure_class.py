@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -12,10 +11,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from git_test_env import clean_git_env
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 CLI = REPOSITORY_ROOT / "scripts" / "failure-class"
 SEED_DIRECTORY = REPOSITORY_ROOT / ".github" / "failure-classes"
+FAMILIES_CATALOGUE = REPOSITORY_ROOT / ".github" / "failure-class-families.json"
 REPORT_FIXTURE = REPOSITORY_ROOT / "scripts" / "fixtures" / "failure_class" / "report-events.json"
 # The registry grows as classes are declared; derive the seed set instead of
 # pinning a count that goes stale the next time a class is added.
@@ -41,7 +43,7 @@ GIT_ISOLATION = [
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     if command and command[0] == "git":
         command = [command[0], *GIT_ISOLATION, *command[1:]]
-    environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    environment = clean_git_env()
     return subprocess.run(command, cwd=cwd, check=False, text=True, capture_output=True, env=environment)
 
 
@@ -52,6 +54,7 @@ class FailureClassCliTests(unittest.TestCase):
         definitions = self.root / ".github" / "failure-classes"
         definitions.parent.mkdir(parents=True)
         shutil.copytree(SEED_DIRECTORY, definitions)
+        shutil.copy(FAMILIES_CATALOGUE, self.root / ".github" / "failure-class-families.json")
         self.seed_canonical_prevention_artifacts(definitions)
         run(["git", "init", "-q"], self.root)
         run(["git", "config", "user.email", "failure-class@example.test"], self.root)
@@ -135,6 +138,19 @@ class FailureClassCliTests(unittest.TestCase):
         self.set_definition_field(
             "FC-malformed-doc-read", "canonical_prevention_artifact", ["backend/guards/read_boundary.py"]
         )
+        result = self.validate(self.body("## Summary\n"))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(self.payload(result)["ok"])
+
+    def test_canonical_prevention_artifact_tracked_at_head_counts(self) -> None:
+        # Cone-mode sparse checkouts do not materialise out-of-cone paths; an
+        # artifact committed at HEAD but absent from the working tree stays valid.
+        self.set_definition_field(
+            "FC-malformed-doc-read", "canonical_prevention_artifact", ["backend/guards/sparse_guard.py"]
+        )
+        self.write("backend/guards/sparse_guard.py", "# guard\n")
+        self.commit("chore: add guard")
+        (self.root / "backend" / "guards" / "sparse_guard.py").unlink()
         result = self.validate(self.body("## Summary\n"))
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertTrue(self.payload(result)["ok"])
@@ -229,6 +245,7 @@ class FailureClassCliTests(unittest.TestCase):
         definition = {
             "schema_version": 1,
             "id": "FC-new-test-boundary",
+            "family": "other",
             "violated_contract": "Test boundaries retain their contract.",
             "canonical_prevention": "Keep the guard at the shared boundary.",
             "evidence_prs": [1234],
@@ -249,6 +266,7 @@ class FailureClassCliTests(unittest.TestCase):
         definition = {
             "schema_version": 1,
             "id": class_id,
+            "family": "other",
             "violated_contract": "Test boundaries retain their contract.",
             "canonical_prevention": "Keep the guard at the shared boundary.",
             "evidence_prs": evidence_prs,
@@ -440,6 +458,68 @@ class FailureClassCliTests(unittest.TestCase):
         self.assertEqual(len(payload["advisory_candidates"]), len(SEED_IDS))
         self.assertIn("no class was inferred", payload["candidate_source"])
 
+    def test_catalogue_is_never_counted_as_a_definition(self) -> None:
+        result = self.validate(self.body("## Summary\n"))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["validation"]["definition_count"], len(SEED_IDS))
+        self.assertNotIn("failure-class-families", SEED_IDS)
+
+    def test_definition_requires_a_known_family(self) -> None:
+        self.set_definition_field("FC-malformed-doc-read", "family", "not-a-family")
+        payload = self.payload(self.cli("explain", "FC-malformed-doc-read"))
+        self.assertIn("unknown_failure_class_family", [item["code"] for item in payload["errors"]])
+
+    def test_definition_without_family_is_rejected(self) -> None:
+        path = self.root / ".github" / "failure-classes" / "FC-malformed-doc-read.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        del data["family"]
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        payload = self.payload(self.cli("explain", "FC-malformed-doc-read"))
+        self.assertIn("missing_definition_field", [item["code"] for item in payload["errors"]])
+
+    def test_every_seed_definition_names_a_catalogue_family(self) -> None:
+        families = json.loads(FAMILIES_CATALOGUE.read_text(encoding="utf-8"))["families"]
+        for path in sorted(SEED_DIRECTORY.glob("*.json")):
+            self.assertIn(json.loads(path.read_text(encoding="utf-8")).get("family"), families, path.name)
+
+    def test_missing_catalogue_is_one_structured_error(self) -> None:
+        (self.root / ".github" / "failure-class-families.json").unlink()
+        payload = self.payload(self.cli("explain", "FC-malformed-doc-read"))
+        codes = [item["code"] for item in payload["errors"]]
+        self.assertEqual(codes.count("missing_family_catalogue"), 1)
+        self.assertNotIn("unknown_failure_class_family", codes)
+
+    def test_explain_lists_family_members(self) -> None:
+        self.set_definition_field("FC-malformed-doc-read", "family", "write-fence")
+        self.set_definition_field("FC-trapping-dict-merge", "family", "write-fence")
+        payload = self.payload(self.cli("explain", "FC-malformed-doc-read"))
+        family = payload["family"]
+        self.assertEqual(family["key"], payload["failure_class"]["family"])
+        self.assertTrue(family["contract"])
+        self.assertNotIn("FC-malformed-doc-read", family["open_members_shown"])
+        self.assertIn("FC-trapping-dict-merge", family["open_members_shown"])
+        self.assertLessEqual(len(family["open_members_shown"]), 25)
+        self.assertGreater(family["members_total"], 1)
+
+    def test_explain_text_prints_the_family_and_its_open_members(self) -> None:
+        self.set_definition_field("FC-malformed-doc-read", "family", "write-fence")
+        self.set_definition_field("FC-trapping-dict-merge", "family", "write-fence")
+        result = run([sys.executable, str(CLI), "explain", "FC-malformed-doc-read", "--root", str(self.root),
+                      "--format", "text"], self.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("family write-fence:", result.stdout)
+        self.assertIn("FC-trapping-dict-merge", result.stdout)
+
+    def test_prepare_tags_candidates_with_their_family(self) -> None:
+        self.set_definition_field("FC-malformed-doc-read", "family", "write-fence")
+        result = self.cli("prepare", "--base", self.base, "--head", "HEAD", "--all-candidates",
+                          "--pr-body-file", str(self.body("## Summary\n")))
+        payload = self.payload(result)
+        by_id = {c["id"]: c for c in payload["advisory_candidates"]}
+        self.assertEqual(by_id["FC-malformed-doc-read"]["family"], "write-fence")
+        self.assertEqual(sum(payload["candidate_families"].values()), payload["candidates_shown"])
+
     def test_explain_emits_versioned_definition(self) -> None:
         result = self.cli("explain", "FC-trapping-dict-merge")
         payload = self.payload(result)
@@ -502,6 +582,7 @@ class FailureClassCliTests(unittest.TestCase):
                 {
                     "schema_version": 1,
                     "id": class_id,
+                    "family": "other",
                     "violated_contract": "A contract that failed once.",
                     "canonical_prevention": "Converge the owner.",
                     "evidence_prs": [],
@@ -607,6 +688,7 @@ class FailureClassCliTests(unittest.TestCase):
                 {
                     "schema_version": 1,
                     "id": new_id,
+                    "family": "other",
                     "violated_contract": "parent contract",
                     "canonical_prevention": "parent prevention",
                     "evidence_prs": [],

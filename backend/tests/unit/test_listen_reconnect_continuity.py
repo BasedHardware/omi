@@ -75,7 +75,24 @@ class CaptureHarness:
 
     async def call(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
         name = fn.__name__
-        if fn.__module__ in {'utils.episodes.boundaries', 'utils.episodes.boundary_runtime'}:
+        if fn.__module__ == 'database.listen_batch_reconnect':
+            uid, cid, sid = args[:3]
+            self.store.rows[('users', uid)] = {'private_cloud_sync_enabled': True, 'time_zone': 'UTC'}
+            self.store.rows[('users', uid, 'conversations', cid)] = deepcopy(self.rows[cid])
+            self.store.rows.setdefault(
+                ('users', uid, 'recording_sessions', sid),
+                {
+                    'uid': uid,
+                    'conversation_id': cid,
+                    'recording_session_id': sid,
+                    'lifecycle_phase': 'in_progress',
+                    'lease_expires_at': self.now + timedelta(minutes=5),
+                },
+            )
+            result = fn(*args, firestore_client=self.store, **kwargs)
+            self.rows[cid] = deepcopy(self.store.rows[('users', uid, 'conversations', cid)])
+            return result
+        if fn.__module__ == 'utils.episodes.boundaries':
             return fn(*args, firestore_client=self.store, **kwargs)
         if name == 'arm':
             return fn(*args, firestore_client=self.store, **kwargs)

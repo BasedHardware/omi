@@ -1,0 +1,7 @@
+{
+  "version": "0.12.563",
+  "date": "2026-11-04",
+  "changes": [
+    "Conversations waiting for a plan now show a quiet Waiting badge instead of an amber Saved and waiting one."
+  ]
+}

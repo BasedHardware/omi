@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import collections
-import time
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -26,6 +25,7 @@ from routers.listen import receiver as receiver_module
 from routers.listen.receiver import ListenReceiver
 from routers.listen.runtime import ListenSessionRuntime
 from tests.unit.test_live_session_transcript_outcome import _runtime
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from utils.stt import connect_backoff as connect_backoff_module
 from utils.stt import (
     legacy_replay,
@@ -45,8 +45,6 @@ from utils.stt.live_outcome import LiveLegOutcome
 from utils.stt.provider_resilience import ProviderCircuitBreaker
 from utils.stt.recovery_state import LiveRecoveryController, current_recovery
 from utils.stt.resilient_stream import (
-    MAX_RECONNECTS,
-    MAX_RECONNECTS_PER_MINUTE,
     ResilientAudio,
     socket_is_finishing,
 )
@@ -60,6 +58,7 @@ ENV = 'STT_FAILOVER_RECOVERY_ENABLED'
 
 @pytest.fixture(autouse=True)
 def _isolated_stt_state(monkeypatch):
+    enabled_live_targets(monkeypatch)
     monkeypatch.setenv('STT_ROUTING_MODE', 'off')
     fleet = FleetHealth()
     for module in (live_health, live_chain, live_session, streaming):
@@ -404,21 +403,6 @@ def test_on_capture_cap_150(monkeypatch):
     assert ring.ring_seconds == 150
 
 
-def test_off_reconnect_budgets(monkeypatch):
-    monkeypatch.delenv(ENV, raising=False)
-    ring = ResilientAudio(16000, recovery_enabled=False)
-    attempts = [ring.admit('soniox', 'connection_lost', samples=1) for _ in range(4)]
-    assert attempts == [True, True] + [False] * 2
-    aged = ResilientAudio(16000, recovery_enabled=False)
-    now = time.monotonic()
-    aged._attempts = collections.deque([now - 120, now - 90])
-    aged._total_attempts = MAX_RECONNECTS
-    assert aged.admit('soniox', 'connection_lost', samples=1) is False
-    replay_limited = ResilientAudio(16000, recovery_enabled=False)
-    assert replay_limited.admit('soniox', 'connection_lost', samples=31 * 16000) is False
-    assert MAX_RECONNECTS_PER_MINUTE == 2
-
-
 def test_pending_departing_exhausted_off_degraded_on(monkeypatch):
     emitted: list[str] = []
     monkeypatch.setattr(live_failure, 'record_fallback', lambda **kw: emitted.append(kw['outcome']))
@@ -480,7 +464,7 @@ async def test_off_replay_emits_only_baseline_metrics(monkeypatch):
         is_connection_dead=False,
         send=lambda data, start_sample=None: True,
     )
-    rejected = legacy_replay.replay_chunks(socket, ring.snapshot(), source=ring, provider='soniox', soniox=None)
+    rejected = legacy_replay.replay_chunks(socket, ring.snapshot(), source=ring, provider='soniox')
     assert rejected is None
     assert live_metrics.REPLAY_AUDIO.labels(source='soniox', successor='soniox')._value.get() == replay_audio
     assert live_metrics.REPLAY_SECONDS.labels(provider='soniox')._value.get() == pytest.approx(replay_seconds + 0.1)
@@ -605,17 +589,12 @@ def _soniox_failover_receiver(monkeypatch, flag):
     receiver.host.stt_service = STTService.soniox
     ring = ResilientAudio(16000, recovery_enabled=receiver.recovery_enabled)
     ring.append(bytes(3200), 0)
-    receiver._resilient_audio = ring
     receiver._window_replay_audio = ring
     receiver._window_replay_started = True
     receiver._pending_live_failover = None
     receiver.stt_socket = _FlagFakeSocket(dead=True)
     receiver._stt_rebuild = (lambda: (None, None, None), 16000)
 
-    async def _no_reconnect():
-        return False
-
-    monkeypatch.setattr(receiver, '_reconnect_stt_socket_locked', _no_reconnect)
     monkeypatch.setattr(
         receiver_module,
         'select_live_replacement',

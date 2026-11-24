@@ -88,3 +88,43 @@ and notification delivery need separate live verification. No alert is applied
 by this repair or PR. Rollback: deploy the prior image; already held receipts
 remain fenced and must not be deleted; an older image cannot finish a partially
 assigned protocol-2 result, so resume it with this repair-capable image.
+
+## Deleted source without a tombstone
+
+`BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED` is **on by default**. Set it
+to `false` to restore the previous `privacy disposition requires a source
+deletion tombstone` block; unset it (or set `true`) to resume settlement.
+The switch changes settlement only: deletion fences still prevent publication
+when it is off. It does not undo committed terminal receipts.
+
+An original source with `deleted=true`, no deletion tombstone, and no valid
+`sync_merged_into` redirect may settle as `disposition=source_deleted`. The
+transaction rechecks the source, account/privacy generation, immutable binding,
+ledger ownership and predecessor. It stores a ready receipt with no conversation
+ID, audio or enrichment obligation, using the existing no-text completion path.
+Completion aggregates all parts and bound siblings. Any `source_deleted` part
+suppresses the entire job's output IDs, including content parts already
+persisted. The shared visibility fence also suppresses IDs in partial results,
+including deletion markers inside held entries; it preserves their existing
+custody semantics and does not count a partial as a job termination. Normal
+and partial completion report `reason_code=source_deleted`. Both skip the usage commit
+entirely: no hourly/monthly usage, ledger accounting fields, fair-use dispatch
+or usage-cache writer fence is written or reissued. Previously committed usage
+is preserved. Normal accounting formulas and ordering remain unchanged.
+The publisher is never called for that result, even with empty IDs. An older mixed completion is
+suppressed on replay without modifying its historical usage. Tombstones retain
+`conversation_deleted`; redirect chains retain their existing checks. Missing
+source documents alone are not evidence of deletion. Tombstone writers are
+unchanged.
+
+`omi_batch_pipeline_projection_source_deleted_jobs_total` increments once after
+job settlement commits, after aggregation over every part and sibling, not
+when individual parts persist and not on transaction retries or receipt replays. It is a process-local Prometheus
+counter; a crash between commit and increment can undercount. The durable
+completion is the audit source. Completion logs emit
+`event=batch_projection action=completion outcome=source_deleted`, without
+user IDs or content. Assignment logs may also identify the part's disposition;
+they are not the terminated-job count.
+Async follow-up attempts report `source_deleted` in
+`omi_batch_pipeline_projection_followup_outcomes_total{outcome="source_deleted"}`;
+this outcome is terminal and does not enter backoff.

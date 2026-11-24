@@ -1,0 +1,21 @@
+id: mute/settings-init-failure-stays-muted
+summary: Committee blocker 3. settings_subsys_init() failing must not unmute either.
+committee: [3]
+tags: [baseline-bug]
+faults:
+  - {op: settings_init, rc: -5, boots: [1]}
+timeline:
+  - {t: 3000, app_mute: 1}
+  - {t: 6000, power: cycle}
+end: 12000
+expect:
+  boots:
+    - {muted: 1}
+    - {muted: 1, should_capture: false, sd_paused: true}
+  invariants: [mute-blocks-capture, capture-after-settings]
+baseline_bug:
+  observed_at: c06b9bcd8749 (3.0.23)
+  expect:
+    boots:
+      - {muted: 1}
+      - {muted: 0, should_capture: true}

@@ -109,10 +109,17 @@ backend/.venv/bin/python backend/scripts/check_sync_staging_lifecycle.py --bucke
 
 Keep its timestamped JSON receipt before the lead-owned post-T3b promotion. It reads bucket
 metadata only and emits counts, metagenerations and policy digests, with no
-bucket/env values, prefixes or provider diagnostics. Missing metadata,
-lifecycle `Delete` actions and bucket retention/default holds that could block
-privacy erasure fail the guard. It never lists, reads, copies or restores
-objects, changes policy, or uses the interactive human identity.
+bucket/env values, prefixes or provider diagnostics. Missing metadata and
+bucket retention/default holds that could block privacy erasure fail the guard.
+Lifecycle `Delete` actions fail it too, except on a bucket named in
+`deploy/storage-lifecycle/retention_contract.json`: there a `Delete` may not
+reach a protected prefix sooner than the longest hold plus margin (an
+unbounded or pending-ruling hold forbids any), and noncurrent-only deletes are
+allowed. The receipt's `ceilings` list reports soft delete, versioning and cache
+ages beyond the contract's ceiling without changing PASS/FAIL. The same JSON is
+the threshold source for the workspace drift and retention checks. It never
+lists, reads, copies or restores objects, changes policy, or uses the
+interactive human identity.
 
 Do not substitute a GCS retention lock or object hold for this application
 hold: privacy erasure must remain possible immediately. The rollout lead owns

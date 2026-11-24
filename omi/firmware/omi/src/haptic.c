@@ -23,7 +23,6 @@ static void haptic_off_work_handler(struct k_work *work)
 }
 
 // BLE Service definitions
-static void haptic_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t haptic_write_handler(struct bt_conn *conn,
                                     const struct bt_gatt_attr *attr,
                                     const void *buf,

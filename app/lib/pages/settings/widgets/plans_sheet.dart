@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,15 +14,19 @@ import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/pages/settings/widgets/cancel_subscription_sheet.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/plan_storefront.dart';
+import 'package:omi/backend/http/api/payment.dart' show paymentRefusalMessage, useGooglePlayCode;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/plan_storefront_api.dart';
 import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
 import 'package:omi/services/experiments/plan_storefront_gate.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
+import 'package:omi/pages/settings/widgets/plans/promo_code_field.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/pages/settings/widgets/plans/plans_hero.dart';
+import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
 import 'package:omi/pages/settings/widgets/plans/training_data_option.dart';
+import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
 import 'package:omi/pages/settings/widgets/yearly_switch.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -94,7 +100,11 @@ class _PlansSheetState extends State<PlansSheet> {
   bool _isSwitchingToFree = false;
   final _promoCodeController = TextEditingController();
   String? _promoCodeError;
-  bool _showPromoCodeField = false;
+  bool _isRedeemingCode = false;
+  bool _promoCodeApplied = false;
+  // A discount code typed into "Have a code?" lands here, in today's promo field, for checkout.
+  bool _showPromoField = false;
+  Timer? _codeRetryTimer;
   bool _cancelSelectionTouched = false;
   String? _renewalConfirmation;
   String? _purchaseError;
@@ -143,7 +153,7 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   Future<void> _selectStorefrontPrice(StorefrontTier tier, StorefrontPrice price) async {
-    if (_isUpgrading || !context.read<UsageProvider>().showSubscriptionUI) return;
+    if (_isUpgrading || _isRedeemingCode || !context.read<UsageProvider>().showSubscriptionUI) return;
     if (_storefrontDecision(tier, price) == StorefrontCheckoutDecision.refuse) return;
     setState(() => _isUpgrading = true);
     selectedTierId = tier.planId;
@@ -185,6 +195,7 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   Future<void> _handleCancelSubscription() async {
+    if (_isRedeemingCode) return;
     await CancelSubscriptionFlow.show(context);
   }
 
@@ -321,6 +332,7 @@ class _PlansSheetState extends State<PlansSheet> {
     StorefrontPrice? storefrontPrice,
     bool releaseUpgradingLock = true,
   }) async {
+    if (_isRedeemingCode) return;
     final bool isYearly = selectedPlan == 'yearly';
 
     // Get the price ID from the available plans
@@ -539,7 +551,11 @@ class _PlansSheetState extends State<PlansSheet> {
           priceId: priceId,
           promotionCode: promoCode.isNotEmpty ? promoCode : null,
         );
-        if (result != null && result['error'] == true) {
+        if (result != null && result['error'] == true && paymentRefusalMessage(result) != null) {
+          _surfacePurchaseError(paymentRefusalMessage(result)!);
+          if (result['code'] == useGooglePlayCode) await provider.fetchSubscription(fresh: true);
+          return;
+        } else if (result != null && result['error'] == true) {
           final detail = isUpgradePendingCancelConflict(result['status_code'], detail: result['detail'] as String?)
               ? l10n.resubscribeFirstToChangePlans
               : result['detail'] as String? ?? l10n.invalidPromotionCode;
@@ -572,10 +588,13 @@ class _PlansSheetState extends State<PlansSheet> {
         if (sessionData != null && sessionData['error'] == true) {
           // Checkout's 409 is an existing subscription, not a pending cancellation.
           _surfacePurchaseError(
-            sessionData['status_code'] == 409
-                ? l10n.checkoutExistingSubscription
-                : sessionData['detail'] as String? ?? l10n.couldNotProcessSubscription,
+            paymentRefusalMessage(sessionData) ??
+                (sessionData['status_code'] == 409
+                    ? l10n.checkoutExistingSubscription
+                    : sessionData['detail'] as String? ?? l10n.couldNotProcessSubscription),
           );
+          // The server now sells this client through Google Play: read the plan again so the sheet shows Play.
+          if (sessionData['code'] == useGooglePlayCode) await provider.fetchSubscription(fresh: true);
         } else if (sessionData != null) {
           // Check if this was a reactivation
           if (sessionData.containsKey('status') && sessionData['status'] == 'reactivated') {
@@ -596,14 +615,16 @@ class _PlansSheetState extends State<PlansSheet> {
               newPlan: targetPlan,
               billingInterval: billingInterval,
             );
-            await provider.fetchSubscription();
+            await provider.fetchSubscription(fresh: true);
             await provider.loadAvailablePlans();
           }
           // Otherwise, this is a new subscription requiring checkout
-          else if (sessionData.containsKey('url') && sessionData['url'] != null) {
+          else if (sessionData.containsKey('url') && sessionData['url'] != null && !provider.buysThroughPlay) {
             final checkoutResult = await routeToPage(context, PaymentWebViewPage(checkoutUrl: sessionData['url']!));
 
             if (checkoutResult == true) {
+              // Checkout completion is not local entitlement proof; refresh the backend-owned state.
+              await provider.fetchSubscription(fresh: true);
               if (mounted) OmiFeedback.confirm(context, l10n.subscriptionSuccessfulCharged);
               PlatformManager.instance.analytics.upgradeSucceeded(
                 previousPlan: currentSub.plan.wireName,
@@ -626,6 +647,90 @@ class _PlansSheetState extends State<PlansSheet> {
       _loadAvailablePlans();
       if (releaseUpgradingLock && mounted) setState(() => _isUpgrading = false);
     }
+  }
+
+  /// A paid Stripe plan on a build that sells through Google Play: the plan, its date, and only Cancel, the stay
+  /// offer (inside Cancel) or Resubscribe at the same price. Nothing here starts a new Stripe charge.
+  Widget _stripePlanOnPlayBuild(UsageProvider provider, Subscription sub) {
+    final l10n = context.l10n;
+    final planName = currentPlanDisplayName(context, provider.subscription);
+    final periodEnd = sub.currentPeriodEnd;
+    final periodEndAt =
+        periodEnd != null && periodEnd > 0 ? DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000) : null;
+    final date = periodEndAt == null ? '—' : OmiDateFormat.of(context).date(periodEndAt);
+    final periodEnded = periodEndAt != null && periodEndAt.isBefore(DateTime.now());
+    final cancelled = sub.cancelAtPeriodEnd;
+    final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
+    final status = _renewalConfirmation ??
+        (!cancelled
+            ? l10n.planRenewsOn(date)
+            : periodEndAt != null
+                ? l10n.yourPlanEndsOn(planName, date)
+                : l10n.subscriptionSetToCancel);
+    return DecoratedBox(
+      key: const ValueKey('plans_sheet_stripe_on_play'),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.85,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+          children: [
+            const SizedBox(height: OmiSpacing.xl),
+            Semantics(header: true, child: Text(planName, style: OmiType.title3, textAlign: TextAlign.center)),
+            const SizedBox(height: OmiSpacing.xs),
+            Text(
+              status,
+              key: const ValueKey('plans_sheet_stripe_on_play_status'),
+              textAlign: TextAlign.center,
+              style: cancelled && _renewalConfirmation == null
+                  ? OmiType.subhead.copyWith(color: OmiColors.warning)
+                  : secondary,
+            ),
+            const SizedBox(height: OmiSpacing.xs),
+            Text(
+              // "Cancel here" only where Cancel is the action; next to Resubscribe the plan is already ending.
+              cancelled ? l10n.playStripeBilledOnWebShort : l10n.playStripeBilledOnWeb,
+              key: const ValueKey('plans_sheet_stripe_on_play_note'),
+              textAlign: TextAlign.center,
+              style: secondary,
+            ),
+            const SizedBox(height: OmiSpacing.xl),
+            if (_purchaseError != null) ...[
+              Text(
+                _purchaseError!,
+                key: const ValueKey('plans_sheet_purchase_error'),
+                textAlign: TextAlign.center,
+                style: OmiType.subhead.copyWith(color: OmiColors.danger),
+              ),
+              const SizedBox(height: OmiSpacing.sm),
+            ],
+            if (cancelled && !periodEnded && _renewalConfirmation == null)
+              OmiButton(
+                key: const ValueKey('plans_sheet_resubscribe_button'),
+                label: l10n.resubscribe,
+                expand: true,
+                maxLines: 2,
+                isLoading: _isUpgrading,
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  return _resubscribeCurrent();
+                },
+              )
+            else if (!cancelled)
+              OmiButton(
+                key: const ValueKey('plans_sheet_cancel_button'),
+                label: l10n.cancelSubscription,
+                variant: OmiButtonVariant.tertiary,
+                expand: true,
+                // Wraps instead of truncating at the largest text sizes.
+                maxLines: 2,
+                onPressed: _handleCancelSubscription,
+              ),
+            const SizedBox(height: OmiSpacing.md),
+          ],
+        ),
+      ),
+    );
   }
 
   void _surfacePurchaseError(String message) {
@@ -689,6 +794,7 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   Future<void> _openPaymentPortal() async {
+    if (_isRedeemingCode) return;
     final navigator = Navigator.of(context);
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
@@ -702,7 +808,7 @@ class _PlansSheetState extends State<PlansSheet> {
       // The user may have paid an overdue invoice or recovered a canceled plan inside the portal,
       // so refresh subscription state on return instead of leaving the UI showing Free until a
       // manual reload.
-      await provider.fetchSubscription();
+      await provider.fetchSubscription(fresh: true);
       await provider.loadAvailablePlans();
     } else if (mounted) {
       OmiFeedback.error(context, l10n.couldNotOpenPaymentSettings);
@@ -713,6 +819,8 @@ class _PlansSheetState extends State<PlansSheet> {
   void initState() {
     PaywallPacing.markShown();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Reopening the sheet re-reads the plan; the last answer stays on screen while it loads.
+      if (mounted) unawaited(context.read<UsageProvider>().fetchSubscription());
       _loadAvailablePlans();
       _initializeStorefront();
     });
@@ -721,6 +829,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
   @override
   void dispose() {
+    _codeRetryTimer?.cancel();
     _promoCodeController.dispose();
     super.dispose();
   }
@@ -766,8 +875,17 @@ class _PlansSheetState extends State<PlansSheet> {
           });
           return const SizedBox.shrink();
         }
+        if (provider.billingProviderUnknown) return const PlayPlansLoading();
+        if (provider.playBilledPurchaser || provider.subscription?.subscription.billedByPlay == true) {
+          return PlayPlansContent(analyticsSource: widget.analyticsSource);
+        }
+        final current = provider.subscription?.subscription;
+        if (provider.buysThroughPlay && current != null && current.plan.isPaid && current.prepaid != true) {
+          return _stripePlanOnPlayBuild(provider, current);
+        }
 
-        if (_storefrontEnabled) {
+        // A Play build never shows Stripe's storefront: only a prepaid plan reaches here, for its own body.
+        if (_storefrontEnabled && !provider.buysThroughPlay) {
           return StorefrontPlansContent(
             storefront: _storefront,
             loading: _storefrontLoading,
@@ -799,6 +917,35 @@ class _PlansSheetState extends State<PlansSheet> {
         final periodEnded = periodEndAt != null && periodEndAt.isBefore(DateTime.now());
         final knownFutureEnd = periodEndAt != null && periodEndAt.isAfter(DateTime.now());
         final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
+
+        // A prepaid no-card plan ends on its own: show when, and nothing to resubscribe, upgrade or cancel.
+        if (isPaidPlan && sub?.prepaid == true) {
+          final planName = currentPlanDisplayName(context, provider.subscription);
+          return DecoratedBox(
+            key: const ValueKey('plans_sheet_prepaid'),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
+            child: SizedBox(
+              height: MediaQuery.sizeOf(context).height * 0.85,
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+                children: [
+                  const SizedBox(height: OmiSpacing.xl),
+                  Semantics(
+                    header: true,
+                    child: Text(planName, style: OmiType.title3, textAlign: TextAlign.center),
+                  ),
+                  const SizedBox(height: OmiSpacing.xs),
+                  Text(
+                    l10n.yourPlanEndsOn(planName, renewalDate),
+                    key: const ValueKey('plans_sheet_prepaid_ends'),
+                    textAlign: TextAlign.center,
+                    style: secondary,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
 
         return DecoratedBox(
           // Paints the sheet surface itself too, for hosts that present it without showOmiSheet.
@@ -933,7 +1080,18 @@ class _PlansSheetState extends State<PlansSheet> {
                         _plansOrPlaceholder(provider),
 
                       const SizedBox(height: OmiSpacing.xl),
-                      _buildPromoCodeField(),
+                      // One code entry: "Have a code?" redeems a prepaid code; a discount code goes to today's
+                      // promo field for checkout.
+                      if (provider.canRedeemPrepaidCode && !_showPromoField)
+                        PrepaidCodeEntry(
+                          onDiscountCode: (code) => setState(() {
+                            _promoCodeController.text = code;
+                            _promoCodeError = null;
+                            _showPromoField = true;
+                          }),
+                        )
+                      else
+                        _buildPromoCodeField(),
                       const SizedBox(height: OmiSpacing.md),
 
                       // Continue/Upgrade — hidden for same-tier annual (nothing to change) and for
@@ -1056,82 +1214,69 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  Widget _buildPromoCodeField() {
-    OutlineInputBorder border(Color color) => OutlineInputBorder(
-          borderRadius: OmiRadius.mdAll,
-          borderSide: BorderSide(color: color),
-        );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Semantics(
-          button: true,
-          expanded: _showPromoCodeField,
-          child: InkWell(
-            onTap: () => setState(() => _showPromoCodeField = !_showPromoCodeField),
-            borderRadius: OmiRadius.smAll,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 44),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ExcludeSemantics(child: Icon(Icons.local_offer_outlined, color: OmiColors.textSecondary, size: 18)),
-                  const SizedBox(width: OmiSpacing.xs),
-                  Text(l10n.promoCode, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-                  const SizedBox(width: OmiSpacing.xxs),
-                  ExcludeSemantics(
-                    child: Icon(
-                      _showPromoCodeField ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                      color: OmiColors.textSecondary,
-                      size: 20,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        if (_showPromoCodeField) ...[
-          const SizedBox(height: OmiSpacing.xs),
-          TextField(
-            controller: _promoCodeController,
-            style: OmiType.callout,
-            autocorrect: false,
-            enableSuggestions: false,
-            decoration: InputDecoration(
-              hintText: l10n.enterPromoCode,
-              hintStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-              filled: true,
-              fillColor: OmiColors.surface2,
-              border: border(OmiColors.border),
-              enabledBorder: border(OmiColors.border),
-              focusedBorder: border(OmiColors.accent),
-              errorBorder: border(OmiColors.danger),
-              focusedErrorBorder: border(OmiColors.danger),
-              errorText: _promoCodeError,
-              contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
-              suffixIcon: _promoCodeController.text.isNotEmpty
-                  ? OmiIconButton(
-                      icon: const Icon(Icons.clear, size: 20),
-                      label: l10n.clear,
-                      color: OmiColors.textSecondary,
-                      onPressed: () {
-                        setState(() {
-                          _promoCodeController.clear();
-                          _promoCodeError = null;
-                        });
-                      },
-                    )
-                  : null,
-            ),
-            onChanged: (_) {
-              setState(() => _promoCodeError = null);
-            },
-          ),
-        ],
-      ],
-    );
+  Future<void> _applySubscriptionCode() async {
+    final provider = context.read<UsageProvider>();
+    final code = _promoCodeController.text.trim();
+    if (_isRedeemingCode ||
+        _isUpgrading ||
+        _codeRetryTimer != null ||
+        code.isEmpty ||
+        !provider.canRedeemSubscriptionCode) {
+      return;
+    }
+    setState(() {
+      _isRedeemingCode = true;
+      _promoCodeError = null;
+      _promoCodeApplied = false;
+    });
+    try {
+      final result = await provider.redeemUserSubscriptionCode(code);
+      if (!mounted) return;
+      if (result is ApiSuccess<bool> && result.data) {
+        setState(() {
+          _promoCodeApplied = true;
+          _promoCodeController.clear();
+        });
+      } else {
+        final problem = result is ApiFailure<bool> ? result.problem : null;
+        final status = problem?.statusCode;
+        if (status == 429) {
+          _codeRetryTimer = Timer(problem?.retryAfter ?? const Duration(hours: 1), () {
+            if (mounted) setState(() => _codeRetryTimer = null);
+          });
+        }
+        setState(() => _promoCodeError = l10n.subscriptionCodeResult(
+              status == 400 || status == 422
+                  ? 'refused'
+                  : status == 409
+                      ? 'conflict'
+                      : status == 429
+                          ? 'rateLimited'
+                          : 'error',
+            ));
+      }
+    } catch (_) {
+      // No exception text: payment errors may contain codes or identifiers.
+      if (mounted) setState(() => _promoCodeError = l10n.subscriptionCodeResult('error'));
+    } finally {
+      if (mounted) setState(() => _isRedeemingCode = false);
+    }
   }
+
+  Widget _buildPromoCodeField() => PlanPromoCodeField(
+        controller: _promoCodeController,
+        error: _promoCodeError,
+        canApply: context.read<UsageProvider>().canRedeemSubscriptionCode,
+        busy: _isRedeemingCode,
+        applyEnabled: !_isUpgrading && _codeRetryTimer == null,
+        applied: _promoCodeApplied,
+        initiallyExpanded: _showPromoField,
+        onApply: _applySubscriptionCode,
+        onChanged: () => setState(() {
+          _promoCodeError = null;
+          _promoCodeApplied = false;
+        }),
+      );
 
   AppLocalizations get l10n => context.l10n;
 

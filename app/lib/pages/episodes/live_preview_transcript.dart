@@ -13,9 +13,9 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// revise are drawn in secondary text; settled words in primary text. No
 /// speaker labels: preview text has no speaker attribution.
 ///
-/// With no on-device engine it is a calm card ("Recording safely"), not an
-/// error and not a setup prompt, with a settings link only where the platform
-/// can deep-link to its speech settings.
+/// With no on-device engine it is a calm line of text, not an error and not a
+/// setup prompt, with a settings link only where the platform can deep-link to
+/// its speech settings.
 class LivePreviewTranscript extends StatelessWidget {
   const LivePreviewTranscript({super.key, required this.preview, this.bottomInset = 84});
 
@@ -135,9 +135,9 @@ class _Waiting extends StatelessWidget {
   }
 }
 
-/// Admitted, but this phone has no on-device engine: the mic glyph card that
-/// says when words arrive and — only where the platform can deep-link to its
-/// speech settings (a denied speech permission is the one case both platforms
+/// Admitted, but this phone has no on-device engine: a quiet line that says when
+/// words arrive and — only where the platform can deep-link to its speech
+/// settings (a denied speech permission is the one case both platforms
 /// can open) — the link that turns live text on.
 class _NoEngine extends StatelessWidget {
   const _NoEngine({this.reason});
@@ -148,40 +148,29 @@ class _NoEngine extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final canOpenSpeechSettings = reason == LivePreviewReason.speechPermissionDenied;
-    // A calm card at the top of the tab, where the transcript will start: not an error, not
-    // a setup prompt.
-    return Align(
+    // Where the transcript will start: not an error, not a setup prompt.
+    return Center(
       key: const Key('live_preview_no_engine'),
-      alignment: Alignment.topCenter,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.md),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xl, OmiSpacing.lg, OmiSpacing.lg),
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.mic_none_rounded, size: 32, color: OmiColors.textTertiary),
-              const SizedBox(height: OmiSpacing.sm),
-              Text(l10n.livePreviewNoEngineTitle, textAlign: TextAlign.center, style: OmiType.headline),
-              const SizedBox(height: OmiSpacing.xs),
-              Text(
-                l10n.livePreviewNoEngineBody,
-                textAlign: TextAlign.center,
-                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.45),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              l10n.livePreviewNoEngineBody,
+              textAlign: TextAlign.center,
+              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.45),
+            ),
+            if (canOpenSpeechSettings) ...[
+              const SizedBox(height: OmiSpacing.xxs),
+              OmiButton.tertiary(
+                key: const Key('live_preview_turn_on_live_text'),
+                label: l10n.livePreviewTurnOnLiveText,
+                size: OmiButtonSize.compact,
+                onPressed: () => openAppSettings(),
               ),
-              if (canOpenSpeechSettings) ...[
-                const SizedBox(height: OmiSpacing.xxs),
-                OmiButton.tertiary(
-                  key: const Key('live_preview_turn_on_live_text'),
-                  label: l10n.livePreviewTurnOnLiveText,
-                  size: OmiButtonSize.compact,
-                  onPressed: () => openAppSettings(),
-                ),
-              ],
             ],
-          ),
+          ],
         ),
       ),
     );

@@ -24,6 +24,7 @@ export function RecordingController() {
     state,
     audioMode,
     segments,
+    isBatchSession,
     duration,
     micLevel,
     systemLevel,
@@ -65,6 +66,7 @@ export function RecordingController() {
             duration,
             micLevel,
             systemLevel,
+            isBatchSession,
           );
           broadcastSegmentsUpdate(channel, segments);
           break;
@@ -75,7 +77,7 @@ export function RecordingController() {
       channel.close();
       channelRef.current = null;
     };
-  }, [startRecording, pauseRecording, resumeRecording, stopRecording]);
+  }, [startRecording, pauseRecording, resumeRecording, stopRecording, isBatchSession]);
 
   // Broadcast state updates when state changes
   useEffect(() => {
@@ -87,9 +89,10 @@ export function RecordingController() {
         duration,
         micLevel,
         systemLevel,
+        isBatchSession,
       );
     }
-  }, [state, audioMode, duration, micLevel, systemLevel]);
+  }, [state, audioMode, duration, micLevel, systemLevel, isBatchSession]);
 
   // Broadcast segments updates when segments change
   useEffect(() => {

@@ -23,6 +23,168 @@
     "attribution_event": "privacy-safe analytics contract"
   },
   "$defs": {
+    "reminderOrigin": {
+      "additionalProperties": false,
+      "properties": {
+        "policy_revision": {
+          "const": "explicit-reminders-v1",
+          "default": "explicit-reminders-v1",
+          "title": "Policy Revision",
+          "type": "string"
+        },
+        "input_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Input Revision",
+          "type": "string"
+        },
+        "speaker_evidence_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Speaker Evidence Revision",
+          "type": "string"
+        },
+        "source_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source At"
+        },
+        "extracted_at": {
+          "format": "date-time",
+          "title": "Extracted At",
+          "type": "string"
+        },
+        "review_reason": {
+          "anyOf": [
+            {
+              "const": "owner_unresolved",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Reason"
+        }
+      },
+      "required": [
+        "input_revision",
+        "speaker_evidence_revision",
+        "extracted_at"
+      ],
+      "title": "ReminderOrigin",
+      "type": "object"
+    },
+    "taskDue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "none",
+            "date",
+            "instant",
+            "unresolved"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "date": {
+          "anyOf": [
+            {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date"
+        },
+        "timezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timezone"
+        },
+        "instant": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instant"
+        },
+        "expression": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expression"
+        },
+        "year_basis": {
+          "anyOf": [
+            {
+              "enum": [
+                "spoken",
+                "source_relative",
+                "next_future_occurrence"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Year Basis"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "TaskDue",
+      "type": "object"
+    },
     "stableId": {
       "type": "string",
       "minLength": 1,
@@ -62,6 +224,7 @@
       "properties": {
         "description": {"type": "string", "minLength": 1, "maxLength": 4096},
         "owner": {"enum": ["user", "other", "unknown"]},
+        "due": {"anyOf": [{"$ref": "#/$defs/taskDue"}, {"type": "null"}]},
         "due_at": {"type": ["string", "null"], "format": "date-time"},
         "due_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
         "priority": {"type": ["string", "null"], "enum": ["high", "medium", "low", null]},
@@ -78,6 +241,7 @@
         "description": {"type": "string", "minLength": 1, "maxLength": 4096},
         "status": {"enum": ["active", "completed", "cancelled", "superseded"]},
         "owner": {"enum": ["user", "other", "unknown"]},
+        "due": {"anyOf": [{"$ref": "#/$defs/taskDue"}, {"type": "null"}]},
         "due_at": {"type": ["string", "null"], "format": "date-time"},
         "due_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
         "priority": {"type": ["string", "null"], "enum": ["high", "medium", "low", null]},
@@ -90,12 +254,15 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "reminder_origin": {"anyOf": [{"$ref": "#/$defs/reminderOrigin"}, {"type": "null"}]},
+        "creation_receipt": {"type": ["object", "null"]},
         "task_id": {"$ref": "#/$defs/stableId"},
         "description": {"type": "string", "minLength": 1, "maxLength": 4096},
         "status": {"enum": ["active", "completed", "cancelled", "superseded"]},
         "goal_id": {"$ref": "#/$defs/nullableStableId"},
         "workstream_id": {"$ref": "#/$defs/nullableStableId"},
         "owner": {"enum": ["user", "other", "unknown"]},
+        "due": {"anyOf": [{"$ref": "#/$defs/taskDue"}, {"type": "null"}]},
         "due_at": {"type": ["string", "null"], "format": "date-time"},
         "due_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
         "source": {"type": "string", "minLength": 1, "maxLength": 64},
@@ -135,6 +302,8 @@
         "goal_id": {"$ref": "#/$defs/nullableStableId"},
         "workstream_id": {"$ref": "#/$defs/nullableStableId"},
         "evidence_refs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence_ref"}},
+        "reminder_origin": {"anyOf": [{"$ref": "#/$defs/reminderOrigin"}, {"type": "null"}]},
+        "creation_receipt": {"type": ["object", "null"]},
         "source_surface": {"type": "string", "minLength": 1, "maxLength": 64},
         "status": {"enum": ["pending", "accepted", "rejected", "expired"]},
         "resolution_reason": {"type": ["string", "null"], "maxLength": 64},

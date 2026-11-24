@@ -6,6 +6,7 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -135,6 +136,28 @@ void main() {
     expect(adapter.propertiesAt(12), containsPair('permanently_denied', false));
     expect(adapter.propertiesAt(13), containsPair('reason', 'no_adapter'));
     expect(adapter.propertiesAt(14), containsPair('reason', 'scanner_unavailable'));
+  });
+
+  test('a real Apple failure reports its class and its Apple code; a plain cancel reports only the class', () async {
+    final adapter = _RecordingAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    final analytics = AnalyticsManager();
+
+    analytics.signInFailed(
+      'apple',
+      error: const SignInWithAppleAuthorizationException(code: AuthorizationErrorCode.unknown, message: 'error 1000'),
+    );
+    analytics.signInFailed('google', cancelled: true);
+    analytics.signInFailed('local_dev', error: StateError('ignored'));
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(adapter.names, ['Sign In Failed', 'Sign In Failure Detail', 'Sign In Failed']);
+    expect(adapter.propertiesAt(0), containsPair('error_class', 'credential'));
+    expect(adapter.propertiesAt(1), containsPair('provider', 'apple'));
+    expect(adapter.propertiesAt(1), containsPair('error_code', 'apple_unknown'));
+    expect(adapter.propertiesAt(1).values, isNot(contains('error 1000')));
+    expect(adapter.propertiesAt(2), containsPair('error_class', 'cancelled'));
   });
 }
 

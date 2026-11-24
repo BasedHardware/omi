@@ -17,6 +17,22 @@ from utils.conversations.meeting_participants import MeetingRoster
 PRESENTATION_CONTRACT_VERSION = 'v3'
 
 
+def identifier_in_text(identifier: str, text: str) -> bool:
+    """Require the complete asserted identifier, without extracting identities.
+
+    Kept local (duplicated from ``database.notes_identity``) on purpose: this
+    validation module is imported by isolated-environment tests that stub the
+    ``database`` package, and the notes-identity module legitimately pulls in
+    Firestore-bound ``person_aliases``. The corroboration check here only needs
+    the pure regex, not the persistence graph.
+    """
+    boundary = r'[\w.+@%-]' if '@' in identifier else r'\w'
+    return bool(
+        identifier.strip()
+        and re.search(r'(?<!' + boundary + ')' + re.escape(identifier.strip()) + r'(?!' + boundary + ')', text, re.I)
+    )
+
+
 @dataclass
 class PresentationContractReport:
     """Bounded, content-free evidence about generated-note conformance."""
@@ -75,6 +91,8 @@ _CODE_RE = re.compile(
     r'(?:^[ \t]{0,3}(?P=fence)[`~]*[ \t]*(?:\n|$)|\Z)|(?P<ticks>`+)(?!`)[\s\S]*?(?<!`)(?P=ticks)(?!`)'
 )
 _ID_LIKE_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,95}\Z')
+# Segment IDs use random UUIDv4 or deterministic UUIDv5.
+_SEGMENT_UUID_RE = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', re.I)
 _CLUSTER_RE = re.compile(r'[?]?[0-9A-Za-z]{1,3}\Z')
 _SAFE_MARKDOWN_SCHEMES = {'http', 'https', 'mailto'}
 _REMOVAL_MARKER = '\x00'
@@ -91,6 +109,7 @@ def _clean_after_removal(text: str) -> str:
     text = re.sub(rf'{marker}(?:[ \t]*{marker})+', _REMOVAL_MARKER, text)
     text = re.sub(rf'[ \t]+{marker}[ \t]+', ' ', text)
     text = re.sub(rf'[ \t]+{marker}(?=[,.;:]|\n|$)', '', text)
+    text = re.sub(rf'(?<=\w){marker}[ \t]+(?=\w)', ' ', text)
     text = re.sub(rf'{marker}[ \t]+', '', text)
     return text.replace(_REMOVAL_MARKER, '').strip()
 
@@ -134,6 +153,7 @@ def _repair_note_citation_pass(
     valid_ids: set[str],
     *,
     safe_fallback: bool = True,
+    uuid_parentheticals_only: bool = False,
     report: Optional[PresentationContractReport] = None,
 ) -> tuple[str, list[str]]:
     """Render-time sweep and generation-time gate; never edit a partial bracket unit.
@@ -142,6 +162,8 @@ def _repair_note_citation_pass(
     links take precedence over that grammar, including ID-shaped ordinary labels.
     Mixed brackets containing known IDs require revision, or unwrap their remaining prose in fallback.
     """
+    if uuid_parentheticals_only and not _SEGMENT_UUID_RE.search(text):
+        return text, []
     report = report if report is not None else PresentationContractReport()
     protected: dict[str, str] = {}
     # Pick a collision-free namespace even for adversarial/user-written examples.
@@ -164,6 +186,25 @@ def _repair_note_citation_pass(
 
     def unit(match: re.Match[str]) -> str:
         value = match.group(0)
+        if value.startswith('('):
+            uuid_tokens = [token for token in re.split(r'[\s,;]+', value[1:-1]) if token]
+            if uuid_tokens and all(_SEGMENT_UUID_RE.fullmatch(token) for token in uuid_tokens):
+                ids = [token for token in uuid_tokens if token in valid_ids]
+                reason = 'inline_source_citation' if len(ids) == len(uuid_tokens) else 'unknown_citation_dropped'
+                return remove(ids, reason)
+            if uuid_parentheticals_only:
+                return value
+            tokens = [token.strip() for token in re.split(r'[;,]', value[1:-1]) if token.strip()]
+            ids = []
+            for token in tokens:
+                nested_link = _MARKDOWN_LINK_RE.fullmatch(token)
+                candidate = nested_link.group(1).strip() if nested_link else token
+                if candidate not in valid_ids:
+                    return _BRACKET_UNIT_RE.sub(unit, value)
+                ids.append(candidate)
+            return remove(ids) if ids else value
+        if uuid_parentheticals_only:
+            return value
         link = _MARKDOWN_LINK_RE.fullmatch(value)
         if link:
             label, destination = (part.strip() for part in link.groups())
@@ -176,16 +217,6 @@ def _repair_note_citation_pass(
                 report.repairs.add('unsafe_markdown_link')
                 return label
             return protect(value)
-        if value.startswith('('):
-            tokens = [token.strip() for token in re.split(r'[;,]', value[1:-1]) if token.strip()]
-            ids = []
-            for token in tokens:
-                nested_link = _MARKDOWN_LINK_RE.fullmatch(token)
-                candidate = nested_link.group(1).strip() if nested_link else token
-                if candidate not in valid_ids:
-                    return _BRACKET_UNIT_RE.sub(unit, value)
-                ids.append(candidate)
-            return remove(ids) if ids else value
         content = value[1:-1].translate(_ADORNMENTS).strip()
         ids = _bracket_ids(content, valid_ids)
         if ids:
@@ -214,19 +245,21 @@ def _repair_note_citation_pass(
         return protect(value)
 
     text = _CITATION_UNIT_RE.sub(unit, text)
-    for source_id in sorted(valid_ids, key=lambda value: (-len(value), value)):
-        pattern = _id_pattern(source_id)
-        if pattern.search(text):
-            if safe_fallback:
-                text = pattern.sub(_REMOVAL_MARKER, text)
-                report.repairs.add('source_id_in_prose')
-            else:
-                report.violations.add('source_id_in_prose')
-    without_speakers = _SPEAKER_PLACEHOLDER_RE.sub(_REMOVAL_MARKER, text)
-    if without_speakers != text:
-        report.repairs.add('speaker_placeholder')
-    without_speakers = _clean_parenthetical_removals(without_speakers)
-    text = _clean_after_removal(without_speakers) if _REMOVAL_MARKER in without_speakers else without_speakers
+    if not uuid_parentheticals_only:
+        for source_id in sorted(valid_ids, key=lambda value: (-len(value), value)):
+            pattern = _id_pattern(source_id)
+            if pattern.search(text):
+                if safe_fallback:
+                    text = pattern.sub(_REMOVAL_MARKER, text)
+                    report.repairs.add('source_id_in_prose')
+                else:
+                    report.violations.add('source_id_in_prose')
+        without_speakers = _SPEAKER_PLACEHOLDER_RE.sub(_REMOVAL_MARKER, text)
+        if without_speakers != text:
+            report.repairs.add('speaker_placeholder')
+        text = without_speakers
+    cleaned = _clean_parenthetical_removals(text)
+    text = _clean_after_removal(cleaned) if _REMOVAL_MARKER in cleaned else cleaned
     if '\x01' in text:
         text = text.replace('\x01', '').strip()
     for key, value in reversed(protected.items()):
@@ -239,12 +272,22 @@ def repair_note_citations(
     valid_ids: set[str],
     *,
     safe_fallback: bool = True,
+    uuid_parentheticals_only: bool = False,
     report: Optional[PresentationContractReport] = None,
 ) -> tuple[str, list[str]]:
-    """Sweep to a fixed point: removing an inner unit may expose an outer shell."""
+    """Sweep to a fixed point: removing an inner unit may expose an outer shell.
+
+    Stored note presentation can opt into just UUID-only citation units.
+    """
     recovered: list[str] = []
     while True:
-        cleaned, ids = _repair_note_citation_pass(text, valid_ids, safe_fallback=safe_fallback, report=report)
+        cleaned, ids = _repair_note_citation_pass(
+            text,
+            valid_ids,
+            safe_fallback=safe_fallback,
+            uuid_parentheticals_only=uuid_parentheticals_only,
+            report=report,
+        )
         recovered.extend(ids)
         if cleaned == text:
             return cleaned, list(dict.fromkeys(recovered))
@@ -283,7 +326,7 @@ def enforce_structured_presentation_contract(
     Citation-only syntax is repaired deterministically and moved into the typed
     evidence field. A known source ID in ordinary prose is ambiguous and asks
     the caller for one revision pass. ``safe_fallback`` removes that identifier
-    after the revision budget is exhausted. Unknown UUID-like text is preserved.
+    after the revision budget is exhausted. UUID-like prose outside citation units is preserved.
     """
 
     report = PresentationContractReport()
@@ -479,12 +522,28 @@ def lead_title_with_people(title: str, people: Sequence[str]) -> tuple[str, bool
     return led, True
 
 
-def _name_in_transcript(name: str, transcript_body: str) -> bool:
-    """Case-insensitive whole-name (word-boundary) match against the transcript body."""
-    name = name.strip()
-    if not name or not transcript_body:
-        return False
-    return re.search(r'(?<!\w)' + re.escape(name) + r'(?!\w)', transcript_body, re.IGNORECASE) is not None
+def attach_notes_identity_context(
+    structured: Structured, roster: Optional[MeetingRoster], frame_count: int, background_body: str
+) -> None:
+    """Carry server context to the note-save seam, outside the client/model schema."""
+    entries = roster.entries if roster else []
+    owners = [e for e in entries if e.kind == 'owner']
+    attendee_names = {e.display_name.casefold() for e in entries if e.kind != 'owner' and e.display_name}
+    setattr(
+        structured,
+        '_notes_identity',
+        {
+            'catalog_ids': list(roster.catalog_person_ids) if roster else [],
+            'owner_names': [e.display_name for e in owners if e.display_name],
+            'owner_emails': [e.email for e in owners if e.email],
+            'frame_count': frame_count,
+            'corroborated_names': [
+                p.name
+                for p in structured.participants
+                if p.name and (p.name.casefold() in attendee_names or identifier_in_text(p.name, background_body))
+            ],
+        },
+    )
 
 
 def validate_rich_meeting_notes(
@@ -497,9 +556,9 @@ def validate_rich_meeting_notes(
 ) -> Structured:
     """Server-side guardrails for rich-only fields; the flag-off path never runs this.
 
-    Participants must be corroborated (roster name/email or a whole-name transcript
-    match), the account owner is never a participant, and nameless participants
-    survive only on a roster email. Insights exist only with background context,
+    Names and emails require exact textual or attendee corroboration even when
+    frames are supplied to the model.
+    The account owner is never a participant. Insights exist only with background context,
     capped at 4 entries of <=30 words. At most one side_notes section survives,
     forced last with heading "Side notes" and 1-4 bullets.
     """
@@ -527,26 +586,22 @@ def validate_rich_meeting_notes(
             # call) is a legitimate identity source alongside the transcript.
             if (
                 matched_entry is None
-                and not _name_in_transcript(name, transcript_body)
-                and not (background_body and _name_in_transcript(name, background_body))
+                and not identifier_in_text(name, transcript_body)
+                and not (background_body and identifier_in_text(name, background_body))
             ):
                 continue
         elif email:
             matched_entry = roster_by_email.get(email.casefold())
-            if matched_entry is None:
+            if matched_entry is None and not identifier_in_text(email, transcript_body + '\n' + background_body):
                 continue
         else:
             continue
-        # Keep an email only when it belongs to the same roster entry that
-        # corroborated the participant — a name match must not inherit someone
-        # else's roster email, and untrusted emails are dropped.
-        if (
-            email
-            and matched_entry is not None
-            and matched_entry.email
-            and matched_entry.email.casefold() == email.casefold()
+        if email and (
+            email.casefold() in roster_by_email or identifier_in_text(email, transcript_body + '\n' + background_body)
         ):
             participant.email = email
+        elif not email and matched_entry is not None and matched_entry.email:
+            participant.email = matched_entry.email
         else:
             participant.email = None
         if name:

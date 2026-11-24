@@ -4,13 +4,41 @@ import audioop
 import os
 import struct
 import wave
+from dataclasses import replace
 from collections.abc import Generator
 
 from utils.batch_pipeline.audio import RATE, AudioUnit, audio_unit
 from utils.sync.files import MAX_SYNC_FRAME_BYTES, decode_files_to_wav, get_timestamp_from_path
+from utils.sync.capture_clock import is_early_capture_time
 
 UNIT_FRAMES = 3600 * RATE
 MAX_JOIN_GAP_FRAMES = 30 * RATE
+
+# Closed vocabulary of faults that mean these uploaded bytes cannot decode with
+# this server's decoder, however often they are retried. Membership is by exact
+# message: a config, Firestore, storage or privacy failure is never a member,
+# even though it can be raised from the same phase.
+DETERMINISTIC_DECODE_MESSAGES = frozenset(
+    {
+        'truncated sync audio frame',
+        'invalid sync audio frame',
+        'empty sync audio',
+        'unsupported sync PCM format',
+        'empty decoded sync audio',
+        'sync decode did not preserve every uploaded frame',
+        'capture bundle exceeds bounded conversation-unit limit',
+    }
+)
+# ``utils.sync.files`` answers this 400 detail for the same class of fault.
+AUDIO_DECODE_FAILED_DETAIL = 'Audio decode failed'
+
+
+def is_deterministic_decode_failure(error: BaseException) -> bool:
+    """Only a closed set of uploaded-bytes faults; never a config or IO failure."""
+    # Duck-typed so this module keeps no FastAPI import (it runs in CPU workers).
+    if getattr(error, 'status_code', None) == 400 and getattr(error, 'detail', None) == AUDIO_DECODE_FAILED_DETAIL:
+        return True
+    return isinstance(error, ValueError) and str(error) in DETERMINISTIC_DECODE_MESSAGES
 
 
 def _frame_count(path: str) -> int:
@@ -47,10 +75,15 @@ def _canonical(path: str) -> bytes:
 
 # Server-held WAV (the cap-hold adapter) takes the same canonicalization as uploads.
 canonical_pcm = _canonical
+validated_frame_count = _frame_count
 
 
 def decode_units(
-    paths: list[str], *, max_seconds: float = 3600, coverage_context: dict | None = None
+    paths: list[str],
+    *,
+    max_seconds: float = 3600,
+    coverage_context: dict | None = None,
+    received_at: float | None = None,
 ) -> Generator[AudioUnit, None, None]:
     unit_frames = min(UNIT_FRAMES, int(max_seconds * RATE))
     if unit_frames < 1 or max_seconds > 7200:
@@ -66,24 +99,67 @@ def decode_units(
         from utils.capture.batch_coverage import prepare, piece_runs, provenance_unit
 
         wavs, source_maps, generated = prepare((coverage_context or {}).get('uid'), wavs, frames, coverage_context)
+        early_paths = {
+            path
+            for path in wavs
+            if received_at is not None
+            and is_early_capture_time(
+                (source_maps.get(path) or {}).get('capture_clock_at', get_timestamp_from_path(path))
+            )
+        }
+        # Count canonical samples before streaming the units. Untrusted clock
+        # gaps cannot place siblings years before receipt or overlap them.
+        early_frames = sum(len(_canonical(path)) // 2 for path in wavs if path in early_paths)
+        early_committed_frames = 0
+
+        def packed_unit(start, pcm, runs, early):
+            nonlocal early_committed_frames
+            unit = provenance_unit(audio_unit(start, pcm), runs)
+            if early and received_at is not None:
+                unit = replace(unit, stored_capture_at=received_at - (early_frames - early_committed_frames) / RATE)
+                early_committed_frames += len(pcm) // 2
+            if received_at is None:
+                unit = replace(unit, source_frames=len(pcm) // 2 - padding_frames)
+            return unit
+
         pending = bytearray()
         pending_runs = []
         start = 0.0
-        for path in sorted(wavs, key=lambda value: (get_timestamp_from_path(value), value)):
+        pending_early = False
+        padding_frames = 0
+        for path in sorted(
+            wavs,
+            key=lambda value: (
+                (source_maps.get(value) or {}).get('capture_clock_at', get_timestamp_from_path(value)),
+                get_timestamp_from_path(value),
+                value,
+            ),
+        ):
             capture = float(get_timestamp_from_path(path))
             pcm = _canonical(path)
             if not pcm:
                 raise ValueError('empty decoded sync audio')
             end = start + len(pending) / (2 * RATE)
             gap = round((capture - end) * RATE)
-            if pending and (gap < 0 or gap > MAX_JOIN_GAP_FRAMES or len(pending) + gap * 2 >= unit_frames * 2):
-                yield provenance_unit(audio_unit(start, bytes(pending)), pending_runs)
+            early = path in early_paths
+            if early and pending_early:
+                gap = 0  # Invalid wall-clock gaps are not silence or timing proof.
+            if pending and (
+                early != pending_early
+                or gap < 0
+                or gap > MAX_JOIN_GAP_FRAMES
+                or len(pending) + gap * 2 >= unit_frames * 2
+            ):
+                yield packed_unit(start, bytes(pending), pending_runs, pending_early)
                 pending.clear()
                 pending_runs = []
+                padding_frames = 0
             if not pending:
                 start = capture
+                pending_early = early
             elif gap > 0:
                 pending.extend(b'\0' * (gap * 2))
+                padding_frames += gap
             offset = 0
             while offset < len(pcm):
                 take = min(unit_frames * 2 - len(pending), len(pcm) - offset)
@@ -93,12 +169,13 @@ def decode_units(
                 pending.extend(pcm[offset : offset + take])
                 offset += take
                 if len(pending) == unit_frames * 2:
-                    yield provenance_unit(audio_unit(start, bytes(pending)), pending_runs)
+                    yield packed_unit(start, bytes(pending), pending_runs, pending_early)
                     pending.clear()
                     pending_runs = []
+                    padding_frames = 0
                     start = capture + offset / (2 * RATE)
         if pending:
-            yield provenance_unit(audio_unit(start, bytes(pending)), pending_runs)
+            yield packed_unit(start, bytes(pending), pending_runs, pending_early)
     finally:
         for path in set(wavs) | set(expected) | generated:
             if os.path.exists(path):

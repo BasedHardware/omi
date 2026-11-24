@@ -37,6 +37,7 @@ void main() {
         wordsTranscribedLimit: 0,
         insightsGainedUsed: 0,
         insightsGainedLimit: 0,
+        phoneCallQuota: PhoneCallQuota(hasAccess: true, isPaid: true),
       ),
     );
 

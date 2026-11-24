@@ -58,8 +58,8 @@ from utils.translation_core.providers import ProviderTranslation
 )
 def test_invalid_provider_response_fails_every_affected_unit_without_cache_writes(provider_response):
     store = DictTranslationStore()
-    provider = FakeProvider(TranslationProvider.google, responses=[provider_response])
-    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+    provider = FakeProvider(TranslationProvider.luna, responses=[provider_response])
+    service, _cache = build_service({TranslationProvider.luna: provider}, store=store)
 
     outcomes = service.translate_outcomes('es', [('one', 'One.'), ('two', 'Two.')])
 
@@ -71,14 +71,14 @@ def test_invalid_provider_response_fails_every_affected_unit_without_cache_write
 def test_successful_early_chunk_is_not_cached_when_later_chunk_fails():
     store = DictTranslationStore()
     provider = FakeProvider(
-        TranslationProvider.google,
+        TranslationProvider.luna,
         responses=[
             translations(('Uno.', 'en')),
-            provider_error(TranslationProvider.google),
+            provider_error(TranslationProvider.luna),
         ],
     )
     service, _cache = build_service(
-        {TranslationProvider.google: provider},
+        {TranslationProvider.luna: provider},
         selected_profile=profile(max_batch_size=1),
         store=store,
     )
@@ -133,8 +133,8 @@ def test_redis_outage_fails_open_and_memory_cache_remains_usable():
     metrics = NoopTranslationMetrics()
     persistent = RedisTranslationStore(client_factory=FailingRedis)
     cache = TranslationCache(persistent=persistent, metrics=metrics)
-    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
-    service, _ignored = build_service({TranslationProvider.google: provider}, cache=cache)
+    provider = FakeProvider(TranslationProvider.luna, responses=[translations(('Hola', 'en'))])
+    service, _ignored = build_service({TranslationProvider.luna: provider}, cache=cache)
 
     assert service.translate_text('es', 'Hello') == ('Hola', 'en')
     assert service.translate_text('es', 'Hello') == ('Hola', 'en')
@@ -150,8 +150,8 @@ def test_redis_client_construction_errors_fail_open_without_hiding_provider_resu
         persistent=RedisTranslationStore(client_factory=raising_factory),
         metrics=NoopTranslationMetrics(),
     )
-    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
-    service, _ignored = build_service({TranslationProvider.google: provider}, cache=cache)
+    provider = FakeProvider(TranslationProvider.luna, responses=[translations(('Hola', 'en'))])
+    service, _ignored = build_service({TranslationProvider.luna: provider}, cache=cache)
 
     assert service.translate_text('es', 'Hello') == ('Hola', 'en')
     assert service.translate_text('es', 'Hello') == ('Hola', 'en')
@@ -174,8 +174,8 @@ def test_redis_store_does_not_hide_unexpected_programming_errors():
 
 def test_negative_cache_uses_same_fingerprint_policy_as_positive_cache():
     store = DictTranslationStore()
-    provider = FakeProvider(TranslationProvider.google, responses=[])
-    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+    provider = FakeProvider(TranslationProvider.luna, responses=[])
+    service, _cache = build_service({TranslationProvider.luna: provider}, store=store)
     fingerprint = fingerprint_text('Already English')
     service.set_negative_cache(fingerprint, 'en')
 
@@ -189,10 +189,10 @@ def test_negative_cache_uses_same_fingerprint_policy_as_positive_cache():
 def test_cached_and_failed_units_never_form_a_partial_mixed_translation():
     store = DictTranslationStore()
     provider = FakeProvider(
-        TranslationProvider.google,
-        responses=[provider_error(TranslationProvider.google)],
+        TranslationProvider.luna,
+        responses=[provider_error(TranslationProvider.luna)],
     )
-    service, cache = build_service({TranslationProvider.google: provider}, store=store)
+    service, cache = build_service({TranslationProvider.luna: provider}, store=store)
     active_profile = profile()
     cache.put(fingerprint_text('Cached.'), 'fr', CachedTranslation('En cache.', 'en'), active_profile)
     outcomes = service.translate_outcomes('fr', [('unit', 'Cached. Missing.')])
@@ -203,10 +203,10 @@ def test_cached_and_failed_units_never_form_a_partial_mixed_translation():
 
 def test_invalid_response_does_not_poison_memory_and_is_retried():
     provider = FakeProvider(
-        TranslationProvider.google,
+        TranslationProvider.luna,
         responses=[[], translations(('Hola', 'en'))],
     )
-    service, _cache = build_service({TranslationProvider.google: provider})
+    service, _cache = build_service({TranslationProvider.luna: provider})
 
     assert service.translate_outcomes('es', [('segment', 'Hello')])[0].status == TranslationStatus.failed
     assert service.translate_text('es', 'Hello') == ('Hola', 'en')
@@ -216,14 +216,14 @@ def test_invalid_response_does_not_poison_memory_and_is_retried():
 def test_lru_eviction_is_bounded_and_evicted_text_is_retried():
     cache = TranslationCache(persistent=None, metrics=NoopTranslationMetrics(), max_entries=1)
     provider = FakeProvider(
-        TranslationProvider.google,
+        TranslationProvider.luna,
         responses=[
             translations(('Uno', 'en')),
             translations(('Dos', 'en')),
             translations(('Uno otra vez', 'en')),
         ],
     )
-    service, _ignored = build_service({TranslationProvider.google: provider}, cache=cache)
+    service, _ignored = build_service({TranslationProvider.luna: provider}, cache=cache)
 
     assert service.translate_text('es', 'One') == ('Uno', 'en')
     assert service.translate_text('es', 'Two') == ('Dos', 'en')

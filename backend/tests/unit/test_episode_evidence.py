@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from models.task_due import ReminderIntent, ReminderOrigin, TaskDue
 from models.structured import NoteClaim, Structured
 from models.episode_extraction import EpisodeStructuredExtraction
 from models.structured_extraction import RichStructuredExtraction, StructuredExtraction
@@ -41,7 +42,6 @@ def valid_note(title='Written approval', overview='The message shows approval.')
 @pytest.fixture(autouse=True)
 def claim_generation_mode(monkeypatch):
     # These regression fixtures exercise the existing annotated path explicitly.
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'true')
     monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'default')
 
 
@@ -135,9 +135,14 @@ def test_sdk_and_backend_fallback_keep_claims_optional():
         List=List,
         Literal=Literal,
         Optional=Optional,
+        TaskDue=TaskDue,
+        ReminderIntent=ReminderIntent,
+        ReminderOrigin=ReminderOrigin,
     )
     exec(compile(ast.Module(body=fallback, type_ignores=[]), 'structured_fallback', 'exec'), namespace)
     for model in (Structured, namespace['Structured']):
+        action = model.model_validate({'action_items': [{'description': 'Synthetic reminder'}]}).action_items[0]
+        assert action.due is None and action.reminder_intent is None and action.reminder_origin is None
         assert 'title_provenance' not in model.model_json_schema()['properties']
         assert 'note_claims' not in model().model_dump()
         value = model.model_validate(valid_note().model_dump(mode='json'))

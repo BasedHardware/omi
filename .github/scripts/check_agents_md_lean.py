@@ -32,15 +32,21 @@ BUDGETS: dict[str, tuple[int, int]] = {
     ".github/AGENTS.md": (45, 4_500),
     "app/AGENTS.md": (164, 11_411),
     "backend/AGENTS.md": (350, 39_000),
+    # Set to its size at creation. backend-go/tools/archcheck also caps it at 60 lines.
+    "backend-go/AGENTS.md": (54, 3_689),
     # main grew this with Codemagic release-pipeline detail after the budget was
     # first set from a stale base; recalibrated to current main + headroom.
-    "desktop/macos/AGENTS.md": (560, 47_000),
+    # 2026-11: INV-6/gauntlet, release-train, and analytics detail moved to
+    # desktop/macos/docs/ owners; budget lowered to the trimmed size + headroom.
+    "desktop/macos/AGENTS.md": (380, 32_000),
     "desktop/windows/AGENTS.md": (127, 6_950),
     "omi/firmware/AGENTS.md": (30, 1_500),
     "web/admin/AGENTS.md": (25, 1_500),
     "web/app/AGENTS.md": (55, 2_400),
     "docs/AGENTS.md": (42, 2_000),
     "scripts/dev-harness/AGENTS.md": (15, 861),
+    # Set to its size at creation: the pipeline lab's replay and privacy practice for agents.
+    "backend/testing/pipeline_lab/AGENTS.md": (79, 5_163),
 }
 
 SKIP_PARTS = {"node_modules", ".build", ".git"}

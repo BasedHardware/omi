@@ -55,7 +55,9 @@ final episodeScenarios = <AuditScenario>[
     state: 'Fictional dinner episode with two processing members, followed by completion',
     run: (a) async {
       final now = DateTime.now();
-      final closed = _closedFixture(day: DateTime(now.year, now.month, now.day), composed: true);
+      // Uncomposed while members process: only an uncomposed episode holds one processing row.
+      // A composed episode keeps its notes row instead (home_rows_test).
+      var closed = _closedFixture(day: DateTime(now.year, now.month, now.day), composed: false);
       final pending = [
         for (final member in closed.members)
           ServerConversation(
@@ -76,7 +78,6 @@ final episodeScenarios = <AuditScenario>[
         ..debugSetLive(null)
         ..debugSetHomeEpisodes([closed]);
       addTearDown(history.dispose);
-      addTearDown(episodes.dispose);
       await a.pump(const HomeFrame(), scaffold: false, providers: [
         ChangeNotifierProvider<ConversationProvider>.value(value: history),
         ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
@@ -84,6 +85,9 @@ final episodeScenarios = <AuditScenario>[
       expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
       expect(find.text('Dinner and plans for the weekend'), findsNothing);
       await a.shot('Episode ended; both members processing in one row', step: 'processing');
+      // The summary lands: the same episode is now composed, so its row shows the title.
+      closed = _closedFixture(day: DateTime(now.year, now.month, now.day), composed: true);
+      episodes.debugSetHomeEpisodes([closed]);
       history
         ..processingConversations = []
         ..conversations = closed.members
@@ -92,6 +96,9 @@ final episodeScenarios = <AuditScenario>[
       expect(find.byKey(const Key('home_processing_row')), findsNothing);
       expect(find.text('Dinner and plans for the weekend'), findsOneWidget);
       await a.shot('Processing finished; same slot becomes the episode row', step: 'complete');
+      // Unmount before disposing: a processing hold re-reads on a timer that must not outlive the page.
+      await a.tester.pumpWidget(const SizedBox.shrink());
+      episodes.dispose();
     },
   ),
   AuditScenario(
@@ -144,7 +151,8 @@ final episodeScenarios = <AuditScenario>[
       expect(find.text('Today'), findsOneWidget);
       expect(find.text('Yesterday'), findsOneWidget);
       expect(find.text('Planning Saturday’s trail'), findsOneWidget);
-      expect(find.textContaining('The newest line keeps my label.'), findsNothing);
+      expect(find.byKey(const Key('home_live_episode_preview')), findsOneWidget);
+      expect(find.textContaining('The newest line keeps my label.', findRichText: true), findsOneWidget);
       expect(find.text('Dinner and plans for the weekend'), findsOneWidget);
       expect(find.text('A quick call about the garden'), findsOneWidget);
       await a.shot('Open full Home with its header, Today live episode and Yesterday rows');

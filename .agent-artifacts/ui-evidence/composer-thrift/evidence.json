@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-episode-composed-light.png",
+      "platform": "mobile-ios",
+      "description": "Flutter headless render: episode-composed-light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-episode-composed-dark.png",
+      "platform": "mobile-ios",
+      "description": "Flutter headless render: episode-composed-dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-episode-late-open.png",
+      "platform": "mobile-ios",
+      "description": "Flutter headless render: episode-late-open",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ],
+  "verification": "2026-11-10 L8b split: 103 focused Flutter tests plus 138 spine tests; current renders visually inspected."
+}

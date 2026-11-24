@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "titling-recovery-rule-discard",
+  "tier": "S",
+  "scrub": "synthetic-structure-only",
+  "seed_blob_sha256": [
+    "bcc1e0fdcc2a0dc0599fa9c09af3e126d3ee0f3308bd0c4821b601f0088f32c8",
+    "a16e7a0a44f4ee954a4f23c74bd326662e901d894b7e15c61bb3aa79bbf35e0e"
+  ],
+  "created": "2026-11-04T00:00:00Z",
+  "prod_evidence": {},
+  "notes": "Synthetic content-free recovery input. Main defaults the recovery-minimum guard OFF; server recovery keeps and titles this input through the cassette. The flag-on branch is covered separately in emulator tests.",
+  "stages": {
+    "titling": {
+      "expect": "pass"
+    }
+  }
+}

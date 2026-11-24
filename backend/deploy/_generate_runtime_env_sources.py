@@ -33,6 +33,7 @@ GKE_CONFIG_MAP_KEYS_BASE = [
     'RAPID_API_HOST',
     'REDIS_DB_HOST',
     'STT_PRERECORDED_MODEL',
+    'PRERECORDED_SONIOX_FAILOVER_ENABLED',
     'STT_SERVICE_MODELS',
     'TYPESENSE_HOST',
     'TWILIO_ACCOUNT_SID',
@@ -52,7 +53,7 @@ GKE_CONFIG_MAP_KEYS_PROD_ONLY = [
 
 STT_LITERALS = {
     'STT_PRERECORDED_MODEL': 'parakeet,modulate-velma-2',
-    'STT_SERVICE_MODELS': 'modulate-velma-2,soniox,parakeet',
+    'STT_SERVICE_MODELS': 'modulate-velma-2,soniox',
 }
 
 OVERLAY_ENV_KEYS = {

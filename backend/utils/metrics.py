@@ -1,11 +1,11 @@
 import os
 import re
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from database.fsr_cache_telemetry import OMI_FALLBACK_TOTAL as OMI_FALLBACK_TOTAL
+from utils.conversation_relevance_labels import DECISION_TRIGGERS, TERMINAL_METRIC_TRIGGERS, TERMINAL_METRIC_REASONS
 
-from fastapi import Response
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     Counter,
@@ -16,8 +16,16 @@ from prometheus_client import (
     generate_latest,
     start_http_server,
 )
+from utils import omi_flag_metrics as _omi_flag_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
+from utils.conversations import phase_shadow as _phase_shadow  # pyright: ignore[reportUnusedImport]  # noqa: F401
+from utils.conversations import (
+    processing_metrics as _retry_metrics,  # pyright: ignore[reportUnusedImport]  # noqa: F401
+)
 from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.sync import absorption_metrics as _absorption_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
+
+if TYPE_CHECKING:
+    from fastapi import Response
 
 # All metrics endpoints import this module. prometheus_client otherwise exports a second _created
 # series for every Counter and Histogram child, including idle zero children.
@@ -34,12 +42,6 @@ SCREEN_TASK_GATE_FRAMES_TOTAL = Counter(
 )
 SCREEN_TASK_CLIENT_BYPASS_TOTAL = Counter(
     'omi_screen_task_client_bypass_total', 'Flagged screenshot requests that bypassed a usable client gate', []
-)
-
-OMI_FLAG_DUAL_READ_TOTAL = Counter(
-    'omi_flag_dual_read_total',
-    'Server flag reads in OMI_FLAGS_SOURCE=dual: Omi store answer compared with the serving PostHog answer',
-    ['flag', 'outcome'],
 )
 
 OMI_LISTEN_STT_UNAVAILABLE_TOTAL = Counter(
@@ -78,6 +80,44 @@ PUSHER_ACTIVE_WS_CONNECTIONS = Gauge(
     'pusher_active_ws_connections',
     'Number of currently active WebSocket connections in pusher',
 )
+
+PUSHER_STORAGE_PCM_INFLIGHT_BYTES = Gauge(
+    'omi_pusher_storage_pcm_inflight_bytes',
+    'PCM payload bytes in custody storage awaits; enabled byte admission retains accounting until actual completion',
+)
+
+PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES = Gauge(
+    'omi_pusher_storage_pcm_budget_limit_bytes',
+    'Pusher storage PCM byte budget limit; zero means no budget is enforced',
+)
+
+from utils.observability.reasons import (
+    AppReviewConfigOutcome,
+    AppReviewConfigReason,
+    PusherPcmErrorReason,
+    PusherPcmStage,
+    ReasonFamily,
+    reason_label,
+)
+
+PUSHER_STORAGE_PCM_REFUSALS_TOTAL = Counter(
+    'omi_pusher_storage_pcm_refusals_total',
+    'Custody PCM submissions refused before storage; no receipt or ACK',
+    ['stage'],
+)
+
+for _pcm_stage in PusherPcmStage:
+    PUSHER_STORAGE_PCM_REFUSALS_TOTAL.labels(stage=reason_label(ReasonFamily.PUSHER_PCM, _pcm_stage, PusherPcmStage))
+
+PUSHER_STORAGE_PCM_ERRORS_TOTAL = Counter(
+    'omi_pusher_storage_pcm_errors_total',
+    'PCM admission accounting faults and late post-cancellation storage failures',
+    ['reason'],
+)
+for _pcm_error in PusherPcmErrorReason:
+    PUSHER_STORAGE_PCM_ERRORS_TOTAL.labels(
+        reason=reason_label(ReasonFamily.PUSHER_PCM, _pcm_error, PusherPcmErrorReason)
+    )
 
 PUSHER_QUEUE_DROPS = Counter(
     'pusher_queue_drops_total',
@@ -206,10 +246,6 @@ OMI_AUDIO_TIMELINE_ELAPSED_VALIDATION_TOTAL = Counter(
     'omi_audio_timeline_elapsed_validation_total',
     'Mapped capture windows compared with raw VAD speech decisions',
     ['provider', 'outcome'],
-)
-OMI_AUDIO_TIMELINE_ELAPSED_SHADOW_ERRORS_TOTAL = Counter(
-    'omi_audio_timeline_elapsed_shadow_errors_total',
-    'Failures in validation-only Soniox elapsed-axis bookkeeping',
 )
 AUDIO_TIMELINE_SEND_PATHS = (
     'vad_gate_active',
@@ -491,18 +527,7 @@ def record_lazy_desktop_deferral(*, event: str) -> None:
 # assess; a share of them that grows is a path skipping the gate by design,
 # and degraded reasons identify the cheaper arm that resolved a model failure.
 CONVERSATION_RELEVANCE_LABELS = {
-    'trigger': frozenset(
-        {
-            'capture_end',
-            'client_finalize',
-            'sync_update',
-            'first_open',
-            'user_reprocess',
-            'merge',
-            'sync_intake',
-            'smart_merge',
-        }
-    ),
+    'trigger': DECISION_TRIGGERS,
     'verdict': frozenset({'keep', 'discard'}),
     'decided_by': frozenset({'policy', 'user', 'rule', 'model', 'jev', 'override', 'deterministic'}),
 }
@@ -528,7 +553,12 @@ def record_conversation_relevance(*, trigger: str, verdict: str, decided_by: str
             name: value if value in CONVERSATION_RELEVANCE_LABELS[name] else 'other'
             for name, value in (('trigger', trigger), ('verdict', verdict), ('decided_by', decided_by))
         }
-        labels['reason'] = reason if _RELEVANCE_REASON.match(reason) else 'other'
+        allowed_reason = (
+            reason in TERMINAL_METRIC_REASONS
+            if trigger in TERMINAL_METRIC_TRIGGERS
+            else bool(_RELEVANCE_REASON.match(reason))
+        )
+        labels['reason'] = reason if allowed_reason else 'other'
         CONVERSATION_RELEVANCE_DECISION_TOTAL.labels(**labels).inc()
     except Exception:
         pass
@@ -547,6 +577,7 @@ JEV_DECISION_LABELS = {
             'capture_resummary',
             'conversation_smart_merge',
             'episode_boundary',
+            'episode_boundary_f',
         }
     ),
     'outcome': frozenset(
@@ -688,8 +719,22 @@ LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
 
 LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_blocked_byok_age_seconds',
-    'Global age of the oldest listen finalization job waiting for user BYOK credentials; '
-    'replicated per process, aggregate with max() not sum(); informational only',
+    'Legacy global age since created_at; recent state-entry dwell is exported by omi_finalization_byok; '
+    'replicated per process, aggregate with max() not sum()',
+    registry=None,
+)
+
+LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS = Gauge(
+    'listen_finalization_oldest_dead_letter_age_seconds',
+    'Global time in dead_letter for the oldest terminal_at timestamp; '
+    'replicated per process, aggregate with max() not sum()',
+    registry=None,
+)
+
+LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_LAST_24H = Gauge(
+    'listen_finalization_byok_session_abandoned_last_24h',
+    'Global COUNT of dead_letter jobs with byok_session_abandoned and terminal_at in the last 24 hours; '
+    'derived from committed job documents, aggregate with max() not sum()',
     registry=None,
 )
 
@@ -712,6 +757,8 @@ def register_listen_finalization_summary_metrics() -> None:
         for metric in (
             LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS,
             LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS,
+            LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS,
+            LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_LAST_24H,
             LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS,
         ):
             REGISTRY.register(metric)
@@ -773,12 +820,89 @@ OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL = Counter(
 for _disposition in CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS:
     OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL.labels(disposition=_disposition)
 
+# Error-class sentinel (services/error_class_sentinel.py). Outcomes are pinned
+# literals: ok, truncated (counts unbounded, alerts suppressed), error (read
+# failed), permission_denied (logging.read grant missing on backend-runtime).
+OMI_ERROR_CLASS_SWEEP_TOTAL = Counter(
+    'omi_error_class_sweep_total',
+    'Error-class sentinel sweep ticks by outcome',
+    ['outcome'],
+)
+for _outcome in ('ok', 'truncated', 'error', 'permission_denied'):
+    OMI_ERROR_CLASS_SWEEP_TOTAL.labels(outcome=_outcome)
+OMI_ERROR_CLASS_ALERT_FIRING = Gauge(
+    'omi_error_class_alert_firing',
+    'Error classes currently firing a new/surge alert (1) on the last sweep tick',
+    ['fingerprint', 'service'],
+)
+# Monotonic firing signal the Grafana rule keys on (display gauge above cannot
+# be cleared reliably across instances). No pre-zeroed labels: a series appears
+# the first time that class fires.
+OMI_ERROR_CLASS_ALERT_FIRED_TOTAL = Counter(
+    'omi_error_class_alert_fired_total',
+    'Error-class new/surge alert firings by class',
+    ['fingerprint', 'service'],
+)
+# increase() over a series born at 1 and flat returns 0, so the paging rule
+# keys on this timestamp gauge instead: freshly fired = time() - max(...) is
+# small; a frozen or stale instance's value ages out of the window.
+OMI_ERROR_CLASS_LAST_FIRED_TIMESTAMP = Gauge(
+    'omi_error_class_last_fired_timestamp_seconds',
+    'Unix time of the most recent new/surge firing per error class',
+    ['fingerprint', 'service'],
+)
+
+OMI_APP_REVIEW_CONFIG_ALERT_TOTAL = Counter(
+    'omi_app_review_config_alert_total',
+    'App-review hide lifecycle alerts by platform and bounded reason',
+    ['platform', 'reason'],
+)
+OMI_APP_REVIEW_CONFIG_LAST_ALERT_TIMESTAMP = Gauge(
+    'omi_app_review_config_last_alert_timestamp_seconds',
+    'Unix time of the latest app-review hide lifecycle alert by platform and reason',
+    ['platform', 'reason'],
+)
+OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL = Counter(
+    'omi_app_review_config_sweep_total',
+    'App-review lifecycle sweep ticks by overall outcome',
+    ['outcome'],
+)
+OMI_APP_REVIEW_CONFIG_LAST_SWEEP_TIMESTAMP = Gauge(
+    'omi_app_review_config_last_sweep_timestamp_seconds',
+    'Unix time of the most recent completed app-review lifecycle sweep',
+)
+for _app_review_platform in ('ios', 'android'):
+    for _app_review_reason in (
+        AppReviewConfigReason.CREDENTIALS_UNAVAILABLE,
+        AppReviewConfigReason.STORE_API_ERROR,
+        AppReviewConfigReason.RECONCILIATION_REPAIR,
+        AppReviewConfigReason.LIVE_HIDE_CLEARED,
+        AppReviewConfigReason.SUBMISSION_TOKEN_UNAVAILABLE,
+        AppReviewConfigReason.SUBMISSION_TOKEN_REJECTED,
+    ):
+        OMI_APP_REVIEW_CONFIG_ALERT_TOTAL.labels(
+            platform=_app_review_platform,
+            reason=reason_label(ReasonFamily.APP_REVIEW_CONFIG, _app_review_reason, AppReviewConfigReason),
+        )
+        OMI_APP_REVIEW_CONFIG_LAST_ALERT_TIMESTAMP.labels(
+            platform=_app_review_platform,
+            reason=reason_label(ReasonFamily.APP_REVIEW_CONFIG, _app_review_reason, AppReviewConfigReason),
+        )
+for _app_review_outcome in (
+    AppReviewConfigOutcome.OK,
+    AppReviewConfigOutcome.PARTIAL,
+    AppReviewConfigOutcome.ERROR,
+):
+    OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL.labels(
+        outcome=reason_label(ReasonFamily.APP_REVIEW_CONFIG, _app_review_outcome, AppReviewConfigOutcome)
+    )
+
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',
     'Global durable listen finalization job count by non-success status; replicated '
-    'per process, aggregate with max() not sum(). dead_letter is cumulative and only '
-    'ever rises: it is an all-time terminal total, not a backlog',
+    'per process, aggregate with max() not sum(). dead_letter is terminal stock '
+    'across every generation from a status COUNT; other statuses use projection shards',
     ['status'],
 )
 
@@ -810,6 +934,40 @@ LISTEN_FINALIZATION_DEAD_LETTER_TOTAL = Counter(
     'Listen finalization jobs terminalized after their final Cloud Tasks attempt',
 )
 
+FINALIZATION_DEAD_LETTER_CAUSES = (  # closed set; mirror smart_merge._INCOMPLETE_CODES (no import: keep metrics light)
+    'donor_receipt_revision_changed',
+    'refresh_lease_busy',
+    'survivor_changed_before_refresh',
+    'refresh_not_persisted',
+    'survivor_vector_failed',
+    'refresh_completion_fenced',
+    'processing_checkpoint_fenced',
+    'donor_cleanup_deferred',
+    'flatten_cleanup_source_invalid',
+    'processing_failed',
+    'worker_failed',
+    'invalid_job',
+    'recovery_structure_unavailable',
+    'final_attempt_failed',
+    'unknown',
+)
+OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL = Counter(
+    'omi_conversation_finalization_dead_letter_total',
+    'Terminal listen finalization jobs by bounded cause class',
+    ['cause'],
+)
+OMI_CONVERSATION_FINALIZATION_BUDGET_REQUEUES_TOTAL = Counter(
+    'omi_conversation_finalization_budget_requeues_total',
+    'Attempt-budget exhaustion delayed requeues granted, by bounded cause class',
+    ['cause'],
+)
+
+# Zero-initialize the closed cause set so an idle process exports every
+# series, distinguishing no dead-letters yet from a missing scrape target.
+for _cause in FINALIZATION_DEAD_LETTER_CAUSES:
+    OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL.labels(cause=_cause)
+    OMI_CONVERSATION_FINALIZATION_BUDGET_REQUEUES_TOTAL.labels(cause=_cause)
+
 LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL = Counter(
     'listen_finalization_stale_processing_reconciliations_total',
     'Stale bare-processing conversation reconciliation outcomes by the crash-orphan sweep',
@@ -820,6 +978,11 @@ LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL = Counter(
 # series, distinguishing no stranded rows from a missing scrape target.
 for _outcome in ('completed', 'migrated', 'skipped', 'error'):
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
+
+LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_TOTAL = Counter(
+    'listen_finalization_byok_session_abandoned_total',
+    'Best-effort post-commit BYOK abandonment signal; use the document-derived last_24h gauge for alerting',
+)
 
 LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL = Counter(
     'listen_finalization_byok_abandonments_total',
@@ -929,11 +1092,23 @@ OMI_SYNC_CAPTURE_TIME_TOTAL = Counter(
     ['outcome'],
 )
 
+OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL = Counter(
+    'omi_pipeline_record_wait_answers_total',
+    'Registered-record upload waits answered by bounded reason',
+    ['reason'],
+)
+
+OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL = Counter(
+    'omi_pipeline_record_wait_memo_hits_total',
+    'Registered-record upload wait memo hits by bounded memo kind',
+    ['memo'],
+)
+
 OMI_SYNC_RECORDING_AGE_SECONDS = Histogram(
     'omi_sync_recording_age_seconds',
     'Oldest recording age at sync admission by lane',
     ['lane'],
-    buckets=(300, 1800, 3600, 21600, 86400, 259200, 604800, 1209600, 2592000),
+    buckets=(300, 1800, 3600, 21600, 86400, 259200, 604800, 1209600, 2592000, 5184000),
 )
 
 OMI_SYNC_QUEUE_WAIT_SECONDS = Histogram(
@@ -1004,6 +1179,17 @@ OMI_SYNC_BRIDGE_RETRACTION_TOTAL = Counter(
         'Never labeled by uid, conversation id, or exception text.'
     ),
     ['outcome', 'reason'],
+)
+
+OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL = Counter(
+    'omi_sync_bridge_contained_donor_shadow_total',
+    (
+        'Shadow-mode outcomes for a processed sync donor the contained-donor bridge merge would consider. '
+        'Labels are a closed set: '
+        'outcome=would_absorb|partial_overlap|no_segment_span|unplaced_donor|donor_ineligible|open_target|no_overlap|error. '
+        'Never labeled by uid, conversation id, or content.'
+    ),
+    ['outcome'],
 )
 
 # Counted alongside omi_sync_transcription_*_total{outcome="internal_error"}:
@@ -1195,6 +1381,12 @@ OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL = Counter(
     ['mode'],
 )
 
+OMI_LISTEN_SERVER_BATCH_SUPPRESSION_TOTAL = Counter(
+    'omi_listen_server_batch_suppression_total',
+    'Server batch suppression decisions at STT initialization (including reinitialization), closed reason set',
+    ['decision', 'reason', 'client_platform', 'language'],
+)
+
 OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL = Counter(
     'omi_listen_local_preview_sessions_total',
     'Listen sessions by mobile local-preview lane admission outcome (closed reason set)',
@@ -1288,6 +1480,11 @@ OMI_ACTION_ITEM_IDENTITY_TOTAL = Counter(
     ['outcome'],
 )
 
+OMI_ENRICHMENT_EARLY_ABORT_TOTAL = Counter(
+    'omi_enrichment_early_abort_total',
+    'Enrichment revision checkpoints: stage=pre_notes|pre_persist, outcome=superseded|check_failed',
+    ['stage', 'outcome'],
+)
 OMI_ACTION_ITEM_REFRESH_TOTAL = Counter(
     'omi_action_item_refresh_total',
     'Automatic refresh task preservation: kept_existing|added_new|transferred_from_donor|skipped_duplicate|disabled',
@@ -1436,6 +1633,18 @@ AUTH_FLOW_DURATION_SECONDS = Histogram(
     ['provider', 'terminal_state'],
 )
 
+OMI_BILLING_RENEWAL_OBSERVATIONS = Counter(
+    'omi_billing_renewal_observations_total',
+    'Verified billing observation deliveries, not distinct invoices or attempts',
+    ['outcome'],
+)
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='eligible')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='created')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='duplicate')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='projection_error')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='write_error')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='timeout')
+
 OMI_SUBSCRIPTION_EVENTS = Counter(
     'omi_subscription_events_total',
     'Stripe subscription lifecycle events observed via webhook. Counts webhook '
@@ -1474,6 +1683,22 @@ PUSHER_DRAIN_IN_PROGRESS.set(0)
 OMI_SYNC_JOB_POLL_REQUESTS_TOTAL = Counter(
     'omi_sync_job_poll_requests_total',
     'Authenticated GET /v2/sync-local-files/{job_id} requests, including rejected polls',
+)
+OMI_SYNC_JOB_POLL_COHORT_REQUESTS_TOTAL = Counter(
+    'omi_sync_job_poll_cohort_requests_total',
+    'Sync job-status polls by stable backoff cohort; cohort is limited to in or out',
+    ['cohort'],
+)
+OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS = Gauge(
+    'omi_sync_job_poll_active_uploaders',
+    'Distinct authenticated UIDs with a nonterminal sync job poll in the last five minutes on this process',
+    ['cohort'],
+)
+OMI_SYNC_JOB_COMPLETION_TO_FIRST_TERMINAL_READ_SECONDS = Histogram(
+    'omi_sync_job_completion_to_first_terminal_read_seconds',
+    'Seconds from sync job completion to its first terminal status read observed by this process',
+    ['cohort'],
+    buckets=(1, 5, 10, 20, 30, 60, 120, 300, 600, 1800, 3600, 7200),
 )
 OMI_SYNC_JOB_POLL_THROTTLED_TOTAL = Counter(
     'omi_sync_job_poll_throttled_total',
@@ -1532,7 +1757,13 @@ def record_action_items_list_cache(outcome: str) -> None:
     OMI_ACTION_ITEMS_LIST_CACHE_TOTAL.labels(outcome=outcome).inc()
 
 
-def metrics_response() -> Response:
+def metrics_response() -> 'Response':
+    # Imported here, not at module scope: this module is reachable from the
+    # record-seal row process (utils.observability.fallback -> utils.metrics),
+    # and fastapi/pydantic is ~60% of that process's import bill. Only the
+    # /metrics route needs the web framework.
+    from fastapi import Response
+
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

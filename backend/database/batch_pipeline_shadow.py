@@ -4,7 +4,6 @@ Four offers share the existing four-node fleet. No ordinary scheduler, content
 ledger, owner ring, user quota, projection receipt or legacy lock is mutated.
 """
 
-from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 import hashlib
 import logging
@@ -303,7 +302,7 @@ class ShadowStore:
                 {
                     **job,
                     'state': 'ready',
-                    'item': asdict(item),
+                    'item': item.to_dict(),
                     'language': language,
                     'projection_context': projection_context or {},
                 },
@@ -328,7 +327,7 @@ class ShadowStore:
                 or 'projection_reserved_at' not in job
             ):
                 return None
-            item = WorkItem(**job['item'])
+            item = WorkItem.from_dict(job['item'])
             tx.check_privacy(
                 item.owner_id, (item.conversation_id,) if item.conversation_id else (), item.privacy_generation
             )
@@ -355,7 +354,7 @@ class ShadowStore:
             job = tx.get('shadow_jobs', segment)
             if job.get('state') != 'ready' or job.get('shadow') is not True:
                 return None
-            item = WorkItem(**job['item'])
+            item = WorkItem.from_dict(job['item'])
             if not item.shadow or item.segment_id != segment:
                 raise ValueError('shadow identity required')
             tx.check_privacy(
@@ -384,7 +383,7 @@ class ShadowStore:
                 or budget.get('units', 0) >= limit
             ):
                 return None
-            item = WorkItem(**job['item'])
+            item = WorkItem.from_dict(job['item'])
             tx.check_privacy(
                 item.owner_id, (item.conversation_id,) if item.conversation_id else (), item.privacy_generation
             )
@@ -441,7 +440,7 @@ class ShadowStore:
             job = tx.get('shadow_jobs', segment)
             if not shadow_percent() or job.get('shadow') is not True or job.get('state') != 'recovery_ready':
                 return None
-            item = WorkItem(**job['item'])
+            item = WorkItem.from_dict(job['item'])
             tx.check_privacy(
                 item.owner_id, (item.conversation_id,) if item.conversation_id else (), item.privacy_generation
             )

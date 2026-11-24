@@ -1,0 +1,35 @@
+"""Content-free operation/disposition contract shared by plan and secret-free undo."""
+
+OPERATION = 'batch-live-no-speech-v1'
+EXITS = {
+    'no_speech': 'operator_undo_restores_original_fields',
+    'no_retained_audio': 'operator_review',
+    'has_speech': 'normal_batch_pipeline',
+    'retained_audio_unmeasured': 'operator_review',
+    'decode_failed': 'operator_review',
+    'coverage_incomplete': 'operator_review',
+    'privacy_blocked': 'operator_rerun_after_consent',
+    'privacy_skipped': 'operator_rerun_after_consent',
+    'upload_pending': 'operator_review',
+    'not_candidate': 'existing_lifecycle_owner',
+    'barrier_mismatch': 'operator_review',
+    'already_registered': 'normal_batch_pipeline',
+    'already_marked': 'operator_undo',
+    'state_changed': 'operator_rerun',
+    'proof_refused': 'operator_rerun',
+    'read_error': 'operator_rerun',
+    'write_error': 'operator_rerun',
+    'disabled': 'operator_rerun_after_enablement',
+    'closed': 'operator_undo_restores_original_fields',
+    # Closed storage-primitive conflict reasons.
+    'revision_changed': 'operator_rerun',
+    'not_batch_live_owner': 'existing_lifecycle_owner',
+    'not_in_progress': 'existing_lifecycle_owner',
+    'row_retired_or_locked': 'operator_review',
+    'already_discarded': 'operator_review',
+    'unbound_plan': 'operator_rerun',
+    'committed_revision_unknown': 'operator_undo_resolves_marker',
+    'not_matching_close': 'operator_review',
+    'invalid_snapshot': 'operator_review',
+    'privacy_changed': 'operator_rerun_after_consent',
+}

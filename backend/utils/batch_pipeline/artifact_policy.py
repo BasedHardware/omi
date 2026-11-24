@@ -15,12 +15,17 @@ from config.batch_pipeline_shadow import shadow_percent
 from utils.batch_pipeline.compute_client import shadow_from_env
 
 
-def artifacts_for(store: Any) -> ArtifactStore:
+def artifacts_for(store: Any, *, storage_client: Any = None) -> ArtifactStore:
     """Shared IO composition; readers must not import admission or GPU stages."""
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     if not bucket:
         raise RuntimeError('durable batch staging bucket is not configured')
-    return create_artifact_store(store, create_storage_client(), bucket, os.getenv('ENCRYPTION_SECRET', '').encode())
+    return create_artifact_store(
+        store,
+        storage_client if storage_client is not None else create_storage_client(),
+        bucket,
+        os.getenv('ENCRYPTION_SECRET', '').encode(),
+    )
 
 
 def create_artifact_store(store: Any, storage_client: Any, bucket: str, master_secret: bytes) -> ArtifactStore:
@@ -39,6 +44,7 @@ def create_artifact_store(store: Any, storage_client: Any, bucket: str, master_s
         bucket=bucket,
         namespace=store.namespace,
         authorize=partial(batch_artifact_authorize, store),
+        authorize_read=partial(batch_artifact_authorize, store),
         key_for_owner=key_for_owner,
         register_artifact=partial(batch_artifact_register, store),
         shadow_result=partial(shadow_result, store),

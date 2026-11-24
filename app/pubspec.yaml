@@ -57,6 +57,9 @@ dependencies:
   pool: ^1.5.1
   collection: ^1.19.1
   http: ^1.4.0
+  # Android-only Google Play Billing (official in_app_purchase federation); no iOS StoreKit plugin.
+  in_app_purchase_android: 0.5.5
+  in_app_purchase_platform_interface: ^1.4.0
   intl: ^0.20.2
   permission_handler: ^12.0.0+1
   # Must stay >=2.0.0 — 1.x's iOS registration force-unwraps
@@ -139,9 +142,13 @@ dependencies:
   quick_actions: ^1.0.0
   in_app_review: ^2.0.12
   cryptography: ^2.9.0
+  qr_flutter: ^4.1.0
 
 dependency_overrides:
   js: ^0.7.1
+  # Vendored with a one-time BGTask registration guard; see packages/flutter_background_service_ios/README.md.
+  flutter_background_service_ios:
+    path: packages/flutter_background_service_ios
   uuid: ^4.4.0
   opus_flutter_ios:
     git:
@@ -163,6 +170,8 @@ dev_dependencies:
     sdk: flutter
   flutter_test:
     sdk: flutter
+  # Fault-inject preference writes that the legacy test API cannot model.
+  shared_preferences_platform_interface: 2.4.1
   fake_async: ^1.3.3
   # Direct dev deps for the phone-call provider test's fake WebSocketChannel:
   # the forwarding signatures need these types, which web_socket_channel
@@ -191,6 +200,7 @@ dev_dependencies:
   flutter_flavorizr: ^2.2.3
   flutter_gen_runner: 5.15.0
   pigeon: ^26.0.1
+  firebase_messaging_platform_interface: ^4.6.5
 
 flutter_launcher_icons:
   android: true

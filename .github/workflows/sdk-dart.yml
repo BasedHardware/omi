@@ -1,0 +1,50 @@
+name: Dart Device SDK
+
+on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
+  pull_request:
+    paths:
+      - "sdks/device/dart/**"
+      - ".github/workflows/sdk-dart.yml"
+  push:
+    branches: [main]
+    paths:
+      - "sdks/device/dart/**"
+      - ".github/workflows/sdk-dart.yml"
+
+permissions:
+  contents: read
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
+jobs:
+  dart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: sdks/device/dart
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
+      # The Hygiene manifest runner has no Flutter toolchain, so this Flutter
+      # package runs its own suite, like sdk-cpp.yml and sdk-rust.yml.
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.5
+          cache: true
+      - run: flutter pub get
+      - run: flutter test

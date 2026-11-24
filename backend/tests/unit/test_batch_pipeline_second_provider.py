@@ -108,6 +108,36 @@ def test_second_provider_error_stays_failed_held(setup, monkeypatch, legacy_depe
     second.assert_called_once()
 
 
+@pytest.mark.parametrize('status,expected', [(503, 'recovered'), (402, 'failed_held')])
+def test_real_adapter_retries_before_settlement_and_keeps_credit_refusal_held(
+    setup, monkeypatch, legacy_dependencies, caplog, status, expected
+):
+    from utils.stt import soniox_batch
+    from tests.unit.test_soniox_recovery_retry import provider
+    from tests.unit.test_soniox_batch import client as client_factory
+
+    transcribe_http = soniox_batch.transcribe
+    handler, calls = provider('upload', 2 if status == 503 else 100, status)
+    second = Mock(
+        side_effect=lambda audio, duration, **kwargs: transcribe_http(
+            audio, duration, **kwargs, client_factory=client_factory(handler), sleep=lambda _: None
+        )
+    )
+    client, binding, artifacts, _, _, recovery = second_setup(setup, monkeypatch, legacy_dependencies, soniox=second)
+    assert recovery.recover('bad', binding.owner_id) == expected
+    job = row(client)
+    assert job['recovery']['recognizers']['soniox']['outcome'] == ('words' if status == 503 else 'error')
+    if status == 402:
+        assert not job.get('result')
+        assert job['measured_held_vad_speech_seconds'] == 5
+        artifacts.persist_recovery_result.assert_not_called()
+        assert 'kind=credit_refusal http_status=402' in caplog.text
+    assert calls['upload'] == (3 if status == 503 else 1)
+    assert calls['create'] == (1 if status == 503 else 0)
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    second.assert_called_once()
+
+
 @pytest.mark.parametrize('missing', ['kill_switch', 'terminal_flag', 'allowance', 'missing_key'])
 def test_second_provider_requires_its_preconditions(setup, monkeypatch, legacy_dependencies, missing):
     client, binding, _, _, second, recovery = second_setup(setup, monkeypatch, legacy_dependencies)

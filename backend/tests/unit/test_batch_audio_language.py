@@ -406,13 +406,16 @@ def test_language_metrics_survive_the_actual_sync_export_allowlist():
     import re
     from pathlib import Path
     import yaml
-    from utils.batch_pipeline.language_metrics import ROUTES
+    from utils.batch_pipeline.language_metrics import ROUTES, SAMPLE_WINDOWS
 
     source = Path(__file__).parents[3] / 'backend/deploy/cloud_run_gmp_sync.yaml'
     relabeling = yaml.safe_load(source.read_text())['spec']['endpoints'][0]['metricRelabeling']
     keep = next(rule['regex'] for rule in relabeling if rule['action'] == 'keep')
-    for collector in (ROUTES, lid.DETECTIONS, lid.PROBE_SECONDS):
+    for collector in (ROUTES, SAMPLE_WINDOWS, lid.DETECTIONS, lid.PROBE_SECONDS):
         assert re.fullmatch(keep, collector._name + '_total')
+    # An idle sample window must export 0 per class, not an absent series.
+    exported = {s.labels['language_class'] for s in SAMPLE_WINDOWS.collect()[0].samples if s.name.endswith('_total')}
+    assert exported >= {'supported', 'unsupported', 'unknown', 'unavailable'}
 
 
 def test_language_gate_and_vendor_guard_metrics_survive_the_sync_export_allowlist():
@@ -427,6 +430,7 @@ def test_language_gate_and_vendor_guard_metrics_survive_the_sync_export_allowlis
         language_gate.SELF_REQUESTS,
         language_gate.SHADOW,
         language_gate.ENFORCED,
+        language_gate.CONFIDENT_SKIPS,
         vendor_guard.VENDOR_AUDIO_SECONDS,
     ):
         assert re.fullmatch(keep, counter._name + '_total')
@@ -451,7 +455,8 @@ async def test_cpu_intake_freezes_detection_proof_with_inheritance_disabled(monk
     captured = []
 
     def authorize(store, seed, snapshots):
-        snapshots['user'] = {'language': 'en', 'transcription_preferences': {'single_language_mode': False}}
+        if snapshots is not None:
+            snapshots['user'] = {'language': 'en', 'transcription_preferences': {'single_language_mode': False}}
         return ProtectionContext('standard', 0)
 
     def stage(work, body):
@@ -512,7 +517,8 @@ async def test_self_lid_intake_context_roundtrips_through_real_batch_worker(monk
     staged = []
 
     def authorize(store, seed, snapshots):
-        snapshots['user'] = {'language': 'multi', 'transcription_preferences': {'single_language_mode': False}}
+        if snapshots is not None:
+            snapshots['user'] = {'language': 'multi', 'transcription_preferences': {'single_language_mode': False}}
         return ProtectionContext('standard', 0)
 
     def stage(work, body):
@@ -593,7 +599,11 @@ async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupporte
         return routes[-1]
 
     def authorize(store, seed, snapshots):
-        snapshots['user'] = {'language': user_language, 'transcription_preferences': {'single_language_mode': single}}
+        if snapshots is not None:
+            snapshots['user'] = {
+                'language': user_language,
+                'transcription_preferences': {'single_language_mode': single},
+            }
         return ProtectionContext('standard', 0)
 
     def stage(work, body):

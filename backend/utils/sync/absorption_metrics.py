@@ -14,6 +14,7 @@ from typing import Any
 from prometheus_client import Counter
 
 from config.merge_before_processing import already_processed
+from utils.sync import intake_content_shadow
 
 logger = logging.getLogger(__name__)
 SOURCE_KINDS = frozenset({'omi', 'phone', 'desktop', 'sdcard', 'other'})
@@ -81,6 +82,10 @@ def capture_assignment_metrics(conversation: dict, plans: list[Any]) -> None:
     been encoded. Neither observation field is written to Firestore.
     """
     try:
+        intake_content_shadow.capture(conversation, plans)
+    except Exception:
+        logger.warning('event=sync_assignment_metrics phase=capture_content outcome=dropped')
+    try:
         observations = absorption_observations(plans)
         if observations:
             conversation[OBSERVATIONS_FIELD] = observations
@@ -101,6 +106,10 @@ def capture_assignment_metrics(conversation: dict, plans: list[Any]) -> None:
 
 def record_assignment_metrics(conversation: dict) -> None:
     """Consume each family once after commit; telemetry must not fail intake."""
+    try:
+        intake_content_shadow.emit(conversation)
+    except Exception:
+        logger.warning('event=sync_assignment_metrics phase=emit_content outcome=dropped')
     for field, counter in ((OBSERVATIONS_FIELD, ABSORBED_TOTAL), (PUBLISHED_FIELD, PUBLISHED_TOTAL)):
         try:
             for observation in conversation.pop(field, []):

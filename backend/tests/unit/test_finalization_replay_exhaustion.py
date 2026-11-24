@@ -7,10 +7,12 @@ from unittest.mock import Mock
 import pytest
 
 from database import conversation_finalization_jobs as jobs
+from database import finalization_due_marker_sweep as sweep
 from services import conversation_finalization as service
 from models.account_cutover import AccountCutoverRecord, AccountCutoverState
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from utils.conversations import lifecycle
+from utils.conversations import lifecycle, typesense_index
+from utils.conversations.relevance_rules import RULES_VERSION
 
 NOW = datetime(2026, 10, 31, tzinfo=timezone.utc)
 JOB_PATH = (jobs.FINALIZATION_JOBS_COLLECTION, 'synthetic-job')
@@ -88,6 +90,15 @@ def test_stale_replay_terminalizes_only_exhausted_budget(store, status, attempts
         'finalization_status': 'dead_letter',
         'structured': {'title': 'Synthetic transcript.', 'overview': ''},
         'summary_retryable': True,
+        # The discard-detection audit stamps an explicit policy keep on the
+        # dead-letter terminal; the verdict itself stays keep.
+        'relevance_decision': {
+            'verdict': 'keep',
+            'decided_by': 'policy',
+            'reason': 'dead_letter_default',
+            'trigger': 'dead_letter',
+            'rules_version': RULES_VERSION,
+        },
     }
     jobs.stop_quiet_checks_for_job.assert_called_once()
     # It cannot mint another Cloud Task or write another attention item.
@@ -258,6 +269,96 @@ def test_real_reconciler_claim_path_retires_without_enqueue(store, monkeypatch):
 
 
 @pytest.fixture
+def exhausted_requeue(store, monkeypatch):
+    store.rows[JOB_PATH].update(
+        status='queued', attempt_count=5, budget_requeue_count=1, last_failure_code='donor_cleanup_deferred'
+    )
+    monkeypatch.setattr(service, 'replay_enabled', lambda: True)
+    monkeypatch.setattr(service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(service, 'is_listen_finalization_tasks_configured', lambda: True)
+    monkeypatch.setattr(service, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
+    monkeypatch.setattr(jobs, 'recover_stranded_byok_jobs', lambda **_: {'blocked': 0, 'errors': 0})
+    monkeypatch.setattr(jobs, 'get_finalization_replay_oldest_overdue_age_seconds', lambda **_: 0)
+    monkeypatch.setattr(
+        jobs,
+        'get_finalization_replay_candidates',
+        lambda **_: [deepcopy(store.rows[JOB_PATH]) | {'job_id': JOB_PATH[-1]}],
+    )
+    monkeypatch.setattr(service, '_publish_job_metrics', Mock())
+    enqueue = Mock()
+    monkeypatch.setattr(service, 'enqueue_listen_finalization_job', enqueue)
+    return enqueue
+
+
+def test_exhausted_requeue_probes_parked_survivor(store, monkeypatch, exhausted_requeue):
+    survivor_path = (*ROW_PATH[:-1], 'synthetic-survivor')
+    store.rows[survivor_path] = {'finalization_engine': 'go', 'finalization_owner_epoch': 1}
+    store.rows[JOB_PATH].update(finalization_waiting_on_owner=survivor_path[-1], reconcile_after_at=NOW)
+    before_job = deepcopy(store.rows[JOB_PATH])
+    before_row = deepcopy(store.rows[ROW_PATH])
+    record_dead_letter = Mock()
+    monkeypatch.setattr(service, '_record_dead_letter', record_dead_letter)
+
+    result = service.reconcile_listen_finalization_jobs(firestore_client=store)
+
+    assert result['terminalized'] == result['retired'] == result['requeued'] == 0
+    assert store.rows[JOB_PATH] == {**before_job, 'reconcile_after_at': NOW + jobs.OWNERSHIP_RECHECK_INTERVAL}
+    assert store.rows[ROW_PATH] == before_row
+    exhausted_requeue.assert_not_called()
+    record_dead_letter.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ('failure_code', 'row_code'),
+    [(code, 'processing_failed') for code in sorted(service.SMART_MERGE_INCOMPLETE_CODES)]
+    + [('worker_failed', 'final_attempt_failed'), ('invalid_job', 'final_attempt_failed')],
+)
+def test_delivery_independent_terminal_folds_failure_and_keeps_usable_transcript_retryable(
+    store, monkeypatch, exhausted_requeue, failure_code, row_code
+):
+    store.rows[JOB_PATH]['last_failure_code'] = failure_code
+    before = deepcopy(store.rows[ROW_PATH])
+    monkeypatch.setattr(service, '_record_dead_letter', Mock())
+
+    assert service.reconcile_listen_finalization_jobs(firestore_client=store)['terminalized'] == 1
+
+    assert store.rows[JOB_PATH]['last_failure_code'] == row_code
+    assert store.rows[ROW_PATH]['summary_retryable'] is True
+    assert store.rows[ROW_PATH]['status'] == 'completed'
+    for key in ('transcript_segments', 'audio_files', 'photos', 'custom_field'):
+        assert store.rows[ROW_PATH][key] == before[key]
+    exhausted_requeue.assert_not_called()
+
+
+def test_delivery_independent_terminal_runs_shared_post_commit_effects_once(store, monkeypatch, exhausted_requeue):
+    terminal_metric = Mock()
+    client_metric = Mock()
+
+    def sync_after_commit(*_):
+        assert store.rows[JOB_PATH]['status'] == 'dead_letter'
+
+    index_sync = Mock(side_effect=sync_after_commit)
+    monkeypatch.setattr(service, 'record_capture_finalization_terminal', terminal_metric)
+    monkeypatch.setattr(service, 'record_conversation_finalization_client_terminal', client_metric)
+    monkeypatch.setattr(typesense_index, 'sync_conversation_index_after_write', index_sync)
+    before = service.LISTEN_FINALIZATION_DEAD_LETTER_TOTAL._value.get()
+
+    assert service.reconcile_listen_finalization_jobs(firestore_client=store)['terminalized'] == 1
+
+    terminal_metric.assert_called_once_with('failure', store.rows[JOB_PATH]['created_at'])
+    client_metric.assert_called_once()
+    index_sync.assert_called_once_with(ROW_PATH[1], ROW_PATH[-1])
+    jobs.stop_quiet_checks_for_job.assert_called_once_with(JOB_PATH[-1], firestore_client=store)
+    assert service.LISTEN_FINALIZATION_DEAD_LETTER_TOTAL._value.get() == before + 1
+    # Discovery may race the terminal write; the transaction refuses a repeat.
+    assert service.reconcile_listen_finalization_jobs(firestore_client=store)['terminalized'] == 0
+    terminal_metric.assert_called_once()
+    index_sync.assert_called_once()
+    jobs.stop_quiet_checks_for_job.assert_called_once()
+    exhausted_requeue.assert_not_called()
+
+
+@pytest.fixture
 def inline_replay(store, monkeypatch):
     """Listen's real inline admission mode with an independent worker binding."""
     monkeypatch.setenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'inline')
@@ -407,3 +508,142 @@ def test_inline_replay_unknown_kind_cannot_abort_the_page(store, inline_replay, 
     assert service.reconcile_listen_finalization_jobs(firestore_client=store)['retired'] == 1
     assert store.rows[JOB_PATH]['last_failure_code'] == 'durable_attempts_exhausted'
     inline_replay.assert_not_called()
+
+
+DUE_MARKER_SWEEP_NOW = NOW
+
+
+def _due_marker_row(**overrides):
+    row = {
+        'uid': ROW_PATH[1],
+        'conversation_id': ROW_PATH[-1],
+        'status': 'queued',
+        'kind': 'listen_finalization',
+        'dispatch_generation': 7,
+        'created_at': NOW - timedelta(hours=25),
+        'updated_at': NOW - timedelta(hours=25),
+    }
+    row.update(overrides)
+    return row
+
+
+@pytest.mark.parametrize(
+    'overrides,outcome,due_set',
+    [
+        ({'status': 'queued'}, 'remarked', True),
+        ({'status': 'leased', 'lease_expires_at': NOW - timedelta(minutes=1)}, 'remarked', True),
+        ({'reconcile_after_at': NOW + timedelta(hours=2)}, 'skipped', False),
+        ({'created_at': NOW - timedelta(hours=23)}, 'skipped', False),
+        ({'kind': 'listen_quiet_check'}, 'skipped', False),
+        ({'kind': 'conversation_merge'}, 'skipped', False),
+        ({'requires_byok': True}, 'skipped', False),
+        ({'status': 'completed'}, 'skipped', False),
+        ({'created_at': None}, 'skipped', False),
+    ],
+)
+def test_due_marker_sweep_restores_only_old_unmarked_nonterminal_jobs(store, overrides, outcome, due_set):
+    store.rows[JOB_PATH] = _due_marker_row(**overrides)
+    before = deepcopy(store.rows[JOB_PATH])
+    job_ref = store.collection(jobs.FINALIZATION_JOBS_COLLECTION).document('synthetic-job')
+
+    result = jobs.firestore.transactional(sweep._restore_missing_due_marker_txn)(
+        store.transaction(), job_ref, NOW - timedelta(hours=24), NOW
+    )
+
+    assert result == outcome
+    if due_set:
+        assert store.rows[JOB_PATH]['reconcile_after_at'] == NOW
+        assert store.rows[JOB_PATH]['updated_at'] == NOW
+    else:
+        assert store.rows[JOB_PATH] == before
+
+
+def test_due_marker_sweep_skips_a_missing_job_document(store):
+    job_ref = store.collection(jobs.FINALIZATION_JOBS_COLLECTION).document('absent-job')
+
+    result = jobs.firestore.transactional(sweep._restore_missing_due_marker_txn)(
+        store.transaction(), job_ref, NOW - timedelta(hours=24), NOW
+    )
+
+    assert result == 'skipped'
+    assert ('conversation_finalization_jobs', 'absent-job') not in store.rows
+
+
+class _SweepSnapshot:
+    def __init__(self, store, job_id, data):
+        self._data = deepcopy(data)
+        self.id = job_id
+        self.reference = store.collection(jobs.FINALIZATION_JOBS_COLLECTION).document(job_id)
+
+    def to_dict(self):
+        return deepcopy(self._data)
+
+
+class _SweepQuery:
+    def __init__(self, calls, rows):
+        self._calls = calls
+        self._rows = rows
+
+    def where(self, field, op, value):
+        self._calls.append(('where', field, op, value))
+        return self
+
+    def order_by(self, field):
+        self._calls.append(('order_by', field))
+        return self
+
+    def start_after(self, cursor):
+        self._calls.append(('start_after', cursor.id))
+        return self
+
+    def limit(self, count):
+        self._calls.append(('limit', count))
+        self._limit = count
+        return self
+
+    def stream(self):
+        return iter(self._rows[: getattr(self, '_limit', len(self._rows))])
+
+
+class _SweepIndexStub:
+    """Stands in for the status + created_at query; asserts its shape, not Firestore's ordering."""
+
+    def __init__(self, store, rows_by_status):
+        self._store = store
+        self._rows_by_status = rows_by_status
+        self.calls: list[tuple] = []
+
+    def build(self, collection, filters, *, field_filter_factory):
+        self.calls.append(('build', dict(filters)))
+        status = filters['status']
+        rows = [_SweepSnapshot(self._store, job_id, data) for job_id, data in self._rows_by_status.get(status, [])]
+        return _SweepQuery(self.calls, rows)
+
+
+def test_due_marker_sweep_pages_by_status_and_reports_each_outcome(store, monkeypatch):
+    rows = {
+        'queued': [
+            ('old-unmarked', _due_marker_row(status='queued')),
+            ('old-marked', _due_marker_row(status='queued', reconcile_after_at=NOW + timedelta(hours=1))),
+            ('recent-unmarked', _due_marker_row(status='queued', created_at=NOW - timedelta(hours=1))),
+            ('quiet-unmarked', _due_marker_row(status='queued', kind='listen_quiet_check')),
+        ],
+        'leased': [('old-leased', _due_marker_row(status='leased', lease_expires_at=NOW - timedelta(minutes=5)))],
+    }
+    for job_id, data in rows['queued'] + rows['leased']:
+        store.rows[(jobs.FINALIZATION_JOBS_COLLECTION, job_id)] = deepcopy(data)
+    index = _SweepIndexStub(store, rows)
+    monkeypatch.setattr(sweep, 'FINALIZATION_OLDEST_NONTERMINAL_QUERY', index)
+
+    result = sweep.remark_missing_due_markers(now=NOW, limit=50, firestore_client=store)
+
+    assert result == {'remarked': 2, 'skipped': 3, 'error': 0}
+    assert store.rows[(jobs.FINALIZATION_JOBS_COLLECTION, 'old-unmarked')]['reconcile_after_at'] == NOW
+    assert store.rows[(jobs.FINALIZATION_JOBS_COLLECTION, 'old-leased')]['reconcile_after_at'] == NOW
+    assert 'reconcile_after_at' not in store.rows[(jobs.FINALIZATION_JOBS_COLLECTION, 'recent-unmarked')]
+    # The age bound lives in the query, on the existing status + created_at index.
+    assert ('where', 'created_at', '<=', NOW - timedelta(hours=24)) in index.calls
+    assert ('order_by', 'created_at') in index.calls
+    cursor_state = store.rows[('conversation_recovery_state', 'due_marker_queued')]
+    assert cursor_state['generation'] == 1
+    assert cursor_state['resume_after_path'] is None

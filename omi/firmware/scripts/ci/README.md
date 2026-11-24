@@ -9,7 +9,7 @@ Workflow: [`.github/workflows/firmware_release.yml`](../../../../.github/workflo
 A firmware "release" is a **GitHub Release** in a specific shape that the
 backend ([`backend/routers/firmware.py`](../../../../backend/routers/firmware.py))
 reads and serves to the app as an OTA update. The workflow builds the firmware
-and publishes that Release.
+or promotes tested artifacts to that Release.
 
 The contract the backend requires (do not break these):
 
@@ -26,34 +26,28 @@ The firmware version is read from `CONFIG_BT_DIS_FW_REV_STR` in
 
 ## Releasing a new CV1 version
 
-1. Bump `CONFIG_BT_DIS_FW_REV_STR` in `omi/firmware/omi/omi.conf` and merge it.
-2. Dry run (build only, artifacts attached to the Actions run, **no** release):
-   ```bash
-   gh workflow run firmware_release.yml
-   ```
-3. Publish:
-   ```bash
-   gh workflow run firmware_release.yml \
-     -f publish=publish \
-     -f changelog="Removed BLE bond-key|Bug fixes" \
-     -f minimum_firmware_required=3.0.6 \
-     -f minimum_app_version=1.0.74 \
-     -f minimum_app_version_code=438 \
-     -f ota_update_steps=battery,internet
-   ```
-   `version` defaults to the `omi.conf` value; pass `-f version=3.0.21` to override.
-
-Publishing is only allowed from the **`main`** branch (the build-only path runs
-from any branch). The publish step also refuses to overwrite an existing
-`Omi_CV1_v<ver>` tag — bump the version if you need to re-release.
+Follow the [tested-byte release runbook](../../docs/cv1-release-safety.md).
+Build-only runs produce `cv1-qa-release` and a separate bench-symbols artifact.
+Publishing requires `qa_run_id` from this workflow at the exact main SHA and
+never rebuilds. OTA packages omit the network image unless explicitly opted in.
+New releases start at 1%; David expands the rollout by editing the release body.
+The runbook covers missing client identifiers, the kill switch, cache latency,
+and reserved emergency-revert versions.
 
 ## Scripts
 
 - `build-cv1.sh` — runs inside `ghcr.io/zephyrproject-rtos/ci` (firmware bind-mounted
-  at `/omi/firmware`): west init/update of NCS v2.9.0, `cp omi.conf prj.conf`, and
+  at `/omi/firmware`): west init/update of NCS v2.9.0, image-scoped `omi_CONF_FILE=omi.conf`, and
   `west build … --sysbuild` (MCUboot-signed). Mirrors [`omi/firmware/omi/BUILD.md`](../../omi/BUILD.md).
   Outputs `dfu_application.zip`, `merged.hex`, `merged_CPUNET.hex`.
+- `cv1_release.py` — validates inputs, packages QA bytes, verifies provenance and promotes them.
+- `test_cv1_release.py` — offline packaging and promotion contract tests.
 - `make-release-body.sh` — renders the GitHub Release body + `KEY_VALUE` block.
+
+`cv1_bootloader.py` strictly parses and hashes every staged HEX at stage, promotion
+and publish. App-core HEX carries the pinned jig-qualified MCUboot plus the exact staged OTA
+app. CI must reproduce the approved build hash; equivalence/rebuild evidence is
+uploaded separately from release assets. See [the bootloader runbook](../../docs/cv1-bootloader.md).
 
 ## Notes
 

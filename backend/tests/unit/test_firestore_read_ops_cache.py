@@ -631,7 +631,7 @@ class TestWebhookInvalidationCoverage:
     def test_payment_imports_invalidation_signal(self):
         """payment.py must import set_credits_invalidation_signal."""
         source = self._read_source(self.PAYMENT_SOURCE_FILE)
-        assert 'from database.redis_db import set_credits_invalidation_signal' in source
+        assert re.search(r'^from database\.redis_db import .*\bset_credits_invalidation_signal\b', source, re.MULTILINE)
 
     def test_checkout_completed_calls_invalidation(self):
         """checkout.session.completed path must call set_credits_invalidation_signal."""

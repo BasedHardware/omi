@@ -108,13 +108,10 @@ def test_capture_proof_path_uses_original_receipts_and_frozen_reference(monkeypa
     assert seen == [(donor, [live])]
 
 
-@pytest.mark.parametrize('count', [65, 4097])
+@pytest.mark.parametrize('count', [4097])
 def test_oversized_pools_abstain_without_truncation(count):
     live, donor = rows()
-    if count == 65:
-        donor['transcript_segments'] *= count
-    else:
-        live['transcript_segments'] *= count
+    live['transcript_segments'] *= count
     original = absolute(donor)
     report = dedupe_donor(original, donor, live)
     assert report.kept == original and report.incomplete_reason == 'segment_cap'

@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 
 from feature_flag_parser_defaults import parser_defaults
+from feature_flag_registry import effective_due
 import json
 import re
 import sys
@@ -292,6 +293,13 @@ def _preamble() -> list[str]:
         "",
         "## Contributing registry rows",
         "",
+        "- One due date: the later of `review_by` and `extension.until`; pending rollout ramps also enforce `done_by` with the same extension and seven-day grace.",
+        "- One `extension: {until, reason, by, granted}` per row, at most 14 days; grants cannot be future-dated. Explain the delay and name the owning lane. Do not move original dates later or remove an applicable ramp deadline.",
+        "- The owner cap of five counts pending/undecided rollout rows without a live dated ramp, including ramps past grace and all additions in the same diff; shared rows count once per distinct lane token, and new rows cannot name account tokens.",
+        "- `ops_kill` defaults on: off is the kill; opt-in behavior is a `rollout` or `config_switch`.",
+        "- Default to merging live with no flag for pure code changes with a clean revert.",
+        "- Use a flag only for a cohort ramp, an incident kill, cost, or custody risk.",
+        "",
         "Edit `config/feature-flags.yaml`, then regenerate this document with",
         "`python3 scripts/render_feature_flag_registry.py`. A `ramp` object is optional",
         "for existing rows. It is required for `lifecycle: rollout` rows that are",
@@ -316,7 +324,7 @@ def _preamble() -> list[str]:
         "```",
         "",
         "Rows created before the cutoff stay grandfathered when `ramp` is absent;",
-        "the checker warns and reports their count. Do not backfill plans into them.",
+        "the checker warns and reports their count. Ramp or retire this debt.",
         "",
         "This is **not** a second classification of deployment wiring. Secret vs config",
         "vs `public_build` still lives only in",
@@ -452,7 +460,7 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
             prereg = entry.get("prereg")
             prereg_cell = f"[{_md(prereg)}](../../{prereg})" if prereg else "—"
             review_by = entry.get("review_by", "—")
-            if entry.get("review_by") and date.fromisoformat(entry["review_by"]) < as_of:
+            if entry.get("review_by") and effective_due(entry) < as_of:
                 review_by += " OVERDUE"
             lines.append(
                 f"| `{entry['key']}` | {entry['terminal']} | {_md(entry['owner'])} | {prereg_cell} | {review_by} |"
@@ -467,17 +475,18 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
         for entry in flags
         if entry.get("lifecycle") in {"experiment", "rollout"}
         and entry.get("review_by")
-        and date.fromisoformat(entry["review_by"]) < as_of
+        and effective_due(entry) < as_of
     ]
     if overdue:
         lines += [
-            "These rollout/experiment entries passed `review_by`. The checker warns",
-            "during the seven-day grace, then fails unless a dated `review_overdue`",
-            "exception is recorded for David.",
+            "These rollout/experiment entries passed their effective review due date.",
+            "The checker warns during the seven-day grace, then fails. Ramp, retire,",
+            "or use the row's one bounded extension; decided rows must retire the code path.",
             "",
         ]
         for entry in overdue:
-            lines.append(f"- `{entry['key']}` — review_by {entry['review_by']} ({_md(entry['owner'])})")
+            extension = f"; effective due {effective_due(entry)}" if "extension" in entry else ""
+            lines.append(f"- `{entry['key']}` — review_by {entry['review_by']}{extension} ({_md(entry['owner'])})")
     else:
         lines.append(f"None as of {as_of.isoformat()}.")
     lines.append("")

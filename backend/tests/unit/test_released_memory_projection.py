@@ -21,11 +21,22 @@ from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
 
 @pytest.fixture
 def store(monkeypatch):
-    monkeypatch.setenv('MEMORY_RELEASED_WRITERS_COVERED', 'v1:unit-test')
+    monkeypatch.setenv('MEMORY_RELEASED_WRITERS_COVERED', 'v2:unit-test')
     monkeypatch.delenv('MEMORY_RELEASED_PROJECTION', raising=False)
     monkeypatch.setattr(projection, 'MIN_CACHE_ROWS', 0)
     client = firestore.Client(project='demo-projection', credentials=AnonymousCredentials())
-    state = SimpleNamespace(client=client, reads=0, scans=0, heads=0, token='v1', blocked=None, rows={}, hook=None)
+    state = SimpleNamespace(
+        client=client,
+        reads=0,
+        scans=0,
+        heads=0,
+        token='v1',
+        blocked=None,
+        rows={},
+        hook=None,
+        schema=projection.HEAD_SCHEMA,
+        generation=1,
+    )
     stamp = datetime(2026, 10, 23, tzinfo=timezone.utc)
     state.stamp = stamp
 
@@ -39,9 +50,15 @@ def store(monkeypatch):
         state.heads += 1
         if state.hook:
             state.hook(state)
-        data = None if state.token is None else {'schema': 1, 'token': state.token}
-        if ref.path.endswith('/list_serving_versions/conversations') and data is not None:
-            data = {'version': state.token}
+        data = (
+            None
+            if state.token is None
+            else {
+                'schema': state.schema,
+                'token': state.token,
+                'commit_generation': state.generation,
+            }
+        )
         if state.blocked is not None and data is not None:
             data['blocked'] = state.blocked
         return snapshot(ref.path, data)
@@ -131,6 +148,60 @@ def test_any_memory_domain_change_invalidates_cached_candidates(store, mutation)
     store.token = 'new-commit'
     assert payloads(store.read()) == payloads(list(store.query.stream()))
     assert store.scans == 3
+
+
+def test_replayed_request_token_cannot_restore_a_pre_delete_page(store):
+    store.rows = {f'users/u/memory_items/{i}': {'n': i} for i in range(3)}
+    store.read()
+    del store.rows['users/u/memory_items/1']
+    # The RPC retry retains its UUID; the server increment still advances.
+    store.generation += 2
+    assert [row.to_dict() for row in store.read()] == [{'n': 0}, {'n': 2}]
+    assert store.scans == 2
+
+
+def test_recreated_head_revision_preserves_nanoseconds_beyond_datetime_equality(store):
+    store.stamp = DatetimeWithNanoseconds(2026, 10, 24, nanosecond=123456001, tzinfo=timezone.utc)
+    store.rows = {'users/u/memory_items/a': {'n': 1}}
+    store.read()
+    # Deletion/recreation may restart a counter and replay the same UUID.
+    store.rows.clear()
+    store.stamp = DatetimeWithNanoseconds(2026, 10, 24, nanosecond=123456002, tzinfo=timezone.utc)
+    assert store.read() == []
+    assert store.scans == 2
+
+
+@pytest.mark.parametrize('generation', [None, 0, -1, True, 1.0, projection.MAX_COMMIT_GENERATION])
+def test_unknown_or_exhausted_server_generation_never_enables_reuse(store, generation):
+    store.generation = generation
+    store.read()
+    store.read()
+    assert store.scans == 2 and not projection._entries
+
+
+def test_saturated_generation_does_not_return_an_older_cached_page(store):
+    store.rows = {'users/u/memory_items/a': {'n': 1}}
+    store.generation = projection.MAX_COMMIT_GENERATION - 1
+    store.read()
+    store.generation += 1
+    store.rows.clear()
+    assert store.read() == []
+    assert store.scans == 2
+
+
+@pytest.mark.parametrize('legacy', ['epoch', 'schema', 'revision'])
+def test_legacy_or_incomplete_version_contract_keeps_the_source_path(store, monkeypatch, legacy):
+    if legacy == 'epoch':
+        monkeypatch.setenv('MEMORY_RELEASED_WRITERS_COVERED', 'v1:old-writers')
+    elif legacy == 'schema':
+        store.schema = 1
+    else:
+        store.stamp = None
+    store.read()
+    store.read()
+    assert store.scans == 2 and not projection._entries
+    if legacy == 'epoch':
+        assert store.heads == 0
 
 
 def test_empty_result_is_invalidated_by_create(store):
@@ -241,24 +312,21 @@ def test_coverage_epoch_rotation_never_reuses_pre_gap_payloads(store, monkeypatc
     store.rows = {f'users/u/memory_items/{i}': {'n': i} for i in range(3)}
     store.read()
     store.rows['users/u/memory_items/0'] = {'n': 'changed-by-old-writer'}
-    monkeypatch.setenv('MEMORY_RELEASED_WRITERS_COVERED', 'v1:post-gap')
+    monkeypatch.setenv('MEMORY_RELEASED_WRITERS_COVERED', 'v2:post-gap')
     assert store.read()[0].to_dict()['n'] == 'changed-by-old-writer'
     assert store.scans == 2
 
 
-def test_mcp_cards_reuse_p1_version_and_respect_its_kill_switch(store, monkeypatch):
-    monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', 'p1-coverage')
-    monkeypatch.setenv('OMI_LIST_PROJECTION_WRITER_ENABLED', 'true')
-    store.token = 'a' * 32
-    store.query = store.client.collection('users/u/conversations').limit(100)
-    store.rows = {f'users/u/conversations/{i}': {'n': i} for i in range(100)}
-    first = projection.projected_stream_list(store.query, surface='mcp_cards')
-    before = store.reads
-    assert payloads(projection.projected_stream_list(store.query, surface='mcp_cards')) == payloads(first)
-    assert store.reads - before == 2
+def test_mcp_conversation_cards_keep_reading_the_source(store):
+    query = store.client.collection('users/u/conversations').limit(100)
+    store.rows = {f'users/u/conversations/{i}': {'n': i} for i in range(3)}
+
+    assert len(projection.projected_stream_list(query, surface='mcp_cards')) == 3
     store.rows.clear()
-    monkeypatch.setenv('OMI_LIST_PROJECTION_WRITER_ENABLED', 'false')
-    assert projection.projected_stream_list(store.query, surface='mcp_cards') == []
+    assert projection.projected_stream_list(query, surface='mcp_cards') == []
+    assert store.scans == 2
+    assert store.heads == 0
+    assert not projection._entries
 
 
 def test_offset_is_charged_only_when_the_source_query_runs(store):
@@ -284,22 +352,16 @@ def test_stream_partial_prefix_retains_existing_budget_semantics(store, monkeypa
     assert not projection._entries
 
 
-@pytest.mark.parametrize('warm', [False, True])
-def test_last_read_preserves_mcp_source_prefix_instead_of_spending_it_on_heads(store, monkeypatch, warm):
-    monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', 'p1-coverage')
-    store.token = 'a' * 32
+def test_last_read_preserves_mcp_source_prefix_without_head_reads(store):
     store.query = store.client.collection('users/u/conversations').limit(100)
     store.rows = {f'users/u/conversations/{i}': {'n': i} for i in range(3)}
-    if warm:
-        list(projection.projected_stream_iter(store.query, surface='mcp_cards'))
-    before = store.heads
     budget = ListReadBudget(deadline_monotonic=24, max_documents=1, clock=lambda: 0)
     actual = []
     with pytest.raises(ListReadBudgetExhausted):
         for row in projection.projected_stream_iter(store.query, budget, surface='mcp_cards'):
             actual.append(row.to_dict())
     assert actual == [{'n': 0}]
-    assert store.heads == before
+    assert store.heads == 0
 
 
 def test_sync_scrape_keeps_projection_and_existing_billing_authority_counters():

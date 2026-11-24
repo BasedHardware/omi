@@ -540,6 +540,11 @@ def generate_comprehensive_daily_summary(
     prompt = f"""You are creating a daily summary for {user_name}. {memories_str}
 {language_rule}
 
+Calendar titles and invitations describe planned context, not observed outcomes.
+Do not report attendance or completion from a calendar title alone. Preserve cancellations, delays,
+and unfinished actions when supported by the supplied conversation notes, action items, or events. Background meetings or media are not the owner's
+accomplishments without evidence of participation. Do not amplify repeated ASR filler.
+
 Today's date: {date_str}
 Conversations available for recap: {len(non_discarded)} (total recordings in day: {total_conversations})
 Daily stats: {memories_created} memories created, {action_items_created} action items created, {watching_minutes} minutes watched, {proactive_moments} proactive moments.

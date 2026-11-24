@@ -1,0 +1,23 @@
+id: button/double-tap-offline-notify-only
+summary: >
+  Committee blocker 2. With no phone connected, a double tap is reported only
+  (3.0.21 behaviour). It must not silently toggle a persistent mute.
+committee: [2]
+tags: [baseline-bug]
+initial: {connected: false}
+timeline:
+  - {t: 5000, tap: [100, 150, 100]}
+  - {t: 8000, power: cycle}
+end: 14000
+expect:
+  boot_count: 2
+  boots:
+    - {exit: stop, muted: 0, should_capture: true, log: ["double tap detected"], not_log: ["Capture mute set"]}
+    - {muted: 0, should_capture: true}
+baseline_bug:
+  observed_at: c06b9bcd8749 (3.0.23)
+  expect:
+    boots:
+      - {muted: 1, should_capture: false, log: ["double tap detected", "Capture mute set"]}
+      # ... and it survives the reboot: capture stays off until the app unmutes.
+      - {muted: 1, should_capture: false}

@@ -1105,3 +1105,25 @@ class TestSyncedWriterTimestamps:
         data = doc_ref.update.call_args[0][0]
         assert data["completed"] is True
         assert isinstance(data["updated_at"], datetime)
+
+
+def test_rest_memory_source_time_survives_response_model(monkeypatch, client):
+    monkeypatch.setattr(
+        rest.mcp_memory_handlers,
+        'memories_page_core',
+        lambda *a, **k: {
+            'memories': [
+                {
+                    'id': 'synthetic',
+                    'content': 'Synthetic durable fact',
+                    'category': 'system',
+                    'source_at': '2026-06-01T00:00:00Z',
+                    'extracted_at': None,
+                }
+            ],
+        },
+    )
+    response = client.get('/v1/mcp/memories')
+    assert response.status_code == 200
+    assert response.json()[0]['source_at'] == '2026-06-01T00:00:00Z'
+    assert response.json()[0]['extracted_at'] is None

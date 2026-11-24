@@ -13,6 +13,7 @@ from models.time_zone_admission import is_schedulable_time_zone
 class SaveFcmTokenRequest(BaseModel):
     fcm_token: str
     time_zone: str
+    registration_order: int | None = Field(default=None, strict=True, ge=1, le=9007199254740991)
 
     @field_validator("time_zone")
     @classmethod

@@ -45,6 +45,8 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
 
   @override
   int get batteryLevel => 0;
+  @override
+  int get settingsBatteryLevel => batteryLevel;
 
   @override
   bool get isCharging => false;
@@ -56,7 +58,7 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   String get latestStableFirmwareVersion => '';
 
   @override
-  Future<void> getDeviceInfo() async {}
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
 
   @override
   void setIsConnected(bool value) => setIsConnectedCalls++;

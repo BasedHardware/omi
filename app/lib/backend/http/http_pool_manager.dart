@@ -139,6 +139,7 @@ class HttpPoolManager {
     http.Request Function() requestBuilder, {
     Duration timeout = const Duration(seconds: 30),
     int retries = 1,
+    bool retryServerErrors = true,
   }) async {
     final sample = requestBuilder();
     final isGet = sample.method == 'GET';
@@ -150,7 +151,7 @@ class HttpPoolManager {
     }
 
     final future = _pool.withResource(() async {
-      return _executeWithRetry(requestBuilder, timeout, retries);
+      return _executeWithRetry(requestBuilder, timeout, retries, retryServerErrors);
     });
 
     if (isGet) {
@@ -190,7 +191,12 @@ class HttpPoolManager {
   @visibleForTesting
   void applyJourneyFaultsForTesting(http.BaseRequest request) => _applyJourneyFaults(request);
 
-  Future<http.Response> _executeWithRetry(http.Request Function() requestBuilder, Duration timeout, int retries) async {
+  Future<http.Response> _executeWithRetry(
+    http.Request Function() requestBuilder,
+    Duration timeout,
+    int retries,
+    bool retryServerErrors,
+  ) async {
     http.Response? lastResponse;
     Object? lastError;
 
@@ -230,7 +236,7 @@ class HttpPoolManager {
           },
         );
 
-        if (lastResponse.statusCode < 500) {
+        if (lastResponse.statusCode < 500 || !retryServerErrors) {
           return lastResponse;
         }
         lastError = Exception('Server error: ${lastResponse.statusCode}');

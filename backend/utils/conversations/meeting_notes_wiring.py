@@ -60,8 +60,7 @@ def _rich_meeting_roster(
     frame_evidence)`` so the notes path can reuse the people and frame reads
     and every shared-prefix caller can pass the desktop flag through.
 
-    Names the frame judge read off call tiles join the roster (as
-    ``screen_activity`` participants) only where no better source named them.
+    Approved frames remain notes evidence; their tile names never alter the roster.
     """
     source_value = getattr(getattr(conversation, 'source', None), 'value', getattr(conversation, 'source', None))
     external_data = getattr(conversation, 'external_data', None) or {}
@@ -93,6 +92,7 @@ def _rich_meeting_roster(
             owner_name,
             owner_emails,
             people_docs,
+            exact_people_match=True,
         )
         return roster, people_docs, desktop_capture, evidence
     except Exception as exc:  # noqa: BLE001 - rich roster is best effort

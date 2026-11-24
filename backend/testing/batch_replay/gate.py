@@ -7,8 +7,10 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import tarfile
-import tempfile
+
+if __name__ == '__main__':
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from testing.replay_snapshot import backend_snapshot, resolve_refs
 
 
 def adapter_digest(gate_path, runner_path, incident_path, transaction_fixture_path):
@@ -18,6 +20,7 @@ def adapter_digest(gate_path, runner_path, incident_path, transaction_fixture_pa
         + runner_path.read_bytes()
         + incident_path.read_bytes()
         + transaction_fixture_path.read_bytes()
+        + (Path(__file__).resolve().parents[1] / 'replay_snapshot.py').read_bytes()
     ).hexdigest()
 
 
@@ -101,24 +104,13 @@ GEOMETRY_LIMITS = frozenset(
 def gate(repo, corpus, ref, base, output, allow_incomplete=False, require_captured_geometry=False):
     runner = Path(__file__).with_name('runner.py')
     transaction_fixture = Path(__file__).resolve().parents[2] / 'tests/unit/fixtures/strict_firestore_transaction.py'
-    resolved = {
-        label: subprocess.check_output(
-            ['git', '-C', str(repo), 'rev-parse', '--verify', f'{value}^{{commit}}'], text=True
-        ).strip()
-        for label, value in (('candidate', ref), ('baseline', base))
-    }
+    resolved = resolve_refs(repo, ref, base)
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
     reports = {}
     incidents = {}
     fixture = runner.with_name('regressions.json')
     for label, sha in resolved.items():
-        with tempfile.TemporaryDirectory(prefix=f'batch-replay-{label}-', dir=output) as directory:
-            snapshot = Path(directory)
-            archive = snapshot / 'source.tar'
-            with archive.open('wb') as stream:
-                subprocess.run(['git', '-C', str(repo), 'archive', sha, 'backend'], stdout=stream, check=True)
-            with tarfile.open(archive) as bundle:
-                bundle.extractall(snapshot, filter='data')
+        with backend_snapshot(repo, sha, output, label) as backend:
             report = output / f'{label}.json'
             environment = {
                 key: value
@@ -137,7 +129,7 @@ def gate(repo, corpus, ref, base, output, allow_incomplete=False, require_captur
                         '-I',
                         str(runner),
                         '--backend',
-                        str(snapshot / 'backend'),
+                        str(backend),
                         '--corpus',
                         str(corpus.resolve()),
                         '--output',
@@ -161,7 +153,7 @@ def gate(repo, corpus, ref, base, output, allow_incomplete=False, require_captur
                             '-I',
                             str(runner),
                             '--backend',
-                            str(snapshot / 'backend'),
+                            str(backend),
                             '--corpus',
                             str(fixture),
                             '--output',

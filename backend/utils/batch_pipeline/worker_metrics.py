@@ -17,12 +17,17 @@ def admission(outcome):
         pass
 
 
-def strict_vad(silent, nonempty):
-    outcomes = ['unavailable'] if silent is None else ['evaluated']
-    if silent:
-        outcomes.append('strict_silent')
-        if nonempty:
-            outcomes.append('strict_silent_pyannote_nonempty')
+def strict_vad(silent, nonempty, asr_empty=False):
+    if asr_empty:
+        # A second observation of the same sampled unit must not double-weight
+        # the original qualification denominator or disagreement counters.
+        outcomes = ['strict_silent_asr_empty'] if silent else []
+    else:
+        outcomes = ['unavailable'] if silent is None else ['evaluated']
+        if silent:
+            outcomes.append('strict_silent')
+            if nonempty:
+                outcomes.append('strict_silent_pyannote_nonempty')
     try:
         for outcome in outcomes:
             STRICT_VAD.labels(outcome).inc()

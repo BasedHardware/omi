@@ -168,7 +168,7 @@ async def test_run_listen_session_counts_no_audio_teardown_once(monkeypatch):
     monkeypatch.setattr(
         runtime_module,
         'record_listen_no_audio_teardown',
-        lambda *, source, platform: calls.append((source, platform)),
+        lambda *, source, platform, state=None: calls.append((source, platform)),
     )
 
     class _Runtime:
@@ -192,7 +192,7 @@ async def test_run_listen_session_skips_no_audio_when_first_audio_seen(monkeypat
     monkeypatch.setattr(
         runtime_module,
         'record_listen_no_audio_teardown',
-        lambda *, source, platform: calls.append((source, platform)),
+        lambda *, source, platform, state=None: calls.append((source, platform)),
     )
 
     class _Runtime:
@@ -256,7 +256,7 @@ async def test_run_listen_session_runtime_failure_still_counts_accepted_session(
     monkeypatch.setattr(
         runtime_module,
         'record_listen_no_audio_teardown',
-        lambda *, source, platform: calls.append((source, platform)),
+        lambda *, source, platform, state=None: calls.append((source, platform)),
     )
 
     class _Runtime:

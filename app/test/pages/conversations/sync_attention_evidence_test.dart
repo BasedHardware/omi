@@ -32,7 +32,7 @@ import 'package:omi/ui/ui.dart';
 import '../../helpers/sfpro_font_fixtures.dart';
 
 // Renders the sync-attention surfaces David chose on 10-27: the Catching up stat tile (option C),
-// On the Way by day (option B) and its support details. The layout assertions run everywhere;
+// On the Way by day (option B). The layout assertions run everywhere;
 // with --dart-define=SYNC_ATTENTION_EVIDENCE_OUTPUT=<dir> the PNGs used as PR evidence are
 // written there too.
 
@@ -51,13 +51,15 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   int get batteryLevel => 72;
   @override
+  int get settingsBatteryLevel => batteryLevel;
+  @override
   bool get isCharging => false;
   @override
   bool get havingNewFirmware => false;
   @override
   String get latestStableFirmwareVersion => '';
   @override
-  Future<void> getDeviceInfo() async {}
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -151,6 +153,7 @@ Wal _wal(DateTime start, int minutes, WalStatus status,
     codec: BleAudioCodec.opus,
     seconds: minutes * 60,
     status: status,
+    uploadedAt: status == WalStatus.uploaded ? DateTime.now().millisecondsSinceEpoch ~/ 1000 : 0,
     storage: storage,
     device: 'pendant',
     uploadRejectionReason: rejectionReason,
@@ -163,7 +166,7 @@ final _now = DateTime(2026, 10, 18, 9, 10);
 DateTime _at(int daysAgo, int hour, int minute) => DateTime(2026, 10, 18 - daysAgo, hour, minute);
 
 /// Mixed days: today uploading, yesterday on the server, two older days waiting, plus failures and
-/// refusals that stay off the page and show only in support.
+/// refusals that stay off the page.
 List<Wal> _mixedDays() => [
       _wal(_at(0, 8, 41), 14, WalStatus.miss)..isSyncing = true,
       _wal(_at(0, 7, 58), 23, WalStatus.miss),
@@ -334,10 +337,19 @@ void main() {
     await writeFrame(tester, '002-mobile-ios-device-nothing-pending');
   });
 
+  testWidgets('Device Settings leaves expired uploads in custody without showing an upload card', (tester) async {
+    final wal = _wal(_at(40, 10, 0), 60, WalStatus.uploaded)..uploadedAt = 0;
+    await pumpDevice(tester, _FakeSync([wal]));
+    expect(find.text('Uploads waiting on the server'), findsNothing);
+    expect(find.text('Transcription unavailable'), findsNothing);
+    expect(wal.status, WalStatus.uploaded);
+    expect(walDeletionAllowed(wal), isFalse);
+    await writeFrame(tester, '004-mobile-ios-device-settings-with-expired-uploads');
+  });
+
   testWidgets('On the Way with mixed days', (tester) async {
     await pumpOnTheWay(tester);
-    expect(find.text('7h 48m catching up'), findsOneWidget);
-    for (final status in ['Uploading', 'Transcribing…', 'Next', 'Queued']) {
+    for (final status in ['Uploading', 'Uploaded, awaiting server', 'Next', 'Queued']) {
       expect(find.text(status), findsOneWidget, reason: status);
     }
     expect(find.text('Try Again'), findsNothing);
@@ -346,27 +358,14 @@ void main() {
     await writeFrame(tester, '003-mobile-ios-on-the-way-mixed-days');
   });
 
-  testWidgets('On the Way details for support', (tester) async {
-    await pumpOnTheWay(tester);
-    await tester.tap(find.byKey(const Key('on_the_way_details_for_support')));
-    await tester.pumpAndSettle();
-    expect(find.text('Invalid recording date'), findsOneWidget);
-    expect(find.text('uploadRejected · invalid_capture_time · 400'), findsOneWidget);
-    expect(find.text('Try Again'), findsNothing);
-    expect(find.text('Delete'), findsNothing);
-    await writeFrame(tester, '004-mobile-ios-on-the-way-support-details');
-  });
-
   testWidgets('On the Way in dark mode', (tester) async {
     await pumpOnTheWay(tester, brightness: Brightness.dark);
-    expect(find.text('7h 48m catching up'), findsOneWidget);
     await writeFrame(tester, '005-mobile-ios-on-the-way-dark');
   });
 
   testWidgets('On the Way at the largest text size', (tester) async {
     // iOS's largest accessibility size (AX5) sets body text at about 3.1x.
     await pumpOnTheWay(tester, textScale: 3.1);
-    expect(find.text('7h 48m catching up'), findsOneWidget);
     await writeFrame(tester, '006-mobile-ios-on-the-way-largest-text');
   });
 }

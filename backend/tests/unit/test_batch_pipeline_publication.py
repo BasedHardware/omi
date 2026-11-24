@@ -215,8 +215,16 @@ async def test_duplicate_publication_is_idempotent():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('cursor', [True, False])
 @pytest.mark.parametrize('concurrency, expected_reads', [(DEFAULT_PUBLISH_CONCURRENCY, 2), (1, 6)])
-async def test_maintenance_does_not_reread_blocked_result_ready_jobs_every_sweep(concurrency, expected_reads):
+async def test_maintenance_does_not_reread_blocked_result_ready_jobs_every_sweep(
+    concurrency, expected_reads, cursor, monkeypatch
+):
+    # The owner cursor (default) finds owners by key and reads no job to learn its owner;
+    # the row sweep it replaces, kept behind the switch, memoises that read.
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED', str(cursor))
+    if cursor:
+        expected_reads = 0
     store, queue, pump = build(concurrency, MIXED)
     leases = {lease.item.segment_id: lease for lease in queue.pull(time.time(), 8)}
     # a1 stays leased (the blocked ordered head); its successors wait result_ready.

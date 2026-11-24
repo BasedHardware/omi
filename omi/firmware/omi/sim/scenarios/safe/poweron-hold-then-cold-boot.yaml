@@ -1,0 +1,27 @@
+id: safe/poweron-hold-then-cold-boot
+summary: >
+  The 3.0.23 field bug. A ~3.5 s button hold at power-on (no charger) must not
+  enter safe mode, and nothing may survive a cold power cycle into SAFE.
+committee: [1]
+tags: [baseline-bug]
+initial: {charging: false}
+timeline:
+  - {t: 0, hold: 3500}
+  - {t: 10000, power: cycle}
+end: 20000
+expect:
+  boot_count: 2
+  boots:
+    - {exit: stop, safe: false, latched: false, not_log: ["Safe mode initialized"]}
+    - {exit: stop, reset: power-on, safe: false, log: ["Device initialized successfully"]}
+  invariants: [no-stuck-safe]
+baseline_bug:
+  observed_at: c06b9bcd8749 (3.0.23)
+  expect:
+    boot_count: 2
+    boots:
+      # The hold latches reason 2 at 3 s and writes omi/bootstate=SAFE ...
+      - {safe: true, latch_reason: 2, log: ["Safe mode initialized: BLE DFU only", "omi/bootstate=SAFE"]}
+      # ... and every later cold boot restores it from NVS: stuck in SAFE.
+      - {reset: power-on, safe: true, latch_reason: 2, log: ["BOOTSTATE: active=1"],
+         not_log: ["Device initialized successfully"]}

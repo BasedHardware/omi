@@ -141,6 +141,15 @@ def test_can_pay_basic_stale_defers_plan_change_until_cancellation_ends(monkeypa
     monkeypatch.setattr(sub, "users_db", SimpleNamespace())
     sub.users_db.get_user_valid_subscription = lambda uid: None
     sub.users_db.get_stripe_customer_id = lambda uid: "cus_x"
+    monkeypatch.setattr(
+        sub,
+        "play_subscriptions_db",
+        SimpleNamespace(
+            get_user_fields=lambda uid: {},
+            pending_play_purchase=lambda uid, fields=None: False,
+            has_play_history=lambda fields: False,
+        ),
+    )
     # No active (non-canceling) subscription, so the basic branch proceeds.
     monkeypatch.setattr(sub, "_has_active_stripe_subscription", lambda uid: False)
 
@@ -175,6 +184,15 @@ def _mock_new_buyer(monkeypatch, subscription_module):
     monkeypatch.setattr(sub, "users_db", SimpleNamespace())
     sub.users_db.get_user_valid_subscription = lambda uid: None
     sub.users_db.get_stripe_customer_id = lambda uid: "cus_x"
+    monkeypatch.setattr(
+        sub,
+        "play_subscriptions_db",
+        SimpleNamespace(
+            get_user_fields=lambda uid: {},
+            pending_play_purchase=lambda uid, fields=None: False,
+            has_play_history=lambda fields: False,
+        ),
+    )
     monkeypatch.setattr(sub, "_has_active_stripe_subscription", lambda uid: False)
     monkeypatch.setattr(sub, "find_active_paid_subscription_for_user", lambda uid: None)
 
@@ -326,7 +344,6 @@ def test_reconcile_basic_subscription_without_stored_stripe_id(monkeypatch, subs
 
 
 def test_unlimited_transcription_plan_skips_monthly_usage_scan(monkeypatch, subscription_module):
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None, **kw: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setattr(
@@ -343,7 +360,6 @@ def test_unlimited_transcription_plan_skips_monthly_usage_scan(monkeypatch, subs
 
 
 def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeypatch, subscription_module):
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None, **kw: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setattr(
@@ -385,7 +401,6 @@ def test_malformed_transcription_allowance_fails_loudly(monkeypatch, subscriptio
 
 
 def _stub_remaining_deps(monkeypatch, subscription_module, plan, used_seconds):
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None, **kw: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setattr(

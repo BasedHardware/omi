@@ -37,7 +37,14 @@ class Structured {
   /// 'highlight' or 'background' from the notes pass (Episodes M3); null on legacy notes.
   String? salience;
 
-  Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other', this.salience});
+  /// Server-authored `title_provenance`: 'server_minimum' while [title] is a stand-in
+  /// (first transcript sentence or a neutral "Recording · time") and no summary has landed.
+  String? titleProvenance;
+
+  Structured(this.title, this.overview,
+      {this.id = 0, this.emoji = '', this.category = 'other', this.salience, this.titleProvenance});
+
+  bool get hasProvisionalTitle => titleProvenance == 'server_minimum';
 
   bool get isBackground => salience == 'background';
 
@@ -58,6 +65,7 @@ class Structured {
       emoji: emojiSource is String && emojiSource.trim().isNotEmpty ? emojiSource : neutralEmoji,
       category: json['category'] ?? 'other',
       salience: json['salience'] is String ? json['salience'] as String : null,
+      titleProvenance: json['title_provenance'] is String ? json['title_provenance'] as String : null,
     );
     final sections = json['sections'];
     if (sections is List) {
@@ -177,6 +185,7 @@ class Structured {
           .toList(),
       'events': events.map((event) => event.toJson()).toList(),
       if (salience != null) 'salience': salience,
+      if (titleProvenance != null) 'title_provenance': titleProvenance,
     };
   }
 
@@ -205,10 +214,48 @@ class ActionItem {
   bool completed = false;
   bool deleted = false;
 
-  ActionItem(this.description, {this.id = 0, this.completed = false, this.deleted = false, this.sourceIndex});
+  /// Extraction ownership (`capture_owner`): "user" when the item is the reader's own.
+  String? captureOwner;
 
-  factory ActionItem.fromGenerated(wire.GeneratedActionItem generated, {int? sourceIndex}) {
-    return ActionItem(generated.description, completed: generated.completed, sourceIndex: sourceIndex);
+  /// Who the extraction says owns the item, when it names someone.
+  String? ownerName;
+  DateTime? dueAt;
+  String? dueCertainty;
+  String? targetTaskId;
+  List<String> sourceSegmentIds;
+
+  /// Why the item exists, in a sentence ("Eddie offered to pass it on").
+  String? context;
+
+  ActionItem(
+    this.description, {
+    this.id = 0,
+    this.completed = false,
+    this.deleted = false,
+    this.sourceIndex,
+    this.captureOwner,
+    this.ownerName,
+    this.dueAt,
+    this.dueCertainty,
+    this.targetTaskId,
+    this.sourceSegmentIds = const [],
+    this.context,
+  });
+
+  factory ActionItem.fromGenerated(wire.GeneratedActionItem generated, {int? sourceIndex, bool deleted = false}) {
+    return ActionItem(
+      generated.description,
+      completed: generated.completed,
+      deleted: deleted,
+      sourceIndex: sourceIndex,
+      captureOwner: generated.captureOwner,
+      ownerName: generated.ownerName,
+      dueAt: generated.dueAt,
+      dueCertainty: generated.dueCertainty,
+      targetTaskId: generated.targetTaskId,
+      sourceSegmentIds: generated.sourceSegmentIds ?? const [],
+      context: generated.context,
+    );
   }
 
   static ActionItem fromJson(Map<String, dynamic> json, {int? sourceIndex, bool retainCachedSourceIndex = false}) {
@@ -223,11 +270,28 @@ class ActionItem {
       completed: generated.completed,
       deleted: json['deleted'] ?? false,
       sourceIndex: sourceIndex,
+      captureOwner: generated.captureOwner,
+      ownerName: generated.ownerName,
+      dueAt: generated.dueAt,
+      dueCertainty: generated.dueCertainty,
+      targetTaskId: generated.targetTaskId,
+      sourceSegmentIds: generated.sourceSegmentIds ?? const [],
+      context: generated.context,
     );
   }
 
   wire.GeneratedActionItem toGenerated() {
-    return wire.GeneratedActionItem(description: description, completed: completed);
+    return wire.GeneratedActionItem(
+      description: description,
+      completed: completed,
+      captureOwner: captureOwner,
+      ownerName: ownerName,
+      dueAt: dueAt,
+      dueCertainty: dueCertainty,
+      targetTaskId: targetTaskId,
+      sourceSegmentIds: sourceSegmentIds,
+      context: context,
+    );
   }
 
   toJson() => {...toGenerated().toJson(), 'deleted': deleted};

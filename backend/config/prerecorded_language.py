@@ -84,6 +84,21 @@ def language_gate_shadow_enabled() -> bool:
     )
 
 
+def language_gate_confident_skip() -> str:
+    """Prerecorded only: skip the paid vendor probe when the shadow self verdict is already confident.
+
+    'both' (default): a self-parakeet verdict goes to Parakeet and an unsupported top-1 to the
+    multilingual route. 'unsupported': only the second, which can never put speech on Parakeet.
+    off/false/0/no restores vendor-only routing. Any other value means 'unsupported'.
+    """
+    raw = os.getenv('STT_PRERECORDED_LANGUAGE_GATE_CONFIDENT_SKIP', '').strip().lower()
+    if raw in {'', 'on', 'true', 'both'}:
+        return 'both'
+    if raw in {'off', 'false', '0', 'no'}:
+        return 'off'
+    return 'unsupported'
+
+
 def language_gate_percent() -> int:
     """Share of cohorts whose prerecorded route uses the self gate instead of the vendor probe.
 

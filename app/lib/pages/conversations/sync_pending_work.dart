@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -10,6 +12,7 @@ import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart' show RateLimitReason;
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_derived_views.dart';
@@ -51,14 +54,14 @@ abstract final class SyncPendingWork {
       s == WalSyncDisplayState.waiting || s == WalSyncDisplayState.retrying || s == WalSyncDisplayState.syncing;
 
   /// Allocation-free on purpose: every SyncProvider notify rebuilds the row.
-  static bool hasUploadedJobs(SyncProvider p) => p.uploadedWals.isNotEmpty;
+  static bool hasUploadedJobs(SyncProvider p) => p.derivedWals.pendingWork.any((w) => w.status == WalStatus.uploaded);
 
   static bool hasServerJobs(SyncProvider p) => hasUploadedJobs(p) || p.syncState.isProcessing;
 
   static bool isPendingWal(Wal w) =>
       w.status == WalStatus.miss && !w.onDeviceOnly && isForwardMoving(w.syncDisplayState);
 
-  static bool shouldShow(SyncProvider p) => hasServerJobs(p) || p.derivedWals.hasForwardMoving;
+  static bool shouldShow(SyncProvider p) => hasServerJobs(p) || p.derivedWals.pendingWork.isNotEmpty;
 
   /// Ids of device recordings whose phone copy already moved on: lagging
   /// bookkeeping, not audio still on the device.
@@ -68,10 +71,12 @@ abstract final class SyncPendingWork {
       .toSet();
 
   /// Recordings uploaded and being transcribed on the server.
-  static List<Wal> uploaded(SyncProvider p) => p.uploadedWals;
+  static List<Wal> uploaded(SyncProvider p) =>
+      p.derivedWals.pendingWork.where((w) => w.status == WalStatus.uploaded).toList(growable: false);
 
   /// Recordings still on the device or the phone, waiting for or in a sync.
-  static List<Wal> syncing(SyncProvider p) => p.pendingSyncWals;
+  static List<Wal> syncing(SyncProvider p) =>
+      p.derivedWals.pendingWork.where((w) => w.status == WalStatus.miss).toList(growable: false);
 
   /// The rows [syncing] lists, from any ordering of the inventory: the device
   /// card reads the unsorted index and must show exactly what On the Way shows.
@@ -106,7 +111,8 @@ abstract final class SyncPendingWork {
     // Device downloads run through an upload cooldown (pulling audio uses no upload quota), so a
     // download in progress is reported as itself, not as the cooldown.
     if (active && s.phase == SyncPhase.downloadingFromDevice) return l.syncCardDownloadingTitle;
-    if (rateLimited) return syncCooldownTitle(rateLimitReason, l);
+    // An edge throttle clears by itself and needs nothing from the user, so it is not named (David, 11-02).
+    if (rateLimited && rateLimitReason != RateLimitReason.edgeThrottle) return syncCooldownTitle(rateLimitReason, l);
     if (active) {
       switch (s.phase) {
         case SyncPhase.downloadingFromDevice:
@@ -125,8 +131,38 @@ abstract final class SyncPendingWork {
   }
 }
 
-/// Opens the Offline Sync page the device settings open, behind the same gate:
-/// work that lives on a storage-less pendant has no Offline Sync screen.
+/// Both device entry points use the current link's storage check.
+Future<void> openDeviceOfflineSync(
+  BuildContext context,
+  DeviceProvider device, {
+  bool? multiFileSync,
+}) async {
+  while (true) {
+    if (!context.mounted) return;
+    if (ModalRoute.isCurrentOf(context) == false) return;
+    if (device.connectedDevice == null) {
+      OmiFeedback.info(context, context.l10n.connectDeviceForOfflineSync);
+      return;
+    }
+    final l = context.l10n;
+    switch (device.offlineStorageCapability) {
+      case OfflineStorageCapability.supported:
+        final multi = multiFileSync ?? device.supportsMultiFileSync;
+        routeToPage(context, multi ? const AutoSyncPage() : const SyncPage());
+        return;
+      case OfflineStorageCapability.unsupported:
+        await showOmiAlert(context, title: l.v2Undetected, message: l.v2UndetectedMessage);
+        return;
+      case OfflineStorageCapability.unverified:
+        final retry =
+            await showOmiConfirm(context, title: l.activityAttentionStorageUnknownTitle, confirmLabel: l.retry);
+        if (!retry || !context.mounted) return;
+        await device.refreshOfflineStorageCapability();
+    }
+  }
+}
+
+/// Opens Offline Sync from Pending or Activity.
 ///
 /// [phoneLocal] bypasses that gate for the Activity page's capture rows: a
 /// phone-local problem (full phone disk, stalled phone upload) must reach the
@@ -136,10 +172,10 @@ abstract final class SyncPendingWork {
 void openOfflineSyncDetails(BuildContext context, SyncProvider p, {bool? multiFileSync, bool phoneLocal = false}) {
   final hidden = SyncPendingWork.hiddenDeviceTwinIds(p.allWals);
   final hasDeviceWork = p.allWals.any((w) => w.status == WalStatus.miss && walIsOnDevice(w) && !hidden.contains(w.id));
-  if (!phoneLocal && hasDeviceWork && !context.read<DeviceProvider>().isDeviceStorageSupport) {
-    showOmiAlert(context, title: context.l10n.v2Undetected, message: context.l10n.v2UndetectedMessage);
+  final multi = multiFileSync ?? SharedPreferencesUtil().deviceSupportsMultiFileSync;
+  if (!phoneLocal && hasDeviceWork) {
+    unawaited(openDeviceOfflineSync(context, context.read<DeviceProvider>(), multiFileSync: multi));
     return;
   }
-  final multi = multiFileSync ?? SharedPreferencesUtil().deviceSupportsMultiFileSync;
   routeToPage(context, multi ? const AutoSyncPage() : const SyncPage());
 }

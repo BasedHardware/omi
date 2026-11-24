@@ -60,7 +60,7 @@ private final class UnsyncedCreateCaptureRegistry: @unchecked Sendable {
 /// Every isolated URLSession request is intercepted. A unique additional
 /// session header routes it to one test's capture; no process-global response
 /// slot, live auth request, or destination network connection is involved.
-private final class UnsyncedCreateURLProtocol: URLProtocol, @unchecked Sendable {
+private final class UnsyncedCreateURLProtocol: URLProtocol {
   static let captureHeader = "X-Omi-Unsynced-Create-Test"
   static let registry = UnsyncedCreateCaptureRegistry()
 

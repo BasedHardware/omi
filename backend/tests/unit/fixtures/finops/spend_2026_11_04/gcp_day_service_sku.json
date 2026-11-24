@@ -1,0 +1,51 @@
+[
+  {
+    "usage_day": "2026-11-04",
+    "project_id": "based-hardware",
+    "service": "App Engine",
+    "sku": "Cloud Firestore Read Ops",
+    "net": "421.22"
+  },
+  {
+    "usage_day": "2026-11-04",
+    "project_id": "based-hardware",
+    "service": "App Engine",
+    "sku": "Cloud Firestore Entity Writes",
+    "net": "56.88"
+  },
+  {
+    "usage_day": "2026-11-04",
+    "project_id": "based-hardware",
+    "service": "Compute Engine",
+    "sku": "Synthetic remainder of non-Vertex services",
+    "net": "1202.75"
+  },
+  {
+    "usage_day": "2026-11-04",
+    "project_id": "based-hardware",
+    "service": "Vertex AI",
+    "sku": "Vertex AI: Provisioned Throughput 1 Year",
+    "net": "299.58"
+  },
+  {
+    "usage_day": "2026-11-04",
+    "project_id": "based-hardware",
+    "service": "Vertex AI",
+    "sku": "Synthetic non-PT remainder",
+    "net": "22.65"
+  },
+  {
+    "usage_day": "2026-11-04",
+    "project_id": "based-hardware",
+    "service": "Gemini API",
+    "sku": "Gemini API",
+    "net": "6.45"
+  },
+  {
+    "usage_day": "2026-11-04",
+    "project_id": "based-hardware-dev",
+    "service": "Vertex AI",
+    "sku": "Dev usage",
+    "net": "0.31"
+  }
+]

@@ -1,4 +1,6 @@
+from utils.conversations.v3 import models as v3_models
 from dataclasses import replace
+from types import SimpleNamespace
 import asyncio
 import json
 import logging
@@ -19,6 +21,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
+from utils.task_intelligence import reminder_policy
 from models.app import App
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
@@ -63,12 +66,18 @@ from utils.llm.meeting_notes_validation import (
     sanitize_structured_speaker_placeholders,
     strip_speaker_placeholders,
     validate_rich_meeting_notes,
+    attach_notes_identity_context,
     validate_structured_source_segment_ids,
 )
 from config.refactor_modes import serving_for
 from config.open_loops import open_loops_enabled
 from utils.llm.notes_packet import PACKET_RULES, select_notes_packet, _local_started_at_iso
 from utils.llm.notes_output_contract import finish_notes_contract, OUTPUT_RULES
+from utils.other.request_deadline import (
+    RequestDeadlineExceeded,
+    capped_deadline_seconds,
+    request_deadline_exceeded,
+)
 from utils.llm.notes_identity import notes_identity, screen_speaker_bindings
 from utils.llm.notes_output import NotesOutput, OpenLoopNotesOutput
 from utils.llm.notes_observability import current_run, observe_notes
@@ -315,6 +324,11 @@ CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
 # deadline cancelled the viable retry in its final stretch, so the mount sizes
 # at two attempts plus one inter-attempt delay bound (3x).
 NOTES_LOOP_DEADLINE_SECONDS = 3 * CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
+# One route caps this per request: the synchronous from-segments ingest sets a
+# request deadline (utils.other.request_deadline) so a failing notes step answers
+# a retryable 503 inside the client's own 30 s pool deadline instead of holding
+# the request for the full recovery budget. Every other caller keeps the constant
+# above unchanged; the cap is a request-scoped ceiling, not a smaller default.
 # Screen-OCR rows already parsed from the context are a follow-up; this gate counts frames only.
 # The gate counts approved frames available (`screen_frame_count` from the wiring),
 # never the attached-image budget: MAX_NOTES_FRAME_IMAGES caps attached images at
@@ -428,8 +442,22 @@ person. Attribute speech only from the original speaker map or direct evidence.
 Do not infer attendance, absence, or a no-show from either listing.
 """ + '\n\n' + ACTION_ITEM_EXTRACTION_RULES,
         schema=StructuredExtraction,
-        budget=Budget(turns=1, tool_calls=0, deadline_seconds=NOTES_LOOP_DEADLINE_SECONDS),
+        budget=Budget(turns=1, tool_calls=0, deadline_seconds=capped_deadline_seconds(NOTES_LOOP_DEADLINE_SECONDS)),
     )
+
+
+def _bounded_notes_mount(mount: Mount) -> Mount:
+    """Re-derive the notes budget from the one absolute request deadline.
+
+    ``notes_mount()`` snapshots the remaining budget when it is built. The
+    agentic attempt may run for most of it before falling back, so the one-shot
+    path must recompute from the same absolute deadline instead of reusing the
+    snapshot — otherwise the two paths can each spend the full budget.
+    """
+    deadline = capped_deadline_seconds(mount.budget.deadline_seconds)
+    if deadline == mount.budget.deadline_seconds:
+        return mount
+    return replace(mount, budget=replace(mount.budget, deadline_seconds=deadline))
 
 
 def _notes_output_schema(uid: Optional[str], *, agent: bool = False) -> type[Any]:
@@ -484,6 +512,8 @@ def _get_shaped_conversation_notes(
     from utils.llm.action_item_v2 import instructions_for
 
     mount = replace(mount, instructions=instructions_for(uid, mount.instructions))
+    if kwargs.get('task_intelligence_capture'):
+        mount = replace(mount, instructions=reminder_policy.instructions(mount.instructions))
     if open_loops_enabled():
         mount = replace(mount, instructions=mount.instructions + '\n\n' + OPEN_LOOP_EXTRACTION_RULES)
     evidence = [
@@ -511,6 +541,14 @@ def _get_shaped_conversation_notes(
         }
     ]
     legacy_packet = json.loads(evidence[0]['content'])
+    # Length varies with this transcript; append after the cacheable task instructions.
+    from utils.llm.conversation_notes_prompts import conversation_note_density
+    from utils.llm.notes_lengths import length_guide, scaled_length_range
+
+    if scaled_length_range(words):
+        legacy_packet.update(density=conversation_note_density(words, rich_mode), LENGTH=length_guide(words))
+        evidence[0]['content'] = json.dumps(legacy_packet, ensure_ascii=False)
+
     packet = select_notes_packet(
         legacy_packet, prefix=prefix, uid=uid, capture_evidence=context, words=words, inputs=kwargs
     )
@@ -524,11 +562,19 @@ def _get_shaped_conversation_notes(
     # response_format and prompt_cache_breakpoint. The shaped notes mount never
     # carries a cache breakpoint; parser-based extraction needs no provider
     # cache hint to work on any lane.
-    model = get_llm('conv_structure', request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS)
+    model = (
+        v3_models.notes_client()
+        if v3_models.active()
+        else get_llm('conv_structure', request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS)
+    )
     # Long or meeting-like conversations get the agentic writer; it returns None
     # (one-shot below, unchanged) when ineligible, disabled, or on any failure.
-    agent_payload = agentic_notes_payload(
-        uid=uid, prefix=prefix, model=model, capture_evidence=context, words=words, frames=frames, kwargs=kwargs
+    agent_payload = (
+        None
+        if v3_models.active()
+        else agentic_notes_payload(
+            uid=uid, prefix=prefix, model=model, capture_evidence=context, words=words, frames=frames, kwargs=kwargs
+        )
     )
     if agent_payload is not None:
         validated_agent_output = _notes_output_schema(uid, agent=True).model_validate(agent_payload)
@@ -545,6 +591,11 @@ def _get_shaped_conversation_notes(
         )
     # An agent may discover screen evidence before falling back. Use the final
     # identity authority for both the prompt and output repair.
+    if request_deadline_exceeded():
+        # The agentic attempt spent the request budget. Starting the one-shot
+        # fallback now would hold the request past the client's own deadline, so
+        # answer the retryable 503 instead of buying a second stalled call.
+        raise RequestDeadlineExceeded('notes fallback started after the request budget was spent')
     one_shot_packet = packet if serving_for('NOTES_PACKET_V2_MODE', uid) else legacy_packet
     one_shot_packet['screen_speaker_bindings'] = screen_speaker_bindings(kwargs['notes_identity'])
     evidence[0]['content'] = json.dumps(one_shot_packet, ensure_ascii=False, default=str)
@@ -561,7 +612,9 @@ def _get_shaped_conversation_notes(
     async def invoke():
         async with isolated_notes_model(model) as isolated_model:
             # Isolate first so the cloner sees the notes model; unsupported models keep their options.
-            if escalated:
+            if v3_models.active():
+                call_model = bind_notes_effort(isolated_model, 'low')
+            elif escalated:
                 call_model = bind_notes_effort(isolated_model, 'xhigh')
             else:
                 call_model = isolated_model
@@ -573,7 +626,7 @@ def _get_shaped_conversation_notes(
                     content = ''.join(part.get('text', '') if isinstance(part, dict) else str(part) for part in content)
                 return Turn(value=_parse_notes_model_output(extraction_parser, str(content)))
 
-            return await run_loop(mount, evidence, model_turn)
+            return await run_loop(_bounded_notes_mount(mount), evidence, model_turn)
 
     result = asyncio.run(invoke())
     output_schema = _notes_output_schema(uid)
@@ -601,6 +654,15 @@ def _finish_shaped_notes(
         user_tz = ZoneInfo(tz) if tz else timezone.utc
     except Exception:
         user_tz = timezone.utc
+    source = (inputs or {}).get('reminder_source')
+    if source is not None:
+        clock = SimpleNamespace(**source)
+        clock.transcript_segments = [SimpleNamespace(**row) for row in source.get('transcript_segments', ())]
+        structured.action_items = [
+            prepared
+            for item in structured.action_items
+            if (prepared := reminder_policy.prepare_reminder(item, conversation=clock, extracted_at=now)) is not None
+        ]
     for item in structured.action_items:
         if item.created_at is None:
             item.created_at = now
@@ -609,6 +671,19 @@ def _finish_shaped_notes(
         event.duration = min(event.duration, 180)
         event.created = False
     structured.overview = render_sections_markdown(structured.sections) or structured.overview
+    # Provisional meeting identities ride the parsed structure to the save seam
+    # as server-only context (outside the client/model schema): roster entries,
+    # screen-frame count and corroborated names, for the notes-identity stager.
+    roster = (inputs or {}).get('roster')
+    meeting_context = (inputs or {}).get('meeting_context')
+    evidence_frames = (inputs or {}).get('screen_frames') or ()
+    has_identity_evidence = bool(
+        evidence_frames
+        or 'SCREEN MOMENTS' in (meeting_context or '')
+        or (roster and any(e.kind != 'owner' for e in roster.entries))
+    )
+    if rich_mode and has_identity_evidence:
+        attach_notes_identity_context(structured, roster, len(evidence_frames), meeting_context or '')
     return structured
 
 

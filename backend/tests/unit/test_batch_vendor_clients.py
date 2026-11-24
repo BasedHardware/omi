@@ -26,6 +26,12 @@ def wav(seconds=5):
 
 @pytest.fixture(autouse=True)
 def keys(monkeypatch):
+    from utils.stt import allowance_watch
+
+    # Provider transport/outcome tests own no billing fixture. Keep the real
+    # operation/executor path, but never cold-load subscription/Stripe policy
+    # or read account state for these synthetic owners.
+    monkeypatch.setattr(allowance_watch, 'entitlement', lambda *a, **kw: ('paid_or_trial', None))
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-not-a-key')
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-not-a-key')
     monkeypatch.setenv('STT_PRERECORDED_VENDOR_FAIL_FAST', 'false')
@@ -149,11 +155,19 @@ def test_soniox_failover_is_admitted_by_the_prerecorded_surface_not_the_recovery
     assert raised.value.kind == 'refused'
 
 
-@pytest.mark.parametrize('status,kind', [(402, 'credit_refusal'), (429, 'rate_limited'), (503, 'error_5xx')])
+@pytest.mark.parametrize('status,kind', [(402, 'credit_refusal'), (429, 'rate_limited')])
 def test_soniox_refusal_at_submission_is_typed_and_not_submitted(status, kind):
     with pytest.raises(soniox_batch.SonioxBatchError) as raised:
         soniox(soniox_handler(create_status=status))
     assert (raised.value.kind, raised.value.submitted) == (kind, False)
+
+
+def test_soniox_5xx_at_submission_is_typed_as_paid_uncertainty():
+    # request() preserves paid uncertainty on 5xx: the POST /transcriptions
+    # attempt may have registered before the failure answer came back.
+    with pytest.raises(soniox_batch.SonioxBatchError) as raised:
+        soniox(soniox_handler(create_status=503))
+    assert (raised.value.kind, raised.value.submitted) == ('error_5xx', True)
 
 
 def test_soniox_failure_after_submission_counts_as_paid():

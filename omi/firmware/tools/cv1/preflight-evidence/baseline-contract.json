@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "board": "omi/nrf5340/cpuapp",
+  "source_revision": "e86cda5abb0ea7ff942ac1bcd07261140953812c",
+  "layout_sha256": "345f6b77aa32407ed2aaf33c8d2d7809b37e37a68f920ad30fd5fb647a4d1f5a",
+  "installed_provision": {
+    "verified_readback_sha256": "ee711c2525c44602e79ac2cb694f0f3f6afb420aa46250168ee760e0db686b4f",
+    "receipt_sha256": "5cc0c3bba41286a224cab112395677428b0c5318e0e3131bd349a9de0dbdf9e0",
+    "provision_hex_sha256": "bd9b711df5f6b48d9fb676145d8c403bef9c7090b343ac8ec871ef0f79c64ba1",
+    "source_format": "Nordic provision.py: s0,s1,count then invalidation token + 16-byte public hash; records at 0x010085A8",
+    "public_records": [
+      {
+        "token": "0x50faffff",
+        "valid": true,
+        "hash16": "f681aa213503faec007bee001252e461"
+      }
+    ],
+    "readback_comparison": "Every defined baseline provision byte matched final installed readback; sanitized evidence attestation, not a fresh live check."
+  },
+  "baseline_images": {
+    "application_full": "ca17a56ca24e05873fabc076d1dac8725792992da49cc9117b2d024fd9028283",
+    "network_full": "838a7a1fe5921d4012c9b3d0509c96608fd267b342632fe0d31b2e7ca7afdaa8"
+  },
+  "reviewed_app_only_sha256": [
+    "a7137ea50aed8dfc231b11e8b72b78e60e170652c01b1f7a5f743a955ea311ce"
+  ],
+  "current_capabilities": {
+    "ota_mode": "MCUBOOT_OVERWRITE_ONLY_FAST",
+    "automatic_old_image_revert": false,
+    "wrapper_versions": "0.0.0+0 for both baseline package images",
+    "dependency_tlvs": false,
+    "pinned_client_confirmation": "unknown: exact hosted package/native source absent locally; prior URL restricted",
+    "recovery": "Qualified SWD baseline restore; not OTA rollback",
+    "network_b0n_validation": "SHA-256 hash integrity only; does not authenticate provisioned keys",
+    "application_mcuboot_validation": "RSA-PSS-2048/SHA-256 signature configuration; no new signature acceptance test",
+    "outer_network_update_authentication": "App-core signature-validation intent documented in pinned Nordic Kconfig; full end-to-end negative acceptance tests unqualified"
+  },
+  "validation_policy": {
+    "application": {
+      "mode": "rsa_pss_2048_sha256",
+      "config_sha256": "d744f3cc81d2af45b9e1b7bf85d8d379e269fdc88d9ee486ace85e7d2d20d4c4",
+      "implementation_sha256": "f05a225de53ffedf57000cd49ad636f38a6ada2f14d8bdc59b6d6bf699150145",
+      "installed_image_evidence_sha256": "275745906413749fc6260e3d1de0f5f079ed46ec3c732b9c3255495035369cb6"
+    },
+    "network": {
+      "mode": "sha256_hash_only",
+      "config_sha256": "120de69f54b5f47ea58f4ff2529a88208a2bc301424a7f2486bb8168ed8eb86d",
+      "implementation_sha256": "eef49a63599557585ad8095909b4558c71f0bd48eefb3def20431bd647fad8c8",
+      "installed_image_evidence_sha256": "275745906413749fc6260e3d1de0f5f079ed46ec3c732b9c3255495035369cb6"
+    }
+  }
+}

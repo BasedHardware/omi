@@ -63,6 +63,7 @@ class Result:
     reason: ConsumerReason | RetryReason  # RETRY requires a RetryReason; every other outcome a ConsumerReason
     available_at: float | None = None  # required for RETRY and for DEFERRED returned by process(); None when
     # claim_key answered DEFERRED (the outbox already re-armed the row and created its wake)
+    defer_cause: str | None = None  # DEFERRED only: the domain cause the outbox records instead of ``reason``
 
     def __post_init__(self) -> None:
         outcome = Outcome(self.outcome)
@@ -97,8 +98,9 @@ def _settle(consumer: QueueConsumer, outbox: Outbox, claim: Claim, result: Resul
     elif result.outcome is Outcome.DEFERRED:
         if result.available_at is None:
             raise ValueError('a consumer that defers must return available_at')
-        # The outbox re-arms the row and creates the new wake itself (contract (b)).
-        settled = outbox.defer(claim, result.available_at, reason, now=now) is not None
+        # The outbox re-arms the row and creates the new wake itself (contract (b)). A domain cause
+        # (enrichment custody) is what the row records, so the outbox can bound long-stuck episodes.
+        settled = outbox.defer(claim, result.available_at, result.defer_cause or reason, now=now) is not None
     elif result.outcome is Outcome.RETRY:
         settled = outbox.release(claim, reason, now=now)
     else:  # STALE / BUSY: the consumer found it no longer owns the work; nothing to write

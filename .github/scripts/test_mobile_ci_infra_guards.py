@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Static contract for the 2026-10-21 mobile CI infra flake guards.
 
-Two recurring infra failures, both on mobile-app-checks.yml:
+Infrastructure failures on mobile-app-checks.yml:
 
+* Hosted runner Java drift. Gradle 8.14.2 cannot run on Java 25.
+  Pin Java 21 before Flutter setup in each Android Gradle job.
 * Android NDK download corruption. Every Gradle-configuring mobile job
   auto-downloaded NDK 28.2 inside Gradle configure with no retry, and a
   truncated dl.google.com response failed the job before any app code ran
@@ -19,6 +21,14 @@ Two recurring infra failures, both on mobile-app-checks.yml:
   job after every real step passed. 50 is the asserted budget: above that
   cold path with wedge headroom, while the CI budget check counts p50
   (19), not the ceiling.
+* PostHog Android SDK drift. posthog_flutter 5.28.0 compiles its Kotlin
+  against the PostHog Android 3.x API, but both the plugin and app declared
+  the closed range [3.51.0,4.0.0], which Gradle reads as including 4.0.0.
+  posthog-android 4.0.0 (core 7.0.0) published 2026-11-20 and removed
+  PostHogOnFeatureFlags, RRStyle and getFeatureFlagPayload, so
+  :posthog_flutter:compileDebugKotlin failed on main (run 44867593537).
+  The root build must force a 3.x release on every project, because the
+  plugin resolves its own compile classpath.
 """
 
 from pathlib import Path
@@ -30,6 +40,13 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "mobile-app-checks.yml"
 BUILD_GRADLE_PATH = REPO_ROOT / "app" / "android" / "app" / "build.gradle"
+ROOT_BUILD_GRADLE_PATH = REPO_ROOT / "app" / "android" / "build.gradle"
+
+POSTHOG_ANDROID_FORCE_RE = re.compile(
+    r"force\s+'com\.posthog:posthog-android:([0-9][0-9.]*)'"
+)
+# Closed range: Gradle's `]` is inclusive, so this admits the 4.0.0 major.
+POSTHOG_ANDROID_CLOSED_RANGE = "[3.51.0,4.0.0]"
 
 # Jobs whose Gradle configure resolves ndkVersion and therefore must
 # preinstall the pinned NDK instead of relying on AGP's unretried download.
@@ -68,6 +85,16 @@ class MobileCIInfraGuardTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.doc = load_workflow()
         cls.jobs = cls.doc["jobs"]
+
+    def test_gradle_jobs_pin_java_before_flutter_setup(self) -> None:
+        for job_id in NDK_JOBS:
+            with self.subTest(job=job_id):
+                steps = self.jobs[job_id]["steps"]
+                actions = [step.get("uses", "").split("@")[0] for step in steps]
+                self.assertEqual(actions.count("actions/setup-java"), 1)
+                java_index = actions.index("actions/setup-java")
+                self.assertEqual(str(steps[java_index]["with"]["java-version"]), "21")
+                self.assertLess(java_index, actions.index("subosito/flutter-action"))
 
     def test_ndk_pin_matches_build_gradle_fallback(self) -> None:
         expected = build_gradle_ndk_pin()
@@ -153,6 +180,34 @@ class MobileCIInfraGuardTests(unittest.TestCase):
             "steps + ~1 min post-job cache save, run 39634604539 attempt 1) or a healthy "
             "cold job is cancelled after every real step passes; re-measure before changing",
         )
+
+    def test_posthog_android_sdk_is_forced_below_4(self) -> None:
+        root_gradle = ROOT_BUILD_GRADLE_PATH.read_text(encoding="utf-8")
+        match = POSTHOG_ANDROID_FORCE_RE.search(root_gradle)
+        self.assertIsNotNone(
+            match,
+            "app/android/build.gradle must force com.posthog:posthog-android to a 3.x "
+            "release: posthog_flutter 5.28.0 compiles against the 3.x API, and the "
+            "plugin's own [3.51.0,4.0.0] range admits 4.0.0 (run 44867593537)",
+        )
+        self.assertEqual(
+            "3",
+            match.group(1).split(".")[0],
+            "posthog-android 4.0.0 (core 7.0.0) removed PostHogOnFeatureFlags, RRStyle "
+            "and getFeatureFlagPayload, which posthog_flutter 5.28.0 imports",
+        )
+        for path in (ROOT_BUILD_GRADLE_PATH, BUILD_GRADLE_PATH):
+            code = "\n".join(
+                line
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if not line.lstrip().startswith("//")
+            )
+            self.assertNotIn(
+                POSTHOG_ANDROID_CLOSED_RANGE,
+                code,
+                f"{path.relative_to(REPO_ROOT)}: the closed range "
+                f"{POSTHOG_ANDROID_CLOSED_RANGE} includes 4.0.0; use an exact 3.x pin",
+            )
 
 
 if __name__ == "__main__":

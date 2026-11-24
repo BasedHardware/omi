@@ -292,6 +292,8 @@ def test_filler_is_preserved_and_promoted_regardless_of_speakers(is_user, speake
     assert not created and promoted['id'] == review['id']
     assert promoted['sync_relevance'] == 'keep'
     assert promoted['discarded'] is False
+    assert promoted['relevance_decision']['verdict'] == 'keep'
+    assert promoted['relevance_decision']['trigger'] == 'sync_intake'
 
 
 @pytest.mark.parametrize('text', ['Help!', 'Yes', 'No', '嗯，请明天联系我', 'I love you', 'Mm 1234', '1234', ''])
@@ -307,6 +309,7 @@ def test_subsecond_meaningful_speech_is_kept(text):
     result, _, _ = intake(StrictFirestore(), short)
     assert result['sync_relevance'] == 'keep'
     assert result['discarded'] is False
+    assert result['relevance_decision']['verdict'] == 'keep'
 
 
 def test_separated_fillers_wait_for_finalization_without_losing_transcript_or_audio():
@@ -439,7 +442,7 @@ def test_real_process_segment_two_independent_job_responses(independent_job_pipe
     # Responses can name pre-bridge IDs; durable redirects converge to one row.
     assert len(conversations(store)) == 1
 
-    pipeline.conversations_db.get_conversation = lambda *a: {
+    pipeline.conversations_db.get_conversation = lambda *a, **_kwargs: {
         'status': 'completed',
         'sync_relevance': 'review',
         'transcript_segments': chunk('a', 1000, 'Mm-hmm')['transcript_segments'],
@@ -450,7 +453,7 @@ def test_real_process_segment_two_independent_job_responses(independent_job_pipe
 
     # Everything the rules cannot settle is assessed as a sync update, with
     # the stored restore marker the wire model does not carry.
-    pipeline.conversations_db.get_conversation = lambda *a: {
+    pipeline.conversations_db.get_conversation = lambda *a, **_kwargs: {
         'sync_relevance': 'keep',
         'sync_relevance_user_kept': True,
         'transcript_segments': chunk('a', 1000, 'Oh')['transcript_segments'],

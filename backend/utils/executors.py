@@ -19,7 +19,11 @@ Provides shared executors with strict separation (bulkhead pattern):
 - cleanup_executor: long-running account-deletion wipes (vectors, recordings,
   Firestore subcollections). Bulkheaded so bursts of account deletions cannot
   starve normal post-processing.
+- erasure_executor: conversation batch purges and accepted-delete erasures
+  (conversation-erasure queue), apart from account-deletion wipes.
 - storage_executor: audio file precaching, GCS operations.
+- pinecone_shutdown: lazy single-worker mutation settlement, isolated from
+  provider calls and the event loop's default executor during termination.
 - cimd_executor: hosted-MCP OAuth client-metadata (CIMD) lookups — DNS,
   connect, and body reads to arbitrary unauthenticated-supplied hosts, all
   inside one hard monotonic deadline. Bulkheaded so hostile client_id floods
@@ -36,12 +40,14 @@ import asyncio
 import atexit
 import contextvars
 import functools
+import importlib
 import logging
 import os
 import queue
 import threading
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager
 from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar, cast
 
 from prometheus_client import REGISTRY, Gauge
@@ -278,6 +284,18 @@ critical_executor = MonitoredThreadPoolExecutor(
 db_executor = MonitoredThreadPoolExecutor(
     name="db", max_workers=int(os.getenv('PUSHER_DB_EXECUTOR_WORKERS', '32')), thread_name_prefix="db"
 )
+# Optional read-cache checks cannot queue behind, or consume, serving DB workers.
+# Shadow allowance IO cannot occupy the serving DB pool or grow an unbounded queue.
+free_allowance_executor = MonitoredThreadPoolExecutor(
+    name="free_allowance", max_workers=2, max_queue_size=4, thread_name_prefix="free-allowance"
+)
+read_cache_shadow_executor = MonitoredThreadPoolExecutor(
+    name="read_cache_shadow",
+    max_workers=2,
+    max_queue_size=0,
+    wait_on_saturation=True,  # submit still raises immediately; suppress expected rejection warnings.
+    thread_name_prefix="read-cache-shadow",
+)
 record_barrier_executor = MonitoredThreadPoolExecutor(
     name="record_barrier",
     max_workers=int(os.getenv('PUSHER_RECORD_BARRIER_EXECUTOR_WORKERS', '16')),
@@ -285,12 +303,65 @@ record_barrier_executor = MonitoredThreadPoolExecutor(
     wait_on_saturation=True,
     thread_name_prefix="record-barrier",
 )
+gateway_idempotency_executor = MonitoredThreadPoolExecutor(
+    name="gateway_idempotency", max_workers=8, max_queue_size=8, thread_name_prefix="gateway-idempotency"
+)
+GATEWAY_SETTLEMENT_WORKERS = 8
+gateway_settlement_executor = MonitoredThreadPoolExecutor(
+    name="gateway_settlement",
+    max_workers=GATEWAY_SETTLEMENT_WORKERS,
+    max_queue_size=0,
+    thread_name_prefix="gateway-settlement",
+)
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
+# Batch policy HTTP leaves only; coordinators stay in async Pump code.
+admission_executor = MonitoredThreadPoolExecutor(name="admission", max_workers=4, thread_name_prefix="admission")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
-postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=24, thread_name_prefix="postproc")
+# The from-segments route bounds its auth dependency by the request deadline. A
+# stalled identity/Firestore call cannot be interrupted, so the wait is
+# abandoned at the deadline; this pool holds those abandoned calls apart from
+# the critical pool that gates every other request.
+auth_deadline_executor = MonitoredThreadPoolExecutor(
+    name="auth_deadline", max_workers=16, max_queue_size=64, thread_name_prefix="auth-deadline"
+)
+# Optional per-window LID must not hold the shared sync coordination pool.
+# Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
+record_language_executor = MonitoredThreadPoolExecutor(
+    name="record_language",
+    max_workers=4,
+    max_queue_size=8,
+    wait_on_saturation=True,
+    thread_name_prefix="record-language",
+)
+postprocess_executor = MonitoredThreadPoolExecutor(
+    name="postprocess",
+    # backend-integration raises this: its enrichment handler holds a thread per LLM-bound request.
+    max_workers=int(os.getenv('POSTPROCESS_EXECUTOR_WORKERS', '24')),
+    thread_name_prefix="postproc",
+)
 cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
+# Sized to the conversation-erasure queue's maxConcurrentDispatches: a delivered task
+# never waits here against its dispatch deadline, and a cleanup burst never waits in
+# front of account wipes on cleanup's four workers.
+erasure_executor = MonitoredThreadPoolExecutor(name="erasure", max_workers=20, thread_name_prefix="erasure")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
+# Optional playback discovery cannot consume mandatory custody/readback workers.
+# Its process coordinator admits at most two calls; this pool has no queue.
+playback_metadata_executor = MonitoredThreadPoolExecutor(
+    name="playback_metadata",
+    max_workers=2,
+    max_queue_size=0,
+    wait_on_saturation=True,
+    thread_name_prefix="playback-metadata",
+)
+playback_debt_executor = MonitoredThreadPoolExecutor(
+    name="playback_debt",
+    max_workers=2,
+    max_queue_size=32,
+    wait_on_saturation=True,
+    thread_name_prefix="playback-debt",
+)
 # Prompt-list verification may outlive its caller while a provider finishes.
 # Keep both the clip cut and inline STT away from shared feature pools.
 speaker_tag_verify_executor = MonitoredThreadPoolExecutor(
@@ -319,13 +390,23 @@ _ALL_EXECUTORS = [
     quiet_replay_executor,
     critical_executor,
     db_executor,
+    free_allowance_executor,
+    read_cache_shadow_executor,
     record_barrier_executor,
+    gateway_idempotency_executor,
+    gateway_settlement_executor,
     llm_executor,
     stripe_executor,
+    admission_executor,
     sync_executor,
+    auth_deadline_executor,
+    record_language_executor,
     postprocess_executor,
     cleanup_executor,
+    erasure_executor,
     storage_executor,
+    playback_metadata_executor,
+    playback_debt_executor,
     speaker_tag_verify_executor,
     cimd_executor,
     open_loops_executor,
@@ -361,6 +442,22 @@ def lifecycle_executor(uid: str, *, episode: bool = False) -> MonitoredThreadPoo
 
 _context_executor: MonitoredThreadPoolExecutor | None = None
 _context_executor_lock = threading.Lock()
+
+
+_pinecone_shutdown_executor: MonitoredThreadPoolExecutor | None = None
+_pinecone_shutdown_executor_lock = threading.Lock()
+
+
+def get_pinecone_shutdown_executor() -> MonitoredThreadPoolExecutor:
+    """One shutdown worker plus one retry slot; created only when draining."""
+    global _pinecone_shutdown_executor
+    with _pinecone_shutdown_executor_lock:
+        if _pinecone_shutdown_executor is None:
+            _pinecone_shutdown_executor = MonitoredThreadPoolExecutor(
+                name='pinecone_shutdown', max_workers=1, max_queue_size=1, thread_name_prefix='pinecone-shutdown'
+            )
+            _ALL_EXECUTORS.append(_pinecone_shutdown_executor)
+        return _pinecone_shutdown_executor
 
 
 def get_context_executor() -> MonitoredThreadPoolExecutor:
@@ -423,6 +520,56 @@ def after_db_call(callback: Callable[[], Coroutine[Any, Any, Any]]) -> bool:
     return True
 
 
+_future_tracker: contextvars.ContextVar['ExecutorFutureTracker | None'] = contextvars.ContextVar(
+    'executor_future_tracker', default=None
+)
+
+
+class ExecutorFutureTracker:
+    """Session-scoped completion proof, independent of caller cancellation.
+
+    Only selected pools are shielded. Completed futures are immediately removed,
+    so a long-lived socket retains neither results nor upload arguments.
+    """
+
+    def __init__(self, *pools):
+        self.pools = pools
+        self.pending: set[asyncio.Future] = set()
+
+    @contextmanager
+    def scope(self):
+        token = _future_tracker.set(self)
+        try:
+            yield
+        finally:
+            _future_tracker.reset(token)
+
+    async def wait(self):
+        # Call only after all submitting tasks have stopped. asyncio.wait never
+        # propagates this coordinator's cancellation into the underlying work.
+        while self.pending:
+            await asyncio.wait(list(self.pending))
+
+    def observe(self, executor, future):
+        if executor not in self.pools:
+            return False
+        self.pending.add(future)
+
+        def settled(done):
+            self.pending.discard(done)
+            if not done.cancelled():
+                done.exception()
+
+        future.add_done_callback(settled)
+        return True
+
+
+def track_executor_future(executor, future):
+    """Include direct metadata submissions in the same session completion proof."""
+    tracker = _future_tracker.get()
+    return tracker is not None and tracker.observe(executor, future)
+
+
 async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     """Offload *fn* to *executor*, propagating ContextVars."""
     loop = asyncio.get_running_loop()
@@ -440,7 +587,7 @@ async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: 
                     raise
                 # Backpressure stays in the async caller, without occupying another worker.
                 await asyncio.sleep(0.05)
-        result = await future
+        result = await asyncio.shield(future) if track_executor_future(executor, future) else await future
     finally:
         if token is not None:
             _after_db.reset(token)
@@ -473,6 +620,22 @@ def _byok_detail_code(error: BaseException) -> str | None:
     return None
 
 
+def _transient_provider_failure_class(error: BaseException) -> str | None:
+    """Return the bounded provider/transport class for a background-task failure.
+
+    Lazy import: executors sits below the provider SDKs in the import graph, and
+    the GPU worker runtime image must not pull them in at module load. A
+    transient provider fault is a retryable dependency failure, not an Omi-side
+    crash, so the done callback logs its class at WARNING instead of the
+    provider message at ERROR (which Cloud Error Reporting would group).
+    """
+    try:
+        from utils.conversations.processing_retry import retryable_provider_failure_class
+    except Exception:
+        return None
+    return retryable_provider_failure_class(error)
+
+
 def _log_background_failure(name: str, future: "Future[Any]") -> None:
     if future.cancelled():
         return
@@ -484,6 +647,18 @@ def _log_background_failure(name: str, future: "Future[Any]") -> None:
     # what Cloud Error Reporting groups as a crash at legal_holds.py.
     if type(error).__name__ == 'DestructiveOperationInProgress':
         logger.info('background task %s deferred reason=destructive_operation', name)
+        return
+    # A spent BYOK provider account (direct OpenRouter answers 402 'requires
+    # more credits') is user account state, not a defect: retries can never
+    # succeed and the provider's error body must not reach logs. The task body
+    # classified the raw provider error inside the propagated BYOK context
+    # (see _classify_byok_halt_in_context); the quota classification needs the
+    # request's validated key, and this callback thread has no task context.
+    # Logging the bounded class without a traceback keeps Error Reporting from
+    # grouping the account state as a crash at the openai SDK frame.
+    halt_class = getattr(error, 'omi_byok_halt_class', None)
+    if isinstance(halt_class, str) and halt_class:
+        logger.warning('background task %s halted reason=%s', name, halt_class)
         return
     # A BYOK provider failure is the user's own provider account state, not a
     # server fault: one structured WARNING, never a traceback at ERROR.
@@ -499,6 +674,34 @@ def _log_background_failure(name: str, future: "Future[Any]") -> None:
     logger.error("background task %s failed: %s", name, error, exc_info=error)
 
 
+def _classify_byok_halt_in_context(fn: Callable[P, T]) -> Callable[P, T]:
+    """Run *fn* and, on failure, classify a raw BYOK quota halt while the
+    task's propagated contextvars (validated BYOK keys) are still live.
+
+    The conversation boundary answers the same classification as a typed 429;
+    tagging the exception here lets the done callback log the bounded halt
+    without a traceback. A server-key error (no validated key in context)
+    stays untagged and remains a loud server fault.
+    """
+
+    @functools.wraps(fn)
+    def run(*args: P.args, **kwargs: P.kwargs) -> T:
+        try:
+            return fn(*args, **kwargs)
+        except BaseException as error:
+            # Late-bound like merge_before_processing.py: executors sits below
+            # utils.byok in the import graph (see _byok_detail_code), so a
+            # static gateway_error_contract import would drag utils.cloud_tasks
+            # into the GPU worker runtime image closure.
+            gateway_error_contract = importlib.import_module('utils.llm.gateway_error_contract')
+
+            if gateway_error_contract.is_byok_quota_error(error):
+                setattr(error, 'omi_byok_halt_class', 'byok_quota')
+            raise
+
+    return run
+
+
 def submit_with_context(
     executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs
 ) -> Future[T]:
@@ -509,7 +712,7 @@ def submit_with_context(
     that do read the Future keep their own handling.
     """
     ctx = contextvars.copy_context()
-    future = executor.submit(ctx.run, fn, *args, **kwargs)
+    future = executor.submit(ctx.run, _classify_byok_halt_in_context(fn), *args, **kwargs)
     future.add_done_callback(functools.partial(_log_background_failure, getattr(fn, '__name__', repr(fn))))
     return future
 
@@ -569,12 +772,20 @@ async def log_executor_health(
 _background_tasks: set[asyncio.Task[Any]] = set()
 
 
-def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> asyncio.Task[Any]:
+def start_background_task(
+    coro: Coroutine[Any, Any, Any], *, name: str, bounded_provider_failure: bool = False
+) -> asyncio.Task[Any]:
     """Schedule *coro* as a tracked background task with exception logging.
 
     Use this instead of bare ``asyncio.create_task()`` for production
     fire-and-forget work.  Bare ``create_task`` silently drops exceptions
     and can be garbage-collected if the caller doesn't keep a reference.
+
+    ``bounded_provider_failure`` opts this task into the retryable-provider
+    contract: a transient provider/transport fault is logged as one bounded
+    WARNING with its class instead of the provider body at ERROR. Only tasks
+    whose caller owns a queue retry or replay may opt in; every other task
+    keeps the loud ERROR so Error Reporting still sees it.
     """
     from database.firestore_read_origin import background_task_read_origin
 
@@ -590,6 +801,20 @@ def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> async
             return
         exc = t.exception()
         if exc:
+            if bounded_provider_failure:
+                # A transient provider/transport fault on a task whose caller
+                # owns a queue retry is a retryable dependency failure, not an
+                # Omi-side crash: log its bounded class at WARNING so Error
+                # Reporting does not group it and the provider body never
+                # reaches logs. The caller still receives the exception.
+                failure_class = _transient_provider_failure_class(exc)
+                if failure_class is not None:
+                    logger.warning(
+                        'background_task transient provider failure: %s failure_class=%s',
+                        t.get_name(),
+                        failure_class,
+                    )
+                    return
             logger.error('background_task failed: %s — %s: %s', t.get_name(), type(exc).__name__, exc)
 
     task.add_done_callback(_done)

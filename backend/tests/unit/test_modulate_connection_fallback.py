@@ -67,13 +67,19 @@ def _modulate_receiver():
 def _serving_policy(models=('modulate-velma-2', 'dg-nova-3', 'parakeet')):
     """Drive the real provider gates, not a stubbed answer about them.
 
-    The outage deployment listed Modulate first with Deepgram and Parakeet behind
-    it, so the fallback decision has to come from ``STT_SERVICE_MODELS`` itself.
+    Preserve the historical outage's plain Parakeet opt-in with its rollback
+    switch; model lists without that slot retain today's default-off policy.
     """
     with (
         patch.object(streaming, 'stt_service_models', list(models)),
         patch.object(streaming, '_deepgram_is_available', return_value=True),
-        patch.dict(os.environ, {'HOSTED_PARAKEET_API_URL': 'ws://parakeet.omi.me/v3/stream'}),
+        patch.dict(
+            os.environ,
+            {
+                'HOSTED_PARAKEET_API_URL': 'ws://parakeet.omi.me/v3/stream',
+                'STT_STREAMING_PARAKEET_SLOT_ENABLED': 'true' if 'parakeet' in models else 'false',
+            },
+        ),
     ):
         yield
 

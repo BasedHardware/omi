@@ -286,6 +286,8 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
         Reference('routers/developer.py', '_parse_client_projection', 'ClientProcessing'),
         Reference('routers/developer.py', '_bind_projection_to_segments', 'ClientProcessing'),
         Reference('routers/developer.py', '_bind_late_client_projection', 'client_processing'),
+        # Budget retries restore the stored display projection through the existing attachment path.
+        Reference('routers/developer.py', '_ingest_conversation_from_segments', 'client_processing'),
         Reference('routers/developer.py', '_ingest_conversation_from_segments', 'client_projection'),
         Reference('routers/developer_segments.py', 'admit_segments', 'client_processing'),
         Reference('routers/developer_segments.py', 'common', 'client_processing'),
@@ -515,6 +517,9 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         # Request serialization goes only to encrypted staging, never intelligence.
         DumpSite('routers/developer_segments.py', 'stage_chunk', 'model_dump'),
         DumpSite('routers/developer.py', 'update_goal', 'model_dump'),
+        # FolderEntity serialization for the Developer API folder response;
+        # this path neither reads a Conversation nor feeds intelligence.
+        DumpSite('routers/developer.py', 'get_user_folders', 'model_dump'),
         # DailySummaryDayStatsPayload aggregates (counts/minutes watched), not
         # conversation content; transcripts reach the LLM via
         # conversations_to_string. Reviewed with the daily-summary work (#12636).
@@ -526,6 +531,8 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
             'model_dump',
         ),
         DumpSite('utils/conversations/process_conversation.py', '_get_conversation_obj', 'dict'),
+        # Structured-only note cleanup; this receiver is never a Conversation/display projection.
+        DumpSite('utils/conversations/process_conversation.py', '_get_conversation_obj', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', 'execute_app', 'dict'),
         DumpSite(
             'utils/conversations/process_conversation.py',
@@ -569,8 +576,17 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/llm/goals.py', 'suggest_goal', 'dict'),
         DumpSite('database/goals.py', 'normalize_goal_storage', 'model_dump'),
         DumpSite('database/goals.py', '_new_goal_payload', 'model_dump'),
-        DumpSite('database/goals.py', 'update_goal', 'model_dump'),
+        DumpSite('database/goals.py', 'update_document', 'model_dump'),
         DumpSite('database/goals.py', 'apply', 'model_dump'),
+        # A2a repository serialization: the task list's key only extracts sort
+        # fields from ActionItemEntity; goal CAS maps GoalEntity's stored fields,
+        # and progress methods map GoalProgressEvent storage/wire values. None
+        # serializes a Conversation or supplies conversation content to intelligence.
+        DumpSite('database/action_items.py', 'key', 'model_dump'),
+        DumpSite('database/goals.py', 'update', 'model_dump'),
+        DumpSite('database/goals.py', 'update_progress_document', 'model_dump'),
+        DumpSite('database/goals.py', 'append_progress_event', 'model_dump'),
+        DumpSite('database/goals.py', 'list_progress_events', 'model_dump'),
         DumpSite('database/task_recommendations.py', 'create_intervention', 'model_dump'),
         DumpSite('database/task_recommendations.py', 'publish', 'model_dump'),
         DumpSite('database/task_recommendations.py', 'create_feedback', 'model_dump'),
@@ -588,6 +604,10 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/apps.py', 'generate_persona_desc', 'dict'),
         DumpSite('utils/task_intelligence/backend_capture.py', 'policy_signals', 'model_dump'),
         DumpSite('utils/task_intelligence/conversation_capture.py', 'canonical_fields', 'model_dump'),
+        # These serialize TaskDue, CandidateCreateRequest and ReminderOrigin only.
+        # None can carry Conversation.client_processing or display projections.
+        DumpSite('utils/task_intelligence/conversation_capture.py', '_capture_decision', 'model_dump'),
+        DumpSite('utils/task_intelligence/conversation_capture.py', 'process_before_legacy', 'model_dump'),
         # Daily-summary stats payload (not Conversation); scanner matches any model_dump.
         DumpSite('utils/llm/external_integrations.py', '_basic_daily_summary', 'model_dump'),
         DumpSite('utils/llm/external_integrations.py', 'generate_comprehensive_daily_summary', 'model_dump'),
@@ -613,6 +633,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # Server-computed recording and episode metadata, not display projections.
         'recorded_start',
         'recorded_end',
+        # Server-authored receipt-clock provenance, not client display projection.
+        'capture_time_trust',
+        # Source-clock timezone metadata, not client-authored display text.
+        'capture_timezone',
         'arrival_at',
         'clock',
         'episode_id',
@@ -621,10 +645,15 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'uses_custom_stt',
         # Server-only route arbitration metadata; Conversation marks it excluded from dumps.
         'record_lane_owner',
+        # Server-only finalization ownership. Both fields are excluded from dumps and wire schemas.
+        'finalization_engine',
+        'finalization_owner_epoch',
         # Server-authored partial audio proof metadata, not client display text.
         'record_audio_partial',
         'structured',
         'client_processing',
+        # Server-generated, coverage-validated preview for the authenticated detail route.
+        'live_summary',
         # Authenticated owner-confirmed edits, not device-authored display projections.
         # Corrections deliberately enter summarization; overview is the owned override.
         'user_corrections',
@@ -654,6 +683,11 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # Retained by persistence/transcript-edit sinks and app views; explicitly
         # stripped as private capture metadata by the integration redactor.
         'capture_coverage',
+        # Server-authored projection of the manual speaker receipt's still-
+        # winning whole-voice not_a_person exclusions. First-party capture
+        # reconciliation signal, not client-authored display; stripped by the
+        # integration redactor like capture_coverage.
+        'excluded_speakers',
         'transcript_segments',
         'transcript_segments_compressed',
         'geolocation',
@@ -710,6 +744,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # the successful-output persistence seams own these stamps.
         'notes_llm_input_hash',
         'notes_llm_output_hash',
+        # Server-only numeric title basis and filtered-checkpoint digest, excluded from all dumps.
+        # The fenced writer computes the basis from speech and the notes seam owns the digest.
+        'title_content_units',
+        'notes_quality_filter_input_hash',
         'l1_llm_input_hash',
         # Server-authored cross-surface event membership (#3244): member ids,
         # sources, and windows only, written solely by database.capture_groups.
@@ -729,6 +767,44 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # Server-authored counts/enums/durations/ids only; no client display
         # projection. Internal metadata, excluded from API and integrations.
         'owner_recognition_diagnostics',
+        # Server-computed Home row contract stamp on list reads
+        # (utils/conversations/home_step.py): a read-time wire projection of
+        # the processing step, never stored and never client-authored. NOT
+        # projection-family — it must survive the integration redactor so
+        # clients receive it; the model serializer omits it when unset.
+        'home_step',
+        # Server read projection (utils/conversations/transcribing_hold.py): the
+        # transcription wait ran out with no failure receipt. Never stored and
+        # never client-authored; NOT projection-family, clients need it to tell a
+        # held recording from a failed one. Omitted when unset.
+        'transcription_wait',
+        # Server-owned app projection from current batch-job evidence, never
+        # stored or accepted from clients. Not a client-processing field.
+        'transcription_admission',
+        # Recordings and conversations (v3): written only by the server-side builder,
+        # planner and processing settle (utils/conversations/v3/), never client-authored.
+        # NOT projection-family: clients need them (Home visibility and tile state).
+        'backfilled',
+        # Historical processing tier (T1+): the server-stamped tier marker and the
+        # read-time open projection. Never client-authored; clients need both to
+        # offer the open-time summary, so neither is projection-family.
+        'processing_tier',
+        'summary_on_open',
+        'home_hidden',
+        'home_hidden_reason',
+        'kind',
+        'manual_end',
+        'outline_kind',
+        'recording',
+        'recording_pieces',
+        'summary_covers_through',
+        'tile_state',
+        'title_locked',
+        'v3_derived',
+        'v3_pending',
+        'v3_process_pending',
+        'v3_recording_ids',
+        'v3_rewrites',
     }
 )
 
@@ -2257,6 +2333,30 @@ def test_red_proof_walrus_alias_fails_rebind_scan() -> None:
     assert not [site for site in collect_intent_txn_write_surface(source)[1] if site.startswith('walrus:')]
 
 
+@pytest.mark.parametrize('locked', [False, True])
+def test_live_recap_stays_out_of_lists_and_integrations(render_mod, locked):
+    payload = {
+        'is_locked': locked,
+        'live_summary': {'overview': 'private recap'},
+        'v3_live_summary': {'ciphertext': 'private receipt'},
+    }
+    for redact in (render_mod.redact_conversation_for_list, render_mod.redact_conversation_for_integration):
+        result = redact(dict(payload))
+        assert 'live_summary' not in result
+        assert 'v3_live_summary' not in result
+
+
+def test_integration_hides_generated_live_sections_after_datetime_serialization(render_mod):
+    payload = {
+        'v3_derived': True,
+        'status': 'in_progress',
+        'summary_covers_through': '2026-11-19T12:00:00Z',
+        'structured': {'overview': 'Editable notes', 'sections': [{'body_markdown': 'Generated live recap'}]},
+    }
+    result = render_mod.redact_conversation_for_integration(payload)
+    assert result['structured'] == {'overview': 'Editable notes'}
+
+
 @pytest.mark.parametrize('coverage', ['unknown', 'incomplete', 'mapped', None])
 @pytest.mark.parametrize('locked', [False, True])
 def test_capture_coverage_stays_on_app_views_and_out_of_integrations(render_mod, projection_sink_fns, coverage, locked):
@@ -2275,6 +2375,16 @@ def test_capture_coverage_stays_on_app_views_and_out_of_integrations(render_mod,
     assert conv.capture_coverage == coverage
     public.pop('capture_coverage')
     assert 'capture_coverage' not in render_mod.redact_conversation_for_integration(public)
+
+
+@pytest.mark.parametrize('locked', [False, True])
+def test_transcription_admission_stays_on_app_views_and_out_of_integrations(render_mod, locked):
+    conv = _make_conversation(is_locked=locked)
+    conv.transcription_admission = 'allowance_held'
+    assert 'transcription_admission' not in render_mod.PROJECTION_FAMILY_FIELDS
+    payload = render_mod.conversation_to_dict(conv)
+    assert render_mod.redact_conversation_for_list(dict(payload))['transcription_admission'] == 'allowance_held'
+    assert 'transcription_admission' not in render_mod.redact_conversation_for_integration(payload)
 
 
 @pytest.mark.parametrize('locked', [False, True])
@@ -2328,3 +2438,8 @@ def test_llm_checkpoints_are_server_only_and_survive_projection_invalidation(ren
         assert {field: snapshot[field] for field in checkpoints} == checkpoints
     projection_sink_fns['drop'](conv)
     assert {field: getattr(conv, field) for field in checkpoints} == checkpoints
+
+
+def test_note_quality_metadata_is_excluded_from_client_and_integration_dumps():
+    assert Conversation.model_fields['title_content_units'].exclude is True
+    assert Conversation.model_fields['notes_quality_filter_input_hash'].exclude is True

@@ -116,13 +116,15 @@ class TranscriptSegment(BaseModel):
     translations: Optional[List[Translation]] = Field(default_factory=list)
     speech_profile_processed: bool = True
     stt_provider: Optional[str] = None
+    speaker_word_seconds: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
     # Persisted for backend identity consumers. SkipJsonSchema keeps these out of
     # the generated OpenAPI/Dart/Swift client schema while validation and
     # model_dump (Firestore persistence, and the pusher transcript frames that
     # document them) stay intact.
     # Cleared atomically on the first manual review; never authorizes teaching.
     speaker_match_source: SkipJsonSchema[Optional[str]] = None
-    speaker_id_scope: SkipJsonSchema[Optional[str]] = None
+    # Opaque voice scope travels to clients for exact recording rename proofs.
+    speaker_id_scope: Optional[str] = None
     speaker_identity_status: SkipJsonSchema[str] = SpeakerIdentityStatus.unknown
     # Only present for v2 text whose provider position could not be proven.
     # Absence keeps every v1 serialized segment byte-identical.
@@ -133,8 +135,10 @@ class TranscriptSegment(BaseModel):
     audio_capture_start: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
     audio_capture_end: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
     audio_source: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
-    # Pinned-speaker prior only (flag PINNED_SPEAKER_PRIOR_ENABLED): people an unlabeled
-    # voice resembles, [{person_id, level, suggest?}], for the suggestion card. Never a label.
+    # Revocable profile pointer; readers require current profile and retention consent.
+    recurring_voice_id: SkipJsonSchema[Optional[str]] = Field(default=None, exclude=True)
+    # Pinned-speaker priors and recurring-match near-misses: [{person_id, level, suggest?}].
+    # Suggestion-card evidence only; never a person label.
     voice_candidates: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
     # Transported only in Python-mode internal dumps; the DB folds this into
     # the bounded conversation blob and removes it from stored segments.
@@ -178,7 +182,7 @@ class TranscriptSegment(BaseModel):
         if self.original_text is None:
             data.pop('original_text', None)
         data['speaker_label_source'] = project_source(data)
-        for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates'):
+        for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates', 'recurring_voice_id'):
             value = getattr(self, key)
             if value is not None:
                 data[key] = value
@@ -194,6 +198,7 @@ class TranscriptSegment(BaseModel):
             'audio_capture_end',
             'audio_source',
             'speaker_match_scores',
+            'speaker_word_seconds',
             'provider_speaker',
             'speaker_grouping_shadow',
             'speaker_grouping_shadow_expires_at',
@@ -389,7 +394,6 @@ class TranscriptSegment(BaseModel):
         *,
         protected_segment_ids: Optional[set[str]] = None,
         speaker_bound_ids: Optional[set[int]] = None,
-        preserve_capture_windows: bool = False,
     ) -> CombineSegmentsResult:
         if not new_segments or len(new_segments) == 0:
             return CombineSegmentsResult(segments, [], [], {})
@@ -563,15 +567,6 @@ class TranscriptSegment(BaseModel):
                 return a, b
             if b.audio_capture_run != a.audio_capture_run:
                 return a, b
-            preserve_known_window = preserve_capture_windows and (
-                a.capture_window_bounds() is not None or b.capture_window_bounds() is not None
-            )
-            if preserve_known_window:
-                left, right = a.capture_window_bounds(), b.capture_window_bounds()
-                if left is None or right is None or max(left[0], right[0]) > min(left[1], right[1]):
-                    # Keep provider text/window pairs intact, rather than clear
-                    # proof while absorbing an unknown or disjoint contributor.
-                    return a, b
             if speaker_bound_ids and a.speaker_id in speaker_bound_ids:
                 return _append_decided_speaker(a, b)
 
@@ -586,8 +581,6 @@ class TranscriptSegment(BaseModel):
                 if last_incomplete:
                     first_sentence, rest = _split_first_sentence(b.text)
                     if _can_backward_merge_first_sentence(first_sentence, rest, last_incomplete):
-                        if preserve_known_window:
-                            return a, b
                         a.text = f'{a.text} {first_sentence}'.strip()
                         b.text = rest
                         a._clear_audio_evidence()
@@ -600,8 +593,6 @@ class TranscriptSegment(BaseModel):
                         _absorb(b, a)
                         return a, None
                 if last_incomplete and len(last_incomplete) < len(b.text.strip()):
-                    if prefix and preserve_known_window:
-                        return a, b
                     b.text = f'{last_incomplete} {b.text}'.strip()
                     if prefix:
                         a.text = prefix

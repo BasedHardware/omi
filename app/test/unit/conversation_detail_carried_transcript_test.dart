@@ -108,10 +108,11 @@ void main() {
     expect(find.textContaining('fresh', findRichText: true), findsWidgets);
   });
 
-  testWidgets('a transcript read from the server is trusted on open', (tester) async {
+  testWidgets('opening a cached server transcript refreshes detail intent once', (tester) async {
     await open(tester, _row(lines: [_line('current')]));
 
-    expect(reads, 0);
+    // Trusted cached data still needs this open's narrow notes-escalation lease.
+    expect(reads, 1);
   });
 
   testWidgets('returning to the app re-reads the open conversation', (tester) async {
@@ -122,6 +123,7 @@ void main() {
         .didChangeAppLifecycleState(AppLifecycleState.resumed);
     await tester.pump();
 
-    expect(reads, 1);
+    // One quiet read on entry, then one fresh read on resume.
+    expect(reads, 2);
   });
 }

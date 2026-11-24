@@ -4,6 +4,7 @@ from typing import Any, ClassVar, Dict, List, Literal, Optional, Tuple, Type
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
+from models.task_due import ReminderIntent
 from models.conversation_emoji import fallback_emoji
 from models.conversation_enums import CategoryEnum
 from models.structured import ActionItem, Event, Insight, MeetingType, Participant, Section, Structured
@@ -34,7 +35,19 @@ _OPTIONAL_LITERAL_VOCABULARIES: Dict[str, Tuple[str, ...]] = {
 # 500s on POST /v1/dev/user/conversations followed on 2026-08-20. Drop the element the extractor made
 # unusable and keep the conversation, and log which field it was -- the prod signature carried no
 # traceback, so there was no way to tell one of these apart from the next.
-_DEFAULTED_SCALARS: Tuple[str, ...] = ('title', 'overview', 'emoji')
+_DEFAULTED_SCALARS: Tuple[str, ...] = ('title', 'overview', 'emoji', 'gist')
+
+# The one-line row label: a hard word bound keeps a chatty model from turning it
+# into a second overview. The server clips rather than rejecting the note.
+GIST_MAX_WORDS = 12
+
+
+def clip_gist(value: Any) -> str:
+    """Collapse whitespace and keep at most ``GIST_MAX_WORDS`` words."""
+    text = ' '.join(str(value or '').split())
+    if not text:
+        return ''
+    return ' '.join(text.split(' ')[:GIST_MAX_WORDS])
 
 
 def _usable_elements(values: Any, element_model: Type[BaseModel], field: str) -> Any:
@@ -81,6 +94,7 @@ def _keep_usable_content(data: Any, element_models: Dict[str, Type[BaseModel]]) 
 
 
 class ExtractedActionItem(BaseModel):
+    reminder_intent: Optional[ReminderIntent] = None
     description: str = Field(description="The action item to be completed")
     due_at: Optional[datetime] = Field(default=None, description="When the action item is due")
     capture_kind: Optional[Literal['explicit_command', 'clear_commitment', 'direct_request', 'inferred_next_step']] = (
@@ -131,6 +145,7 @@ class ExtractedActionItem(BaseModel):
     def to_action_item(self) -> ActionItem:
         return ActionItem(
             description=self.description,
+            reminder_intent=self.reminder_intent.model_dump(mode='python') if self.reminder_intent else None,
             due_at=self.due_at,
             capture_kind=self.capture_kind,
             capture_confidence=self.capture_confidence,
@@ -263,9 +278,21 @@ class ExtractedParticipant(BaseModel):
     organization: Optional[str] = Field(default=None, description="Participant's organization when known")
     role: Optional[str] = Field(default=None, description="Participant's role or relationship when known")
     is_ai_agent: bool = Field(default=False, description='True for AI notetakers and assistants, never people')
-    source: Literal['roster', 'transcript'] = Field(
-        description="Whether meeting metadata ('roster') or only the conversation evidences this participant"
+    alias: Optional[str] = Field(
+        default=None, description='Short alias explicitly asserted for this person; never derive it'
     )
+    speaker_bindings: List[int] = Field(
+        default_factory=list,
+        description='Exact numeric spk keys the notes model binds to this non-owner participant; omit when uncertain',
+    )
+    source: str = Field(description="Identity evidence source: roster, transcript, screen, or background")
+
+    @field_validator('speaker_bindings', mode='before')
+    @classmethod
+    def keep_numeric_bindings(cls, value):
+        if not isinstance(value, list):
+            return []
+        return list(dict.fromkeys(v for v in value if type(v) is int and v >= 0))[:8]
 
     def to_participant(self) -> Participant:
         return Participant(
@@ -275,6 +302,8 @@ class ExtractedParticipant(BaseModel):
             role=self.role,
             is_ai_agent=self.is_ai_agent,
             source=self.source,
+            alias=self.alias,
+            speaker_bindings=self.speaker_bindings,
         )
 
 
@@ -309,6 +338,10 @@ class StructuredExtraction(BaseModel):
         description="A brief overview of the conversation, highlighting the key details from it",
         default='',
     )
+    gist: str = Field(
+        description='One line of at most 12 words saying what this conversation was about',
+        default='',
+    )
     emoji: str = Field(description="An emoji to represent the conversation", default='🧠')
     category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
     sections: List[ExtractedSection] = Field(
@@ -341,8 +374,13 @@ class StructuredExtraction(BaseModel):
         except ValueError:
             return CategoryEnum.other
 
+    @field_validator('gist', mode='before')
+    @classmethod
+    def clip_gist_words(cls, value: Any) -> str:
+        return clip_gist(value)
+
     def to_structured(self) -> Structured:
-        return Structured(
+        structured = Structured(
             title=self.title,
             overview=self.overview,
             # The schema default (🧠) means the model never chose; persist the
@@ -353,6 +391,9 @@ class StructuredExtraction(BaseModel):
             action_items=[item.to_action_item() for item in self.action_items],
             events=[event.to_event() for event in self.events],
         )
+        if self.gist:
+            structured.gist = self.gist
+        return structured
 
 
 class RichStructuredExtraction(StructuredExtraction):
@@ -372,7 +413,7 @@ class RichStructuredExtraction(StructuredExtraction):
     )
     participants: List[ExtractedParticipant] = Field(
         default_factory=list,
-        description='People and AI agents evidenced by the meeting roster or the transcript; never the account owner',
+        description='People and AI agents evidenced by the supplied notes context, including screen evidence; never the account owner',
     )
     salience: Optional[Salience] = Field(default=None, description=SALIENCE_DESCRIPTION)
     insights: List[ExtractedInsight] = Field(
@@ -416,6 +457,8 @@ class RichStructuredExtraction(StructuredExtraction):
             action_items=[item.to_action_item() for item in self.action_items],
             events=[event.to_event() for event in self.events],
         )
+        if self.gist:
+            structured.gist = self.gist
         # Only mark the rich fields as set when the model actually answered
         # them — unset fields serialize away, so non-meeting notes keep the
         # baseline document shape even with the flag on.

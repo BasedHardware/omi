@@ -1,0 +1,27 @@
+id: safe/charger-hold-10s-enters-then-hold-exits
+summary: >
+  Deliberate support entry: hold ~10 s at power-on while on the charger
+  enters SAFE (reason 2). Inside SAFE, release then a 3 s hold powers off, and
+  the next wake boots normally even though the charger is still connected.
+committee: [1]
+tags: [fix]
+initial: {charging: true}
+timeline:
+  - {t: 0, hold: 10600}
+  - {t: 14000, hold: 4000}
+  - {t: 30000, tap: [150]}
+end: 40000
+expect:
+  boot_count: 2
+  boots:
+    - {exit: poweroff, safe: true, latch_reason: 2, button_held_at_poweroff: false,
+       log: ["Safe mode initialized: BLE DFU only", "Safe mode entering system off"],
+       not_log: ["omi/bootstate=SAFE"]}
+    - {reset: off-wake, safe: false, log: ["Device initialized successfully"]}
+  invariants: [no-stuck-safe, poweroff-waits-release]
+baseline_bug:
+  observed_at: c06b9bcd8749 (3.0.23)
+  expect:
+    boots:
+      - {exit: poweroff, safe: true, latch_reason: 2, log: ["omi/bootstate=SAFE"]}
+      - {reset: off-wake, safe: true}

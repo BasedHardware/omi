@@ -12,6 +12,7 @@ import routers.listen.receiver as receiver_module
 from routers.listen.receiver import ListenReceiver
 from tests.unit.test_parakeet_window_live import runtime, _flush_capture
 from tests.unit.test_parakeet_failover_exhausted import Replacement, setup_chain
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from utils.observability import fallback
 from utils.stt import live_chain, live_router, parakeet_window as window, streaming as st
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, WINDOW_ADMISSION
@@ -24,6 +25,7 @@ def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def serving(monkeypatch, runtime):
+    enabled_live_targets(monkeypatch)
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')

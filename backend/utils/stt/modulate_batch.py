@@ -29,8 +29,12 @@ MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0
 
 
 def wav_duration_seconds(audio_bytes: bytes) -> float:
-    """Cheap WAV-header duration for burn accounting; unparseable audio is 0 seconds."""
+    """Header duration for WAV or recovery FLAC; unparseable audio is 0 seconds."""
     try:
+        if audio_bytes.startswith(b'fLaC'):
+            import soundfile as sf
+
+            return sf.info(BytesIO(audio_bytes)).duration
         with wave.open(BytesIO(audio_bytes)) as source:
             rate = source.getframerate()
             return source.getnframes() / rate if rate > 0 else 0.0
@@ -78,6 +82,8 @@ async def modulate_batch_async(
     diarize: bool = True,
     client: Any = None,
     mark_fallback: bool = False,
+    filename: str = 'audio.wav',
+    content_type: str = 'audio/wav',
 ) -> Tuple[List[Dict[str, Any]], str]:
     """One Velma batch POST awaited on the event loop: no executor thread held, no client retry.
 
@@ -96,11 +102,15 @@ async def modulate_batch_async(
         raise ModulateBatchError('credit_refusal' if breaker_budget_exhausted(ENDPOINT_STT) else 'breaker_open')
     client = get_batch_vendor_client() if client is None else client
     burn_seconds = wav_duration_seconds(audio_bytes)
+    from utils.stt.allowance_watch import observe_async
+    from utils.byok import get_byok_uid
+
+    await observe_async(get_byok_uid(), 'prerecorded', 'modulate', burn_seconds)
     try:
         response = await client.post(
             MODULATE_BATCH_URL,
             headers={'X-API-Key': api_key},
-            files={'upload_file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')},
+            files={'upload_file': (filename, BytesIO(audio_bytes), content_type)},
             data={'speaker_diarization': str(diarize).lower()},
             timeout=MODULATE_TIMEOUT,
         )

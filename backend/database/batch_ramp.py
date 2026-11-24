@@ -1,7 +1,9 @@
 """Bounded, metadata-only owner-load reads at new admission boundaries."""
 
+from collections import OrderedDict
 from dataclasses import replace
 import logging
+from threading import Lock
 import time
 
 from prometheus_client import Counter
@@ -18,12 +20,33 @@ EXCLUDED = Counter(
     ('reason',),
 )
 
+# Only exclusion decisions may survive a request. Light snapshots can become
+# stale as other instances admit work; never use them to certify new admission.
+EXCLUSION_MEMO_SECONDS = 60
+EXCLUSION_MEMO_LIMIT = 1024
+_exclusions: OrderedDict[tuple[object, str, str], float] = OrderedDict()
+_exclusions_lock = Lock()
+
 
 def read_owner_load(uid, *, firestore_client=None, now=None, incoming_audio_seconds=0, stage=None):
+    """Read fresh load or decline certification for a recently excluded owner.
+
+    A memo hit returns no numeric snapshot, so it cannot report stale, smaller
+    backlog or certify a light owner. Drained owners may stay on legacy for at
+    most 60 seconds. Scope by client and stage as well as uid; never retain
+    content, durations or load counts in the bounded process-local memo.
+    """
     stage = current_stage() if stage is None else stage
     if stage not in {'prod', 'dev'}:
         raise ValueError('ramp owner-load reads require an explicit prod/dev data-plane namespace')
     client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
+    key = (client, stage, uid)
+    with _exclusions_lock:
+        instant = time.monotonic()
+        while _exclusions and next(iter(_exclusions.values())) <= instant:
+            _exclusions.popitem(last=False)
+        if key in _exclusions:
+            return None
     now = time.time() if now is None else now
     jobs = list(
         client.collection(f'batch_pipeline_{stage}_jobs')
@@ -54,8 +77,17 @@ def read_owner_load(uid, *, firestore_client=None, now=None, incoming_audio_seco
     active_job = active.get('active_job_id')
     if active_job and not any(row.get('job_id') == active_job for row in pending_rows):
         pending_rows.append({'job_id': active_job, 'payload': active.get('active_payload')})
+    job_rows = [row.to_dict() or {} for row in jobs]
+    # Incoming audio belongs to this request, not the owner. A single oversized
+    # upload must not suppress certification for subsequent small uploads.
+    if exclusion_reason(owner_load(job_rows, pending_rows, now)) is not None:
+        with _exclusions_lock:
+            _exclusions[key] = time.monotonic() + EXCLUSION_MEMO_SECONDS
+            _exclusions.move_to_end(key)
+            while len(_exclusions) > EXCLUSION_MEMO_LIMIT:
+                _exclusions.popitem(last=False)
     return owner_load(
-        [row.to_dict() or {} for row in jobs],
+        job_rows,
         pending_rows,
         now,
         incoming_audio_seconds=incoming_audio_seconds,

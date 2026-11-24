@@ -113,4 +113,59 @@ config OMI_WATCHDOG_TIMEOUT_MS
          operations can run longer (e.g. SD/LFS pre-warm) to avoid false
          watchdog resets."
 
+config OMI_SDHC_SPI_CMD12_FIX
+    bool "SPI SD host driver with the CMD12 reply fix"
+    depends on DT_HAS_ZEPHYR_SDHC_SPI_SLOT_ENABLED
+    depends on !SPI_SDHC
+    select SPI
+    select CRC
+    select SDHC_SUPPORTS_SPI_MODE
+    default n
+    help
+        "Builds src/sdfix/sdhc_spi_cmd12_fix.c, Zephyr's drivers/sdhc/sdhc_spi.c
+         with the reply to CMD12 (STOP_TRANSMISSION) decoded even when it starts
+         partway through a byte, instead of the stock driver. Without it every
+         multi-block read fails with -EINVAL on cards that answer that way.
+         Needs CONFIG_SPI_SDHC=n."
+config OMI_SAFE_MODE_BOOT_LIMIT
+    int "Failed boots before recovery"
+    range 1 20
+    default 3
+
+config OMI_SAFE_MODE_GOOD_UPTIME_S
+    int "Healthy main-loop uptime before GOOD (seconds)"
+    range 1 3600
+    default 60
+
+config OMI_FAULT_INJECT
+    bool "DEVELOPMENT ONLY: safe-mode fault injection"
+    depends on DEBUG
+    default n
+    help
+      Also requires -DOMI_DEVELOPMENT_BUILD=ON. Release builds reject this.
+
+choice OMI_FAULT_INJECT_KIND
+    prompt "Fault to inject on every normal trial"
+    depends on OMI_FAULT_INJECT
+    default OMI_FAULT_INJECT_HARD_FAULT
+
+config OMI_FAULT_INJECT_HARD_FAULT
+    bool "Fatal error before BLE"
+config OMI_FAULT_INJECT_DRIVER_HANG
+    bool "Deferred driver-init hang"
+config OMI_FAULT_INJECT_SETTINGS_HANG
+    bool "Hang in app_settings_init"
+config OMI_FAULT_INJECT_WDT_STARVE
+    bool "Stop feeding WDT at uptime 30 seconds"
+endchoice
+
+config OMI_FAULT_INJECT_HARD_FAULT_DELAY_MS
+    int "Dwell before the injected fatal error"
+    depends on OMI_FAULT_INJECT_HARD_FAULT
+    default 0
+    help
+      Sleep this long between the fault witness line and the fatal error,
+      still before BLE, so a bench observer polling over SWD can sample the
+      witness on every failing boot.
+
 endmenu

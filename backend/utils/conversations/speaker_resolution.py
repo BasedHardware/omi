@@ -11,9 +11,10 @@ from config.batch_conversation_speakers import (
     enabled as batch_speakers_enabled,
     has_batch_authority,
     sync_off_enabled,
+    original_evidence_enabled,
 )
 from utils.conversations.speaker_clips import MAX_CLIP_SECONDS, SAMPLE_RATE, verified_clip as _verified_clip
-from utils.conversations.speaker_sync_store import in_sync_store, sync_store_placements
+from utils.conversations.speaker_sync_store import in_store, single_store_placements
 from utils.conversations.speaker_window_cohort import per_window_evidence
 from utils.speakers import processing as speaker_evidence
 
@@ -58,6 +59,7 @@ from utils.conversations.speaker_grouping_shadow import compare_and_select
 from utils.conversations.speaker_resolution_inputs import (
     manual_speakers as _manual_speakers,
     measured_embedding_seconds,
+    transcript_membership,
     batch_provider_keys,
     started_at as _started_at,
     manifest_span_load as _manifest_span_load,
@@ -215,7 +217,9 @@ def _duration(segment: TranscriptSegment) -> float:
     return max(0.0, float(segment.end) - float(segment.start))
 
 
-def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True) -> Dict[str, np.ndarray]:
+def load_voiceprints_for_resolution(
+    uid: str, *, allow_audio_repair: bool = True, require_complete: bool = False
+) -> Dict[str, np.ndarray]:
     prints: Dict[str, np.ndarray] = {}
     try:
         owner = load_owner_embedding(uid, users=users_db, allow_audio_repair=allow_audio_repair)
@@ -223,12 +227,16 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
             prints[OWNER_IDENTITY] = owner.reshape(-1)
     except Exception as error:
         logger.warning('event=speaker_resolution_owner_profile outcome=failed exception_type=%s', type(error).__name__)
+        if require_complete:
+            raise
     # Owner recognition is plan-independent: an entitlement read failure fails
     # closed for person prints only, never for the owner's own voiceprint.
     try:
         named_allowed = named_speaker_prompts_allowed(uid)
     except Exception as error:
         logger.warning('event=speaker_resolution_entitlement outcome=failed exception_type=%s', type(error).__name__)
+        if require_complete:
+            raise
         return prints
     if not named_allowed:
         return prints
@@ -242,6 +250,8 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
         logger.warning(
             'event=speaker_resolution_person_profiles outcome=failed exception_type=%s', type(error).__name__
         )
+        if require_complete:
+            raise
         return prints
     for person in people or []:
         embedding = validated_embedding(
@@ -311,9 +321,9 @@ def _embed_missing(
     embedded = 0
     failures = 0
 
-    def store_only(segment: TranscriptSegment) -> bool:
+    def store_of(segment: TranscriptSegment) -> Optional[str]:
         placement = placements.get(segment.id) if placements and segment.id is not None else None
-        return placement is not None and placement.store is not None
+        return placement.store if placement else None
 
     def wanted(start: float, next_start: Optional[float]) -> bool:
         index = bisect.bisect_left(midpoints, start)
@@ -348,7 +358,7 @@ def _embed_missing(
             last = bisect.bisect_left(midpoints, chunk_end)
             for segment in pending[first:last]:
                 # Chunks here mix stores; these assemble from their own store below.
-                if store_only(segment):
+                if store_of(segment):
                     continue
                 abs_start, abs_end = window_of(segment)
                 begin, end = max(abs_start, chunk_start), min(abs_end, chunk_end)
@@ -378,9 +388,7 @@ def _embed_missing(
                 if time.monotonic() > deadline:
                     return
                 windows: List[Tuple[float, float]] = []
-                clip, reason = _verified_clip(
-                    session, *window_of(segment), windows=windows, sync_store_only=store_only(segment)
-                )
+                clip, reason = _verified_clip(session, *window_of(segment), windows=windows, store=store_of(segment))
                 if clip is None:
                     diagnostics.clip_skips += 1
                     if reason == 'clip_too_short':
@@ -547,7 +555,7 @@ def _verified_read_session(
         extents = []
         refusal = None
         for chunk in chunks:
-            if placement and placement.store and not in_sync_store(chunk):
+            if placement and placement.store and not in_store(chunk, placement.store):
                 continue
             start, upper_end = bounds_by_path[chunk['path']]
             # Unknown Opus durations are deliberately unbounded: never assume
@@ -838,6 +846,8 @@ def resolve_speakers_for_processing(
     budget_seconds: Optional[float] = None,
     max_embedding_attempts: Optional[int] = None,
     allow_owner_audio_repair: bool = True,
+    final_pass_runner=None,
+    skip_automatic: bool = False,
 ) -> bool:
     """Resolve voices and return whether the manual receipt was read and applied."""
     trace = resolver_trace()
@@ -849,13 +859,23 @@ def resolve_speakers_for_processing(
         return False
     if trace is not None and trace.pass_name == 'first':
         record_retry('first', 'eligible', 'candidate')
-    evidence_token = speaker_evidence.begin(conversation)
+    resolution = conversation.speaker_resolution
+    if resolution is not None and has_batch_authority(conversation.transcript_segments):
+        membership = transcript_membership(conversation.transcript_segments)
+        if resolution.status == 'resolved' and resolution.input_membership_sha256 != membership:
+            # A terminal whole-pass obligation may suppress new inference, but
+            # its old snapshot cannot certify newly appended/rebased text.
+            # This is speaker-result metadata, not a conversation lifecycle state.
+            conversation.speaker_resolution = resolution = ConversationSpeakers(
+                status='unavailable', version=resolution.version
+            )
+        resolution.input_membership_sha256 = membership
+    evidence_token = None if skip_automatic else speaker_evidence.begin(conversation)
     resolver_reason('disabled')
     try:
-        if match_scores.enabled():
-            updates = [s.speaker_match_scores for s in conversation.transcript_segments if s.speaker_match_scores]
-            if updates:
-                conversation.speaker_match_scores = match_scores.merge(conversation.speaker_match_scores, updates)
+        updates = [s.speaker_match_scores for s in conversation.transcript_segments if s.speaker_match_scores]
+        if updates:
+            conversation.speaker_match_scores = match_scores.merge(conversation.speaker_match_scores, updates)
     except Exception:
         match_scores.record_failure(logger, reason='malformed_doc')
     began = time.monotonic()
@@ -886,7 +906,7 @@ def resolve_speakers_for_processing(
             conversation.transcript_segments
         )
         # The kill switch also stops linking/naming when speaker evidence serves.
-        if batch_record and not batch_resolution:
+        if batch_record and not batch_resolution and not skip_automatic:
             resolver_reason('batch_authoritative')
             # Legacy owner-safe abstention; manual receipts still win below.
             trusted = _capture_trusted(conversation.transcript_segments)
@@ -908,7 +928,7 @@ def resolve_speakers_for_processing(
                 (segment.speaker_id_scope or '').startswith('final:') for segment in conversation.transcript_segments
             )
         )
-        if resolution_enabled() and not final_record:
+        if resolution_enabled() and not final_record and not skip_automatic:
             _resolve(
                 uid,
                 conversation,
@@ -957,7 +977,29 @@ def resolve_speakers_for_processing(
                 )
         elif receipt_read:
             receipt_applied = True  # A successful read confirmed there is no manual receipt.
-        speaker_evidence.finish(evidence_token, uid, conversation, receipt if receipt_read else None)
+        if not skip_automatic:
+            speaker_evidence.finish(evidence_token, uid, conversation, receipt if receipt_read else None)
+        # The whole pass is the last automatic authority, after the evidence
+        # projection, and must have a successfully read manual receipt.
+        if receipt_read and resolution_enabled() and budget_seconds is None:
+            from utils.conversations.final_pass_batch import run_batch_final_pass
+
+            (final_pass_runner or run_batch_final_pass)(
+                uid,
+                conversation,
+                receipt,
+                load_prints=load_voiceprints_for_resolution,
+                apply=apply_speaker_resolution,
+                requeue=None,
+            )
+        resolution = conversation.speaker_resolution
+        if (
+            not skip_automatic
+            and resolution_enabled()
+            and resolution is not None
+            and batch_speakers_enabled(conversation.transcript_segments)
+        ):
+            resolution.input_membership_sha256 = transcript_membership(conversation.transcript_segments)
     return receipt_applied
 
 
@@ -975,8 +1017,14 @@ def completed_identity_retry_skip_reason(raw: Optional[Mapping[str, Any]]) -> Op
         return 'private_cloud_disabled'
     if raw.get('updated_at') is None:
         return 'missing_revision'
-    if (raw.get('speaker_resolution') or {}).get('status') == 'resolved' and any(
-        s.get('is_user') for s in raw.get('transcript_segments') or []
+    resolution = raw.get('speaker_resolution') or {}
+    membership_current = not any(
+        (s.get('speaker_id_scope') or '').startswith('final:batch:') for s in raw.get('transcript_segments') or []
+    ) or resolution.get('input_membership_sha256') == transcript_membership(raw.get('transcript_segments') or [])
+    if (
+        membership_current
+        and resolution.get('status') == 'resolved'
+        and any(s.get('is_user') for s in raw.get('transcript_segments') or [])
     ):
         return 'already_resolved_owner'
     return None
@@ -1105,7 +1153,7 @@ def _no_embeddings_diagnostics(
         stop=stop,
         embeddable=sum(_duration(s) >= MIN_EMBED_SECONDS for s in non_omi),
         pending=len(pending),
-        cache_hits=sum(s.id not in pending_ids for s in long),
+        cache_hits=sum(s.id in vectors and s.id not in pending_ids for s in long),
         new_embeddings=new_embeddings,
         valid_vectors=valid,
         clip_skips=diagnostics.clip_skips,
@@ -1162,6 +1210,16 @@ def _resolve(
         resolver_reason('no_vectors' if resolution is None else 'resolved' if resolution.coverage >= 0.9 else 'partial')
         return
     batch_resolution = conversation.private_cloud_sync_enabled and batch_speakers_enabled(segments)
+    if batch_resolution and original_evidence_enabled():
+        _resolve_original_batch(
+            uid,
+            conversation,
+            receipt=receipt,
+            deadline=deadline,
+            max_embedding_attempts=max_embedding_attempts,
+            allow_owner_audio_repair=allow_owner_audio_repair,
+        )
+        return
     input_ids = len({s.speaker_id for s in segments if s.speaker_id != OMI_SPEAKER_ID_SENTINEL})
     if not conversation.private_cloud_sync_enabled or not speaker_embedding_configured():
         resolver_reason('no_audio')
@@ -1232,7 +1290,7 @@ def _resolve(
             placements[segment.id] = place_segment(segment, mapping, index)
         if mapping.get('started_at') is not None:
             placements.update(
-                sync_store_placements(
+                single_store_placements(
                     uid,
                     conversation.id,
                     segments,
@@ -1435,7 +1493,7 @@ def _resolve(
         failed=diagnostics.embed_failures,
         embeddable=len(embeddable),
         pending=len(pending),
-        cache_hits=len(embeddable) - len(pending),
+        cache_hits=sum(s.id in keys and keys[s.id] in cache_snapshot for s in embeddable),
         valid_vectors=len(vectors),
         stop=stop,
     )
@@ -1486,9 +1544,8 @@ def _resolve(
     )
 
     try:
-        if match_scores.enabled():
-            retained = [r for r in (conversation.speaker_match_scores or []) if r['stage'] != 'resolution']
-            conversation.speaker_match_scores = match_scores.merge(retained, resolution.match_scores)
+        retained = [r for r in (conversation.speaker_match_scores or []) if r['stage'] != 'resolution']
+        conversation.speaker_match_scores = match_scores.merge(retained, resolution.match_scores)
     except Exception:
         match_scores.record_failure(logger, reason='malformed_doc')
     speaker_evidence.capture_resolution(resolution)
@@ -1545,3 +1602,101 @@ def _resolve(
         diagnostics.clip_skips,
         diagnostics.embed_failures,
     )
+
+
+def _resolve_original_batch(uid, conversation, *, receipt, deadline, max_embedding_attempts, allow_owner_audio_repair):
+    from utils.conversations import batch_identity_evidence
+
+    if not speaker_embedding_configured():
+        resolver_reason('endpoint_unconfigured')
+        conversation.speaker_resolution = ConversationSpeakers(status='unavailable', version=RESOLUTION_VERSION)
+        return
+    seconds = {}
+    cache = decode_cache(download_speaker_embedding_cache(uid, conversation.id), seconds)
+    # This path never consumes playback/sentence vectors or promotes them to
+    # original-unit evidence. Keep only current bounded original-unit entries.
+    cache = {key: value for key, value in cache.items() if key.startswith('batch-unit:')}
+    try:
+        evidence = batch_identity_evidence.load(
+            uid,
+            conversation,
+            deadline,
+            cache=cache,
+            clip_seconds=seconds,
+            extract=extract_embedding_from_bytes,
+            max_attempts=(
+                min(_max_new_embeddings(), max_embedding_attempts)
+                if max_embedding_attempts is not None
+                else _max_new_embeddings()
+            ),
+            reason=resolver_reason,
+        )
+        keys = batch_provider_keys(conversation.transcript_segments)
+        abstained = {
+            s.id
+            for s in conversation.transcript_segments
+            if s.id not in evidence.vectors or s.id not in keys or text_window_refusal(s.start, s.end) is not None
+        }
+        result = resolve_conversation_speakers(
+            conversation.transcript_segments,
+            evidence.vectors,
+            manual_speakers=_manual_speakers(receipt),
+            voiceprints=load_voiceprints_for_resolution(uid, allow_audio_repair=allow_owner_audio_repair),
+            embedding_seconds=evidence.seconds,
+            abstained_segment_ids=abstained,
+            grouping='batch_authoritative',
+            provider_keys=keys,
+            grouping_deadline=min(deadline, time.monotonic() + 2),
+        )
+        evidence.validate()
+        owner_diagnostics.resolver_counts(
+            attempted=evidence.attempted,
+            successful=evidence.successful,
+            cache_hits=evidence.cache_hits,
+            valid_vectors=len(evidence.vectors),
+            coverage=result.coverage if result else 0,
+        )
+        if evidence.successful:
+            # Bounded per-conversation encrypted cache, with existing erasure.
+            # Never publish original-unit centroids as enrollment candidates.
+            upload_speaker_embedding_cache(uid, conversation.id, encode_cache(cache, seconds))
+        evidence.validate()
+        for segment in conversation.transcript_segments:
+            segment.speaker_word_seconds = (evidence.word_seconds or {}).get(segment.id)
+        if result is None:
+            resolver_reason('no_vectors')
+            conversation.speaker_resolution = ConversationSpeakers(status='unavailable', version=RESOLUTION_VERSION)
+            return
+        speaker_evidence.capture_resolution(result)
+        apply_speaker_resolution(
+            conversation,
+            result.speaker_ids,
+            result.voice_identities,
+            result.voice_identity_statuses,
+            owner_voiceprint_available=result.owner_voiceprint_available,
+            contradicted_segment_ids=result.contradicted_segment_ids,
+            scope=f'{BATCH_CONVERSATION_SCOPE}{conversation.id}',
+        )
+        conversation.speaker_resolution = ConversationSpeakers(
+            status='resolved' if result.coverage >= MIN_RESOLVED_COVERAGE else 'unavailable',
+            version=RESOLUTION_VERSION,
+            participant_speaker_ids=result.significant_speaker_ids,
+            input_membership_sha256=transcript_membership(conversation.transcript_segments),
+        )
+        retained = [r for r in (conversation.speaker_match_scores or []) if r['stage'] != 'resolution']
+        conversation.speaker_match_scores = match_scores.merge(retained, result.match_scores)
+        resolver_reason('resolved' if result.coverage >= MIN_RESOLVED_COVERAGE else 'partial')
+    except Exception as error:
+        from utils.conversations.final_pass_errors import error_details
+
+        resolver_reason(error_details(error.__cause__ or error)['reason'])
+        conversation.speaker_resolution = ConversationSpeakers(status='unavailable', version=RESOLUTION_VERSION)
+        record_fallback(
+            component='other',
+            from_mode='conversation_speaker_resolution',
+            to_mode='capture_speaker_ids',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        logger.warning('event=batch_identity_evidence outcome=unavailable exception_type=%s', type(error).__name__)

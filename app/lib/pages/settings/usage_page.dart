@@ -487,6 +487,37 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     // The backend's name for the plan ("Plus", "Operator", …); "Free Plan" for the free tier.
     final planLabel = currentPlanDisplayName(context, provider.subscription);
 
+    final badge = isPaid
+        ? Container(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xxs),
+            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+            child: Text(planLabel, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w700)),
+          )
+        : Text(planLabel, style: OmiType.headline);
+    final managePlan = Semantics(
+      button: true,
+      child: InkWell(
+        onTap: () => _showPlansSheet(source: 'usage_page', trackOpen: true),
+        borderRadius: OmiRadius.smAll,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  context.l10n.managePlan,
+                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                ),
+              ),
+              const SizedBox(width: OmiSpacing.xxs),
+              Icon(Icons.chevron_right, color: OmiColors.textSecondary, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+
     return Container(
       margin: const EdgeInsets.only(bottom: OmiSpacing.sm),
       padding: EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: isPaid ? OmiSpacing.xs : OmiSpacing.md),
@@ -498,42 +529,18 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: isPaid
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xxs),
-                        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
-                        child: Text(planLabel, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w700)),
-                      )
-                    : Text(planLabel, style: OmiType.headline),
-              ),
-              if (isPaid)
-                Semantics(
-                  button: true,
-                  child: InkWell(
-                    onTap: () => _showPlansSheet(source: 'usage_page', trackOpen: true),
-                    borderRadius: OmiRadius.smAll,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 44),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            context.l10n.managePlan,
-                            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                          ),
-                          const SizedBox(width: OmiSpacing.xxs),
-                          Icon(Icons.chevron_right, color: OmiColors.textSecondary, size: 20),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          // At the accessibility text sizes the badge and Manage Plan stack, so the plan name is not
+          // squeezed to one letter per line.
+          if (isPaid && MediaQuery.textScalerOf(context).scale(1) >= 1.6)
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [badge, managePlan])
+          else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(child: badge),
+                if (isPaid) managePlan,
+              ],
+            ),
           if (!isPaid) ...[
             const SizedBox(height: OmiSpacing.xxs),
             Text(context.l10n.basicPlanDescription, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
@@ -729,7 +736,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                 ],
               ],
               if (stats != null) ..._buildAllowanceMeters(provider.subscription),
-              const HeldAudioUsageSection(),
+              const SaveLiveHoursRow(),
               if (stats != null && provider.chatQuotaUnit != null && period == 'monthly') ...[
                 const SizedBox(height: OmiSpacing.sm),
                 _buildChatQuotaLine(context, provider),
@@ -831,7 +838,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     String? displayText;
     double percentage = 0.0;
 
-    if (sub.chatQuotaUnit == 'cost_usd') {
+    if (sub.chatQuotaUnit == 'cost_usd' && (provider.playBilledPurchaser || sub.subscription.billedByPlay)) {
+      // Google Play readers see the share of their allowance, never a US$ amount.
+      final limit = sub.subscription.limits.chatCostUsdPerMonth;
+      percentage = limit != null && limit > 0 ? (used / limit).clamp(0.0, 1.0) : 0.0;
+      value = NumberFormat.percentPattern(l10n.localeName).format(percentage);
+      displayText = value;
+    } else if (sub.chatQuotaUnit == 'cost_usd') {
       value = formatBillingPrice((used * 100).round(), 'usd');
       final limit = sub.subscription.limits.chatCostUsdPerMonth;
       if (limit != null && limit > 0) {

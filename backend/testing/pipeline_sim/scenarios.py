@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Callable
 
+from testing.pipeline_sim.backlog_flood import run_backlog_flood
 from testing.pipeline_sim.scorer import score
 from testing.pipeline_sim.sim import SimConfig, simulate
 from testing.pipeline_sim.stt import ExhaustionWindow, ModulateProfile, STTProfile
@@ -61,6 +62,10 @@ def provider_exhaustion_window(
             max_replicas=6,
             exhaustion=(ExhaustionWindow(start, start + minutes * 60.0, mode),),
         ),
+        # Hold one fixed input; latency comparisons must not depend on which
+        # random paid-provider failures a different polling order draws.
+        unrecoverable_near_silence=True,
+        modulate=ModulateProfile(speech_recover_rate=1.0, near_silence_recover_rate=1.0),
         horizon_seconds=4 * 3600.0,
     )
 
@@ -100,6 +105,8 @@ def stale_finalize_targets(seed: int = 1) -> SimConfig:
         ),
         recovery_duplicate_delivery_rate=0.5,
         worker_rpc_duplicate_rate=0.3,
+        unrecoverable_near_silence=True,
+        modulate=ModulateProfile(speech_recover_rate=1.0, near_silence_recover_rate=1.0),
         horizon_seconds=3 * 3600.0,
     )
 
@@ -121,6 +128,76 @@ def privacy_blocked_users(seed: int = 1) -> SimConfig:
         # Quarantines pile up just before the fence so some recoveries are still queued when it lands.
         stt=STTProfile(min_replicas=4, max_replicas=4, exhaustion=(ExhaustionWindow(600.0, 900.0, 'empty'),)),
         horizon_seconds=3 * 3600.0,
+    )
+
+
+def backlog_flood_fresh_latency(
+    seed: int = 1,
+    *,
+    release: str = 'held',
+    flood: bool = True,
+    owner_drain_first_turn_seconds: int = 15,
+) -> SimConfig:
+    """A 22x-hourly, already-transcribed flood must not delay steady fresh captures."""
+    if release not in {'held', 'unmetered', 'gated'}:
+        raise ValueError("release must be 'held', 'unmetered', or reserved 'gated'")
+    if owner_drain_first_turn_seconds not in {0, 15}:
+        raise ValueError('projection switch is tested at its main defaults: 0 (off) or 15 (on)')
+    return SimConfig(
+        name='backlog_flood_fresh_latency',
+        seed=seed,
+        workload=WorkloadSpec(
+            owners=80,
+            uploads_per_owner_per_hour=0.0,
+            arrival_seconds=3600.0,
+            segments_per_upload=(1, 1),
+            speech_seconds=(30.0, 30.0),
+            near_silence_fraction=0.0,
+            silence_fraction=0.0,
+        ),
+        # Provider delivery is deliberately quick; backlog projection, not STT capacity, is the bottleneck.
+        modulate=ModulateProfile(
+            concurrency=64,
+            base_latency_seconds=1.0,
+            seconds_per_audio_second=0.01,
+            speech_recover_rate=1.0,
+        ),
+        summary_dispatch='task',
+        summary_pool='isolated',
+        summary_seconds=0.1,
+        summary_sigma=0.0,
+        projection_seconds=1.0,
+        # Every fresh row is provider-routed and every old row is already transcribed; one pump
+        # retains the real idle/maintenance path without duplicating irrelevant GPU polling work.
+        gpu_pumps=1,
+        horizon_seconds=2 * 3600.0,
+        gate_poll_seconds=10**9,  # This scenario has a fresh-cohort verdict, not the whole-fleet gate.
+        language='ja',
+        legacy_sync='draining',
+        flags={
+            'BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED': 'true',
+            'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED': str(release == 'unmetered').lower(),
+            # The unmetered arm characterizes rollback to the legacy release path.
+            'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED': str(release != 'unmetered').lower(),
+            'BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS': '60',
+            'BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH': '0' if release == 'unmetered' else '16',
+            'BATCH_PIPELINE_MAX_OWNER_DRAINS': '8',
+            'BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS': str(owner_drain_first_turn_seconds),
+            'BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS': '120',
+        },
+        backlog_flood={
+            'release': release,
+            'flood': flood,
+            'flood_at': 600.0,
+            'fresh_owners': 60,
+            'steady_uploads_per_owner': 6,
+            'fresh_interval_seconds': 600.0,
+            'flooded_owners': 30,
+            'fresh_flooded_owners': 10,
+            'rows_per_flooded_owner': 264,
+            'catch_up_depth': 0 if release == 'unmetered' else 16,
+            'first_turn_seconds': owner_drain_first_turn_seconds,
+        },
     )
 
 
@@ -148,6 +225,7 @@ SCENARIOS: dict[str, Callable[..., SimConfig]] = {
     'stale_finalize_targets': stale_finalize_targets,
     'privacy_blocked_users': privacy_blocked_users,
     'summary_behind_transcription': summary_behind_transcription,
+    'backlog_flood_fresh_latency': backlog_flood_fresh_latency,
 }
 
 
@@ -155,4 +233,6 @@ def run(name: str, seed: int = 1, *, overrides: dict[str, Any] | None = None, **
     config = SCENARIOS[name](seed, **params)
     if overrides:
         config = replace(config, **overrides)
+    if config.backlog_flood is not None:
+        return run_backlog_flood(config)
     return score(simulate(config))

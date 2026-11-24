@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.validate_storage_lifecycle import (
     LEGACY_DELETE_RULES,
     NONCURRENT_DELETE_RULE,
@@ -61,7 +63,11 @@ def test_prod_coldline_rule_is_pinned_to_batch_suffixes():
     set_class = [
         r
         for r in _rules(_load("prod.json"))
-        if r["action"]["type"] == "SetStorageClass" and r["condition"].get("matchesPrefix") == ["chunks/"]
+        if (
+            r["action"]["type"] == "SetStorageClass"
+            and r["action"]["storageClass"] == "COLDLINE"
+            and r["condition"].get("matchesPrefix") == ["chunks/"]
+        )
     ]
     assert len(set_class) == 1
     rule = set_class[0]
@@ -88,6 +94,30 @@ def test_prod_raw_capture_coldline_rule_shape_is_pinned():
                 "matchesStorageClass": ["STANDARD", "MULTI_REGIONAL"],
             },
         }, f"{name}: raw-* Coldline rule shape must stay pinned to the three capture prefixes"
+
+
+def test_prod_has_no_archive_rule():
+    assert all(rule["action"].get("storageClass") != "ARCHIVE" for rule in _rules(_load("prod.json"))), (
+        "David dropped the existing-stock Archive transition on 2026-11-02; " "prod apply must never reinstall it"
+    )
+
+
+@pytest.mark.parametrize("name", APPLY_FILES + ROLLBACK_FILES)
+def test_archive_rule_is_rejected_in_every_private_cloud_variant(name):
+    document = _load(name)
+    document["lifecycle"]["rule"].append(
+        {
+            "action": {"type": "SetStorageClass", "storageClass": "ARCHIVE"},
+            "condition": {
+                "age": 90,
+                "matchesPrefix": ["chunks/"],
+                "matchesStorageClass": ["COLDLINE"],
+                "matchesSuffix": [".batch.enc", ".batch.bin"],
+            },
+        }
+    )
+    errors = validate_desired_document(document)
+    assert any("must set storageClass COLDLINE" in e and "ARCHIVE" in e for e in errors), errors
 
 
 def test_prod_re_declares_the_two_legacy_delete_rules_verbatim():

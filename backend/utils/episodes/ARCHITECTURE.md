@@ -248,9 +248,13 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   `content` blob with the other notes.
 - `composer_version` changes recompose an episode once on read.
 - `composed_fingerprint` covers retained members, every member's transcript text
-  and timing, and its own summary and action items. Unchanged evidence never
-  spends a second call; a late member, a sync upgrade, a transcript edit or a
-  discard recomposes. `summary_needs_regeneration` forces it. An episode with no
+  and timing, and its own summary and action items. This full fingerprint remains
+  the paid-call lease and composed-state stamp. With the default-on
+  `EPISODE_COMPOSE_SETTLE_ENABLED` switch, `composed_evidence` separately hashes
+  each member's speech text and resolved `person_name`; `composed_membership`
+  stamps the retained member set. Label/summary/timing-only drift does not buy
+  another call. Real speech, a name change, late membership or a discard still
+  recomposes. `summary_needs_regeneration` forces it. An episode with no
   speech is stamped once instead of retried.
 - `composed_notes` hashes the composed title, notes and moment headings. A later
   per-moment write over them (a closing conversation's tail, a sync replay) still
@@ -264,26 +268,75 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   10/20/40 minutes and stops after four until the evidence changes.
 - Chapter clock times are mapped on the same clock as the transcript labels and
   must fall inside the episode's transcript span (two-minute slack).
-- Triggers: close, every member finalize (including `sync_update`), and a
+- With `EPISODE_LIVE_MEMBER_CLOSE_ENABLED` (default on), a closed episode excludes
+  still-capturing live members from readiness and summary inputs. The compose tick
+  rehomes post-gap live members atomically; true pre-boundary members retain their
+  owner and recompose after finishing.
+- A pending member transcript waits for `episode_compose_transcript_wait_seconds()`
+  (20 minutes by default), measured from its pending stamp. After expiry the
+  episode can compose the available speech; a later transcript receipt schedules
+  one refresh for its new evidence. `EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS`
+  overrides the deadline (clamped to 0–86400 seconds); setting it to 21600 restores
+  the former six-hour wait without a build.
+- Background close/finalize triggers wait for `COMPOSER_SETTLE_SECONDS` (two
+  quiet minutes), capped at `COMPOSER_MAX_SETTLE_SECONDS` (five minutes) from
+  the first pending arrival. `compose_pending_since` and
+  `compose_activity_at` track arrival time without changing recorded boundaries.
+  A tracked async task requeues process-local due work without occupying composer
+  workers; shutdown cancels it. Finalizes and reads recover pending work after
+  restart using the persisted window (no new durable queue or sweeper). A paid
+  background `stale`/`superseded` result starts a fresh quiet window before retry,
+  including when the previous window reached its cap. Read-side schedules
+  (`throttle=True`) promote pending work immediately. Foreground retries, direct
+  `compose` and `force=True` bypass settling. Turning the switch off restores the
+  full-fingerprint scheduling and immediate-retry behavior. No composer version
+  bump or eager recompose wave.
+  Persisted pending work remains read-eligible with the switch off, so rollback
+  after restart drains it immediately. With the switch on, a later trigger
+  retains the persisted first-pending cap; a read bypasses the quiet window.
+  If pending-state persistence fails, finalizers still schedule and workers
+  bypass settling, retaining the normal fingerprint/lease checks. This favors
+  paying over losing new speech or names and emits shared fallback telemetry.
+  Legacy episodes have no narrow trigger stamp: an unchanged full fingerprint
+  backfills it without a paid call. A changed full fingerprint conservatively
+  composes once behind the background settle window, because the old hash cannot
+  distinguish label drift from new speech. That successful compose seeds the
+  narrow stamp, so subsequent label-only finalizes skip. No historical backfill
+  or production-data migration is required.
+- `omi_episode_compose_total{outcome,trigger}` counts runs by outcome and bounded
+  trigger (`close|read|member_final|settle`); `omi_episode_compose_seconds` carries
+  the same labels. `omi_episode_compose_calls_total{trigger,outcome}` counts each
+  paid model call, including `trigger="repair"`.
+  `omi_episode_compose_trigger_skipped_total{reason="evidence_unchanged"}` counts
+  avoided triggers. All have bounded labels and no user identifiers.
+- Triggers: close, member finalize (including `sync_update`, gated on the changed
+  member already loaded by finalization), a late member attaching to an
+  already-composed closed episode (`EPISODE_COMPOSE_LATE_ATTACH_ENABLED`, default
+  on; the attach memo can suppress the later finalize), and a
   read-side safety net in `home_read.project_episodes` for a closed episode that
   is uncomposed, drifted or whose visible members changed, closed over a minute
   ago (at most two per read, each episode at most every ten minutes per process).
   Runs on a small background pool, one run per episode at a time; never raises.
-- `project_episodes` leaves out a member that closed in under a minute with no notes
-  because it fell under the notes floor, unless the user curated it. Lookups and
+- `project_episodes` and the conversation list leave out completed below-floor
+  rows permanently, regardless of capture duration, age or lane, unless the user
+  curated them. Only unsettled provisional rows have a two-hour hold deadline. Lookups and
   search still reach it. Kill switch `HOME_HIDE_BELOW_FLOOR_ROWS` (on unless set off, read
   per request; changing it takes a new backend revision). Telemetry:
   `omi_episode_home_members_total{outcome}`.
 - Kill switch `EPISODE_COMPOSER` (on unless set off): off restores the live
-  notes as the final notes. Telemetry: `omi_episode_compose_total{outcome}` and
-  `omi_episode_compose_seconds`; usage adds `composer_*` counters.
+  notes as the final notes. Telemetry: `omi_episode_compose_total{outcome,trigger}`,
+  `omi_episode_compose_seconds` and `omi_episode_compose_calls_total{trigger,outcome}`;
+  usage adds `composer_*` counters.
+- `EPISODE_COMPOSER_THRIFT` (on unless set off) keeps paid composes: one repair
+  retry over the bad output alone, a title-and-lede compose for short episodes,
+  superseded results stored and marked pending, and a two-paid-failure cap. Off
+  restores discard-and-retry and the four-failure cap.
 
 ## Kill switch, cohort and client capability
 
 `config/episodes.py`:
 - `EPISODES_ENABLED` defaults on and is the kill switch.
-- `EPISODES_PERCENT` (default 100) and `EPISODES_UID_ALLOWLIST`
-  select the admitted cohort. The allowlist bypasses the percentage.
+- Every nonempty owner is admitted while the kill switch is on.
 
 Off makes `/v1/episodes/*` report `enabled: false`. Apps keep today's
 per-conversation UI, and episode lifecycle reads, writes and model calls stop.
@@ -331,6 +384,10 @@ builds, the desktop app and web never call any `/v1/episodes` route.
 - `omi_episode_provisional_items_total{outcome}`
 - `omi_episode_wrapup_latency_seconds`
 - `omi_episode_boundary_total`
+- `omi_episode_f_gate_total{reason}`: first candidate privacy refusal at Variant F settlement;
+  `held|client_processing|deferred|local_pending|local_only|row_consent|user_consent|locked_discarded|owner|status|hidden|other`
+- `omi_episode_f_fallback_total{site}`: fallback attribution by distinct bounded call site;
+  existing shared fallback reason values stay unchanged
 - `omi_episode_moments_skipped_no_client_total{trigger}`: admitted moments (and
   finalization tails, `trigger=finalize`) skipped because no capable client was seen
 - `omi_episode_live_sessions_total{client_seen}`: admitted live conversations at
@@ -380,6 +437,36 @@ transaction, including its four-hour cuts. This makes cap placement independent
 of arrival order. Old episode IDs redirect to the resulting window. Existing
 live/user/calendar boundaries stay authoritative; no historical scan/backfill
 is performed outside intake. Member/window/query budgets fail closed.
+
+Home list membership suppression is default-on via `HOME_HIDE_EPISODE_MEMBERS`,
+but requires admission, `episodes:client_seen` and this client's held replacement.
+`X-Omi-Home-Episode-Ids` carries at most 50 exact `episode_id:conversation_id`
+pairs from loaded metadata; larger or malformed headers are ignored. One
+batch validates at most five exact episode documents for members on this page;
+remaining members stay visible. Redirects are not followed. The server checks
+extant, unmerged episodes and
+retained completed members; unknown/unfetched episodes and unfinished rows stay
+visible. Old clients send no acknowledgement and keep their rows. The response's
+`X-Omi-Conversation-Page-Size` preserves the original page cursor and
+`X-Omi-Home-Suppressed-Ids` identifies omissions whose exact held snapshots the
+app retains locally, so replacing the overlay cannot orphan those members.
+Search and other filtered consumers do not opt in. No membership or title is
+written by this read projection. Turning member hiding off also restores ordinary
+list-version checks and cacheability, even when the client sends the header.
+A list read idle-closes at most two episodes, scheduling compose in that call
+outside the missed-compose cap. A successful close reuses its committed document;
+a lost close/activity CAS reads one exact snapshot, without redirect traversal.
+Other idle episodes keep their source rows while waiting for a later read.
+The bounded missed-compose safety net still covers other closed episodes.
+
+`HOME_NEUTRAL_MINIMUM_TITLES` defaults on. Home neutralizes floor/short server
+minimums (including exact legacy first-sentence matches when speech is already
+loaded) and the exact eight-word lazy placeholder. User edits, model provenance,
+ordinary titles and dead-letter terminal titles survive. Indexed lists and member
+metadata never refetch transcripts to infer provenance. Off restores stored titles.
+`EPISODE_OUTPUT_LANGUAGE_PIN=off` restores preference-then-capture resolution on
+conversation and episode paths. With the pin on, a supplied transcript must agree
+with a non-English capture tag; omitted segments retain the capture fallback.
 
 Each membership CAS writes `conversation.episode_id` alongside its overlay
 link. A conversation crossing the cap stays with its starting episode; only
@@ -476,3 +563,57 @@ When atomic sync intake appends meaningful speech, its new content revision
 invalidates an older automatic model/Jev/deterministic discard. Transport replays
 and content still needing fragment review retain the assessment; user decisions remain authoritative.
 The final-discard predicate continues to ignore the intake hint itself.
+
+Batch audio close attaches membership before queued transcription/finalization.
+`routers.listen.batch_close` preserves the archive barrier and reuses its existing
+conversation reread. `utils.episodes.batch_close` checks ownership, privacy,
+retention and episode/recorded-time admission, then calls `service.attach_recorded`
+with committed audio bounds. Live and sync attachment use that same primitive;
+neither the current pointer nor processing time selects a batch capture's owner.
+This metadata-only attachment is an explicit exception to the client-seen rule
+above: ownership must exist before transcription, even when an older client has
+not acknowledged episodes. It retains episode and recorded-time admission,
+adds no model work, and does not change paid-work gates. An attachment error
+emits shared `record_fallback` degraded telemetry before finalization repairs it.
+
+The scoped `EPISODE_BATCH_CLOSE_ATTACH_ENABLED` kill switch defaults on. Off
+restores attach-after-transcription without changing live/sync attachment.
+The membership transaction stamps a pending start and a fixed 2h transcription
+deadline on the conversation, using `config.batch_timeliness.SLA_SECONDS` (normal
+target: 30m). Close replay does not renew the deadline or bump the canonical
+recorded component's state version or timeline fence. Home reads use the durable
+`record_projection_revision` delivery receipt: until it exists they show
+“Transcribing…” / processing, then “Couldn't transcribe” / failed on terminal
+failure or deadline expiry. A late projection restores normal metadata. Audio
+bounds still supply a finish time if finalization failed before writing one.
+The unlabeled overdue-read counter counts observations, not unique members.
+Its info alert is staged beside the existing batch timeliness rules; idle
+members remain covered by queue timeliness monitoring. No production alert
+or runtime configuration is changed here.
+## One Home processing row (owner ruling, 2026-11-15)
+
+Home shows at most one processing row directly below the live episode, or at
+the top of Today without live capture. It represents every pending recording
+and closed episode for that day, even across finished rows. Finished episodes
+keep their own rows; terminal failures never enter the processing aggregate.
+The aggregate's page must retain links to every source episode and recording.
+The one-row invariant holds before capability negotiation and through 404/read
+errors. Server capability controls date/failure policy, never the row limit.
+Without confirmed day policy, pending work across days joins Today's one row;
+unknown steps say Transcribing and subtitles show a pending recording count.
+Processing Delete rechecks its initially displayed IDs against current cards,
+owners and conversations after confirmation. Any changed scope cancels the
+whole action with a notice; Undo only receives the exact current records that
+were staged. A READY member or composed replacement cannot be deleted through
+a stale processing confirmation.
+
+This is a client presentation contract. The episode API preserves distinct
+episode IDs and membership, and the conversation list preserves `episode_id`.
+Released clients reconstruct owners from those fields and sort by recording
+time independently of server response order. Rewriting them into a synthetic
+owner would also change detail, delete and acknowledgement semantics. A blank
+client aggregate must not resolve its page to the first overlapping episode:
+that would lose the other members. Server queue and compose waits can expose
+more pending objects, but cannot enforce this display rule on an old client.
+`tests/unit/test_home_pending_identity_contract.py` pins source identity and
+step preservation; Flutter Home tests own aggregation, placement and reachability.

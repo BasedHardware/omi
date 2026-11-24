@@ -60,3 +60,31 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{- define "pusher.conversationsV3StartupEnv" -}}
+{{- $env := .Values.conversationsV3StartupEnv -}}
+{{- if not (kindIs "map" $env) -}}
+  {{- fail "conversationsV3StartupEnv must be a map" -}}
+{{- end -}}
+{{- $required := list "CONVERSATIONS_V3" "CONVERSATIONS_V3_STAGE" "SYNC_TASKS_PROJECT" "SYNC_TASKS_LOCATION" "SYNC_TASKS_INVOKER_SA" -}}
+{{- $targets := list "CONVERSATIONS_V3_TASKS_URL" "SYNC_TASKS_HANDLER_URL" -}}
+{{- range $key := concat $required $targets -}}
+  {{- $value := get $env $key -}}
+  {{- if or (not (hasKey $env $key)) (not (kindIs "string" $value)) -}}
+    {{- fail (printf "conversationsV3StartupEnv.%s must be an explicit string" $key) -}}
+  {{- end -}}
+  {{- if or (contains "$(" $value) (contains "$$" $value) (and (has $key $required) (empty (trim $value))) -}}
+    {{- fail (printf "conversationsV3StartupEnv.%s must be a literal startup value" $key) -}}
+  {{- end -}}
+{{- end -}}
+{{- if ne (len $env) 7 -}}
+  {{- fail "conversationsV3StartupEnv accepts only the seven conversations-v3 startup keys" -}}
+{{- end -}}
+{{- if and (empty (trim $env.CONVERSATIONS_V3_TASKS_URL)) (empty (trim $env.SYNC_TASKS_HANDLER_URL)) -}}
+  {{- fail "conversationsV3StartupEnv requires a task target" -}}
+{{- end -}}
+{{- range $key, $value := $env }}
+- name: {{ $key }}
+  value: {{ $value | quote }}
+{{- end -}}
+{{- end -}}

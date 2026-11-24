@@ -27,3 +27,14 @@ def partial_barrier(row):
         and mark.get('upload_revision') == row.get('record_upload_revision')
         and mark.get('finished_at') == row.get('finished_at')
     )
+
+
+def repair_due(row, now):
+    """Age permits fresh proof, never removal of a partial custody barrier."""
+    from datetime import datetime
+
+    mark = row.get('record_audio_partial') or {}
+    stamp = mark.get('repair_attempted_at') or mark.get('finished_partial_at') or mark.get('finished_at')
+    return bool(
+        isinstance(stamp, datetime) and stamp.tzinfo is not None and now - stamp.timestamp() >= INVENTORY_POLL_SECONDS
+    )

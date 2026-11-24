@@ -526,11 +526,13 @@ def test_derived_vector_index_returns_ids_only_and_uses_versioned_namespace(monk
         def __init__(self):
             self.upserts = []
             self.deletes = []
+            self.queries = []
 
         def upsert(self, **kwargs):
             self.upserts.append(kwargs)
 
         def query(self, **kwargs):
+            self.queries.append(kwargs)
             assert kwargs['namespace'] == vector_db.WORKSTREAM_ASSOCIATION_NAMESPACE
             return {
                 'matches': [
@@ -543,8 +545,16 @@ def test_derived_vector_index_returns_ids_only_and_uses_versioned_namespace(monk
         def delete(self, **kwargs):
             self.deletes.append(kwargs)
 
+    raw_index = object()
     fake = FakeIndex()
-    monkeypatch.setattr(vector_db, 'index', fake)
+    routes = []
+
+    def route(raw, uid, **kwargs):
+        routes.append((raw, uid, kwargs))
+        return fake
+
+    monkeypatch.setattr(vector_db, 'index', raw_index)
+    monkeypatch.setattr(vector_db, 'owner_index', route)
     monkeypatch.setattr(vector_db, 'embeddings', SimpleNamespace(embed_query=lambda text: [0.1, 0.2]))
     monkeypatch.setattr(vector_db, 'external_write_fence', lambda *args, **kwargs: nullcontext())
 
@@ -558,7 +568,12 @@ def test_derived_vector_index_returns_ids_only_and_uses_versioned_namespace(monk
     assert vector_db.delete_workstream_association_vector('uid-1', 'ws-1')
     assert vector_db.reset_workstream_association_vectors('uid-1')
 
+    assert routes == [(raw_index, 'uid-1', {'index_name': vector_db._pinecone_index_name})] * 4
+    assert len(fake.upserts) == len(fake.queries) == 1
+    assert len(fake.deletes) == 2
+    assert fake.queries[0]['filter']['uid'] == {'$eq': 'uid-1'}
     record = fake.upserts[0]['vectors'][0]
+    assert record['metadata']['uid'] == 'uid-1'
     assert 'objective' not in record['metadata']
     assert record['metadata']['schema_version'] == 1
     assert all(call['namespace'] == vector_db.WORKSTREAM_ASSOCIATION_NAMESPACE for call in fake.deletes)

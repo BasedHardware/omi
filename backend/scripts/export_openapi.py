@@ -85,6 +85,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/frame-requests',
     '/v1/folders',
     '/v1/goals',
+    '/v1/home',
     '/v1/import',
     '/v1/integrations',
     # Released JIT paths remain static 410 tombstones for client compatibility.
@@ -123,9 +124,11 @@ APP_CLIENT_PREFIXES = (
     '/v2/firmware',
     '/v2/initial-message',
     '/v2/messages',
+    '/v2/sync-capture-end',
     '/v2/sync-capture-manifest',
     '/v2/sync-local-files',
     '/v2/tts',
+    '/v2/users/me/referral/campaign',
     '/v2/voice-message',
     '/v2/voice-messages',
     '/v3/memories',
@@ -138,6 +141,26 @@ AUDITED_PUBLIC_PREFIXES = (
     '/v1/conversations',
 )
 UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
+    (
+        'GET',
+        '/v1/conversations/live',
+    ): 'Firebase-authenticated first-party v3 capability/live row; not a Developer API key route.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/summary/stream',
+    ): 'Firebase-authenticated first-party on-open notes stream; not a Developer API key route.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/summary/live-catchup/stream',
+    ): 'Firebase-authenticated first-party live recap stream; not a Developer API key route.',
+    (
+        'POST',
+        '/v1/conversations/{conversation_id}/summary/open',
+    ): 'Firebase-authenticated first-party historical summary-on-open; not a Developer API key route.',
+    (
+        'POST',
+        '/v1/conversations/deletion-batch-purges/run',
+    ): 'Cloud Tasks worker on backend-sync, service OIDC only; not a browser, app or Developer API surface.',
     (
         'POST',
         '/v1/conversations/shared/chat',
@@ -251,6 +274,14 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         '/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
+        'GET',
+        '/v1/conversations/{conversation_id}/recording-speakers',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'PATCH',
+        '/v1/conversations/{conversation_id}/recording-speakers',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
         'POST',
         '/v1/conversations/{conversation_id}/speakers/{speaker_id}/reject',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
@@ -322,6 +353,14 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'POST',
         '/v1/conversations/search',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'POST',
+        '/v1/conversations/task-presence',
+    ): 'Firebase-authenticated first-party task membership metadata; not part of the Developer API key contract.',
+    (
+        'POST',
+        '/v1/conversations/with-tasks/page',
+    ): 'Firebase-authenticated first-party task-filtered conversation browse; not part of the Developer API key contract.',
     (
         'POST',
         '/v1/conversations/merge',

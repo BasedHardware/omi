@@ -25,6 +25,8 @@ export interface TranscriptionSocketOptions {
   onDisconnected: () => void;
   /** Authoritative conversation id from conversation_session events. */
   onConversationSession?: (conversationId: string) => void;
+  /** Explicit ready-event mode; absent on older servers means live. */
+  onServerBatch?: (isBatch: boolean) => void;
 }
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected';
@@ -305,6 +307,8 @@ export class TranscriptionSocket {
           if (segment.text.trim()) {
             this.options.onSegment(segment);
           }
+        } else if (data.type === 'service_status' && data.status === 'ready') {
+          this.options.onServerBatch?.(data.server_batch_only === true);
         }
         // Handle auth response (first-message authentication)
         else if (data.type === 'auth_response') {

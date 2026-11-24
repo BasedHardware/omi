@@ -25,6 +25,76 @@ void main() {
     await SharedPreferencesUtil.init(mirrorNativeAuthToken: false);
   });
 
+  test('successful initial refresh merges the newest page without dropping cached older pages', () async {
+    final start = DateTime.utc(2026, 10, 20, 12);
+    ServerConversation at(String id, DateTime time, String title) => ServerConversation(
+        id: id,
+        createdAt: time,
+        startedAt: time,
+        finishedAt: time.add(const Duration(minutes: 2)),
+        structured: Structured(title, 'Synthetic summary'));
+    final page = [for (var i = 0; i < 50; i++) at('fresh-$i', start.subtract(Duration(minutes: i * 3)), 'Fresh $i')];
+    final older = at('older-page', start.subtract(const Duration(days: 10)), 'Cached older page');
+    final boundaryTie = at('boundary-tie', page.last.createdAt, 'Cached next-page tie');
+    final deleted = at('deleted-older', start.subtract(const Duration(days: 11)), 'Pending deletion');
+    final overlap = at('fresh-0', start, 'Stale overlapping title');
+    final absent = at('absent-newer', start.add(const Duration(minutes: 3)), 'Absent in covered range');
+    final provider = ConversationProvider(
+        isSignedIn: () => true,
+        conversationListFetcher: () async => (items: page, ok: true),
+        dailySummariesChecker: () async => false)
+      ..conversations = [overlap, absent, older, boundaryTie, deleted];
+    provider.memoriesToDelete[deleted.id] = deleted;
+    addTearDown(provider.dispose);
+    await provider.getInitialConversations(checkDailySummaries: false);
+    expect(provider.conversations, hasLength(52));
+    expect(provider.conversations.any((c) => c.id == boundaryTie.id), isTrue,
+        reason: 'a storage timestamp tie can belong to the next page');
+    expect(provider.conversations.first.structured.title, 'Fresh 0');
+    expect(identical(provider.conversations.last, older), isTrue);
+    expect(provider.conversations.any((c) => c.id == deleted.id || c.id == absent.id), isFalse);
+  });
+
+  test('a delayed recording cannot redefine the storage boundary and drop cached history', () async {
+    final created = DateTime.utc(2026, 10, 20, 12);
+    final recorded = created.subtract(const Duration(days: 20));
+    final delayed = ServerConversation(
+        id: 'late-recording',
+        createdAt: created,
+        startedAt: recorded,
+        finishedAt: recorded.add(const Duration(minutes: 2)),
+        structured: Structured('Late recording', 'Summary'));
+    final cached = ServerConversation(
+        id: 'older-storage-page',
+        createdAt: created.subtract(const Duration(days: 1)),
+        structured: Structured('Cached history', 'Summary'));
+    final provider =
+        ConversationProvider(isSignedIn: () => true, conversationListFetcher: () async => (items: [delayed], ok: true))
+          ..conversations = [cached];
+    addTearDown(provider.dispose);
+    expect(await provider.fetchConversations(), isTrue);
+    expect(provider.conversations.map((c) => c.id), ['older-storage-page', 'late-recording']);
+  });
+
+  test('an older row discarded while a refresh waits cannot return from its starting snapshot', () async {
+    final start = DateTime.utc(2026, 10, 20);
+    final older = ServerConversation(
+        id: 'older',
+        createdAt: start.subtract(const Duration(days: 10)),
+        structured: Structured('Old cached row', 'Summary'));
+    final fresh = ServerConversation(id: 'fresh', createdAt: start, structured: Structured('Fresh page', 'Summary'));
+    final page = Completer<({List<ServerConversation> items, bool ok})>();
+    final provider = ConversationProvider(isSignedIn: () => true, conversationListFetcher: () => page.future)
+      ..conversations = [older];
+    addTearDown(provider.dispose);
+    final refreshing = provider.fetchConversations();
+    provider.upsertConversation(
+        ServerConversation(id: older.id, createdAt: older.createdAt, structured: older.structured, discarded: true));
+    page.complete((items: [fresh], ok: true));
+    expect(await refreshing, isTrue);
+    expect(provider.conversations.map((c) => c.id), ['fresh']);
+  });
+
   test('default provider restores a large stored cache through a completed worker', () async {
     await SharedPreferencesUtil().saveStringList(
         'cachedConversations', [for (var i = 0; i < 2000; i++) jsonEncode(_row('fixture-$i').toJson())]);

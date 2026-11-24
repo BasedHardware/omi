@@ -1,4 +1,4 @@
-"""Meeting edges are shared by storage, conversation, episode and merge policy."""
+"""Shared meeting evidence retains its storage and polling guarantees."""
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -7,19 +7,17 @@ import pytest
 
 from models.boundary_evidence import BoundarySignal
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from utils.episodes import boundaries, boundary_store, boundary_runtime, policy, service
+from utils.episodes import boundaries, boundary_store
 
-NOW = datetime(2026, 10, 22, 15, tzinfo=timezone.utc)
-ACCOUNT = 'test-account'
+NOW = datetime.now(timezone.utc).replace(microsecond=0)
+ACCOUNT = 'fixture-owner-39'
 
 
 @pytest.fixture
 def store(monkeypatch):
     # Signal retention must use the same clock as the fixed recorded fixtures.
     monkeypatch.setattr(boundary_store, 'datetime', SimpleNamespace(now=lambda tz: NOW))
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT', '100')
     db = StrictFirestore()
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'serve')
     monkeypatch.setattr(boundary_store, 'get_firestore_client', lambda: db)
     return db
 
@@ -44,57 +42,6 @@ def test_evidence_is_idempotent_and_late_retry_cannot_reopen(store):
     )
     assert boundary_store.record(ACCOUNT, [moved], firestore_client=store) == 1
     assert boundary_store.load(ACCOUNT, [boundary_store.signal_id(moved)], firestore_client=store) == [moved]
-
-
-@pytest.mark.parametrize(
-    'mode,closes,merges', [('serve', 'close', False), ('shadow', 'legacy', True), ('off', 'legacy', True)]
-)
-def test_boundary_closes_conversation_and_fences_merge_only_in_serve(store, monkeypatch, mode, closes, merges):
-    boundary_store.record(ACCOUNT, [signal()], firestore_client=store)
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', mode)
-    left = {'started_at': NOW - timedelta(minutes=5), 'finished_at': NOW}
-    right = {'started_at': NOW + timedelta(minutes=1)}
-    assert boundaries.conversation_decision(ACCOUNT, left, NOW + timedelta(seconds=1), firestore_client=store) == closes
-    assert boundaries.merge_allowed(ACCOUNT, left, right, firestore_client=store) is merges
-
-
-def test_no_split_inside_a_signal_but_end_and_quiet_are_hard(store):
-    boundary_store.record(ACCOUNT, [signal(ended_at=NOW + timedelta(minutes=30))], firestore_client=store)
-    row = {'started_at': NOW, 'finished_at': NOW + timedelta(minutes=10)}
-    assert boundaries.conversation_decision(ACCOUNT, row, NOW + timedelta(minutes=11), firestore_client=store) == 'hold'
-    assert (
-        boundaries.conversation_decision(ACCOUNT, row, NOW + timedelta(minutes=40), firestore_client=store) == 'close'
-    )
-    row['finished_at'] = NOW + timedelta(minutes=30)
-    assert (
-        boundaries.conversation_decision(ACCOUNT, row, NOW + timedelta(minutes=30), firestore_client=store) == 'close'
-    )
-
-
-def test_episode_start_closes_previous_and_opens_meeting_without_model_call(store, monkeypatch):
-    boundary_store.record(ACCOUNT, [signal()], firestore_client=store)
-    assert callable(service.new_episode)  # Warm the existing model stack during collection, outside the call budget.
-    previous = {'id': 'episode-test', 'started_at': NOW - timedelta(minutes=10)}
-    changes = []
-    monkeypatch.setattr(boundary_runtime.episodes_db, 'get_current_episode', lambda *a, **k: previous)
-    monkeypatch.setattr(boundary_runtime.episodes_db, 'close_episode', lambda *a, **k: changes.append(('close', a[2])))
-    monkeypatch.setattr(boundary_runtime.episodes_db, 'commit_moment', lambda *a, **k: changes.append(('open', k)))
-    assert boundary_runtime.apply_signal_edges(ACCOUNT, arrival_at=NOW, firestore_client=store) == 'opened'
-    assert changes[0] == ('close', 'boundary')
-    assert changes[1][1]['new_episode']['started_at'] == NOW
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'shadow')
-    changes.clear()
-    assert boundary_runtime.apply_signal_edges(ACCOUNT, arrival_at=NOW, firestore_client=store) == 'shadow'
-    assert changes == []
-
-
-def test_episode_policy_preserves_hard_cap_inside_meeting(store):
-    boundary_store.record(ACCOUNT, [signal()], firestore_client=store)
-    facts = policy.MomentFacts('conversation-test', 'omi', NOW + timedelta(minutes=2), NOW + timedelta(minutes=3))
-    chosen = boundary_runtime.decision(
-        ACCOUNT, {'started_at': NOW}, facts, policy.Boundary('close', 'hard_cap'), firestore_client=store
-    )
-    assert chosen.action == 'close' and chosen.reason == 'hard_cap'
 
 
 def test_calendar_and_screen_context_produce_signals():
@@ -123,53 +70,19 @@ def test_account_erasure_fences_new_evidence(store):
     assert len(store.rows) == 1
 
 
-def test_quiet_rule_ends_the_signal_so_later_ambient_capture_is_not_a_meeting(store):
-    boundary_store.record(ACCOUNT, [signal()], firestore_client=store)
-    row = {'started_at': NOW, 'finished_at': NOW + timedelta(minutes=1)}
-    assert (
-        boundaries.conversation_decision(ACCOUNT, row, NOW + timedelta(minutes=31), firestore_client=store) == 'close'
-    )
-    known = boundary_store.windows(ACCOUNT, firestore_client=store)
-    assert boundaries.active(known, NOW + timedelta(minutes=32)) == []
-    later = {'started_at': NOW + timedelta(minutes=32), 'finished_at': NOW + timedelta(minutes=33)}
-    assert (
-        boundaries.conversation_decision(ACCOUNT, later, NOW + timedelta(minutes=34), firestore_client=store)
-        == 'legacy'
-    )
-
-
 @pytest.mark.asyncio
-async def test_calendar_poll_is_bounded_and_off_mode_does_no_lookup(monkeypatch):
+async def test_calendar_poll_is_bounded():
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
     from routers.listen.boundary_poll import poll_calendar
 
     controller = SimpleNamespace(clock=lambda: NOW, _active_calendar_meeting=AsyncMock())
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'shadow')
     await poll_calendar(controller)
     await poll_calendar(controller)
     assert controller._active_calendar_meeting.await_count == 1
     controller.clock = lambda: NOW + timedelta(seconds=60)
     await poll_calendar(controller)
     assert controller._active_calendar_meeting.await_count == 2
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'off')
-    controller.clock = lambda: NOW + timedelta(seconds=120)
-    await poll_calendar(controller)
-    assert controller._active_calendar_meeting.await_count == 2
-
-
-@pytest.mark.asyncio
-async def test_off_mode_never_offloads_boundary_storage(monkeypatch):
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock
-    from routers.listen.boundary_poll import conversation_action, merge_permitted, ingest_calendar
-
-    controller = SimpleNamespace(host=SimpleNamespace(persistence=SimpleNamespace(call=AsyncMock())))
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'off')
-    assert await conversation_action(controller, {}) == 'legacy'
-    assert await merge_permitted(controller, {})
-    await ingest_calendar(controller, {})
-    controller.host.persistence.call.assert_not_awaited()
 
 
 def test_full_index_evicts_old_terminal_edges_but_preserves_active_signals(store):
@@ -198,14 +111,13 @@ def test_seven_day_retention_evicts_expired_edges_with_the_explicit_store_clock(
     assert boundary_store.signal_id(fresh) in boundary_store.windows(ACCOUNT, firestore_client=store)
 
 
-def test_shadow_tick_reads_and_context_ingest_are_bounded_to_sixty_seconds(store, monkeypatch):
+def test_shared_reads_and_context_ingest_are_bounded_to_sixty_seconds(store, monkeypatch):
     from cachetools import TTLCache
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
 
     clock = [0.0]
-    monkeypatch.setattr(boundary_store, '_shadow_windows', TTLCache(maxsize=8, ttl=60, timer=lambda: clock[0]))
+    monkeypatch.setattr(boundary_store, '_recent_windows', TTLCache(maxsize=8, ttl=60, timer=lambda: clock[0]))
     monkeypatch.setattr(boundary_store, '_seen_contexts', TTLCache(maxsize=8, ttl=60, timer=lambda: clock[0]))
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'shadow')
     original = StrictFirestoreDocument.get
     reads = []
 
@@ -225,21 +137,19 @@ def test_shadow_tick_reads_and_context_ingest_are_bounded_to_sixty_seconds(store
             }
         },
     }
-    for tick in range(12):
-        assert (
-            boundaries.conversation_decision(ACCOUNT, row, NOW + timedelta(seconds=tick * 5), firestore_client=store)
-            == 'legacy'
-        )
+    for _ in range(12):
+        boundaries.ingest_context(ACCOUNT, row['external_data']['calendar_meeting_context'], firestore_client=store)
+        assert boundary_store.windows(ACCOUNT, firestore_client=store)
     assert len(store.transactions) == 1
     assert len(reads) == 4  # deletion, state, payload, then one cached window read
     clock[0] = 61
-    boundaries.conversation_decision(ACCOUNT, row, NOW + timedelta(seconds=61), firestore_client=store)
+    boundaries.ingest_context(ACCOUNT, row['external_data']['calendar_meeting_context'], firestore_client=store)
+    assert boundary_store.windows(ACCOUNT, firestore_client=store)
     assert len(store.transactions) == 2
     assert len(reads) == 8
 
 
-def test_shadow_cache_is_owner_scoped_invalidated_by_writes_and_bypassed_in_serve(store, monkeypatch):
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'shadow')
+def test_shared_cache_is_owner_scoped_and_invalidated_by_writes(store):
     assert boundary_store.windows(ACCOUNT, firestore_client=store) == {}
     boundary_store.record(ACCOUNT, [signal()], firestore_client=store)
     assert len(boundary_store.windows(ACCOUNT, firestore_client=store)) == 1
@@ -248,8 +158,6 @@ def test_shadow_cache_is_owner_scoped_invalidated_by_writes_and_bypassed_in_serv
     assert boundary_store.windows(ACCOUNT, firestore_client=other) == {}
     store.rows[('users', ACCOUNT, 'capture_boundary_state', 'v1')] = {'entries': {}}
     assert len(boundary_store.windows(ACCOUNT, firestore_client=store)) == 1
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'serve')
-    assert boundary_store.windows(ACCOUNT, firestore_client=store) == {}
 
 
 def test_noncalendar_start_is_still_immutable(store):
@@ -272,12 +180,19 @@ def test_saved_context_cannot_rewind_an_authoritative_calendar_reschedule(store)
 
 
 @pytest.mark.parametrize(
-    'mode,sample,writes', [('off', '100', 0), ('shadow', '0', 0), ('shadow', '100', 1), ('serve', '0', 1)]
+    'uid,stored',
+    [('fixture-owner-39', True), ('fixture-owner-0', False)],
 )
-def test_boundary_shadow_writes_are_sampled(store, monkeypatch, mode, sample, writes):
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', mode)
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE_SERVE_PERCENT', '0')
-    monkeypatch.delenv('EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S', raising=False)
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT', sample)
-    assert boundary_store.record(ACCOUNT, [signal()], firestore_client=store) == writes
-    assert bool(store.rows) == bool(writes)
+def test_shared_call_and_relevance_inputs_keep_the_production_sample(store, monkeypatch, uid, stored):
+    from utils.conversations import call_metadata, relevance_media
+
+    evidence = signal(ended_at=NOW + timedelta(minutes=20), meeting_link='https://meet.google.com/abc-defg-hij')
+    assert boundary_store.record(uid, [evidence], firestore_client=store) == int(stored)
+    assert relevance_media._boundaries(uid) == ([evidence] if stored else [])
+
+    monkeypatch.setenv(call_metadata.FLAG, 'serve')
+    conversation = SimpleNamespace(started_at=NOW, finished_at=NOW + timedelta(minutes=10), is_call=None)
+    call_metadata.apply_call_metadata(uid, conversation)
+    assert conversation.is_call is (True if stored else None)
+    if stored:
+        assert conversation.calendar_event_id == evidence.external_id

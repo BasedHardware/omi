@@ -1,3 +1,13 @@
+"""Developer-platform API (/v1/dev/*): transcript ingestion into conversations,
+plus memories, action items, facts, folders, apps and people for SDK clients.
+
+This is a released-client surface: request/response shapes are consumed by the
+shipped Python CLI SDK (sdks/python-cli) and external tooling, and the
+from-segments intake carries capture evidence lineage, so compatibility rules
+apply here that do not apply to app-facing routes.
+"""
+
+from utils.conversations.layer import read_product as read_product_conversation
 from models.developer_transcript import SimpleTranscriptSegment
 from routers import developer_segments
 from routers.developer_segments_models import (
@@ -27,7 +37,6 @@ import database.daily_summaries as daily_summaries_db
 from database._client import db
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
-from utils.list_version_check import ListVersionCheck
 
 from models.calendar_context import DevCalendarMeetingContext
 from models.folder import Folder
@@ -80,6 +89,10 @@ from dependencies import (
 from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
+from utils.other.from_segments_503 import FromSegments503Route
+from utils.other.raise_site import raise_site_of
+from utils.other.request_deadline import RequestDeadlineExceeded, from_segments_request_deadline
+from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.observability.external_lists import (
     observe_action_items_page,
@@ -88,6 +101,10 @@ from utils.observability.external_lists import (
 )
 from utils.observability.firestore_request_reads import ReadComponent, read_component
 from utils import external_list_reads as external_lists
+from utils import external_polling_cache as polling_cache
+from utils.developer_item_reads import project_structured_defaults, read_conversation_item
+from utils.conversations import transcribing_hold
+from config.episodes import home_transcription_presentation_gate_enabled
 from utils.mcp_server.handlers.conversations import conversation_cards_page_core
 from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.helpers import conversation_participants
@@ -131,7 +148,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(route_class=external_lists.ExternalListCacheRoute)
+router = APIRouter(route_class=FromSegments503Route)
 FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
@@ -861,16 +878,9 @@ def get_action_items(
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
     observe_action_items_page(limit, offset)
-    version_check = ListVersionCheck.start(request, uid, 'action_items')
-    if version_check.not_modified is not None:
-        return version_check.not_modified
     with read_component(ReadComponent.OTHER):
         budget = list_read_budget_for_request(request, route='developer-action-items', owner_uid=uid, context=auth)
-        cached = (
-            external_lists.cached_external_list(request, response, auth, locals())
-            if not (version_check.active and 'lp1-' in request.headers.get('if-none-match', ''))
-            else None
-        )
+        cached = external_lists.cached_external_list(request, response, auth, locals())
         observe_action_items_shape(
             conversation_id is not None, start_date is not None or end_date is not None, completed, cached is not None
         )
@@ -891,7 +901,6 @@ def get_action_items(
     valid_action_items = external_lists.validate_developer_action_items(action_items, ActionItemResponse, uid, logger)
     observe_action_items_rows('returned', len(valid_action_items))
     finish_list_budget(response, budget)
-    version_check.finish(response, truncated=budget.truncated)
     return valid_action_items
 
 
@@ -1284,7 +1293,15 @@ def get_developer_daily_summary(
     status = 500
     returned_count = 0
     try:
+        negative_key = polling_cache.negative_key(request, auth.uid, auth, summary_id)
+        if negative_key and polling_cache.missing(external_lists._redis(), negative_key):
+            status = 404
+            raise HTTPException(
+                404, detail='Daily summary not found', headers={'X-Omi-List-Cache': 'negative; max-age=10'}
+            )
         summary = daily_summaries_db.get_daily_summary(auth.uid, summary_id)
+        if summary is None and negative_key:
+            polling_cache.remember_missing(external_lists._redis(), negative_key)
         if not summary:
             status = 404
             raise HTTPException(status_code=404, detail='Daily summary not found')
@@ -1332,17 +1349,16 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     folders = folders_db.get_folders(uid)
     valid_folders = []
     for folder in folders:
-        if not folder or not folder.get('id'):
+        if not folder or not folder.id:
             logger.warning('Skipping malformed folder in Developer API folder list')
             continue
         try:
-            DeveloperFolder.model_validate(folder)
-            valid_folders.append(folder)
+            DeveloperFolder.model_validate(folder.model_dump(exclude_unset=True))
+            valid_folders.append(folder.model_dump(exclude_unset=True))
         except ValidationError as e:
             invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
             logger.warning(
-                f"Skipping invalid folder doc {folder.get('id', 'unknown')} for uid {uid}: "
-                f"missing/invalid fields {invalid_fields}"
+                f"Skipping invalid folder doc {folder.id} for uid {uid}: " f"missing/invalid fields {invalid_fields}"
             )
             continue
     return valid_folders
@@ -1516,7 +1532,11 @@ def get_conversations(
             raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
         budget = external_lists.developer_conversation_offset_budget(request, response, offset, auth)
-        cached = external_lists.cached_external_list(request, response, auth, locals())
+        cached = (
+            external_lists.cached_external_list(request, response, auth, locals())
+            if not home_transcription_presentation_gate_enabled()
+            else None
+        )
         if cached is not None:
             status = 200
             returned_count = len(json.loads(bytes(cached.body)))
@@ -1535,7 +1555,13 @@ def get_conversations(
                     end_dt=end_date,
                     categories=[c.value for c in category_list],
                     cursor_kind="developer_conversations",
-                    extra_field_paths=["structured", "source", "geolocation", "folder_id"],
+                    extra_field_paths=[
+                        "structured",
+                        "source",
+                        "geolocation",
+                        "folder_id",
+                        *transcribing_hold.READ_FIELDS,
+                    ],
                     **budget_kwargs,
                 )
             except ToolExecutionError as exc:
@@ -1551,6 +1577,7 @@ def get_conversations(
                 limit + 1,
                 offset,
                 include_discarded=False,
+                presentation=True,
                 statuses=["completed"],
                 start_date=start_date,
                 end_date=end_date,
@@ -1575,6 +1602,7 @@ def get_conversations(
         # Filter out locked conversations completely
         unlocked_conversations = [conv for conv in conversations if not conv.get('is_locked', False)]
 
+        unlocked_conversations = [transcribing_hold.project(row) for row in unlocked_conversations]
         for conv in unlocked_conversations:
             conv.update(conversation_participants(conv, include_display=False))
             conv['transcript_included'] = include_transcript
@@ -1596,7 +1624,7 @@ def get_conversations(
                 logger.warning('Skipping malformed conversation in Developer API conversation list')
                 continue
             try:
-                valid_conversations.append(Conversation.model_validate(conv))
+                valid_conversations.append(Conversation.model_validate(project_structured_defaults(conv)))
             except ValidationError as e:
                 invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
                 logger.warning(
@@ -1722,56 +1750,18 @@ def get_conversation_endpoint(
     - **include_transcript**: If True, includes full transcript_segments in the response
     """
     ignore_unknown_query(request, {"include_transcript"}, response)
-    auth = uid
-    uid = auth.uid
-    status = 500
-    returned_count = None
-    try:
-        if include_transcript:
-            check_conversation_transcript_read_limit(auth, request=request)
-
-        conversation = conversations_db.get_conversation(uid, conversation_id)
-        if not conversation or conversation.get('deleted', False):
-            status = 404
-            returned_count = 0
-            raise HTTPException(status_code=404, detail="Conversation ID not found or unknown conversation sub-route")
-
-        # Filter out locked conversations
-        if conversation.get('is_locked', False):
-            status = 404
-            returned_count = 0
-            raise HTTPException(status_code=404, detail="Conversation ID not found or unknown conversation sub-route")
-
-        from utils.mcp_server.helpers import conversation_participants
-
-        conversation.update(conversation_participants(conversation, include_display=False))
-        conversation['transcript_included'] = include_transcript
-
-        # Remove transcript_segments if not requested
-        if not include_transcript:
-            conversation.pop('transcript_segments', None)
-        else:
-            populate_speaker_names(uid, [conversation], preserve_api_values=True)
-
-        populate_folder_names(uid, [conversation])
-
-        status = 200
-        returned_count = 1
-        return conversation
-    except HTTPException as e:
-        status = e.status_code
-        returned_count = 0 if returned_count is None else returned_count
-        raise
-    finally:
-        _audit_developer_read(
-            request=request,
-            auth=auth,
-            operation='get_conversation',
-            status=status,
-            include_transcript=include_transcript,
-            returned_count=returned_count,
-            resource_id=conversation_id,
-        )
+    return read_conversation_item(
+        conversation_id,
+        include_transcript,
+        uid,
+        request,
+        conversations_db=conversations_db,
+        cache_client=external_lists._redis,
+        check_transcript=check_conversation_transcript_read_limit,
+        populate_speaker_names=populate_speaker_names,
+        populate_folder_names=populate_folder_names,
+        audit=_audit_developer_read,
+    )
 
 
 def _from_segments_conversation_id(uid: str, client_session_id: str) -> str:
@@ -2138,6 +2128,7 @@ def _ingest_conversation_from_segments(
     source = request.source or ConversationSource.phone
 
     conversation_id = None
+    resumable_conversation = None
     if request.client_session_id:
         conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
         # One point read suppresses retries even when a prior delete failed during cleanup.
@@ -2155,11 +2146,20 @@ def _ingest_conversation_from_segments(
                 conversation_id,
             )
             return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
-        existing_conversation = conversations_db.get_conversation(
-            uid, conversation_id, read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY
+        existing_conversation = read_product_conversation(
+            conversations_db.get_conversation,
+            uid,
+            conversation_id,
+            read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY,
         )
         if existing_conversation:
-            if _is_stale_from_segments_claim(
+            metadata = existing_conversation.get('external_data') or {}
+            if (
+                existing_conversation.get('status') == ConversationStatus.in_progress
+                and metadata.get('from_segments_client_session_id') == request.client_session_id
+            ):
+                resumable_conversation = OmiConversation.model_validate(existing_conversation)
+            elif _is_stale_from_segments_claim(
                 existing_conversation, request.client_session_id, datetime.now(timezone.utc)
             ):
                 logger.warning(
@@ -2220,8 +2220,19 @@ def _ingest_conversation_from_segments(
         }
     OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(path='from_segments', status=evidence_status).inc()
 
-    # Create conversation object with transcript segments
-    if conversation_id:
+    # Reuse the persisted transcript and metadata on a budget retry.
+    if resumable_conversation is not None:
+        if not lifecycle_service.admit_processing(
+            uid,
+            resumable_conversation.id,
+            extra_updates={'external_data.from_segments_claimed_at': datetime.now(timezone.utc)},
+        ):
+            raise HTTPException(status_code=409, detail="Conversation creation already in progress")
+        resumable_conversation.status = ConversationStatus.processing
+        create_conversation_obj = resumable_conversation
+        client_projection = resumable_conversation.client_processing
+        language_code = resumable_conversation.language or 'en'
+    elif conversation_id:
         create_conversation_obj = OmiConversation(
             id=conversation_id,
             created_at=started_at,
@@ -2259,7 +2270,7 @@ def _ingest_conversation_from_segments(
         if client_projection is not None:
             create_payload.update(client_processing_mutation(client_projection))
         if not lifecycle_service.create_processing_conversation(uid, create_payload, idempotent=True):
-            existing_conversation = conversations_db.get_conversation(uid, conversation_id)
+            existing_conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
             if existing_conversation:
                 logger.info(
                     "from-segments idempotency concurrent hit for uid=%s client_session_id=%s conversation_id=%s",
@@ -2302,7 +2313,7 @@ def _ingest_conversation_from_segments(
     # Process conversation. The idempotent (client_session_id) path creates a
     # processing row; the admission guard's lease heartbeat keeps it fresh so the
     # crash-orphan sweep can never terminalize active work. rollback_on_failure is
-    # False because this path owns its own recovery (delete on exception below).
+    # False because this path retains the row only for a request budget cut.
     # Only pass client_projection when accepted: mocks and other callers that
     # still use a 3-positional signature stay compatible, and omitting it is
     # the same as None on the coordinator.
@@ -2320,9 +2331,18 @@ def _ingest_conversation_from_segments(
                 conversation = process_conversation(uid, language_code, create_conversation_obj, **process_kwargs)
         else:
             conversation = process_conversation(uid, language_code, create_conversation_obj, **process_kwargs)
-    except Exception:
-        if request.client_session_id and conversation_id:
-            conversations_db.delete_conversation(uid, conversation_id)
+    except Exception as error:
+        budget_cut = isinstance(error, RequestDeadlineExceeded) or raise_site_of(error) == 'request_budget_exhausted'
+        if conversation_id:
+            if budget_cut:
+                try:
+                    lifecycle_service.rollback_processing_admission(uid, conversation_id)
+                except Exception:
+                    logger.warning('from_segments_budget_claim_rollback_failed')
+            else:
+                conversations_db.delete_conversation(uid, conversation_id)
+        if isinstance(error, RequestDeadlineExceeded):
+            raise conversation_processing_http_exception(error) from error
         raise
     # Non-idempotent ingest: the coordinator's generic persist stripped the
     # field (paid / flag-off deferred). Stamp it now. The session-id path
@@ -2405,6 +2425,7 @@ def _ingest_conversation_from_segments(
 def create_conversation_from_segments_user(
     request: CreateConversationFromTranscriptRequest,
     http_request: Request,
+    _deadline: Any = Depends(from_segments_request_deadline),
     uid: str = Depends(with_rate_limit(get_current_user_uid, "conversations:from-segments")),
 ):
     """Create a conversation from already-transcribed segments (Firebase-authed).
@@ -2557,7 +2578,7 @@ def update_conversation_endpoint(
     - **title**: New title for the conversation (optional)
     - **discarded**: Whether the conversation is discarded (optional)
     """
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
@@ -2575,10 +2596,10 @@ def update_conversation_endpoint(
         else:
             lifecycle_service.restore_discarded(uid, conversation_id)
 
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if conversation:
         populate_folder_names(uid, [conversation])
-    return conversation
+    return project_structured_defaults(conversation) if conversation else conversation
 
 
 # ******************************************************
@@ -2708,14 +2729,28 @@ def get_goals(
 def get_goal(
     goal_id: str,
     uid: str = Depends(get_uid_with_goals_read),
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+    request: Request = None,
 ):
     """
     Get a single goal by ID.
 
     - **goal_id**: The ID of the goal to retrieve
     """
-    goals = goals_db.get_all_goals(uid, include_inactive=True)
-    goal = next((g for g in goals if g.get('id') == goal_id), None)
+    negative_key = polling_cache.negative_key(request, uid, auth, goal_id)
+    if negative_key and polling_cache.missing(external_lists._redis(), negative_key):
+        raise HTTPException(404, detail='Goal not found', headers={'X-Omi-List-Cache': 'negative; max-age=10'})
+    if negative_key:
+        try:
+            goal = goals_db.get_goal_by_id(uid, goal_id)
+        except (AttributeError, TypeError, ValueError):
+            goal = None  # List projection also hides corrupt rows; never cache them as absent.
+        else:
+            if goal is None:
+                polling_cache.remember_missing(external_lists._redis(), negative_key)
+    else:
+        goals = goals_db.get_all_goals(uid, include_inactive=True)
+        goal = next((g for g in goals if g.get('id') == goal_id), None)
 
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")

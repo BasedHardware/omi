@@ -8,6 +8,7 @@ missing key, four concurrent schedulers leasing every job once) is in
 from __future__ import annotations
 
 from contextlib import contextmanager
+import math
 
 import pytest
 
@@ -37,10 +38,11 @@ class Conn:
         yield
 
     def execute(self, sql, params=()):
-        self.sql.append(sql)
-        if self.fail and self.fail[0] in sql:
+        text = sql.as_string(None) if hasattr(sql, 'as_string') else sql
+        self.sql.append(text)
+        if self.fail and self.fail[0] in text:
             raise self.fail[1]
-        if sql.startswith('SELECT doc FROM'):
+        if text.startswith('SELECT doc FROM'):
             key = params[-1]
             return Result((self.docs[key],) if key in self.docs else None)
         return Result()
@@ -63,6 +65,24 @@ class SqlError(Exception):
 
 def store(conn):
     return pg.PostgresStore('batch_pipeline_test_lock', pool=Pool(conn), customer_client=None)
+
+
+@pytest.mark.parametrize('method', ['oldest', 'oldest_retry'])
+def test_queue_age_skips_dispositions_and_reports_saturated_scans_as_unknown(method):
+    class AgeConn(Conn):
+        def __init__(self, rows):
+            super().__init__()
+            self.rows = rows
+
+        def execute(self, sql, params=()):
+            assert params[-1] == 501
+            return Result(rows=self.rows)
+
+    disposed = {'state': 'quarantined'}
+    active = {'state': 'result_ready', 'terminal_disposition': {'state': 'completed'}}
+    assert getattr(store(AgeConn([(1, disposed), (2, active)])), method)(0) == 2
+    assert getattr(store(AgeConn([(1, disposed)])), method)(0) is None
+    assert math.isnan(getattr(store(AgeConn([(1, disposed)] * 501)), method)(0))
 
 
 def test_transactions_run_read_committed_with_a_bounded_lock_wait():
@@ -135,3 +155,28 @@ def test_other_errors_are_not_retried():
     with pytest.raises(KeyError):
         store(Conn()).run(body)
     assert calls == [1]
+
+
+def test_observation_never_starts_a_connection_or_credential_refresh():
+    from database.jobstore.connection import Pool as ConnectionPool
+
+    pool = ConnectionPool('', connect=lambda: pytest.fail('observation initiated a connection'))
+    with pytest.raises(TimeoutError, match='warm connection'):
+        with pool.connection(existing_only=True):
+            pytest.fail('an empty pool cannot lend a connection')
+    pool.close()
+
+
+def test_get_existing_distinguishes_absent_and_empty_after_legacy_get_and_buffered_put():
+    conn = Conn(docs={'empty': {}})
+
+    def body(tx):
+        assert tx.get('backlog_release', 'empty') == {}
+        assert tx.get('backlog_release', 'absent') == {}
+        assert tx.get_existing('backlog_release', 'empty') == {}
+        assert tx.get_existing('backlog_release', 'absent') is None
+        tx.put('backlog_release', 'absent', {})
+        assert tx.get_existing('backlog_release', 'absent') == {}
+
+    store(conn).run(body)
+    assert sum('pg_advisory_xact_lock' in sql for sql in conn.sql) == 1

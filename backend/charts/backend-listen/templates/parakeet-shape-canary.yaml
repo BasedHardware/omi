@@ -1,0 +1,8 @@
+{{- if (.Values.parakeetShapeCanary | default dict).enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: parakeet-shape-route
+data:
+  route.json: '{"percent":0,"expires":0}'
+{{- end }}

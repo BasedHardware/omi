@@ -64,7 +64,10 @@ The repository has more specific rules for some kinds of change. Your agent or `
   <Accordion title="Fix classification and new checks">
 
 **Classify reactive fixes.** A `fix:` commit responds to a triggering defect
-and must declare `Failure-Class: FC-<slug> | new | none` in its PR body. A
+and must declare exactly one of `Failure-Class: FC-<slug>`, `Failure-Class: new`
+or `Failure-Class: none` in its PR body. Every class belongs to one contract family
+(`.github/failure-class-families.json`); reuse a class in the family before declaring
+`new`. A
 `harden:` commit strengthens a boundary or contract without a triggering
 incident; it may cite a class but needs no declaration. The validator is
 offline and required; its `report` command is advisory and only identifies
@@ -81,6 +84,12 @@ sets `status` to `open` and removes `dormant_since`, then classify the instance
 fix. IDs use stable semantic lower-kebab slugs such as `FC-malformed-doc-read`;
 use `scripts/failure-class prepare` or `explain` for the exact field and
 relevant context.
+
+Temporary Git fixtures must clear the variables reported by
+`git rev-parse --local-env-vars`, plus `GIT_NAMESPACE`, before running Git or
+checks that invoke Git. `scripts/pr-preflight` resolves and enters the selected
+worktree before clearing this environment for its child checks; standalone
+Python script fixtures can use `scripts/git_test_env.py`.
 
 **Prefer primitives to guards.** Before adding a check or ratchet, answer in
 the PR body: "Why isn't this a shared primitive instead?" A new guard must

@@ -19,7 +19,7 @@ def main() -> None:
     client = firestore.Client(project=project, credentials=AnonymousCredentials())
     uid = f'fs-p2-{uuid.uuid4().hex}'
     install_write_heads()
-    os.environ['MEMORY_RELEASED_WRITERS_COVERED'] = 'v1:emulator-test'
+    os.environ['MEMORY_RELEASED_WRITERS_COVERED'] = 'v2:emulator-test'
     os.environ['MEMORY_RELEASED_PROJECTION'] = 'on'
     root = f'users/{uid}'
     item = client.document(f'{root}/memory_items/a')

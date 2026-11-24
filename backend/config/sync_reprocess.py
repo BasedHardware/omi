@@ -17,7 +17,6 @@ margin lever — the dedupe savings (~$6-9/day weekday) were already live:
 import os
 
 from config.refactor_modes import default_off, default_on, serving_for
-from config.repeat_work import revision_reuse
 
 
 def _outbox_runtime() -> bool:
@@ -29,24 +28,63 @@ def _outbox_runtime() -> bool:
 def _enabled(name: str, *, default: bool) -> bool:
     raw = os.getenv(name)
     if serving_for('CAPTURE_COVERAGE_MODE', None):
-        # Explicit child configuration wins; only an absent child inherits revision reuse.
-        return revision_reuse() if raw is None else default_off(name)
+        # Preserve the former revision-off serve-mode default: only explicit children opt in.
+        return False if raw is None else default_off(name)
     if raw is None or not raw.strip():
         # A blank value is an unset value, never a blank kill switch: a dev host
         # must not fall onto the outbox path through an empty token.
-        return revision_reuse() or default
+        return default
     # Kill-switch grammar outside serve mode: an explicit false word turns the
     # switch off; anything else keeps the serving default (warn-once on typos).
     # refactor: superseded by explicit child precedence when CAPTURE_COVERAGE_MODE=serve
-    return revision_reuse() or default_on(name)
+    return default_on(name)
 
 
 def coalesce_enabled() -> bool:
     return _enabled('SYNC_REPROCESS_COALESCE_ENABLED', default=_outbox_runtime())
 
 
+def early_abort_enabled() -> bool:
+    """Kill switch: stop an enrichment run before its LLM work once its conversation's sync revision moved.
+
+    On unless set to a false word. The checks only read ``sync_content_revision``; off restores running
+    every doomed reprocess to the persist fence.
+    """
+    from config.refactor_modes import default_on as kill_switch_on
+
+    return kill_switch_on('ENRICHMENT_EARLY_ABORT_ENABLED')
+
+
+def fence_redirect_transfer_enabled() -> bool:
+    """Kill switch: a persist-fenced enrichment run whose row a merge redirected transfers custody, not discards."""
+    from config.refactor_modes import default_on as kill_switch_on
+
+    return kill_switch_on('ENRICHMENT_FENCE_REDIRECT_TRANSFER_ENABLED')
+
+
 def dedupe_enabled() -> bool:
     return _enabled('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', default=True)
+
+
+# Mirrors ``utils.enrichment.outbox.LIVE_DEFER_SECONDS``, the legacy sync handler's
+# empty-output defer. Kept here so the push consumer reads the same default without a
+# config -> utils import.
+DEFAULT_EMPTY_OUTPUT_BACKOFF_SECONDS = 120
+
+
+def empty_output_backoff_seconds() -> int:
+    """Kill switch: how long an empty first summary waits before its next attempt.
+
+    Default 120s, matching the legacy ``sync_handler`` defer. ``0`` restores the
+    immediate 409 that let Cloud Tasks rerun the callback at once (SCA-3667).
+    """
+    raw = os.getenv('ENRICHMENT_EMPTY_OUTPUT_BACKOFF_SECONDS', '').strip()
+    if not raw:
+        return DEFAULT_EMPTY_OUTPUT_BACKOFF_SECONDS
+    try:
+        return max(0, min(3600, int(raw)))
+    except ValueError:
+        return DEFAULT_EMPTY_OUTPUT_BACKOFF_SECONDS
 
 
 def settle_seconds() -> int:

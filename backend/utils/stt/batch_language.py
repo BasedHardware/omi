@@ -5,6 +5,7 @@ No recognizer text participates in the decision. Errors/uncertainty stay multili
 """
 
 from dataclasses import dataclass, replace
+import hashlib
 from io import BytesIO
 import math
 import os
@@ -17,6 +18,7 @@ from config.prerecorded_language import (
     MIN_AUDIO_LID_CONFIDENCE,
     audio_lid_confidence_floor,
     language_class,
+    language_gate_confident_skip,
     language_gate_shadow_enabled,
     language_guard_enabled,
     self_lid_confidence_floor,
@@ -32,6 +34,7 @@ from utils.stt.vendor_guard import (
     record_breaker_quota_error,
     record_breaker_success,
     record_vendor_burn,
+    record_vendor_payload,
 )
 
 MAX_PROBE_SECONDS = 30
@@ -161,6 +164,7 @@ def _detect(audio: bytes, *, before_probe=None, **audio_options) -> tuple[Langua
             return decision, outcome
         with httpx.Client(timeout=httpx.Timeout(8, connect=2)) as client:
             sent = True
+            record_vendor_payload('modulate', 'lid', len(body))
             response = client.post(
                 LID_URL, headers={'X-API-Key': key}, files={'upload_file': ('language.wav', body, 'audio/wav')}
             )
@@ -236,6 +240,22 @@ def _self_verdict(probe: bytes, probe_seconds: float, surface: str, *, before_pr
     return verdict
 
 
+def self_language_class(audio: bytes, *, before_probe=None) -> str:
+    """The self gate's top-1 capability for one bounded window of speech, or 'unavailable'.
+
+    A continuity check on speech after a vendor-admitted sample, never admission by itself. On
+    prerecorded shadow (24 h, probes >= 10 s), the P(supported) floor refused 62% of probes the
+    vendor called Parakeet-safe; the top-1 named an unsupported language on 3.6% of those and on
+    ~85% of probes the vendor called an unsupported language.
+    """
+    try:
+        probe, seconds = probe_wav(audio)
+    except Exception:
+        return 'unavailable'
+    verdict = _self_verdict(probe, seconds, 'batch', before_probe=before_probe)
+    return 'unavailable' if verdict is None else language_class(verdict.language)
+
+
 def _outage_fallback(audio, surface, audio_options, verdict, *, before_probe=None) -> LanguageDecision | None:
     """The vendor probe is down: use the self-hosted gate's verdict under its own confidence floor.
 
@@ -289,6 +309,35 @@ def compare_shadow_pair(audio: bytes, *, before_call, surface='batch_shadow') ->
     return verdict is not None and vendor.evidence == 'audio_lid' and vendor.confidence >= 0.9
 
 
+# Share of skippable probes that still pay the vendor, so the shadow agreement series
+# (omi_stt_language_gate_shadow_total) keeps measuring what the skip decides.
+CONFIDENT_SKIP_AUDIT_PERCENT = 5
+
+
+def _confident_skip_audited(audio: bytes) -> bool:
+    digest = hashlib.sha256(audio).digest()
+    return int.from_bytes(digest[:8], 'big') % 100 < CONFIDENT_SKIP_AUDIT_PERCENT
+
+
+def _confident_skip_route(verdict: language_gate.SelfVerdict | None) -> str | None:
+    """The route a confident shadow verdict decides on its own, or None to ask the vendor.
+
+    Legacy sync segments only (resolve_file): the disagreement rate below was measured there, and
+    sampled batch admission requires vendor audio_lid evidence. A self-parakeet verdict clears the
+    enforced gate's floor (prod shadow 24 h to 11-02 04:55Z: the vendor called 0.07% of them an
+    unsupported language at >= 0.9). An unsupported top-1 can only move speech to the multilingual
+    route. Anything in between keeps the vendor probe.
+    """
+    if verdict is None:
+        return None
+    mode = language_gate_confident_skip()
+    if mode == 'off':
+        return None
+    if verdict.parakeet:
+        return 'parakeet' if mode == 'both' else None
+    return 'multilingual' if language_class(verdict.language) == 'unsupported' else None
+
+
 def resolve_language(
     language,
     audio: bytes,
@@ -297,6 +346,7 @@ def resolve_language(
     before_self_probe=None,
     surface='prerecorded',
     cohort_key=None,
+    confident_skip=False,
     **audio_options,
 ) -> LanguageDecision:
     code = normalized_stt_language(language.strip() if isinstance(language, str) else None)
@@ -309,7 +359,14 @@ def resolve_language(
     )
     if enforced:
         language_gate.record_enforced(surface, verdict)
+    skip = _confident_skip_route(verdict) if confident_skip and surface == 'prerecorded' and not enforced else None
+    if skip is not None and _confident_skip_audited(audio):
+        language_gate.record_confident_skip(surface, 'audit')
+        skip = None
     if enforced and verdict is not None:
+        decision = _self_decision(verdict)
+    elif skip is not None and verdict is not None:
+        language_gate.record_confident_skip(surface, skip)
         decision = _self_decision(verdict)
     else:
         # Gate unavailable in an enforced cohort falls back to today's vendor path.
@@ -353,7 +410,9 @@ def resolve_file(language, path, *, selector, before_probe=None, cohort_key=None
     try:
         with wave.open(str(path), 'rb') as source:
             body, _ = probe_wav_from_reader(source)
-        decision = resolve_language(language, body, before_probe=before_probe, cohort_key=cohort_key)
+        decision = resolve_language(
+            language, body, before_probe=before_probe, cohort_key=cohort_key, confident_skip=True
+        )
     except Exception:
         decision = LanguageDecision('und', 0.0, 'unavailable')
     return select_decision(language, decision, selector)

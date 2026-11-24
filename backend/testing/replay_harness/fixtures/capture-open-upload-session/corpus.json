@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "source": "synthetic-owner-ciphertext-shape",
+  "owner_token": "owner-token",
+  "conversation_id": "case-conversation",
+  "conversation": {
+    "id": "case-conversation",
+    "source": "omi",
+    "language": "en",
+    "status": "completed",
+    "record_lane_owner": "batch_live_v1",
+    "record_audio_closed": false,
+    "record_upload_sessions": {
+      "producer-1": true
+    },
+    "record_upload_failed": false,
+    "private_cloud_sync_enabled": true,
+    "data_protection_level": "standard",
+    "created_at": "2026-11-01T00:00:00Z",
+    "started_at": "2026-11-01T00:00:00Z",
+    "finished_at": "2026-11-01T00:03:00Z",
+    "structured": {},
+    "transcript_segments": [
+      {
+        "id": "seg-1",
+        "text": "We reviewed the replay harness and agreed to add capture checks before admission. The team will validate upload custody and finalization with synthetic examples tomorrow. This should help us diagnose missing titles without contacting any external service.",
+        "start": 0,
+        "end": 180,
+        "speaker_id": "SPEAKER_00",
+        "is_user": true
+      }
+    ],
+    "finalization_job_id": "job-1",
+    "finalization_revision": 1,
+    "finalization_status": "completed"
+  },
+  "finalization_jobs": {
+    "job-1": {
+      "id": "job-1",
+      "uid": "owner-token",
+      "conversation_id": "case-conversation",
+      "status": "completed",
+      "finalization_revision": 1,
+      "dispatch_generation": 1,
+      "requires_byok": false,
+      "fanout_status": "pending",
+      "fanout_key": "synthetic-fanout",
+      "processing_trigger": "capture_end",
+      "created_at": "2026-11-01T00:00:00Z",
+      "updated_at": "2026-11-01T00:00:00Z",
+      "attempt_count": 0,
+      "task_retry_count": 0
+    }
+  },
+  "jobs": {},
+  "results": {},
+  "artifacts": {},
+  "chunk_inventory": [
+    {
+      "name": "synthetic-chunk"
+    }
+  ],
+  "enrichment_outbox": null,
+  "capture_upload": {
+    "seal": true
+  }
+}

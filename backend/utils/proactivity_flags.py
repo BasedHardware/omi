@@ -12,7 +12,7 @@ from typing import Any
 
 from config.proactivity_v2 import ProactivityDenied
 from utils import omi_flags
-from utils.metrics import OMI_FLAG_DUAL_READ_TOTAL
+from utils.omi_flag_metrics import OMI_FLAG_DUAL_READ_TOTAL
 
 logger = logging.getLogger(__name__)
 

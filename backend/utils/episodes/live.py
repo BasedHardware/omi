@@ -447,11 +447,20 @@ async def on_realtime_segments(
                     conversations_db.get_conversation_raw_snapshot,
                     uid,
                     conversation_id,
-                    field_paths=['started_at', 'finished_at', 'last_speech_at', 'source', 'discarded', 'deleted'],
+                    field_paths=[
+                        'started_at',
+                        'finished_at',
+                        'last_speech_at',
+                        'source',
+                        'discarded',
+                        'deleted',
+                        'recording',
+                        'v3_derived',
+                    ],
                 )
                 if row:
                     sessions.remember_origin(uid, conversation_id, row)
-            if not row or row.get('discarded') or row.get('deleted'):
+            if not row or row.get('recording') or row.get('v3_derived') or row.get('discarded') or row.get('deleted'):
                 return
             recorded = recorded_span(row.get('started_at'), segments)
             if recorded is None:
@@ -462,7 +471,9 @@ async def on_realtime_segments(
                 row = dict(row, transcript_segments=list(segments), finished_at=recorded[1])
                 from utils.episodes.finalize import schedule_synced_intake_attach
 
-                schedule_synced_intake_attach(uid, conversation_id, row)
+                await executors.run_blocking(
+                    executors.db_executor, schedule_synced_intake_attach, uid, conversation_id, row
+                )
                 return
         spoken = any(str(s.get('text') or '').strip() for s in segments)
         if conversation_id and spoken:

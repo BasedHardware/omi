@@ -260,6 +260,7 @@ Future<ActionItemWithMetadata?> createActionItem({
   DateTime? dueAt,
   String? conversationId,
   bool completed = false,
+  String? idempotencyKey,
 }) async {
   var requestBody = {'description': description, 'completed': completed};
 
@@ -272,7 +273,7 @@ Future<ActionItemWithMetadata?> createActionItem({
 
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/action-items',
-    headers: {},
+    headers: {if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey},
     method: 'POST',
     body: jsonEncode(requestBody),
   );
@@ -300,6 +301,7 @@ Future<ActionItemWithMetadata?> updateActionItem(
   String? appleReminderId,
   int? sortOrder,
   int? indentLevel,
+  bool Function()? canSend,
 }) async {
   var requestBody = <String, dynamic>{};
 
@@ -339,6 +341,8 @@ Future<ActionItemWithMetadata?> updateActionItem(
     headers: {},
     method: 'PATCH',
     body: jsonEncode(requestBody),
+    canSend: canSend,
+    signOutOn401: canSend == null,
   );
 
   if (response == null) return null;

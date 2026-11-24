@@ -29,8 +29,8 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = 'ffc47f59113f510e04b187c499122ceeaf626e810d72f433484b7281ca00c579'
-CATALOG_REVISION: Final = 12
+CATALOG_SHA256: Final = '23333004b5824053fbceee41c79561e1229fa30001bec2ef3e20a373eb8b15df'
+CATALOG_REVISION: Final = 13
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
  'price_amount': 'stripe_live',
@@ -298,7 +298,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
                                   'primary_env_var': 'STRIPE_PLUS_ANNUAL_PRICE_ID',
                                   'accepted_env_vars': ['STRIPE_PLUS_ANNUAL_PRICE_ID']}]}},
  'unlimited_v2': {'id': 'unlimited_v2',
-                  'display_name': 'Unlimited',
+                  'display_name': 'Omi Pro',
                   'wire_aliases': [],
                   'wire_fallback_plan': 'unlimited',
                   'lifecycle': 'current',
@@ -349,7 +349,7 @@ PLAN_DISPLAY_NAMES: Final[dict[PlanType, str]] = {
     PlanType.architect: 'Architect',
     PlanType.operator: 'Pro',
     PlanType.plus: 'Plus',
-    PlanType.unlimited_v2: 'Unlimited',
+    PlanType.unlimited_v2: 'Omi Pro',
 }
 PLAN_STOREFRONTS: Final[dict[PlanType, tuple[str, ...]]] = {
     PlanType.basic: (),

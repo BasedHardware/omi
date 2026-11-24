@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/payment.dart' show paymentErrorFromBody;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/l10n/app_localizations.dart';
@@ -16,6 +17,12 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import '../support/recording_analytics.dart';
 
 final _now = DateTime.utc(2026, 10, 26, 12);
+const _play = PlayBillingConfig(
+  productId: 'omi_pro',
+  basePlans: {'monthly': 'month', 'yearly': 'year'},
+  trialOfferId: 'trial-7d',
+  obfuscatedAccountId: 'acct-hash',
+);
 final int _prorationDate = _now.millisecondsSinceEpoch ~/ 1000;
 final int _renewsAt = DateTime.utc(2027, 10, 26, 12).millisecondsSinceEpoch ~/ 1000;
 
@@ -91,7 +98,7 @@ class _Usage extends UsageProvider {
   int fetches = 0;
 
   @override
-  Future<void> fetchSubscription() async => fetches++;
+  Future<void> fetchSubscription({bool fresh = false}) async => fetches++;
 
   @override
   Future<void> loadAvailablePlans() async {}
@@ -105,6 +112,7 @@ Future<_Usage> _pump(
   Widget child, {
   SubscriptionStatus status = SubscriptionStatus.active,
   int? periodEnd,
+  PlayBillingConfig? play,
 }) async {
   tester.view.physicalSize = const Size(430, 932);
   tester.view.devicePixelRatio = 1;
@@ -127,6 +135,7 @@ Future<_Usage> _pump(
       wordsTranscribedLimit: 0,
       insightsGainedUsed: 0,
       insightsGainedLimit: 0,
+      playBilling: play,
     ),
   );
   await tester.pumpWidget(
@@ -299,6 +308,46 @@ void main() {
       expect(analytics.propertiesOf('Subscription Yearly Switch Failed').last['reason'], 'error');
     });
 
+    for (final (code, body, message) in [
+      (
+        'use_google_play',
+        '{"detail": "Subscribe with Google Play in the app.", "code": "use_google_play"}',
+        'Subscribe with Google Play in the app.',
+      ),
+      (
+        'play_on_hold',
+        '{"detail": "You have a Google Play subscription on hold. Fix the payment in Google Play.", '
+            '"code": "play_subscription_on_hold"}',
+        'You have a Google Play subscription on hold. Fix the payment in Google Play.',
+      ),
+    ]) {
+      testWidgets('a $code refusal shows the server sentence, never JSON', (tester) async {
+        final backend = _Backend(offer: _offer(), switchResult: paymentErrorFromBody(403, body));
+        await _pump(tester, YearlySwitchPlansRow(load: backend.load, apply: backend.apply));
+        await tester.tap(find.byKey(const Key('yearly_switch_plans_row')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('yearly_switch_confirm')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text(message), findsOneWidget);
+        expect(find.textContaining('{'), findsNothing);
+        analytics.expectSingle('Subscription Yearly Switch Failed', {'surface': 'plans', 'reason': 'refused'});
+      });
+    }
+
+    testWidgets('a build that sells through Google Play never offers or reads the switch', (tester) async {
+      final backend = _Backend(offer: _offer());
+      await _pump(tester, YearlySwitchPlansRow(load: backend.load, apply: backend.apply), play: _play);
+      expect(find.byKey(const Key('yearly_switch_plans_row')), findsNothing);
+      expect(backend.loads, isEmpty);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('iOS ignores Play setup and keeps the switch', (tester) async {
+      final backend = _Backend(offer: _offer());
+      await _pump(tester, YearlySwitchPlansRow(load: backend.load, apply: backend.apply), play: _play);
+      expect(find.byKey(const Key('yearly_switch_plans_row')), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
     testWidgets('a preview that fails to load offers Try Again instead of a guess', (tester) async {
       final backend = _Backend(offer: _offer(), previewFailures: 1);
       await _pump(tester, YearlySwitchPlansRow(load: backend.load, apply: backend.apply));
@@ -333,134 +382,6 @@ void main() {
       );
       expect(backend.loads, isEmpty);
       expect(find.byKey(const Key('yearly_switch_plans_row')), findsNothing);
-    });
-  });
-
-  group('Home row', () {
-    testWidgets('past the first paid month it shows once, then stays quiet for 30 days', (tester) async {
-      final backend = _Backend(offer: _offer());
-      await _pump(tester, YearlySwitchHomeRow(load: backend.load, apply: backend.apply, now: () => _now));
-      final l10n = _l10n(tester);
-
-      // The exact saving, never rounded up.
-      expect(find.text(l10n.yearlySwitchHomeTitle('US\$89.97')), findsOneWidget);
-      expect(find.text(l10n.yearlySwitchHomeSubtitle), findsOneWidget);
-      analytics.expectSingle('Subscription Yearly Switch Shown', {'surface': 'home'});
-      expect(SharedPreferencesUtil().yearlySwitchHomeShownAt, _now.millisecondsSinceEpoch);
-
-      // The next launch inside 30 days: no row, and the backend is not even asked.
-      backend.loads.clear();
-      await _pump(
-        tester,
-        YearlySwitchHomeRow(
-          key: UniqueKey(),
-          load: backend.load,
-          apply: backend.apply,
-          now: () => _now.add(const Duration(days: 29)),
-        ),
-      );
-      expect(find.byKey(const Key('yearly_switch_home_row')), findsNothing);
-      expect(backend.loads, isEmpty);
-
-      await _pump(
-        tester,
-        YearlySwitchHomeRow(
-          key: UniqueKey(),
-          load: backend.load,
-          apply: backend.apply,
-          now: () => _now.add(const Duration(days: 31)),
-        ),
-      );
-      expect(find.byKey(const Key('yearly_switch_home_row')), findsOneWidget);
-    });
-
-    testWidgets('a subscription that loads after Home mounts still gets the row', (tester) async {
-      final backend = _Backend(offer: _offer());
-      final usage = await _pump(tester, YearlySwitchHomeRow(load: backend.load, apply: backend.apply, now: () => _now));
-      final loaded = usage.subscription;
-      // Cold start: Home renders before /v1/users/me/subscription answers.
-      usage.debugSetSubscription(null);
-      await tester.pumpWidget(
-        ChangeNotifierProvider<UsageProvider>.value(
-          value: usage,
-          child: MaterialApp(
-            theme: buildOmiTheme(),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            locale: const Locale('en'),
-            home: Scaffold(
-              body: ListView(
-                children: [
-                  YearlySwitchHomeRow(key: UniqueKey(), load: backend.load, apply: backend.apply, now: () => _now),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-      SharedPreferencesUtil().yearlySwitchHomeShownAt = 0;
-      backend.loads.clear();
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('yearly_switch_home_row')), findsNothing);
-      expect(backend.loads, isEmpty);
-
-      usage.debugSetSubscription(loaded);
-      await tester.pumpAndSettle();
-      expect(backend.loads, [false]);
-      expect(find.byKey(const Key('yearly_switch_home_row')), findsOneWidget);
-    });
-
-    testWidgets('a Home without the usage provider renders nothing and asks nothing', (tester) async {
-      final backend = _Backend(offer: _offer());
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildOmiTheme(),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: YearlySwitchHomeRow(load: backend.load, apply: backend.apply, now: () => _now)),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      expect(find.byKey(const Key('yearly_switch_home_row')), findsNothing);
-      expect(backend.loads, isEmpty);
-    });
-
-    testWidgets('a yearly subscriber is never looked up', (tester) async {
-      final backend = _Backend(offer: _offer(eligible: false, reason: 'not_monthly'));
-      await _pump(
-        tester,
-        YearlySwitchHomeRow(load: backend.load, apply: backend.apply, now: () => _now),
-        periodEnd: _renewsAt,
-      );
-      expect(backend.loads, isEmpty);
-      expect(find.byKey(const Key('yearly_switch_home_row')), findsNothing);
-    });
-
-    testWidgets('the first paid month gets no Home row', (tester) async {
-      final backend = _Backend(offer: _offer(firstBillingPeriod: true));
-      await _pump(tester, YearlySwitchHomeRow(load: backend.load, apply: backend.apply, now: () => _now));
-      expect(find.byKey(const Key('yearly_switch_home_row')), findsNothing);
-      expect(SharedPreferencesUtil().yearlySwitchHomeShownAt, 0);
-    });
-
-    testWidgets('dismiss hides the row; tapping it opens the same confirm sheet', (tester) async {
-      final backend = _Backend(offer: _offer());
-      await _pump(tester, YearlySwitchHomeRow(load: backend.load, apply: backend.apply, now: () => _now));
-      final l10n = _l10n(tester);
-
-      await tester.tap(find.byKey(const Key('yearly_switch_home_row')));
-      await tester.pumpAndSettle();
-      expect(find.text(l10n.yearlySwitchDueToday), findsOneWidget);
-      analytics.expectSingle('Subscription Yearly Switch Opened', {'surface': 'home'});
-      await tester.tap(find.byKey(const Key('yearly_switch_cancel')));
-      await tester.pumpAndSettle();
-      expect(backend.switches, isEmpty);
-
-      await tester.tap(find.byKey(const Key('yearly_switch_dismiss')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('yearly_switch_home_row')), findsNothing);
-      analytics.expectSingle('Subscription Yearly Switch Dismissed', {'surface': 'home'});
     });
   });
 }

@@ -63,6 +63,7 @@ _ENUM_CLASS = re.compile(r'[A-Z]\w*(?:Reason|Outcome|Stage|Family)')
 CLOSED_HELPERS = frozenset(
     {
         'utils.observability.reasons.reason_label',
+        'database.reason_labels.reason_label',
         'utils.journey_metrics_contract.bounded_client_journey_issue_class',  # closed CLIENT_JOURNEY_ISSUE_CLASSES else 'unknown'
         'utils.stt.outcomes.bounded_provider',  # _KNOWN_PROVIDERS else 'unknown'
         'utils.stt.stream_close.bounded_stream_close_provider',  # STT_STREAM_CLOSE_PROVIDERS else 'unknown'
@@ -78,6 +79,7 @@ CLOSED_HELPERS = frozenset(
         'utils.batch_pipeline.vendor_route_metrics._vendor',  # VENDOR_SERVICES else 'unknown'
         'utils.batch_pipeline.vendor_route_metrics._late_outcome',  # LATE_RESULT_OUTCOMES else 'unknown'
         'utils.batch_pipeline.vendor_health._provider',  # VENDOR_SERVICES else 'unknown'
+        'utils.stt.live_metrics.bounded_shape_outcome',  # SHAPE_OUTCOMES else 'error'
     }
 )
 

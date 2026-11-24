@@ -88,14 +88,15 @@ def run_virtual(clock: VirtualClock, main: Callable[[], Awaitable[T]]) -> T:
     loop = VirtualTimeLoop(clock)
     try:
         # Not installed as the thread's current loop: callers' loops stay untouched.
-        result = loop.run_until_complete(main())
+        return loop.run_until_complete(main())
+    finally:
+        # A failed background process is a harness failure, not a partial gate
+        # sample. Teardown must also run when main propagates that failure.
         pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
         for task in pending:
             task.cancel()
         if pending:
             loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-        return result
-    finally:
         loop.close()
 
 

@@ -9,6 +9,8 @@ export interface AIUserProfileResponse {
   data_sources_used?: number | null;
   generated_at?: string | null;
   profile_text?: string | null;
+  refreshed_at?: string | null;
+  source?: string | null;
 }
 
 export interface AcceptSharedActionItemsResponse {
@@ -24,6 +26,8 @@ export type AccountCutoverCheckpointPhase = "not_started" | "inventory" | "offli
 
 export type AccountCutoverClientAction = "none" | "force_upgrade" | "migration_maintenance";
 
+export type AccountCutoverClientState = "legacy" | "migrating" | "new" | "rolled_back_stranded";
+
 export interface AccountCutoverControl {
   account_generation?: number;
   api_generation?: number;
@@ -35,7 +39,7 @@ export interface AccountCutoverControl {
   offline_queue_instruction?: OfflineQueueInstruction;
   product_traffic_allowed?: boolean;
   schema_version?: 1;
-  state?: AccountCutoverState;
+  state?: AccountCutoverClientState;
   stranded_new_data?: boolean;
   ui_generation?: number;
 }
@@ -48,8 +52,6 @@ export interface AccountCutoverManifestSummary {
   schema_version?: number;
   stranded_new_data?: boolean;
 }
-
-export type AccountCutoverState = "legacy" | "migrating" | "new" | "rolled_back_stranded";
 
 export interface AccountDeletionActionResponse {
   message: string;
@@ -95,10 +97,13 @@ export interface ActionItem {
   conversation_id?: string | null;
   created_at?: string | null;
   description: string;
+  due?: TaskDue | null;
   due_at?: string | null;
   due_certainty?: "confirmed" | "tentative" | null;
   owner_name?: string | null;
   ownership_confidence?: number | null;
+  reminder_intent?: ReminderIntent | null;
+  reminder_origin?: ReminderOrigin | null;
   source_segment_ids?: Array<string>;
   target_task_id?: string | null;
   updated_at?: string | null;
@@ -109,6 +114,7 @@ export interface ActionItemCreateRequest {
   completed?: boolean | null;
   conversation_id?: string | null;
   description: string;
+  due?: TaskDue | null;
   due_at?: string | null;
   due_confidence?: number | null;
   export_date?: string | null;
@@ -139,7 +145,9 @@ export interface ActionItemResponse {
   completed_at?: string | null;
   conversation_id?: string | null;
   created_at?: string | null;
+  creation_receipt?: Record<string, unknown> | null;
   description: string;
+  due?: TaskDue | null;
   due_at?: string | null;
   due_confidence?: number | null;
   export_date?: string | null;
@@ -154,6 +162,7 @@ export interface ActionItemResponse {
   provenance?: Array<EvidenceRef>;
   recurrence_parent_id?: string | null;
   recurrence_rule?: string | null;
+  reminder_origin?: ReminderOrigin | null;
   sort_order?: number;
   source?: string;
   status?: TaskStatus;
@@ -168,6 +177,7 @@ export interface ActionItemUpdateRequest {
   clear_due_at?: boolean;
   completed?: boolean | null;
   description?: string | null;
+  due?: TaskDue | null;
   due_at?: string | null;
   due_confidence?: number | null;
   export_date?: string | null;
@@ -709,6 +719,8 @@ export interface AudioFile {
   id: string;
   playback_start?: number | null;
   provider?: string;
+  recording_file_id?: string | null;
+  recording_id?: string | null;
   source_fingerprint?: string | null;
   started_at?: string | null;
   uid: string;
@@ -1007,6 +1019,38 @@ export interface CalendarOnboardingStatusResponse {
   state: string;
 }
 
+export interface CalendarSelection {
+  account_id: string;
+  calendars: Array<ReadableCalendar>;
+  selected_ids: Array<string>;
+  write_calendar_id?: string;
+}
+
+export interface CalendarSelectionUpdate {
+  account_id: string;
+  selected_ids: Array<string>;
+}
+
+export interface CampaignAttributionResponse {
+  campaign_id: string;
+  checkout_url: string;
+  discount_percent: number;
+  state: string;
+}
+
+export interface CampaignSnapshotResponse {
+  campaign_id: string;
+  claimable_months: number;
+  claimed_months: number;
+  earned_months?: number | null;
+  enabled: boolean;
+  milestone_progress?: number | null;
+  qualified_purchases: number;
+  reason?: string | null;
+  referral_url?: string | null;
+  reward_status: string;
+}
+
 export interface CancelSubscriptionRequest {
   reason?: string | null;
   reason_details?: string | null;
@@ -1095,6 +1139,7 @@ export type CandidateRecord = {
 
 export interface CandidateResolutionReceipt {
   candidate_id: string;
+  creation_receipt?: Record<string, unknown> | null;
   newly_resolved: boolean;
   receipt_id: string;
   resolved_at: string;
@@ -1378,6 +1423,7 @@ export interface CleanerMemory {
   category: MemoryCategory;
   category_source?: string | null;
   content: string;
+  extracted_at?: string | null;
   id: string;
   manually_added?: boolean | null;
   manually_added_source?: string | null;
@@ -1385,6 +1431,7 @@ export interface CleanerMemory {
   policy?: Record<string, unknown> | null;
   reviewed?: boolean | null;
   reviewed_source?: string | null;
+  source_at?: string | null;
 }
 
 export interface ClickUpListsResponse {
@@ -1428,6 +1475,12 @@ export interface ColdStartSequenceTerminalReceipt {
   receipt_id: string;
   sequence_id: string;
   terminal_state: "completed" | "abandoned";
+}
+
+export interface ConnectorAccess {
+  client_ids: Array<string>;
+  default_scopes: Array<string>;
+  required_scopes: Array<string>;
 }
 
 export interface ConnectorSynthesisRequest {
@@ -1479,6 +1532,8 @@ export interface Conversation {
   call_platform?: string | null;
   capture_coverage?: "unknown" | "incomplete" | "mapped" | null;
   capture_group?: CaptureGroup | null;
+  capture_time_trust?: "untrusted" | null;
+  capture_timezone?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
   client_processing?: ClientProcessing | null;
@@ -1490,16 +1545,22 @@ export interface Conversation {
   deferred?: boolean;
   discarded?: boolean;
   episode_id?: string | null;
+  excluded_speakers?: Array<number> | null;
   external_data?: Record<string, unknown> | null;
   finished_at: string | null;
   folder_id?: string | null;
   geolocation?: Geolocation | null;
   geolocation_scope?: "owner" | null;
+  home_hidden?: boolean | null;
+  home_hidden_reason?: string | null;
   id: string;
   imported?: boolean;
   is_call?: boolean | null;
   is_locked?: boolean;
+  kind?: "conversation" | "voice_work" | "media" | "background" | null;
   language?: string | null;
+  live_summary?: LiveSummaryPreview | null;
+  manual_end?: boolean | null;
   meeting_dedup_speech_s?: number | null;
   meeting_duration_s?: number | null;
   meeting_treatment_eligible?: boolean;
@@ -1512,9 +1573,12 @@ export interface Conversation {
   processing_deferred?: boolean;
   processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
+  processing_tier?: "historical" | null;
   record_audio_partial?: RecordAudioPartial | null;
   recorded_end?: string | null;
   recorded_start?: string | null;
+  recording?: boolean | null;
+  recording_pieces?: Array<RecordingPiece> | null;
   screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
   speaker_resolution?: ConversationSpeakers | null;
@@ -1523,9 +1587,13 @@ export interface Conversation {
   status?: ConversationStatus | null;
   structured: Structured;
   suggested_summarization_apps?: Array<string>;
+  summary_covers_through?: string | null;
+  summary_on_open?: boolean | null;
   summary_retryable?: boolean | null;
   sync_content_revision?: number | null;
   sync_relevance?: "keep" | "review" | null;
+  tile_state?: "live" | "transcribing" | "writing" | "done" | "failed" | null;
+  title_locked?: boolean | null;
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
   updated_at?: string | null;
@@ -1691,6 +1759,8 @@ export interface ConversationSearchItem {
   call_platform?: string | null;
   capture_coverage?: "unknown" | "incomplete" | "mapped" | null;
   capture_group?: CaptureGroup | null;
+  capture_time_trust?: "untrusted" | null;
+  capture_timezone?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
   client_processing?: ClientProcessing | null;
@@ -1702,16 +1772,22 @@ export interface ConversationSearchItem {
   deferred?: boolean;
   discarded?: boolean;
   episode_id?: string | null;
+  excluded_speakers?: Array<number> | null;
   external_data?: Record<string, unknown> | null;
   finished_at: string | null;
   folder_id?: string | null;
   geolocation?: Geolocation | null;
   geolocation_scope?: "owner" | null;
+  home_hidden?: boolean | null;
+  home_hidden_reason?: string | null;
   id: string;
   imported?: boolean;
   is_call?: boolean | null;
   is_locked?: boolean;
+  kind?: "conversation" | "voice_work" | "media" | "background" | null;
   language?: string | null;
+  live_summary?: LiveSummaryPreview | null;
+  manual_end?: boolean | null;
   match_snippets?: Array<TranscriptMatchSnippet>;
   meeting_dedup_speech_s?: number | null;
   meeting_duration_s?: number | null;
@@ -1725,9 +1801,12 @@ export interface ConversationSearchItem {
   processing_deferred?: boolean;
   processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
+  processing_tier?: "historical" | null;
   record_audio_partial?: RecordAudioPartial | null;
   recorded_end?: string | null;
   recorded_start?: string | null;
+  recording?: boolean | null;
+  recording_pieces?: Array<RecordingPiece> | null;
   screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
   speaker_resolution?: ConversationSpeakers | null;
@@ -1736,9 +1815,13 @@ export interface ConversationSearchItem {
   status?: ConversationStatus | null;
   structured: Structured;
   suggested_summarization_apps?: Array<string>;
+  summary_covers_through?: string | null;
+  summary_on_open?: boolean | null;
   summary_retryable?: boolean | null;
   sync_content_revision?: number | null;
   sync_relevance?: "keep" | "review" | null;
+  tile_state?: "live" | "transcribing" | "writing" | "done" | "failed" | null;
+  title_locked?: boolean | null;
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
   updated_at?: string | null;
@@ -1802,6 +1885,14 @@ export interface ConversationSyncState {
   visibility?: ConversationVisibility;
 }
 
+export interface ConversationTaskPresenceRequest {
+  conversation_ids: Array<string>;
+}
+
+export interface ConversationTaskPresenceResponse {
+  presence: Record<string, boolean>;
+}
+
 export interface ConversationTestPromptResponse {
   summary: string;
 }
@@ -1821,6 +1912,11 @@ export type ConversationVisibility = "private" | "shared" | "public";
 export interface ConversationsCountResponse {
   count: number;
   sources?: Array<string> | null;
+}
+
+export interface ConversationsLiveResponse {
+  conversation?: LiveConversation | null;
+  v3: boolean;
 }
 
 export interface CreateActionItemRequest {
@@ -2167,6 +2263,11 @@ export interface DeleteKnowledgeGraphResponse {
 export interface DeleteLimitlessConversationsResponse {
   deleted_count: number;
   message: string;
+}
+
+export interface DeletedConversation {
+  deleted_at: string;
+  id: string;
 }
 
 export interface DesktopDailyUsageRequest {
@@ -2528,6 +2629,7 @@ export interface Episode {
   bullets?: Array<string>;
   close_reason?: "user" | "gap" | "idle" | "hard_cap" | "source_change" | "calendar_boundary" | "moved_on" | null;
   closed_at?: string | null;
+  compose_deferred?: boolean;
   conversation_ids?: Array<string>;
   emoji?: string;
   follow_ups?: Array<string>;
@@ -2566,6 +2668,8 @@ export interface EpisodeLookupResponse {
 export interface EpisodeMember {
   emoji?: string;
   finished_at?: string | null;
+  gist?: string;
+  home_step?: string | null;
   id: string;
   started_at: string;
   status?: string;
@@ -3189,6 +3293,41 @@ export interface HiddenNoiseDayCount {
   date: string;
 }
 
+export interface HomeFeedCard {
+  detail_id: string;
+  emoji?: string;
+  finished_at?: string | null;
+  has_tasks?: boolean;
+  home_step?: string | null;
+  id: string;
+  is_locked?: boolean;
+  kind: "episode" | "conversation";
+  member_count?: number;
+  preview?: string;
+  revision: string;
+  sort_at: string;
+  sources?: Array<string>;
+  starred?: boolean;
+  started_at?: string | null;
+  status: string;
+  summary_available?: boolean;
+  title?: string;
+}
+
+export interface HomeFeedPreparationResponse {
+  has_more: boolean;
+  processed: number;
+  ready: boolean;
+}
+
+export interface HomeFeedResponse {
+  generation: string;
+  has_more?: boolean;
+  items?: Array<HomeFeedCard>;
+  next_cursor?: string | null;
+  truncated?: boolean;
+}
+
 export interface IgnoredVoice {
   conversation_id: string;
   conversation_started_at?: string | null;
@@ -3240,6 +3379,7 @@ export interface IntegrationNotificationResponse {
 export interface IntegrationResponse {
   app_key: string;
   connected: boolean;
+  read_selection_configured?: boolean | null;
 }
 
 export interface InterventionCreate {
@@ -3311,6 +3451,21 @@ export interface LegacyProactiveIntent {
 
 export interface LinkCalendarEventRequest {
   event_id: string;
+}
+
+export interface LiveConversation {
+  created_at: string;
+  finished_at: string | null;
+  id: string;
+  started_at: string;
+  status: ConversationStatus;
+  structured: Structured;
+  tile_state?: "live" | "transcribing" | "writing" | "done" | "failed" | null;
+}
+
+export interface LiveSummaryPreview {
+  structured: Structured;
+  summary_covers_through: string;
 }
 
 export interface LlmTotalCostResponse {
@@ -3411,6 +3566,7 @@ export interface McpApiKeyCreate {
 
 export interface McpApiKeyCreated {
   app_id?: string | null;
+  connector_access?: ConnectorAccess;
   created_at: string;
   id: string;
   key: string;
@@ -3431,6 +3587,7 @@ export interface McpCreateActionItem {
 }
 
 export interface McpOauthGrantsResponse {
+  connector_access?: Record<string, ConnectorAccess>;
   grants?: Array<Record<string, unknown>>;
 }
 
@@ -3825,6 +3982,11 @@ export interface MobileFeedbackRequest {
   value: "-1" | "1";
 }
 
+export interface MonthlySwitchRequest {
+  expected_amount: number;
+  price_id: string;
+}
+
 export interface MoveConversationRequest {
   folder_id?: string | null;
 }
@@ -3984,6 +4146,7 @@ export interface PageContext {
 }
 
 export interface Participant {
+  alias?: string | null;
   email?: string | null;
   evidence?: string | null;
   is_ai_agent?: boolean;
@@ -3991,6 +4154,7 @@ export interface Participant {
   organization?: string | null;
   role?: string | null;
   source: "roster" | "transcript";
+  speaker_bindings?: Array<number>;
 }
 
 export interface PayPalPaymentDetailsResponse {
@@ -4004,6 +4168,19 @@ export interface PaymentCheckoutSessionResponse {
   session_id?: string | null;
   status?: string | null;
   url?: string | null;
+}
+
+export interface PaymentIssue {
+  monthly_switch?: PaymentIssueMonthlySwitch | null;
+  plan: PlanType;
+  status: "past_due" | "unpaid";
+}
+
+export interface PaymentIssueMonthlySwitch {
+  amount: number;
+  currency: string;
+  price_id: string;
+  yearly_amount: number;
 }
 
 export interface PaymentMethodStatusResponse {
@@ -4055,8 +4232,10 @@ export interface PendingSyncResponse {
 export interface PendingWorkItem {
   conversation_ids: Array<string>;
   duration_seconds: number;
+  home_step?: string | null;
   id: string;
   kind: "conversation" | "sync_job";
+  recording_count?: number;
   started_at: string | null;
   state: "queued" | "transcribing" | "summarizing";
   updated_at: string | null;
@@ -4065,6 +4244,7 @@ export interface PendingWorkItem {
 export interface PendingWorkSnapshot {
   attention_unseen_count: number;
   enabled: boolean;
+  home_processing_today?: boolean;
   items: Array<PendingWorkItem>;
 }
 
@@ -4146,6 +4326,8 @@ export interface PlanIdentitySubscription {
   features?: Array<string>;
   limits?: PlanLimits;
   plan?: PlanType;
+  prepaid?: boolean | null;
+  provider?: "play" | null;
   status?: SubscriptionStatus;
   stripe_subscription_id?: string | null;
 }
@@ -4162,7 +4344,10 @@ export interface PlanIdentityUserSubscriptionResponse {
   held_audio?: HeldAudioSummary | null;
   insights_gained_limit: number;
   insights_gained_used: number;
+  payment_issue?: PaymentIssue | null;
   phone_call_quota?: PhoneCallQuota | null;
+  play_billing?: PlayBillingConfig | null;
+  prepaid_code_redeem?: boolean | null;
   processing_backlog?: ProcessingBacklog | null;
   show_subscription_ui?: boolean;
   subscription: PlanIdentitySubscription;
@@ -4187,6 +4372,33 @@ export type PlanType = "basic" | "unlimited" | "architect" | "operator" | "plus"
 export interface PlatformMinimumBuild {
   minimum_supported_build: number;
   platform: string;
+}
+
+export interface PlayBasePlan {
+  id: string;
+  interval: "month" | "year";
+}
+
+export interface PlayBillingConfig {
+  base_plans: Array<PlayBasePlan>;
+  obfuscated_account_id: string;
+  product_id: string;
+  trial_offer_id: string;
+}
+
+export interface PlayBillingErrorResponse {
+  detail: string;
+  message: string;
+}
+
+export interface PlayPurchaseRequest {
+  product_id: string;
+  purchase_token: string;
+}
+
+export interface PlayPurchaseResponse {
+  status: "active" | "pending" | "inactive";
+  subscription?: Subscription | null;
 }
 
 export interface PluginResult {
@@ -4278,6 +4490,7 @@ export interface ProactivityTarget {
 export interface ProcessConversationRequest {
   calendar_meeting_context?: CalendarMeetingContext | null;
   client_processing?: unknown | null;
+  live_conversation_id?: string | null;
 }
 
 export interface ProcessingBacklog {
@@ -4446,6 +4659,13 @@ export interface ReadRolloutCapabilities {
   shadow_artifacts_enabled: boolean;
 }
 
+export interface ReadableCalendar {
+  available: boolean;
+  id: string;
+  name: string;
+  primary: boolean;
+}
+
 export interface RebuildResponse {
   edges_count: number;
   nodes_count: number;
@@ -4493,6 +4713,91 @@ export interface RecordLlmUsageBucketRequest {
 
 export type RecordedClock = "device" | "estimated_device" | "frame" | "live_capture" | "imported" | "legacy";
 
+export interface RecordingMemberCount {
+  applied_count: number;
+  conversation_id: string;
+  error?: string | null;
+}
+
+export interface RecordingPiece {
+  audio_file_id: string;
+  end: number;
+  recording_id: string;
+  start: number;
+}
+
+export interface RecordingSelection {
+  conversation_id: string;
+  segment_ids: Array<string>;
+  speaker_id?: number | null;
+  voice?: RecordingVoice | null;
+}
+
+export interface RecordingSpeakerConflict {
+  detail: "recording_speaker_rename_disabled" | RecordingStaleDetail;
+}
+
+export interface RecordingSpeakerLimit {
+  detail: "recording_speaker_limit_exceeded";
+}
+
+export interface RecordingSpeakerRequest {
+  is_user?: boolean;
+  person_id?: string | null;
+  selections?: Array<RecordingSelection>;
+  use_for_speech_training?: boolean;
+  voice?: RecordingVoice | null;
+  whole_recording?: boolean;
+}
+
+export interface RecordingSpeakerResponse {
+  applied_count: number;
+  conversations: Array<RecordingMemberCount>;
+  coverage?: "complete" | "partial";
+  episode_id?: string | null;
+}
+
+export interface RecordingStaleDetail {
+  code: "stale_speaker";
+  message: string;
+}
+
+export interface RecordingTranscriptMember {
+  id: string;
+  recording_offset_seconds: number;
+  transcript_segments: Array<RecordingTranscriptSegment>;
+}
+
+export interface RecordingTranscriptResponse {
+  conversations: Array<RecordingTranscriptMember>;
+  coverage?: "complete" | "partial";
+  enabled: boolean;
+  episode_id?: string | null;
+}
+
+export interface RecordingTranscriptSegment {
+  end: number;
+  id?: string | null;
+  is_user: boolean;
+  original_text?: string | null;
+  person_id?: string | null;
+  speaker?: string | null;
+  speaker_id?: number | null;
+  speaker_id_scope?: string | null;
+  speaker_label_source?: "manual" | "auto" | "carried" | null;
+  speech_profile_processed?: boolean;
+  start: number;
+  stream_speaker: string;
+  stt_provider?: string | null;
+  text: string;
+  translations?: Array<Translation> | null;
+}
+
+export interface RecordingVoice {
+  speaker_id_scope: string;
+  stream_speaker: string;
+}
+
 export interface RedeemCodeRequest {
   code: string;
 }
@@ -4502,6 +4807,13 @@ export interface RedeemCodeResponse {
   applies_at?: number | null;
   currency?: string | null;
   percent_off?: number | null;
+  status: string;
+}
+
+export interface RedeemPrepaidCodeResponse {
+  ends_at: number;
+  months: number;
+  plan: string;
   status: string;
 }
 
@@ -4527,6 +4839,20 @@ export interface RejectSpeakerRequest {
 export interface ReleaseChannel {
   app_build?: number | null;
   release_channel: "testflight" | "app_store" | "dev";
+}
+
+export interface ReminderIntent {
+  due_expression?: string | null;
+  kind: "explicit_reminder" | "quoted" | "hypothetical" | "current_session" | "status" | "waiting_on";
+}
+
+export interface ReminderOrigin {
+  extracted_at: string;
+  input_revision: string;
+  policy_revision?: "explicit-reminders-v1";
+  review_reason?: "owner_unresolved" | null;
+  source_at?: string | null;
+  speaker_evidence_revision: string;
 }
 
 export interface ReorderFoldersRequest {
@@ -4724,6 +5050,7 @@ export interface SamePersonItem {
 
 export interface SaveFcmTokenRequest {
   fcm_token: string;
+  registration_order?: number | null;
   time_zone: string;
 }
 
@@ -4741,6 +5068,7 @@ export interface ScreenActivityAppSummary {
 
 export interface ScreenActivityCoverage {
   capture_completeness?: "unknown";
+  devices?: Array<ScreenDeviceCoverage>;
   first_observed_at?: string | null;
   last_observed_at?: string | null;
   row_limit: number;
@@ -4782,6 +5110,13 @@ export interface ScreenActivitySyncResponse {
   frame_requests?: Array<FrameRequestDelivery> | null;
   last_id: number;
   synced: number;
+}
+
+export interface ScreenDeviceCoverage {
+  device_id: string;
+  first_observed_at: string;
+  last_observed_at: string;
+  synced_through?: string | null;
 }
 
 export interface ScreenFrameAdjudicationRequest {
@@ -4887,6 +5222,7 @@ export interface SearchedMemory {
   category: MemoryCategory;
   category_source?: string | null;
   content: string;
+  extracted_at?: string | null;
   id: string;
   manually_added?: boolean | null;
   manually_added_source?: string | null;
@@ -4895,6 +5231,7 @@ export interface SearchedMemory {
   relevance_score: number;
   reviewed?: boolean | null;
   reviewed_source?: string | null;
+  source_at?: string | null;
 }
 
 export interface Section {
@@ -4989,6 +5326,7 @@ export interface SharedActionItem {
   context?: string | null;
   description: string;
   due_at?: string | null;
+  due_certainty?: "confirmed" | "tentative" | null;
   owner_name?: string | null;
 }
 
@@ -5466,6 +5804,7 @@ export interface Structured {
   category?: CategoryEnum;
   emoji?: string;
   events?: Array<Event>;
+  gist?: string;
   insights?: Array<Insight>;
   meeting_type?: "interview" | "intro" | "sales" | "customer" | "one_on_one" | "team_sync" | "planning" | "demo" | "social" | "other" | null;
   note_claims?: Array<NoteClaim> | null;
@@ -5492,6 +5831,8 @@ export interface Subscription {
   features?: Array<string>;
   limits?: PlanLimits;
   plan?: PlanType;
+  prepaid?: boolean | null;
+  provider?: "play" | null;
   status?: SubscriptionStatus;
   stripe_subscription_id?: string | null;
 }
@@ -5534,6 +5875,20 @@ export interface SyncBatchItem {
 
 export interface SyncBatchRequest {
   items: Array<SyncBatchItem>;
+}
+
+export interface SyncCaptureEndRequest {
+  end_decided_at: number;
+  end_type: "user_initiated" | "silence_backstop" | "disconnect";
+  last_speech_at?: number | null;
+  pending_wals: number;
+  recording_session_id: string;
+  sent_at: number;
+}
+
+export interface SyncCaptureEndResponse {
+  accepted: boolean;
+  retry?: boolean;
 }
 
 export interface SyncCaptureManifestFile {
@@ -5579,6 +5934,7 @@ export interface SyncJobStatusResponse {
   retry_after?: number | null;
   status: string;
   successful_segments?: number;
+  total_files?: number;
   total_segments?: number;
 }
 
@@ -5599,6 +5955,10 @@ export interface SyncRecoveryWindowExceededResponse {
 
 export interface SyncRequestValidationErrorResponse {
   detail: Array<Record<string, unknown>>;
+}
+
+export interface SyncUploadHoldReleaseResponse {
+  accepted: boolean;
 }
 
 export interface SyncUserTimeZoneRequest {
@@ -5656,6 +6016,7 @@ export interface TaskCancelCandidate {
   goal_id?: string | null;
   ownership_confidence: number;
   proposed_action?: "cancel";
+  reminder_origin?: ReminderOrigin | null;
   source_surface: string;
   subject_kind?: "task";
   task_change: TaskChangePayload;
@@ -5672,6 +6033,7 @@ export interface TaskCardSpec {
 
 export interface TaskChangePayload {
   description?: string | null;
+  due?: TaskDue | null;
   due_at?: string | null;
   due_confidence?: number | null;
   owner?: TaskOwner | null;
@@ -5689,11 +6051,29 @@ export interface TaskCompleteCandidate {
   goal_id?: string | null;
   ownership_confidence: number;
   proposed_action?: "complete";
+  reminder_origin?: ReminderOrigin | null;
   source_surface: string;
   subject_kind?: "task";
   task_change: TaskChangePayload;
   task_id: string;
   workstream_id?: string | null;
+}
+
+export interface TaskConversationPageRequest {
+  cursor?: string | null;
+  end_date?: string | null;
+  folder_id?: string | null;
+  include_discarded?: boolean;
+  limit?: number;
+  query?: string;
+  starred?: boolean | null;
+  start_date?: string | null;
+}
+
+export interface TaskConversationPageResponse {
+  items: Array<Conversation>;
+  next_cursor?: string | null;
+  partial?: boolean;
 }
 
 export interface TaskCreateCandidate {
@@ -5703,6 +6083,7 @@ export interface TaskCreateCandidate {
   goal_id?: string | null;
   ownership_confidence: number;
   proposed_action?: "create";
+  reminder_origin?: ReminderOrigin | null;
   source_surface: string;
   subject_kind?: "task";
   task_change: TaskCreatePayload;
@@ -5711,12 +6092,23 @@ export interface TaskCreateCandidate {
 
 export interface TaskCreatePayload {
   description: string;
+  due?: TaskDue | null;
   due_at?: string | null;
   due_confidence?: number | null;
   owner?: TaskOwner;
   priority?: TaskPriority | null;
   recurrence_parent_id?: string | null;
   recurrence_rule?: string | null;
+}
+
+export interface TaskDue {
+  date?: string | null;
+  expression?: string | null;
+  instant?: string | null;
+  kind: "none" | "date" | "instant" | "unresolved";
+  reason?: string | null;
+  timezone?: string | null;
+  year_basis?: "spoken" | "source_relative" | "next_future_occurrence" | null;
 }
 
 export interface TaskGoalLinkImport {
@@ -5813,6 +6205,7 @@ export interface TaskSupersedeCandidate {
   goal_id?: string | null;
   ownership_confidence: number;
   proposed_action?: "supersede";
+  reminder_origin?: ReminderOrigin | null;
   source_surface: string;
   subject_kind?: "task";
   task_change: TaskChangePayload;
@@ -5827,6 +6220,7 @@ export interface TaskUpdateCandidate {
   goal_id?: string | null;
   ownership_confidence: number;
   proposed_action?: "update";
+  reminder_origin?: ReminderOrigin | null;
   source_surface: string;
   subject_kind?: "task";
   task_change: TaskChangePayload;
@@ -5897,6 +6291,7 @@ export interface TranscriptSegment {
   person_id?: string | null;
   speaker?: string | null;
   speaker_id?: number | null;
+  speaker_id_scope?: string | null;
   speaker_label_source?: "manual" | "auto" | "carried" | null;
   speech_profile_processed?: boolean;
   start: number;
@@ -6004,6 +6399,7 @@ export interface UpdateAIUserProfileRequest {
   data_sources_used?: number | null;
   generated_at?: string | null;
   profile_text?: string | null;
+  source?: "user_edit" | "exploration" | null;
 }
 
 export interface UpdateActionItemDescriptionRequest {
@@ -6188,7 +6584,10 @@ export interface UserSubscriptionResponse {
   held_audio?: HeldAudioSummary | null;
   insights_gained_limit: number;
   insights_gained_used: number;
+  payment_issue?: PaymentIssue | null;
   phone_call_quota?: PhoneCallQuota | null;
+  play_billing?: PlayBillingConfig | null;
+  prepaid_code_redeem?: boolean | null;
   processing_backlog?: ProcessingBacklog | null;
   show_subscription_ui?: boolean;
   subscription: Subscription;
@@ -6320,6 +6719,7 @@ export interface WorkstreamCreateCandidate {
   goal_id?: string | null;
   ownership_confidence: number;
   proposed_action?: "create";
+  reminder_origin?: ReminderOrigin | null;
   source_surface: string;
   subject_kind?: "workstream";
   workstream_id?: string | null;
@@ -6457,9 +6857,9 @@ export interface OmiApiSchemas {
   "AcceptSharedTasksRequest": AcceptSharedTasksRequest;
   "AccountCutoverCheckpointPhase": AccountCutoverCheckpointPhase;
   "AccountCutoverClientAction": AccountCutoverClientAction;
+  "AccountCutoverClientState": AccountCutoverClientState;
   "AccountCutoverControl": AccountCutoverControl;
   "AccountCutoverManifestSummary": AccountCutoverManifestSummary;
-  "AccountCutoverState": AccountCutoverState;
   "AccountDeletionActionResponse": AccountDeletionActionResponse;
   "AccountDeletionLossSummary": AccountDeletionLossSummary;
   "AccountDeletionRestoreResponse": AccountDeletionRestoreResponse;
@@ -6586,6 +6986,10 @@ export interface OmiApiSchemas {
   "CalendarOnboardingResetResponse": CalendarOnboardingResetResponse;
   "CalendarOnboardingSkipResponse": CalendarOnboardingSkipResponse;
   "CalendarOnboardingStatusResponse": CalendarOnboardingStatusResponse;
+  "CalendarSelection": CalendarSelection;
+  "CalendarSelectionUpdate": CalendarSelectionUpdate;
+  "CampaignAttributionResponse": CampaignAttributionResponse;
+  "CampaignSnapshotResponse": CampaignSnapshotResponse;
   "CancelSubscriptionRequest": CancelSubscriptionRequest;
   "CandidateAcceptanceRequest": CandidateAcceptanceRequest;
   "CandidateAction": CandidateAction;
@@ -6642,6 +7046,7 @@ export interface OmiApiSchemas {
   "ClientProcessing": ClientProcessing;
   "ColdStartSequence": ColdStartSequence;
   "ColdStartSequenceTerminalReceipt": ColdStartSequenceTerminalReceipt;
+  "ConnectorAccess": ConnectorAccess;
   "ConnectorSynthesisRequest": ConnectorSynthesisRequest;
   "ConnectorSynthesisResponse": ConnectorSynthesisResponse;
   "ConnectorSynthesisTask": ConnectorSynthesisTask;
@@ -6679,11 +7084,14 @@ export interface OmiApiSchemas {
   "ConversationSyncMutationRequest": ConversationSyncMutationRequest;
   "ConversationSyncMutationResponse": ConversationSyncMutationResponse;
   "ConversationSyncState": ConversationSyncState;
+  "ConversationTaskPresenceRequest": ConversationTaskPresenceRequest;
+  "ConversationTaskPresenceResponse": ConversationTaskPresenceResponse;
   "ConversationTestPromptResponse": ConversationTestPromptResponse;
   "ConversationTopicRequest": ConversationTopicRequest;
   "ConversationTopicResponse": ConversationTopicResponse;
   "ConversationVisibility": ConversationVisibility;
   "ConversationsCountResponse": ConversationsCountResponse;
+  "ConversationsLiveResponse": ConversationsLiveResponse;
   "CreateActionItemRequest": CreateActionItemRequest;
   "CreateAnnouncementRequest": CreateAnnouncementRequest;
   "CreateChatSessionRequest": CreateChatSessionRequest;
@@ -6729,6 +7137,7 @@ export interface OmiApiSchemas {
   "DeleteImportJobResponse": DeleteImportJobResponse;
   "DeleteKnowledgeGraphResponse": DeleteKnowledgeGraphResponse;
   "DeleteLimitlessConversationsResponse": DeleteLimitlessConversationsResponse;
+  "DeletedConversation": DeletedConversation;
   "DesktopDailyUsageRequest": DesktopDailyUsageRequest;
   "DesktopDailyUsageResponse": DesktopDailyUsageResponse;
   "DeterministicFacts": DeterministicFacts;
@@ -6855,6 +7264,9 @@ export interface OmiApiSchemas {
   "HeldAudioSummary": HeldAudioSummary;
   "HiddenNoiseCountsResponse": HiddenNoiseCountsResponse;
   "HiddenNoiseDayCount": HiddenNoiseDayCount;
+  "HomeFeedCard": HomeFeedCard;
+  "HomeFeedPreparationResponse": HomeFeedPreparationResponse;
+  "HomeFeedResponse": HomeFeedResponse;
   "IgnoredVoice": IgnoredVoice;
   "IgnoredVoicesResponse": IgnoredVoicesResponse;
   "ImportJobResponse": ImportJobResponse;
@@ -6874,6 +7286,8 @@ export interface OmiApiSchemas {
   "LegacyMaterializePromptsResponse": LegacyMaterializePromptsResponse;
   "LegacyProactiveIntent": LegacyProactiveIntent;
   "LinkCalendarEventRequest": LinkCalendarEventRequest;
+  "LiveConversation": LiveConversation;
+  "LiveSummaryPreview": LiveSummaryPreview;
   "LlmTotalCostResponse": LlmTotalCostResponse;
   "LlmUsageFeatureResponse": LlmUsageFeatureResponse;
   "LlmUsageRecordResponse": LlmUsageRecordResponse;
@@ -6944,6 +7358,7 @@ export interface OmiApiSchemas {
   "MobileFeedbackReason": MobileFeedbackReason;
   "MobileFeedbackReceipt": MobileFeedbackReceipt;
   "MobileFeedbackRequest": MobileFeedbackRequest;
+  "MonthlySwitchRequest": MonthlySwitchRequest;
   "MoveConversationRequest": MoveConversationRequest;
   "NormalizedContextMatch": NormalizedContextMatch;
   "NormalizedContextSnapshot": NormalizedContextSnapshot;
@@ -6970,6 +7385,8 @@ export interface OmiApiSchemas {
   "Participant": Participant;
   "PayPalPaymentDetailsResponse": PayPalPaymentDetailsResponse;
   "PaymentCheckoutSessionResponse": PaymentCheckoutSessionResponse;
+  "PaymentIssue": PaymentIssue;
+  "PaymentIssueMonthlySwitch": PaymentIssueMonthlySwitch;
   "PaymentMethodStatusResponse": PaymentMethodStatusResponse;
   "PaymentMutationResponse": PaymentMutationResponse;
   "PaymentStatusMessageResponse": PaymentStatusMessageResponse;
@@ -6993,6 +7410,11 @@ export interface OmiApiSchemas {
   "PlanLimits": PlanLimits;
   "PlanType": PlanType;
   "PlatformMinimumBuild": PlatformMinimumBuild;
+  "PlayBasePlan": PlayBasePlan;
+  "PlayBillingConfig": PlayBillingConfig;
+  "PlayBillingErrorResponse": PlayBillingErrorResponse;
+  "PlayPurchaseRequest": PlayPurchaseRequest;
+  "PlayPurchaseResponse": PlayPurchaseResponse;
   "PluginResult": PluginResult;
   "PricingOption": PricingOption;
   "PrivateCloudSyncResponse": PrivateCloudSyncResponse;
@@ -7026,19 +7448,35 @@ export interface OmiApiSchemas {
   "QuestionOption": QuestionOption;
   "RateMessageRequest": RateMessageRequest;
   "ReadRolloutCapabilities": ReadRolloutCapabilities;
+  "ReadableCalendar": ReadableCalendar;
   "RebuildResponse": RebuildResponse;
   "Recommendation": Recommendation;
   "RecommendationSubjectKind": RecommendationSubjectKind;
   "RecordAudioPartial": RecordAudioPartial;
   "RecordLlmUsageBucketRequest": RecordLlmUsageBucketRequest;
   "RecordedClock": RecordedClock;
+  "RecordingMemberCount": RecordingMemberCount;
+  "RecordingPiece": RecordingPiece;
+  "RecordingSelection": RecordingSelection;
+  "RecordingSpeakerConflict": RecordingSpeakerConflict;
+  "RecordingSpeakerLimit": RecordingSpeakerLimit;
+  "RecordingSpeakerRequest": RecordingSpeakerRequest;
+  "RecordingSpeakerResponse": RecordingSpeakerResponse;
+  "RecordingStaleDetail": RecordingStaleDetail;
+  "RecordingTranscriptMember": RecordingTranscriptMember;
+  "RecordingTranscriptResponse": RecordingTranscriptResponse;
+  "RecordingTranscriptSegment": RecordingTranscriptSegment;
+  "RecordingVoice": RecordingVoice;
   "RedeemCodeRequest": RedeemCodeRequest;
   "RedeemCodeResponse": RedeemCodeResponse;
+  "RedeemPrepaidCodeResponse": RedeemPrepaidCodeResponse;
   "ReferralClaimRequest": ReferralClaimRequest;
   "ReferralClaimResponse": ReferralClaimResponse;
   "ReferralLinkResponse": ReferralLinkResponse;
   "RejectSpeakerRequest": RejectSpeakerRequest;
   "ReleaseChannel": ReleaseChannel;
+  "ReminderIntent": ReminderIntent;
+  "ReminderOrigin": ReminderOrigin;
   "ReorderFoldersRequest": ReorderFoldersRequest;
   "ReplyToReviewRequest": ReplyToReviewRequest;
   "ResponseMessage": ResponseMessage;
@@ -7070,6 +7508,7 @@ export interface OmiApiSchemas {
   "ScreenActivitySummaryResponse": ScreenActivitySummaryResponse;
   "ScreenActivitySyncRequest": ScreenActivitySyncRequest;
   "ScreenActivitySyncResponse": ScreenActivitySyncResponse;
+  "ScreenDeviceCoverage": ScreenDeviceCoverage;
   "ScreenFrameAdjudicationRequest": ScreenFrameAdjudicationRequest;
   "ScreenFrameAdjudicationResponse": ScreenFrameAdjudicationResponse;
   "ScreenFrameCandidateIn": ScreenFrameCandidateIn;
@@ -7174,6 +7613,8 @@ export interface OmiApiSchemas {
   "SurfaceStateRequest": SurfaceStateRequest;
   "SyncBatchItem": SyncBatchItem;
   "SyncBatchRequest": SyncBatchRequest;
+  "SyncCaptureEndRequest": SyncCaptureEndRequest;
+  "SyncCaptureEndResponse": SyncCaptureEndResponse;
   "SyncCaptureManifestFile": SyncCaptureManifestFile;
   "SyncCaptureManifestRequest": SyncCaptureManifestRequest;
   "SyncCaptureManifestResponse": SyncCaptureManifestResponse;
@@ -7183,6 +7624,7 @@ export interface OmiApiSchemas {
   "SyncLocalFilesResultResponse": SyncLocalFilesResultResponse;
   "SyncRecoveryWindowExceededResponse": SyncRecoveryWindowExceededResponse;
   "SyncRequestValidationErrorResponse": SyncRequestValidationErrorResponse;
+  "SyncUploadHoldReleaseResponse": SyncUploadHoldReleaseResponse;
   "SyncUserTimeZoneRequest": SyncUserTimeZoneRequest;
   "SynthesizeAIUserProfileRequest": SynthesizeAIUserProfileRequest;
   "SynthesizeAIUserProfileResponse": SynthesizeAIUserProfileResponse;
@@ -7194,8 +7636,11 @@ export interface OmiApiSchemas {
   "TaskCardSpec": TaskCardSpec;
   "TaskChangePayload": TaskChangePayload;
   "TaskCompleteCandidate": TaskCompleteCandidate;
+  "TaskConversationPageRequest": TaskConversationPageRequest;
+  "TaskConversationPageResponse": TaskConversationPageResponse;
   "TaskCreateCandidate": TaskCreateCandidate;
   "TaskCreatePayload": TaskCreatePayload;
+  "TaskDue": TaskDue;
   "TaskGoalLinkImport": TaskGoalLinkImport;
   "TaskGoalLinkImportReport": TaskGoalLinkImportReport;
   "TaskGoalLinkImportRequest": TaskGoalLinkImportRequest;
@@ -8102,6 +8547,24 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/calendar/google/calendars": {
+    get: {
+      operationId: "list_readable_google_calendars_v1_calendar_google_calendars_get";
+      responses: {
+        "200": CalendarSelection;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    put: {
+      operationId: "save_google_calendar_selection_v1_calendar_google_calendars_put";
+      responses: {
+        "200": CalendarSelection;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/calendar/google/events": {
     get: {
       operationId: "list_google_calendar_events_v1_calendar_google_events_get";
@@ -8334,7 +8797,17 @@ export interface OmiApiPaths {
       responses: {
         "200": CreateConversationResponse;
         "401": void;
+        "404": void;
         "422": HTTPValidationError;
+        "500": {
+  detail: string;
+};
+        "503": {
+  detail: {
+  code: "conversation_processing_retryable";
+  message: string;
+};
+};
       };
     };
   };
@@ -8368,6 +8841,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/conversations/live": {
+    get: {
+      operationId: "get_live_conversation_v1_conversations_live_get";
+      responses: {
+        "200": ConversationsLiveResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/conversations/merge": {
     post: {
       operationId: "merge_conversations_v1_conversations_merge_post";
@@ -8388,11 +8871,31 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/conversations/task-presence": {
+    post: {
+      operationId: "task_presence_v1_conversations_task_presence_post";
+      responses: {
+        "200": ConversationTaskPresenceResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/conversations/topic": {
     post: {
       operationId: "generate_conversation_topic_endpoint_v1_conversations_topic_post";
       responses: {
         "200": ConversationTopicResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/with-tasks/page": {
+    post: {
+      operationId: "conversations_with_tasks_v1_conversations_with_tasks_page_post";
+      responses: {
+        "200": TaskConversationPageResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -8628,6 +9131,29 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/conversations/{conversation_id}/recording-speakers": {
+    get: {
+      operationId: "get_recording_speakers_v1_conversations__conversation_id__recording_speakers_get";
+      responses: {
+        "200": RecordingTranscriptResponse;
+        "401": void;
+        "404": void;
+        "413": RecordingSpeakerLimit;
+        "422": HTTPValidationError;
+      };
+    };
+    patch: {
+      operationId: "assign_recording_speakers_v1_conversations__conversation_id__recording_speakers_patch";
+      responses: {
+        "200": RecordingSpeakerResponse;
+        "401": void;
+        "404": void;
+        "409": RecordingSpeakerConflict;
+        "413": RecordingSpeakerLimit;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/conversations/{conversation_id}/reprocess": {
     post: {
       operationId: "reprocess_conversation_v1_conversations__conversation_id__reprocess_post";
@@ -8639,7 +9165,16 @@ export interface OmiApiPaths {
         "404": void;
         "409": void;
         "422": HTTPValidationError;
+        "500": {
+  detail: string;
+};
         "502": void;
+        "503": {
+  detail: {
+  code: "conversation_processing_retryable";
+  message: string;
+};
+};
       };
     };
   };
@@ -8799,6 +9334,41 @@ export interface OmiApiPaths {
         "200": ConversationStatusResponse;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/summary/live-catchup/stream": {
+    get: {
+      operationId: "conversation_live_catchup_stream_v1_conversations__conversation_id__summary_live_catchup_stream_get";
+      responses: {
+        "200": unknown;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/summary/open": {
+    post: {
+      operationId: "open_historical_summary_v1_conversations__conversation_id__summary_open_post";
+      responses: {
+        "200": Conversation;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/summary/stream": {
+    get: {
+      operationId: "conversation_summary_stream_v1_conversations__conversation_id__summary_stream_get";
+      responses: {
+        "200": unknown;
+        "401": void;
+        "404": void;
+        "409": {
+  detail: "summary_in_progress";
+};
         "422": HTTPValidationError;
       };
     };
@@ -9295,6 +9865,19 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/episodes/{episode_id}/assign-speaker": {
+    patch: {
+      operationId: "assign_episode_speaker_v1_episodes__episode_id__assign_speaker_patch";
+      responses: {
+        "200": RecordingSpeakerResponse;
+        "401": void;
+        "404": void;
+        "409": RecordingSpeakerConflict;
+        "413": RecordingSpeakerLimit;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/episodes/{episode_id}/items/{item_id}/dismiss": {
     post: {
       operationId: "dismiss_episode_item_v1_episodes__episode_id__items__item_id__dismiss_post";
@@ -9695,6 +10278,26 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/home/feed": {
+    get: {
+      operationId: "get_home_feed_v1_home_feed_get";
+      responses: {
+        "200": HomeFeedResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/home/feed/prepare": {
+    post: {
+      operationId: "prepare_home_feed_v1_home_feed_prepare_post";
+      responses: {
+        "200": HomeFeedPreparationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/import/jobs": {
     get: {
       operationId: "get_import_jobs_v1_import_jobs_get";
@@ -10036,6 +10639,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/mcp/conversations/deleted": {
+    get: {
+      operationId: "get_deleted_conversations_v1_mcp_conversations_deleted_get";
+      responses: {
+        "200": Array<DeletedConversation>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/mcp/conversations/search": {
     get: {
       operationId: "search_conversations_v1_mcp_conversations_search_get";
@@ -10091,6 +10704,15 @@ export interface OmiApiPaths {
         "200": McpApiKeyCreated;
         "401": void;
         "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/keys/scopes": {
+    get: {
+      operationId: "get_mcp_key_scope_contract";
+      responses: {
+        "200": ConnectorAccess;
+        "401": void;
       };
     };
   };
@@ -10397,12 +11019,45 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/payments/payment-issue/monthly-switch": {
+    post: {
+      operationId: "payment_issue_monthly_switch_endpoint_v1_payments_payment_issue_monthly_switch_post";
+      responses: {
+        "200": PaymentStatusMessageResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/payments/play/purchases": {
+    post: {
+      operationId: "verify_play_purchase_v1_payments_play_purchases_post";
+      responses: {
+        "200": PlayPurchaseResponse;
+        "400": PlayBillingErrorResponse;
+        "401": void;
+        "409": PlayBillingErrorResponse;
+        "422": HTTPValidationError;
+        "429": void;
+      };
+    };
+  };
   "/v1/payments/portal-return": {
     get: {
       operationId: "portal_return_v1_payments_portal_return_get";
       responses: {
         "200": unknown;
         "401": void;
+      };
+    };
+  };
+  "/v1/payments/prepaid-code/redeem": {
+    post: {
+      operationId: "redeem_prepaid_code_endpoint_v1_payments_prepaid_code_redeem_post";
+      responses: {
+        "200": RedeemPrepaidCodeResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
@@ -11128,6 +11783,24 @@ export interface OmiApiPaths {
     };
     patch: {
       operationId: "update_ai_profile_v1_users_ai_profile_patch";
+      responses: {
+        "200": AIUserProfileResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_ai_profile_v1_users_ai_profile_delete";
+      responses: {
+        "204": void;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/ai-profile/refresh": {
+    post: {
+      operationId: "refresh_ai_profile_v1_users_ai_profile_refresh_post";
       responses: {
         "200": AIUserProfileResponse;
         "401": void;
@@ -12391,6 +13064,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v2/sync-capture-end": {
+    post: {
+      operationId: "record_sync_capture_end_v2_sync_capture_end_post";
+      responses: {
+        "200": SyncCaptureEndResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v2/sync-capture-manifest": {
     post: {
       operationId: "create_sync_capture_manifest_v2_sync_capture_manifest_post";
@@ -12423,11 +13106,51 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v2/sync-local-files/{job_id}/release-hold": {
+    post: {
+      operationId: "release_sync_upload_hold_v2_sync_local_files__job_id__release_hold_post";
+      responses: {
+        "200": SyncUploadHoldReleaseResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v2/tts/synthesize": {
     post: {
       operationId: "tts_synthesize_v2_tts_synthesize_post";
       responses: {
         "200": unknown;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/users/me/referral/campaign": {
+    get: {
+      operationId: "get_campaign_v2_users_me_referral_campaign_get";
+      responses: {
+        "200": CampaignSnapshotResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/users/me/referral/campaign/attribution": {
+    post: {
+      operationId: "attribute_campaign_v2_users_me_referral_campaign_attribution_post";
+      responses: {
+        "200": CampaignAttributionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/users/me/referral/campaign/claim": {
+    post: {
+      operationId: "claim_campaign_v2_users_me_referral_campaign_claim_post";
+      responses: {
+        "200": CampaignSnapshotResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -14285,6 +15008,46 @@ export async function get_calendar_capture_gaps_v1_calendar_capture_gaps_get(que
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function list_readable_google_calendars_v1_calendar_google_calendars_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CalendarSelection> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/calendar/google/calendars`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function save_google_calendar_selection_v1_calendar_google_calendars_put(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CalendarSelectionUpdate, init?: OmiApiClientInit): Promise<CalendarSelection> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/calendar/google/calendars`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PUT",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function list_google_calendar_events_v1_calendar_google_events_get(query: { time_min?: string | null, time_max?: string | null, q?: string | null, max_results?: number }, header: { X_App_Platform?: string, X_App_Version?: string, X_App_Build?: string | null, authorization?: string, X_Device_Id_Hash?: string }, init?: OmiApiClientInit): Promise<Array<GoogleCalendarEvent>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/calendar/google/events`;
@@ -14746,7 +15509,7 @@ export async function synthesize_connector_data_v1_connectors_synthesize_post(he
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_conversations_v1_conversations_get(query: { limit?: number, offset?: number, statuses?: string | null, include_discarded?: boolean, sources?: string | null, start_date?: string | null, end_date?: string | null, folder_id?: string | null, starred?: boolean | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Conversation>> {
+export async function get_conversations_v1_conversations_get(query: { limit?: number, offset?: number, statuses?: string | null, include_discarded?: boolean, sources?: string | null, start_date?: string | null, end_date?: string | null, folder_id?: string | null, starred?: boolean | null, cursor?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Conversation>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations`;
   const _params = query ? Object.entries(query)
@@ -14854,6 +15617,26 @@ export async function get_hidden_noise_counts_v1_conversations_hidden_noise_coun
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_live_conversation_v1_conversations_live_get(header: { X_Omi_App_Channel?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ConversationsLiveResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/live`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_Omi_App_Channel !== undefined ? { "X-Omi-App-Channel": String(header.X_Omi_App_Channel) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function merge_conversations_v1_conversations_merge_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MergeConversationsRequest, init?: OmiApiClientInit): Promise<MergeConversationsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/merge`;
@@ -14896,9 +15679,51 @@ export async function search_conversations_endpoint_v1_conversations_search_post
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function task_presence_v1_conversations_task_presence_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ConversationTaskPresenceRequest, init?: OmiApiClientInit): Promise<ConversationTaskPresenceResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/task-presence`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function generate_conversation_topic_endpoint_v1_conversations_topic_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ConversationTopicRequest, init?: OmiApiClientInit): Promise<ConversationTopicResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/topic`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function conversations_with_tasks_v1_conversations_with_tasks_page_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: TaskConversationPageRequest, init?: OmiApiClientInit): Promise<TaskConversationPageResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/with-tasks/page`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
@@ -15360,6 +16185,47 @@ export async function conversation_has_audio_recording_v1_conversations__convers
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_recording_speakers_v1_conversations__conversation_id__recording_speakers_get(path: { conversation_id: string }, header: { X_Omi_App_Channel?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<RecordingTranscriptResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/recording-speakers`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_Omi_App_Channel !== undefined ? { "X-Omi-App-Channel": String(header.X_Omi_App_Channel) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function assign_recording_speakers_v1_conversations__conversation_id__recording_speakers_patch(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RecordingSpeakerRequest, init?: OmiApiClientInit): Promise<RecordingSpeakerResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/recording-speakers`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function reprocess_conversation_v1_conversations__conversation_id__reprocess_post(path: { conversation_id: string }, query: { language_code?: string | null, app_id?: string | null, source?: "omi" | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/reprocess`;
@@ -15672,6 +16538,25 @@ export async function patch_conversation_summary_v1_conversations__conversation_
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function open_historical_summary_v1_conversations__conversation_id__summary_open_post(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/summary/open`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -16577,6 +17462,28 @@ export async function get_episode_v1_episodes__episode_id__get(path: { episode_i
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function assign_episode_speaker_v1_episodes__episode_id__assign_speaker_patch(path: { episode_id: string }, header: { X_Omi_App_Channel?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RecordingSpeakerRequest, init?: OmiApiClientInit): Promise<RecordingSpeakerResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/episodes/${path.episode_id}/assign-speaker`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_Omi_App_Channel !== undefined ? { "X-Omi-App-Channel": String(header.X_Omi_App_Channel) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function dismiss_episode_item_v1_episodes__episode_id__items__item_id__dismiss_post(path: { episode_id: string, item_id: string }, header: { X_Omi_App_Channel?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Episode> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/episodes/${path.episode_id}/items/${path.item_id}/dismiss`;
@@ -17412,6 +18319,49 @@ export async function append_goal_progress_event_v1_goals__goal_id__progress_eve
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_home_feed_v1_home_feed_get(query: { limit?: number, cursor?: string | null }, header: { X_Omi_App_Channel?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<HomeFeedResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/home/feed`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_Omi_App_Channel !== undefined ? { "X-Omi-App-Channel": String(header.X_Omi_App_Channel) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function prepare_home_feed_v1_home_feed_prepare_post(header: { X_Omi_App_Channel?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<HomeFeedPreparationResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/home/feed/prepare`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_Omi_App_Channel !== undefined ? { "X-Omi-App-Channel": String(header.X_Omi_App_Channel) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_import_jobs_v1_import_jobs_get(query: { limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<ImportJobResponse>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/import/jobs`;
@@ -18085,6 +19035,24 @@ export async function get_conversations_v1_mcp_conversations_get(query: { start_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_deleted_conversations_v1_mcp_conversations_deleted_get(query: { deleted_since?: string | null, limit?: number, cursor?: string | null }, init?: OmiApiClientInit): Promise<Array<DeletedConversation>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/conversations/deleted`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function search_conversations_v1_mcp_conversations_search_get(query: { query: string, limit?: number, start_date?: string | null, end_date?: string | null, timezone?: string | null }, init?: OmiApiClientInit): Promise<Array<SimpleConversation>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/conversations/search`;
@@ -18181,6 +19149,21 @@ export async function create_key_v1_mcp_keys_post(body: McpApiKeyCreate, init?: 
       ...init?.headers,
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_mcp_key_scope_contract(init?: OmiApiClientInit): Promise<ConnectorAccess> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/keys/scopes`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -18727,6 +19710,70 @@ export async function get_overage_info_endpoint_v1_payments_overage_info_get(hea
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function payment_issue_monthly_switch_endpoint_v1_payments_payment_issue_monthly_switch_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MonthlySwitchRequest, init?: OmiApiClientInit): Promise<PaymentStatusMessageResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/payments/payment-issue/monthly-switch`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function verify_play_purchase_v1_payments_play_purchases_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: PlayPurchaseRequest, init?: OmiApiClientInit): Promise<PlayPurchaseResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/payments/play/purchases`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function redeem_prepaid_code_endpoint_v1_payments_prepaid_code_redeem_post(header: { X_App_Platform?: string, X_App_Build?: string | null, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RedeemCodeRequest, init?: OmiApiClientInit): Promise<RedeemPrepaidCodeResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/payments/prepaid-code/redeem`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_App_Build !== undefined ? { "X-App-Build": String(header.X_App_Build) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function redeem_code_endpoint_v1_payments_redeem_code_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RedeemCodeRequest, init?: OmiApiClientInit): Promise<RedeemCodeResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/payments/redeem-code`;
@@ -18890,7 +19937,7 @@ export async function save_paypal_payment_details_v1_paypal_payment_details_post
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function pending_work_v1_pending_work_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<PendingWorkSnapshot> {
+export async function pending_work_v1_pending_work_get(header: { X_Omi_App_Channel?: string | null, X_Omi_Home_Ownership?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<PendingWorkSnapshot> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/pending-work`;
   const _search = "";
@@ -18899,6 +19946,8 @@ export async function pending_work_v1_pending_work_get(header: { authorization?:
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      ...(header.X_Omi_App_Channel !== undefined ? { "X-Omi-App-Channel": String(header.X_Omi_App_Channel) } : {}),
+      ...(header.X_Omi_Home_Ownership !== undefined ? { "X-Omi-Home-Ownership": String(header.X_Omi_Home_Ownership) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
@@ -20113,6 +21162,44 @@ export async function update_ai_profile_v1_users_ai_profile_patch(header: { auth
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function delete_ai_profile_v1_users_ai_profile_delete(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<void> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/ai-profile`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return;
+}
+
+export async function refresh_ai_profile_v1_users_ai_profile_refresh_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AIUserProfileResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/ai-profile/refresh`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function synthesize_ai_profile_v1_users_ai_profile_synthesize_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SynthesizeAIUserProfileRequest, init?: OmiApiClientInit): Promise<SynthesizeAIUserProfileResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/ai-profile/synthesize`;
@@ -21040,7 +22127,7 @@ export async function claim_referral_v1_users_me_referral_claim_post(header: { a
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_user_subscription_endpoint_v1_users_me_subscription_get(header: { X_App_Platform?: string, X_App_Version?: string, authorization?: string, X_Device_Id_Hash?: string, X_Omi_Plan_Identity?: string }, init?: OmiApiClientInit): Promise<UserSubscriptionResponse> {
+export async function get_user_subscription_endpoint_v1_users_me_subscription_get(header: { X_App_Platform?: string, X_App_Version?: string, X_App_Build?: string | null, authorization?: string, X_Device_Id_Hash?: string, X_Omi_Plan_Identity?: string }, init?: OmiApiClientInit): Promise<UserSubscriptionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/me/subscription`;
   const _search = "";
@@ -21051,6 +22138,7 @@ export async function get_user_subscription_endpoint_v1_users_me_subscription_ge
       ...init?.headers,
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+      ...(header.X_App_Build !== undefined ? { "X-App-Build": String(header.X_App_Build) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_Omi_Plan_Identity !== undefined ? { "X-Omi-Plan-Identity": String(header.X_Omi_Plan_Identity) } : {}),
@@ -22477,7 +23565,7 @@ export async function upload_video_frames_chat_v2_files_video_post(header: { aut
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_latest_version_v2_firmware_latest_get(query: { device_model: string, firmware_revision: string, hardware_revision: string, manufacturer_name: string }, init?: OmiApiClientInit): Promise<FirmwareVersionResponse> {
+export async function get_latest_version_v2_firmware_latest_get(query: { device_model: string, firmware_revision: string, hardware_revision: string, manufacturer_name: string, device_id?: string | null }, init?: OmiApiClientInit): Promise<FirmwareVersionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/firmware/latest`;
   const _params = query ? Object.entries(query)
@@ -22781,6 +23869,27 @@ export async function answer_review_item_v2_v2_review_items__item_id__answer_pos
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function record_sync_capture_end_v2_sync_capture_end_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SyncCaptureEndRequest, init?: OmiApiClientInit): Promise<SyncCaptureEndResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/sync-capture-end`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function create_sync_capture_manifest_v2_sync_capture_manifest_post(header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, authorization?: string }, body: SyncCaptureManifestRequest, init?: OmiApiClientInit): Promise<SyncCaptureManifestResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-capture-manifest`;
@@ -22802,7 +23911,7 @@ export async function create_sync_capture_manifest_v2_sync_capture_manifest_post
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string, recording_session_id?: string | null, audio_start_seconds?: number | null, audio_end_seconds?: number | null }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, X_Request_ID?: string | null, X_Cloud_Trace_Context?: string | null, X_Omi_Sync_Capture_Manifest?: string | null, X_Omi_Firmware_Version?: string | null, X_Omi_Device_Model?: string | null, X_Omi_Conversation_Geolocation?: string | null, authorization?: string }, body: FormData, init?: OmiApiClientInit): Promise<void> {
+export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string, recording_session_id?: string | null, audio_start_seconds?: number | null, audio_end_seconds?: number | null, repair_job_id?: string | null }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, X_Request_ID?: string | null, X_Cloud_Trace_Context?: string | null, X_Omi_Sync_Capture_Manifest?: string | null, X_Omi_Firmware_Version?: string | null, X_Omi_Device_Model?: string | null, X_Omi_Conversation_Geolocation?: string | null, authorization?: string }, body: FormData, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-local-files`;
   const _params = query ? Object.entries(query)
@@ -22831,7 +23940,7 @@ export async function sync_local_files_v2_v2_sync_local_files_post(query: { conv
   return;
 }
 
-export async function get_sync_job_status_v2_sync_local_files__job_id__get(path: { job_id: string }, query: { surface_open?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SyncJobStatusResponse> {
+export async function get_sync_job_status_v2_sync_local_files__job_id__get(path: { job_id: string }, query: { surface_open?: boolean }, header: { X_Omi_Custody_Repair_Protocol?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SyncJobStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-local-files/${path.job_id}`;
   const _params = query ? Object.entries(query)
@@ -22843,10 +23952,80 @@ export async function get_sync_job_status_v2_sync_local_files__job_id__get(path:
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      ...(header.X_Omi_Custody_Repair_Protocol !== undefined ? { "X-Omi-Custody-Repair-Protocol": String(header.X_Omi_Custody_Repair_Protocol) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function release_sync_upload_hold_v2_sync_local_files__job_id__release_hold_post(path: { job_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SyncUploadHoldReleaseResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/sync-local-files/${path.job_id}/release-hold`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_campaign_v2_users_me_referral_campaign_get(header: { authorization?: string }, init?: OmiApiClientInit): Promise<CampaignSnapshotResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/users/me/referral/campaign`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function attribute_campaign_v2_users_me_referral_campaign_attribution_post(header: { authorization?: string }, body: ReferralClaimRequest, init?: OmiApiClientInit): Promise<CampaignAttributionResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/users/me/referral/campaign/attribution`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function claim_campaign_v2_users_me_referral_campaign_claim_post(header: { authorization?: string }, init?: OmiApiClientInit): Promise<CampaignSnapshotResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/users/me/referral/campaign/claim`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
@@ -23377,4 +24556,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 536 client methods generated.
+// Total: 559 client methods generated.

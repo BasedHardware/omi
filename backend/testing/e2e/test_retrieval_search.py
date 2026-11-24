@@ -258,6 +258,9 @@ def _install_fakes(monkeypatch):
 
 
 def test_memory_search_reindexes_updates_and_delete_removes_result(client, auth_headers, fake_firestore, monkeypatch):
+    # This scenario explicitly drives the deferred processor and outbox below.
+    # Inline normalization would race it using the generic fake LLM response.
+    monkeypatch.setenv("MEMORY_REQUIRED_INTAKE_ENABLED", "false")
     vector_db, fake_index, fake_embeddings = _install_fakes(monkeypatch)
 
     from database.memory_vector_metadata import canonical_memory_provider_id

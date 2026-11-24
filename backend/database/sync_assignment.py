@@ -46,7 +46,10 @@ class SyncAssignmentDiscovery:
 
 
 def encode_sync_assignment_plan(uid: str, client: Any, transaction: Any, payload: dict, current: dict | None) -> dict:
-    from database import conversations
+    from database import conversations, home_visibility_index
+    from database.batch_summary_debt import arm_projection_summary
+
+    arm_projection_summary(uid, client, transaction, payload, current)
 
     if current and current.get('has_transcript_corrections'):
         from utils.agent_capabilities.transcripts import load_entries, preserves_correction_anchors
@@ -65,6 +68,7 @@ def encode_sync_assignment_plan(uid: str, client: Any, transaction: Any, payload
         uid,
         payload.get('data_protection_level') or 'enhanced',
         preserve_transcript_identity=bool(current and current.get('has_transcript_corrections')),
+        conversation_state=current,
     )
     if current is not None and OPEN_LOOP_EXTRACTIONS_FIELD in current:
         # The decoded plan never carries retained extractions (the encoded blob
@@ -99,11 +103,11 @@ def encode_sync_assignment_plan(uid: str, client: Any, transaction: Any, payload
         and current.get('data_protection_level') != payload.get('data_protection_level')
     ):
         encoded[match_scores.FIELD] = firestore.DELETE_FIELD
-    return encoded
+    return home_visibility_index.stamp(encoded, current)
 
 
 def run_sync_assignment(client: Any, assign: Any, full_ids: frozenset[str], *, retry_contention: bool = False):
-    from database._client import run_transactional
+    from database.transcript_pointer import run_preloaded_transactional as run_transactional
     from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
     if (

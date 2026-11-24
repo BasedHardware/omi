@@ -17,7 +17,7 @@ import logging
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
 
 from models.transcript_segment import legacy_conversation_segment_id
 from utils.conversations.transcript_chunks import build_transcript_chunks
@@ -182,17 +182,58 @@ def _query_terms(query: str) -> List[str]:
     return [t for t in _TOKEN_RE.findall(_normalize_text(query)) if len(t) >= 2]
 
 
+def _short_terms(query_norm: str) -> List[str]:
+    return [t for t in _TOKEN_RE.findall(query_norm) if len(t) < 2]
+
+
 def _segment_matches(text: str, query_norm: str, terms: Sequence[str]) -> bool:
     hay = _normalize_text(text)
     if not hay:
         return False
     if query_norm and query_norm in hay:
         return True
+    # One-character words ("Series A", "plan B") are too short to substring-match,
+    # but a query that names one must not match a segment without it as a word.
+    short = _short_terms(query_norm)
+    if short and not set(short) <= set(_TOKEN_RE.findall(hay)):
+        return False
     # Prefer multi-term: require every token when the query has 2+ terms so
     # "budget review" does not match every segment that merely says "review".
     if len(terms) >= 2:
         return all(t in hay for t in terms)
     return bool(terms) and terms[0] in hay
+
+
+def _all_terms_span(text: str, terms: Sequence[str]) -> Optional[Tuple[int, int]]:
+    """Shortest ``[start, end)`` of ``text`` containing every term, or None."""
+    hits = sorted(
+        (pos, i, pos + len(term)) for i, term in enumerate(dict.fromkeys(terms)) for pos in _occurrences(text, term)
+    )
+    need = len(dict.fromkeys(terms))
+    best: Optional[Tuple[int, int]] = None
+    counts: Dict[int, int] = {}
+    left = 0
+    for right in range(len(hits)):
+        counts[hits[right][1]] = counts.get(hits[right][1], 0) + 1
+        while len(counts) == need:
+            end = max(h[2] for h in hits[left : right + 1])
+            if best is None or end - hits[left][0] < best[1] - best[0]:
+                best = (hits[left][0], end)
+            term_index = hits[left][1]
+            counts[term_index] -= 1
+            if not counts[term_index]:
+                del counts[term_index]
+            left += 1
+    return best
+
+
+def _occurrences(text: str, term: str, cap: int = 64) -> List[int]:
+    found: List[int] = []
+    at = text.find(term)
+    while at >= 0 and len(found) < cap:
+        found.append(at)
+        at = text.find(term, at + 1)
+    return found
 
 
 def _seconds_to_ms(value: Any) -> Optional[int]:
@@ -220,6 +261,7 @@ def build_transcript_match_snippets(
     max_snippets: int = 3,
     max_chars: int = _MAX_SNIPPET_CHARS,
     center_match: bool = False,
+    with_position: bool = False,
 ) -> List[Dict[str, Any]]:
     """Return grep-style transcript snippets for segments matching ``query``.
 
@@ -284,10 +326,17 @@ def build_transcript_match_snippets(
         if len(snippet_text) > max_chars:
             if center_match and max_chars > 6:
                 normalized = _normalize_text(center_text)
+                width = max_chars - 6
+                lead = width // 3
                 at = normalized.find(query_norm) if query_norm else -1
                 if at < 0:
-                    locations = [normalized.find(term) for term in terms if term]
-                    at = min((pos for pos in locations if pos >= 0), default=0)
+                    span = _all_terms_span(normalized, terms) if len(terms) >= 2 else None
+                    if span is not None:
+                        # Start at the shortest stretch holding every word, leading in less if it is long.
+                        at, lead = span[0], min(lead, max(0, width - (span[1] - span[0])))
+                    else:
+                        locations = [normalized.find(term) for term in terms if term]
+                        at = min((pos for pos in locations if pos >= 0), default=0)
                 # Map the normalized match back to a raw-text window. Casefold
                 # and NFKC can change length; never return normalized speech as
                 # if it were the user's verbatim transcript.
@@ -298,7 +347,7 @@ def build_transcript_match_snippets(
                         left = mid + 1
                     else:
                         right = mid
-                clip_start = max(center_line_start, center_offset + left - (max_chars - 6) // 3)
+                clip_start = max(center_line_start, center_offset + left - lead)
                 clip_end = min(len(snippet_text), clip_start + max_chars - 6)
                 excerpt = snippet_text[clip_start:clip_end]
                 snippet_text = ('...' if clip_start else '') + excerpt + ('...' if clip_end < len(snippet_text) else '')
@@ -324,6 +373,8 @@ def build_transcript_match_snippets(
                 "speaker_id": None,
                 "speaker_key": display.for_segment(hit).key,
                 "speaker_label": display.label(hit),
+                # The hit's list position, for segments stored without an id (opt-in; private key).
+                **({"_position": center} if with_position else {}),
             }
         )
     return snippets
@@ -461,6 +512,7 @@ def attach_match_snippets_to_conversations(
     query: str,
     *,
     max_chars: int = _MAX_SNIPPET_CHARS,
+    with_position: bool = False,
 ) -> List[Dict[str, Any]]:
     """Copy conversations and attach ``match_snippets`` from transcript_segments."""
     enriched: List[Dict[str, Any]] = []
@@ -470,6 +522,8 @@ def attach_match_snippets_to_conversations(
         item = dict(conv)
         segments_raw = item.get("transcript_segments") or []
         segments: List[Any] = segments_raw if isinstance(segments_raw, list) else []
-        item["match_snippets"] = build_transcript_match_snippets(segments, query, max_chars=max_chars)
+        item["match_snippets"] = build_transcript_match_snippets(
+            segments, query, max_chars=max_chars, with_position=with_position
+        )
         enriched.append(item)
     return enriched

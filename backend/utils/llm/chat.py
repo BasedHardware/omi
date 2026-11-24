@@ -1409,7 +1409,6 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
         people = [Person(**p) for p in people_data]
 
     transcript = TranscriptSegment.segments_as_string(segments, people=people, user_name=user_name)
-    # TODO: tweak with different type of requests, like this, or roast, or praise or emotional, etc.
 
     prompt = f"""
     You are a brutally honest, very creative, sometimes funny, indefatigable personal life coach who helps people improve their own agency in life, \

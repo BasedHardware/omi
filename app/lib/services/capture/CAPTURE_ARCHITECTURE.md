@@ -97,12 +97,22 @@ with no live taker is dropped rather than stranded on idle.
 listener callback dispatch events; nothing else mutates ownership.
 
 User/API intents: `PhoneStartRequested`, `PhoneStopRequested`,
-`FinishRequested`, `PauseCaptureRequested`, `ResumeCaptureRequested`,
+`PhoneDiscardRequested`, `FinishRequested`, `PauseCaptureRequested`, `ResumeCaptureRequested`,
 `OfflineMuteToggled`, `DeviceStartRequested`, `DeviceStopRequested`,
 `DeviceUpdated`, `PhoneBatchStartRequested`, `DevicePauseRequested`,
 `DeviceResumeRequested`, `BatchModeSetRequested`,
 `TranscriptionSettingsChanged`, `RecordProfileChanged`,
 `OnboardingBatchChanged`.
+
+`PhoneDiscardRequested` is Undo on Home's recording bar. It moves ownership exactly as a user
+`PhoneStopRequested` does (pendant resume, policy restore, call conversion), with one difference:
+the live teardown is `DiscardPhoneLiveStage`, which keeps nothing. That stage does not flush, it
+drops the recording's WALs (`LocalWalSyncImpl.discardRecording`, CUSTODY invariant 2) and clears
+the transcript, and nothing is processed. After the socket closes, `discardPhoneRecording` deletes
+the server's copy by recording id. The delete is persisted before the first attempt and cleared
+only when the server accepts it, so a delete an offline or killed app could not finish runs again
+on the next launch (`capture_phone_discard.dart`). Batch phone sessions and captures the phone does
+not own are ignored.
 
 A Live Activity tap sends `PauseCaptureRequested`, `ResumeCaptureRequested` or
 `FinishRequested` with the card's `SystemSurfaceTarget` (recording id and
@@ -135,7 +145,7 @@ awaited, against `CaptureEffectPorts` — one method per primitive:
 |---|---|
 | `writePolicy(muted)` | `_setCaptureMuted` durable admission write; returns `PolicyWriteOutcome` and a superseded policy aborts the rest of the transition. |
 | `stopBleStream` / `startBleStream` | `_closeBleStream` / `_initiateDeviceAudioStreaming`. |
-| `openSocket(spec)` / `closeSocket(reason)` | `_initiateWebsocket` / `_socket?.stop`. |
+| `openSocket(spec)` / `closeSocket(reason, userStop)` | `_initiateWebsocket` / `_socket?.stop`; `userStop` sends `finalization_reason: user_stop` first. |
 | `startNativeMic(mode)` / `stopNativeMic()` | live → `_resumeMicRecording`; batch → `_startPhoneMicBatchBody`; stop → `_phoneMic.stop()`. |
 | `setNativeWriterGate(source, admitted)` | `CaptureNativeWriterGate` interface. **Interface only**: no native per-source gate exists, so production uses `NoopCaptureNativeWriterGate` and batch handoffs stay refused rather than silently unsafe. |
 | `finalizeWal` | `_wal.getSyncs().phone.finalizeCurrentSession()`. |
@@ -472,10 +482,28 @@ dispatches simply sanitizes again next launch.
   `wasPaused` intent; no device control opens BLE beneath a phone or call.
   With no owner, the old device-pause API still writes the durable mute
   policy without opening hardware.
+- Explicit pendant pause/resume runs `PersistDeviceMuteStage` before the local
+  `PolicyWrite`. A supported device must acknowledge storage and return matching
+  readback; failures reach the UI caller instead of confirming the new state.
+  A superseded policy restores the winning hardware intent before keeping the
+  prior owner. Phone-only, automatic silence, and call suspension never write
+  this persistent hardware setting.
 - Resume while idle is policy-only: `ResumeCaptureRequested`/
-  `OfflineMuteToggled` with no owner emits `PolicyWrite(false)` and nothing
+  `OfflineMuteToggled` with no connected device emits `PolicyWrite(false)` and nothing
   else — no `ResumeDeviceTailStage`, no socket, no BLE open. An offline
-  unmute changes admission, never ownership.
+  unmute changes admission, never ownership. With a connected pendant, hardware
+  confirmation precedes the policy write; the reducer still starts nothing, and
+  the controller (`_resumeStartingIdlePendant`) then starts the idle pendant.
+  `DeviceResumeRequested` (pendant double-press) shares this idle rule.
+- A pendant muted before the app process restarted resolves to a paused
+  session on its cold start: the start commits `RecordingState.pause` without
+  an audio subscription instead of failing closed to idle, so Resume stays
+  reachable (`_commitMutedStartAsPaused`).
+- Every fresh device session resolves the pendant mute before its transport
+  stage. `DeviceMuteResolved` folds the effective policy into both the staged
+  and committed pendant phase, preserving the active session and live/batch
+  mode. A check-only start without an owner stays idle; a preserved call
+  suspension continues to use its recorded resume intent.
 - A device start admitted under a muted policy is a legitimate paused
   capture: telemetry marks it started, not `failStart`. Any other failed
   start stage fails the transition closed rather than committing a session
@@ -527,3 +555,33 @@ and keepalive ticks.
 Remaining legacy: the staged bodies listed above, plus UI-adjacent controller
 concerns (location capture, metrics, optimistic processing) that never made
 ownership decisions.
+
+## Conversation windows on a continuing live socket (#20365)
+
+A source recording/socket can carry several server conversations. Its recording ID stays stable,
+while each completed conversation rotates a separate window revision with a factual phone-clock
+start. Reset and rearm publish together; stopping/error does not open another window.
+
+`capture_conversation_custody.dart` admits an immutable close before yielding: the WAL owner seals
+an exclusive audio cut, and the close retains its segment arrivals, socket mode, interruption state
+and account generation. Only stamping runs in the ordered tail. Each conversation has its own
+confirmation/fallback; coverage and recovery never run inside that tail. Duplicate processing IDs
+do not rotate the next window. Account clearing retires pending authority and timers, while
+already-admitted writes remain fenced by their original WAL generation.
+
+Process Now reserves the same cut before its disk/HTTP waits. A server close during its drain adopts
+that exact window. After the local window has rotated, an intervening server ID is ambiguous until
+the HTTP result supplies the exact ID: a matching ID confirms the original cut, a different ID owns
+its own cut, and an absent result leaves ambiguous audio unlinked for recovery. Intervening audio
+is never guessed into the earlier conversation. No upload preference or transcript-coverage rule
+changes; the WAL [custody contract](../wals/CUSTODY.md) remains authoritative.
+
+Implementation/verification checklist:
+
+- [x] Rearm sequential windows without reconnecting or inventing future clock timestamps.
+- [x] Seal/reserve exact WAL object identities at close admission, before queued I/O.
+- [x] Keep per-close evidence and handle reversed/duplicate events and Process Now overlap.
+- [x] Preserve partial, interrupted, uncertain and foreign-account audio and upload choices.
+- [x] Exercise real controller/ledger/disk/recovery with synthetic ingress and restart discovery
+  (`capture_next_conversation_window_test.dart`, `conversation_wal_snapshot_test.dart`); these replay
+  tests substitute socket/device boundaries and do not certify native BLE or a physical pendant.

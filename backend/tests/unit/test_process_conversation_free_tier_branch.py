@@ -165,7 +165,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     )
 
     subscription = add('utils.subscription', AutoMockModule('utils.subscription'))
-    subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.request_has_llm_byok_key = MagicMock(return_value=False)
     subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
@@ -223,7 +222,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.memory.rejected_memory_feedback', AutoMockModule('utils.memory.rejected_memory_feedback'))
 
     task_intelligence = ModuleType('utils.task_intelligence')
-    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    # Keep pure policy modules importable while persistence adapters stay stubbed.
+    task_intelligence.__path__ = [str(_BACKEND / 'utils' / 'task_intelligence')]  # type: ignore[attr-defined]
     add('utils.task_intelligence', task_intelligence)
     capture = AutoMockModule('utils.task_intelligence.conversation_capture')
     capture.capture_enabled = MagicMock(return_value=False)
@@ -239,6 +239,13 @@ def _build_fakes() -> dict[str, ModuleType]:
     # The finalizer's smart-merge step is off by default; its own tests drive it.
     smart_merge = add('utils.conversations.smart_merge', AutoMockModule('utils.conversations.smart_merge'))
     smart_merge.smart_merge_step = AsyncMock(return_value=False)
+    # The finalizer classifies a donor-resume failure with the real exception
+    # class and closed code set (isinstance must never see a mock).
+    from utils.conversations.smart_merge import _INCOMPLETE_CODES, SmartMergeIncomplete, _incomplete_cause
+
+    smart_merge.SmartMergeIncomplete = SmartMergeIncomplete
+    smart_merge._INCOMPLETE_CODES = _INCOMPLETE_CODES
+    smart_merge._incomplete_cause = _incomplete_cause
     add('utils.log_sanitizer', AutoMockModule('utils.log_sanitizer'))
     add('utils.retrieval.frame_request_authority', AutoMockModule('utils.retrieval.frame_request_authority'))
     services_pkg = ModuleType('services')
@@ -309,7 +316,6 @@ def _spy_managed_effects(monkeypatch, pc) -> dict[str, MagicMock]:
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args, **kwargs: False)
-    monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: False)
     return spies
 
 
@@ -729,6 +735,7 @@ def test_flag_off_fresh_create_persists_no_processing_state_key(monkeypatch, pc)
 
 
 def test_flag_off_legacy_deferred_store_persists_no_processing_state_key(monkeypatch, pc) -> None:
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', 'off')
     spies = _spy_managed_effects(monkeypatch, pc)  # should_defer returns True
     payloads = _capture_all_persists(monkeypatch, pc)
 
@@ -813,6 +820,7 @@ def test_paid_reprocess_clears_a_dead_letter_summary_retryable_marker(monkeypatc
 
 @pytest.mark.parametrize('persisted, expected_event', [(True, 'stored'), (False, 'fenced')])
 def test_legacy_deferral_records_lazy_store_lifecycle(monkeypatch, pc, persisted: bool, expected_event: str) -> None:
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', 'off')
     spies = _spy_managed_effects(monkeypatch, pc)
     recorded: list[str] = []
     monkeypatch.setattr(pc, 'record_lazy_desktop_deferral', lambda *, event: recorded.append(event))
@@ -874,7 +882,8 @@ async def test_finalizer_summary_vector_requires_winning_claim(monkeypatch, pc, 
     async def inline(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
-    def claim(*args):
+    def claim(*args, expected_discarded=False):
+        assert expected_discarded is (mode == 'discarded_replay')
         events.append('claim')
         return {'status': claim_status, 'fanout_key': 'key'}
 
@@ -1019,6 +1028,36 @@ def test_silent_backfill_persists_summary_and_never_schedules_derived_work(monke
     )
     assert payloads and payloads[-1][pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is True
     assert not bundle
+    assert disposition[-1] is pc.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
+    for key in ['extract_memories', 'extract_memories_inner', 'trigger_apps', 'assign_folder']:
+        spies[key].assert_not_called()
+    submitted.assert_not_called()
+
+
+def test_v3_backfilled_window_takes_the_live_notes_trigger_but_no_derived_effects(monkeypatch, pc):
+    """A v3 backfill window is processed like live capture (same trigger into notes) yet stays silent."""
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda *_: False)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    spies['get_structured'].return_value = (Structured(title='Derived', overview='Synthetic complete summary'), False)
+    _stub_completed_for_normal_path(monkeypatch, pc)
+    payloads = _capture_all_persists(monkeypatch, pc)
+    disposition = []
+    submitted = MagicMock(side_effect=AssertionError('historical work must stay silent'))
+    monkeypatch.setattr(pc, 'submit_with_context', submitted)
+    # As inside service._process: the v3 summary writer fence is held by the drain.
+    monkeypatch.setattr(pc.v3_service.fence, 'current', lambda: True)
+    window = _existing_desktop().model_copy(
+        update={'source': ConversationSource.omi, 'v3_derived': True, 'backfilled': True}
+    )
+    pc.process_conversation(
+        'uid',
+        'en',
+        window,
+        trigger=pc.ProcessingTrigger.CAPTURE_END,
+        derived_effects_disposition_observer=disposition.append,
+    )
+    assert spies['get_structured'].call_args.kwargs['trigger'] is pc.ProcessingTrigger.CAPTURE_END
+    assert payloads and payloads[-1][pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is True
     assert disposition[-1] is pc.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
     for key in ['extract_memories', 'extract_memories_inner', 'trigger_apps', 'assign_folder']:
         spies[key].assert_not_called()

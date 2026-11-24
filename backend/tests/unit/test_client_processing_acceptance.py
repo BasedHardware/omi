@@ -75,6 +75,8 @@ from models.transcript_segment import TranscriptSegment
 from utils.conversations.projection_payload import PROVENANCE_LOG_MAX_CHARS
 
 
+from database import _client as firestore_client
+from tests.support.isolated_prometheus import isolated_prometheus
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 
@@ -117,17 +119,6 @@ def _build_fakes() -> dict[str, ModuleType]:
         fakes[name] = mod
         return mod
 
-    database_pkg = ModuleType('database')
-    database_pkg.__path__ = [str(_BACKEND / 'database')]  # type: ignore[attr-defined]
-    add('database', database_pkg)
-
-    client_mod = ModuleType('database._client')
-    client_mod.db = MagicMock(name='db')
-    client_mod.get_firestore_client = lambda: client_mod.db
-    client_mod.get_data_plane_firestore_client = lambda: client_mod.db
-    client_mod.run_transactional = lambda client, operation: operation(client.transaction())
-    client_mod.document_id_from_seed = lambda seed: 'seed-id'
-    add('database._client', client_mod)
     tombstones = add('database.conversation_tombstones', AutoMockModule('database.conversation_tombstones'))
     tombstones.is_deleted = MagicMock(return_value=False)
 
@@ -222,7 +213,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     )
 
     subscription = add('utils.subscription', AutoMockModule('utils.subscription'))
-    subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.request_has_llm_byok_key = MagicMock(return_value=False)
@@ -279,7 +269,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.memory.rejected_memory_feedback', AutoMockModule('utils.memory.rejected_memory_feedback'))
 
     task_intelligence = ModuleType('utils.task_intelligence')
-    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    # Keep pure policy modules importable while persistence adapters stay stubbed.
+    task_intelligence.__path__ = [str(_BACKEND / 'utils' / 'task_intelligence')]  # type: ignore[attr-defined]
     add('utils.task_intelligence', task_intelligence)
     capture = AutoMockModule('utils.task_intelligence.conversation_capture')
     capture.capture_enabled = MagicMock(return_value=False)
@@ -315,7 +306,13 @@ def _add_developer_fakes(fakes: dict[str, ModuleType]) -> None:
 def stack():
     fakes = _build_fakes()
     _add_developer_fakes(fakes)
-    with stub_modules(fakes):
+    with pytest.MonkeyPatch.context() as patch, isolated_prometheus(), stub_modules(fakes):
+        client = MagicMock()
+        patch.setattr(firestore_client, '_firestore_client', client)
+        patch.setattr(firestore_client, '_customer_firestore_client', client)
+        patch.setattr(firestore_client, '_data_plane_firestore_client', client)
+        patch.setattr(firestore_client, 'run_transactional', lambda client, operation: operation(client.transaction()))
+        patch.setattr(firestore_client, 'document_id_from_seed', lambda seed: 'seed-id')
         pc = load_module_fresh(
             'utils.conversations.process_conversation',
             os.path.join(str(_BACKEND), 'utils', 'conversations', 'process_conversation.py'),
@@ -412,7 +409,6 @@ def _spy_managed_effects(monkeypatch, pc) -> dict[str, MagicMock]:
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args, **kwargs: False)
-    monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: False)
     return spies
 
 
@@ -621,6 +617,7 @@ def test_paid_plan_generic_persist_omits_projection_keeps_it_in_memory(monkeypat
 
 
 def test_flag_off_deferred_persist_omits_projection_keeps_it_in_memory(monkeypatch, stack) -> None:
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', 'off')
     pc, _dev = stack
     monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: False)
     spies = _spy_managed_effects(monkeypatch, pc)

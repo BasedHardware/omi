@@ -32,6 +32,8 @@ from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
+from database import _client as firestore_client
+from tests.support.isolated_prometheus import isolated_prometheus
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -51,9 +53,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     because they are not exercised by the tracking-context logic under test. ``models.*`` and
     ``fastapi`` stay real (they are import-pure Pydantic schemas / the framework).
     """
-    import hashlib
-    import uuid
-
     fakes: dict[str, ModuleType] = {}
 
     def add(name: str, mod: ModuleType) -> ModuleType:
@@ -64,23 +63,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     refresh = ModuleType('utils.conversations.action_item_refresh')
     refresh.preserve = lambda *a, **k: False
     add('utils.conversations.action_item_refresh', refresh)
-
-    database_pkg = ModuleType("database")
-    database_pkg.__path__ = [str(BACKEND_DIR / "database")]  # type: ignore[attr-defined]
-    add("database", database_pkg)
-
-    client_mod = ModuleType("database._client")
-    client_mod.db = MagicMock(name="db")
-    client_mod.get_firestore_client = lambda: client_mod.db
-    client_mod.get_data_plane_firestore_client = lambda: client_mod.db
-
-    def _document_id_from_seed(seed: str) -> str:
-        seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
-        return str(uuid.UUID(bytes=seed_hash[:16], version=4))
-
-    client_mod.document_id_from_seed = _document_id_from_seed
-    client_mod.run_transactional = MagicMock()
-    add("database._client", client_mod)
 
     vector_db = add("database.vector_db", AutoMockModule("database.vector_db"))
     for attr in [
@@ -147,7 +129,8 @@ def _build_fakes() -> dict[str, ModuleType]:
         add(name, AutoMockModule(name))
 
     task_intelligence = ModuleType("utils.task_intelligence")
-    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    # Keep pure policy modules importable while persistence adapters stay stubbed.
+    task_intelligence.__path__ = [str(BACKEND_DIR / 'utils' / 'task_intelligence')]  # type: ignore[attr-defined]
     add("utils.task_intelligence", task_intelligence)
     conversation_capture = AutoMockModule("utils.task_intelligence.conversation_capture")
     conversation_capture.capture_enabled = MagicMock(return_value=False)
@@ -160,6 +143,13 @@ def _build_fakes() -> dict[str, ModuleType]:
     workstream_association = AutoMockModule("utils.task_intelligence.workstream_association")
     workstream_association.associate_canonical_evidence = MagicMock()
     add("utils.task_intelligence.workstream_association", workstream_association)
+
+    # Speaker providers/custody are outside this usage/persistence fixture.
+    # Stub the processing boundary, including its on_persist keyword, rather
+    # than importing diarization against the deliberately fake Firebase SDK.
+    speakers = AutoMockModule("utils.conversations.processing_speakers")
+    speakers.resolve_speakers_for_processing = MagicMock(return_value=False)
+    add("utils.conversations.processing_speakers", speakers)
 
     # --- firebase / pinecone / typesense / anthropic / stripe --------------
     firebase_admin = ModuleType("firebase_admin")
@@ -270,7 +260,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     subjects.infer_subject_from_segments = lambda segments: (None, None)
 
     subscription = add("utils.subscription", AutoMockModule("utils.subscription"))
-    subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
 
@@ -382,7 +371,12 @@ def _load_modules(request):
     teardown, keeping the suite hermetic.
     """
     fakes = _build_fakes()
-    with stub_modules(fakes):
+    with pytest.MonkeyPatch.context() as patch, isolated_prometheus(), stub_modules(fakes):
+        client = MagicMock()
+        patch.setattr(firestore_client, '_firestore_client', client)
+        patch.setattr(firestore_client, '_customer_firestore_client', client)
+        patch.setattr(firestore_client, '_data_plane_firestore_client', client)
+        patch.setattr(firestore_client, 'run_transactional', MagicMock())
         ut = load_module_fresh(
             "utils.llm.usage_tracker",
             str(BACKEND_DIR / "utils" / "llm" / "usage_tracker.py"),
@@ -720,7 +714,10 @@ def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch)
     persisted.assert_not_called()
 
 
-def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(monkeypatch):
+@pytest.mark.parametrize('enabled', [True, False])
+def test_deferred_fresh_creation_uses_the_matching_lifecycle_owner(monkeypatch, enabled):
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', str(enabled))
+    expected_status = ConversationStatus.completed if enabled else ConversationStatus.processing
     new_request = CreateConversation(
         started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
         finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
@@ -729,19 +726,26 @@ def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(mo
     )
     deferred_conversation = MagicMock()
     deferred_conversation.id = 'deferred-conversation'
-    deferred_conversation.dict.return_value = {'id': 'deferred-conversation', 'status': 'processing'}
-    created = MagicMock(return_value=True)
+    deferred_conversation.record_lane_owner = None
+    deferred_conversation.recording = False
+    deferred_conversation.dict.return_value = {'id': 'deferred-conversation', 'status': expected_status}
+    completed = MagicMock(return_value=True)
+    processing = MagicMock(return_value=True)
     persisted = MagicMock()
-    monkeypatch.setattr(process_conversation, '_build_deferred_structured', lambda *args: MagicMock())
+    monkeypatch.setattr(process_conversation, 'build_deferred_structured', lambda *args: MagicMock())
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
-    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', completed)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', processing)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
 
     result = process_conversation._store_deferred_conversation('uid', new_request)
 
     assert result is deferred_conversation
     assert deferred_conversation.deferred is True
-    created.assert_called_once_with('uid', deferred_conversation.dict(), idempotent=True)
+    assert deferred_conversation.status is expected_status
+    used, unused = (completed, processing) if enabled else (processing, completed)
+    used.assert_called_once_with('uid', deferred_conversation.dict(), idempotent=True)
+    unused.assert_not_called()
     persisted.assert_not_called()
 
 
@@ -749,6 +753,7 @@ def test_deferred_desktop_filler_is_discarded_by_the_free_rules(monkeypatch):
     """Free-tier desktop never reaches the model, but the rules still run."""
     from models.transcript_segment import TranscriptSegment
 
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', 'on')
     new_request = CreateConversation(
         started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
         finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
@@ -757,12 +762,14 @@ def test_deferred_desktop_filler_is_discarded_by_the_free_rules(monkeypatch):
     )
     deferred_conversation = MagicMock()
     deferred_conversation.id = 'deferred-filler'
-    deferred_conversation.dict.return_value = {'id': 'deferred-filler', 'status': 'processing'}
+    deferred_conversation.record_lane_owner = None
+    deferred_conversation.recording = False
+    deferred_conversation.dict.return_value = {'id': 'deferred-filler', 'status': 'completed'}
     created = MagicMock(return_value=True)
-    monkeypatch.setattr(process_conversation, '_build_deferred_structured', lambda *args: MagicMock())
+    monkeypatch.setattr(process_conversation, 'build_deferred_structured', lambda *args: MagicMock())
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
     monkeypatch.setattr(process_conversation, '_calendar_overlap_retains_conversation', lambda *args: False)
-    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', created)
 
     process_conversation._store_deferred_conversation('uid', new_request)
 
@@ -1307,12 +1314,7 @@ def test_replace_mode_preferred_app_leads_and_keeps_other_results():
     ]
 
 
-@pytest.mark.parametrize('enabled', [False, True], ids=['flag-off', 'flag-on'])
-def test_user_reprocess_passes_the_result_contract_and_maps_app_failure(monkeypatch, enabled):
-    if enabled:
-        monkeypatch.setenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', 'true')
-    else:
-        monkeypatch.delenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', raising=False)
+def test_user_reprocess_preserves_results_and_returns_generic_app_failure(monkeypatch):
     seen_kwargs: list = []
 
     def _failing_trigger_apps(uid, conversation, **kwargs):
@@ -1322,14 +1324,9 @@ def test_user_reprocess_passes_the_result_contract_and_maps_app_failure(monkeypa
     with pytest.raises(HTTPException) as exc_info:
         _run_explicit_selection_flow(monkeypatch, _failing_trigger_apps, [])
 
-    # Keep-until-replaced is the default for every user reprocess; the flag
-    # selects only the error code.
+    # Keep-until-replaced is the default for every user reprocess.
     assert seen_kwargs[0]['replace_selected_result'] is True
-    if enabled:
-        assert exc_info.value.status_code == 502
-        assert exc_info.value.detail['code'] == 'app_result_failed'
-    else:
-        assert exc_info.value.status_code == 500
+    assert exc_info.value.status_code == 500
 
 
 def test_first_party_only_never_runs_or_reads_the_preferred_app():
@@ -1793,7 +1790,11 @@ def _ledger_gate_conversation(conversation_id: str) -> Conversation:
         transcript_segments=[
             TranscriptSegment(
                 id='seg-1',
-                text='hello there, this is a transcript segment',
+                text=(
+                    'hello there, this is a transcript segment with enough owner speech '
+                    'to clear the memory admission floor and reach the extraction boundary '
+                    'for the writer-mode admission tests that follow it here'
+                ),
                 speaker='SPEAKER_00',
                 speaker_id=0,
                 is_user=True,
@@ -2122,3 +2123,26 @@ def test_held_raw_budget_denial_preserves_backlog_choice_authority(monkeypatch, 
 def _isolated_relevance_policy(monkeypatch):
     # This legacy model/input fixture has no episode or neighbor database.
     monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
+
+
+def test_builtin_preference_runs_on_new_conversation_without_install_then_clear_stops_it():
+    from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID
+
+    _setup_trigger_apps_mocks(preferred_app_id=DEFAULT_SUMMARY_APP_ID)
+    first = _make_trigger_conversation()
+    result, available, llm, usage, catalog = _trigger_apps_context()
+    with available, llm, usage as record_usage, catalog as lookup:
+        process_conversation.trigger_conversation_apps('user-builtin', first)
+        assert [(item.app_id, item.content) for item in first.apps_results] == [
+            (DEFAULT_SUMMARY_APP_ID, 'App result content')
+        ]
+        assert result.call_args.args[2].id == DEFAULT_SUMMARY_APP_ID
+        lookup.assert_not_called()
+        record_usage.assert_not_called()
+
+        # A later conversation sees the cleared preference and must not run the default again.
+        process_conversation.redis_db.get_user_preferred_app.return_value = None
+        second = _make_trigger_conversation()
+        process_conversation.trigger_conversation_apps('user-builtin', second)
+        assert second.apps_results == []
+        result.assert_called_once()

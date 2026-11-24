@@ -137,7 +137,7 @@ it before the pane's own Esc.
 | Say | Not |
 |---|---|
 | Omi | omi (in UI copy) |
-| Tasks | Action items, To-dos |
+| Tasks | Action items, To-dos, except the meeting-note section of extracted items is Action items |
 | Memories | Facts |
 | Apps | Plugins (Integrations is a section of Apps) |
 | Conversations — recorded conversations | "conversation" for the chat thread; the chat is **Chat** |

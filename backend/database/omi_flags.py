@@ -106,8 +106,36 @@ def read_audit(client: Any, key: str, limit: int = 20) -> list[dict[str, Any]]:
     return rows[:limit]
 
 
-def write_rule(client: Any, key: str, rule: dict[str, Any] | None, *, actor: str, reason: str) -> int:
-    """Replace (or delete, when ``rule`` is None) one flag, bump the version and audit it atomically."""
+class StaleRuleError(RuntimeError):
+    """The stored rule changed after the caller read it; nothing was written."""
+
+
+_UNCHECKED: Any = object()
+
+
+def _rule_identity(rule: dict[str, Any] | None) -> tuple[bool, Any]:
+    # Every write_rule write stamps the global version; a rule written another way is compared whole.
+    if rule is None:
+        return (False, None)
+    version = rule.get('version')
+    return (True, ('version', version) if version is not None else ('rule', rule))
+
+
+def write_rule(
+    client: Any,
+    key: str,
+    rule: dict[str, Any] | None,
+    *,
+    actor: str,
+    reason: str,
+    expected: dict[str, Any] | None = _UNCHECKED,
+) -> int:
+    """Replace (or delete, when ``rule`` is None) one flag, bump the version and audit it atomically.
+
+    ``expected`` is the rule the caller read (None when absent). When given, the write is refused with
+    StaleRuleError if the stored rule has since changed, so a decision made on that snapshot cannot
+    overwrite a concurrent write.
+    """
     meta_ref = client.collection(META_COLLECTION).document(META_DOC)
     flag_ref = client.collection(FLAGS_COLLECTION).document(key)
     audit_ref = client.collection(AUDIT_COLLECTION).document()
@@ -118,6 +146,8 @@ def write_rule(client: Any, key: str, rule: dict[str, Any] | None, *, actor: str
         current = flag_ref.get(transaction=transaction)
         version = int(((meta.to_dict() if meta.exists else None) or {}).get('version') or 0) + 1
         before = current.to_dict() if current.exists else None
+        if expected is not _UNCHECKED and _rule_identity(before) != _rule_identity(expected):
+            raise StaleRuleError(key)
         now = datetime.now(timezone.utc)
         after = (
             None if rule is None else {**rule, 'key': key, 'version': version, 'updated_at': now, 'updated_by': actor}

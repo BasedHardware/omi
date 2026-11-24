@@ -143,7 +143,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
               onPressed: _routing ? null : _omi),
           const SizedBox(height: OmiSpacing.md),
           OmiButton(
-              variant: OmiButtonVariant.secondary,
+              variant: OmiButtonVariant.tertiary,
               labelStyle: labelStyle,
               key: const Key('first_capture_shop'),
               label: context.l10n.firstCaptureNoDevice,

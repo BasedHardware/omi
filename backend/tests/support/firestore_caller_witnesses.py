@@ -27,6 +27,7 @@ from fastapi import HTTPException
 import database.conversations as conversations_db
 import database.conversation_scan as conversation_scan
 import database.users as users_db
+from database.ports.folders import FolderEntity
 import routers.conversations as conversations_router
 import routers.developer as developer_router
 import routers.google_calendar as google_calendar_router
@@ -34,6 +35,7 @@ import routers.integration as integration_router
 import routers.search as search_router
 import routers.support as support_router
 import routers.users as users_router
+import utils.ai_profile_refresh as ai_profile_refresh
 import utils.apps as apps_utils
 import utils.conversations.meeting_context_pack as meeting_context_pack
 import utils.imports.limitless as limitless
@@ -201,6 +203,25 @@ def _run_main_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> N
                             else:
                                 trial(capture, call)
 
+    monkeypatch.setattr(conversations_router, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setenv('OMI_HOME_VISIBILITY_INDEX_OWNERS', 'u1')
+    trial(
+        capture,
+        conversations_router.get_conversations,
+        request=SimpleNamespace(headers={'X-Omi-Home-Page-Mode': 'auto'}),
+        response=None,
+        limit=50,
+        offset=0,
+        cursor=None,
+        statuses='processing,completed',
+        sources=None,
+        start_date=None,
+        end_date=None,
+        folder_id=None,
+        starred=None,
+        uid='u1',
+    )
+
 
 def _run_main_count(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     for statuses in (None, '', 'completed', 'processing,completed'):
@@ -295,7 +316,7 @@ def _run_integration_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCaptur
 
 def _run_search_overview(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, search_router, 'run_blocking', _inline_run_blocking)
-    _stub(monkeypatch, search_router, '_list_folders', lambda uid: [{'id': 'folder-1', 'name': 'F'}])
+    _stub(monkeypatch, search_router, '_list_folders', lambda uid: [FolderEntity(id='folder-1', name='F')])
     _stub(monkeypatch, search_router.daily_summaries_db, 'get_summaries_count', lambda uid: 0)
     _stub(monkeypatch, search_router.memories_db, 'count_default_visible_memories', lambda uid: 0)
     _stub(monkeypatch, users_db, 'count_people', lambda uid: 0)
@@ -385,6 +406,10 @@ def _run_prior_meetings(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture)
         FROZEN_NOW,
         None,
     )
+
+
+def _run_ai_profile_conversations(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    trial(capture, ai_profile_refresh._conversations, 'u1', FROZEN_NOW)
 
 
 def _run_limitless_lookup(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
@@ -556,7 +581,7 @@ WITNESSES: dict[str, CallerWitness] = {
             'routers/conversations.py:get_conversations:database.conversations.get_conversations_without_photos',
             'database.conversations.get_conversations_without_photos',
             'database.conversations.get_conversations_without_photos',
-            ('main-list-single-status', 'main-list-default-or-multi-status'),
+            ('main-list-single-status', 'main-list-default-or-multi-status', 'main-list-indexed-home'),
             1,
             _run_main_list,
         ),
@@ -664,6 +689,14 @@ WITNESSES: dict[str, CallerWitness] = {
             ('persona-update',),
             1,
             _run_persona_update,
+        ),
+        CallerWitness(
+            'utils/ai_profile_refresh.py:_conversations:database.conversations.get_conversations_without_photos',
+            'database.conversations.get_conversations_without_photos',
+            'database.conversations.get_conversations_without_photos',
+            ('ai-profile-recent',),
+            1,
+            _run_ai_profile_conversations,
         ),
         CallerWitness(
             'utils/conversations/meeting_context_pack.py:_gather_prior_meetings:database.conversations.get_conversations_without_photos',

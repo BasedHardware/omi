@@ -204,30 +204,6 @@ def test_mobile_percent_is_nested_in_actual_batch_admission(monkeypatch, platfor
         assert not admitted(owner) or resolve_batch_policy(owner).batch_enabled
 
 
-@pytest.mark.parametrize(
-    'change,expected',
-    [
-        ({}, True),
-        ({'private_cloud_sync_enabled': False}, False),
-        ({'uses_custom_stt': True}, False),
-        ({'deleted': True}, False),
-        ({'record_lane_owner': 'legacy_final_pass_v1'}, False),
-    ],
-)
-def test_completion_cas_retains_empty_transcript_and_fences_privacy_races(monkeypatch, change, expected):
-    admitted = capture()
-    admitted['status'] = 'processing'
-    current = {**admitted, **change}
-    db = StrictFirestore({ROW: current})
-    monkeypatch.setattr(conversations, 'db', db)
-    monkeypatch.setattr(conversations, 'stop_quiet_check_for_conversation', Mock())
-    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', Mock())
-    monkeypatch.setattr(conversations, 'serving_for', lambda *args: False)
-    assert lifecycle.complete_server_batch_capture('owner', 'conversation', admitted) is expected
-    assert db.rows[ROW]['status'] == ('completed' if expected else 'processing')
-    assert db.rows[ROW]['transcript_segments'] == []
-
-
 @pytest.mark.asyncio
 async def test_no_provider_for_whole_session_reinit_reconnect_and_idle_reopen(monkeypatch):
     h = host()
@@ -381,7 +357,14 @@ async def test_zero_sample_packets_do_not_expand_or_shrink_batch_span(remote, mo
             originals.append(b'\xff')
     await archive.close()
     receipt = AudioReceipt(**h.events[0].receipt)
-    assert remote.blob(receipt.path).data == b''.join(originals)
+    blob = remote.blob(receipt.path)
+    if blob.metadata['codec'] == 'flac':
+        # Lossless storage can change the container; custody still recovers
+        # every original PCM byte through the generation/hash-verified reader.
+        assert read_pcm('owner', receipt) == b''.join(originals)
+    else:
+        # Undecodable/unaligned zero-sample packets retain their raw bytes.
+        assert blob.data == b''.join(originals)
     manifest = json.loads(remote.blob(receipt.manifest_path).data)
     assert len(manifest['frames']) == len(originals)
     assert sum(frame['samples'] for frame in manifest['frames']) == 16000
@@ -417,19 +400,34 @@ async def test_first_audio_marker_failure_keeps_buffered_original_for_shutdown_c
 
 
 @pytest.mark.asyncio
-async def test_zero_preview_finalizer_registers_exact_language_bounds_before_completion(monkeypatch):
+@pytest.mark.parametrize(
+    'trigger',
+    [
+        finalizer.ProcessingTrigger.CAPTURE_END,
+        finalizer.ProcessingTrigger.SERVER_RECOVERY,
+        finalizer.ProcessingTrigger.CLIENT_FINALIZE,
+    ],
+)
+@pytest.mark.parametrize('status', [ConversationStatus.processing, ConversationStatus.completed])
+@pytest.mark.parametrize('archive_closed', [False, True])
+async def test_zero_preview_finalizer_registers_exact_language_bounds_before_completion(
+    monkeypatch, trigger, status, archive_closed
+):
     row = capture()
     row.update(
-        status='processing',
+        status=status.value,
+        home_transcription_pending_at=datetime.fromtimestamp(1002, timezone.utc),
+        home_transcription_deadline_at=datetime.fromtimestamp(8202, timezone.utc),
         started_at=datetime.fromtimestamp(1000, timezone.utc),
         finished_at=datetime.fromtimestamp(1002, timezone.utc),
         language='es',
         has_content=True,
         server_batch_audio_start=1000,
         server_batch_audio_end=1002,
+        server_batch_audio_closed=archive_closed,
     )
     store = MemoryStore()
-    model = SimpleNamespace(status=ConversationStatus.processing, transcript_segments=[])
+    model = SimpleNamespace(status=status, transcript_segments=[])
     monkeypatch.setattr(finalizer, '_load_admitted_conversation', AsyncMock(return_value=(None, row, model)))
     monkeypatch.setattr(
         finalizer, 'register_recording', lambda owner, data: register_recording(owner, data, store=store, now=1)
@@ -441,18 +439,56 @@ async def test_zero_preview_finalizer_registers_exact_language_bounds_before_com
         assert pending['record_snapshot']['language'] == 'es'
         assert pending['record_snapshot']['started_at'].timestamp() == 1000
         assert pending['record_snapshot']['finished_at'].timestamp() == 1002
-        return True
+        assert args == ('owner', 'conversation', row, 'job', 1, 1)
+        return 'completed'
 
-    monkeypatch.setattr(finalizer.lifecycle_service, 'complete_server_batch_capture', complete)
-    monkeypatch.setattr(finalizer.lifecycle_service, 'claim_finalization_fanout', lambda *args: {'status': 'claimed'})
-    monkeypatch.setattr(finalizer.lifecycle_service, 'complete_finalization_fanout', lambda *args: True)
+    completion = Mock(side_effect=complete)
+    monkeypatch.setattr(finalizer.lifecycle_service, 'complete_server_batch_capture', completion)
+    monkeypatch.setattr(
+        finalizer.lifecycle_service, 'claim_finalization_fanout', Mock(side_effect=AssertionError('split fanout'))
+    )
+    monkeypatch.setattr(
+        finalizer.lifecycle_service,
+        'complete_finalization_fanout',
+        Mock(side_effect=AssertionError('split completion')),
+    )
     monkeypatch.setattr(
         finalizer, '_episode_at_finalization_start', AsyncMock(side_effect=AssertionError('preview work'))
     )
     result = await finalizer.finalize_persisted_conversation(
-        'owner', 'conversation', finalization_job_id='job', dispatch_generation=1, lease_epoch=1
+        'owner', 'conversation', finalization_job_id='job', dispatch_generation=1, lease_epoch=1, trigger=trigger
     )
     assert result is finalizer.ConversationFinalizationDisposition.completed
+
+    assert completion.call_count == 1
+    assert row['home_transcription_deadline_at'] == datetime.fromtimestamp(8202, timezone.utc)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'registered,outcome', [(False, None), (True, 'fenced'), (True, 'lease_conflict'), (True, 'missing')]
+)
+async def test_zero_preview_finalizer_never_acknowledges_refused_or_fenced_handoff(monkeypatch, registered, outcome):
+    row = capture(has_content=True, server_batch_audio_start=1, server_batch_audio_end=2)
+    row['status'] = 'processing'
+    model = SimpleNamespace(status=ConversationStatus.processing, transcript_segments=[])
+    monkeypatch.setattr(finalizer, '_load_admitted_conversation', AsyncMock(return_value=(None, row, model)))
+    monkeypatch.setattr(finalizer, 'register_recording', lambda *args: registered)
+    completion = Mock(return_value=outcome)
+    monkeypatch.setattr(finalizer.lifecycle_service, 'complete_server_batch_capture', completion)
+    if not registered or outcome == 'missing':
+        with pytest.raises(RuntimeError, match='registration refused|completion fenced'):
+            await finalizer.finalize_persisted_conversation(
+                'owner', 'conversation', finalization_job_id='job', dispatch_generation=1, lease_epoch=1
+            )
+    else:
+        assert (
+            await finalizer.finalize_persisted_conversation(
+                'owner', 'conversation', finalization_job_id='job', dispatch_generation=1, lease_epoch=1
+            )
+            is finalizer.ConversationFinalizationDisposition.fenced
+        )
+    assert completion.call_count == int(registered)
 
 
 @pytest.mark.asyncio
@@ -511,8 +547,8 @@ async def test_real_controller_closes_empty_archive_and_only_removes_inactive_no
     monkeypatch.setattr(recording_sessions, 'stop_quiet_check_for_conversation', lambda *a, **kw: None)
     monkeypatch.setattr(conversations, 'get_conversation', lambda *a, **kw: db.documents.get(ROW))
     monkeypatch.setattr(conversations, 'delete_conversation_photos', lambda *a: None)
-    erase = Mock()
-    monkeypatch.setattr(lifecycle, 'delete_conversation_audio_files', erase)
+    inventory = Mock(return_value=0)
+    monkeypatch.setattr(lifecycle, 'count_retained_raw_conversation_objects', inventory)
     h = host()
     h.state = SimpleNamespace(current_conversation_id='conversation', first_audio_byte_timestamp=None, active=active)
     h.recording_session_ids_by_conversation = {}
@@ -528,7 +564,10 @@ async def test_real_controller_closes_empty_archive_and_only_removes_inactive_no
     assert await controller.process_conversation('conversation') is (not active)
     assert (ROW in db.documents) is active
     controller.schedule_finalization.assert_not_awaited()
-    erase.assert_not_called()
+    if active:
+        inventory.assert_not_called()
+    else:
+        inventory.assert_called_once_with('owner', 'conversation')
 
 
 @pytest.mark.asyncio
@@ -542,7 +581,8 @@ async def test_late_first_frame_after_close_cannot_delete_capture_before_commit(
     monkeypatch.setattr(recording_sessions, 'stop_quiet_check_for_conversation', lambda *a, **kw: None)
     monkeypatch.setattr(conversations, 'get_conversation', lambda *a, **kw: db.documents.get(ROW))
     monkeypatch.setattr(conversations, 'delete_conversation_photos', lambda *a: None)
-    monkeypatch.setattr(lifecycle, 'delete_conversation_audio_files', Mock())
+    inventory = Mock(return_value=0)
+    monkeypatch.setattr(lifecycle, 'count_retained_raw_conversation_objects', inventory)
     h = archive_host()
     h.server_batch_only = True
     h.state = SimpleNamespace(current_conversation_id='conversation', first_audio_byte_timestamp=None, active=True)
@@ -567,6 +607,7 @@ async def test_late_first_frame_after_close_cannot_delete_capture_before_commit(
     controller.schedule_finalization = AsyncMock(return_value=True)
     assert not await controller.process_conversation('conversation')
     assert db.documents[ROW]['server_batch_audio_received'] is True
+    inventory.assert_not_called()
     controller.schedule_finalization.assert_not_awaited()
     await close()
     assert db.documents[ROW]['server_batch_audio_start'] == 1000
@@ -603,16 +644,6 @@ def test_archive_close_barrier_requires_owned_existing_capture():
     assert db.rows[ROW]['server_batch_audio_closed'] is True
     db.rows[ROW]['deleted'] = True
     assert not server_batch_audio.close_server_batch_audio('owner', 'conversation', firestore_client=db)
-
-
-@pytest.mark.parametrize('received', [True, False])
-def test_empty_server_batch_display_cleanup_never_erases_original_custody(monkeypatch, received):
-    erase = Mock()
-    monkeypatch.setattr(lifecycle, 'delete_conversation_audio_files', erase)
-    row = capture()
-    row.update(server_batch_audio_received=received, server_batch_audio_closed=True)
-    lifecycle._discard_unreferenced_audio('owner', 'conversation', row)
-    erase.assert_not_called()
 
 
 @pytest.mark.parametrize('received', [False, True, None])

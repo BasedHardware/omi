@@ -231,7 +231,7 @@ def prepare_for_read(
                 return _process(result)
             elif isinstance(result, list):
                 items: List[Any] = cast(List[Any], result)
-                return [_process(item) for item in items]
+                return [processed for item in items if (processed := _process(item)) is not None]
             elif isinstance(result, tuple):
                 # Handle functions that return a tuple, e.g., (data, doc_id)
                 elements: Tuple[Any, ...] = cast(Tuple[Any, ...], result)
@@ -240,7 +240,13 @@ def prepare_for_read(
                     if isinstance(element, dict):
                         processed_elements.append(_process(element))
                     elif isinstance(element, list):
-                        processed_elements.append([_process(item) for item in cast(List[Any], element)])
+                        processed_elements.append(
+                            [
+                                processed
+                                for item in cast(List[Any], element)
+                                if (processed := _process(item)) is not None
+                            ]
+                        )
                     else:
                         processed_elements.append(element)
                 return tuple(processed_elements)

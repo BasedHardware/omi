@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from database import rollout_cohorts as store  # noqa: E402
 from scripts.rollout.ramp_controller import DRAINING_PRECONDITIONS, QUALITY_FLOOR  # noqa: E402
 from utils.rollout.runtime_percent import write_ramp  # noqa: E402
+from scripts.rollout import live_preflight  # noqa: E402
 
 EXPECTED_TIER = {'prod': 'prod-operator', 'staging': 'dev-operator'}
 DEFAULT_TARGET = {'prod': ('based-hardware', '(default)'), 'staging': ('based-hardware-dev', 'staging')}
@@ -71,6 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='Permit writing a quality-floor percent (' + ', '.join(sorted(QUALITY_FLOOR)) + ') below its floor',
     )
+    parser.add_argument('--accept-not-live')
     parser.add_argument('--apply', action='store_true', help='Perform the write (default is a dry run)')
     return parser
 
@@ -85,6 +87,7 @@ def plan_change(args: argparse.Namespace, entry: dict[str, Any] | None) -> tuple
         if entry is not None and entry['locked_by'] is None and entry['percents']:
             return 'percent_write_requires_operator_lock'
         percents = dict(args.percent)
+        live_preflight.widens_exposure(entry, {'percents': percents})
         # A seed equal to the batch percent would cut prod's live first-summary guarantee (100) to the cohort.
         lowered = sorted(n for n, floor in QUALITY_FLOOR.items() if n in percents and percents[n] < floor)
         if lowered and not args.allow_quality_decrease:
@@ -129,17 +132,40 @@ def main(argv: Sequence[str] | None = None, *, client_factory: Callable[..., Any
     if args.actor is None or args.actor == CONTROLLER_ACTOR or args.expected_revision is None:
         print('writes need --actor (not ramp-controller) and --expected-revision', file=sys.stderr)
         return 2
-    planned = plan_change(args, entry)
-    if isinstance(planned, str):
-        print('ramp_set refused: ' + planned, file=sys.stderr)
+    try:
+        planned = plan_change(args, entry)
+        if isinstance(planned, str):
+            print('ramp_set refused: ' + planned, file=sys.stderr)
+            return 2
+        change, reason = planned
+        widening = live_preflight.widens_exposure(entry, change)
+    except live_preflight.MixedWrite as error:
+        print(str(error), file=sys.stderr)
         return 2
-    change, reason = planned
     if not args.apply:
         print('dry run: ' + json.dumps({'env': args.env, 'change': change, 'reason': reason, 'revision': revision}))
         return 0
     if os.getenv('GCP_AGENT_TIER') != EXPECTED_TIER[args.env]:
         print('select the matching GCP operator tier before applying', file=sys.stderr)
         return 2
+    raises = (
+        {
+            name: pct
+            for name, pct in change.get('percents', {}).items()
+            if live_preflight.widens_exposure(entry, {'percents': {name: pct}})
+        }
+        if widening
+        else {}
+    )
+    try:
+        live_preflight.override_reason('', args.accept_not_live)
+        reason = live_preflight.override_reason(reason, args.accept_not_live if raises else None)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    if args.env == 'prod':
+        for name, percent in raises.items():
+            live_preflight.require(name, percent, args.accept_not_live)
     try:
         new_revision = write_ramp(
             args.env,

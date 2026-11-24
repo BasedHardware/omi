@@ -750,3 +750,10 @@ def test_l1_extraction_receives_untrusted_cluster_render(monkeypatch):
     assert 'UNTRUSTED' in captured['text']
     assert 'Speaker A:' in captured['text'] and 'Speaker B:' in captured['text']
     assert 'David:' not in captured['text']
+
+
+def test_l1_prompt_routes_reminders_to_action_items():
+    prompt = _l1_system_prompt()
+    assert 'Explicit reminder requests' in prompt
+    assert 'these belong in action items, not durable facts' in prompt
+    assert 'Current-session instructions to an AI assistant' in prompt

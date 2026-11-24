@@ -8,6 +8,20 @@ description: "BLE protocol specification for communicating with Omi wearable dev
 
 This page describes the Bluetooth Low Energy (BLE) protocol used to communicate between the Omi app and device. Use this reference when building custom apps or SDKs.
 
+## Firmware update discovery
+
+`GET /v2/firmware/latest` accepts `device_model`, `firmware_revision`,
+`hardware_revision`, and `manufacturer_name`, plus an optional `device_id` for
+stable device rollout cohorts: the lowercase hex SHA-256 of the normalized DIS
+serial (UTF-8), never the raw serial. Omit it when no serial is available.
+Without a device identifier, partial rollouts
+are excluded; existing releases without a rollout limit keep their behavior.
+A blocked release is excluded from every firmware endpoint. No eligible newer
+release returns 404. Explicit `GET /v2/firmware/version` requests ignore
+`rollout_percent` for support and reverts, but return 404 for a blocked release.
+See the [CV1 release contract](https://github.com/BasedHardware/omi/blob/main/omi/firmware/docs/cv1-release-safety.md)
+for packaging, promotion and rollout details.
+
 ## BLE discovery
 
 The official app discovers the device by scanning for BLE devices with the name `Omi`.

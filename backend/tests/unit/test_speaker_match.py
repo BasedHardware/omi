@@ -220,7 +220,6 @@ def test_one_long_clip_decides_immediately(monkeypatch):
 
 
 def test_live_owner_near_miss_stays_pending_then_accepts_fresh_evidence(monkeypatch):
-    monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', 'true')
     matcher, _host, emitted = _live_matcher(monkeypatch, [_cold_start_vector(0.67), _cold_start_vector(0.40)])
     matcher.person_embeddings.pop('p1')
     pending_counter = LIVE_SPEAKER_DECISIONS.labels(target='owner', decision='pending')._value

@@ -12,22 +12,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/plan_storefront.dart';
-import 'package:omi/models/subscription.dart';
-import 'package:omi/pages/held_audio/held_audio_views.dart';
-import 'package:omi/pages/held_audio/processing_backlog_view.dart';
-import 'package:provider/provider.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/backend/schema/transcript_segment.dart';
-import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
-import 'package:omi/pages/conversation_detail/page.dart';
-import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/app_provider.dart';
-import 'package:omi/providers/people_provider.dart';
-import 'package:omi/providers/folder_provider.dart';
-import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/pages/on_device/on_device_at_cap_sheet.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
@@ -235,6 +219,10 @@ void main() {
           'c1', const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.phone, reason: OnDeviceReason.liveHoursUsed));
     await shoot(tester, '08-summary-made-on-iphone-ios.png',
         home: Scaffold(body: OnDeviceProvenanceSection(conversationId: 'c1', controller: value, onRedo: () {})));
+    expect(find.textContaining("You reached this month's limit"), findsNothing);
+    // The details sit behind the one-liner until it is tapped.
+    await tester.tap(find.byKey(const Key('on_device_why_toggle')));
+    await tester.pump();
     expect(find.textContaining("You reached this month's limit"), findsOneWidget);
   });
 
@@ -244,6 +232,9 @@ void main() {
           'c1', const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.cloud, reason: OnDeviceReason.liveHoursUsed));
     await shoot(tester, '09-summary-by-omi-cloud-ios.png',
         home: Scaffold(body: OnDeviceProvenanceSection(conversationId: 'c1', controller: value)));
+    // The details sit behind the one-liner until it is tapped.
+    await tester.tap(find.byKey(const Key('on_device_why_toggle')));
+    await tester.pump();
     expect(find.textContaining("doesn't count toward your usage"), findsOneWidget);
   });
 
@@ -378,6 +369,9 @@ void main() {
       platform: TargetPlatform.android,
       home: Scaffold(body: OnDeviceProvenanceSection(conversationId: 'c1', controller: value)),
     );
+    // The details sit behind the one-liner until it is tapped.
+    await tester.tap(find.byKey(const Key('on_device_why_toggle')));
+    await tester.pump();
     expect(find.textContaining("doesn't count toward your usage"), findsOneWidget);
   });
 
@@ -455,262 +449,6 @@ void main() {
     });
     expect(find.text('Remove Speech Model'), findsNothing);
   });
-
-  HeldAudioSummary heldSummary({bool retainLive = true, String state = 'paused'}) => HeldAudioSummary(
-        state: state,
-        seconds: 150,
-        count: 22,
-        resetAt: DateTime.utc(2026, 11, 1).millisecondsSinceEpoch ~/ 1000,
-        retainLive: retainLive,
-        recordings: [
-          HeldAudioRecording(
-              id: 'newer', startedAt: DateTime.utc(2026, 10, 17, 15, 4).millisecondsSinceEpoch ~/ 1000, seconds: 90),
-          HeldAudioRecording(
-              id: 'older', startedAt: DateTime.utc(2026, 10, 17, 9, 12).millisecondsSinceEpoch ~/ 1000, seconds: 60),
-        ],
-      );
-
-  Widget heldHome(OnDeviceTranscriptionController value) {
-    return Scaffold(
-      body: ListView(
-        children: [
-          HeldAudioHomeSection(
-            controller: value,
-            gate: true,
-            summary: heldSummary(),
-            onUpgrade: () {},
-            onPhone: () {},
-          ),
-        ],
-      ),
-    );
-  }
-
-  for (final language in const ['en', 'es', 'ja']) {
-    for (final light in const [false, true]) {
-      final theme = light ? 'light' : 'dark';
-      testWidgets('held audio home $language $theme', (tester) async {
-        final value = controller(settings: const OnDeviceSettings(enabled: false));
-        await shoot(
-          tester,
-          'held-audio-a-$language-$theme.png',
-          light: light,
-          locale: Locale(language),
-          fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
-          home: heldHome(value),
-        );
-      });
-    }
-  }
-
-  testWidgets('held audio home after choosing the phone', (tester) async {
-    final value = controller(settings: const OnDeviceSettings(enabled: true));
-    await shoot(tester, 'held-audio-a-phone-en-dark.png', home: heldHome(value));
-    expect(find.textContaining('Your recordings and transcripts are saved.'), findsOneWidget);
-    expect(
-      find.textContaining('Waiting recordings stay waiting until you choose to process them.'),
-      findsOneWidget,
-    );
-    expect(find.byKey(const Key('held_audio_on_phone')), findsNothing);
-  });
-
-  for (final language in const ['en', 'es', 'ja']) {
-    for (final light in const [false, true]) {
-      final theme = light ? 'light' : 'dark';
-      testWidgets('held audio live $language $theme', (tester) async {
-        final value = controller(settings: const OnDeviceSettings(enabled: false));
-        await shoot(
-          tester,
-          'held-audio-b-$language-$theme.png',
-          light: light,
-          locale: Locale(language),
-          fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
-          home: Scaffold(
-            body: HeldAudioLiveBanner(
-              controller: value,
-              gate: true,
-              summary: heldSummary(),
-              recordedSeconds: 185,
-              onUpgrade: () {},
-              onPhone: () {},
-            ),
-          ),
-        );
-      });
-    }
-  }
-
-  for (final language in const ['en', 'es', 'ja']) {
-    for (final light in const [false, true]) {
-      final theme = light ? 'light' : 'dark';
-      testWidgets('held audio usage $language $theme', (tester) async {
-        final value = controller(settings: const OnDeviceSettings(enabled: false, saveLiveHours: true));
-        await shoot(
-          tester,
-          'held-audio-c-$language-$theme.png',
-          light: light,
-          locale: Locale(language),
-          fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
-          home: Scaffold(
-            body: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                child: HeldAudioUsageSection(
-                  controller: value,
-                  gate: true,
-                  summary: heldSummary(retainLive: false),
-                  paid: true,
-                  onUpgrade: () {},
-                  onSaveLiveHours: (_) {},
-                )),
-          ),
-        );
-      });
-    }
-  }
-
-  for (final language in const ['en', 'es', 'ja']) {
-    for (final light in const [false, true]) {
-      for (final state in const ['capped', 'waiting_choice', 'processing', 'none']) {
-        for (final surface in const ['a', 'b', 'c']) {
-          testWidgets('held audio v5 $state $surface $language $light', (tester) async {
-            final value = controller(settings: const OnDeviceSettings(enabled: true));
-            final backlog = ProcessingBacklog(
-                state: state,
-                heldAudioCount: 22,
-                heldAudioSeconds: 7200,
-                deferredSeconds: 1800,
-                deferredConversations: 3,
-                estimatedHours: 2.5,
-                estimatedPercent: 12.5,
-                estimatedUnits: 25,
-                remainingUnits: 100);
-            final held = heldSummary(retainLive: state == 'capped');
-            final Widget content = switch (surface) {
-              'a' =>
-                HeldAudioHomeSection(controller: value, gate: true, summary: held, backlog: backlog, onUpgrade: () {}),
-              'b' => HeldAudioLiveBanner(
-                  controller: value,
-                  gate: true,
-                  summary: held,
-                  backlog: backlog,
-                  recordedSeconds: 185,
-                  onUpgrade: () {}),
-              _ => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                  child: HeldAudioUsageSection(
-                      controller: value,
-                      gate: true,
-                      summary: held,
-                      backlog: backlog,
-                      paid: true,
-                      onUpgrade: () {},
-                      onSaveLiveHours: (_) {})),
-            };
-            await shoot(tester, 'held-audio-$surface-$state-$language-${light ? 'light' : 'dark'}.png',
-                light: light,
-                locale: Locale(language),
-                fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
-                home: Scaffold(body: ListView(children: [content])));
-            expect(find.textContaining('resets'), findsNothing);
-            expect(find.byKey(Key('processing_backlog_$surface')), state == 'none' ? findsNothing : findsOneWidget);
-          });
-        }
-      }
-      for (final exceeds in const [false, true]) {
-        testWidgets('held audio v5 confirm $exceeds $language $light', (tester) async {
-          await shoot(tester, 'held-audio-confirm-$exceeds-$language-${light ? 'light' : 'dark'}.png',
-              light: light,
-              locale: Locale(language),
-              fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
-              home: Scaffold(
-                  body: ListView(children: [
-                ProcessingBacklogView(
-                  backlog: ProcessingBacklog(
-                      state: 'waiting_choice',
-                      heldAudioSeconds: 7200,
-                      deferredSeconds: 1800,
-                      estimatedHours: 2.5,
-                      estimatedPercent: 12.5,
-                      exceedsRemaining: exceeds),
-                  surface: 'a',
-                  onUpgrade: () {},
-                  onProcess: () async => true,
-                )
-              ])), afterPump: (tester) async {
-            // OmiButton holds its Future until the dialog closes: do not await the action Future here.
-            await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
-            await tester.pump();
-            await tester.pump(const Duration(milliseconds: 500));
-          });
-        });
-      }
-      for (final surface in const ['list', 'detail']) {
-        testWidgets('held audio v5 deferred transcript $surface $language $light', (tester) async {
-          final conversation = ServerConversation(
-              id: 'held-deferred',
-              createdAt: DateTime.utc(2026, 10, 17, 9),
-              startedAt: DateTime.utc(2026, 10, 17, 9),
-              finishedAt: DateTime.utc(2026, 10, 17, 9, 2),
-              processingDeferred: true,
-              structured: Structured('', ''),
-              transcriptSegments: [
-                TranscriptSegment(
-                    id: 's1',
-                    text: 'Let’s review the launch plan tomorrow morning.',
-                    speaker: 'SPEAKER_0',
-                    isUser: true,
-                    personId: null,
-                    start: 0,
-                    end: 12,
-                    translations: [])
-              ]);
-          final conversations = ConversationProvider(isSignedIn: () => false)..conversations = [conversation];
-          conversations.groupedConversations = {
-            conversationLocalDayKey(conversation.createdAt): [conversation]
-          };
-          conversations.conversationDetailsFetcherOverride = (_) async => conversation;
-          final detail = ConversationDetailProvider();
-          final apps = AppProvider();
-          detail.setProviders(apps, conversations);
-          addTearDown(() {
-            detail.dispose();
-            apps.dispose();
-            conversations.dispose();
-          });
-          final content = MultiProvider(
-              providers: [
-                ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
-                ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
-                ChangeNotifierProvider<AppProvider>.value(value: apps),
-                ChangeNotifierProvider(create: (_) => PeopleProvider()),
-                ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => [])),
-                ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
-                ChangeNotifierProvider(
-                    create: (_) => IntegrationProvider(
-                        fetchStatus: (_) async => null,
-                        saveStatus: (_, __) async => false,
-                        deleteStatus: (_) async => false,
-                        persistPref: (_, __) async {})),
-              ],
-              child: surface == 'list'
-                  ? Scaffold(
-                      body: ListView(children: [
-                      ConversationListItem(conversation: conversation, date: conversation.createdAt, conversationIdx: 0)
-                    ]))
-                  : ConversationDetailPage(conversation: conversation));
-          await shoot(tester, 'held-audio-deferred-$surface-$language-${light ? 'light' : 'dark'}.png',
-              light: light,
-              locale: Locale(language),
-              fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
-              home: content, afterPump: (tester) async {
-            await tester.pump(const Duration(milliseconds: 500));
-          });
-          expect(find.byKey(const Key('processing_deferred_marker')), findsOneWidget);
-          expect(find.textContaining('Let’s review the launch plan', findRichText: true), findsWidgets);
-        });
-      }
-    }
-  }
 
   testWidgets('android model setup', (tester) async {
     await shoot(

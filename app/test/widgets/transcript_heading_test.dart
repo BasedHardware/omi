@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -67,6 +67,8 @@ void main() {
     WidgetTester tester,
     ServerConversation conversation, {
     List<Person> people = const [],
+    Locale locale = const Locale('en'),
+    double textScale = 1,
   }) async {
     final detail = ConversationDetailProvider(fetchConversation: (_) async => conversation)
       ..selectedDate = conversation.createdAt
@@ -81,10 +83,15 @@ void main() {
             value: PeopleProvider(loadPeople: () async => PeopleListResponse(people: people))..people = people,
           ),
         ],
-        child: const MaterialApp(
+        child: MaterialApp(
+          locale: locale,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: TranscriptWidgets()),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
+          home: const Scaffold(body: TranscriptWidgets()),
         ),
       ),
     );
@@ -98,6 +105,35 @@ void main() {
         .widgetList<Text>(find.descendant(of: heading, matching: find.byType(Text)))
         .map((text) => text.data ?? '')
         .join();
+  }
+
+  for (final width in [320.0, 393.0]) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('Spanish selection wraps without truncation at width $width and scale $scale', (tester) async {
+        tester.view.physicalSize = Size(width, 852);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await pumpDetail(
+          tester,
+          _conversation([_seg('own', 0, 0, isUser: true)],
+              speakers: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [0])),
+          locale: const Locale('es'),
+          textScale: scale,
+        );
+        final action = find.byKey(const Key('transcript_select_lines'));
+        final label = find.descendant(of: action, matching: find.byType(Text));
+        expect(tester.widget<Text>(label).data, 'Seleccionar · Transcripción');
+        expect(tester.renderObject<RenderParagraph>(label).didExceedMaxLines, isFalse);
+        final heading = find.byKey(const Key('conversation_transcript_heading'));
+        final headingText = find.descendant(of: heading, matching: find.byType(Text));
+        expect(tester.renderObject<RenderParagraph>(headingText).didExceedMaxLines, isFalse);
+        expect(tester.getRect(action).right, lessThanOrEqualTo(width));
+        expect(tester.getRect(action).left, greaterThanOrEqualTo(0));
+        expect(tester.getRect(action).overlaps(tester.getRect(heading)), isFalse);
+        expect(tester.takeException(), isNull);
+      });
+    }
   }
 
   group('transcript heading speaker count', () {

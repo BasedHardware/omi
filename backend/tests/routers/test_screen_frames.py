@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 
 from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.screen_frame import ScreenFrameAdjudicationRequest, ScreenFrameCandidateIn, ScreenFrameSubjectIn
@@ -102,7 +102,7 @@ class TestEgressDisabled:
         monkeypatch.delenv("BUCKET_SCREEN_FRAMES", raising=False)
 
         with pytest.raises(HTTPException) as exc_info:
-            screen_frames_mod.adjudicate_screen_frames(_request(), uid=UID)
+            screen_frames_mod.adjudicate_screen_frames(_request(), background_tasks=BackgroundTasks(), uid=UID)
 
         assert exc_info.value.status_code == 409
 
@@ -113,7 +113,7 @@ class TestEgressDisabled:
         monkeypatch.setattr(screen_frames_mod, "judge_canonical", judged)
 
         with pytest.raises(HTTPException) as exc_info:
-            screen_frames_mod.adjudicate_screen_frames(_request(), uid=UID)
+            screen_frames_mod.adjudicate_screen_frames(_request(), background_tasks=BackgroundTasks(), uid=UID)
 
         assert exc_info.value.status_code == 409
         judged.assert_not_called()
@@ -127,7 +127,7 @@ class TestEgressDisabled:
         monkeypatch.setattr(screen_frames_mod, "judge_canonical", judged)
 
         with pytest.raises(HTTPException):
-            screen_frames_mod.adjudicate_screen_frames(_request(), uid=UID)
+            screen_frames_mod.adjudicate_screen_frames(_request(), background_tasks=BackgroundTasks(), uid=UID)
 
         judged.assert_not_called()
         # A stamp here would tell the client this conversation was already decided,
@@ -141,7 +141,7 @@ class TestDigestMismatch:
         request = _request(candidates=[bad_candidate])
 
         with pytest.raises(HTTPException) as exc_info:
-            screen_frames_mod.adjudicate_screen_frames(request, uid=UID)
+            screen_frames_mod.adjudicate_screen_frames(request, background_tasks=BackgroundTasks(), uid=UID)
 
         assert exc_info.value.status_code == 400
 
@@ -153,7 +153,7 @@ class TestAdmissionRefusedWhenSettingDisabled:
 
         request = _request()
         with pytest.raises(HTTPException) as exc_info:
-            screen_frames_mod.adjudicate_screen_frames(request, uid=UID)
+            screen_frames_mod.adjudicate_screen_frames(request, background_tasks=BackgroundTasks(), uid=UID)
 
         assert exc_info.value.status_code == 409
         assert exc_info.value.detail["code"] == "meeting_note_screenshots_disabled"
@@ -166,7 +166,7 @@ class TestAdmissionRefusedWhenNotCompleted:
 
         request = _request()
         with pytest.raises(HTTPException) as exc_info:
-            screen_frames_mod.adjudicate_screen_frames(request, uid=UID)
+            screen_frames_mod.adjudicate_screen_frames(request, background_tasks=BackgroundTasks(), uid=UID)
 
         assert exc_info.value.status_code == 409
 
@@ -178,7 +178,7 @@ class TestUnknownConversationIs404:
 
         request = _request()
         with pytest.raises(HTTPException) as exc_info:
-            screen_frames_mod.adjudicate_screen_frames(request, uid=UID)
+            screen_frames_mod.adjudicate_screen_frames(request, background_tasks=BackgroundTasks(), uid=UID)
 
         assert exc_info.value.status_code == 404
 
@@ -455,7 +455,9 @@ class TestConcurrentJudging:
 
         enforce = self._stub_seams(monkeypatch, judge=judge, commit=commit)
 
-        screen_frames_mod.adjudicate_screen_frames(_request(candidates=self._candidates(3)), uid=UID)
+        screen_frames_mod.adjudicate_screen_frames(
+            _request(candidates=self._candidates(3)), background_tasks=BackgroundTasks(), uid=UID
+        )
 
         assert len(commit_threads) == 3
         assert not any(name.startswith("llm") for name in commit_threads)
@@ -481,7 +483,9 @@ class TestConcurrentJudging:
         )
 
         with pytest.raises(HTTPException) as exc_info:
-            screen_frames_mod.adjudicate_screen_frames(_request(candidates=self._candidates(2)), uid=UID)
+            screen_frames_mod.adjudicate_screen_frames(
+                _request(candidates=self._candidates(2)), background_tasks=BackgroundTasks(), uid=UID
+            )
 
         assert exc_info.value.status_code == 503
         assert deleted == [(UID, CONVERSATION_ID, "landed-c0")]
@@ -491,7 +495,9 @@ class TestConcurrentJudging:
         commit = MagicMock()
         self._stub_seams(monkeypatch, judge=lambda **kw: None, commit=commit)
 
-        response = screen_frames_mod.adjudicate_screen_frames(_request(candidates=self._candidates(2)), uid=UID)
+        response = screen_frames_mod.adjudicate_screen_frames(
+            _request(candidates=self._candidates(2)), background_tasks=BackgroundTasks(), uid=UID
+        )
 
         commit.assert_not_called()
         assert response.outcome == "no_approved_frames"
@@ -617,7 +623,11 @@ class TestEmptyEvidencePass:
             screen_frames_mod.enforcement, "build_frame_set_response", lambda *a: screen_frames_mod.EMPTY_FRAME_SET
         )
 
-        response = screen_frames_mod.adjudicate_screen_frames(_request(candidates=[]), uid=UID)
+        tasks = BackgroundTasks()
+        response = screen_frames_mod.adjudicate_screen_frames(_request(candidates=[]), background_tasks=tasks, uid=UID)
+        assert len(tasks.tasks) == 1
+        assert tasks.tasks[0].func is screen_frames_mod.refresh_notes_after_evidence
+        assert tasks.tasks[0].args == (UID, CONVERSATION_ID)
 
         assert response.outcome == "no_approved_frames"
         judge.assert_not_called()
@@ -635,7 +645,9 @@ class TestEmptyEvidencePass:
         fake_users_db.get_meeting_note_screenshots_enabled.return_value = False
 
         with pytest.raises(HTTPException) as exc_info:
-            screen_frames_mod.adjudicate_screen_frames(_request(candidates=[]), uid=UID)
+            screen_frames_mod.adjudicate_screen_frames(
+                _request(candidates=[]), background_tasks=BackgroundTasks(), uid=UID
+            )
 
         assert exc_info.value.status_code == 409
 
@@ -675,7 +687,9 @@ def test_the_marker_is_stamped_after_persistence_and_before_the_response(_stub_a
     built = ConversationScreenFrameSet(revision=1, adjudicated_at=stamp, selection_fingerprint="fp")
     order = _ordered_pass(_stub_admission_dependencies, monkeypatch, build=lambda: built)
 
-    response = screen_frames_mod.adjudicate_screen_frames(_request(candidates=[]), uid=UID)
+    response = screen_frames_mod.adjudicate_screen_frames(
+        _request(candidates=[]), background_tasks=BackgroundTasks(), uid=UID
+    )
 
     assert order == ["persist", "stamp", "respond"]
     assert response.frame_set is built
@@ -692,6 +706,6 @@ def test_a_response_failure_after_persistence_still_leaves_the_pass_marked(_stub
     order = _ordered_pass(_stub_admission_dependencies, monkeypatch, build=signing_fails)
 
     with pytest.raises(RuntimeError):
-        screen_frames_mod.adjudicate_screen_frames(_request(candidates=[]), uid=UID)
+        screen_frames_mod.adjudicate_screen_frames(_request(candidates=[]), background_tasks=BackgroundTasks(), uid=UID)
 
     assert order == ["persist", "stamp", "respond"]

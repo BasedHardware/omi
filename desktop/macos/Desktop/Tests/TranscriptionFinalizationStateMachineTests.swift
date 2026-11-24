@@ -9,7 +9,7 @@ private struct FinalizationRecoveryRequest {
   let body: Data?
 }
 
-private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendable {
+private final class FinalizationRecoveryURLStub: URLProtocol {
   private static let lock = NSLock()
   private nonisolated(unsafe) static var _requests: [FinalizationRecoveryRequest] = []
   private nonisolated(unsafe) static var _finalizationStatusBodies: [Data] = []

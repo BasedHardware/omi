@@ -11,7 +11,10 @@ from utils.sync import cap_recovery_plan as plan
 
 
 @pytest.mark.parametrize('upload_fails', [False, True])
-async def test_piece_plan_is_durable_before_dispatch_and_replays_frozen_audio(tmp_path, monkeypatch, upload_fails):
+@pytest.mark.parametrize('clock_offset', [0.0, -1000000000.0])
+async def test_piece_plan_is_durable_before_dispatch_and_replays_frozen_audio(
+    tmp_path, monkeypatch, upload_fails, clock_offset
+):
     async def leaf(pool, fn, *args):
         return fn(*args)
 
@@ -38,6 +41,9 @@ async def test_piece_plan_is_durable_before_dispatch_and_replays_frozen_audio(tm
         'source_position_map': ({'claim': 'synthetic'}, 100),
         'lineage_binding': 'bound',
     }
+    metadata = {'timestamp': 1}
+    if clock_offset:
+        context['early_capture_offset'] = metadata['early_capture_offset'] = clock_offset
     prepare = AsyncMock(
         return_value=(
             {str(piece)},
@@ -55,10 +61,10 @@ async def test_piece_plan_is_durable_before_dispatch_and_replays_frozen_audio(tm
     directory, snapshot = SimpleNamespace(name=str(tmp_path)), SimpleNamespace(id='hold')
     if upload_fails:
         with pytest.raises(RuntimeError):
-            await plan.ensure_plan('synthetic', snapshot, row, {'timestamp': 1}, directory, prepare, save)
+            await plan.ensure_plan('synthetic', snapshot, row, metadata, directory, prepare, save)
         assert 'piece_plan' not in row and row['audio_path'] == 'original-held-audio'
         return
-    pieces, _, _ = await plan.ensure_plan('synthetic', snapshot, row, {'timestamp': 1}, directory, prepare, save)
+    pieces, _, _ = await plan.ensure_plan('synthetic', snapshot, row, metadata, directory, prepare, save)
     assert row['piece_plan'] == pieces
     # Later code/config may change VAD and WAL overlap. Neither may redefine a retry.
     prepare.side_effect = AssertionError('must not prepare the source again')
@@ -67,9 +73,7 @@ async def test_piece_plan_is_durable_before_dispatch_and_replays_frozen_audio(tm
         plan.cap_hold, 'read_audio', lambda uid, item, path: piece.write_bytes(blobs[item['audio_path']])
     )
     monkeypatch.setattr(plan.cap_hold, 'metadata', lambda uid, item: json.loads(item['metadata']))
-    replay, locals_, contexts = await plan.ensure_plan(
-        'synthetic', snapshot, row, {'timestamp': 1}, directory, prepare, save
-    )
+    replay, locals_, contexts = await plan.ensure_plan('synthetic', snapshot, row, metadata, directory, prepare, save)
     path, restored_context = await plan.stage_piece(
         'synthetic', piece.name, replay[piece.name], directory, locals_, contexts
     )

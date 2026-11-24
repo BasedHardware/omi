@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-firmware-battery-unavailable.png",
+      "platform": "mobile-ios",
+      "description": "Firmware update page with an unknown pendant battery level: waiting and reconnect guidance with the update button disabled. Rendered from the real page with synthetic state and product fonts using flutter-render-evidence.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-firmware-battery-unavailable-ro.png",
+      "platform": "mobile-ios",
+      "description": "Firmware update waiting for a fresh battery reading, with Romanian informal-singular guidance and the update action disabled. Real page and product fonts, synthetic state.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-firmware-battery-unavailable-hu.png",
+      "platform": "mobile-ios",
+      "description": "Firmware update waiting for a fresh battery reading, with Hungarian informal-singular guidance and the update action disabled. Real page and product fonts, synthetic state.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-firmware-battery-unavailable-et.png",
+      "platform": "mobile-ios",
+      "description": "Firmware update waiting for a fresh battery reading, with Estonian informal-singular guidance and the update action disabled. Real page and product fonts, synthetic state.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

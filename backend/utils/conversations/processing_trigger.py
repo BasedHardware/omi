@@ -30,8 +30,10 @@ class ProcessingTrigger(str, Enum):
     CAPTURE_GROUP = (
         'capture_group'  # a capture-group member joined; the primary's notes must carry the group's meeting context
     )
+    SCREEN_EVIDENCE = 'screen_evidence'  # late evidence refreshes notes on an already-kept row
     SERVER_RECOVERY = 'server_recovery'
     SILENT_BACKFILL = 'silent_backfill'  # operator-approved historical summary, no derived work
+    HISTORICAL_OPEN = 'historical_open'  # the owner opened a historical-tier row: summary only
 
 
 class RelevancePolicy(str, Enum):
@@ -75,6 +77,12 @@ PROCESSING_MODES: Mapping[ProcessingTrigger, ProcessingMode] = MappingProxyType(
         ProcessingTrigger.CAPTURE_GROUP: ProcessingMode(True, True, _KEEP),
         ProcessingTrigger.SERVER_RECOVERY: ProcessingMode(True, True, _KEEP),
         ProcessingTrigger.SILENT_BACKFILL: ProcessingMode(True, True, _KEEP),
+        # The owner opened a historical-tier row (config/historical_tier.py): its
+        # one summary runs now, as a regeneration with no created-side effects.
+        ProcessingTrigger.HISTORICAL_OPEN: ProcessingMode(True, True, _KEEP),
+        # Late screen/calendar evidence refreshes notes on an already-kept row;
+        # it is a content refresh, never a re-judgement of the rendered row.
+        ProcessingTrigger.SCREEN_EVIDENCE: ProcessingMode(True, True, _KEEP),
     }
 )
 

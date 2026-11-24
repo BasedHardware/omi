@@ -1,10 +1,10 @@
 """Explicit operator intents; a new recognizer preserves every spent paid token."""
 
 from copy import deepcopy
-from dataclasses import asdict
 from uuid import uuid4
 
 from config.policy import RecoveryPolicy
+from config.batch_paid_attempt import attempted, renewed, retryable
 from config.batch_language_recovery import (
     language_guarded,
     independent_attempted,
@@ -97,14 +97,36 @@ def expected_route(job, marker):
 
 
 class SpeechRedriveStore:
-    def __init__(self, store, *, server_flags):
+    def __init__(self, store, *, server_flags, max_attempts=1):
         """Operator-only. `server_flags` is the serving role's live settings for an
         unpinned unit, or None to refuse it; never this process's environment."""
         self.store = store
         self.server_flags = server_flags
+        if max_attempts not in {1, 2}:
+            raise ValueError('bounded paid attempts required')
+        self.max_attempts = max_attempts
 
     def checked(self, tx, segment_id):
         return RecoveryStore(self.store).checked(tx, segment_id, allow_completed_speech_redrive=True)
+
+    def observe_preflight(self, segment_id, owner_id, expected_recovery, now, seconds):
+        """Retain acoustic custody evidence without creating a paid intent."""
+
+        def commit(tx):
+            job, binding = self.checked(tx, segment_id)
+            result = tx.get('results', segment_id)
+            if (
+                binding.owner_id != owner_id
+                or job.get('recovery') != expected_recovery
+                or not self.terminal(job, result, now)
+            ):
+                raise ProjectionBlocked('terminal held obligation required')
+            measured = held_vad_census(job, seconds)
+            if job.get('measured_held_vad_speech_seconds') != measured:
+                job['measured_held_vad_speech_seconds'] = measured
+                tx.put('jobs', segment_id, job)
+
+        self.store.run(commit)
 
     @staticmethod
     def terminal(job, existing, now):
@@ -196,6 +218,13 @@ class SpeechRedriveStore:
                     or marker.get('silent', False) is not silent
                 ):
                     raise ProjectionBlocked('different speech redrive intent')
+                if self.max_attempts == 2 and retryable(marker, marker.get('state')):
+                    if not self.terminal(job, existing, now):
+                        raise ProjectionBlocked('terminal held obligation required')
+                    marker = renewed(marker, token)
+                    marker['state'] = 'prepared'
+                    job['speech_redrive'] = marker
+                    tx.put('jobs', segment_id, job)
                 return job
             if not self.terminal(job, existing, now):
                 raise ProjectionBlocked('terminal held obligation required')
@@ -212,6 +241,7 @@ class SpeechRedriveStore:
                 'prepared_at': now,
                 'privacy_generation': binding.privacy_generation,
                 'prior_recovery': deepcopy(expected_recovery),
+                'max_attempts': self.max_attempts,
             }
             if ordinary_empty_independent:
                 job['speech_redrive']['ordinary_empty_independent'] = True
@@ -250,6 +280,7 @@ class SpeechRedriveStore:
             ):
                 return False
             marker.update(state='running', started_at=now)
+            attempted(marker)
             tx.put('jobs', segment_id, job)
             return True
 
@@ -299,8 +330,8 @@ class SpeechRedriveStore:
             ):
                 return False
             if marker.get('state') == 'completed':
-                return isinstance(result_uri, str) and job.get('result') == asdict(
-                    WorkResult(segment_id, result_uri, outcome)
+                return isinstance(result_uri, str) and WorkResult(segment_id, result_uri, outcome).matches_persisted(
+                    job.get('result')
                 )
             if marker.get('state') != 'running' or not self.terminal(job, existing, now):
                 return False
@@ -324,7 +355,7 @@ class SpeechRedriveStore:
                     ready_at=now,
                     merge_pending=True,
                     recovery_state='recovered',
-                    result=asdict(WorkResult(segment_id, result_uri, outcome)),
+                    result=WorkResult(segment_id, result_uri, outcome).to_dict(),
                 )
                 tx.put('owners', owner_key(job['owner_id']), owner)
             else:

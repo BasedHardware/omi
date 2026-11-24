@@ -9,6 +9,8 @@ Two kinds of row are visible only because they predate the relevance step:
    stamped before that reader change is deployed.
 2. Conversations never assessed at all (no ``relevance_decision``): offline
    sync, client finalize, and desktop captures from before the relevance step.
+   Keeps from the short-clip floor or occasion retention count as unassessed:
+   they never ran the rules on the text.
    Only audio-transcript sources are eligible, and an empty transcript is never
    a discard here. The deterministic rules (no model, no cost) run over the
    transcript; only a rule discard is written. What they cannot settle is left
@@ -47,6 +49,8 @@ from utils.conversations.relevance_rules import RULES_VERSION, deterministic_rel
 from utils.conversations.wake_word import find_wake_word_matches
 
 BACKFILL_TRIGGER = 'backfill'
+# Stored keeps that never ran the rules on the text: the short-clip floor and occasion retention.
+REJUDGED_KEEP_REASONS = frozenset({'content_below_floor', 'occasion_member', 'occasion_neighbor', 'occasion_context'})
 
 # Only conversations whose content is an audio transcript. App/workflow imports
 # (external_integration, workflow), camera captures (openglass), screen capture,
@@ -93,7 +97,10 @@ def verdict_for(conversation: Mapping[str, Any]) -> Optional[str]:
         return None
     if is_low_signal_sync_fragment(conversation):
         return 'legacy_review'
-    if conversation.get('relevance_decision') or is_user_curated(conversation):
+    if is_user_curated(conversation):
+        return None
+    decision = conversation.get('relevance_decision')
+    if decision and not (isinstance(decision, Mapping) and decision.get('reason') in REJUDGED_KEEP_REASONS):
         return None
     if _has_calendar_evidence(conversation):
         return None

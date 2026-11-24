@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-index-manifest-omits-terminal-document-order",
+  "family": "cross-boundary-contract",
   "violated_contract": "A canonical composite index declaration must include the provider's terminal document-key ordering. Omitting it makes strict readiness classify an already READY native index as MISSING, and repeating create-only reconciliation cannot change that identity mismatch.",
   "canonical_prevention": "Declare the terminal __name__ order in the owning index requirements and regenerate the manifest. Exercise strict readiness against the native Admin API shape, retaining exact identity matching and the rejection of implicit aliases.",
   "canonical_prevention_artifact": [

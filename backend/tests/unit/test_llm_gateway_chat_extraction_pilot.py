@@ -225,6 +225,7 @@ def test_strict_schema_normalizes_action_item_extraction_for_openai():
     action_item_schema = schema['$defs']['ExtractedActionItem']
     assert action_item_schema['additionalProperties'] is False
     assert action_item_schema['required'] == [
+        'reminder_intent',
         'description',
         'due_at',
         'capture_kind',
@@ -239,6 +240,7 @@ def test_strict_schema_normalizes_action_item_extraction_for_openai():
         'target_task_id',
         'source_segment_ids',
     ]
+    assert {'type': 'null'} in action_item_schema['properties']['reminder_intent']['anyOf']
     assert 'default' not in action_item_schema['properties']['due_at']
     assert {'type': 'null'} in action_item_schema['properties']['due_at']['anyOf']
 

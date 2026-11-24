@@ -15,12 +15,14 @@ import 'package:omi/utils/platform/platform_manager.dart';
 Future<Memory?> createMemoryServer(
   String content,
   String visibility,
-  String category,
-) async {
+  String category, {
+  bool Function()? canSend,
+}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories',
     headers: {},
     method: 'POST',
+    canSend: canSend,
     body: json.encode({
       'content': content,
       'visibility': visibility,
@@ -375,16 +377,17 @@ String? _nextMemoryCursor(http.Response? response) {
   return null;
 }
 
-Future<bool> deleteMemoryServer(String memoryId) async {
+Future<bool> deleteMemoryServer(String memoryId, {bool Function()? canSend}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories/$memoryId',
     headers: {},
     method: 'DELETE',
+    canSend: canSend,
     body: '',
   );
   if (response == null) return false;
   Logger.debug('deleteMemory response: ${response.body}');
-  return response.statusCode == 200;
+  return response.statusCode == 200 || response.statusCode == 204 || response.statusCode == 404;
 }
 
 Future<bool> deleteAllMemoriesServer() async {

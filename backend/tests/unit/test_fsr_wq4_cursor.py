@@ -36,11 +36,16 @@ def rows(count=20, *, tied=False):
 class Snapshot:
     update_time = None
 
-    def __init__(self, row):
+    def __init__(self, row, fields=None):
         self.row = copy.deepcopy(row)
         self.id = row['id']
+        self.fields = fields
+        self.reference = row['id']
 
     def to_dict(self):
+        if self.fields is not None:
+            # A projected read carries only the selected fields.
+            return {field: copy.deepcopy(self.row[field]) for field in self.fields if field in self.row}
         return copy.deepcopy(self.row)
 
 
@@ -130,7 +135,18 @@ class CountingQuery:
             self.counts['reads'] += 1
             if self.on_read:
                 self.on_read(row)
-            yield Snapshot(row)
+            if self.fields is not None:
+                self.counts['lean'] = self.counts.get('lean', 0) + 1
+            yield Snapshot(row, self.fields)
+
+    def get_all(self, references, **kwargs):
+        """Point reads of whole documents (or ``field_paths``), as ``client.get_all``."""
+        by_id = {row['id']: row for row in self.data}
+        for reference in references:
+            self.counts['reads'] += 1
+            self.counts['hydrated'] = self.counts.get('hydrated', 0) + 1
+            if reference in by_id:
+                yield Snapshot(by_id[reference], kwargs.get('field_paths'))
 
 
 @pytest.fixture(autouse=True)
@@ -312,13 +328,15 @@ def test_visibility_flip_during_page_fills_without_duplication_or_skips(monkeypa
 
 
 def test_hidden_skip_cap_advances_empty_page(monkeypatch, enable):
+    monkeypatch.setattr(db, '_HIDDEN_ROW_PAGE_SKIP_CAP', 64)
     data = rows(100)
     first, _ = fetch(monkeypatch, data, limit=2, page_envelope=True)
     for row in data[2:80]:
         row['deleted'] = True
     result, counts = fetch(monkeypatch, data, limit=2, cursor=first['next_cursor'], page_envelope=True)
     assert result['conversations'] == []
-    assert counts['reads'] == db._RULE_DISCARD_PAGE_SKIP_CAP + 1
+    # Only hidden rows count against the cap; the scan stops on the cap-th one.
+    assert counts['reads'] == 64
     assert result['next_cursor']
     next_page, _ = fetch(monkeypatch, data, limit=2, cursor=result['next_cursor'], page_envelope=True)
     assert [row['id'] for row in next_page['conversations']] == ['020', '019']

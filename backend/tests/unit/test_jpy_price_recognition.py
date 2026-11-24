@@ -90,7 +90,6 @@ def webhook(monkeypatch):
     monkeypatch.setattr(payment.stripe.Subscription, 'modify', lambda sid, **kwargs: None)
     monkeypatch.setattr(payment, 'send_subscription_paid_personalized_notification', notify)
     monkeypatch.setattr(payment, 'set_credits_invalidation_signal', lambda uid: None)
-    monkeypatch.setattr(payment, 'clear_trial_paywall_cache', lambda uid: None)
     monkeypatch.setattr(payment, 'clear_fair_use_on_upgrade', lambda uid: None)
     monkeypatch.setattr(payment.conversations_db, 'unlock_all_conversations', unlock('conversations'))
     monkeypatch.setattr(payment.memories_db, 'unlock_all_memories', unlock('memories'))

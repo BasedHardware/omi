@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from config import directory_routing
+from database.directory.wipe import purge_owner_planes
+
 from database.messaging import MessagingStore
 
 import asyncio
@@ -17,13 +20,16 @@ from database import _client as database_client
 from database.legal_holds import (
     acquire_destructive_operation,
     assert_account_deletion_permitted,
+    assert_destructive_gate_still_ours,
     finish_destructive_operation,
+    mark_remote_erasure,
 )
 from database.dev_api_key import delete_dev_key, get_dev_keys_for_user
 from database.mcp_api_key import delete_mcp_key, get_mcp_keys_for_user
 from database.mcp_oauth import delete_user_oauth_credentials
 from database import account_deletion_grace as deletion_grace_db
 from database import account_deletion_marker as deletion_marker_db
+from database import go_queue_erase as go_erase_db
 from database import users as users_db
 from database import processing_backlog as processing_backlog_db
 from database.action_items import get_action_item_ids
@@ -37,7 +43,7 @@ from database.vector_db import (
     delete_screen_activity_vectors,
     delete_transcript_chunk_vectors_batch,
 )
-from utils import stripe as stripe_utils
+from utils import play_publisher, stripe as stripe_utils
 from utils.cloud_tasks import (
     assert_inline_account_deletion_permitted,
     enqueue_account_deletion_wipe,
@@ -50,6 +56,7 @@ from utils.other import endpoints as auth
 from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_data
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import delete_canonical_memory_maintenance_registry_entry
+from utils.other.lake_wipe import destroy_owner_lake_keys, purge_owner_lake_content
 from utils.other.storage import delete_all_conversation_recordings, delete_all_user_storage_objects
 from utils.retrieval.frame_request_storage import (
     delete_all_frame_request_pixels_for_user,
@@ -58,6 +65,7 @@ from utils.retrieval.frame_request_storage import (
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
 from utils.integration_telemetry import emit_posthog_event
 from services.users.agent_vm_account_cleanup import delete_agent_vm_for_account
+from services.users.go_queue_erase import go_queue_erase_required, require_committed_erase
 from config.account_deletion_grace import (
     account_deletion_grace_enabled,
     account_deletion_grace_window,
@@ -189,6 +197,12 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         logger.error(f'delete_account purge screen activity vectors failed for {uid}: {sanitize(str(e))}')
 
     try:
+        vector_db.delete_all_user_vector_copies(uid)
+    except Exception as e:
+        record_failure('required_failures', 'all_vector_copies', e)
+        logger.error(f'delete_account purge all vector copies failed for {uid}: {sanitize(str(e))}')
+
+    try:
         result['recordings_deleted'] = delete_all_conversation_recordings(uid) or 0
     except Exception as e:
         record_failure('required_failures', 'conversation_recordings', e)
@@ -317,20 +331,24 @@ class DeletionBillingError(RuntimeError):
 _DELETION_HEARTBEAT_INTERVAL_SECONDS = 60
 
 
-async def _renew_deletion_wipe_lease(uid: str, token: str, stop: asyncio.Event, lost: Event) -> None:
+async def _renew_deletion_wipe_lease(
+    uid: str, token: str, stop: asyncio.Event, lost: Event, short_erase_lease: bool
+) -> None:
+    lease_args = (go_erase_db.ERASE_LEASE_SECONDS,) if short_erase_lease else ()
+    marker_args = (True,) if short_erase_lease else ()
     while not stop.is_set():
         try:
-            if not await run_blocking(db_executor, renew_job_run_lock, f'account-deletion:{uid}', token):
+            if not await run_blocking(db_executor, renew_job_run_lock, f'account-deletion:{uid}', token, *lease_args):
                 lost.set()
                 return
             # Also heartbeat during a single long provider/Firestore operation.
-            await run_blocking(db_executor, users_db.heartbeat_user_deletion_wipe, uid)
+            await run_blocking(db_executor, users_db.heartbeat_user_deletion_wipe, uid, *marker_args)
         except Exception as error:
             # Keep the Firestore freshness fence on a Redis outage. A later
             # successful renewal or lost-token result resolves lease ownership.
             logger.error('delete_account lease heartbeat failed: %s', sanitize(str(error)))
             try:
-                await run_blocking(db_executor, users_db.heartbeat_user_deletion_wipe, uid)
+                await run_blocking(db_executor, users_db.heartbeat_user_deletion_wipe, uid, *marker_args)
             except Exception as heartbeat_error:
                 logger.error('delete_account marker heartbeat failed: %s', sanitize(str(heartbeat_error)))
         try:
@@ -339,17 +357,31 @@ async def _renew_deletion_wipe_lease(uid: str, token: str, stop: asyncio.Event, 
             pass
 
 
-async def run_deletion_wipe_with_lease(uid: str, retry_count: int, terminal: bool, token: str) -> bool:
+async def run_deletion_wipe_with_lease(
+    uid: str,
+    retry_count: int,
+    terminal: bool,
+    token: str,
+    wipe_job_id: str | None = None,
+) -> bool:
     """Own renewal until the cleanup thread finishes, even if HTTP is cancelled."""
 
     async def run() -> bool:
         stop = asyncio.Event()
         lost = Event()
         heartbeat = start_background_task(
-            _renew_deletion_wipe_lease(uid, token, stop, lost), name='account-deletion-lease'
+            _renew_deletion_wipe_lease(uid, token, stop, lost, wipe_job_id is not None), name='account-deletion-lease'
         )
         try:
-            return await run_blocking(cleanup_executor, background_wipe_user_data, uid, retry_count, terminal, lost)
+            arguments = (uid, retry_count, terminal, lost)
+            if wipe_job_id is not None:
+                return await run_blocking(
+                    cleanup_executor,
+                    background_wipe_user_data,
+                    *arguments,
+                    erase_claim=(wipe_job_id, token),
+                )
+            return await run_blocking(cleanup_executor, background_wipe_user_data, *arguments)
         finally:
             stop.set()
             await heartbeat
@@ -358,19 +390,33 @@ async def run_deletion_wipe_with_lease(uid: str, retry_count: int, terminal: boo
     return await asyncio.shield(worker)
 
 
+class _ProtectedWipeRequired(RuntimeError):
+    """An unprotected executor encountered an armed deletion."""
+
+
 def background_wipe_user_data(
-    uid: str, retry_count: int = 0, terminal: bool = False, lease_lost: Event | None = None
+    uid: str,
+    retry_count: int = 0,
+    terminal: bool = False,
+    lease_lost: Event | None = None,
+    *,
+    erase_claim: tuple[str, str] | None = None,
 ) -> bool:
+    if erase_claim is None and go_queue_erase_required():
+        raise RuntimeError('Go queue erase requires an authenticated wipe task')
     started_at = time.monotonic()
     current_operation = 'wipe_running_marker'
     purge_result: object = {}
     deletion_gate_token = f'account-deletion:{uid}'
     deletion_gate_acquired = False
+    preserve_erase_gate = False
+    marker_args = (True,) if erase_claim is not None else ()
 
     def heartbeat() -> None:
         if lease_lost is not None and lease_lost.is_set():
             raise RuntimeError('account deletion run-lock lost')
-        users_db.heartbeat_user_deletion_wipe(uid)
+        if users_db.heartbeat_user_deletion_wipe(uid, *marker_args) is False:
+            raise _ProtectedWipeRequired
 
     try:
         # Acquire the same transaction gate used by the server-owned legal-hold
@@ -387,7 +433,15 @@ def background_wipe_user_data(
         # genuinely orphaned ``pending`` marker (queued but never started)
         # from a wipe that is actively executing. Without this, a slow wipe
         # could be duplicate-claimed after the short ``pending`` stale window.
-        users_db.mark_user_deletion_wipe_running(uid)
+        if erase_claim is None:
+            users_db.mark_user_deletion_wipe_running(uid)
+        else:
+            job_id, token = erase_claim
+            if not renew_job_run_lock(deletion_gate_token, token, go_erase_db.ERASE_LEASE_SECONDS):
+                raise RuntimeError('account deletion wipe claim lost')
+            preserve_erase_gate = (
+                users_db.mark_user_deletion_wipe_running(uid, job_id, go_erase_db.claim_fingerprint(token)) is True
+            )
         # The durable marker and queue claim are the authority for every
         # irreversible step below. In particular, do not cancel billing or
         # remove Firebase Auth from the request thread: a queue NotFound must
@@ -397,7 +451,36 @@ def background_wipe_user_data(
         # A late checkout/webhook could have created a subscription after the
         # grace admission check. Re-read Stripe at the irreversible boundary,
         # even when admission recorded an earlier successful cancellation.
+        play_cancel_confirmed_since = datetime.now(timezone.utc)
         _cancel_subscription_for_account_deletion(uid)
+        if erase_claim is not None:
+            current_operation = 'go_queue_erase'
+            job_id, token = erase_claim
+
+            def owns_erase_claim() -> datetime:
+                expires = datetime.now(timezone.utc) + go_erase_db.ERASE_GRANT_DURATION
+                if not renew_job_run_lock(deletion_gate_token, token, go_erase_db.ERASE_LEASE_SECONDS):
+                    raise RuntimeError('Go queue erase wipe claim lost')
+                heartbeat()
+                assert_destructive_gate_still_ours(uid, 'account_deletion', token=deletion_gate_token)
+                return expires
+
+            def set_erase_inflight(inflight: bool) -> None:
+                nonlocal preserve_erase_gate
+                if inflight:
+                    preserve_erase_gate = True
+                mark_remote_erasure(
+                    uid,
+                    kind='account_deletion',
+                    token=deletion_gate_token,
+                    inflight=inflight,
+                    firestore_client=deletion_marker_db.account_deletion_firestore_client(),
+                    target='go_queue_erase',
+                )
+                if not inflight:
+                    preserve_erase_gate = False
+
+            require_committed_erase(uid, job_id, token, owns_erase_claim, set_erase_inflight)
         current_operation = 'agent_vm'
         heartbeat()
         delete_agent_vm_for_account(uid)
@@ -429,6 +512,19 @@ def background_wipe_user_data(
         if required_failures:
             failed_operations = ', '.join(failure['operation'] for failure in required_failures)
             raise RuntimeError(f'required derived purge failed: {failed_operations}')
+        if directory_routing.directory_configured():
+            current_operation = 'cell_directory_purge'
+            heartbeat()
+            purge_owner_planes(uid)
+        current_operation = 'lake_prefix_purge'
+        heartbeat()
+        purge_owner_lake_content(uid)
+        # Google Play purchase records (uid + purchase token) and the account map live outside users/{uid}.
+        # Only purchases whose cancel the billing step above confirmed in this run are deleted; anything
+        # else raises and keeps the wipe retryable.
+        current_operation = 'play_billing_records'
+        heartbeat()
+        play_publisher.purge_account_records(uid, play_cancel_confirmed_since)
         current_operation = 'firestore_user_data'
         heartbeat()
         wipe_result = users_db.delete_user_data(uid)
@@ -443,10 +539,24 @@ def background_wipe_user_data(
         current_operation = 'memory_maintenance_registry'
         heartbeat()
         _delete_memory_maintenance_registry(uid)
+        current_operation = 'lake_key_destroy'
+        heartbeat()
+        destroy_owner_lake_keys(uid)
         logger.info('delete_account background wipe complete')
+    except _ProtectedWipeRequired:
+        logger.warning('account deletion deferred because its Go queue erase is armed')
+        return False
     except Exception as e:
+        if erase_claim is not None:
+            try:
+                if not renew_job_run_lock(deletion_gate_token, erase_claim[1], go_erase_db.ERASE_LEASE_SECONDS):
+                    logger.warning('delete_account failure ignored after losing the run lock')
+                    return False
+            except Exception:
+                logger.error('delete_account could not confirm ownership to record wipe failure')
+                return False
         logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
-        if deletion_gate_acquired:
+        if deletion_gate_acquired and not preserve_erase_gate:
             try:
                 finish_destructive_operation(
                     uid,
@@ -484,9 +594,12 @@ def background_wipe_user_data(
             except Exception as persist_err:
                 logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(persist_err))}')
         required_failures, best_effort_failures = _purge_failures(purge_result)
-        failed_operations = [failure['operation'] for failure in required_failures + best_effort_failures] or [
-            current_operation
-        ]
+        failed_operations = [failure['operation'] for failure in required_failures + best_effort_failures]
+        # A later step's failure is named even when the derived purge already recorded best-effort failures
+        # (for example play_billing_records), so no failing step is hidden behind an earlier one.
+        if current_operation != 'derived_data' and current_operation not in failed_operations:
+            failed_operations.append(current_operation)
+        failed_operations = failed_operations or [current_operation]
         _emit_deletion_telemetry(
             uid,
             ACCOUNT_DELETION_WIPE_FAILED,
@@ -538,6 +651,8 @@ def enqueue_deletion_wipe(uid: str, wipe_job_id: str):
     if is_account_deletion_dispatch_enabled() is True:
         enqueue_account_deletion_wipe(wipe_job_id)
         return
+    if go_queue_erase_required():
+        raise RuntimeError('Go queue erase requires Cloud Tasks account deletion dispatch')
     # Inline dispatch is retained solely for deterministic local/dev/test
     # execution, and may never reach production data whatever the stage says.
     assert_inline_account_deletion_permitted()
@@ -579,7 +694,7 @@ def _retry_firestore_write(
     logger.critical(msg)
 
 
-def _cancel_subscription_for_account_deletion(uid: str) -> None:
+def _cancel_stripe_for_account_deletion(uid: str) -> None:
     subscription_id = None
     try:
         sub = users_db.get_existing_user_subscription(uid)
@@ -593,6 +708,14 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
         raise DeletionBillingError(subscription_id, error) from error
 
 
+def _cancel_subscription_for_account_deletion(uid: str) -> None:
+    _cancel_stripe_for_account_deletion(uid)
+    # Google Play bills outside Stripe: stop it too, or the deleted account keeps being charged. A failure
+    # propagates like a Stripe failure: admission is not marked complete (the grace reconciler re-runs it
+    # every cycle) and the wipe retries it with backoff. It is never a parked billing failure.
+    play_publisher.cancel_for_account_deletion(uid)
+
+
 def purge_user_conversation_index(uid: str) -> None:
     """Remove Typesense's owner documents; failures keep the wipe retryable."""
     from utils.conversations.typesense_index import purge_user_conversation_index as purge
@@ -601,7 +724,7 @@ def purge_user_conversation_index(uid: str) -> None:
 
 
 def _run_immediate_deletion_steps(uid: str) -> None:
-    """Cancel billing and revoke owner credentials before accepting deletion."""
+    """Run admission actions, leaving protected credential deletion to the wipe."""
     failures: list[Exception] = []
     try:
         _cancel_subscription_for_account_deletion(uid)
@@ -613,10 +736,11 @@ def _run_immediate_deletion_steps(uid: str) -> None:
         logger.info('delete_account immediate revocation observed Firebase Auth user already absent')
     except Exception as error:
         failures.append(error)
-    try:
-        delete_account_credentials(uid)
-    except Exception as error:
-        failures.append(error)
+    if not go_queue_erase_required():
+        try:
+            delete_account_credentials(uid)
+        except Exception as error:
+            failures.append(error)
     if failures:
         raise failures[0]
 
@@ -783,6 +907,45 @@ def restore_account_deletion(uid: str) -> dict[str, Any]:
     }
 
 
+def _report_grace_actions_failure(uid: str, record: dict, error: Exception) -> None:
+    """Every failed grace admission retry is loud: alertable log plus deletion telemetry with attempts and age.
+
+    The wipe stays blocked (Google may still charge), but the due date is still evaluated so the marker
+    shows when the deletion is overdue instead of failing silently past its deadline.
+    """
+    now = datetime.now(timezone.utc)
+    previous = record.get('grace_actions_failed_attempts')
+    attempts = (previous if isinstance(previous, int) else 0) + 1
+    intent_at = _deletion_due_at(record.get('wipe_intent_at'))
+    age_seconds = int((now - intent_at).total_seconds()) if intent_at else None
+    due_at = _deletion_due_at(record.get('wipe_due_at'))
+    overdue = due_at is not None and due_at <= now
+    log = logger.critical if overdue else logger.error
+    log(
+        'delete_account grace immediate-action retry failed for %s: attempts=%s age_seconds=%s overdue=%s error=%s',
+        uid,
+        attempts,
+        age_seconds,
+        overdue,
+        sanitize(str(error)),
+    )
+    _emit_deletion_telemetry(
+        uid,
+        ACCOUNT_DELETION_WIPE_FAILED,
+        {
+            'failed_operations': ['grace_immediate_actions'],
+            'retry_count': attempts,
+            'age_seconds': age_seconds,
+            'overdue': overdue,
+            'terminal': False,
+        },
+    )
+    try:
+        deletion_grace_db.record_grace_actions_failure(uid, attempts, overdue)
+    except Exception as persist_error:
+        logger.error('delete_account grace failure persist failed for %s: %s', uid, sanitize(str(persist_error)))
+
+
 def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
     """Retry incomplete grace admission actions and re-enqueue due wipes.
 
@@ -826,9 +989,7 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
                     _run_immediate_deletion_steps(uid)
                     actions_completed = deletion_grace_db.mark_user_deletion_grace_actions_complete(uid, job_id)
                 except Exception as error:
-                    logger.error(
-                        'delete_account grace immediate-action retry failed for %s: %s', uid, sanitize(str(error))
-                    )
+                    _report_grace_actions_failure(uid, record, error)
                     skipped += 1
                     continue
                 if actions_completed is not True:

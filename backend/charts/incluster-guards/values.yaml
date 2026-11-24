@@ -1,3 +1,5 @@
+# Suspend only the Parakeet guard; retain state and independent batch guards.
+parakeetSuspended: true
 enabled: true
 # Ship enforced; this kill switch suppresses HPA spec writes, not evidence/state.
 dryRun: false

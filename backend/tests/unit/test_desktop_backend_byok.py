@@ -74,7 +74,6 @@ def authenticated_anthropic_chat(monkeypatch):
     monkeypatch.setattr(endpoints, '_enforce_cutover_http_if_request', lambda *_args: None)
     monkeypatch.setattr(endpoints, 'record_user_platform', lambda *_args: None)
     monkeypatch.setattr(endpoints, 'record_client_device', lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *_args, **_kwargs: False)
     monkeypatch.setattr(subscription, 'get_customer_firestore_client', lambda: None)
 
     def exhausted_managed_quota(*_args, **_kwargs):

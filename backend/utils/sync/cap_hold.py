@@ -15,6 +15,7 @@ import wave
 from uuid import uuid4
 from typing import Any
 from models.conversation_enums import ConversationSource
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.observability.held_content import record_capture
 from utils.observability.stt_cap_dispatch import record_audio, record_allowance_decision, DispatchPath
 from utils.stt_cap_dispatch import funded_allowance
@@ -168,11 +169,14 @@ def upload_held_audio(
 
 
 def hold_started_at(metadata: dict) -> int | None:
-    """Recording start from plaintext hold metadata, before it is encrypted."""
+    """Stored recording start; raw metadata remains the capture identity."""
     value = metadata.get('timestamp')
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return int(value)
+    offset = metadata.get('early_capture_offset', 0.0)
+    if isinstance(offset, (int, float)) and not isinstance(offset, bool):
+        value -= offset
+    return int(value) if value > 0 else None
 
 
 def hold_manifest(fields: dict, seconds: float, now: float, started_at: int | None) -> dict:
@@ -387,7 +391,11 @@ def hold_segment(uid: str, path: str, metadata: dict[str, Any], *, receipt: dict
         if not created and not _exists(uid, identity):
             record_capture('ack_without_authority')
     return _finish(
-        identity, seconds, funded_allowance(uid, lane=metadata.get('origin', 'sync')).reason, receipt, created
+        identity,
+        seconds,
+        funded_allowance(uid, lane=metadata.get('origin', 'sync')).reason,
+        receipt,
+        created,
     )
 
 
@@ -453,6 +461,7 @@ def _read_single_audio(uid: str, row: dict[str, Any], path: str) -> None:
             raise
 
 
+@object_get_reader(Reader.SYNC_RECOVERY)
 def read_audio(uid: str, row: dict[str, Any], path: str) -> None:
     if row.get('source_slice'):
         return _read_source_slice(uid, row, path)
@@ -527,6 +536,7 @@ def _read_source_slice(uid: str, row: dict[str, Any], path: str) -> None:
         raise ValueError('held source decode changed since frozen plan')
 
 
+@object_get_reader(Reader.SYNC_RECOVERY)
 def metadata(uid: str, row: dict[str, Any]) -> dict[str, Any]:
     if row.get('metadata_path'):
         if not row['metadata_path'].startswith(f'chunks/{uid}/cap-held/'):
@@ -568,6 +578,7 @@ async def hold_capture_if_exhausted(
     *,
     receipts: dict | None = None,
     source_frame_maps: dict | None = None,
+    early_capture_offsets: dict[str, float] | None = None,
     admission: dict | None = None,
     dispatch_path: DispatchPath = DispatchPath.SYNC_V1,
     **context: Any,
@@ -593,6 +604,11 @@ async def hold_capture_if_exhausted(
                 'full_capture': True,
                 'file_name': Path(path).name,
                 'source_frame_map': (source_frame_maps or {}).get(path),
+                **(
+                    {'early_capture_offset': early_capture_offsets[path]}
+                    if early_capture_offsets and path in early_capture_offsets
+                    else {}
+                ),
             },
             allowance.reason,
             receipt,

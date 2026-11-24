@@ -4,8 +4,8 @@
 # LIVE suites (this script) cover bridge/LLM continuity on a named bundle.
 # HERMETIC INV-6 write-path rules (stage/promote single-writer, floating snapshot
 # alias, open-by-id hydrate, viewport SoT) live in Swift unit tests gated by
-# agent-logic-harness.sh + gauntlet --self-check. See AGENTS.md →
-# "Live gauntlet vs hermetic INV-6 coverage".
+# agent-logic-harness.sh + gauntlet --self-check. See
+# docs/chat-continuity-write-path.md → "Live gauntlet vs hermetic INV-6 coverage".
 #
 # Drives a named omi-* bundle through:
 #   0. (non-prod) clear kernel main_chat turns to avoid stale model-visible history

@@ -9,6 +9,14 @@ import pytest
 from utils.stt import soniox_batch as module
 from config.prerecorded_stt import PrerecordedSTTConfigurationError
 
+# Keep the real allowance observation path, but pay its demonstrated first-use
+# imports during collection rather than inside the measured provider call.
+# observe_request intentionally keeps these imports lazy for serving startup.
+from utils.byok import get_byok_uid as _get_byok_uid  # noqa: F401
+from utils.stt.allowance_session import current as _allowance_session_current  # noqa: F401
+from utils.stt.allowance_watch import observe_request as _observe_request  # noqa: F401
+from utils.stt_cap_dispatch import customer_funded as _customer_funded  # noqa: F401
+
 FILE = '11111111-1111-4111-8111-111111111111'
 TRANSCRIPTION = '22222222-2222-4222-8222-222222222222'
 TRANSCRIPT = {
@@ -24,6 +32,13 @@ TRANSCRIPT = {
 
 def client(handler):
     return lambda **kwargs: httpx.Client(transport=httpx.MockTransport(handler), **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def empty_deferred_cleanup():
+    module._DEFERRED_CLEANUP.clear()
+    yield
+    module._DEFERRED_CLEANUP.clear()
 
 
 @pytest.fixture
@@ -102,7 +117,7 @@ def test_malformed_reply_never_counts_as_empty(payload):
 
 
 @pytest.mark.parametrize('failure', ['upload', 'create', 'poll', 'transcript'])
-def test_failure_is_single_submit_content_free_and_cleans_known_resources(key, failure, caplog):
+def test_transient_refusal_is_bounded_content_free_and_cleans_known_resources(key, failure, caplog):
     calls = []
 
     def handler(request):
@@ -128,8 +143,10 @@ def test_failure_is_single_submit_content_free_and_cleans_known_resources(key, f
 
     with pytest.raises(module.SonioxBatchError, match='^soniox_batch_failed$'):
         module.transcribe(b'synthetic', 5, client_factory=client(handler), sleep=lambda _: None)
-    assert sum(m == 'POST' and p == '/v1/transcriptions' for m, p in calls) <= 1
-    assert sum(m == 'POST' and p == '/v1/files' for m, p in calls) == 1
+    assert sum(m == 'POST' and p == '/v1/transcriptions' for m, p in calls) == (
+        0 if failure == 'upload' else 3 if failure == 'create' else 1
+    )
+    assert sum(m == 'POST' and p == '/v1/files' for m, p in calls) == (3 if failure == 'upload' else 1)
     if failure != 'upload':
         assert ('DELETE', f'/v1/files/{FILE}') in calls
     assert 'PRIVATE_SENTINEL' not in caplog.text
@@ -171,7 +188,7 @@ def test_missing_key_refuses_before_http(monkeypatch):
 
 @pytest.mark.parametrize('seconds', [0.5, 61, 7200])
 def test_second_chance_is_ship_on_and_separate_from_guarded_cap(key, monkeypatch, seconds):
-    monkeypatch.delenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED')
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
     monkeypatch.delenv('BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED', raising=False)
     assert module.authorization(seconds, second_chance=True)
     with pytest.raises(module.SonioxBatchError):
@@ -204,3 +221,66 @@ def test_provider_ids_cannot_escape_authenticated_path(key):
     with pytest.raises(module.SonioxBatchError):
         module.transcribe(b'synthetic', 5, client_factory=client(handler))
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize('stage', ['upload', 'create', 'poll', 'transcript'])
+def test_prerecorded_failover_stops_at_first_rate_limit(key, stage):
+    calls = []
+
+    def handler(request):
+        if request.method == 'DELETE':
+            return httpx.Response(204)
+        operation = (
+            'upload'
+            if request.url.path == '/v1/files'
+            else (
+                'create'
+                if request.method == 'POST'
+                else 'transcript' if request.url.path.endswith('/transcript') else 'poll'
+            )
+        )
+        calls.append(operation)
+        if operation == stage:
+            return httpx.Response(429)
+        if operation == 'upload':
+            return httpx.Response(201, json={'id': FILE})
+        if operation == 'create':
+            return httpx.Response(201, json={'id': TRANSCRIPTION, 'status': 'queued'})
+        return httpx.Response(200, json={'status': 'completed'})
+
+    with pytest.raises(module.SonioxBatchError) as raised:
+        module.transcribe(
+            b'synthetic',
+            5,
+            language='en',
+            failover=True,
+            retry_rate_limits=False,
+            client_factory=client(handler),
+            sleep=lambda _: None,
+        )
+    assert raised.value.kind == 'rate_limited'
+    assert calls.count(stage) == 1
+
+
+def test_refused_transcription_delete_is_retried_by_the_next_call(key, caplog):
+    calls, refuse = [], [True]
+
+    def handler(request):
+        calls.append((request.method, request.url.path))
+        if request.method == 'DELETE':
+            if request.url.path.startswith('/v1/transcriptions/') and refuse[0]:
+                return httpx.Response(429)
+            return httpx.Response(204)
+        if request.url.path == '/v1/files':
+            return httpx.Response(201, json={'id': FILE})
+        if request.method == 'POST':
+            return httpx.Response(201, json={'id': TRANSCRIPTION, 'status': 'completed'})
+        return httpx.Response(200, json=TRANSCRIPT)
+
+    module.transcribe(b'synthetic', 5, client_factory=client(handler), sleep=lambda _: None)
+    assert list(module._DEFERRED_CLEANUP) == [f'/transcriptions/{TRANSCRIPTION}']
+    assert 'outcome=failed http_status=429' in caplog.text
+    refuse[0], calls[:] = False, []
+    module.transcribe(b'synthetic', 5, client_factory=client(handler), sleep=lambda _: None)
+    assert calls.count(('DELETE', f'/v1/transcriptions/{TRANSCRIPTION}')) == 2
+    assert not module._DEFERRED_CLEANUP

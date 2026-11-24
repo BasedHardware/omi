@@ -47,11 +47,18 @@ def main():
     )
     parser.add_argument('--max-units', type=int, default=1000)
     parser.add_argument('--lookback-units', type=int, default=100)
+    parser.add_argument(
+        '--enable-silence-read-skip',
+        action='store_true',
+        help='explicitly opt this repair process into silent read skipping; prod otherwise forces false',
+    )
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--approve-plan-sha256')
     args = parser.parse_args()
     # Suppress library logs containing identifiers or content; own output is counts only.
     logging.disable(logging.CRITICAL)
+    if args.stage == 'prod' or args.enable_silence_read_skip:
+        os.environ['BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'] = 'true' if args.enable_silence_read_skip else 'false'
     if args.stage == 'prod':
         if args.local_namespace:
             parser.error('--local-namespace applies to --stage local only; prod is fixed batch_pipeline_prod')

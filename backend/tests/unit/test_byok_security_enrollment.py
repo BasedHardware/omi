@@ -5,6 +5,7 @@ Covers: Enrollment, subscription entitlements, middleware validation, cache rout
 
 import hashlib
 from typing import Dict
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -137,7 +138,7 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
         monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: False)
         monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
-        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
+        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription, **kwargs: None)
         monkeypatch.setattr(users, 'get_user_valid_subscription', lambda _uid: subscription, raising=False)
         monkeypatch.setattr(
             users,
@@ -196,7 +197,7 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
         monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: False)
         monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
-        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
+        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription, **kwargs: None)
         monkeypatch.setattr(users, 'get_user_valid_subscription', lambda _uid: subscription, raising=False)
         monkeypatch.setattr(
             users,
@@ -244,7 +245,6 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(users, 'get_byok_key', lambda _provider: None)
         monkeypatch.setattr(enforcement, 'get_byok_key', lambda _provider: None)
         monkeypatch.setattr(enforcement, 'is_marketplace_reviewer', lambda _uid: False)
-        monkeypatch.setattr(enforcement, 'is_trial_paywalled', lambda *_args, **_kwargs: False)
         monkeypatch.setattr(enforcement.users_db, 'get_user_valid_subscription', lambda _uid, **kwargs: paid)
         monkeypatch.setattr(users, 'get_monthly_usage_for_subscription', lambda _uid: {'transcription_seconds': used})
         monkeypatch.setattr(users, 'resolve_transcription_allowance', enforcement.resolve_transcription_allowance)
@@ -334,7 +334,6 @@ class TestRequestHasLLMByokKey:
         from models.users import PlanType
         from utils import subscription
 
-        monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *args, **kwargs: False)
         monkeypatch.setattr(subscription.users_db, 'get_user_valid_subscription', lambda *args, **kwargs: None)
         monkeypatch.setattr(
             subscription.user_usage_db,
@@ -479,21 +478,37 @@ class TestCacheRouting:
         assert inst1 is inst2
         constructor.assert_called_once_with(model='gpt-4.1-mini', api_key=api_key)
 
-    def test_cached_anthropic_no_raw_key_in_cache(self):
-        from utils.llm.clients import _anthropic_cache, _cached_anthropic
+    @staticmethod
+    def _stub_anthropic_constructor(monkeypatch):
+        from utils.llm import clients
 
+        # Cache/hash behavior is ours; importing/constructing the provider SDK is
+        # not. Keep the real cache functions and key derivation under test.
+        constructor = MagicMock(return_value=object())
+        clients._anthropic_cache.clear()
+        monkeypatch.setattr(clients, '_anthropic_module', lambda: SimpleNamespace(AsyncAnthropic=constructor))
+        return clients, constructor
+
+    def test_cached_anthropic_no_raw_key_in_cache(self, monkeypatch):
+        clients, constructor = self._stub_anthropic_constructor(monkeypatch)
         api_key = 'sk-ant-secret-key-for-cache-test'
-        _cached_anthropic(api_key)
-        for k in _anthropic_cache.keys():
+        client = clients._cached_anthropic(api_key)
+        for k in clients._anthropic_cache.keys():
             assert api_key not in k, f"Raw API key found in cache key: {k}"
+        # Fixed SHA-256 of the public fixture above: this verifies cache indexing,
+        # not password storage. Keep the exact digest and cached-object checks.
+        expected_cache_key = '556b1dd19cbebf91a8551fd2008123805d81f76534d8ef0a38c847ef15d090cd'
+        assert list(clients._anthropic_cache) == [expected_cache_key]
+        assert clients._anthropic_cache[expected_cache_key] is client
+        constructor.assert_called_once_with(api_key=api_key, timeout=120.0, max_retries=1)
 
-    def test_cached_anthropic_returns_same_instance(self):
-        from utils.llm.clients import _cached_anthropic
-
+    def test_cached_anthropic_returns_same_instance(self, monkeypatch):
+        clients, constructor = self._stub_anthropic_constructor(monkeypatch)
         api_key = 'sk-ant-deterministic-key'
-        inst1 = _cached_anthropic(api_key)
-        inst2 = _cached_anthropic(api_key)
+        inst1 = clients._cached_anthropic(api_key)
+        inst2 = clients._cached_anthropic(api_key)
         assert inst1 is inst2
+        constructor.assert_called_once_with(api_key=api_key, timeout=120.0, max_retries=1)
 
     def test_gemini_byok_routes_to_gemini_endpoint(self, monkeypatch):
         from utils.llm.clients import _GEMINI_OPENAI_BASE_URL

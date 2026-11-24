@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/payment.dart' as payment_api;
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
@@ -18,10 +17,10 @@ import 'package:omi/utils/billing_price.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Monthly to yearly on the same plan, at the plan's yearly price (backend `utils/yearly_switch.py`).
-/// Offered in Plans & Billing and, past the first paid month, as one quiet Home row. The confirm
-/// sheet shows Stripe's preview: what is charged today, the plan and the renewal date.
+/// Offered in Plans & Billing. The confirm sheet shows Stripe's preview: what is charged today, the
+/// plan and the renewal date.
 
-enum YearlySwitchSurface { home, plans }
+enum YearlySwitchSurface { plans }
 
 typedef YearlySwitchLoader = Future<wire.GeneratedYearlySwitchResponse?> Function({bool preview});
 
@@ -71,9 +70,6 @@ void _emitShown(YearlySwitchSurface surface) => const TypedEvents()
 
 void _emitOpened(YearlySwitchSurface surface) => const TypedEvents()
     .emit(SubscriptionYearlySwitchOpened(surface: SubscriptionYearlySwitchOpenedSurface.values.byName(surface.name)));
-
-void _emitDismissed(YearlySwitchSurface surface) => const TypedEvents().emit(
-    SubscriptionYearlySwitchDismissed(surface: SubscriptionYearlySwitchDismissedSurface.values.byName(surface.name)));
 
 void _emitFailed(YearlySwitchSurface surface, SubscriptionYearlySwitchFailedReason reason) =>
     const TypedEvents().emit(SubscriptionYearlySwitchFailed(
@@ -218,7 +214,7 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
       widget.onSwitched?.call();
       final usage = context.read<UsageProvider?>();
       if (usage != null) {
-        unawaited(usage.fetchSubscription());
+        unawaited(usage.fetchSubscription(fresh: true));
         unawaited(usage.loadAvailablePlans());
       }
       setState(() {
@@ -233,7 +229,7 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
       widget.surface,
       declined
           ? SubscriptionYearlySwitchFailedReason.declined
-          : (status == 400 || status == 409)
+          : (status == 400 || status == 403 || status == 409)
               ? SubscriptionYearlySwitchFailedReason.refused
               : SubscriptionYearlySwitchFailedReason.error,
     );
@@ -242,9 +238,8 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
       _stale = true;
       _error = declined
           ? l10n.yearlySwitchDeclined
-          : outcome == _Outcome.unknown
-              ? l10n.somethingWentWrong
-              : l10n.yearlySwitchFailed;
+          : payment_api.paymentRefusalMessage(result) ??
+              (outcome == _Outcome.unknown ? l10n.somethingWentWrong : l10n.yearlySwitchFailed);
     });
   }
 
@@ -313,19 +308,19 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _FactRow(
+        PlanSwitchFactRow(
           label: l10n.yearlySwitchPlanLabel,
           value: l10n.yearlySwitchPlanValue(plan, yearlySwitchMoney(offer.yearlyAmount!, currency)),
         ),
         Divider(height: 1, thickness: 1, color: OmiColors.border),
-        _FactRow(
+        PlanSwitchFactRow(
           label: l10n.yearlySwitchDueToday,
           value: dueToday,
           valueKey: const Key('yearly_switch_due_today'),
           emphasized: true,
         ),
         Divider(height: 1, thickness: 1, color: OmiColors.border),
-        _FactRow(label: l10n.yearlySwitchRenews, value: renews),
+        PlanSwitchFactRow(label: l10n.yearlySwitchRenews, value: renews),
         if (offer.amountDueToday! < offer.yearlyAmount!)
           Padding(
             padding: const EdgeInsets.only(top: OmiSpacing.xxs),
@@ -364,9 +359,11 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
 /// What a switch attempt did: [unknown] when neither the response nor a re-read of Stripe says.
 enum _Outcome { switched, failed, unknown }
 
-/// One line of the preview: what it is on the left, its value on the right, aligned with the title.
-class _FactRow extends StatelessWidget {
-  const _FactRow({required this.label, required this.value, this.valueKey, this.emphasized = false});
+/// One line of a plan-switch preview: what it is on the left, its value on the right, aligned with
+/// the title. Shared by the yearly and monthly switch sheets.
+class PlanSwitchFactRow extends StatelessWidget {
+  const PlanSwitchFactRow(
+      {super.key, required this.label, required this.value, this.valueKey, this.emphasized = false});
 
   final String label;
   final String value;
@@ -377,27 +374,35 @@ class _FactRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bodySize = OmiType.body.fontSize!;
+    // At large text sizes the value goes under its label so amounts never break mid-number.
+    final stack = MediaQuery.textScalerOf(context).scale(bodySize) > bodySize * 1.3;
+    final labelText = Text(label, style: OmiType.body.copyWith(color: OmiColors.textPrimary));
+    final valueText = Text(
+      value,
+      key: valueKey,
+      textAlign: stack ? TextAlign.start : TextAlign.end,
+      style: emphasized
+          ? OmiType.body.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w600)
+          : OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+    );
     return MergeSemantics(
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 48),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: OmiSpacing.sm),
-          child: Row(
-            children: [
-              Text(label, style: OmiType.body.copyWith(color: OmiColors.textPrimary)),
-              const SizedBox(width: OmiSpacing.md),
-              Expanded(
-                child: Text(
-                  value,
-                  key: valueKey,
-                  textAlign: TextAlign.end,
-                  style: emphasized
-                      ? OmiType.body.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w600)
-                      : OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+          child: stack
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [labelText, valueText],
+                )
+              : Row(
+                  children: [
+                    labelText,
+                    const SizedBox(width: OmiSpacing.md),
+                    Expanded(child: valueText),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -512,7 +517,9 @@ class _YearlySwitchPlansRowState extends State<YearlySwitchPlansRow> {
 
   @override
   Widget build(BuildContext context) {
-    final candidate = context.select<UsageProvider?, String?>(yearlySwitchCandidate);
+    // The switch charges Stripe; a build that sells through Google Play never offers it.
+    final candidate = context.select<UsageProvider?, String?>(
+        (usage) => usage?.buysThroughPlay == true ? null : yearlySwitchCandidate(usage));
     if (candidate == null || _switched) return const SizedBox.shrink();
     if (_loadedFor != candidate) {
       _loadedFor = candidate;
@@ -533,92 +540,6 @@ class _YearlySwitchPlansRowState extends State<YearlySwitchPlansRow> {
         color: OmiColors.surface2,
         tileColor: OmiColors.surface3,
         onTap: _open,
-      ),
-    );
-  }
-}
-
-/// Home: one quiet row for a monthly payer past their first paid month, at most once every 30 days.
-class YearlySwitchHomeRow extends StatefulWidget {
-  const YearlySwitchHomeRow({super.key, this.load, this.apply, this.now});
-
-  final YearlySwitchLoader? load;
-  final YearlySwitchApplier? apply;
-  final DateTime Function()? now;
-
-  static const quietPeriod = Duration(days: 30);
-
-  @override
-  State<YearlySwitchHomeRow> createState() => _YearlySwitchHomeRowState();
-}
-
-class _YearlySwitchHomeRowState extends State<YearlySwitchHomeRow> {
-  static const _monthAhead = Duration(days: 32);
-  wire.GeneratedYearlySwitchResponse? _offer;
-  String? _loadedFor;
-  bool _hidden = false;
-
-  Future<void> _load(String candidate) async {
-    final prefs = SharedPreferencesUtil();
-    final now = (widget.now ?? DateTime.now)();
-    // A yearly plan renews months from now: no lookup (it would only answer not_monthly on every launch).
-    final periodEnd = context.read<UsageProvider?>()?.subscription?.subscription.currentPeriodEnd;
-    if (periodEnd != null && DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000).isAfter(now.add(_monthAhead))) {
-      return;
-    }
-    final lastShown = prefs.yearlySwitchHomeShownAt;
-    if (lastShown > 0 &&
-        now.difference(DateTime.fromMillisecondsSinceEpoch(lastShown)) < YearlySwitchHomeRow.quietPeriod) {
-      return;
-    }
-    final offer = await (widget.load ?? payment_api.getYearlySwitch)(preview: false);
-    if (!mounted || _loadedFor != candidate || offer == null || !offer.eligible) return;
-    // The first paid month is still the reader's decision; the row waits for the second.
-    if (offer.firstBillingPeriod != false || offer.savingsAmount == null) return;
-    prefs.yearlySwitchHomeShownAt = now.millisecondsSinceEpoch;
-    setState(() => _offer = offer);
-    _emitShown(YearlySwitchSurface.home);
-  }
-
-  Future<void> _open() async {
-    final switched = await showYearlySwitchSheet(
-      context,
-      surface: YearlySwitchSurface.home,
-      load: widget.load,
-      apply: widget.apply,
-    );
-    if (switched && mounted) setState(() => _hidden = true);
-  }
-
-  void _dismiss() {
-    _emitDismissed(YearlySwitchSurface.home);
-    setState(() => _hidden = true);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final candidate = context.select<UsageProvider?, String?>(yearlySwitchCandidate);
-    if (candidate == null || _hidden) return const SizedBox.shrink();
-    if (_loadedFor != candidate) {
-      _loadedFor = candidate;
-      _offer = null;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_load(candidate));
-      });
-    }
-    final offer = _offer;
-    if (offer == null) return const SizedBox.shrink();
-    final l10n = context.l10n;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: YearlySwitchRow(
-        key: const Key('yearly_switch_home_row'),
-        title: l10n.yearlySwitchHomeTitle(yearlySwitchMoney(offer.savingsAmount!, offer.currency)),
-        subtitle: l10n.yearlySwitchHomeSubtitle,
-        color: OmiColors.surface1,
-        tileColor: OmiColors.surface2,
-        onTap: _open,
-        onDismiss: _dismiss,
       ),
     );
   }

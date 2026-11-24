@@ -8,6 +8,7 @@ const POSTHOG_KEY =
 const POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
 
 let isInitialized = false;
+let flagOwnerId: string | undefined;
 
 export const PostHogManager = {
   init() {
@@ -15,6 +16,7 @@ export const PostHogManager = {
       if (isInitialized || typeof window === 'undefined' || !POSTHOG_KEY) return;
       posthog.init(POSTHOG_KEY, {
         api_host: POSTHOG_HOST,
+        advanced_disable_feature_flags: true,
         autocapture: false,
         capture_pageview: false,
         persistence: 'localStorage',
@@ -28,6 +30,10 @@ export const PostHogManager = {
   identify(userId: string, properties?: { name?: string; email?: string }) {
     try {
       if (typeof window === 'undefined') return;
+      if (flagOwnerId !== userId) {
+        resetOmiFlags();
+        flagOwnerId = userId;
+      }
       this.init();
       if (!isInitialized) return;
       const person: Record<string, string> = { Platform: 'web' };
@@ -48,43 +54,12 @@ export const PostHogManager = {
       // A throwing capture must not block checkout.
     }
   },
-  /**
-   * Resolve a boolean flag: Omi's flag store first for the keys it owns, else
-   * once PostHog has delivered flags. Fails closed: no SDK, a throw, or no
-   * answer within `timeoutMs` reads as off.
-   */
+  /** Omi is the only flag authority; missing or unavailable reads fail closed. */
   async isFeatureEnabled(flag: string, timeoutMs = 2000): Promise<boolean> {
     try {
-      const omi = await omiFlagEnabled(flag, { timeoutMs });
-      if (omi !== undefined) return omi;
+      return (await omiFlagEnabled(flag, { timeoutMs })) ?? false;
     } catch {
-      // Omi store unavailable: PostHog answers.
-    }
-    return this.isPostHogFeatureEnabled(flag, timeoutMs);
-  },
-  isPostHogFeatureEnabled(flag: string, timeoutMs: number): Promise<boolean> {
-    try {
-      if (typeof window === 'undefined') return Promise.resolve(false);
-      this.init();
-      if (!isInitialized) return Promise.resolve(false);
-      return new Promise<boolean>((resolve) => {
-        let unsubscribe: (() => void) | undefined;
-        const finish = (enabled: boolean) => {
-          clearTimeout(timer);
-          unsubscribe?.();
-          resolve(enabled);
-        };
-        const timer = setTimeout(() => finish(false), timeoutMs);
-        try {
-          unsubscribe = posthog.onFeatureFlags(() => {
-            finish(posthog.isFeatureEnabled(flag) === true);
-          });
-        } catch {
-          finish(false);
-        }
-      });
-    } catch {
-      return Promise.resolve(false);
+      return false;
     }
   },
   pageView(pageName: string) {
@@ -95,6 +70,7 @@ export const PostHogManager = {
       if (typeof window === 'undefined') return;
       this.init();
       resetOmiFlags();
+      flagOwnerId = undefined;
       if (!isInitialized) return;
       posthog.reset();
     } catch {

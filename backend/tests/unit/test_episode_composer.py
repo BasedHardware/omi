@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
@@ -17,7 +19,9 @@ os.environ.setdefault(
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 
 from config import episodes as config
-from utils.episodes import composer, service
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+from utils.episodes import composer, home_read, metrics, service
+from utils.sync import processing_hold
 
 UID = 'composer-uid'
 T0 = datetime(2026, 10, 30, 7, 56, tzinfo=timezone.utc)  # 14:56 in Asia/Bangkok
@@ -114,12 +118,25 @@ def _reply(**over):
 
 
 @pytest.fixture
-def store(monkeypatch):
+def store(monkeypatch, request):
     monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, raising=False)
+    # This file pins the paid composer path; the one-conversation shortcut has its own file.
+    monkeypatch.setattr(composer, 'episode_single_member_compose_enabled', lambda: False)
+
+    # These fixtures use a fixed 2026-10-30 capture, which is "late" by wall clock.
+    # Late-compose tests opt back in explicitly; the rest keep today's finalize compose.
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', lambda: False)
+    monkeypatch.setattr(composer, '_deferred', {})
+    monkeypatch.setattr(composer, '_foreground', set())
+    monkeypatch.setattr(composer, '_recent', {})
+    monkeypatch.setattr(composer, '_inflight', set())
+    monkeypatch.setattr(composer, '_rerun', set())
     rows = [_row('c1', T0, 180), _row('c2', T0 + timedelta(minutes=181), 8)]
     s = Store(_episode(), rows)
-    monkeypatch.setattr(composer.episodes_db, 'get_episode', s.get_episode)
-    monkeypatch.setattr(composer.episodes_db, 'update_episode', s.update_episode)
+    if getattr(request, 'param', None) != 'transactional':
+        monkeypatch.setattr(composer.episodes_db, 'get_episode', s.get_episode)
+        monkeypatch.setattr(composer.episodes_db, 'update_episode', s.update_episode)
     monkeypatch.setattr(composer.conversations_db, 'get_conversation', s.get_conversation)
     return s
 
@@ -134,15 +151,73 @@ def _c(invoke=None, calls=None):
         tz_name='Asia/Bangkok',
         owner_name=lambda uid: 'David',
         people_names=lambda uid, ids: {},
-        extras={'compose_invoke': invoke or default},
+        extras={'compose_invoke': invoke or default, 'compose_context': lambda *a, **kw: ('', '')},
     )
+
+
+@pytest.mark.parametrize('store', ['transactional'], indirect=True)
+@pytest.mark.parametrize(
+    'case,expected_reads',
+    [('read', 0), ('finalized', 4), ('account_deleted', 3), ('conversation_deleted', 4)],
+)
+def test_finalization_compose_deletion_fence_and_read_delta(case, expected_reads, store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, 'false')
+
+    episode_path = ('users', UID, 'episodes', 'ep1')
+    account = ('account_deletions', UID)
+    tombstone = ('users', UID, 'deleted_conversations', 'c1')
+    marker = {'account_deleted': account, 'conversation_deleted': tombstone}.get(case)
+    db = StrictFirestore({episode_path: composer.episodes_db.seal(UID, store.episode)})
+    db.rows[('users', UID, 'episode_links', 'c1')] = {'episode_id': 'ep1'}
+    for cid, row in store.rows.items():
+        row['updated_at'] = T0
+        db.rows[('users', UID, 'conversations', cid)] = deepcopy(row)
+    reads = []
+    get = StrictFirestoreDocument.get
+
+    def count_authority_get(ref, transaction=None, **kwargs):
+        if ref.path in {account, tombstone}:
+            assert transaction is not None
+            reads.append(ref.path)
+        snapshot = get(ref, transaction=transaction, **kwargs)
+        if ref.path[:3] == ('users', UID, 'conversations'):
+            snapshot.update_time = T0
+        return snapshot
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', count_authority_get)
+    before_result = []
+
+    def invoke(uid, messages):
+        assert db.rows[episode_path].get('compose_lease')
+        if marker is not None:
+            db.rows[marker] = {}
+        before_result.append(deepcopy(db.rows))
+        return _reply()
+
+    c = _c(invoke=invoke)
+    c.firestore_client = db
+    if case == 'read':
+        assert composer.compose(UID, 'ep1', collaborators=c, trigger='read') == 'composed'
+    else:
+        c.finalizing_conversation_id = 'c1'
+        outcomes = []
+        monkeypatch.setattr(composer.metrics, 'record_compose', lambda outcome, *_a, **_kw: outcomes.append(outcome))
+        monkeypatch.setattr(composer._executor, 'submit', lambda run: run())
+        assert composer.after_finalized(UID, 'c1', 'finalized', c, row=store.rows['c1']) == 'finalized'
+        assert outcomes == ['skipped_deleted' if marker is not None else 'composed']
+    assert len(before_result) == 1
+    assert len(reads) == expected_reads
+    if marker is not None:
+        assert db.rows == before_result[0]
+    else:
+        assert db.rows[episode_path]['state_version'] == store.episode['state_version'] + 2
 
 
 def test_composes_a_closed_episode_into_summary_and_real_chapters(store):
     calls = []
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
     written = store.writes[-1]
-    assert written['title'] == 'Omi app bugs and labeling tool'
+    assert written['title'] == 'old'
     lede = 'David found two app regressions and explained the labeling tool.'
     assert written['lede'] == lede and written['bullets'] == [lede]
     assert written['follow_ups'] == ['Fix the processing row']
@@ -171,7 +246,9 @@ def test_composes_a_closed_episode_into_summary_and_real_chapters(store):
     # The late member's end moves the episode's activity forward (the 1h46m lunch bug).
     assert written['member_activity']['c2'] == T0 + timedelta(minutes=189)
     system, human = calls[0]
-    assert 'David' in system[1] and 'Existing summary: O' in human[1] and '[14:56:00] David: We planned' in human[1]
+    assert (
+        'David' in system[1] and 'Existing summary: O' in human[1] and '[14:56:00] Speaker 01: We planned' in human[1]
+    )
 
 
 def test_waits_for_members_still_processing(store):
@@ -257,7 +334,7 @@ def test_a_refused_window_change_keeps_the_paid_notes_on_the_old_window(store, m
 
     monkeypatch.setattr(composer.episodes_db, 'update_episode', refuse_window)
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
-    assert store.episode['title'] == 'Omi app bugs and labeling tool' and 'member_activity' not in store.episode
+    assert store.episode['title'] == 'old' and 'member_activity' not in store.episode
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'unchanged'
     assert len(calls) == 1
 
@@ -350,19 +427,19 @@ def test_person_rename_recomposes(store):
     assert len(calls) == 2
 
 
-def test_speaker_correction_recomposes(store):
+def test_unresolved_speaker_id_drift_does_not_recompose(store):
     calls = []
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
     store.rows['c1']['transcript_segments'][1]['person_id'] = 'person-arjan'
-    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
-    assert len(calls) == 2
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'unchanged'
+    assert len(calls) == 1
 
 
 def test_a_trigger_during_a_run_composes_again(store, monkeypatch):
     outcomes = iter(['composed', 'unchanged'])
     seen = []
 
-    def fake_compose(uid, episode_id, collaborators=None, force=False):
+    def fake_compose(uid, episode_id, collaborators=None, force=False, background=False, trigger=None):
         seen.append(episode_id)
         if len(seen) == 1:
             # A member finalize arrives while this run is in flight.
@@ -375,13 +452,16 @@ def test_a_trigger_during_a_run_composes_again(store, monkeypatch):
     assert seen == ['ep1', 'ep1']
 
 
-def test_membership_change_during_the_call_is_not_overwritten(store):
+def test_membership_change_during_the_call_keeps_the_paid_result_pending(store):
     def invoke(uid, messages):
         store.episode['conversation_ids'] = ['c1', 'c2', 'c3']
         return _reply()
 
-    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
-    assert not any("bullets" in w for w in store.writes) and store.episode["compose_lease"] is None
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'kept_pending'
+    # The paid result is kept and the episode is pending, so a settled compose refreshes it.
+    assert store.episode['title'] == 'old'
+    assert store.episode['compose_pending_since'] and store.episode['compose_lease'] is None
+    assert composer.needs_compose(store.episode) is True
 
 
 def test_long_transcripts_keep_the_densest_windows_in_order():
@@ -419,7 +499,6 @@ def test_needs_compose_read_check(monkeypatch):
 
 
 def test_home_read_safety_net_schedules_uncomposed_and_changed_episodes(monkeypatch):
-    from utils.episodes import home_read
 
     queued = []
     monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
@@ -450,7 +529,6 @@ def test_home_read_safety_net_schedules_uncomposed_and_changed_episodes(monkeypa
 
 def test_per_conversation_lookup_carries_the_safety_net(monkeypatch):
     # Home reads episodes through /by-conversation, not only the window list: the lookup schedules too.
-    from utils.episodes import home_read
 
     queued = []
     monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
@@ -495,13 +573,14 @@ def test_a_second_replica_does_not_pay_for_the_same_evidence(store):
     assert calls == [1] and store.episode['compose_lease'] is None
 
 
-def test_discard_during_the_call_is_superseded_not_written(store):
+def test_discard_during_the_call_cannot_reintroduce_hidden_content(store):
     def invoke(uid, messages):
         store.rows['c2']['discarded'] = True
         return _reply()
 
     assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
-    assert not any('bullets' in w for w in store.writes)
+    assert store.episode['title'] == 'old'
+    assert not any('bullets' in write for write in store.writes)
     assert store.episode['compose_lease'] is None
 
 
@@ -718,6 +797,1452 @@ def test_the_wire_reads_moments_in_time_order_and_drops_placeholder_headings():
         }
     )
     assert [m['id'] for m in wire['moments']] == ['a', 'b']
-    assert wire['moments'][1]['heading'] == ''
+    assert wire['moments'][1]['heading'] == 'Discussion 1'
     assert wire['moments'][0]['ended_at'] == T0 + timedelta(minutes=34)
     assert wire['moments'][1]['ended_at'] == T0 + timedelta(minutes=34, seconds=8)
+
+
+@pytest.mark.parametrize('drift', ['title', 'overview', 'action_items', 'speaker', 'is_user', 'person_id', 'timing'])
+def test_label_summary_and_timing_drift_do_not_pay(store, drift):
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    stamp = store.episode['composed_fingerprint']
+    row = store.rows['c1']
+    if drift in {'title', 'overview', 'action_items'}:
+        row['structured'][drift] = [{'description': 'New wording'}] if drift == 'action_items' else 'New wording'
+    else:
+        row['transcript_segments'][0][{'timing': 'start'}.get(drift, drift)] = {
+            'speaker': 'SPEAKER_99',
+            'is_user': False,
+            'person_id': 'unknown',
+            'timing': 2,
+        }[drift]
+    assert composer.fingerprint(list(store.rows.values())) != stamp
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'unchanged'
+    assert store.episode['composed_fingerprint'] == stamp and len(calls) == 1
+
+
+def _schedule_seam(store, monkeypatch):
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', store.get_episode)
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+
+
+def test_sync_update_label_drift_skips_before_member_reads(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    store.rows['c1']['structured']['title'] = 'Reprocessed title'
+    store.rows['c1']['transcript_segments'][0]['speaker'] = 'SPEAKER_77'
+    _schedule_seam(store, monkeypatch)
+    monkeypatch.setattr(composer.conversations_db, 'get_conversation', lambda *a, **kw: pytest.fail('redundant read'))
+    reasons = []
+    monkeypatch.setattr(composer.metrics, 'record_compose_trigger_skipped', reasons.append)
+    assert composer.after_finalized(UID, 'c1', 'finalized', c, row=store.rows['c1']) == 'finalized'
+    assert len(calls) == 1 and reasons == ['evidence_unchanged']
+    assert not composer._deferred
+
+
+@pytest.mark.parametrize('change', ['speech', 'name', 'late_member', 'membership', 'discard', 'delete'])
+def test_real_finalized_evidence_is_deferred_then_recomposed(store, monkeypatch, change):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    cid = 'c1'
+    if change == 'speech':
+        store.rows[cid]['transcript_segments'][0]['text'] += ' We decided to ship.'
+    elif change == 'name':
+        store.rows[cid]['transcript_segments'][1]['person_name'] = 'Arjan'
+    elif change == 'late_member':
+        cid = 'c3'
+        store.rows[cid] = _row(cid, T0 + timedelta(minutes=184), 4)
+        store.episode['conversation_ids'].append(cid)
+    elif change == 'membership':
+        store.episode['conversation_ids'] = ['c1']
+    else:
+        store.rows[cid][{'discard': 'discarded', 'delete': 'deleted'}[change]] = True
+    _schedule_seam(store, monkeypatch)
+    composer.schedule_for_conversation(UID, cid, collaborators=c, row=store.rows[cid])
+    assert len(calls) == 1
+    assert (UID, 'ep1') in composer._deferred
+    assert store.episode['compose_pending_since']
+    # Simulate the due tick after a full quiet window, without sleeping or changing recorded boundaries.
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+    store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+    composer._deferred[(UID, 'ep1')] = (0, c)
+    composer._schedule_due()
+    assert len(calls) == 2
+    assert store.episode['compose_pending_since'] is None
+    assert not composer._deferred
+    if change in {'membership', 'discard', 'delete'}:
+        assert store.episode['composed_member_ids'] == (['c1'] if change == 'membership' else ['c2'])
+
+
+def test_background_settles_without_claiming_lease_or_holding_worker(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    _schedule_seam(store, monkeypatch)
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+    assert not calls and not composer._inflight
+    assert 'compose_lease' not in store.episode
+    assert (
+        config.COMPOSER_SETTLE_SECONDS - 10
+        < composer._deferred[(UID, 'ep1')][0] - composer.time.monotonic()
+        <= config.COMPOSER_SETTLE_SECONDS
+    )
+    assert store.episode['compose_activity_at'] >= store.episode['compose_pending_since']
+
+
+@pytest.mark.parametrize('previously_composed', [False, True])
+def test_full_settle_queue_composes_immediately_without_losing_pending_evidence(
+    store, monkeypatch, previously_composed
+):
+    calls = []
+    c = _c(calls=calls)
+    if previously_composed:
+        assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+        store.rows['c1']['transcript_segments'][0]['text'] += ' New speech.'
+    _schedule_seam(store, monkeypatch)
+    queued = {(UID, f'other-{i}'): (float('inf'), c) for i in range(10_000)}
+    composer._deferred.update(queued)
+    fallbacks = []
+    outcomes = []
+    monkeypatch.setattr(composer, 'record_fallback', lambda **kw: fallbacks.append(kw))
+    monkeypatch.setattr(composer.metrics, 'record_compose', lambda outcome, seconds, **_: outcomes.append(outcome))
+
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+
+    assert outcomes == ['composed']
+    assert len(calls) == (2 if previously_composed else 1)
+    assert store.writes[-3]['compose_pending_since']
+    assert store.writes[-2]['compose_lease']['fingerprint'] == store.episode['composed_fingerprint']
+    assert store.episode['compose_pending_since'] is None
+    assert store.episode['composed_evidence'] == composer._evidence(list(store.rows.values()))
+    assert composer._deferred == queued and not composer._inflight
+    assert len(fallbacks) == 1
+    assert fallbacks[0] == {
+        'component': 'conversation_notes',
+        'from_mode': 'episode_compose_settling',
+        'to_mode': 'episode_compose_immediate',
+        'reason': 'capacity_full',
+        'outcome': 'degraded',
+        'log': composer.logger,
+    }
+    # Saturation does not bypass the normal fingerprint deduplication on the next attempt.
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'unchanged'
+    assert len(calls) == (2 if previously_composed else 1) and len(fallbacks) == 1
+
+
+@pytest.mark.parametrize('change', ['speech', 'name'])
+@pytest.mark.parametrize('failure', ['cas_exhausted', 'storage_error', 'gate_only'])
+def test_failed_pending_write_still_schedules_and_eventually_composes(store, monkeypatch, change, failure):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    old_stamp = store.episode['composed_fingerprint']
+    segment = store.rows['c1']['transcript_segments'][1]
+    segment['text' if change == 'speech' else 'person_name'] = 'New speech' if change == 'speech' else 'Arjan'
+    _schedule_seam(store, monkeypatch)
+    write = store.update_episode
+    attempts = []
+    fallbacks = []
+    monkeypatch.setattr(composer, 'record_fallback', lambda **kw: fallbacks.append(kw))
+
+    def fail_pending(*args, **kw):
+        if kw['updates'].get('compose_pending_since'):
+            attempts.append(kw['updates'])
+            if failure != 'gate_only' or len(attempts) <= 3:
+                if failure == 'storage_error':
+                    raise RuntimeError('storage unavailable')
+                raise composer.episodes_db.EpisodeConflict('state_version_changed')
+        return write(*args, **kw)
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', fail_pending)
+    assert composer.after_finalized(UID, 'c1', 'finalized', c, row=store.rows['c1']) == 'finalized'
+    if failure == 'gate_only':
+        # Once metadata writes recover, the scheduled worker durably retains its retry.
+        assert len(calls) == 1 and composer._deferred and store.episode['compose_pending_since']
+        store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+        store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+        composer._deferred[(UID, 'ep1')] = (0, c)
+        composer._schedule_due()
+    else:
+        # Even persistent metadata failure must pay now rather than lose this last finalize.
+        assert len(attempts) == (6 if failure == 'cas_exhausted' else 2)
+    assert len(calls) == 2 and store.episode['composed_fingerprint'] != old_stamp
+    assert not composer._deferred and store.episode['compose_pending_since'] is None
+    assert fallbacks and all(f['reason'] == 'enqueue_failed' and f['outcome'] == 'degraded' for f in fallbacks)
+    # The immediate fallback still stamps and deduplicates the paid evidence normally.
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'unchanged'
+    assert len(calls) == 2
+
+
+def test_identical_finalizes_do_not_extend_quiet_window(store, monkeypatch):
+    c = _c()
+    _schedule_seam(store, monkeypatch)
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+    first, activity = store.episode['compose_pending_since'], store.episode['compose_activity_at']
+    writes = len(store.writes)
+    store.rows['c1']['structured']['overview'] = 'Drift'
+    composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
+    assert store.episode['compose_pending_since'] == first
+    assert store.episode['compose_activity_at'] == activity
+    assert len(store.writes) == writes
+
+
+def test_new_speech_extends_quiet_window_but_preserves_first_pending_time(store, monkeypatch):
+    c = _c()
+    _schedule_seam(store, monkeypatch)
+    composer.schedule(UID, 'ep1', collaborators=c)
+    # Leave less than a quiet window until the original cap, so new speech cannot renew it.
+    remaining = config.COMPOSER_SETTLE_SECONDS / 2
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS - remaining)
+    store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS / 5)
+    activity = store.episode['compose_activity_at']
+    first = store.episode['compose_pending_since']
+    store.rows['c1']['transcript_segments'][0]['text'] += ' Late words.'
+    composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
+    assert store.episode['compose_pending_since'] == first
+    assert store.episode['compose_activity_at'] > activity
+    assert remaining - 1 < composer.settle_delay(store.episode) <= remaining
+
+
+def test_continuous_upload_pays_at_max_latency_cap(store):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'settling'
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS + 60)
+    store.rows['c1']['transcript_segments'][0]['text'] += ' Still uploading.'
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'composed'
+    assert len(calls) == 1
+
+
+def test_pending_window_survives_process_local_queue_loss(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'settling'
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS + 60)
+    composer._deferred.clear()  # A new process has no local queue.
+    _schedule_seam(store, monkeypatch)
+    composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
+    assert len(calls) == 1 and store.episode['compose_pending_since'] is None
+
+
+@pytest.mark.parametrize('enabled', ['on', 'off'])
+@pytest.mark.parametrize('change', ['speech', 'name'])
+def test_read_recovers_persisted_pending_evidence_after_restart(store, monkeypatch, enabled, change):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    old_stamp = store.episode['composed_fingerprint']
+    segment = store.rows['c1']['transcript_segments'][1]
+    segment['text' if change == 'speech' else 'person_name'] = 'Late speech' if change == 'speech' else 'Arjan'
+    _schedule_seam(store, monkeypatch)
+    composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
+    assert len(calls) == 1 and store.episode['compose_pending_since']
+    # Keep only persisted state, as after an instance restart and optional rollback.
+    for state in (composer._deferred, composer._recent, composer._inflight, composer._rerun, composer._foreground):
+        state.clear()
+    monkeypatch.setenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, enabled)
+    assert composer.needs_compose(store.episode)
+    schedule = composer.schedule
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **kw: schedule(uid, eid, collaborators=c, **kw))
+    assert (
+        home_read.schedule_missed_composes(
+            UID, [store.episode], [{'id': 'ep1', 'members': [{'id': 'c1'}, {'id': 'c2'}]}]
+        )
+        == 1
+    )
+    assert len(calls) == 2 and store.episode['composed_fingerprint'] != old_stamp
+    assert store.episode['compose_pending_since'] is None and not composer._deferred
+
+
+def test_later_trigger_after_restart_preserves_pending_cap_despite_new_speech(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    store.rows['c1']['transcript_segments'][0]['text'] += ' Late speech.'
+    _schedule_seam(store, monkeypatch)
+    composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
+    # Leave less than a quiet window until the original cap, so new speech cannot renew it.
+    remaining = config.COMPOSER_SETTLE_SECONDS / 2
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS - remaining)
+    store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS / 5)
+    activity = store.episode['compose_activity_at']
+    first = store.episode['compose_pending_since']
+    for state in (composer._deferred, composer._recent, composer._inflight, composer._rerun, composer._foreground):
+        state.clear()
+    store.rows['c1']['transcript_segments'][0]['text'] += ' Still uploading.'
+    composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
+    assert len(calls) == 1 and store.episode['compose_pending_since'] == first
+    assert store.episode['compose_activity_at'] > activity
+    assert remaining - 1 < composer._deferred[(UID, 'ep1')][0] - composer.time.monotonic() <= remaining
+    # The recovered worker pays at the persisted cap even if activity is still recent.
+    store.episode['compose_pending_since'] -= timedelta(seconds=remaining + 60)
+    composer._deferred[(UID, 'ep1')] = (0, c)
+    composer._schedule_due()
+    assert len(calls) == 2 and store.episode['compose_pending_since'] is None and not composer._deferred
+
+
+def test_rollback_drains_pending_marker_without_paying_if_speech_was_reverted(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    old_text = store.rows['c1']['transcript_segments'][0]['text']
+    store.rows['c1']['transcript_segments'][0]['text'] += ' Late speech.'
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'settling'
+    store.rows['c1']['transcript_segments'][0]['text'] = old_text
+    composer._deferred.clear()
+    monkeypatch.setenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, 'off')
+    assert composer.needs_compose(store.episode)
+    _schedule_seam(store, monkeypatch)
+    assert composer.schedule(UID, 'ep1', collaborators=c, throttle=True)
+    assert len(calls) == 1 and store.episode['compose_pending_since'] is None
+    assert not composer.needs_compose(store.episode)
+
+
+def test_read_promotes_deferred_compose_even_inside_throttle_window(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    _schedule_seam(store, monkeypatch)
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+    assert not calls
+    assert composer.schedule(UID, 'ep1', collaborators=c, throttle=True)
+    assert len(calls) == 1 and not composer._deferred
+
+
+def test_read_promotes_inflight_background_that_is_entering_settle(store, monkeypatch):
+    c = _c()
+    _schedule_seam(store, monkeypatch)
+    real_compose = composer.compose
+    modes = []
+
+    def compose(uid, eid, **kw):
+        modes.append(kw['background'])
+        result = real_compose(uid, eid, **kw)
+        if len(modes) == 1:
+            assert not composer.schedule(uid, eid, collaborators=c, throttle=True)
+        return result
+
+    monkeypatch.setattr(composer, 'compose', compose)
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+    assert modes == [True, False]
+    assert store.episode.get('composed_fingerprint') and not composer._deferred
+
+
+def test_force_and_direct_page_compose_bypass_settle(store):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'settling'
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True, force=True) == 'composed'
+    store.rows['c1']['transcript_segments'][0]['text'] += ' New evidence.'
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize('outcome', ['kept_pending', 'stale'])
+def test_racing_paid_background_call_waits_before_retry(store, monkeypatch, outcome):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'settling'
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+    store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+    composer._deferred.clear()
+    _schedule_seam(store, monkeypatch)
+    if outcome == 'kept_pending':
+
+        def invoke(uid, messages):
+            calls.append(messages)
+            store.rows['c1']['transcript_segments'][0]['text'] += ' Arrived during the call.'
+            return _reply()
+
+        c = _c(invoke=invoke)
+    else:
+        update = store.update_episode
+
+        def write(*args, **kw):
+            result = update(*args, **kw)
+            if 'composed_fingerprint' in kw['updates']:
+                store.rows['c1']['transcript_segments'][0]['text'] += ' Arrived during the final write.'
+            return result
+
+        monkeypatch.setattr(composer.episodes_db, 'update_episode', write)
+    outcomes = []
+    monkeypatch.setattr(composer.metrics, 'record_compose', lambda result, seconds, **_: outcomes.append(result))
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+    assert outcomes == ([outcome] if outcome == 'kept_pending' else [outcome, 'settling'])
+    assert len(calls) == 1 and composer._deferred and not composer._inflight
+
+
+def test_off_restores_label_drift_payment_and_immediate_background(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    monkeypatch.setenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, 'off')
+    _schedule_seam(store, monkeypatch)
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+    store.rows['c1']['structured']['overview'] = 'Drift'
+    composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
+    assert len(calls) == 2 and not composer._deferred
+
+
+def test_settling_and_skipped_trigger_metrics_have_no_user_labels():
+    before = metrics.EPISODE_COMPOSE_TOTAL.labels(outcome='settling', trigger='close')._value.get()
+    skips = metrics.EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason='evidence_unchanged')._value.get()
+    calls = metrics.EPISODE_COMPOSE_CALLS_TOTAL.labels(trigger='repair', outcome='parse_error')._value.get()
+    metrics.record_compose('settling', 0.01, trigger='close')
+    metrics.record_compose_trigger_skipped('evidence_unchanged')
+    metrics.record_compose_call('repair', 'parse_error')
+    assert metrics.EPISODE_COMPOSE_TOTAL.labels(outcome='settling', trigger='close')._value.get() == before + 1
+    assert metrics.EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason='evidence_unchanged')._value.get() == skips + 1
+    assert metrics.EPISODE_COMPOSE_CALLS_TOTAL.labels(trigger='repair', outcome='parse_error')._value.get() == calls + 1
+    assert metrics.EPISODE_COMPOSE_TOTAL._labelnames == ('outcome', 'trigger')
+    assert metrics.EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL._labelnames == ('reason',)
+    assert metrics.EPISODE_COMPOSE_CALLS_TOTAL._labelnames == ('trigger', 'outcome')
+    # An unknown trigger or outcome is folded into a bounded label, never a uid.
+    metrics.record_compose('composed', 0.01, trigger='someone-uid')
+    assert metrics.EPISODE_COMPOSE_TOTAL.labels(outcome='composed', trigger='other')._value.get() >= 1
+
+
+def test_settle_retry_task_cancels_and_clears_its_queue(monkeypatch):
+    async def run():
+        task = asyncio.create_task(composer.retry_settled_composes())
+        await asyncio.sleep(0)
+        composer._deferred[(UID, 'ep1')] = (float('inf'), None)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert not composer._deferred
+
+    asyncio.run(run())
+
+
+def test_home_read_safety_net_bypasses_pending_quiet_window(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    _schedule_seam(store, monkeypatch)
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+    schedule = composer.schedule
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **kw: schedule(uid, eid, collaborators=c, **kw))
+    assert (
+        home_read.schedule_missed_composes(
+            UID,
+            [store.episode],
+            [{'id': 'ep1', 'members': [{'id': 'c1'}, {'id': 'c2'}]}],
+        )
+        == 1
+    )
+    assert len(calls) == 1 and not composer._deferred
+
+
+def test_same_full_fingerprint_backfills_trigger_stamp_without_paying(store):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    del store.episode['composed_evidence']
+    del store.episode['composed_membership']
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'unchanged'
+    assert store.episode['composed_evidence'] and len(calls) == 1
+
+
+def test_superseded_at_latency_cap_still_waits_before_next_paid_attempt(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'settling'
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS + 60)
+    composer._deferred.clear()
+    _schedule_seam(store, monkeypatch)
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        store.rows['c1']['transcript_segments'][0]['text'] += ' Continually arriving.'
+        return _reply()
+
+    assert composer.schedule(UID, 'ep1', collaborators=_c(invoke=invoke))
+    assert len(calls) == 1 and composer._deferred
+    assert config.COMPOSER_SETTLE_SECONDS - 10 < composer.settle_delay(store.episode) <= config.COMPOSER_SETTLE_SECONDS
+
+
+def test_off_restores_immediate_superseded_retry(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, 'off')
+    calls = []
+    _schedule_seam(store, monkeypatch)
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        if len(calls) == 1:
+            store.rows['c1']['transcript_segments'][0]['text'] += ' New words.'
+        return _reply()
+
+    assert composer.schedule(UID, 'ep1', collaborators=_c(invoke=invoke))
+    assert len(calls) == 2 and not composer._deferred
+    assert store.episode['composed_fingerprint']
+
+
+def test_read_arriving_as_background_worker_exits_is_not_lost(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    _schedule_seam(store, monkeypatch)
+    lock = composer.threading.Lock()
+
+    class ExitRace:
+        exits = 0
+
+        def __enter__(self):
+            lock.acquire()
+
+        def __exit__(self, *_):
+            lock.release()
+            self.exits += 1
+            if self.exits == 3:
+                # After the outcome decision, before inflight ownership is released.
+                assert not composer.schedule(UID, 'ep1', collaborators=c, throttle=True)
+
+    monkeypatch.setattr(composer, '_inflight_lock', ExitRace())
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+    assert len(calls) == 1 and not composer._deferred and not composer._inflight
+
+
+@pytest.mark.parametrize('change', ['speech', 'summary'])
+def test_legacy_changed_fingerprint_composes_once_then_uses_narrow_gate(store, change):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    del store.episode['composed_evidence']
+    del store.episode['composed_membership']
+    if change == 'speech':
+        store.rows['c1']['transcript_segments'][0]['text'] += ' Real late speech.'
+    else:
+        store.rows['c1']['structured']['overview'] = 'Label-only legacy drift'
+    # The legacy full hash cannot distinguish these two cases: never drop real late speech.
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'settling'
+    assert len(calls) == 1
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+    store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'composed'
+    assert len(calls) == 2 and store.episode['composed_evidence']
+    store.rows['c1']['structured']['overview'] = 'Another label-only reprocess'
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'unchanged'
+    assert len(calls) == 2
+
+
+# --------------------------------------------------------------------------- keep paid composes
+
+
+def test_parse_failure_repairs_once_with_only_the_bad_output(store):
+    calls = []
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        if len(calls) == 1:
+            return SimpleNamespace(content='not json at all', usage_metadata={'input_tokens': 100, 'output_tokens': 5})
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    assert len(calls) == 2
+    system, human = calls[1]
+    assert 'repair' in system[1].lower()
+    assert '{{' not in system[1] and '}}' not in system[1], 'repair schema must be actual JSON'
+    # The repair prompt is the bad output alone: no transcript, no member summaries.
+    assert human[1] == 'not json at all'
+    assert 'We planned the launch' not in human[1] and 'Existing summary' not in human[1]
+    assert store.episode['title'] == 'old'
+    # Both paid calls are counted in the episode's usage.
+    assert store.episode['usage']['composer_input_tokens'] == 100 + 8000
+    assert store.episode['usage']['composer_output_tokens'] == 5 + 500
+
+
+def test_repair_failure_counts_two_paid_failures_and_stops(store):
+    calls = []
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        return SimpleNamespace(content='still not json', usage_metadata={'input_tokens': 10, 'output_tokens': 1})
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'error'
+    assert len(calls) == 2
+    assert store.episode['compose_failures'] == 2 and store.episode['compose_lease'] is None
+    # The cap is two paid failures: no third call on the same evidence.
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'backoff'
+    assert len(calls) == 2
+
+
+def test_paid_failure_cap_is_two_per_episode(store):
+    calls = []
+
+    def boom(uid, messages):
+        calls.append(1)
+        raise TimeoutError('slow')
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=boom)) == 'error'
+    assert store.episode['compose_failures'] == 1
+    store.episode['compose_failed_at'] = T0  # past the backoff window, same evidence
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=boom)) == 'error'
+    assert store.episode['compose_failures'] == 2
+    store.episode['compose_failed_at'] = T0
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=boom)) == 'backoff'
+    assert len(calls) == 2
+
+
+def test_short_episode_accepts_a_title_and_lede_without_chapters(store):
+    store.episode['conversation_ids'] = ['c1']
+    store.rows['c1'] = _row('c1', T0, 5)
+    reply = _reply(chapters=[])
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=lambda u, m: reply)) == 'composed'
+    assert store.episode['title'] == 'old'
+    assert store.episode['lede'] == 'David found two app regressions and explained the labeling tool.'
+    assert store.episode['moments'] == [] and store.episode['compose_failures'] == 0
+
+
+def test_long_episode_without_chapters_is_still_a_failed_compose(store):
+    reply = _reply(chapters=[])
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=lambda u, m: reply)) == 'error'
+    assert store.episode['compose_failures'] == 1
+    assert not any('lede' in w for w in store.writes)
+
+
+def test_repair_call_is_counted_with_its_own_trigger(store):
+    before = metrics.EPISODE_COMPOSE_CALLS_TOTAL.labels(trigger='repair', outcome='ok')._value.get()
+    calls = []
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        return SimpleNamespace(content='not json', usage_metadata={}) if len(calls) == 1 else _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    assert metrics.EPISODE_COMPOSE_CALLS_TOTAL.labels(trigger='repair', outcome='ok')._value.get() == before + 1
+
+
+def test_kill_switch_off_skips_the_repair_retry(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
+    calls = []
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        return SimpleNamespace(content='not json', usage_metadata={})
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'error'
+    assert len(calls) == 1 and store.episode['compose_failures'] == 1
+
+
+def test_kill_switch_off_discards_a_superseded_result(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
+
+    def invoke(uid, messages):
+        store.rows['c2']['transcript_segments'].append({'start': 700, 'end': 705, 'text': 'Late.', 'is_user': True})
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
+    assert not any('bullets' in w for w in store.writes)
+    assert not store.episode.get('compose_pending_since')
+
+
+def test_kill_switch_off_keeps_the_four_failure_cap(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
+    calls = []
+
+    def boom(uid, messages):
+        calls.append(1)
+        raise TimeoutError('slow')
+
+    store.episode.update(
+        compose_failures=3,
+        compose_failed_at=T0,
+        compose_failed_fingerprint=composer.fingerprint(list(store.rows.values())),
+    )
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=boom)) == 'error'
+    assert store.episode['compose_failures'] == 4
+    store.episode['compose_failed_at'] = T0
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=boom)) == 'backoff'
+    assert len(calls) == 1
+
+
+def test_compose_trigger_labels_follow_the_caller(store, monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        composer.metrics, 'record_compose', lambda outcome, seconds, trigger='close': seen.append(trigger)
+    )
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+    c = _c()
+    assert composer.schedule(UID, 'ep1', collaborators=c, trigger='read')
+    assert seen == ['read']
+    seen.clear()
+    composer._deferred.clear()
+    store.rows['c1']['transcript_segments'][0]['text'] += ' New speech.'
+    assert composer.schedule(UID, 'ep1', collaborators=c, trigger='member_final')
+    assert seen == ['member_final']
+
+
+def test_settle_timer_labels_its_compose(store, monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        composer.metrics, 'record_compose', lambda outcome, seconds, trigger='close': seen.append(trigger)
+    )
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+    composer._deferred[(UID, 'ep1')] = (0, _c())
+    composer._schedule_due()
+    assert seen == ['settle']
+
+
+# --------------------------------------------------------------------------- late composes
+#
+# A recording repaired or synced more than 48h after capture composes on its first
+# open, not at finalize. The `store` fixture turns the switch off; these tests opt in.
+
+
+def _late(store, *, days=3):
+    store.episode['started_at'] = datetime.now(timezone.utc) - timedelta(days=days)
+    return store.episode
+
+
+def test_a_late_episode_defers_its_compose_at_finalize(store, monkeypatch):
+    queued = []
+    monkeypatch.delenv(config.EPISODE_COMPOSER_THRIFT_ENV, raising=False)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
+    reasons = []
+    monkeypatch.setattr(composer.metrics, 'record_compose_trigger_skipped', reasons.append)
+    episode = _late(store)
+    assert composer.schedule_after_close(UID, 'ep1', episode=episode, collaborators=_c()) is False
+    assert queued == []
+    assert store.episode['compose_deferred_at'] is not None
+    # The row reads as the first member's own summary title until the composer replaces it.
+    assert store.episode['title'] == 'T'
+    assert reasons == ['late_deferred']
+
+
+def test_a_normal_episode_still_composes_at_finalize(store, monkeypatch):
+    queued = []
+    monkeypatch.delenv(config.EPISODE_COMPOSER_THRIFT_ENV, raising=False)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
+    store.episode['started_at'] = datetime.now(timezone.utc) - timedelta(hours=2)
+    assert composer.schedule_after_close(UID, 'ep1', episode=store.episode, collaborators=_c()) is True
+    assert queued == ['ep1']
+    assert 'compose_deferred_at' not in store.episode
+
+
+def test_the_late_compose_switch_off_restores_finalize_compose(store, monkeypatch):
+    queued = []
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
+    episode = _late(store)
+    assert composer.schedule_after_close(UID, 'ep1', episode=episode, collaborators=_c()) is True
+    assert queued == ['ep1']
+    assert 'compose_deferred_at' not in store.episode
+
+
+def test_opening_a_deferred_episode_composes_it_exactly_once(store, monkeypatch):
+    calls = []
+    monkeypatch.delenv(config.EPISODE_COMPOSER_THRIFT_ENV, raising=False)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+    episode = _late(store)
+    episode['compose_deferred_at'] = datetime.now(timezone.utc)
+    assert composer.schedule_opened(UID, episode, collaborators=_c(calls=calls)) is True
+    assert len(calls) == 1
+    assert store.episode['composed_fingerprint']
+    # The deferral is one-shot: a later arrival defers again on its own.
+    assert store.episode['compose_deferred_at'] is None
+    # A second open inside the read throttle window does not pay again.
+    assert composer.schedule_opened(UID, store.episode, collaborators=_c(calls=calls)) is False
+    assert len(calls) == 1
+
+
+def test_the_read_safety_net_waits_for_the_grace_window(monkeypatch):
+    monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_COMPOSER_THRIFT_ENV, raising=False)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    now = datetime.now(timezone.utc)
+    deferred = {
+        'id': 'late',
+        'status': 'closed',
+        'started_at': now - timedelta(days=3),
+        'closed_at': now - timedelta(days=3),
+        'compose_deferred_at': now - timedelta(hours=1),
+    }
+    assert composer.needs_compose(deferred) is False
+    assert composer.needs_compose(deferred, opened=True) is True
+    past_grace = {**deferred, 'compose_deferred_at': now - timedelta(days=8)}
+    assert composer.needs_compose(past_grace) is True
+
+
+def test_a_composed_late_episode_refreshes_normally_when_a_member_arrives(store, monkeypatch):
+    monkeypatch.delenv(config.EPISODE_COMPOSER_THRIFT_ENV, raising=False)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: True)
+    episode = _late(store)
+    episode.update(
+        {
+            'composed_fingerprint': 'x',
+            'composed_member_ids': ['c1', 'c2'],
+            'composed_membership': ['c1', 'c2'],
+            'composed_notes': composer.notes_hash(episode),
+            'composer_version': config.COMPOSER_VERSION,
+        }
+    )
+    episode['title'] = 'Composed title'
+    episode['composed_notes'] = composer.notes_hash(episode)
+    assert composer.schedule_after_close(UID, 'ep1', episode=episode, collaborators=_c()) is True
+    assert store.episode['title'] == 'Composed title'
+    assert not store.episode.get('compose_deferred_at')
+
+
+def test_the_late_threshold_is_configurable(monkeypatch):
+    monkeypatch.delenv(config.EPISODE_COMPOSER_THRIFT_ENV, raising=False)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    now = datetime.now(timezone.utc)
+    episode = {'id': 'e', 'status': 'closed', 'started_at': now - timedelta(hours=30)}
+    assert composer.is_late(episode) is False
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV, '24')
+    assert composer.is_late(episode) is True
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV, 'nonsense')
+    assert composer.is_late(episode) is False
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV, '0')
+    assert composer.is_late(episode) is False
+
+
+def test_paid_result_never_reintroduces_a_member_hidden_during_the_call(store):
+    def invoke(uid, messages):
+        store.rows['c2']['deleted'] = True
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
+    assert not any('bullets' in write for write in store.writes)
+
+
+def test_l8_off_drains_a_persisted_late_deferral(monkeypatch):
+    monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
+    episode = {
+        'id': 'late',
+        'status': 'closed',
+        'closed_at': datetime.now(timezone.utc),
+        'compose_deferred_at': datetime.now(timezone.utc),
+    }
+    assert composer.needs_compose(episode) is True
+
+
+def test_waiting_new_member_keeps_paid_output_without_rebuy(store):
+    calls = []
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        store.episode['conversation_ids'].append('c3')
+        store.rows['c3'] = _row('c3', T0, 5, status='processing')
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'kept_pending'
+    assert store.episode['title'] == 'old'
+    assert store.episode['compose_pending_since']
+    assert store.episode['composed_member_ids'] == ['c1', 'c2']
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'waiting'
+    assert len(calls) == 1
+
+
+def test_repair_sequence_remains_leased_after_240_seconds(store, monkeypatch):
+    clock = [datetime.now(timezone.utc)]
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock[0]
+
+    monkeypatch.setattr(composer, 'datetime', Clock)
+    calls, peers = [], []
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        clock[0] += timedelta(seconds=130)
+        if len(calls) == 1:
+            return SimpleNamespace(content='malformed', usage_metadata={'input_tokens': 10, 'output_tokens': 1})
+        assert (clock[0] - started).total_seconds() > 240
+        peers.append(composer.compose(UID, 'ep1', collaborators=_c()))
+        return _reply()
+
+    started = clock[0]
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    assert peers == ['leased'] and len(calls) == 2
+    assert store.episode['usage']['composer_calls'] == 2
+
+
+def test_no_paid_turn_starts_without_deadline_headroom(store, monkeypatch):
+    clock = [datetime.now(timezone.utc)]
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock[0]
+
+    monkeypatch.setattr(composer, 'datetime', Clock)
+    calls = []
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        clock[0] += timedelta(seconds=composer.COMPOSER_LEASE_SECONDS - 30)
+        return SimpleNamespace(content='malformed', usage_metadata={})
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'error'
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize('flag,deferred', [('off', True), ('on', False)])
+def test_open_schedules_only_deferred_episodes_with_thrift_on(store, monkeypatch, flag, deferred):
+    from unittest.mock import Mock
+
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, flag)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    if deferred:
+        store.episode['compose_deferred_at'] = datetime.now(timezone.utc)
+    schedule = Mock()
+    monkeypatch.setattr(composer, 'schedule', schedule)
+    assert composer.schedule_opened(UID, store.episode, collaborators=_c()) is False
+    schedule.assert_not_called()
+
+
+@pytest.mark.parametrize('entry', ['member_final', 'close'])
+def test_late_composed_episode_redefers_new_member_then_open_includes_it(store, monkeypatch, entry):
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
+    old_title = store.episode['title']
+    _late(store)
+    store.episode['conversation_ids'].append('c3')
+    store.rows['c3'] = _row('c3', T0, 5, title='Late speech')
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *a, **k: store.episode)
+    if entry == 'member_final':
+        composer.schedule_for_conversation(UID, 'c3', collaborators=_c(), row=store.rows['c3'])
+    else:
+        assert not composer.schedule_after_close(UID, 'ep1', episode=store.episode, collaborators=_c())
+    assert store.episode['compose_deferred_at'] and store.episode['title'] == old_title
+    assert not composer.needs_compose(store.episode)
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+    assert composer.schedule_opened(UID, store.episode, collaborators=_c())
+    assert store.episode['composed_member_ids'] == ['c1', 'c2', 'c3']
+    assert store.episode['compose_deferred_at'] is None
+
+
+def test_member_final_deferral_write_fault_falls_through(store, monkeypatch):
+    from unittest.mock import Mock, ANY
+
+    _late(store)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *a, **k: store.episode)
+    monkeypatch.setattr(composer, '_write', Mock(side_effect=RuntimeError('write unavailable')))
+    schedule = Mock(return_value=True)
+    monkeypatch.setattr(composer, 'schedule', schedule)
+    composer.schedule_for_conversation(UID, 'c1', collaborators=_c(), row=store.rows['c1'])
+    schedule.assert_called_once_with(UID, 'ep1', collaborators=ANY, trigger='member_final')
+
+
+def test_terminal_parse_replies_count_both_input_and_output_tokens(store):
+    inputs = metrics.EPISODE_COMPOSE_INPUT_TOKENS_TOTAL.labels(mode='full')._value.get()
+    outputs = metrics.EPISODE_COMPOSE_OUTPUT_TOKENS_TOTAL.labels(mode='full')._value.get()
+
+    def invoke(uid, messages):
+        return SimpleNamespace(content='malformed', usage_metadata={'input_tokens': 10, 'output_tokens': 3})
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'error'
+    assert metrics.EPISODE_COMPOSE_INPUT_TOKENS_TOTAL.labels(mode='full')._value.get() == inputs + 20
+    assert metrics.EPISODE_COMPOSE_OUTPUT_TOKENS_TOTAL.labels(mode='full')._value.get() == outputs + 6
+
+
+@pytest.mark.parametrize(
+    'value,expected', [('24', 24), ('0', 168), ('-1', 168), ('nan', 168), ('inf', 168), ('nope', 168)]
+)
+def test_late_grace_configuration_is_positive_finite(monkeypatch, value, expected):
+    monkeypatch.setenv(config.EPISODE_LATE_COMPOSE_GRACE_HOURS_ENV, value)
+    assert config.episode_late_compose_grace_hours() == expected
+
+
+def test_unknown_recording_span_does_not_admit_sectionless_paid_output(store):
+    for row in store.rows.values():
+        for key in ('recorded_start', 'recorded_end', 'started_at', 'finished_at', 'created_at'):
+            row.pop(key, None)
+    assert not composer._short_episode(list(store.rows.values()))
+
+
+def test_unexpected_compose_exception_still_releases_scheduler_ownership(store, monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(composer, 'compose', Mock(side_effect=RuntimeError('unexpected worker error')))
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+    assert composer.schedule(UID, 'ep1', collaborators=_c()) is False
+    assert not composer._inflight and not composer._rerun and not composer._foreground
+
+
+def test_first_open_while_waiting_does_not_strand_a_later_member_final(store, monkeypatch):
+    _late(store)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', config.episode_late_compose_enabled)
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *a, **k: store.episode)
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+    store.rows['c2']['status'] = 'processing'
+    assert composer.defer_late_compose(UID, store.episode, _c())
+    assert composer.schedule_opened(UID, store.episode, collaborators=_c())
+    assert not store.episode.get('composed_fingerprint')
+    assert composer._opened_deferral(store.episode)
+    assert composer.needs_compose(store.episode), 'an opened deferral must bypass the seven-day read hold'
+    store.rows['c2']['status'] = 'completed'
+    composer.schedule_for_conversation(UID, 'c2', collaborators=_c(), row=store.rows['c2'])
+    assert store.episode.get('compose_pending_since'), 'member-final is scheduled after the client poll ends'
+    assert composer.schedule_opened(UID, store.episode, collaborators=_c())
+    assert store.episode['composed_member_ids'] == ['c1', 'c2']
+    assert store.episode['compose_deferred_at'] is None
+    assert store.episode['compose_opened_deferred_at'] is None
+
+
+def test_waits_for_completed_member_with_pending_transcript_and_recovers_after_restart(store):
+    now = datetime.now(timezone.utc)
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=now)
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls), force=True) == 'waiting'
+    assert calls == []
+    assert store.episode['compose_pending_since'] >= now
+    assert not composer.needs_compose(store.episode)
+    wait_seconds = config.episode_compose_transcript_wait_seconds()
+    assert wait_seconds - 10 < composer._deferred[UID, 'ep1'][0] - composer.time.monotonic() <= wait_seconds
+    composer._deferred.clear()  # A restarted process recovers the persisted debt on read.
+    assert not composer.needs_compose(store.episode)
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'waiting'
+    store.rows['c2']['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'The late launch details.'}]
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert 'The late launch details.' in calls[0][1][1]
+    assert store.episode['compose_transcript_wait_until'] is None
+
+
+def test_home_wait_reads_do_not_requeue_until_deadline_or_new_receipt(store, monkeypatch):
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    # Simulate process restart: only persisted debt and the existing Home metadata remain.
+    composer._deferred.clear()
+    monkeypatch.setattr(composer.episodes_db, 'get_episode', lambda *_a, **_kw: pytest.fail('extra episode read'))
+    monkeypatch.setattr(
+        composer.conversations_db, 'get_conversation', lambda *_a, **_kw: pytest.fail('extra member read')
+    )
+    for _ in range(10):
+        assert not composer.needs_compose(store.episode)
+    store.episode['_member_transcript_updated_at'] = datetime.now(timezone.utc)
+    assert composer.needs_compose(store.episode)
+    store.episode.pop('_member_transcript_updated_at')
+    store.episode['compose_transcript_wait_until'] = datetime.now(timezone.utc) - timedelta(seconds=1)
+    assert composer.needs_compose(store.episode)
+
+
+@pytest.mark.parametrize('change', ['discarded', 'deleted', 'membership_removed'])
+def test_home_removal_of_waiting_member_composes_remaining_speech_promptly(store, monkeypatch, change):
+    calls = []
+    c = _c(calls=calls)
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'waiting'
+    assert not calls and not composer.needs_compose(store.episode)
+    if change == 'membership_removed':
+        store.episode['conversation_ids'].remove('c2')
+    else:
+        store.rows['c2'][change] = True
+    _schedule_seam(store, monkeypatch)
+    schedule = composer.schedule
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **kw: schedule(uid, eid, collaborators=c, **kw))
+    wires = [{'id': 'ep1', 'members': [{'id': 'c1'}]}]
+    assert home_read.schedule_missed_composes(UID, [store.episode], wires) == 1
+    assert len(calls) == 1 and store.episode['composed_member_ids'] == ['c1']
+    assert store.episode['compose_transcript_wait_until'] is None
+
+
+def test_regeneration_request_bypasses_active_wait_suppression(store):
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    store.episode['summary_needs_regeneration'] = True
+    assert composer.needs_compose(store.episode)
+
+
+def test_transcript_receipt_rearms_active_wait(store, monkeypatch):
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *_a, **_kw: store.episode)
+    queued = []
+    monkeypatch.setattr(composer, 'schedule', lambda *_a, **kw: queued.append(kw))
+    store.rows['c2']['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'The late launch details.'}]
+    composer.transcript_projected(UID, store.rows['c2'])
+    assert queued and store.episode['compose_transcript_wait_until'] is None
+    assert composer.needs_compose(store.episode)
+    assert (UID, 'ep1') not in composer._deferred
+
+
+def test_composer_worker_consumes_content_free_projection_receipt(store, monkeypatch):
+    from collections import OrderedDict
+
+    monkeypatch.setattr(composer.transcript_receipts, '_pending', OrderedDict())
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    queued = []
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *_a, **_kw: store.episode)
+    monkeypatch.setattr(composer, 'schedule', lambda *_a, **kw: queued.append(kw))
+    store.rows['c2']['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'The late launch details.'}]
+    assert composer.transcript_receipts.enqueue(UID, store.rows['c2'])
+    assert not queued and store.episode['compose_transcript_wait_until']
+    composer._receive_transcript_receipts(composer.transcript_receipts.take())
+    assert queued and store.episode['compose_transcript_wait_until'] is None
+    assert composer.needs_compose(store.episode)
+
+
+def test_wait_write_is_fenced_against_a_concurrent_transcript(store, monkeypatch):
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+
+    def concurrent(*_args, updates, expected_member_revisions, **_kwargs):
+        assert set(expected_member_revisions) == {'c1', 'c2'}
+        store.rows['c2']['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'Late launch details.'}]
+        raise composer.episodes_db.EpisodeConflict('member_revision_changed')
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', concurrent)
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'superseded'
+    assert not store.episode.get('compose_transcript_wait_until') and not composer._deferred
+
+
+def test_receipt_promotes_real_deferred_wait_without_a_home_request(store, monkeypatch):
+    _schedule_seam(store, monkeypatch)
+    calls = []
+    c = _c(calls=calls)
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+    assert (
+        composer._deferred[UID, 'ep1'][0] - composer.time.monotonic()
+        > config.episode_compose_transcript_wait_seconds() - 10
+    )
+    store.rows['c2']['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'Late launch details.'}]
+    composer.schedule_for_conversation(UID, 'c2', collaborators=c, row=store.rows['c2'], transcript_updated=True)
+    assert store.episode['compose_transcript_wait_until'] is None
+    assert 0 < composer._deferred[UID, 'ep1'][0] - composer.time.monotonic() <= config.COMPOSER_SETTLE_SECONDS
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS + 60)
+    store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS + 60)
+    composer._deferred[UID, 'ep1'] = (0, c)
+    composer._schedule_due()
+    assert len(calls) == 1 and store.episode['composed_member_ids'] == ['c1', 'c2']
+
+
+@pytest.mark.parametrize('quiet_seconds', [120, 300, 600])
+@pytest.mark.parametrize('notes_finish_first', [False, True])
+def test_transcript_receipt_refreshes_notes_only_if_they_finish_after_compose(
+    store, monkeypatch, quiet_seconds, notes_finish_first
+):
+    _schedule_seam(store, monkeypatch)
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', str(quiet_seconds))
+    calls = []
+    c = _c(calls=calls)
+    member = store.rows['c2']
+    member.update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+    assert not calls and store.episode['compose_transcript_wait_until']
+
+    # Projection commits speech once, starting both independent quiet windows.
+    arrived = datetime.now(timezone.utc).timestamp()
+    member['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'Late launch details.'}]
+    member[processing_hold.FIELD] = processing_hold.activity_patch(member, arrived)
+    obligation = {'first_pending_at': arrived}
+    assert processing_hold.admission(member, obligation, now=arrived + quiet_seconds - 1) == (
+        'quiet_wait',
+        arrived + quiet_seconds,
+    )
+    composer.schedule_for_conversation(UID, 'c2', collaborators=c, row=member, transcript_updated=True)
+    assert store.episode['compose_transcript_wait_until'] is None
+    activity = store.episode['compose_activity_at']
+    pending = store.episode['compose_pending_since']
+    assert 0 < composer.settle_delay(store.episode) <= config.COMPOSER_SETTLE_SECONDS
+
+    def finish_compose():
+        # Deliver the existing timer after its quiet window; no Home read is required.
+        store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+        store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+        composer._deferred[UID, 'ep1'] = (0, c)
+        composer._schedule_due()
+        assert len(calls) == 1
+
+    if not notes_finish_first:
+        finish_compose()
+    assert processing_hold.admission(member, obligation, now=arrived + quiet_seconds) == ('ready', None)
+    member[processing_hold.FIELD] = processing_hold.completion_patch(member, processing_hold.content_snapshot(member))
+    member['structured']['overview'] = 'The member notes finished after their independent hold.'
+    composer.after_finalized(UID, 'c2', 'finalized', c, row=member)
+    if notes_finish_first:
+        # Completing notes cannot restart the episode quiet window at the notes completion time.
+        assert store.episode['compose_activity_at'] == activity
+        assert store.episode['compose_pending_since'] == pending
+        finish_compose()
+    composer.after_finalized(UID, 'c2', 'finalized', c, row=member)
+    assert len(calls) == (1 if notes_finish_first else 2) and not composer._deferred
+    assert processing_hold.admission(member, obligation, now=arrived + quiet_seconds) == ('unchanged', None)
+
+
+def test_home_active_wait_eliminates_redundant_composer_reads(store, monkeypatch):
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    reads = {'episode': 0, 'member': 0}
+
+    def episode(*args, **kwargs):
+        reads['episode'] += 1
+        return store.get_episode(*args, **kwargs)
+
+    def member(*args, **kwargs):
+        reads['member'] += 1
+        return store.get_conversation(*args, **kwargs)
+
+    monkeypatch.setattr(composer.episodes_db, 'get_episode', episode)
+    monkeypatch.setattr(composer.conversations_db, 'get_conversation', member)
+    monkeypatch.setattr(
+        composer, 'schedule', lambda *_args, **_kwargs: bool(composer.compose(UID, 'ep1', collaborators=_c()))
+    )
+    wires = [{'id': 'ep1', 'members': [{'id': 'c1'}, {'id': 'c2'}]}]
+    # Prior read recovery treats pending debt as due on every request.
+    with monkeypatch.context() as previous:
+        previous.setattr(composer, 'needs_compose', lambda *_args, **_kwargs: True)
+        assert home_read.schedule_missed_composes(UID, [store.episode], wires) == 1
+    assert reads == {'episode': 1, 'member': 2}
+    reads.update(episode=0, member=0)
+    for _ in range(10):
+        assert home_read.schedule_missed_composes(UID, [store.episode], wires) == 0
+    assert reads == {'episode': 0, 'member': 0}
+
+
+@pytest.mark.parametrize('expired,disabled', [(True, False), (False, True)])
+def test_pending_transcript_wait_is_bounded_and_can_be_disabled(store, monkeypatch, expired, disabled):
+    wait_seconds = config.episode_compose_transcript_wait_seconds()
+    pending = datetime.now(timezone.utc) - timedelta(seconds=wait_seconds + 60 if expired else wait_seconds / 2)
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=pending)
+    if disabled:
+        monkeypatch.setenv(config.EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENV, 'false')
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
+
+
+@pytest.mark.parametrize('hidden', ['discarded', 'deleted', 'duplicate'])
+def test_pending_transcript_of_excluded_member_does_not_block(store, hidden):
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    if hidden == 'duplicate':
+        store.episode['duplicate_conversation_ids'] = ['c2']
+    else:
+        store.rows['c2'][hidden] = True
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
+
+
+def test_expired_transcript_wait_composes_then_late_receipt_recomposes_exactly_once(store, monkeypatch):
+    clock = [datetime.now(timezone.utc)]
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock[0]
+
+    monkeypatch.setattr(composer, 'datetime', Clock)
+    calls = []
+    c = _c(calls=calls)
+    member = store.rows['c2']
+    member.update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'waiting'
+    assert not calls
+    clock[0] += timedelta(seconds=config.episode_compose_transcript_wait_seconds() + 60)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    assert len(calls) == 1 and 'The late launch details.' not in calls[0][1][1]
+    # Exercise the real receipt scheduler, including catch-up for an old partial summary.
+    _schedule_seam(store, monkeypatch)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', lambda: True)
+    member['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'The late launch details.'}]
+    composer.schedule_for_conversation(UID, 'c2', collaborators=c, row=member, transcript_updated=True)
+    assert len(calls) == 1 and composer._deferred
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+    store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+    composer._deferred[UID, 'ep1'] = (0, c)
+    composer._schedule_due()
+    assert len(calls) == 2 and 'The late launch details.' in calls[1][1][1]
+    composer.schedule_for_conversation(UID, 'c2', collaborators=c, row=member, transcript_updated=True)
+    assert len(calls) == 2 and not composer._deferred
+
+
+def test_projected_transcript_rearms_already_composed_old_episode_before_enrichment(store, monkeypatch):
+    store.rows['c2']['transcript_segments'] = []
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
+    # Even an old partial summary must catch up without waiting for a page open.
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', lambda: True)
+    seen = []
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *a, **kw: store.episode)
+    monkeypatch.setattr(composer, 'schedule', lambda *a, **kw: seen.append((a, kw)))
+    row = store.rows['c2']
+    row['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'A newly recovered decision.'}]
+    composer.transcript_projected(UID, row)
+    assert len(seen) == 1
+    assert store.episode['compose_pending_since']
+    assert seen[0][1]['trigger'] == 'member_final'
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
+    composer.transcript_projected(UID, row)
+    assert len(seen) == 1  # The same committed evidence cannot buy another call.
+    monkeypatch.setenv(config.EPISODE_COMPOSE_TRANSCRIPT_READY_ENV, 'false')
+    row['transcript_segments'][0]['text'] = 'Another change'
+    composer.transcript_projected(UID, row)
+    assert len(seen) == 1
+
+
+@pytest.mark.parametrize(
+    'raw,expected', [(None, 1200), ('1800', 1800), ('21600', 21600), ('-1', 0), ('999999', 86400), ('bad', 1200)]
+)
+def test_transcript_wait_config_is_bounded(monkeypatch, raw, expected):
+    if raw is None:
+        monkeypatch.delenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', raising=False)
+    else:
+        monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', raw)
+    assert config.episode_compose_transcript_wait_seconds() == expected
+
+
+def test_legacy_episode_pending_stamp_waits_when_home_stamp_is_absent(store):
+    store.rows['c2'].update(transcript_segments=[], episode_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+
+
+def test_projection_signal_respects_global_episode_switch(store, monkeypatch):
+    seen = []
+    monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'false')
+    monkeypatch.setattr(composer, 'schedule_for_conversation', lambda *a, **kw: seen.append(1))
+    composer.transcript_projected(UID, store.rows['c1'])
+    assert seen == []
+
+
+def _home_reconcile_transcript(store, monkeypatch):
+    monkeypatch.setattr(home_read, 'user_zone_provider', lambda _: 'UTC')
+    wire = home_read.project_episode(UID, store.episode, members=store.rows, list_row=True)
+    return home_read.schedule_missed_composes(UID, [store.episode], [wire] if wire else [])
+
+
+@pytest.mark.parametrize('crash', ['before_enqueue', 'after_take'])
+@pytest.mark.parametrize('waiting', [False, True])
+def test_durable_transcript_marker_recovers_lost_queue_receipt_once(store, monkeypatch, crash, waiting):
+    from collections import OrderedDict
+
+    monkeypatch.setattr(composer.transcript_receipts, '_pending', OrderedDict())
+    calls = []
+    c = _c(calls=calls)
+    store.rows['c2']['transcript_segments'] = []
+    if waiting:
+        store.rows['c2']['home_transcription_pending_at'] = datetime.now(timezone.utc)
+    assert composer.compose(UID, 'ep1', collaborators=c) == ('waiting' if waiting else 'composed')
+    paid_before = len(calls)
+    # Models the existing assignment transaction's committed speech + marker.
+    store.rows['c2'].update(
+        transcript_segments=[{'start': 0, 'end': 5, 'text': 'Late launch decision.'}],
+        episode_transcript_updated_at=datetime.now(timezone.utc),
+    )
+    if crash == 'after_take':
+        composer.transcript_receipts.enqueue(UID, store.rows['c2'])
+        assert composer.transcript_receipts.take()  # Worker dies before handling it.
+    composer._deferred.clear()
+    _schedule_seam(store, monkeypatch)
+    monkeypatch.setattr(composer, 'episode_compose_settle_enabled', lambda: False)
+    schedule = composer.schedule
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **kw: schedule(uid, eid, collaborators=c, **kw))
+    assert _home_reconcile_transcript(store, monkeypatch) == 1
+    assert len(calls) == paid_before + 1
+    assert _home_reconcile_transcript(store, monkeypatch) == 0
+    assert composer.transcript_receipts.take() == []
+
+
+@pytest.mark.parametrize('fast_first', [False, True])
+def test_transcript_fast_path_and_home_recovery_buy_one_compose(store, monkeypatch, fast_first):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    store.rows['c2'].update(
+        transcript_segments=[{'start': 0, 'end': 5, 'text': 'Late launch decision.'}],
+        episode_transcript_updated_at=datetime.now(timezone.utc),
+    )
+    _schedule_seam(store, monkeypatch)
+    monkeypatch.setattr(composer, 'episode_compose_settle_enabled', lambda: False)
+    schedule = composer.schedule
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **kw: schedule(uid, eid, collaborators=c, **kw))
+    fast = lambda: composer.schedule_for_conversation(
+        UID, 'c2', collaborators=c, row=store.rows['c2'], transcript_updated=True
+    )
+    recover = lambda: _home_reconcile_transcript(store, monkeypatch)
+    first, second = (fast, recover) if fast_first else (recover, fast)
+    first()
+    composer._recent.clear()  # Dedupe must survive the process-local throttle too.
+    second()
+    assert len(calls) == 2
+    assert _home_reconcile_transcript(store, monkeypatch) == 0
+
+
+@pytest.mark.parametrize('change', ['deleted', 'moved'])
+def test_stale_transcript_receipt_does_not_compose_former_member_and_home_drops_marker(store, monkeypatch, change):
+    calls = []
+    c = _c(calls=calls)
+    if change == 'deleted':
+        store.rows['c2']['deleted'] = True
+    else:
+        store.episode['conversation_ids'] = ['c1']
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    store.rows['c2']['episode_transcript_updated_at'] = datetime.now(timezone.utc)
+    store.episode['_member_transcript_updated_at'] = datetime.now(timezone.utc)
+    queued = []
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *_a, **_kw: store.episode)
+    monkeypatch.setattr(composer, 'schedule', lambda *_a, **_kw: queued.append(1))
+    composer.schedule_for_conversation(UID, 'c2', collaborators=c, row=store.rows['c2'], transcript_updated=True)
+    assert _home_reconcile_transcript(store, monkeypatch) == 0
+    assert '_member_transcript_updated_at' not in store.episode
+    assert not queued and len(calls) == 1
+
+
+def test_unchanged_transcript_revision_is_acknowledged_without_paid_compose(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    store.rows['c2']['episode_transcript_updated_at'] = datetime.now(timezone.utc)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'unchanged'
+    assert store.episode['composed_transcript_updated_at'] == store.rows['c2']['episode_transcript_updated_at']
+    assert _home_reconcile_transcript(store, monkeypatch) == 0
+    assert len(calls) == 1
+
+
+def test_only_pending_transcript_members_wake_an_active_wait(store, monkeypatch):
+    c = _c()
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'waiting'
+    assert store.episode['compose_transcript_wait_members'] == ['c2']
+    persisted = dict(store.episode)
+    due = composer._deferred[UID, 'ep1']
+    queued = []
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *_a, **_kw: store.episode)
+    monkeypatch.setattr(composer, 'schedule', lambda *_a, **_kw: queued.append(1) or True)
+    store.rows['c1']['episode_transcript_updated_at'] = datetime.now(timezone.utc)
+    composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'], transcript_updated=True)
+    assert not queued and store.episode == persisted and composer._deferred[UID, 'ep1'] == due
+    assert _home_reconcile_transcript(store, monkeypatch) == 0
+    store.rows['c2'].update(
+        transcript_segments=[{'start': 0, 'end': 5, 'text': 'The blocker is now ready.'}],
+        episode_transcript_updated_at=datetime.now(timezone.utc),
+    )
+    assert _home_reconcile_transcript(store, monkeypatch) == 1
+    composer.schedule_for_conversation(UID, 'c2', collaborators=c, row=store.rows['c2'], transcript_updated=True)
+    assert len(queued) == 2 and store.episode['compose_transcript_wait_until'] is None
+
+
+def test_transcript_wait_tracks_every_pending_blocker(store):
+    pending = datetime.now(timezone.utc)
+    for member in store.rows.values():
+        member.update(transcript_segments=[], home_transcription_pending_at=pending)
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    assert store.episode['compose_transcript_wait_members'] == ['c1', 'c2']
+
+
+def test_wait_stored_under_a_longer_limit_ends_at_the_current_limit(store, monkeypatch):
+    """Lowering the limit releases episodes that were already waiting under the old one."""
+    monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', '21600')
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    assert not composer.needs_compose(store.episode)
+    monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', '1200')
+    assert not composer.needs_compose(store.episode)  # still inside the new limit
+    store.episode['compose_transcript_wait_started_at'] -= timedelta(seconds=1201)
+    assert composer.needs_compose(store.episode)
+
+
+def test_disabling_transcript_wait_bypasses_persisted_blocker_suppression(store, monkeypatch):
+    c = _c()
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'waiting'
+    monkeypatch.setenv(config.EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENV, 'false')
+    queued = []
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *_a, **_kw: store.episode)
+    monkeypatch.setattr(composer, 'schedule', lambda *_a, **_kw: queued.append(1) or True)
+    composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'], transcript_updated=True)
+    assert queued and store.episode['compose_transcript_wait_until'] is None

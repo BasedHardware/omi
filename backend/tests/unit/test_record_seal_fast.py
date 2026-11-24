@@ -113,11 +113,11 @@ def test_precheck_short_tail_avoids_prefix_but_eligible_keeps_full_proof(monkeyp
     with pytest.raises(ValueError, match='tail not durable') as refusal:
         repair.retained_tail_proof(job, row, None, artifacts)
     assert proof_diagnostics(refusal.value) == {'proof_reason': 'tail_lagging', 'tail_gap_bucket': '1_to_5s'}
-    assert reads == ['1.pcm', '0.pcm', '1.pcm']
+    assert reads == ['1.pcm', '0.pcm']
     reads.clear()
     row['finished_at'] = datetime.fromtimestamp(102, timezone.utc)
     assert repair.retained_tail_proof(job, row, None, artifacts)
-    assert reads == ['1.pcm', '0.pcm', '1.pcm']
+    assert reads == ['1.pcm', '0.pcm']
 
 
 @pytest.mark.parametrize(

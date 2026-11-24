@@ -16,6 +16,9 @@ transaction.
 
 from __future__ import annotations
 
+from models.finalization_owner import python_owns_finalization
+from database import transcript_pointer
+
 import logging
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
@@ -28,14 +31,17 @@ from google.api_core.exceptions import FailedPrecondition
 from database import conversations as conversations_db
 from database import smart_merge_audit as audit_db
 from database.quiet_check_retirement import stop_quiet_check_for_conversation
-from database._client import get_firestore_client, run_transactional
+from database._client import get_firestore_client
+from database.transcript_pointer import run_preloaded_transactional as run_transactional
 from database.firestore_index_registry import (
     CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
     CONVERSATIONS_SMART_MERGE_PARTITION_QUERY,
 )
 from database.people_stats_cache import invalidate_people_stats_cache
+from config.record_wal_duplicate import has_retained_custody
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.conversations.smart_merge_policy import rebase_donor_segments
+from utils.conversations.summary_delivery import rearm_on_revision_change
 from utils.sync.bridge_observation import log_bridge_observation
 from config import merge_ancestry
 from config.conversation_smart_merge import smart_merge_flatten_enabled
@@ -305,7 +311,7 @@ def record_decision(uid: str, conversation_id: str, record: Mapping[str, Any], *
     @firestore.transactional
     def write(transaction) -> bool:
         row = ref.get(transaction=transaction).to_dict()
-        if not row or row.get('deleted'):
+        if not row or not python_owns_finalization(row) or row.get('deleted'):
             return False
         transaction.update(ref, {DECISION_FIELD: dict(record)})
         return True
@@ -358,7 +364,7 @@ def absorb_conversation(
         size_bucket = None
         survivor_raw = survivor_ref.get(transaction=transaction).to_dict()
         donor_raw = donor_ref.get(transaction=transaction).to_dict()
-        if not donor_raw:
+        if not donor_raw or not python_owns_finalization(donor_raw) or not python_owns_finalization(survivor_raw or {}):
             return AbsorbResult('rejected', 'conversation_not_eligible')
         if finalization_fence is not None:
             job_id, generation, epoch = finalization_fence
@@ -395,6 +401,8 @@ def absorb_conversation(
             return AbsorbResult('rejected', 'conversation_not_eligible')
         if not survivor_raw or survivor_raw.get('deleted'):
             return AbsorbResult('rejected', 'survivor_changed')
+        if has_retained_custody(donor_raw) or has_retained_custody(survivor_raw):
+            return AbsorbResult('rejected', 'conversation_not_eligible')
         # Corrections own captured segment anchors. Intake must not absorb or
         # re-key either side underneath an encrypted correction receipt.
         if survivor_raw.get('has_transcript_corrections') or donor_raw.get('has_transcript_corrections'):
@@ -420,10 +428,18 @@ def absorb_conversation(
                 ancestor_id: collection.document(ancestor_id).get(transaction=transaction).to_dict()
                 for ancestor_id in union_ancestors
             }
+            if any(has_retained_custody(row) for row in ancestor_rows.values()):
+                return AbsorbResult('rejected', 'conversation_not_eligible')
         else:
             ancestor_rows = {}
-        survivor, survivor_segments = _decode_row(uid, dict(survivor_raw, id=survivor_id))
-        donor, donor_segments = _decode_row(uid, dict(donor_raw, id=donor_id))
+        try:
+            survivor, survivor_segments = _decode_row(uid, dict(survivor_raw, id=survivor_id))
+        except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+            return AbsorbResult('rejected', 'conversation_not_eligible')
+        try:
+            donor, donor_segments = _decode_row(uid, dict(donor_raw, id=donor_id))
+        except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+            return AbsorbResult('rejected', 'conversation_not_eligible')
         last_fragment_row = None
         if last_fragment_id is not None:
             if last_fragment_id == survivor_id:
@@ -435,7 +451,10 @@ def absorb_conversation(
                     else collection.document(last_fragment_id).get(transaction=transaction).to_dict()
                 )
                 if fragment_raw is not None:
-                    fragment_row, fragment_segments = _decode_row(uid, dict(fragment_raw, id=last_fragment_id))
+                    try:
+                        fragment_row, fragment_segments = _decode_row(uid, dict(fragment_raw, id=last_fragment_id))
+                    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+                        return AbsorbResult('rejected', 'conversation_not_eligible')
                     last_fragment_row = dict(fragment_row, transcript_segments=fragment_segments)
         if has_intervening_discarded(uid, survivor, donor, transaction=transaction, firestore_client=client):
             return AbsorbResult('rejected', 'intervening_discarded')
@@ -476,7 +495,11 @@ def absorb_conversation(
         from utils.conversations.recorded_time import write_span
 
         survivor_update.update(write_span({**survivor, **survivor_update}))
-        payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
+        if 'transcript_segments' in survivor_update:
+            rearm_on_revision_change(survivor_raw, survivor_update)
+        payload = conversations_db.encode_conversation_for_write(
+            uid, survivor_update, level, conversation_state=survivor_raw
+        )
         conversations_db.guard_match_score_size(payload, survivor_raw)
         if (
             'speaker_match_scores' in survivor_raw
@@ -604,7 +627,7 @@ def claim_survivor_refresh(
     @firestore.transactional
     def claim(transaction) -> Optional[int]:
         row = ref.get(transaction=transaction).to_dict()
-        if not row or row.get('deleted'):
+        if not row or not python_owns_finalization(row) or row.get('deleted'):
             return None
         state = dict(row.get(SMART_MERGE_FIELD) or {})
         revision = int(state.get('revision') or 0)

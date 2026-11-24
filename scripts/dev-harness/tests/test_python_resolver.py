@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+from scripts.git_test_env import clean_git_env
+
 import pytest
 
 HARNESS_ROOT = Path(__file__).resolve().parents[1]
@@ -48,7 +50,7 @@ def _make_command() -> str:
 
 
 def _shell_env() -> dict[str, str]:
-    env = os.environ.copy()
+    env = clean_git_env()
     if os.name == "nt":
         bash = Path(_bash_command())
         path_entries = [str(bash.parent)]
@@ -85,12 +87,7 @@ def _git_init(repo: Path) -> None:
     linked-worktree parent and breaks every later `git rev-parse --show-toplevel`
     in the same push.
     """
-    env = os.environ.copy()
-    local_vars = subprocess.run(
-        ["git", "rev-parse", "--local-env-vars"], text=True, stdout=subprocess.PIPE, check=True
-    ).stdout.split()
-    for var in local_vars:
-        env.pop(var, None)
+    env = clean_git_env()
     subprocess.run(["git", "init", "-q", str(repo)], env=env, check=True)
 
 
@@ -556,7 +553,7 @@ def test_make_uses_git_bash_when_bare_bash_resolves_to_wsl(tmp_path: Path) -> No
 
     make = Path(_make_command()).resolve()
     system32 = Path(os.environ["SystemRoot"]) / "System32"
-    env = os.environ.copy()
+    env = clean_git_env()
     inherited_paths = [
         entry
         for entry in env.get("PATH", "").split(os.pathsep)

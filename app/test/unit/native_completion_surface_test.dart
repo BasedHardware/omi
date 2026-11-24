@@ -73,7 +73,7 @@ void main() {
     expect((await ledger.getAllWals()).single.holdForUser, isTrue);
   });
 
-  test('a migrated queued job surfaces its confirmed conversation through the ledger completion hook', () async {
+  test('a migrated queued job surfaces its confirmed conversation after same-account reauthentication', () async {
     final ledger = await custodyLedger(
         fetch: (id) async => SyncJobFetch(
             SyncJobFetchOutcome.ok,
@@ -93,6 +93,14 @@ void main() {
     addTearDown(view.dispose);
     await view.refresh();
     expect(await File('${dir.path}/$name').exists(), isTrue);
+    expect(view.recordings.single.state.name, 'processing');
+    ledger.clearUserData();
+    view.clearUserData();
+    SharedPreferencesUtil().uid = '';
+    await view.refresh();
+    expect(view.recordings, isEmpty);
+    SharedPreferencesUtil().uid = 'owner';
+    await view.refresh();
     expect(view.recordings.single.state.name, 'processing');
     await ledger.reconcileUploadedWals();
     await done.future;

@@ -21,7 +21,7 @@ from utils.llm.notes_agent import langchain_complete, record_decision, record_ru
 from config.refactor_modes import serving_for
 from utils.llm.notes_packet import select_notes_packet
 from utils.llm.notes_identity import notes_identity, screen_speaker_bindings
-from utils.llm.notes_agent_policy import plan_notes_agent
+from utils.llm.notes_agent_policy import bounded_budget, plan_notes_agent
 from utils.llm.notes_lengths import length_guide
 from utils.llm.notes_agent_prompt import (
     version_for_run,
@@ -189,8 +189,9 @@ def agentic_notes_payload(
                     seed=seed,
                     complete=complete,
                     toolbox=toolbox,
-                    budget=budget,
+                    budget=bounded_budget(budget),
                     transcript_words=words,
+                    task_intelligence_capture=bool(kwargs.get('task_intelligence_capture')),
                     prefetched_evidence=packet.get('prefetched_evidence', 0),
                     prefetched_lookups=prefetched_results(packet),
                     open_tasks=open_tasks,

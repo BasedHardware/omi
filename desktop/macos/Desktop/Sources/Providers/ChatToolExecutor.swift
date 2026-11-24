@@ -1,3 +1,9 @@
+// Executes the agent's on-device tools: contacts, messages, mail, and
+// AppleScript actuation against the user's own machine.
+//
+// Everything routes through kernel-owned policy rather than improvised shell --
+// untrusted values reach osascript as argv only, and actuation never resolves
+// without a dispatch or scoped grant (desktop/macos/docs/device-tool-surface.md).
 @preconcurrency import AVFoundation
 import AppKit
 @preconcurrency import ApplicationServices

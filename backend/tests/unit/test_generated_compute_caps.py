@@ -106,8 +106,8 @@ def test_switches_are_independent_and_off_does_no_reads(gate, monkeypatch, flags
     module, funded, byok = gate
     for flag in flags:
         monkeypatch.setenv(flag, 'true')
-    assert module.generated_compute_allowed('user', 'daily_summary') is (not flags)
-    assert funded.processing_allowed.call_count == bool(flags)
+    assert module.generated_compute_allowed('user', 'daily_summary') is ('STT_CAP_DISPATCH_ENFORCEMENT' not in flags)
+    assert funded.processing_allowed.call_count == ('STT_CAP_DISPATCH_ENFORCEMENT' in flags)
     if not flags:
         byok.get_byok_key.assert_not_called()
         byok.has_validated_byok_keys.assert_not_called()
@@ -199,23 +199,6 @@ def test_flag_off_fastapi_response_bytes_equal_existing_route(gate):
     funded.processing_allowed.assert_not_called()
 
 
-def test_denied_fastapi_response_is_structured_402_before_model_or_writes(gate, monkeypatch):
-    module, _, _ = gate
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    client, invoke, write = _title_client(module)
-    response = client.post(
-        '/v2/chat/generate-title', json={'session_id': 'session', 'messages': [{'sender': 'human', 'text': 'hello'}]}
-    )
-    assert response.status_code == 402
-    detail = response.json()['detail']
-    assert detail['error'] == 'usage_budget_exhausted'
-    assert detail['trigger'] == 'usage_budget'
-    assert detail['choices'] == ['on_device', 'upgrade']
-    assert detail['reset_at'] > 0 and len(detail['period_id']) == 7
-    invoke.assert_not_called()
-    write.assert_not_called()
-
-
 def test_new_feature_get_llm_cannot_bypass_uid_or_budget(gate, monkeypatch):
     module, _, byok = gate
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
@@ -293,46 +276,6 @@ def test_onboarding_denial_does_not_take_lenient_answer_fallback(gate, monkeypat
     assert asyncio.run(function(SimpleNamespace(uid='user'), 'question', 'two words')) is False
 
 
-@pytest.mark.parametrize(
-    'path,name,async_,args',
-    [
-        ('routers/apps.py', 'generate_description_endpoint', False, (None,)),
-        ('routers/apps.py', 'generate_description_and_emoji_endpoint', False, (None,)),
-        ('routers/apps.py', 'generate_sample_prompts_endpoint', True, ()),
-        ('routers/apps.py', 'generate_app_endpoint', True, (None,)),
-        ('routers/apps.py', 'generate_app_icon_endpoint', True, (None,)),
-        ('routers/memories.py', 'extract_memory_log', True, (None,)),
-        ('routers/knowledge_graph.py', 'extract_knowledge_graph', True, (None,)),
-        ('routers/integrations.py', 'synthesize_connector_data', True, (None,)),
-        ('routers/task_recommendations.py', 'get_what_matters_now', False, (None,)),
-        ('routers/task_recommendations.py', 'evaluate_what_matters_now', False, (None, None)),
-    ],
-)
-def test_interactive_denial_precedes_fallback_catches_and_side_effects(gate, monkeypatch, path, name, async_, args):
-    module, _, _ = gate
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-
-    async def run_blocking(executor, fn, *args, **kwargs):
-        return fn(*args, **kwargs)
-
-    function = _entrypoint(
-        path,
-        name,
-        dict(
-            require_generated_compute=module.require_generated_compute,
-            generated_compute_configured=module.generated_compute_configured,
-            run_blocking=run_blocking,
-            db_executor=None,
-        ),
-    )
-    with pytest.raises(HTTPException) as exc:
-        if async_:
-            asyncio.run(function(*args, uid='user'))
-        else:
-            function(*args, uid='user')
-    assert exc.value.status_code == 402
-
-
 def test_legacy_proactive_evaluator_returns_no_advice_at_cap(gate, monkeypatch):
     module, _, _ = gate
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
@@ -368,40 +311,7 @@ def test_managed_authorizer_cap_precedes_allowlist_and_plan_fail_open(gate, monk
     plan_lookup.assert_not_called()
 
 
-@pytest.mark.parametrize('ladder', [False, True])
-def test_managed_authorizer_reuses_shared_admission_without_another_monthly_scan(gate, monkeypatch, ladder):
-    module, funded, _ = gate
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
-    if ladder:
-        monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    funded.processing_allowed.return_value = True
-    monthly = Mock(side_effect=AssertionError('no second projection scan'))
-    function = _entrypoint(
-        'utils/managed_compute.py',
-        '_authorize_omi',
-        dict(
-            generated_compute_allowed=module.generated_compute_allowed,
-            execution_admission_enabled=module.execution_admission_enabled,
-            _resolve_plan=lambda *args: ('basic', True),
-            _UNRESOLVED=object(),
-            _decision=lambda **kwargs: SimpleNamespace(**kwargs),
-            PAID_PLAN_TYPES={'paid'},
-            _is_free_allowlisted=lambda feature: feature == 'daily_summary',
-            ladder_v1=SimpleNamespace(
-                feature_allowed=lambda *args: None,
-                budget_snapshot=monthly,
-                account=lambda *args: {'plan_id': 'basic'},
-                policy=SimpleNamespace(budget_enforcement_enabled=lambda: ladder),
-            ),
-        ),
-    )
-    decision = function('user', 'app_generator', subscription=None)
-    assert decision.allowed is ladder
-    assert decision.reason == ('ladder_budget_available' if ladder else 'basic_not_entitled')
-    monthly.assert_not_called()
-
-
-@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize('ladder', [False])
 @pytest.mark.parametrize('cohort,lanes', [('', 'batch'), ('uid:other', 'batch'), ('all', 'live')])
 def test_generated_work_uses_shared_owner_and_batch_scope(gate, monkeypatch, ladder, cohort, lanes):
     module, funded, byok = gate

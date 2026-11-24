@@ -3,9 +3,22 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/settings/widgets/ignored_voices_sheet.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+
+/// The app-wide capture provider when one is reachable from this context, for
+/// forwarding Settings-side voice restorations to a live capture. The provider
+/// lives above the app shell, so in practice this only misses in isolated
+/// widget tests — restoring then simply skips the capture-side retirement.
+CaptureProvider? _liveCaptureProvider(BuildContext context) {
+  try {
+    return context.read<CaptureProvider>();
+  } catch (_) {
+    return null;
+  }
+}
 
 /// Two switches that control voice learning: whether Omi asks the user to tag
 /// voices, and whether naming someone saves a short voice sample of them.
@@ -52,7 +65,18 @@ class _VoiceProfileSettingsSectionState extends State<VoiceProfileSettingsSectio
               key: const Key('voice_settings_ignored_voices'),
               title: context.l10n.ignoredVoicesTitle,
               subtitle: context.l10n.ignoredVoicesSubtitle,
-              onTap: () => showIgnoredVoicesSheet(context),
+              onTap: () {
+                // A restoration while the same live capture stays active must
+                // retire the capture-side exclusion too: the restore writes no
+                // positive label, so no snapshot can ever satisfy the
+                // manual-positive retirement condition. Pass the signal so the
+                // voice becomes eligible for prompts again immediately.
+                final capture = _liveCaptureProvider(context);
+                showIgnoredVoicesSheet(
+                  context,
+                  onRestored: capture?.onIgnoredVoiceRestored,
+                );
+              },
             ),
           ],
         );

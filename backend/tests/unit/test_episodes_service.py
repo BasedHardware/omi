@@ -28,7 +28,6 @@ def _enabled(monkeypatch):
     # Legacy rollback path; recorded-time ownership has its own suite.
     monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'false')
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_CARRY_ON_SESSION_END_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV, raising=False)
@@ -300,7 +299,8 @@ def test_unplaced_consumption_survives_episode_boundary_and_failed_open():
     assert episodes_db.get_current_episode(UID, firestore_client=store) is None
 
 
-def test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_reprocess():
+@pytest.fixture
+def fifty_thousand_unplaced_segments():
     """A pathological all-unplaced conversation: receipts must shard out of the episode
     document (no document may approach the 1 MiB limit) while the finalization tail of
     the whole transcript still dedupes against everything consumed live."""
@@ -339,6 +339,14 @@ def test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_re
         assert service.record_moment(UID, moment, c) == 'applied'
         consumed_ids |= {s['id'] for s in moment.segments}
 
+    tail = unplaced_batch(0, total, minutes=1 + batches * 1.5, trigger='finalize')
+    return store, model, c, consumed_ids, total, tail
+
+
+def test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_reprocess(
+    fifty_thousand_unplaced_segments,
+):
+    store, model, c, consumed_ids, total, tail = fifty_thousand_unplaced_segments
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
     raw_episode = store.rows[('users', UID, 'episodes', episode['id'])]
     episode_bytes = len(json.dumps(raw_episode, default=str))
@@ -362,7 +370,6 @@ def test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_re
 
     # The whole-transcript finalization tail costs nothing: no id is processed twice.
     calls_before = len(model.calls)
-    tail = unplaced_batch(0, total, minutes=1 + batches * 1.5, trigger='finalize')
     assert service.record_moment(UID, tail, c) == 'skipped_applied'
     assert len(model.calls) == calls_before
 
@@ -515,7 +522,21 @@ def test_first_moment_opens_an_episode_with_sealed_content():
         }
     )
     c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
-    assert service.record_moment(UID, _moment(person='p1'), c) == 'applied'
+    named = _moment(person='p1')
+    named = replace(
+        named,
+        segments=[
+            {
+                **segment,
+                'id': str(index),
+                'speaker_id': index % 2,
+                'speaker_id_scope': 'synthetic',
+                **({'speaker_label_source': 'manual'} if not segment['is_user'] else {}),
+            }
+            for index, segment in enumerate(named.segments)
+        ],
+    )
+    assert service.record_moment(UID, named, c) == 'applied'
 
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
     assert episode['title'] == 'Coding at the café'
@@ -555,7 +576,7 @@ def test_next_moment_sends_only_state_plus_new_text_and_dedupes_applied_segments
     user_message = model.calls[1][1][1]
     assert '"Lunch at 12:30"' in user_message and 'git thing' not in user_message and 'pricing' in user_message
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
-    assert [m['heading'] for m in episode['moments']] == ['Lunch', '']
+    assert [m['heading'] for m in episode['moments']] == ['Lunch', 'Discussion 2']
     assert episode['bullets'] == ['B2'] and episode['applied']['c1'] == 50.0
 
 
@@ -673,6 +694,67 @@ def test_finalization_applies_the_tail_and_reconciles_provisional_items():
     # The tail call saw only the unapplied tail.
     assert 'sandbox' in model.calls[1][1][1] and 'git thing' not in model.calls[1][1][1]
     assert service.on_conversation_finalized(UID, 'c1', row, trigger='user_reprocess', collaborators=c) == 'skipped'
+
+
+@pytest.mark.parametrize('marker', [('account_deletions', UID), ('users', UID, 'deleted_conversations', 'c1')])
+def test_finalization_reconciliation_refuses_deletion_after_planning(marker, monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'items': [{'text': 'Book lunch table'}]})
+    service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    monkeypatch.setattr(service, '_finalize_closes', lambda *_: False)
+    before = dict(store.rows)
+
+    def saved_tasks(uid, cid):
+        store.rows[marker] = {}
+        return [{'id': 'task-1', 'description': 'Book lunch table'}]
+
+    c.saved_tasks = saved_tasks
+    row = {'id': 'c1', 'source': 'omi', 'started_at': T0}
+    assert (
+        service.on_conversation_finalized(UID, 'c1', row, trigger='capture_end', collaborators=c) == 'skipped_deleted'
+    )
+    assert store.rows == {**before, marker: {}}
+
+
+@pytest.mark.parametrize('marker', [('account_deletions', UID), ('users', UID, 'deleted_conversations', 'c1')])
+@pytest.mark.parametrize(
+    'path,writer',
+    [
+        ('new_tail', 'commit_moment'),
+        ('live_tail', 'commit_moment'),
+        ('close', 'close_episode'),
+        ('early_close', 'close_episode'),
+        ('discarded', 'update_episode'),
+        ('deleted', 'update_episode'),
+    ],
+)
+def test_finalization_writers_refuse_deletion_after_planning(path, writer, marker, monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch'}, {'bullets': ['New speech']})
+    if path != 'new_tail':
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    before = dict(store.rows)
+    write = getattr(episodes_db, writer)
+
+    def write_after_deletion(*args, **kwargs):
+        assert store.rows == before
+        store.rows[marker] = {}
+        return write(*args, **kwargs)
+
+    monkeypatch.setattr(episodes_db, writer, write_after_deletion)
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    row = {'id': 'c1', 'source': 'omi', 'started_at': T0, 'finished_at': T0 + timedelta(minutes=1)}
+    if path.endswith('tail'):
+        row['transcript_segments'] = _segments(LONG, start=30.0)
+    if path in {'discarded', 'deleted'}:
+        row[path] = True
+    if path == 'early_close':
+        outcome = service.close_on_finalize(UID, 'c1', trigger='client_finalize', collaborators=c)
+    else:
+        outcome = service.on_conversation_finalized(UID, 'c1', row, trigger='client_finalize', collaborators=c)
+    assert outcome == 'skipped_deleted'
+    assert store.rows == {**before, marker: {}}
 
 
 def _row(conversation_id='c1', *, text=None, start=30.0, source='omi', **extra):
@@ -906,6 +988,7 @@ def test_reads_close_idle_episodes_lazily_and_wire_projection_hides_internals():
         'title',
         'bullets',
         'lede',
+        'compose_deferred',
         'follow_ups',
         'people',
         'provisional_items',
@@ -1621,6 +1704,28 @@ def test_a_late_sync_clip_rejoins_the_gap_closed_episode_and_reopens_it():
     assert episodes_db.get_last_closed_episode(UID, firestore_client=store) is None
 
 
+@pytest.mark.parametrize('marker', [('account_deletions', UID), ('users', UID, 'deleted_conversations', 'c-wal')])
+def test_sync_rejoin_refuses_deletion_after_planning(marker, monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch'})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    _close_on_gap(store)
+    before = dict(store.rows)
+    reopen = episodes_db.reopen_episode
+
+    def reopen_after_deletion(*args, **kwargs):
+        store.rows[marker] = {}
+        return reopen(*args, **kwargs)
+
+    monkeypatch.setattr(episodes_db, 'reopen_episode', reopen_after_deletion)
+    c = _collaborators(model, now=T0 + timedelta(minutes=21), store=store)
+    outcome = service.on_conversation_finalized(
+        UID, 'c-wal', _wal_row(minutes=15), trigger='sync_update', collaborators=c
+    )
+    assert outcome == 'skipped_deleted'
+    assert store.rows == {**before, marker: {}}
+
+
 def test_a_late_sync_clip_starting_within_the_continue_gap_of_the_close_rejoins():
     store = StrictFirestore()
     service.record_moment(
@@ -2135,7 +2240,7 @@ def test_output_language_firestore_and_preference_reads_are_cached_per_session(m
         conversations_db,
         'get_conversation_raw_snapshot',
         lambda *args, **kwargs: (
-            language_reads.append(args[1]) if kwargs.get('field_paths') == ['language'] else None,
+            language_reads.append(args[1]) if kwargs.get('field_paths') == ['language', 'recording'] else None,
             raw_snapshot(*args, **kwargs),
         )[1],
     )
@@ -2230,3 +2335,119 @@ def test_a_stored_section_seconds_long_runs_to_the_next_on_its_recording():
     assert read[0]['started_at'] == first['started_at']
     assert read[0]['ended_at'] == second['started_at']
     assert read[1]['ended_at'] == second['ended_at']
+
+
+@pytest.mark.parametrize('read', ['live', 'lookup'])
+def test_idle_closing_read_schedules_compose_immediately(monkeypatch, read):
+    # This fixture's capture is old enough to be "late"; keep today's close-time compose.
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
+    store = StrictFirestore()
+    _attach(store, 'c1', minutes=0)
+    first = episodes_db.get_current_episode(UID, firestore_client=store)
+    scheduled = []
+    monkeypatch.setattr(service.composer, 'schedule', lambda uid, eid, **kw: scheduled.append((uid, eid)))
+    reader = _collaborators(FakeModel(), now=T0 + timedelta(seconds=config.CLOSE_GAP_SECONDS + 1), store=store)
+    if read == 'live':
+        service.live_episode(UID, collaborators=reader)
+    else:
+        service.episode_for_conversation(UID, 'c1', collaborators=reader)
+    closed = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    assert closed['status'] == 'closed'
+    assert scheduled == [(UID, first['id'])]
+
+
+def test_idle_closing_list_read_schedules_compose_in_the_same_call(monkeypatch):
+    from utils.episodes import home_read
+
+    # This fixture's capture is old enough to be "late"; keep today's close-time compose.
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
+    store = StrictFirestore()
+    _attach(store, 'c1', minutes=0)
+    first = episodes_db.get_current_episode(UID, firestore_client=store)
+    scheduled = []
+    monkeypatch.setattr(service.composer, 'schedule', lambda uid, eid, **kw: scheduled.append((uid, eid)))
+    monkeypatch.setattr(
+        home_read,
+        '_read_members',
+        lambda *a, **kw: {
+            'c1': {
+                'status': 'completed',
+                'started_at': T0,
+                'finished_at': T0 + timedelta(minutes=1),
+                'structured': {'title': 'A meeting', 'overview': 'Notes'},
+            }
+        },
+    )
+    wires = home_read.project_episodes(UID, [first], firestore_client=store)
+    assert wires[0]['status'] == 'closed'
+    assert scheduled == [(UID, first['id'])]
+
+
+def test_intake_attach_to_a_composed_closed_episode_rearms_its_compose(monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_ENV, 'on')
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    first = episodes_db.get_current_episode(UID, firestore_client=store)
+    _close_on_gap(store)
+    # A compose already ran on the members the episode had when it closed.
+    closed = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    episodes_db.update_episode(
+        UID,
+        first['id'],
+        expected_version=closed['state_version'],
+        updates={
+            'composed_at': T0 + timedelta(minutes=20),
+            'composed_fingerprint': 'fp',
+            'composed_evidence': {'c-live': 'e-live'},
+            'composed_membership': ['c-live'],
+            'composed_member_ids': ['c-live'],
+            'composed_notes': service.composer.notes_hash(closed),
+        },
+        firestore_client=store,
+    )
+    # New live words open the next episode; the late clip belongs to the closed one.
+    _attach(store, 'c-new', minutes=45)
+    scheduled = []
+    monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: scheduled.append(a) or True)
+    c = _collaborators(model, now=T0 + timedelta(minutes=46), store=store)
+    assert service.attach_synced_intake(UID, 'c-wal', _wal_row(minutes=15), collaborators=c) == 'rejoined_member'
+    after = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    # The member joined a composed closed episode: its notes are stale until the next compose.
+    assert after['conversation_ids'] == ['c-live', 'c-wal']
+    assert after.get('compose_deferred_at') is not None
+    assert not scheduled
+
+
+def test_intake_attach_to_a_composed_closed_episode_respects_the_kill_switch(monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_ENV, 'on')
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    first = episodes_db.get_current_episode(UID, firestore_client=store)
+    _close_on_gap(store)
+    closed = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    episodes_db.update_episode(
+        UID,
+        first['id'],
+        expected_version=closed['state_version'],
+        updates={
+            'composed_at': T0 + timedelta(minutes=20),
+            'composed_fingerprint': 'fp',
+            'composed_evidence': {'c-live': 'e-live'},
+            'composed_membership': ['c-live'],
+            'composed_member_ids': ['c-live'],
+            'composed_notes': service.composer.notes_hash(closed),
+        },
+        firestore_client=store,
+    )
+    _attach(store, 'c-new', minutes=45)
+    monkeypatch.setenv(config.EPISODE_COMPOSE_LATE_ATTACH_ENABLED_ENV, 'off')
+    scheduled = []
+    monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: scheduled.append(a) or True)
+    c = _collaborators(model, now=T0 + timedelta(minutes=46), store=store)
+    assert service.attach_synced_intake(UID, 'c-wal', _wal_row(minutes=15), collaborators=c) == 'rejoined_member'
+    after = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    assert after['conversation_ids'] == ['c-live', 'c-wal']
+    assert after.get('compose_pending_since') is None
+    assert not scheduled

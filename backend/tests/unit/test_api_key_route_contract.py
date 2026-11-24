@@ -19,6 +19,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
             {
                 ("/v1/mcp/keys", "GET"): ("mcp", "get_keys_v1_mcp_keys_get", "Get Keys"),
                 ("/v1/mcp/keys", "POST"): ("mcp", "create_key_v1_mcp_keys_post", "Create Key"),
+                ("/v1/mcp/keys/scopes", "GET"): ("mcp", "get_mcp_key_scope_contract", "Get Key Scope Contract"),
                 ("/v1/mcp/keys/{key_id}", "DELETE"): (
                     "mcp",
                     "delete_key_v1_mcp_keys__key_id__delete",

@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from types import ModuleType, SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import pytest
 
@@ -92,12 +92,15 @@ def test_apply_refuses_missing_index(capsys):
     assert 'no vector index' in capsys.readouterr().err
 
 
-def test_write_loads_conversation_and_reports_created_or_updated():
+def test_write_loads_conversation_and_reports_created_or_updated(monkeypatch):
     db = ModuleType('database.conversations')
     db.get_conversation = MagicMock(return_value=row())
     vector = ModuleType('database.vector_db')
     vector.index = MagicMock()
-    vector.index.fetch.return_value = SimpleNamespace(vectors={})
+    scoped_index = MagicMock()
+    scoped_index.fetch.return_value = SimpleNamespace(vectors={})
+    route = MagicMock(return_value=scoped_index)
+    monkeypatch.setattr(script, 'owner_index', route)
     factory = ModuleType('utils.conversations.factory')
     factory.deserialize_conversation = MagicMock(return_value='conversation')
     process = ModuleType('utils.conversations.process_conversation')
@@ -111,8 +114,11 @@ def test_write_loads_conversation_and_reports_created_or_updated():
         }
     ):
         assert script.write_summary('uid', row()) == 'created'
-        vector.index.fetch.return_value = SimpleNamespace(vectors={'uid-c1': {}})
+        scoped_index.fetch.return_value = SimpleNamespace(vectors={'uid-c1': {}})
         assert script.write_summary('uid', row()) == 'updated'
+    assert route.call_args_list == [call(vector.index, 'uid')] * 2
+    assert scoped_index.fetch.call_args_list == [call(ids=['uid-c1'], namespace='ns1')] * 2
+    vector.index.fetch.assert_not_called()
     process.save_structured_vector.assert_called_with('uid', 'conversation')
 
 

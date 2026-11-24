@@ -70,7 +70,7 @@ STORAGE_NETWORK_CALL_MARKERS = (
 # imported implementation performs synchronous I/O.
 SYNC_DB_UTILITY_IMPORTS = {
     "utils.apps": frozenset({"get_available_apps"}),
-    "utils.subscription": frozenset({"is_trial_paywalled"}),
+    "utils.subscription": frozenset({"get_remaining_transcription_seconds"}),
 }
 SYNC_NETWORK_UTILITY_IMPORTS = {
     "utils.notifications": frozenset({"send_notification"}),

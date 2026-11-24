@@ -197,13 +197,17 @@ def test_protection_migration_round_trips_extractions_atomically(monkeypatch, so
     seed(store, 'existing', 1000, source, **{FIELD: EXTRACTIONS})
     ref = store.collection('users').document('u').collection('conversations').document('existing')
     monkeypatch.setattr(
-        store, 'get_all', lambda *args, **kwargs: [SimpleNamespace(exists=True, reference=ref)], raising=False
+        store,
+        'get_all',
+        lambda *args, **kwargs: [SimpleNamespace(exists=True, id=ref.id, reference=ref, to_dict=dict)],
+        raising=False,
     )
     monkeypatch.setattr(store, 'batch', MagicMock, raising=False)
     monkeypatch.setattr(
         StrictFirestoreCollection, 'select', lambda *args: SimpleNamespace(stream=lambda: []), raising=False
     )
     monkeypatch.setattr(db, 'db', store)
+    monkeypatch.setattr(db.conversations_v3_backfill_runs, '_live_run_ids', lambda *a, **kw: [])
     db.migrate_conversations_level_batch('u', ['existing'], target)
     raw = store.rows[path('existing')]
     assert raw['data_protection_level'] == target
@@ -223,7 +227,7 @@ def test_reprocess_without_fresh_extractions_preserves_stored_blob(monkeypatch, 
     monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *args: None)
     incoming = dict(
         chunk('existing', 1000),
-        structured={'title': 'Reprocessed'},
+        structured={'title': 'Reprocessed', 'overview': 'Reprocessed overview'},
         data_protection_level=level,
         sync_content_revision=1,
     )
@@ -243,7 +247,7 @@ def test_processor_output_reprotected_when_migration_wins(monkeypatch, source, t
     monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *args: None)
     incoming = dict(
         chunk('existing', 1000),
-        structured={'title': 'Reprocessed'},
+        structured={'title': 'Reprocessed', 'overview': 'Reprocessed overview'},
         data_protection_level=source,
         sync_content_revision=1,
         **{FIELD: EXTRACTIONS}

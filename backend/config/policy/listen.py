@@ -16,6 +16,8 @@ import os
 
 from config.policy.batch import cohort_bucket
 from config.policy.parts import PolicyPart, policy_environment, source_role
+from config.live_stt_gpu_fleet import gpu_fleet_off, streaming_parakeet_slot_enabled
+from config.stt_provider_policy import STTServingSurface, default_models_for_surface
 
 if TYPE_CHECKING:
     from config.live_stt_registry import Target
@@ -40,7 +42,7 @@ class ListenSessionPolicy(PolicyPart):
     window_allocated: bool = False
     # Mirrors stt_provider_policy DEFAULT_MODELS_BY_SURFACE[STREAMING]; Deepgram
     # retired 2026-08-27.
-    service_models: tuple[str, ...] = ('modulate-velma-2', 'soniox', 'parakeet')
+    service_models: tuple[str, ...] = ('modulate-velma-2', 'soniox')
     failover_recovery_enabled: bool = False
     fallback_liveness_grace_seconds: float = 0.3
     paid_spillover_budget_enabled: bool = False
@@ -54,6 +56,7 @@ class ListenSessionPolicy(PolicyPart):
     no_text_rescue_enabled: bool = False
     no_text_rescue_seconds: float = 60.0
     learned_language_profile: bool = False
+    # Retain the serialized field so existing recorded policy hashes remain valid.
     multi_language_hints: bool = True
     hintable_percent: float = 0.0
     hintable_allocated: bool = False
@@ -154,6 +157,8 @@ def _window_percent(env, *, strict=False):
 
 def window_pressure_allocation() -> float:
     """Process-start poller activation retains its original un-clamped input."""
+    if gpu_fleet_off():
+        return 0.0
     return float(os.environ.get('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0'))
 
 
@@ -258,9 +263,23 @@ def account_circuit_cooldown() -> float:
     return float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800'))
 
 
-def service_models(default: list[str]) -> list[str]:
+def service_models(default: list[str], *, surface: STTServingSurface = STTServingSurface.STREAMING) -> list[str]:
+    if gpu_fleet_off():
+        return ['modulate-velma-2', 'soniox']  # Vendor-only chain; also builds callbacks an old policy omitted.
     policy = current_listen_policy.get()
-    return list(policy.service_models) if policy is not None else default
+    models = list(policy.service_models) if policy is not None else list(default)
+    if surface != STTServingSurface.STREAMING:
+        return models
+    configured = {model.strip() for model in models}
+    # Roll back every selector and connector, including an already-pinned list.
+    if streaming_parakeet_slot_enabled():
+        if 'parakeet' not in configured:
+            models.append('parakeet')
+    elif 'parakeet' in configured:
+        # A stale plain-only list must retain a vendor path after retirement,
+        # including managed sessions that deliberately do not retry defaults.
+        models.extend(model for model in default_models_for_surface(surface) if model not in configured)
+    return models
 
 
 def hintable_allocation(uid):
@@ -269,7 +288,8 @@ def hintable_allocation(uid):
     policy = current_listen_policy.get()
     if policy is not None:
         return policy.hintable_allocated
-    return bool(uid) and cohort_bucket(uid, 'stt-hintable', bits=64) < _hintable_percent(os.environ)
+    env = os.environ
+    return bool(uid) and cohort_bucket(uid, 'stt-hintable', bits=64) < _hintable_percent(env)
 
 
 def _hintable_percent(env):
@@ -283,7 +303,6 @@ def resolve_listen_policy(
     uid: str, *, flags: Mapping[str, str] | None = None, models=None, liveness_grace_seconds=None
 ) -> ListenSessionPolicy:
     from config.live_demand import resolve_live_demand
-    from config.stt_provider_policy import STTServingSurface, default_models_for_surface
 
     env = policy_environment(flags)
     invalid_fields = []
@@ -383,7 +402,6 @@ def resolve_listen_policy(
         no_text_rescue_enabled=enabled('STT_NO_TEXT_RESCUE_ENABLED'),
         no_text_rescue_seconds=rescue,
         learned_language_profile=enabled('STT_LEARNED_LANGUAGE_PROFILE'),
-        multi_language_hints=enabled('STT_MULTI_LANGUAGE_HINTS', 'true'),
         hintable_percent=hintable,
         hintable_allocated=bool(uid) and cohort_bucket(uid, 'stt-hintable', bits=64) < hintable,
         demand_enabled=demand.enabled,

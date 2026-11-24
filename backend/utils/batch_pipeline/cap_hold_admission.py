@@ -104,7 +104,7 @@ async def admit_held(uid: str, snapshot: Any, row: Mapping[str, Any]) -> HeldAdm
     from utils.batch_pipeline import intake
     from utils.executors import run_blocking, storage_executor
     from utils.sync import cap_hold
-    from utils import funded_processing
+    from utils import backlog_release, funded_processing
     from utils.batch_pipeline.held_coverage import HeldDecoder
 
     if not eligible(row):
@@ -124,7 +124,11 @@ async def admit_held(uid: str, snapshot: Any, row: Mapping[str, Any]) -> HeldAdm
             content_id=content_id,
             paths=[path],
             lane='backfill',
-            recording_age_seconds=None,
+            # Age 0 is the normal backfill class (RECENT); unknown age is DEEP.
+            recording_age_seconds=0 if backlog_release.normal_priority.get() else None,
+            # Held audio never takes a cheaper-vendor route; a language GPUs cannot serve still may.
+            vendor_table=False,
+            release=backlog_release.source.get(),
             source=meta['source'],
             # The owner's processing choice funded this audio; it is not re-locked.
             should_lock=False,

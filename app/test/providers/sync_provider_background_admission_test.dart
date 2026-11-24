@@ -92,6 +92,7 @@ Wal _uploaded(String job) => Wal(
       seconds: 60,
       storage: WalStorage.disk,
       status: WalStatus.uploaded,
+      uploadedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       device: 'phone',
     )..jobId = job;
 
@@ -394,7 +395,7 @@ void main() {
         home: OnTheWayPage(pendingWork: PendingWorkStore()),
       ),
     ));
-    expect(find.textContaining('catching up'), findsOneWidget);
+    expect(find.byKey(const Key('on_the_way_days')), findsOneWidget);
     final l = AppLocalizations.of(tester.element(find.byType(OnTheWayPage)));
 
     await tester.runAsync(() => coordinator.wake(WakeTrigger.startup));

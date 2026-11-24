@@ -2,10 +2,11 @@ import { getClientFlags } from '@/lib/api';
 import type { ClientFlag, ClientFlagsResponse } from '@/lib/omiApi.generated';
 
 /**
- * Omi flag store answers, fetched once per page load and read ahead of PostHog.
+ * Omi flag store answers, fetched once per page load.
  * A key the store does not list, a failed fetch, or no answer within the timeout
- * is `undefined`, so the caller keeps PostHog's answer.
+ * is `undefined`, so the caller applies its default.
  */
+let generation = 0;
 let pending: Promise<Map<string, ClientFlag> | null> | null = null;
 
 export function loadOmiFlags(
@@ -32,13 +33,14 @@ export async function omiFlagEnabled(
     load,
   }: { timeoutMs?: number; load?: () => Promise<ClientFlagsResponse> } = {},
 ): Promise<boolean | undefined> {
+  const ownerGeneration = generation;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<null>((resolve) => {
     timer = setTimeout(() => resolve(null), timeoutMs);
   });
   try {
     const flags = await Promise.race([loadOmiFlags(load), timeout]);
-    return flags?.get(key)?.enabled;
+    return ownerGeneration === generation ? flags?.get(key)?.enabled : undefined;
   } finally {
     clearTimeout(timer);
   }
@@ -46,5 +48,6 @@ export async function omiFlagEnabled(
 
 /** Account change: the next read fetches the new account's answers. */
 export function resetOmiFlags(): void {
+  generation++;
   pending = null;
 }

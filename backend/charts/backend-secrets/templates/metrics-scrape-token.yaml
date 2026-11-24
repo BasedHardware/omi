@@ -1,0 +1,22 @@
+{{- /* Reuse the app token's remote key so source changes cannot split scrape auth. */}}
+{{- range .Values.externalSecret.secretKeys }}
+{{- if eq .secretKey "METRICS_SECRET" }}
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: metrics-scrape-token-store
+  namespace: {{ $.Release.Namespace }}
+spec:
+  refreshInterval: {{ $.Values.externalSecret.refreshInterval }}
+  secretStoreRef:
+    name: {{ $.Chart.Name }}-store
+    kind: SecretStore
+  target:
+    name: metrics-scrape-token
+    creationPolicy: Owner
+  data:
+    - secretKey: token
+      remoteRef:
+        key: {{ .remoteKey }}
+{{- end }}
+{{- end }}

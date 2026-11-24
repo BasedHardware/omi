@@ -217,6 +217,14 @@
       "why": "pre-existing; unreviewed"
     },
     {
+      "path": "services/error_class_sentinel.py",
+      "function": "_tick",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "error-class sweep outcome is a pinned four-value closed set (ok/truncated/error/permission_denied), not a failure reason"
+    },
+    {
       "path": "utils/account_cutover/telemetry.py",
       "function": "record_cutover_transition",
       "label": "reason",
@@ -461,8 +469,8 @@
       "function": "<module>",
       "label": "outcome",
       "shape": "name",
-      "count": 12,
-      "why": "pre-existing; unreviewed"
+      "count": 13,
+      "why": "pre-existing; +1 error-class sweep pre-zero loop (pinned four-value closed set)"
     },
     {
       "path": "utils/metrics.py",
@@ -1057,14 +1065,6 @@
       "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
     },
     {
-      "path": "utils/stt/legacy_replay.py",
-      "function": "reconnect_live_stt_socket",
-      "label": "reason",
-      "shape": "name",
-      "count": 4,
-      "why": "pre-existing; unreviewed"
-    },
-    {
       "path": "utils/stt/live_chain.py",
       "function": "_connect_backoff_event",
       "label": "provider",
@@ -1290,34 +1290,10 @@
     },
     {
       "path": "utils/stt/resilient_stream.py",
-      "function": "ResilientAudio.admit",
-      "label": "provider",
-      "shape": "name",
-      "count": 2,
-      "why": "pre-existing; unreviewed"
-    },
-    {
-      "path": "utils/stt/resilient_stream.py",
-      "function": "ResilientAudio.admit",
-      "label": "reason",
-      "shape": "name",
-      "count": 2,
-      "why": "pre-existing; unreviewed"
-    },
-    {
-      "path": "utils/stt/resilient_stream.py",
       "function": "ResilientAudio.record_replay",
       "label": "provider",
       "shape": "name",
       "count": 1,
-      "why": "pre-existing; unreviewed"
-    },
-    {
-      "path": "utils/stt/resilient_stream.py",
-      "function": "reconnect_live_stt_socket",
-      "label": "reason",
-      "shape": "name",
-      "count": 6,
       "why": "pre-existing; unreviewed"
     },
     {

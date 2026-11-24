@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-unbounded-dependency-range-admits-breaking-major",
+  "family": "vendor-platform-behavior",
+  "violated_contract": "A build that compiles a third-party plugin must pin the SDK version that plugin was written against. A Gradle version range whose upper bound is the next major admits that major, so a clean tree fails the hosted compile when the vendor publishes a breaking release. pubspec.lock pins Dart packages but not Maven artifacts, so the lockfile cannot catch this drift.",
+  "canonical_prevention": "Force the last compatible major on every project in the root build — a Flutter plugin resolves its own compile classpath, so the app's direct dependency cannot constrain it — and assert the pin in a static guard so the closed range cannot return.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/test_mobile_ci_infra_guards.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/android/build.gradle",
+    "app/android/app/build.gradle",
+    ".github/scripts/test_mobile_ci_infra_guards.py"
+  ],
+  "status": "open"
+}

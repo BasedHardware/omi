@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-provider-error-reported-as-user-cancel",
+  "family": "cross-boundary-contract",
+  "violated_contract": "A sign-in provider error (an Apple authorization failure, a Firebase rejection of the provider token) must reach the caller with its code. It must not be swallowed into a null result that the caller then reports and presents as the user cancelling, because analytics and the on-screen message can no longer tell a refusal from a dismissal.",
+  "canonical_prevention": "Provider sign-in calls throw instead of returning null on failure; the error is classified once, in the shared sign-in failure classifier, into cancel versus failure class plus a closed provider code, and both analytics and the shown message read that single classification.",
+  "canonical_prevention_artifact": [
+    "app/lib/utils/auth/sign_in_failure.dart",
+    "app/test/unit/auth_service_apple_sign_in_error_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/auth_service.dart",
+    "app/lib/providers/auth_provider.dart",
+    "app/lib/utils/auth/"
+  ],
+  "status": "open"
+}

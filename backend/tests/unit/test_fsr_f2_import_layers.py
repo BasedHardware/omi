@@ -15,6 +15,7 @@ def test_cache_and_gate_do_not_import_business_logic():
         BACKEND / 'database/fsr_read_cache.py',
         BACKEND / 'database/fsr_cache_telemetry.py',
         BACKEND / 'config/firestore_read_levers.py',
+        BACKEND / 'config/referral_campaign.py',
     ):
         for node in ast.walk(ast.parse(path.read_text())):
             names = (

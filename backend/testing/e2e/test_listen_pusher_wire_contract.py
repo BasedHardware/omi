@@ -7,12 +7,18 @@ are controlled by the hermetic E2E harness.
 
 from __future__ import annotations
 
+import sys
+from collections.abc import Iterator
+from concurrent.futures import CancelledError, Future
+from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
+from starlette.testclient import WebSocketTestSession
 
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from fakes.firestore import get_mock_firestore
 from fakes.listen_pusher_wire import (
     PUSHER_PROCESS_CONVERSATION,
@@ -42,6 +48,18 @@ MULTI_LANGUAGE_PARAKEET_LISTEN_URL = (
 )
 
 
+@contextmanager
+def _terminal_websocket(session: WebSocketTestSession) -> Iterator[WebSocketTestSession]:
+    websocket = session.__enter__()
+    try:
+        yield websocket
+    finally:
+        # Starlette waits on the portal future on exit. The server's close
+        # frame is asserted in the body, where cancellation still propagates.
+        with suppress(CancelledError):
+            session.__exit__(*sys.exc_info())
+
+
 def _configure_live_wire_contract(monkeypatch: Any, pusher: ScriptedPusherPeer, parakeet_api_url: str) -> None:
     """Point only the production network clients at deterministic loopback peers."""
 
@@ -50,6 +68,7 @@ def _configure_live_wire_contract(monkeypatch: Any, pusher: ScriptedPusherPeer, 
     import utils.stt.streaming as streaming
 
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', parakeet_api_url)
+    monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'true')
     monkeypatch.setattr(streaming, 'stt_service_models', ('parakeet',))
     monkeypatch.setattr(listen_runtime, 'PUSHER_ENABLED', True)
     monkeypatch.setattr(pusher_client, 'PusherAPI', pusher.api_url)
@@ -62,7 +81,9 @@ def _configure_live_wire_contract(monkeypatch: Any, pusher: ScriptedPusherPeer, 
     breaker._probe_in_progress = False  # type: ignore[reportPrivateUsage]
 
 
-def _configure_modulate_loopback(monkeypatch: Any, modulate: ScriptedModulatePeer) -> None:
+def _configure_modulate_loopback(
+    monkeypatch: Any, modulate: ScriptedModulatePeer, *, models: tuple[str, ...] = ('parakeet', 'modulate-velma-2')
+) -> None:
     """Route only Velma-2's real WebSocket client to the deterministic peer."""
 
     import utils.stt.streaming as streaming
@@ -79,7 +100,7 @@ def _configure_modulate_loopback(monkeypatch: Any, modulate: ScriptedModulatePee
         return await original_connect(uri, *args, **kwargs)
 
     monkeypatch.setenv('MODULATE_API_KEY', 'loopback-modulate-key')
-    monkeypatch.setattr(streaming, 'stt_service_models', ('parakeet', 'modulate-velma-2'))
+    monkeypatch.setattr(streaming, 'stt_service_models', models)
     monkeypatch.setattr(streaming.websockets, 'connect', connect_loopback)
 
 
@@ -195,10 +216,14 @@ def test_listen_pusher_wire_contract_native_happy_path_and_explicit_parakeet_rou
         parakeet.close()
 
 
-def test_listen_pusher_wire_contract_multilingual_explicit_parakeet_routes_to_modulate(
-    client, test_uid, monkeypatch, fake_firestore
+@pytest.mark.parametrize(
+    'listen_url,slot_enabled', [(MULTI_LANGUAGE_PARAKEET_LISTEN_URL, True), (NATIVE_LISTEN_URL, False)]
+)
+def test_listen_pusher_wire_contract_unavailable_explicit_parakeet_routes_to_modulate(
+    client, test_uid, monkeypatch, fake_firestore, listen_url, slot_enabled
 ):
-    """An explicit Parakeet preference cannot bypass streaming language capability."""
+    """Unsupported or retired Parakeet falls through to a serving vendor, including a stale plain-only list."""
+    enabled_live_targets(monkeypatch)
 
     async def pusher_success(_peer, _frame, _websocket):
         return None
@@ -208,11 +233,14 @@ def test_listen_pusher_wire_contract_multilingual_explicit_parakeet_routes_to_mo
     pusher = ScriptedPusherPeer(pusher_success).start()
     try:
         _configure_live_wire_contract(monkeypatch, pusher, parakeet.api_url)
-        _configure_modulate_loopback(monkeypatch, modulate)
+        _configure_modulate_loopback(
+            monkeypatch, modulate, models=('parakeet', 'modulate-velma-2') if slot_enabled else ('parakeet',)
+        )
+        monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', str(slot_enabled))
         clear_finalization_jobs(fake_firestore, test_uid)
-        seed_listen_user(test_uid, uses_custom_stt=False)
+        seed_listen_user(test_uid, uses_custom_stt=False, single_language_mode=not slot_enabled)
 
-        with client.websocket_connect(MULTI_LANGUAGE_PARAKEET_LISTEN_URL, headers=NATIVE_AUTH_HEADERS) as websocket:
+        with client.websocket_connect(listen_url, headers=NATIVE_AUTH_HEADERS) as websocket:
             session = _open_native_listen(websocket)
             pusher.wait_for_connections(1)
             websocket.send_bytes(PCM8_AUDIO_FRAME)
@@ -220,13 +248,15 @@ def test_listen_pusher_wire_contract_multilingual_explicit_parakeet_routes_to_mo
             _receive_modulate_segment(websocket)
             transcript = pusher.wait_for_frames(PUSHER_TRANSCRIPT, 1)[0]
 
-        # The live Modulate API represents automatic multi-language selection
-        # by omitting ``language``. The full route reaches that real wire
-        # boundary, while the configured Parakeet peer remains untouched.
+        # Auto-detection omits language; the single-language English fallback
+        # keeps its explicit hint. Neither path may dial the Parakeet peer.
         assert modulate.connection_count == 1
         modulate_request = urlsplit(modulate.paths[0])
         assert modulate_request.path == '/api/velma-2-stt-streaming'
-        assert 'language=' not in modulate_request.query
+        if slot_enabled:
+            assert 'language=' not in modulate_request.query
+        else:
+            assert 'language=en' in modulate_request.query
         assert 'sample_rate=8000' in modulate_request.query
         assert parakeet.connection_count == 0
         assert parakeet.paths == []
@@ -375,8 +405,9 @@ def test_listen_pusher_wire_contract_terminal_or_fenced_response_is_not_replayed
         parakeet.close()
 
 
+@pytest.mark.parametrize('cancelled_portal_future', [False, True], ids=['normal-exit', 'cancelled-portal-future'])
 def test_listen_pusher_wire_contract_provider_connect_failure_is_terminal(
-    client, test_uid, monkeypatch, fake_firestore
+    client, test_uid, monkeypatch, fake_firestore, cancelled_portal_future
 ):
     """A provider-connect failure sends bounded stt_failed/1011 before pusher work exists."""
 
@@ -391,7 +422,7 @@ def test_listen_pusher_wire_contract_provider_connect_failure_is_terminal(
         clear_finalization_jobs(fake_firestore, test_uid)
         seed_listen_user(test_uid, uses_custom_stt=False, single_language_mode=True)
 
-        with client.websocket_connect(NATIVE_LISTEN_URL, headers=NATIVE_AUTH_HEADERS) as websocket:
+        with _terminal_websocket(client.websocket_connect(NATIVE_LISTEN_URL, headers=NATIVE_AUTH_HEADERS)) as websocket:
             failed = receive_until(
                 websocket,
                 lambda payload: isinstance(payload, dict)
@@ -404,6 +435,12 @@ def test_listen_pusher_wire_contract_provider_connect_failure_is_terminal(
             close_message = websocket.receive()
             assert close_message['type'] == 'websocket.close'
             assert close_message['code'] == 1011
+            if cancelled_portal_future:
+                future: Future[None] = Future()
+                assert future.cancel()
+                # Force the same future.result() failure Starlette can surface
+                # on exit, after the terminal wire assertions have run.
+                websocket.exit_stack.callback(future.result)
 
         assert pusher.connection_count == 0
         assert pusher.frames == []

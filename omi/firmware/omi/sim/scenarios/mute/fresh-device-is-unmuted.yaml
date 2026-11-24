@@ -1,0 +1,8 @@
+id: mute/fresh-device-is-unmuted
+summary: Fail-closed must not mute a healthy fresh device that never stored a mute value.
+tags: [guard]
+timeline: []
+end: 5000
+expect:
+  boots:
+    - {muted: 0, should_capture: true, sd_paused: false}

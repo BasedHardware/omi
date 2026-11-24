@@ -133,8 +133,14 @@ class TranslationCoordinator:
     ## Cost Note
 
     Because we send full text (not delta), each evolving segment generates
-    multiple translations of overlapping content. Current cost: ~$4,282/mo
-    for 284M characters. Target (with DD-008 fixes): ~$1,900–2,500/mo.
+    multiple overlapping translations, so cost scales with redundant chars.
+    Translation runs on Luna (feature 'translation', gpt-6-luna). The priced
+    source of truth is llm_gateway/config/cost_rate_cards.yaml card
+    openai.gpt-6-luna.2026-09-22: $0.10/M input and $0.60/M output tokens,
+    and the gateway ledger records actual spend. At ~4 chars/token the
+    translated text alone is ~$0.025/M chars in and ~$0.15/M chars out, before
+    prompt overhead. The old "$4,282/mo for 284M chars" figure was the Google
+    Translate V3 era and no longer applies.
 
     ## Key Trade-off
 

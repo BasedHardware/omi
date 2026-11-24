@@ -83,6 +83,8 @@ class RayBanMetaDeviceConnection extends DeviceConnection {
       await _metaTransport.startAudioCapture();
     } catch (e) {
       Logger.debug('Ray-Ban Meta: failed to start audio capture: $e');
+      await subscription.cancel();
+      rethrow;
     }
 
     return subscription;
