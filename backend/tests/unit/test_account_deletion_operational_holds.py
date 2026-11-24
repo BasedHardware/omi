@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from google.api_core.exceptions import InvalidArgument, PreconditionFailed
+from google.api_core.exceptions import Forbidden, InvalidArgument, NotFound, PreconditionFailed
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 from google.cloud.firestore_v1._helpers import encode_dict
@@ -19,6 +19,7 @@ from google.cloud.firestore_v1.types import Document
 from database import account_deletion_operational_holds as holds
 from scripts import account_deletion_operational_holds as operator
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.log_sanitizer import sanitize
 
 UID = 'synthetic-owner'
 
@@ -252,6 +253,140 @@ def test_account_purge_protects_unheld_legal_marker_outside_sync_bucket():
     with pytest.raises(holds.OperationalStorageHoldBlocked, match='protected'):
         holds.delete_owner_bucket_prefix(bucket, f'{UID}/', real_gcs=False, account_deletion_uid=UID)
     blob.delete.assert_not_called()
+
+
+PREFIX = 'raw-live/synthetic-owner/conversation/'
+
+
+def _conversation_bucket():
+    objects = {}
+
+    def list_blobs(*, prefix, versions):
+        assert versions is True
+        return (blob for blob in objects.values() if blob.name.startswith(prefix))
+
+    return SimpleNamespace(name='private-sync', list_blobs=MagicMock(side_effect=list_blobs)), objects
+
+
+def _add_blob(objects, name, generation=1):
+    blob = SimpleNamespace(name=name, generation=generation, metageneration=2)
+    key = (name, generation)
+
+    def delete(**kwargs):
+        assert kwargs == {'if_generation_match': generation, 'if_metageneration_match': 2}
+        del objects[key]
+
+    blob.delete = MagicMock(side_effect=delete)
+    objects[key] = blob
+    return blob
+
+
+def test_conversation_purge_skips_object_deleted_after_listing():
+    bucket, objects = _conversation_bucket()
+    first = _add_blob(objects, PREFIX + 'first')
+    second = _add_blob(objects, PREFIX + 'second')
+
+    def concurrent_delete(**kwargs):
+        del objects[(first.name, first.generation)]
+        raise NotFound('object disappeared', errors=[{'reason': 'notFound'}])
+
+    first.delete.side_effect = concurrent_delete
+    assert holds.delete_owner_bucket_prefix(bucket, PREFIX, real_gcs=True) == 1
+    second.delete.assert_called_once()
+    assert holds.delete_owner_bucket_prefix(bucket, PREFIX, real_gcs=True) == 0
+
+
+def test_conversation_purge_skips_stale_generation_and_verifies_replacement():
+    bucket, objects = _conversation_bucket()
+    first = _add_blob(objects, PREFIX + 'first')
+    second = _add_blob(objects, PREFIX + 'second')
+
+    def concurrent_replace(**kwargs):
+        del objects[(first.name, first.generation)]
+        _add_blob(objects, first.name, generation=2)
+        raise PreconditionFailed('stale generation', errors=[{'reason': 'conditionNotMet'}])
+
+    first.delete.side_effect = concurrent_replace
+    with pytest.raises(holds.StoragePrefixPurgeError, match='left objects under the owner prefix'):
+        holds.delete_owner_bucket_prefix(bucket, PREFIX, real_gcs=True)
+    second.delete.assert_called_once()
+    objects[(first.name, 2)].delete.assert_not_called()
+    assert holds.delete_owner_bucket_prefix(bucket, PREFIX, real_gcs=True) == 1
+    assert holds.delete_owner_bucket_prefix(bucket, PREFIX, real_gcs=True) == 0
+
+
+@pytest.mark.parametrize('reason', ['objectUnderActiveHold', 'retentionPolicyNotMet'])
+def test_conversation_purge_names_protected_generation_and_continues(reason):
+    bucket, objects = _conversation_bucket()
+    protected = _add_blob(objects, PREFIX + 'protected')
+    other = _add_blob(objects, PREFIX + 'other')
+    protected.delete.side_effect = Forbidden('protected', errors=[{'reason': reason}])
+
+    with pytest.raises(holds.StoragePrefixPurgeBlocked) as blocked:
+        holds.delete_owner_bucket_prefix(bucket, PREFIX, real_gcs=True)
+    assert blocked.value.objects == {(bucket.name, protected.name, protected.generation): reason}
+    other.delete.assert_called_once()
+
+
+def test_protected_generation_exception_keeps_object_details_out_of_logs():
+    bucket = 'syntheticprivatebucket'
+    owner_id = 'syntheticprivateowner'
+    conversation_id = 'syntheticprivateconversation'
+    blob_path = f'chunks/{owner_id}/{conversation_id}/syntheticprivateclip'
+    generation = 91234567
+    objects = {(bucket, blob_path, generation): 'objectUnderActiveHold'}
+    error = holds.StoragePrefixPurgeBlocked(objects, unverified=2)
+
+    assert error.objects == objects
+    assert error.unverified == 2
+    expected = (
+        'owner storage purge left objects under the owner prefix: '
+        'reason=protected_prefix blocked_generations=1 unverified_generations=2'
+    )
+    for rendered in (str(error), sanitize(str(error))):
+        assert rendered == expected
+        for private_value in (bucket, owner_id, conversation_id, blob_path, 'syntheticprivateclip', str(generation)):
+            assert private_value not in rendered
+
+
+@pytest.mark.parametrize('foreign_object', [True, False], ids=['empty-prefix', 'empty-bucket'])
+def test_conversation_purge_with_no_matching_objects(foreign_object):
+    bucket, objects = _conversation_bucket()
+    if foreign_object:
+        foreign = _add_blob(objects, 'raw-live/another-owner/conversation/foreign')
+    assert holds.delete_owner_bucket_prefix(bucket, PREFIX, real_gcs=True) == 0
+    if foreign_object:
+        foreign.delete.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'failure',
+    [
+        Forbidden('permission denied', errors=[{'reason': 'insufficientPermissions'}]),
+        NotFound('bucket missing', errors=[{'reason': 'noSuchBucket'}]),
+        PreconditionFailed('policy violation', errors=[{'reason': 'orgPolicyConstraintFailed'}]),
+    ],
+)
+def test_conversation_purge_surfaces_provider_failure_once(failure):
+    bucket, objects = _conversation_bucket()
+    first = _add_blob(objects, PREFIX + 'first')
+    second = _add_blob(objects, PREFIX + 'second')
+    first.delete.side_effect = failure
+    with pytest.raises(holds.StoragePrefixPurgeError, match=failure.errors[0]['reason']) as error:
+        holds.delete_owner_bucket_prefix(bucket, PREFIX, real_gcs=True)
+    assert error.value.__suppress_context__
+    first.delete.assert_called_once()
+    second.delete.assert_not_called()
+
+
+def test_conversation_purge_does_not_mistake_vanished_bucket_for_vanished_object():
+    bucket, objects = _conversation_bucket()
+    first = _add_blob(objects, PREFIX + 'first')
+    missing = NotFound('bucket gone', errors=[{'reason': 'notFound'}])
+    first.delete.side_effect = missing
+    bucket.list_blobs.side_effect = [[first], missing]
+    with pytest.raises(holds.StoragePrefixPurgeError, match='list failed in private-sync: notFound'):
+        holds.delete_owner_bucket_prefix(bucket, PREFIX, real_gcs=True)
 
 
 def test_plan_requires_exact_preservation_generation():

@@ -6,6 +6,7 @@ collaborators rather than importing network clients or asserting source strings.
 
 import ast
 import asyncio
+import logging
 from contextlib import ExitStack, nullcontext
 from pathlib import Path
 from types import SimpleNamespace, MethodType
@@ -16,8 +17,10 @@ import pytest
 
 from database import conversation_tombstones as tombstones
 from database import user_data_deletion
+from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked, StoragePrefixPurgeError
 from google.api_core.exceptions import AlreadyExists
 from testing.import_isolation import stub_modules, AutoMockModule
+from utils.log_sanitizer import hash_log_identifier
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -83,6 +86,7 @@ def function(path, name, namespace):
         namespace.setdefault('CONVERSATION_DELETE_GATE_WAIT_SECONDS', 0.0)
         namespace.setdefault('deferred_batch_purges', lambda uid: nullcontext())
         namespace.setdefault('_legal_hold_defers_delete', lambda uid: False)
+        function(path, '_delete_privacy_audio_after_response', namespace)
         function(path, '_delete_conversation_under_gate', namespace)
     node = next(
         n
@@ -203,10 +207,44 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         tasks = MagicMock()
         assert delete('c', tasks, True, None, 'u').status_code == 204
         tasks.add_task.assert_called_once_with(
-            namespace['delete_privacy_conversation_audio'], 'u', 'c', source_ids=['donor']
+            namespace['_delete_privacy_audio_after_response'], 'u', 'c', source_ids=['donor']
         )
         assert 'users/u/conversations/c' not in store.rows
     assert tombstones.is_deleted('u', 'c')
+
+
+@pytest.mark.parametrize('protected', [False, True], ids=['provider-error', 'held-object'])
+def test_background_audio_purge_logs_only_hashes_and_bounded_details(protected, caplog):
+    uid = 'privateownerid'
+    conversation_id = 'privateconversationid'
+    bucket = 'privatebucketname'
+    blob_name = f'chunks/{uid}/{conversation_id}/privateclipname'
+    if protected:
+        error = StoragePrefixPurgeBlocked({(bucket, blob_name, 91234567): 'objectUnderActiveHold'}, unverified=2)
+        details = 'outcome=blocked reason=protected_prefix blocked_generations=1 unverified_generations=2'
+    else:
+        error = StoragePrefixPurgeError(f'owner storage list failed in {bucket}: insufficientPermissions {blob_name}')
+        details = 'outcome=failed reason=prefix_purge_failed blocked_generations=0 unverified_generations=unknown'
+    purge = MagicMock(side_effect=error)
+    namespace = {
+        'delete_privacy_conversation_audio': purge,
+        'logger': logging.getLogger(__name__),
+        'hash_log_identifier': hash_log_identifier,
+    }
+    background_purge = function('routers/conversations.py', '_delete_privacy_audio_after_response', namespace)
+
+    background_purge(uid, conversation_id, source_ids=['donor'])
+
+    purge.assert_called_once_with(uid, conversation_id, source_ids=['donor'])
+    (record,) = caplog.records
+    assert record.levelno == logging.ERROR
+    assert record.exc_info is None
+    assert record.getMessage() == (
+        f'event=conversation_audio_purge uid_hash={hash_log_identifier(uid)} '
+        f'conversation_id_hash={hash_log_identifier(conversation_id)} {details}'
+    )
+    for private_value in (uid, conversation_id, bucket, blob_name, 'privateclipname', '91234567'):
+        assert private_value not in caplog.text
 
 
 def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch):

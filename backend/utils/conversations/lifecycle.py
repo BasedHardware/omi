@@ -59,9 +59,10 @@ from utils.llm.gateway_error_contract import (
     is_byok_account_state_http_exception,
     is_retryable_processing_http_exception,
 )
+from utils.log_sanitizer import hash_log_identifier
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_intake_outcome
-from utils.other.storage import delete_conversation_audio_files
+from utils.other.storage import count_retained_raw_conversation_objects
 from utils.journey_metrics_contract import bounded_client_kind
 from utils.observability.journeys import record_client_journey_accepted, record_journey_accepted
 from utils.conversation_shape import observe_completed_conversation_shape
@@ -953,7 +954,6 @@ def delete_empty_recording_conversation(
     transaction_guard: Any = None,
 ) -> bool:
     """Delete only a still-empty listen generation and tombstone it atomically."""
-    deleted_conversation: dict[str, Any] = {}
     recovery_guards: dict[str, Any] = {}
     if require_expired_recording_lease:
         recovery_guards = dict(recovery_cutoff=recovery_cutoff, require_expired_recording_lease=True)
@@ -967,11 +967,10 @@ def delete_empty_recording_conversation(
         uid,
         conversation_id,
         recording_session_id,
-        deleted_conversation=deleted_conversation,
         **recovery_guards,
     )
     if deleted:
-        # Remove the search projection before photo/audio cleanup: a later
+        # Remove the search projection before photo cleanup: a later
         # cleanup failure must not leave the deleted conversation indexed.
         # This path deletes the Firestore row in its own transaction inside
         # recording_sessions_db, so conversations_db.delete_conversation's
@@ -985,54 +984,27 @@ def delete_empty_recording_conversation(
         # Parent deletion is transactionally fenced with content writes; photos
         # are a subcollection and need their physical cleanup afterwards.
         conversations_db.delete_conversation_photos(uid, conversation_id)
-        _discard_unreferenced_audio(uid, conversation_id, deleted_conversation)
+        _log_retained_empty_recording_audio(uid, conversation_id)
     return deleted
 
 
-def _discard_unreferenced_audio(
-    uid: str,
-    conversation_id: str,
-    deleted_conversation: Mapping[str, Any],
-) -> None:
-    """Reclaim private-cloud bytes the deleted row was the last owner of.
-
-    Emptiness here means no transcript segments, no photos and no ``has_content``
-    — it never consults ``audio_files``. A generation whose STT produced nothing
-    because the provider was failing is therefore deleted with real audio still
-    registered on it, and those bytes are the only surviving copy of that
-    recording, so they stay: the row is gone either way, and retained chunks can
-    still be reprocessed or restored. Only a generation that never registered any
-    audio can be leaving chunks nothing will ever reference again (#11742).
-    """
-    if server_batch.owned(deleted_conversation):
-        # Empty/zero-sample captures can still have immutable original receipts.
-        # Removing the display row must never sweep their only retained bytes.
-        return
-    if deleted_conversation.get('audio_files'):
-        logger.info(
-            'Retained registered audio for empty conversation uid=%s conversation_id=%s',
-            uid,
-            conversation_id,
-        )
-        return
+def _log_retained_empty_recording_audio(uid: str, conversation_id: str) -> None:
+    """System-initiated teardown preserves audio independently of row contents."""
+    count: int | str = 'unknown'
+    count_error = 'none'
     try:
-        delete_conversation_audio_files(uid, conversation_id)
-    except Exception:
-        # The row is already gone, so there is nothing left to keep consistent
-        # with; a failed sweep just leaves the orphan this call meant to reclaim.
-        logger.exception(
-            'Failed to reclaim unreferenced audio uid=%s conversation_id=%s',
-            uid,
-            conversation_id,
-        )
-        record_fallback(
-            component='other',
-            from_mode='private_cloud_sync',
-            to_mode='drop',
-            reason='other',
-            outcome='exhausted',
-            log=logger,
-        )
+        count = count_retained_raw_conversation_objects(uid, conversation_id)
+    except Exception as error:
+        # The row is already gone. A failed inventory cannot change that outcome.
+        count_error = type(error).__name__
+    logger.info(
+        'Retained audio for empty conversation uid_hash=%s conversation_id_hash=%s '
+        'retained_raw_objects=%s count_error=%s',
+        hash_log_identifier(uid),
+        hash_log_identifier(conversation_id),
+        count,
+        count_error,
+    )
 
 
 def open_live_recording_session(

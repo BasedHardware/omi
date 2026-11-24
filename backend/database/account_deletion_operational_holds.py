@@ -10,6 +10,8 @@ import hashlib
 import json
 from typing import Any, TypeGuard
 
+from google.api_core.exceptions import Forbidden, GoogleAPICallError, NotFound, PreconditionFailed
+
 from database.account_deletion_marker import account_deletion_document, account_deletion_firestore_client
 from database.legal_holds import assert_account_deletion_permitted, assert_destructive_gate_still_ours
 
@@ -27,6 +29,22 @@ PRESERVATION_LEDGER_SHA256 = {
 
 class OperationalStorageHoldBlocked(RuntimeError):
     """A hold cannot be proved operational and authorized for this wipe."""
+
+
+class StoragePrefixPurgeError(RuntimeError):
+    """A conversation storage sweep failed verification or a provider request."""
+
+
+class StoragePrefixPurgeBlocked(StoragePrefixPurgeError):
+    """Named object generations remain protected by Cloud Storage."""
+
+    def __init__(self, objects: dict[tuple[str, str, int], str], *, unverified: int = 0):
+        self.objects: dict[tuple[str, str, int], str] = objects
+        self.unverified = unverified
+        super().__init__(
+            'owner storage purge left objects under the owner prefix: '
+            f'reason=protected_prefix blocked_generations={len(objects)} unverified_generations={unverified}'
+        )
 
 
 def assert_no_protected_object_hold(blob: Any) -> None:
@@ -48,18 +66,24 @@ def assert_no_protected_object_hold(blob: Any) -> None:
 
 
 def delete_owner_bucket_prefix(
-    bucket: Any, prefix: str, *, real_gcs: bool, account_deletion_uid: str | None = None
+    bucket: Any,
+    prefix: str,
+    *,
+    real_gcs: bool,
+    account_deletion_uid: str | None = None,
+    tolerate_object_races: bool = True,
 ) -> int:
     """Purge and verify owner generations, honoring approved operational holds."""
     listing_kwargs = {'versions': True} if real_gcs else {}
+    if account_deletion_uid is None and tolerate_object_races:
+        return _delete_conversation_bucket_prefix(bucket, prefix, real_gcs=real_gcs, listing_kwargs=listing_kwargs)
+
     blobs = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
     for blob in blobs:
         if account_deletion_uid is not None:
             assert_no_protected_object_hold(blob)
-        if account_deletion_uid is not None and (
-            getattr(blob, 'temporary_hold', None) is True or getattr(bucket, 'name', None) == 'syncing-local'
-        ):
-            release_operational_hold_for_account_deletion(account_deletion_uid, blob)
+            if getattr(blob, 'temporary_hold', None) is True or getattr(bucket, 'name', None) == 'syncing-local':
+                release_operational_hold_for_account_deletion(account_deletion_uid, blob)
         if real_gcs:
             blob.delete(if_generation_match=blob.generation, if_metageneration_match=blob.metageneration)
         else:
@@ -67,6 +91,53 @@ def delete_owner_bucket_prefix(
     if list(bucket.list_blobs(prefix=prefix, **listing_kwargs)):
         raise RuntimeError('owner storage purge left objects under the owner prefix')
     return len(blobs)
+
+
+def _storage_error_reason(error: GoogleAPICallError) -> str:
+    return next((item['reason'] for item in error.errors if item.get('reason')), type(error).__name__)
+
+
+def _delete_conversation_bucket_prefix(
+    bucket: Any, prefix: str, *, real_gcs: bool, listing_kwargs: dict[str, bool]
+) -> int:
+    def list_versions() -> list[Any]:
+        try:
+            return list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
+        except GoogleAPICallError as error:
+            raise StoragePrefixPurgeError(
+                f'owner storage list failed in {bucket.name}: {_storage_error_reason(error)}'
+            ) from None
+
+    blocked: dict[tuple[str, str, int], str] = {}
+    deleted = 0
+    for blob in list_versions():
+        try:
+            if real_gcs:
+                blob.delete(if_generation_match=blob.generation, if_metageneration_match=blob.metageneration)
+            else:
+                blob.delete()
+        except GoogleAPICallError as error:
+            reason = _storage_error_reason(error)
+            # A generic object DELETE 404 can also mean the bucket vanished.
+            # The final LIST verifies that the bucket is still accessible.
+            if isinstance(error, NotFound) and reason in {'notFound', 'noSuchObject', 'NotFound'}:
+                continue
+            if isinstance(error, PreconditionFailed) and reason == 'conditionNotMet':
+                continue
+            if isinstance(error, Forbidden) and reason in {'objectUnderActiveHold', 'retentionPolicyNotMet'}:
+                blocked[(bucket.name, blob.name, blob.generation)] = reason
+                continue
+            raise StoragePrefixPurgeError(f'owner storage delete failed in {bucket.name}: {reason}') from None
+        deleted += 1
+
+    remaining = list_versions()
+    if remaining:
+        present = {(bucket.name, blob.name, blob.generation) for blob in remaining} if blocked else set()
+        blocked = {key: reason for key, reason in blocked.items() if key in present}
+        if blocked:
+            raise StoragePrefixPurgeBlocked(blocked, unverified=len(remaining) - len(blocked))
+        raise StoragePrefixPurgeError('owner storage purge left objects under the owner prefix')
+    return deleted
 
 
 def plan_digest(plan: dict[str, Any]) -> str:
