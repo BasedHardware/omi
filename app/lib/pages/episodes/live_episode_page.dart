@@ -11,7 +11,6 @@ import 'package:omi/backend/schema/person.dart';
 import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_tabs.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
-import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/episode_content.dart';
 import 'package:omi/pages/episodes/finish_capture.dart';
@@ -168,13 +167,12 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     });
     var stays = false;
     try {
-      final live = context.read<ConversationsV3Provider?>()?.live;
       final outcome = await finishLiveCapture(
         context,
         provider,
         episodes: _episodes,
         retry: _retryPending,
-        owned: live != null && LiveConversationEndButton.phoneCaptures(live, provider, currentLiveId: live.id),
+        liveConversationId: ownedLiveFinishId(context, provider),
       );
       if (!mounted) return;
       stays = presentFinishOutcome(
