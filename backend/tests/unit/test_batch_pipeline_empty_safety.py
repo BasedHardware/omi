@@ -39,6 +39,27 @@ def test_ship_on_and_explicit_kill_switch(monkeypatch):
     assert terminal_empty_payload(2, [{'start': 0, 'end': 1}])['outcome'] == 'no_recoverable_speech'
 
 
+def test_two_recognizer_close_is_default_off_and_needs_two_validated_empty_receipts(monkeypatch):
+    from config.batch_pipeline_empty_asr import terminal_empty_allowed, two_recognizer_empty_close_enabled
+
+    spans = [{'start': 0, 'end': 1}]
+    empty = lambda name: {'provider': name, 'outcome': 'empty', 'word_count': 0}
+    both = {'modulate': empty('modulate'), 'soniox': empty('soniox')}
+    monkeypatch.delenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', raising=False)
+    assert not two_recognizer_empty_close_enabled()
+    assert not terminal_empty_allowed(spans, recognizer_receipts=both)
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', 'true')
+    assert terminal_empty_allowed(spans, recognizer_receipts=both)
+    # One recognizer, an unvalidated answer, words, or a mislabelled receipt keep the audio held.
+    assert not terminal_empty_allowed(spans)
+    assert not terminal_empty_allowed(spans, recognizer_receipts={'modulate': empty('modulate')})
+    for change in ({'outcome': 'error'}, {'word_count': 1}, {'word_count': None}, {'provider': 'modulate'}):
+        assert not terminal_empty_allowed(spans, recognizer_receipts={**both, 'soniox': {**both['soniox'], **change}})
+    with pytest.raises(Exception):
+        terminal_empty_payload(2, spans)
+    assert terminal_empty_payload(2, spans, recognizer_receipts=both)['outcome'] == 'no_recoverable_speech'
+
+
 def make_worker(*, vad, retry, decode=None, stream=None):
     words = Mock()
     words.transcribe_batch.side_effect = lambda batch: [[] for _ in batch]

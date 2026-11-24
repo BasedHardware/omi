@@ -15,7 +15,7 @@ from database.batch_pipeline_policy import (
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, normalized_binding
 from config.batch_language_recovery import MAX_AUDIO_SECONDS, language_guarded
 from config.batch_paid_attempt import attempted, renewed, retryable
-from utils.batch_pipeline.correctness_metrics import record as record_correctness
+from utils.batch_pipeline.correctness_metrics import record as record_correctness, record_recovery_settlement
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.batch_pipeline.input_retention import held_input_leg, staged_at, staged_enqueue, TERMINAL_SECONDS
@@ -568,9 +568,20 @@ class RecoveryStore(RecoveryFence):
                 tx.put('owners', owner_key(job['owner_id']), owner)
             job['recovery']['settled_at'] = now
             tx.put('jobs', segment_id, job)
+            # A retried transaction replaces the observation; only a commit reports it.
+            settled[:] = [(dict(job['recovery'].get('recognizers') or {}), census, language_guarded(job))]
             return True, job['duration_seconds'] if result_uri is not None else 0
 
+        settled: list = []
         changed, seconds = self.store.run(commit)
+        if changed and settled:
+            recognizers, census, guarded = settled[0]
+            record_recovery_settlement(
+                recognizers,
+                census,
+                guarded,
+                'failed_held' if result_uri is None else 'words' if outcome == 'success' else outcome,
+            )
         if changed and seconds:
             record_correctness(
                 'no_recoverable_speech' if outcome == 'no_recoverable_speech' else 'recovered', seconds=seconds
