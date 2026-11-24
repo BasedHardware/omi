@@ -39,7 +39,7 @@
     {
       "file": "006-mobile-ios-next-placeholder-finish.png",
       "platform": "mobile-ios",
-      "description": "Finish is available on the next local capture page opened from the Listening placeholder.",
+      "description": "Finish is available on the next local capture page with only the active capture ID and no transcript.",
       "captured_by": "agent",
       "source": "visual-audit"
     }

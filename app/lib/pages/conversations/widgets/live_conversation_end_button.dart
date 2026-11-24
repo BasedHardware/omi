@@ -40,16 +40,8 @@ class LiveConversationEndButton extends StatefulWidget {
     return conversation.transcriptSegments.any((segment) => captured.contains(segment.id));
   }
 
-  @override
-  State<LiveConversationEndButton> createState() => _LiveConversationEndButtonState();
-}
-
-class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
-  bool _ended = false;
-  // Failure count when a successful close latched End; a later unsuccessful settlement releases it.
-  int? _latchedFailures;
-
-  bool _owns(ServerConversation conversation, CaptureProvider capture, String? currentLiveId) {
+  /// Whether the current capture can finish this window.
+  static bool phoneCaptures(ServerConversation conversation, CaptureProvider capture, {String? currentLiveId}) {
     final verified = capture.verifiedLiveServerRecordingId;
     final recordings = conversation.v3?.recordingIds ?? const <String>[];
     if (verified != null && capture.hasClosedServerRecording(verified)) {
@@ -60,22 +52,33 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
           conversation.id == currentLiveId &&
           recordings.isNotEmpty &&
           !recordings.contains(verified) &&
-          LiveConversationEndButton.ownsCapture(conversation, capture.locallyReceivedSegmentIds);
+          ownsCapture(conversation, capture.locallyReceivedSegmentIds);
     }
     // Listen may rotate while the client capture ID and earlier segments are still
     // present. A window that names its sources must then list the verified recording.
     if (verified != null && recordings.isNotEmpty) return recordings.contains(verified);
     if (EpisodePresentation.streamingSource(capture) == null && verified == null) return false;
     return recordings.contains(capture.activeRecordingId) ||
-        LiveConversationEndButton.ownsCapture(conversation, capture.locallyReceivedSegmentIds);
+        ownsCapture(conversation, capture.locallyReceivedSegmentIds);
   }
+
+  @override
+  State<LiveConversationEndButton> createState() => _LiveConversationEndButtonState();
+}
+
+class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
+  bool _ended = false;
+  // Failure count when a successful close latched End; a later unsuccessful settlement releases it.
+  int? _latchedFailures;
 
   @override
   Widget build(BuildContext context) {
     final conversation = widget.conversation;
     final currentLiveId = context.select<ConversationsV3Provider?, String?>((v3) => v3?.live?.id);
     final mine = context.select<CaptureProvider?, bool>(
-      (capture) => capture != null && _owns(conversation, capture, currentLiveId),
+      (capture) =>
+          capture != null &&
+          LiveConversationEndButton.phoneCaptures(conversation, capture, currentLiveId: currentLiveId),
     );
     final failures = context.select<ConversationsV3Provider?, int>((v3) => v3?.finishFailures ?? 0);
     if (_ended && _latchedFailures != null && failures != _latchedFailures) {
@@ -109,7 +112,10 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                 final capture = context.read<CaptureProvider>();
                 // Checked again at the tap: the capture may have moved on since the last build.
                 final v3 = context.read<ConversationsV3Provider?>();
-                if (_ended || !_owns(conversation, capture, v3?.live?.id)) return;
+                if (_ended ||
+                    !LiveConversationEndButton.phoneCaptures(conversation, capture, currentLiveId: v3?.live?.id)) {
+                  return;
+                }
                 _ended = true;
                 HapticFeedback.mediumImpact();
                 final setEndSuppressed = widget.onEndSuppressionChanged;
@@ -131,7 +137,7 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                   // A closed window with a published finish stays latched; only a failed close restores End.
                   if (!(closed && started)) {
                     _ended = false;
-                    if (_owns(conversation, capture, v3?.live?.id)) setEndSuppressed?.call(false);
+                    setEndSuppressed?.call(false);
                   } else {
                     _latchedFailures = failuresAtTap;
                   }

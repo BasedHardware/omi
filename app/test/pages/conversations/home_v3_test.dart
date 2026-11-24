@@ -38,6 +38,7 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/live_summary_section.dart';
 import 'package:omi/pages/conversation_detail/widgets/summary_tab.dart';
+import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
@@ -887,6 +888,61 @@ void main() {
     });
   });
 
+  testWidgets('Home updates the live row when only its recording IDs change', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      final row = find.byKey(const ValueKey('live-1'));
+      List<String> recordingIds() => tester.widget<ConversationListItem>(row).conversation.v3!.recordingIds;
+      expect(recordingIds(), ['rec-1']);
+
+      home.liveRecordingIds = ['rec-2'];
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      expect(recordingIds(), ['rec-2']);
+
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('a failed End releases suppression even when ownership changes during the drain', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.capture.verifiedLiveServerRecordingId = 'rec-1';
+      home.publishManualEnds();
+      final drain = home.capture.drain = Completer<void>();
+      final conversation = home.conversationsV3.live!;
+      final suppression = <bool>[];
+      final navigator = Navigator.of(tester.element(find.byType(ConversationsPage)));
+      unawaited(navigator.push(omiPageRoute(
+        builder: (_) => Scaffold(
+          body: Center(
+            child: LiveConversationEndButton(conversation: conversation, onEndSuppressionChanged: suppression.add),
+          ),
+        ),
+      )));
+      await settleDetailTab(tester);
+
+      await tester.tap(endButton);
+      await tester.pump();
+      expect(suppression, [true]);
+      home.capture
+        ..verifiedLiveServerRecordingId = 'rec-2'
+        ..ping();
+      await tester.pump();
+      expect(endButton, findsNothing);
+      drain.completeError(StateError('WAL drain failed'));
+      await settleDetailTab(tester);
+      expect(suppression, [true, false]);
+
+      home.capture
+        ..verifiedLiveServerRecordingId = 'rec-1'
+        ..ping();
+      await tester.pump();
+      expect(endButton.hitTestable(), findsOneWidget);
+      await _dispose(tester, home);
+    });
+  });
+
   testWidgets('v3: the placeholder opens Finish for a verified capture with no transcript', (tester) async {
     await withClock(Clock.fixed(_now), () async {
       final home = await _pumpHome(tester, v3: true);
@@ -1268,6 +1324,7 @@ void main() {
     testWidgets('End during hydration cancels intent and restores recap only for a retained capture: $retained',
         (tester) async {
       final home = await _pumpHome(tester, v3: true);
+      home.publishManualEnds();
       final hydrate = Completer<void>();
       final drain = retained ? (home.capture.drain = Completer<void>()) : null;
       home.detailBarrier = hydrate;
@@ -1281,6 +1338,8 @@ void main() {
 
       await tester.tap(find.text('Launch checklist'));
       await settleDetailTab(tester);
+      // Filtered Home cannot show Processing, so a successful End stays on detail.
+      home.conversations.showStarredOnly = true;
       await tester.tap(find.text('Summary'));
       await settleDetailTab(tester);
       expect(opens, 0);
@@ -1759,12 +1818,15 @@ void main() {
           await settleDetailTab(tester);
 
           if (placeholder) {
-            // When there is no visible server window, the ongoing local capture still
-            // opens its own page. This time the socket has announced the successor.
-            home.liveOpen = false;
+            // Home hides the window and offers the local capture page. The window
+            // still lists the active capture ID, the only available ownership evidence.
+            home.liveHidden = true;
+            final activeId = home.capture.activeRecordingId!;
+            home.liveRecordingIds = [activeId];
             home.capture
+              ..recordingToProcess = activeId
               ..segments = []
-              ..verifiedLiveServerRecordingId = 'rec-2'
+              ..verifiedLiveServerRecordingId = null
               ..ping();
             await home.conversationsV3.refresh();
             await settleDetailTab(tester);
@@ -1796,16 +1858,16 @@ void main() {
               tester, placeholder ? '006-mobile-ios-next-placeholder-finish' : '005-mobile-ios-next-detail-end');
           await tester.tap(action);
           await settleDetailTab(tester);
-          expect(home.conversationsV3.finishRow, isNotNull);
-          expect(home.conversationsV3.finishRow, isNot(same(firstFinish)));
           if (placeholder) {
             expect(home.capture.finishCalls, 1);
-            expect(home.capture.finishedRecordingId, 'rec-2');
+            expect(home.capture.finishedRecordingId, home.capture.activeRecordingId);
             expect(home.capture.endCalls, 1);
           } else {
             expect(home.capture.endCalls, 2);
             expect(home.capture.endedLiveId, 'live-2');
           }
+          expect(home.conversationsV3.finishRow, isNotNull);
+          expect(home.conversationsV3.finishRow, isNot(same(firstFinish)));
           await _dispose(tester, home);
           debugDefaultTargetPlatformOverride = null;
         });
