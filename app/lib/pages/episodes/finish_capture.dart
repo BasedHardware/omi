@@ -35,11 +35,16 @@ HeldCapture? holdCapture(CaptureProvider provider) => provider.segments.isEmpty 
 ///
 /// [retry] sends Process Now again after a failed Finish even when the page shows nothing new: the
 /// failed request processed nothing, and the controller already moved its transcript aside.
+///
+/// [owned] says the caller already established this phone's capture owns the live window (Home's
+/// swipe shows Finish only then, including when the window lists the active capture ID and no line
+/// has arrived yet). That ownership alone sends Process Now, as the detail page's End does.
 Future<FinishOutcome> finishLiveCapture(
   BuildContext context,
   CaptureProvider provider, {
   EpisodeProvider? episodes,
   bool retry = false,
+  bool owned = false,
 }) async {
   final v3Feedback = context.read<ConversationsV3Provider?>()?.finishFeedbackEnabled ?? false;
   final preview = provider.livePreview;
@@ -65,7 +70,7 @@ Future<FinishOutcome> finishLiveCapture(
   // A phone recorder still restoring coordinator ownership has no source yet, but is still this phone's.
   final phoneOwns = provider.liveCaptureSource == ConversationSource.phone.name ||
       (provider.liveCaptureSource == null && EpisodePresentation.streamingSource(provider) == 'phone');
-  if (hadContent || retry || phoneOwns || (v3Feedback && provider.verifiedLiveServerRecordingId != null)) {
+  if (hadContent || retry || phoneOwns || owned || (v3Feedback && provider.verifiedLiveServerRecordingId != null)) {
     final previousFinish = provider.lastClientFinish;
     provider.noteClientFinish();
     FinishOutcome outcome;
@@ -78,7 +83,7 @@ Future<FinishOutcome> finishLiveCapture(
           ? const FinishFailed(FinishFailure.exception)
           : FinishOutcome.fromProcess(
               answer,
-              heardSomething: hadContent || retry || v3Feedback,
+              heardSomething: hadContent || retry || owned || v3Feedback,
             );
     } on FinishMadeNoRequest {
       outcome = const FinishSavedForLater();

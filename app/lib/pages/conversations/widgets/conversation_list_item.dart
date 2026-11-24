@@ -809,7 +809,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
     final capture = context.read<CaptureProvider>();
     final episodes = context.read<EpisodeProvider?>();
     HapticFeedback.mediumImpact();
-    final outcome = await finishLiveCapture(context, capture, episodes: episodes);
+    // The swipe shows only for a window this phone's capture owns; carry that into Finish so an
+    // owned window with no line yet still sends Process Now instead of answering "nothing new".
+    final owned = LiveConversationEndButton.phoneCaptures(widget.conversation, capture);
+    final outcome = await finishLiveCapture(context, capture, episodes: episodes, owned: owned);
     if (!context.mounted) return;
     presentFinishOutcome(context, outcome,
         entry: FinishEntry.home, onRetry: () => retryFinishFromHome(context, capture));

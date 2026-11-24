@@ -37,7 +37,8 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 /// The decoder fixture: a v3 conversation as the server sends it. [tile] null is a document with no
 /// tile state (an older server).
-ServerConversation _decoded(String? tile, {String id = 'c1', String status = 'completed'}) =>
+ServerConversation _decoded(String? tile,
+        {String id = 'c1', String status = 'completed', Map<String, dynamic> extra = const {}}) =>
     ServerConversation.fromJson({
       'id': id,
       'created_at': '2026-11-01T10:00:00Z',
@@ -51,6 +52,7 @@ ServerConversation _decoded(String? tile, {String id = 'c1', String status = 'co
       ],
       'kind': 'conversation',
       if (tile != null) 'tile_state': tile,
+      ...extra,
     });
 
 ConversationsV3Provider _v3(bool on) => ConversationsV3Provider(
@@ -131,6 +133,9 @@ class _Capture extends CaptureProvider {
 
   CreateConversationResponse? answer;
   var finishes = 0;
+
+  @override
+  String? activeRecordingId;
 
   @override
   String? get liveCaptureSource => 'omi';
@@ -491,6 +496,31 @@ void main() {
       expect(capture.finishes, 1);
       expect(find.text("Didn't go through. Your audio is safe."), findsOneWidget);
       expect(find.byType(ConversationListItem), findsOneWidget, reason: 'the row stays live');
+      await tester.pump(const Duration(seconds: 9));
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a pendant window owned only by its active capture ID finishes through Process Now', (tester) async {
+      // No line, photo or preview yet and no verified server ID: the window lists this phone's
+      // active capture ID, which is the only ownership evidence.
+      final capture = _Capture()
+        ..segments = []
+        ..activeRecordingId = 'capture-1';
+      addTearDown(capture.dispose);
+      final live = _decoded('live', extra: {
+        'transcript_segments': const <Map<String, dynamic>>[],
+        'v3_recording_ids': ['capture-1'],
+      });
+      expect(live.v3?.recordingIds, ['capture-1']);
+      await pumpRow(tester, live, capture: capture);
+      await swipe(tester, -600);
+      expect(find.byKey(const ValueKey('conversation_swipe_finish')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('conversation_swipe_finish')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(capture.finishes, 1, reason: 'Process Now is sent, not the stop-only path');
+      expect(find.text("Didn't go through. Your audio is safe."), findsOneWidget,
+          reason: 'the request was made; its transport failure is reported, not "nothing new"');
       await tester.pump(const Duration(seconds: 9));
       await tester.pumpWidget(const SizedBox());
     });
