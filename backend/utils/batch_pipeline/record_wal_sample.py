@@ -19,7 +19,7 @@ from google.api_core.exceptions import GoogleAPICallError
 from prometheus_client import Counter as Metric
 
 from config.audio_archive import derived_audio_bucket
-from config.record_wal_sample import ATTEMPT_SECONDS, slot_at
+from config.record_wal_sample import ATTEMPT_SECONDS, metric_revision, slot_at
 from database import record_wal_sample as state
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.record_wal_handoff import HandoffConflict
@@ -40,14 +40,23 @@ MAX_FILES = 20
 MAX_PACKETS = 50_000
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 
-attempts = Metric('omi_record_wal_handoff_sample_attempts_total', 'One-time sampling attempts', ['outcome'])
+attempts = Metric('omi_record_wal_handoff_sample_attempts_total', 'One-time sampling attempts', ['outcome', 'revision'])
 totals = Metric(
     'omi_record_wal_handoff_sample_totals_total',
     'Aggregate classified WAL payload plus framing bytes, or Opus ticks at 48 kHz',
     ['dispatch', 'classification', 'unit'],
 )
 offsets = Metric('omi_record_wal_handoff_sample_clock_offsets_total', 'Files with proved offsets', ['bucket'])
-io_work = Metric('omi_record_wal_handoff_sample_io_total', 'Issued bounded sampler work', ['unit'])
+io_work = Metric('omi_record_wal_handoff_sample_io_total', 'Issued bounded sampler work', ['unit', 'revision'])
+
+# The sync scrape profile deliberately omits global revision metadata. Publish
+# four exact-revision children before the first scrape, even while sampling is
+# off, so Release can distinguish observed zero from a missing guard series.
+_REVISION = metric_revision()
+if _REVISION:
+    attempts.labels('claimed_slot', _REVISION)
+    for unit in ('point_reads', 'gcs_requests', 'remote_bytes'):
+        io_work.labels(unit, _REVISION)
 
 _slot_lock = threading.Lock()
 _latest_attempted = -1
@@ -409,7 +418,7 @@ async def observe(
     if int(hashlib.sha256(content_id.encode()).hexdigest()[:12], 16) % 1000:
         return
     if not _try_process_slot(slot):
-        attempts.labels('local_slot_miss').inc()
+        attempts.labels('local_slot_miss', _REVISION).inc()
         return
     dispatch = 'refused' if status_code == 503 else 'accepted' if status_code in {200, 202} else 'other'
     budget = ArtifactReadBudget(time.monotonic() + ATTEMPT_SECONDS, MAX_MANIFEST_TOTAL, 14)
@@ -417,16 +426,16 @@ async def observe(
     try:
         async with asyncio.timeout(ATTEMPT_SECONDS):
             if not await run_blocking(db_executor, state.claim_slot, store, slot, budget):
-                attempts.labels('contested_slot').inc()
+                attempts.labels('contested_slot', _REVISION).inc()
                 return
-            attempts.labels('claimed_slot').inc()
+            attempts.labels('claimed_slot', _REVISION).inc()
             generation, row = await run_blocking(
                 db_executor, state.authority, store, uid, cid, source, device, budget, reads
             )
             try:
                 layout = await run_blocking(sync_executor, read_staged_packets, paths, budget)
             except OSError:
-                attempts.labels('unreadable_staged').inc()
+                attempts.labels('unreadable_staged', _REVISION).inc()
                 return
             candidate = not has_jobs and _same_sealed_capture(row, row)
             try:
@@ -434,10 +443,10 @@ async def observe(
                     storage_executor, read_manifest_inventory, uid, cid, candidate, budget
                 )
             except (InvalidTag, StructError):
-                attempts.labels('unreadable_manifest').inc()
+                attempts.labels('unreadable_manifest', _REVISION).inc()
                 runs, no_alternate = [], False
             except (ValueError, KeyError, TypeError, GoogleAPICallError, ArtifactReadLimit):
-                attempts.labels('unproven_inventory').inc()
+                attempts.labels('unproven_inventory', _REVISION).inc()
                 runs, no_alternate = [], False
             _, current = await run_blocking(
                 db_executor,
@@ -464,15 +473,15 @@ async def observe(
                 totals.labels(dispatch, classification, unit).inc(value)
             for label, count in clock.items():
                 offsets.labels(label).inc(count)
-            attempts.labels('counted').inc()
+            attempts.labels('counted', _REVISION).inc()
     except (BatchPrivacyBlocked, HandoffConflict):
-        attempts.labels('authority_refused').inc()
+        attempts.labels('authority_refused', _REVISION).inc()
     except (ArtifactReadLimit, TimeoutError):
-        attempts.labels('limit').inc()
+        attempts.labels('limit', _REVISION).inc()
     except Exception:
         # No content, IDs or SDK messages enter sampling telemetry.
-        attempts.labels('unavailable').inc()
+        attempts.labels('unavailable', _REVISION).inc()
     finally:
-        io_work.labels('point_reads').inc(reads.issued)
-        io_work.labels('gcs_requests').inc(budget.objects)
-        io_work.labels('remote_bytes').inc(budget.received_bytes)
+        io_work.labels('point_reads', _REVISION).inc(reads.issued)
+        io_work.labels('gcs_requests', _REVISION).inc(budget.objects)
+        io_work.labels('remote_bytes', _REVISION).inc(budget.received_bytes)
