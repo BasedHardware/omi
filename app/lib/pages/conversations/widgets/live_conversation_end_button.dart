@@ -40,6 +40,19 @@ class LiveConversationEndButton extends StatefulWidget {
     return conversation.transcriptSegments.any((segment) => captured.contains(segment.id));
   }
 
+  /// Whether this phone is capturing [conversation]: the one ownership check behind End and Home's
+  /// swipe to Finish. The account-wide in-progress pointer and transcript can come from another device.
+  static bool phoneCaptures(ServerConversation conversation, CaptureProvider capture) {
+    // Listen rotates its server recording on silence while the client capture ID stays; once the
+    // server ID is verified, only it binds End, so a stale earlier window cannot end the next one.
+    final verified = capture.verifiedLiveServerRecordingId;
+    // A verified recording also rides out a brief source blip (a pendant lease lapsing, a reconnect).
+    if (EpisodePresentation.streamingSource(capture) == null && verified == null) return false;
+    final recordings = conversation.v3?.recordingIds ?? const <String>[];
+    return recordings.contains(verified ?? capture.activeRecordingId) ||
+        ownsCapture(conversation, capture.locallyReceivedSegmentIds);
+  }
+
   @override
   State<LiveConversationEndButton> createState() => _LiveConversationEndButtonState();
 }
@@ -49,16 +62,8 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
   // Failure count when a successful close latched End; a later unsuccessful settlement releases it.
   int? _latchedFailures;
 
-  bool _owns(ServerConversation conversation, CaptureProvider capture) {
-    if (EpisodePresentation.streamingSource(capture) == null) return false;
-    // The account-wide in-progress pointer and transcript can come from another device.
-    final recordings = conversation.v3?.recordingIds ?? const <String>[];
-    // Listen rotates its server recording on silence while the client capture ID stays; once the
-    // server ID is verified, only it binds End, so a stale earlier window cannot end the next one.
-    final verified = capture.verifiedLiveServerRecordingId;
-    return recordings.contains(verified ?? capture.activeRecordingId) ||
-        LiveConversationEndButton.ownsCapture(conversation, capture.locallyReceivedSegmentIds);
-  }
+  bool _owns(ServerConversation conversation, CaptureProvider capture) =>
+      LiveConversationEndButton.phoneCaptures(conversation, capture);
 
   @override
   Widget build(BuildContext context) {

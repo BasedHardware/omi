@@ -23,6 +23,7 @@ import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversation_detail/conversation_live_guard.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/conversations/home_rows.dart';
+import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/pages/paywall/value_moment_paywall.dart';
@@ -795,15 +796,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
   /// The same length the detail page shows (`OmiDuration.compact`, hub audit #15).
   bool get _isLive => conversationIsLiveIn(context, widget.conversation);
 
-  /// Whether this phone is capturing the live conversation, so it can end it: the conversation holds
-  /// a segment this phone captured (a v3 window copies its recordings' segments, ids included).
+  /// Whether this phone is capturing the live conversation, so it can end it (End's own check).
   bool _phoneOwnsCapture(BuildContext context) {
     final conversation = widget.conversation;
-    return context.select<CaptureProvider?, bool>((capture) {
-      if (capture == null) return false;
-      final captured = {for (final segment in capture.segments) segment.id};
-      return captured.isNotEmpty && conversation.transcriptSegments.any((segment) => captured.contains(segment.id));
-    });
+    return context.select<CaptureProvider?, bool>(
+        (capture) => capture != null && LiveConversationEndButton.phoneCaptures(conversation, capture));
   }
 
   /// Swipe → Finish: the live page's Finish path (one typed outcome), then its result opens. A

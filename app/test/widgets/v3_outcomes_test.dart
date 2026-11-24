@@ -135,6 +135,10 @@ class _Capture extends CaptureProvider {
   @override
   String? get liveCaptureSource => 'omi';
 
+  // s1 arrived over this phone's own socket: the ownership evidence the live row's swipe needs.
+  @override
+  Iterable<String> get locallyReceivedSegmentIds => segments.map((segment) => segment.id);
+
   @override
   Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
     finishes++;
