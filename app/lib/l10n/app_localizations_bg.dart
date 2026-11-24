@@ -15387,9 +15387,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get stopThese => 'Спри тези';
 
   @override
-  String get meetingActionItemsTitle => 'Елементи за действие';
-
-  @override
   String get addToTasks => 'Добави в Задачи';
 
   @override

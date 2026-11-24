@@ -15344,9 +15344,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get stopThese => 'हे थांबवा';
 
   @override
-  String get meetingActionItemsTitle => 'करावयाच्या गोष्टी';
-
-  @override
   String get addToTasks => 'टास्कमध्ये जोडा';
 
   @override

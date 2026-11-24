@@ -15365,9 +15365,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get stopThese => 'Ustavi te';
 
   @override
-  String get meetingActionItemsTitle => 'Dejanja';
-
-  @override
   String get addToTasks => 'Dodaj med opravila';
 
   @override

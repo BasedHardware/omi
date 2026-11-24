@@ -15401,9 +15401,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get stopThese => 'Запри ги овие';
 
   @override
-  String get meetingActionItemsTitle => 'Активности';
-
-  @override
   String get addToTasks => 'Додај во Задачи';
 
   @override

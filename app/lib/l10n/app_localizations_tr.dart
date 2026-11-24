@@ -15347,9 +15347,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get stopThese => 'Bunları Durdur';
 
   @override
-  String get meetingActionItemsTitle => 'Eylem öğeleri';
-
-  @override
   String get addToTasks => 'Görevlere Ekle';
 
   @override

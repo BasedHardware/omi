@@ -15413,9 +15413,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get stopThese => 'Atura aquests';
 
   @override
-  String get meetingActionItemsTitle => 'Elements d\'acció';
-
-  @override
   String get addToTasks => 'Afegeix a Tasques';
 
   @override

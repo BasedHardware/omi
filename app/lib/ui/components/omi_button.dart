@@ -91,12 +91,12 @@ class OmiButton extends StatefulWidget {
     this.isLoading = false,
     this.expand = false,
     this.pill = false,
+    this.maxLines = 1,
   })  : variant = OmiButtonVariant.secondary,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null,
-        maxLines = 1;
+        labelStyle = null;
 
   const OmiButton.destructive({
     super.key,
@@ -108,12 +108,12 @@ class OmiButton extends StatefulWidget {
     this.isLoading = false,
     this.expand = false,
     this.pill = false,
+    this.maxLines = 1,
   })  : variant = OmiButtonVariant.destructive,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null,
-        maxLines = 1;
+        labelStyle = null;
 
   const OmiButton.tertiary({
     super.key,
@@ -125,12 +125,12 @@ class OmiButton extends StatefulWidget {
     this.isLoading = false,
     this.expand = false,
     this.pill = false,
+    this.maxLines = 1,
   })  : variant = OmiButtonVariant.tertiary,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null,
-        maxLines = 1;
+        labelStyle = null;
 
   /// See [OmiButtonVariant.toolbar].
   const OmiButton.toolbar({
@@ -143,12 +143,12 @@ class OmiButton extends StatefulWidget {
     this.isLoading = false,
     this.expand = false,
     this.pill = false,
+    this.maxLines = 1,
   })  : variant = OmiButtonVariant.toolbar,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null,
-        maxLines = 1;
+        labelStyle = null;
 
   final String label;
 

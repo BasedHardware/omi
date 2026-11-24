@@ -66,6 +66,9 @@ class _AuthComponentState extends State<AuthComponent> {
               // Title text
               Text(
                 context.l10n.speakTranscribeSummarize,
+                // A 32 pt headline past 1.5x breaks "Transcribe." mid-word; the buttons below carry
+                // the text size instead.
+                textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.5),
                 style: TextStyle(
                   color: OmiColors.textPrimary,
                   fontSize: 32,
@@ -77,15 +80,16 @@ class _AuthComponentState extends State<AuthComponent> {
               ),
 
               const SizedBox(height: 32),
-
+            ],
+            // The buttons stay pinned under the scrolling title at every text size.
+            footer: [
               // Where the sign-in buttons start; toasts float above it.
               SizedBox(key: _buttonsTop, width: double.infinity),
 
               // Sign in buttons
               if (!provider.isLocalDevProfile && (Platform.isIOS || Platform.isAndroid)) ...[
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: double.infinity, minHeight: 56),
                   child: ElevatedButton(
                     onPressed: () {
                       OmiHaptics.selection();
@@ -101,12 +105,15 @@ class _AuthComponentState extends State<AuthComponent> {
                       children: [
                         const FaIcon(FontAwesomeIcons.apple, size: 24),
                         const SizedBox(width: 8),
-                        Text(
-                          context.l10n.signInWithApple,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'Manrope',
+                        Flexible(
+                          child: Text(
+                            context.l10n.signInWithApple,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Manrope',
+                            ),
                           ),
                         ),
                       ],
@@ -118,9 +125,8 @@ class _AuthComponentState extends State<AuthComponent> {
 
               // Google sign in button
               if (!provider.isLocalDevProfile)
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: double.infinity, minHeight: 56),
                   child: ElevatedButton(
                     onPressed: () {
                       OmiHaptics.selection();
@@ -136,9 +142,12 @@ class _AuthComponentState extends State<AuthComponent> {
                       children: [
                         const FaIcon(FontAwesomeIcons.google, size: 20),
                         const SizedBox(width: 8),
-                        Text(
-                          context.l10n.signInWithGoogle,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                        Flexible(
+                          child: Text(
+                            context.l10n.signInWithGoogle,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                          ),
                         ),
                       ],
                     ),
@@ -152,9 +161,8 @@ class _AuthComponentState extends State<AuthComponent> {
               // one. Never shown in a production-family build.
               if (provider.isLocalDevProfile) ...[
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: double.infinity, minHeight: 56),
                   child: OutlinedButton(
                     onPressed: () {
                       OmiHaptics.selection();
@@ -167,6 +175,7 @@ class _AuthComponentState extends State<AuthComponent> {
                     ),
                     child: const Text(
                       'Sign in (local dev)',
+                      textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
                     ),
                   ),

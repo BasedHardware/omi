@@ -15364,9 +15364,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get stopThese => 'Parar estes';
 
   @override
-  String get meetingActionItemsTitle => 'Itens de ação';
-
-  @override
   String get addToTasks => 'Adicionar às tarefas';
 
   @override

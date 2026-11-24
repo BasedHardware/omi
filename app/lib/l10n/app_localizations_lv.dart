@@ -15371,9 +15371,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get stopThese => 'Apturēt šos';
 
   @override
-  String get meetingActionItemsTitle => 'Veicamie darbi';
-
-  @override
   String get addToTasks => 'Pievienot uzdevumiem';
 
   @override

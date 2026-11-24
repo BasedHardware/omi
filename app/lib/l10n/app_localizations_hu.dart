@@ -15395,9 +15395,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get stopThese => 'Ezek leállítása';
 
   @override
-  String get meetingActionItemsTitle => 'Teendők';
-
-  @override
   String get addToTasks => 'Hozzáadás a feladatokhoz';
 
   @override
