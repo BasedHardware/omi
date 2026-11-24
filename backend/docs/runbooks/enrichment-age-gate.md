@@ -33,3 +33,23 @@ due debt for the normal sweep. Keep both the original first_pending_at and the
 custody/policy fields. No deletion, generation reset or synthetic completion is
 part of unpark. The operator must keep a private checkpoint and counts-only
 receipt; never print identities.
+
+Run `backend/scripts/unpark_enrichment_age_gate.py` from the operator checkout.
+Discovery requires the `enrichment_age_gate_unpark_newest` index to be ready.
+Before planning and again before applying, confirm the effective age window of
+the production workers that enforce the gate. Pass it as
+`--serving-max-age-hours`, after the serving rollout has reached all relevant
+workers. Use `0` only when the serving gate is disabled. The tool checks each
+row against the supplied window and includes that window and its fixed
+`based-hardware` project in the receipt. Apply sends Cloud Tasks in
+`based-hardware/us-central1` using each row's persisted handler binding.
+
+Dry-run accepts the `ro-prod` and `prod-operator` tiers. Pass `--next-file` in a
+private directory under `/Volumes/Ephemeral/scratch`. For apply, use the
+`prod-operator` tier and repeat the page inputs with
+`--apply --approve-plan-sha256 <dry-run digest>`. A changed page or window returns
+`plan_changed` with no row write, enqueue or checkpoint update. Run a fresh
+dry-run on the same input before approving again. A concurrent token change
+after apply has matched the digest is fenced inside the transaction. Keep the
+input cursor until the page is settled, then use the output file as
+`--after-file` with a different `--next-file`. An empty page resets the cursor.

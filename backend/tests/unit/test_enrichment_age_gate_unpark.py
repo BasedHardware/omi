@@ -2,12 +2,14 @@
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
+from database import batch_pipeline_privacy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.enrichment import age_gate, outbox
@@ -55,7 +57,7 @@ def source(monkeypatch):
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
     monkeypatch.delenv('ENRICHMENT_AGE_GATE_UNPARK_ENABLED', raising=False)
     monkeypatch.setattr(unpark, 'assert_batch_write_allowed', lambda *args, **kwargs: 1)
-    monkeypatch.setattr(unpark.time, 'time', lambda: NOW)
+    monkeypatch.setattr(unpark, 'time', SimpleNamespace(time=lambda: NOW, sleep=unpark.time.sleep))
     client = StrictFirestore(
         {
             ('users', UID): {'private_cloud_sync_enabled': True},
@@ -102,6 +104,26 @@ def test_dry_run_counts_only_and_apply_preserves_debt_and_binding(source):
     assert apply(source, result, wake) == {'state_changed': 1}
     assert wake.call_count == 1
     assert len([tx for tx in source.transactions if tx.sets]) == writes
+
+
+def test_dry_run_does_not_schedule_privacy_token_mint(source, monkeypatch):
+    authorize = batch_pipeline_privacy.assert_batch_write_allowed
+    monkeypatch.setattr(unpark, 'assert_batch_write_allowed', authorize)
+    memo_levers = {'bpp_generation_memo', 'bpp_decision_cache', 'bpp_token_mint'}
+    monkeypatch.setattr(batch_pipeline_privacy, 'lever_enabled', lambda name, _uid: name in memo_levers)
+    monkeypatch.setattr(batch_pipeline_privacy, 'ttl_enabled', lambda name, _uid: name == 'bpp_decision_cache')
+    mint = Mock()
+    monkeypatch.setattr(batch_pipeline_privacy, 'schedule_token_mint', mint)
+    assert plan(source)['entries'][0]['disposition'] == 'eligible'
+    mint.assert_not_called()
+    assert no_writes(source)
+
+    @unpark.firestore.transactional
+    def default_privacy_check(transaction):
+        return authorize(source, transaction, UID, conversation_ids=[CID])
+
+    default_privacy_check(source.transaction())
+    mint.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -237,6 +259,14 @@ def cli():
     return module
 
 
+@pytest.fixture
+def operator_cli(monkeypatch):
+    # Register environment changes that main() makes directly.
+    for key in ('OMI_ENV_STAGE', 'ENRICHMENT_MAX_AGE_HOURS'):
+        monkeypatch.setenv(key, os.environ.get(key, ''))
+    return cli()
+
+
 @pytest.mark.parametrize(
     'tier,apply_mode,allowed',
     [
@@ -247,15 +277,17 @@ def cli():
         ('ro-dev', False, False),
     ],
 )
-def test_cli_tiers_before_client_access(monkeypatch, tier, apply_mode, allowed):
+def test_cli_tiers_before_client_access(monkeypatch, tier, apply_mode, allowed, operator_cli):
     monkeypatch.setenv('GCP_AGENT_TIER', tier)
     monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
     monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
     monkeypatch.delenv('ENRICHMENT_AGE_GATE_UNPARK_ENABLED', raising=False)
     reached = Mock(side_effect=RuntimeError('stop before network'))
-    module = cli()
-    monkeypatch.setattr(module, 'get_firestore_client', reached)
-    args = ['--next-file', '/unused'] + (['--apply', '--approve-plan-sha256', 'digest'] if apply_mode else [])
+    module = operator_cli
+    monkeypatch.setattr(module.firestore, 'Client', reached)
+    args = ['--next-file', '/unused', '--serving-max-age-hours', '72']
+    if apply_mode:
+        args += ['--apply', '--approve-plan-sha256', 'a' * 64]
     with pytest.raises(RuntimeError if allowed else SystemExit):
         module.main(args)
     assert reached.called is allowed
@@ -268,61 +300,131 @@ def test_cli_disabled_apply_never_reads_cursor_or_client(monkeypatch):
     monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
     reached = Mock()
     module = cli()
-    monkeypatch.setattr(module, 'get_firestore_client', reached)
+    monkeypatch.setattr(module.firestore, 'Client', reached)
     with pytest.raises(SystemExit):
         module.main(
-            ['--next-file', '/unused', '--after-file', '/private/input', '--apply', '--approve-plan-sha256', 'x']
+            [
+                '--next-file',
+                '/unused',
+                '--after-file',
+                '/private/input',
+                '--serving-max-age-hours',
+                '72',
+                '--apply',
+                '--approve-plan-sha256',
+                'a' * 64,
+            ]
         )
     reached.assert_not_called()
 
 
-def test_cli_dry_run_outputs_only_counts_digest_and_checkpoint(source, monkeypatch, capsys):
-    module = cli()
+def test_cli_dry_run_outputs_only_counts_digest_and_checkpoint(source, monkeypatch, capsys, operator_cli):
+    module = operator_cli
     monkeypatch.setenv('GCP_AGENT_TIER', 'ro-prod')
     monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
     monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
-    monkeypatch.setattr(module, 'get_firestore_client', lambda: source)
+    client = Mock(return_value=source)
+    monkeypatch.setattr(module.firestore, 'Client', client)
     cursor = {'deferred_since': NOW, 'path': f'{outbox.COLLECTION}/{KEY}'}
     monkeypatch.setattr(module, 'discover', lambda *args, **kwargs: ([KEY], cursor))
     write = Mock()
     monkeypatch.setattr(module, 'write_cursor', write)
-    module.main(['--next-file', '/private/cursor'])
+    module.main(['--next-file', '/private/cursor', '--serving-max-age-hours', '84'])
     output = capsys.readouterr()
     report = json.loads(output.out)
     assert report['dispositions'] == {'eligible': 1} and report['apply'] is False
-    assert set(report) == {'operation', 'plan_sha256', 'count', 'dispositions', 'apply'}
+    assert report['project'] == 'based-hardware' and report['serving_max_age_hours'] == 84
+    assert set(report) == {
+        'operation',
+        'plan_sha256',
+        'count',
+        'dispositions',
+        'apply',
+        'project',
+        'serving_max_age_hours',
+    }
     assert all(value not in output.out + output.err for value in (UID, CID, KEY, '/private', 'a' * 32))
+    client.assert_called_once_with(project='based-hardware')
     write.assert_called_once_with('/private/cursor', cursor)
     assert no_writes(source)
 
 
-def test_cli_apply_honors_a_digest_from_an_earlier_dry_run(source, monkeypatch, capsys):
-    module = cli()
+@pytest.mark.parametrize('effects_only', [False, True])
+def test_cli_apply_uses_approved_plan_and_persisted_binding(source, monkeypatch, capsys, effects_only, operator_cli):
+    from utils import cloud_tasks
+
+    module = operator_cli
     monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
     monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
     monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
     monkeypatch.delenv('ENRICHMENT_AGE_GATE_UNPARK_ENABLED', raising=False)
-    monkeypatch.setattr(module, 'get_firestore_client', lambda: source)
-    monkeypatch.setattr(module, 'discover', lambda *args, **kwargs: ([KEY], None))
-    monkeypatch.setattr(module, 'write_cursor', Mock())
-    wake = Mock()
-    real_apply = unpark.apply_unpark
+    monkeypatch.setenv('SYNC_TASKS_PROJECT', 'based-hardware-dev')
+    monkeypatch.delenv('SYNC_TASKS_LOCATION', raising=False)
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true')
+    document_id = KEY
+    dispatch = BINDING
+    if effects_only:
+        document_id = outbox.key(UID, CID + '\0effects')
+        handler = 'https://worker.invalid/v1/conversation-finalization-jobs/run'
+        dispatch = {**BINDING, 'handler': handler, 'audience': 'https://worker.invalid'}
+        source.rows[(outbox.COLLECTION, document_id)] = {
+            **source.rows.pop(ROW_PATH),
+            'document_id': document_id,
+            'effects_only': True,
+            'dispatch': dispatch,
+        }
+    row_path = (outbox.COLLECTION, document_id)
+    monkeypatch.setattr(module.firestore, 'Client', Mock(return_value=source))
 
-    def apply_with_fake_wake(client, plan, digest, **kwargs):
-        return real_apply(client, plan, digest, wake=wake, **kwargs)
+    def discover_parked(*args, **kwargs):
+        return ([document_id] if source.rows[row_path]['age_gate_parked'] else []), None
 
-    monkeypatch.setattr(module, 'apply_unpark', apply_with_fake_wake)
-    module.main(['--next-file', '/private/cursor'])
+    monkeypatch.setattr(module, 'discover', discover_parked)
+    checkpoint = Mock()
+    monkeypatch.setattr(module, 'write_cursor', checkpoint)
+
+    def check_task_target(*args, **kwargs):
+        assert os.environ['SYNC_TASKS_PROJECT'] == 'based-hardware'
+        assert os.environ['SYNC_TASKS_LOCATION'] == 'us-central1'
+
+    enqueue = Mock(side_effect=check_task_target)
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    args = ['--next-file', '/private/cursor', '--serving-max-age-hours', '72']
+    module.main(args)
     digest = json.loads(capsys.readouterr().out)['plan_sha256']
     assert no_writes(source)
+    # The approved digest also pins the confirmed serving window.
+    checkpoint.reset_mock()
+    approve = ['--apply', '--approve-plan-sha256', digest]
+    module.main(args[:-1] + ['73'] + approve)
+    assert json.loads(capsys.readouterr().out)['outcome'] == 'plan_changed'
+    assert no_writes(source)
+    checkpoint.assert_not_called()
+    enqueue.assert_not_called()
+
     # The apply runs on a later clock than the dry-run; the approved digest must survive it.
     monkeypatch.setattr(unpark.time, 'time', lambda: NOW + 600)
-    module.main(['--next-file', '/private/cursor', '--apply', '--approve-plan-sha256', digest])
+    apply_args = args + approve
+    module.main(apply_args)
     report = json.loads(capsys.readouterr().out)
     assert report['apply'] is True and report['outcomes'] == {'unparked': 1}
-    assert source.rows[ROW_PATH]['age_gate_parked'] is False
-    assert source.rows[ROW_PATH]['due_at'] == NOW + 600
-    assert wake.call_count == 1
+    persisted = source.rows[row_path]
+    assert persisted['age_gate_parked'] is False
+    assert persisted['due_at'] == NOW + 600
+    enqueue.assert_called_once()
+    queue, handler, _, payload = enqueue.call_args.args
+    assert (queue, handler) == (dispatch['queue'], dispatch['handler'])
+    assert enqueue.call_args.kwargs['audience'] == dispatch['audience']
+    assert payload == {'kind': 'sync_reprocess', 'key': document_id, 'task_token': persisted['task_token']}
+
+    checkpoint.reset_mock()
+    module.main(apply_args)
+    report = json.loads(capsys.readouterr().out)
+    assert report['outcome'] == 'plan_changed'
+    assert report['count'] == 0 and 'plan_sha256' not in report
+    checkpoint.assert_not_called()
+    enqueue.assert_called_once()
+    assert sum(bool(tx.sets) for tx in source.transactions) == 1
 
 
 def test_cli_invalid_arguments_do_not_echo_sensitive_values(capsys):

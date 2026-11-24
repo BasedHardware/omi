@@ -115,14 +115,10 @@ def prepare(
     def commit(transaction):
         old = ref.get(transaction=transaction).to_dict() or {}
         uid, cid = old.get('uid'), old.get('conversation_id')
-        if (
-            not isinstance(uid, str)
-            or not uid
-            or not isinstance(cid, str)
-            or not cid
-            or outbox.key(uid, cid) != document_id
-            or old.get('document_id', document_id) != document_id
-        ):
+        if not isinstance(uid, str) or not uid or not isinstance(cid, str) or not cid:
+            return 'identity_changed', None
+        key_material = cid + '\0effects' if old.get('effects_only') else cid
+        if outbox.key(uid, key_material) != document_id or old.get('document_id', document_id) != document_id:
             return 'identity_changed', None
         if expected_token is not None and old.get('task_token') != expected_token:
             return 'state_changed', None
@@ -130,11 +126,11 @@ def prepare(
         if reason:
             return reason, None
         conversation_ref = client.collection('users').document(uid).collection('conversations').document(cid)
-        conversation = conversation_ref.get(transaction=transaction).to_dict() or {}
+        conversation = conversation_ref.get(transaction=transaction, field_paths=['created_at']).to_dict() or {}
         if _too_old(old, conversation.get('created_at'), now=now, max_age_seconds=max_age_seconds):
             return 'outside_age_window', None
         try:
-            assert_batch_write_allowed(client, transaction, uid, conversation_ids=[cid])
+            assert_batch_write_allowed(client, transaction, uid, conversation_ids=[cid], allow_token_mint=False)
         except BatchPrivacyBlocked:
             return 'privacy_refused', None
         if not apply:
@@ -142,6 +138,7 @@ def prepare(
         pending = dict(old)
         pending.pop('deferred_since', None)
         pending.update(
+            document_id=document_id,
             age_gate_parked=False,
             deferred_reason=None,
             dormant=False,

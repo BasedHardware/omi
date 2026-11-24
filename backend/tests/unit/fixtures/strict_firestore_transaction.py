@@ -128,6 +128,7 @@ class StrictFirestoreDocument:
             supported_field_paths = [field for field in field_paths if field != 'recording']
             if supported_field_paths not in (
                 ['deleted'],
+                ['created_at'],
                 ["is_locked"],
                 ["folder_id"],
                 ["language"],
