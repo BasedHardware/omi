@@ -262,9 +262,34 @@ class WorkflowContractTests(unittest.TestCase):
                 'workerd helm must retain --ref "$ADMITTED_SHA" --verify-image "$REPOSITORY" --check-worktree)"',
             ),
             (
-                '--revision "$REVISION" --all -o json | jq -r \'.intake.enabled // false\')"',
-                '--revision "$REVISION" --all -o json | jq -r \'.image.digest\')"',
-                'workerd helm must retain --revision "$REVISION" --all -o json | jq -r \'.intake.enabled // false\')"',
+                "refusing a rollback that would enable private intake.",
+                "continuing.",
+                "workerd helm must retain refusing a rollback that would enable private intake.",
+            ),
+            (
+                'kubectl -n "$NAMESPACE" wait --for=condition=complete "job/$job" --timeout=150s',
+                "true",
+                'workerd helm must retain kubectl -n "$NAMESPACE" wait --for=condition=complete "job/$job" --timeout=150s',
+            ),
+            (
+                'if [[ "$REVISION" == 0 ]]; then',
+                "if false; then",
+                'workerd helm must retain if [[ "$REVISION" == 0 ]]; then',
+            ),
+            (
+                "refusing ${{ inputs.mode }} while private intake is live.",
+                "continuing.",
+                "workerd helm must retain refusing ${{ inputs.mode }} while private intake is live.",
+            ),
+            (
+                "not restoring it automatically.",
+                "restoring.",
+                "workerd helm must retain not restoring it automatically.",
+            ),
+            (
+                'if [[ "${{ inputs.mode }}" == workerd-install && "$image" != "$REPOSITORY@$WORKERD_DIGEST" ]]; then',
+                "if false; then",
+                'workerd helm must retain if [[ "${{ inputs.mode }}" == workerd-install && "$image" != "$REPOSITORY@$WORKERD_DIGEST" ]]; then',
             ),
             (
                 "version: v4.2.4",

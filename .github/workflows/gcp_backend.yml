@@ -1009,6 +1009,14 @@ jobs:
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
           { echo "### Prod workerd before"; echo "- Helm revision: \`$revision\`"; echo "- Image: \`$image\`"; } >> "$GITHUB_STEP_SUMMARY"
           helm -n "$NAMESPACE" history "$RELEASE" --max 5
+          # This job carries values-prod.yaml only. With private intake live, an install would
+          # silently withdraw the route and a rollback could too, while the Cloud Run notifier
+          # still points at it. Intake changes follow the README's ordered procedure instead.
+          live_intake="$(helm -n "$NAMESPACE" get values "$RELEASE" --all -o json | jq -r '.intake.enabled // false')"
+          if [[ "$live_intake" != false ]]; then
+            echo "::error::$RELEASE has intake.enabled=$live_intake; refusing ${{ inputs.mode }} while private intake is live." >&2
+            exit 1
+          fi
 
       - name: Verify release identity
         if: inputs.mode == 'workerd-install'
@@ -1042,7 +1050,7 @@ jobs:
           helm template "$RELEASE" "$chart" --namespace "$NAMESPACE" -f "$chart/values-prod.yaml" \
             --set-string "image.digest=$WORKERD_DIGEST" --set migration.enabled=true \
             --show-only templates/migration.yaml | kubectl -n "$NAMESPACE" create -f -
-          if ! kubectl -n "$NAMESPACE" wait --for=condition=complete "job/$job" --timeout=5m; then
+          if ! kubectl -n "$NAMESPACE" wait --for=condition=complete "job/$job" --timeout=150s; then
             kubectl -n "$NAMESPACE" describe "job/$job" || true
             kubectl -n "$NAMESPACE" logs "job/$job" --tail=50 || true
             echo "::error::Workerd migration did not complete; the Deployment is unchanged." >&2
@@ -1080,6 +1088,8 @@ jobs:
 
       - name: Verify rollout and readiness
         id: verify
+        env:
+          WORKERD_DIGEST: ${{ inputs.workerd_digest }}
         run: |
           set -euo pipefail
           kubectl -n "$NAMESPACE" rollout status "deployment/$RELEASE" --timeout=5m
@@ -1090,6 +1100,11 @@ jobs:
           curl -fsS -m 5 http://127.0.0.1:18080/ready
           image="$(kubectl -n "$NAMESPACE" get "deployment/$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}')"
           ready="$(kubectl -n "$NAMESPACE" get "deployment/$RELEASE" -o jsonpath='{.status.readyReplicas}/{.spec.replicas}')"
+          if [[ "${{ inputs.mode }}" == workerd-install && "$image" != "$REPOSITORY@$WORKERD_DIGEST" ]]; then
+            echo "::error::Deployment serves $image, not $REPOSITORY@$WORKERD_DIGEST." >&2
+            exit 1
+          fi
+          [[ "${ready%/*}" == "${ready#*/}" ]] || { echo "::error::Only $ready workerd replicas are ready." >&2; exit 1; }
           revision="$(helm -n "$NAMESPACE" history "$RELEASE" --max 1 -o json | jq -r '.[-1].revision')"
           {
             echo "### Prod workerd after (${{ inputs.mode }})"
@@ -1109,9 +1124,17 @@ jobs:
             echo "- **First install failed; no prior revision to restore.**" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
+          intake="$(helm -n "$NAMESPACE" get values "$RELEASE" --revision "$REVISION" --all -o json | jq -r '.intake.enabled // false')"
+          if [[ "$intake" != false ]]; then
+            echo "::error::Helm revision $REVISION has intake.enabled=$intake; not restoring it automatically." >&2
+            exit 1
+          fi
           helm -n "$NAMESPACE" rollback "$RELEASE" "$REVISION" --wait --timeout 5m
           kubectl -n "$NAMESPACE" rollout status "deployment/$RELEASE" --timeout=5m
-          echo "- **Install failed; restored Helm revision \`$REVISION\`.**" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "- **Install failed; restored Helm revision \`$REVISION\`.**"
+            echo "- The migration already applied stays. If the restored image rejects the current migration checksums, fix forward."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Plan B B2 release train: build-only also publishes every role image
   # (backend/Dockerfile.roles targets and listen-edge) from the admitted SHA,
