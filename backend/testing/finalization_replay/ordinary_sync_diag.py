@@ -195,7 +195,7 @@ def _receiver(client):
 
 
 def _observe_sync(state, run, leaves, url):
-    from utils import executors
+    from utils import ai_profile_refresh, executors
     from utils.episodes import finalize
     from utils.enrichment import callback
 
@@ -209,6 +209,7 @@ def _observe_sync(state, run, leaves, url):
 
     leaves.enter_context(patch.object(callback, 'submit_with_context', track))
     leaves.enter_context(patch.object(finalize, 'submit_with_context', track))
+    leaves.enter_context(patch.object(ai_profile_refresh, 'submit_with_context', track))
     leaves.enter_context(patch.object(reference_module, '_run', run))
     if state.replay_side == 'python':
         from database import episode_attach_memo, episode_timeline
