@@ -398,23 +398,6 @@ func TestPaidResultRecoveryWhileHeldNeverTranscribes(t *testing.T) {
 	}
 }
 
-func TestUnversionedExhaustionAdmitsWithoutAConditionHold(t *testing.T) {
-	t.Parallel()
-	r := newRig(t)
-	r.accounts.fact = queue.EntitlementSnapshot{Exhausted: true}
-	job := r.admit(t, unit("legacy", "audio/legacy"))
-	if job.State != queue.StateReady {
-		t.Fatalf("unversioned intake: %v", job.State)
-	}
-	r.start()
-	r.Until(job.Key, "unfunded speech deferred", func(j queue.Job) bool {
-		return j.State == queue.StateWaiting && j.Reason != nil && *j.Reason == queue.CauseAllowanceExhausted && j.Attempts == 0
-	})
-	if charges, calls := r.vendor.ledger(); charges != 0 || len(calls) != 0 {
-		t.Fatalf("unfunded speech: charges=%d calls=%d", charges, len(calls))
-	}
-}
-
 func TestDisabledConditionHoldDefersPaidSpeech(t *testing.T) {
 	t.Parallel()
 	policy := queuetest.Policy()

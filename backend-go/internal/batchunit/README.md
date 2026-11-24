@@ -55,7 +55,7 @@ formats in `Declaration` until no job in the old one remains, and decode by `Job
 
 ## Batch-shadow funding inputs
 
-Intake supplies the custody deadline and audio duration from the existing retention record. The account adapter returns a positive, monotonically increasing generation for every change between exhausted and funded, including grants and effective period boundaries. An unversioned account leaves the stored observation intact. BYOK and paid-result recovery are trusted intake dispositions. The speech adapter receives the frozen route and BYOK flag. Recovery calls only `Recover`.
+Intake supplies the custody deadline and audio duration from the existing retention record. The account adapter returns a positive, monotonically increasing generation for every change between exhausted and funded, including grants and effective period boundaries. An unversioned funded account leaves the stored observation intact. An exhausted account without a positive generation returns HTTP 503 before enqueue. BYOK and paid-result recovery are trusted intake dispositions. The speech adapter receives the frozen route and BYOK flag. Recovery calls only `Recover`.
 
 During replay, the driver sends an owner notification by HTTP to `POST /v1/batch/{owner}/entitlement-changed`. The conformance binary obtains the generation, exhaustion and source timestamp with one `GET /accounts/{owner}` against `STUB_URL`. Billing subscription changes, referral-grant changes and UTC usage-period rollover share this invalidation. The repository has no live publisher from those authorities to this endpoint.
 
