@@ -8,9 +8,11 @@ A phase with less than its full Standard reserve uses its existing realtime
 deadline. Summary opts in only during the existing background model call.
 Interactive, catch-up, and pusher socket finalization use Standard with their
 existing transport deadlines. Tool turns, streaming requests, BYOK, and
-caller-selected tiers are excluded. The shared gateway retries one Flex 429 if the provider
-delay and another useful attempt fit. Timeouts go directly to Standard because
-the first provider attempt may have charged.
+caller-selected tiers are excluded. For these background requests, the gateway
+retries one upstream Flex HTTP 429 without a usage receipt if the provider delay
+and another useful attempt fit. These rejections can also use the Standard
+reserve for one dispatch. A timeout or other uncertain Flex failure ends the
+gateway request because the provider may already have billed it.
 
 Only an authenticated builder task can request nonstreaming Flex for a finished,
 non-manual outline with headroom before close + 2 hours. It reserves 45 seconds
@@ -19,6 +21,8 @@ per builder pass. A foreground open can take the existing lease during the
 background model call. The old token cannot publish, although a provider call
 already in flight can still charge. The durable outline attempt count reserves a
 second slot for the realtime path.
+On a background gateway timeout, the builder takes its existing outline
+fallback path within its publication budget.
 
 Set `LLM_GATEWAY_BACKGROUND_FLEX_RETRY=off` in the gateway and backend to restore
 the previous Flex behavior. The gateway's `LLM_GATEWAY_FLEX_FIRST_LANES` can exclude

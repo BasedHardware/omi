@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, Callable
 
 from langchain_core.callbacks import BaseCallbackHandler
-from openai import DefaultAsyncHttpxClient
+from openai import APIStatusError, DefaultAsyncHttpxClient
 
 from utils.llm import background_flex
 from utils.llm.gateway_client import feature_auto_lane_id
@@ -161,6 +161,14 @@ async def background_outline(uid, messages, *, budget_ms):
         except TimeoutError:
             if not deadline.expired():
                 raise
+            return ''
+        except APIStatusError as error:
+            if error.status_code != 502 or not isinstance(error.body, dict):
+                raise
+            if error.body.get('failure_class') != 'timeout_before_output':
+                raise
+            # Preserve the builder's outline fallback when the gateway stops
+            # after a provider timeout that might already have been billed.
             return ''
         if not isinstance(response.content, str) or response.response_metadata.get('finish_reason') != 'stop':
             return ''

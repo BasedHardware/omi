@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from functools import cache
 
+import httpx
 import pytest
 from prometheus_client import REGISTRY
 
@@ -18,7 +20,7 @@ from llm_gateway.gateway.errors import (
     GatewayProviderFailureError,
     GatewayProviderRequestRejectedError,
 )
-from llm_gateway.gateway.accounting import AttemptTrace, ProviderResponseMetadata
+from llm_gateway.gateway.accounting import AttemptTrace, ProviderResponseMetadata, UsageStatus
 from llm_gateway.gateway.executor import (
     ProviderRegistry,
     execute_chat_completion,
@@ -29,11 +31,16 @@ from llm_gateway.gateway.executor import (
 )
 from llm_gateway.gateway.providers import (
     FakeChatCompletionProvider,
+    OpenAICompatibleChatCompletionProvider,
     ProviderFailure,
     ProviderResponse,
     fake_success_response,
 )
-from llm_gateway.gateway.resolver import resolve_chat_completion_route, resolve_embedding_route
+from llm_gateway.gateway.resolver import (
+    resolve_chat_completion_route,
+    resolve_embedding_route,
+    select_lkg_route_for_failure,
+)
 from utils.llm.model_config import LUNA_MODEL
 from llm_gateway.gateway.schemas import (
     CredentialMode,
@@ -1295,7 +1302,7 @@ async def test_background_flex_retries_within_shared_budget(monkeypatch, lane, b
     reply = fake_success_response(resolved.active_route.primary)
     provider = FakeChatCompletionProvider(
         [
-            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=2),
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=2, upstream_http_status=429),
             {**reply, 'service_tier': 'flex'},
         ]
     )
@@ -1314,26 +1321,76 @@ async def test_background_flex_retries_within_shared_budget(monkeypatch, lane, b
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    'failure, retry_after', [(FailureClass.TIMEOUT_BEFORE_OUTPUT, None), (FailureClass.PROVIDER_429_OMI_PAID, 90)]
-)
-async def test_background_flex_preserves_standard_after_timeout_or_long_retry_after(monkeypatch, failure, retry_after):
+@pytest.mark.parametrize('retry_after,expected_flex_calls', [(90, 1), (2, 2)])
+async def test_background_flex_preserves_standard_reserve_after_rejections(
+    monkeypatch, retry_after, expected_flex_calls
+):
     lane = 'omi:auto:conversation-v3-outline'
     resolved = resolve_chat_completion_route(
         gateway_config(), {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
     )
+    rejected = ProviderFailure(
+        FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=retry_after, upstream_http_status=429
+    )
     provider = FakeChatCompletionProvider(
-        [
-            ProviderFailure(failure, retry_after_seconds=retry_after),
-            fake_success_response(resolved.active_route.primary),
-        ]
+        [rejected] * expected_flex_calls + [fake_success_response(resolved.active_route.primary)]
     )
     slept = _install_retry_clock(monkeypatch)
     await execute_chat_completion(
         resolved, omi_credentials(), ProviderRegistry({'openai': provider}), background_flex_budget_ms=80_000
     )
-    assert slept == []
-    assert [call.request.get('service_tier') for call in provider.calls] == ['flex', None]
+    assert slept == ([2] if expected_flex_calls == 2 else [])
+    assert [call.request.get('service_tier') for call in provider.calls] == ['flex'] * expected_flex_calls + [None]
+    assert provider.calls[-1].timeout_ms >= 45_000
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'preceding_429s,expected_tiers', [(0, ['flex']), (1, ['flex', 'flex']), (2, ['flex', 'flex', None])]
+)
+async def test_background_flex_timeout_stops_provider_and_lkg_fallbacks(monkeypatch, preceding_429s, expected_tiers):
+    lane = 'omi:auto:conversation-v3-outline'
+    resolved = resolve_chat_completion_route(
+        gateway_config(), {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
+    )
+    active = resolved.active_route.model_copy(
+        update={
+            **_active_rollout_kwargs(resolved.active_route),
+            'fallbacks': [ProviderRef(provider='openai', model='gpt-4o-mini')],
+            'fallback_policy': resolved.active_route.fallback_policy.model_copy(
+                update={'fallback_on': [FailureClass.TIMEOUT_BEFORE_OUTPUT], 'never_fallback_on': []}
+            ),
+            'retry': resolved.active_route.retry.model_copy(update={'max_attempts': 3}),
+        }
+    )
+    lkg = resolved.last_known_good_route.model_copy(update={'route_artifact_id': 'route.synthetic.lkg'})
+    resolved = replace(resolved, active_route=active, last_known_good_route=lkg)
+    assert select_lkg_route_for_failure(resolved, FailureClass.TIMEOUT_BEFORE_OUTPUT) is lkg
+    tiers = []
+
+    async def openai(request):
+        tiers.append(json.loads(request.content).get('service_tier'))
+        if len(tiers) <= preceding_429s:
+            return httpx.Response(429, headers={'Retry-After': '2'})
+        raise httpx.ReadTimeout('synthetic read timeout', request=request)
+
+    slept = _install_retry_clock(monkeypatch)
+    trace = AttemptTrace()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(openai)) as client:
+        provider = OpenAICompatibleChatCompletionProvider(http_client=client)
+        with pytest.raises(GatewayProviderFailureError) as error:
+            await execute_chat_completion(
+                resolved,
+                omi_credentials(),
+                ProviderRegistry({'openai': provider}),
+                attempt_trace=trace,
+                background_flex_budget_ms=80_000,
+            )
+
+    assert error.value.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT
+    assert slept == ([2] if preceding_429s else [])
+    assert tiers == expected_tiers
+    assert trace.attempts[-1].usage_status == UsageStatus.INDETERMINATE
 
 
 @pytest.mark.asyncio

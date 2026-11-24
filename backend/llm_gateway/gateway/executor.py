@@ -95,6 +95,13 @@ class ExecutorResult:
     provider_accounting: ProviderResponseMetadata
 
 
+@dataclass
+class _BackgroundFlexTerminalError(Exception):
+    """Stop all gateway dispatch after a potentially billable background attempt."""
+
+    gateway_error: GatewayError
+
+
 class ProviderRegistry:
     def __init__(self, providers: Mapping[str, ChatCompletionProvider] | None = None) -> None:
         self._providers = {provider.strip().lower(): client for provider, client in (providers or {}).items()}
@@ -187,6 +194,8 @@ async def execute_chat_completion(
             flex_deadline=flex_deadline,
             allow_legacy_flex=not scoped_flex,
         )
+    except _BackgroundFlexTerminalError as exc:
+        raise exc.gateway_error from exc.__cause__
     except GatewayError as exc:
         first_failure = exc.failure_class
         last_error = exc
@@ -875,12 +884,20 @@ async def _attempt_provider(
                     metadata=exc.accounting,
                     usage_status=UsageStatus.INDETERMINATE,
                 )
-            if flex_attempt:
-                if (
-                    flex_deadline is not None
-                    and flex_attempts < BACKGROUND_FLEX_MAX_ATTEMPTS
+            if flex_attempts and not legacy_flex:
+                # Only an upstream rejection without a receipt permits another
+                # dispatch. A transport timeout cannot establish that billing stopped.
+                if not (
+                    flex_attempt
                     and exc.failure_class == FailureClass.PROVIDER_429_OMI_PAID
+                    and exc.upstream_http_status == 429
+                    and exc.accounting is None
                 ):
+                    if flex_attempt:
+                        FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome='stopped_after_error').inc()
+                    raise _BackgroundFlexTerminalError(error) from exc
+            if flex_attempt:
+                if flex_deadline is not None and flex_attempts < BACKGROUND_FLEX_MAX_ATTEMPTS:
                     retry_slack = flex_deadline - monotonic() - BACKGROUND_FLEX_MIN_ATTEMPT_MS / 1000
                     delay = provider_429_backoff_seconds(
                         attempt=flex_attempts,
@@ -891,8 +908,7 @@ async def _attempt_provider(
                         await sleep_for_provider_retry(delay)
                         if (flex_deadline - monotonic()) * 1000 >= BACKGROUND_FLEX_MIN_ATTEMPT_MS:
                             continue
-                # A timeout may already have incurred a provider charge. Try
-                # Standard once the Flex budget is spent, without retrying Flex.
+                # Scoped Flex reaches Standard only after an upstream 429.
                 flex_deadline = None
                 reason = {
                     FailureClass.TIMEOUT_BEFORE_OUTPUT: ConvStructureFlexFallbackReason.TIMEOUT.value,

@@ -1014,13 +1014,17 @@ async def test_explicit_summary_open_locks_configured_preview_with_live_recap_pr
 
 
 @pytest.mark.asyncio
-async def test_background_outline_sends_same_lane_and_explicit_cache_prefix(monkeypatch):
+@pytest.mark.parametrize('gateway_timeout', [False, True])
+async def test_background_outline_sends_same_lane_and_explicit_cache_prefix(monkeypatch, gateway_timeout):
     import httpx
     from openai import AsyncOpenAI
     from utils.conversations.v3 import models, outline
     from utils.llm.gateway_client import GatewayContextChatOpenAI
 
+    calls = []
+
     async def gateway(request):
+        calls.append(request)
         payload = json.loads(request.content)
         assert request.headers['x-omi-background-flex-budget-ms'] == '83000'
         assert not payload.get('stream')
@@ -1033,6 +1037,8 @@ async def test_background_outline_sends_same_lane_and_explicit_cache_prefix(monk
             'text': outline.OUTLINE_CACHE_PREFIX,
             'prompt_cache_breakpoint': {'mode': 'explicit'},
         }
+        if gateway_timeout:
+            return httpx.Response(502, json={'error': {'failure_class': 'timeout_before_output'}})
         return httpx.Response(
             200,
             json={
@@ -1045,7 +1051,9 @@ async def test_background_outline_sends_same_lane_and_explicit_cache_prefix(monk
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(gateway)) as transport:
-        async_client = AsyncOpenAI(api_key='test', base_url='http://gateway.invalid/v1', http_client=transport)
+        async_client = AsyncOpenAI(
+            api_key='test', base_url='http://gateway.invalid/v1', http_client=transport, max_retries=0
+        )
         model = GatewayContextChatOpenAI(
             api_key='test',
             model='omi:auto:conversation-v3-outline',
@@ -1054,7 +1062,8 @@ async def test_background_outline_sends_same_lane_and_explicit_cache_prefix(monk
         )
         monkeypatch.setattr(models, 'get_or_create_omi_gateway_llm', lambda *a, **kw: model)
         messages = [('system', outline.OUTLINE_CACHE_PREFIX), ('human', 'Synthetic speech')]
-        assert await models.background_outline('u', messages, budget_ms=83_000) == '{}'
+        assert await models.background_outline('u', messages, budget_ms=83_000) == ('' if gateway_timeout else '{}')
+        assert len(calls) == 1
 
 
 def test_outline_only_budgets_finished_automatic_stretches_with_publication_headroom():
