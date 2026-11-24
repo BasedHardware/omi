@@ -1447,10 +1447,14 @@ def try_acquire_ai_profile_refresh_lock(uid: str, ttl: int = 10 * 60) -> bool:
     return result is not None
 
 
-def try_acquire_ai_profile_auto_cooldown(uid: str, ttl: int = 60 * 60) -> bool:
+def try_acquire_ai_profile_auto_cooldown(uid: str, ttl: int = 60 * 60, *, token: str = '1') -> bool:
     """At most one automatic AI-profile refresh attempt per owner per ``ttl``."""
-    result = r.set(f'users:{uid}:ai_profile_auto_cooldown', '1', ex=ttl, nx=True)
+    result = r.set(f'users:{uid}:ai_profile_auto_cooldown', token, ex=ttl, nx=True)
     return result is not None
+
+
+def release_ai_profile_auto_cooldown(uid: str, token: str) -> None:
+    release_token_lock(f'users:{uid}:ai_profile_auto_cooldown', token)
 
 
 def release_ai_profile_refresh_lock(uid: str) -> None:
