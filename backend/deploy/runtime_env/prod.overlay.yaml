@@ -2052,6 +2052,11 @@ overlay:
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED:
             value: 'true'
             category: rollout
+          # SCA-3664: carry the approved logging reductions on integration through the next deploy.
+          # Rollback: disable sampling and change-only kill-switch logging independently.
+          BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT: {value: '1', category: ops_kill}
+          BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_API_URL:
             value: 'https://backend-sync-hhibjajaja-uc.a.run.app'
             category: service_discovery
@@ -2218,6 +2223,11 @@ overlay:
       # Ramp and rollback: docs/listen_pusher_pipeline/changes/2026-11-19-projection-pump-deploy-target.md.
       backend-projection-pump:
         derive_from: backend-integration
+        # These logging controls are carried by integration only; strip them from the inherited pump env.
+        forbidden_env:
+        - BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED
+        - BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT
+        - BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED
         env:
           # The two custody switches (BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED, BATCH_PROJECTION_OUTBOX)
           # are inherited from integration's false pins: David 2026-11-21 ~03:45Z (SCA-3318) keeps
