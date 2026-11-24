@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-plans-stripe-on-play.png",
+      "platform": "mobile-android",
+      "description": "Plans & Billing, Stripe subscriber on a Play build: plan, renewal date, omi.me line, Cancel Subscription (widget-test render)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-plans-stripe-on-play-xxxl.png",
+      "platform": "mobile-android",
+      "description": "Same at the largest text size: Cancel Subscription wraps, nothing truncated (widget-test render)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-plans-stripe-on-play-ending.png",
+      "platform": "mobile-android",
+      "description": "Cancel-pending Stripe plan on a Play build: end date and Resubscribe at the same price (widget-test render)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-payment-row-play.png",
+      "platform": "mobile-android",
+      "description": "Home payment-declined row on a Play build: no Update or Switch to Monthly, plain text to update the card on omi.me (widget-test render)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-android-paid-app-play.png",
+      "platform": "mobile-android",
+      "description": "Paid Marketplace app for a Stripe subscriber on a Play build: Not available on Android, no Subscribe (widget-test render)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
