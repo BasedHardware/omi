@@ -72,9 +72,9 @@ label, and approved reason. Labels are `go_gap`, `python_bug:<issue>`, or
 a reviewed label have `label: null` and count as unlabelled. It includes totals by label
 and family. Invalid Home token evidence includes a per-slot `failure_reason`, without token
 values. The SCA-3874 case runs Python through the fake Cloud Tasks queue and the real
-enrichment route to its durable age park. The reporter allows the parked-versus-dead-letter
-status difference after checking custody and retry evidence. Cost includes the full Python
-retry lifecycle. Pass-3 Go-gap patterns from SCA-4012 are applied from
+enrichment route to its durable age park. The reporter labels the parked-versus-dead-letter
+status difference as SCA-4178 after checking custody and retry evidence. Cost includes the
+full Python retry lifecycle. Pass-3 Go-gap patterns from SCA-4012 are applied from
 `approved-go-gaps-sca-4012.csv` to currently unlabelled rows. The report's unexplained gate count
 is `go_gap + unlabelled`; Python-bug exception rows are reported separately. Protected payload,
 clock, ID, and token checks are listed in `comparison-rules.md`.

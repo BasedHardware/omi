@@ -107,8 +107,15 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
             ],
         }
         enriched = enrich(report)
-        self.assertTrue(enriched['cases'][0]['differences'][0]['label'].startswith('by_design:SCA-3874:'))
+        status_row, transcript_row = enriched['cases'][0]['differences']
+        self.assertEqual(status_row['label'], 'python_bug:unreadable_ciphertext_retry_until_age_gate')
+        self.assertEqual(status_row['issue'], 'SCA-4178')
+        self.assertIsNone(transcript_row['label'])
         self.assertEqual(enriched['unexplained_differences'], 1)
+        self.assertEqual(
+            enriched['diagnostic']['unexplained_gate']['python_bug_exceptions'],
+            {'unreadable_ciphertext_retry_until_age_gate': 1},
+        )
 
         report['cases'][0]['python_retry']['ciphertext_kept'] = False
         with self.assertRaisesRegex(ValueError, 'stale or missing evidence'):

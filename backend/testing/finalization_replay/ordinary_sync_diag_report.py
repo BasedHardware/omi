@@ -28,6 +28,8 @@ KNOWN_GAPS = [
 
 UNREADABLE_CASE = 'unreadable-ciphertext-dead-letters'
 UNREADABLE_PARK_RULE = 'SCA-3874: Python parked and Go dead-lettered while both retained the ciphertext'
+UNREADABLE_RETRY_BUG = 'python_bug:unreadable_ciphertext_retry_until_age_gate'
+UNREADABLE_RETRY_ISSUE = 'SCA-4178'
 
 PYTHON_BUG_ISSUE = re.compile(r'^[A-Z][A-Z0-9]*-[1-9][0-9]*$')
 DYNAMIC_DERIVED_DOCUMENT_IDS = {
@@ -322,10 +324,12 @@ def enrich(report: dict) -> dict:
                 '/conversation/finalization_job_id',
             }:
                 label = 'go_gap'
+            elif unreadable_park and difference.get('path') == '/status':
+                label = UNREADABLE_RETRY_BUG
+                difference['issue'] = UNREADABLE_RETRY_ISSUE
+                difference['reason'] = UNREADABLE_PARK_RULE
             elif difference.get('reason'):
                 label = f"by_design:{difference['reason']}"
-            elif unreadable_park and difference.get('path') == '/status':
-                label = f'by_design:{UNREADABLE_PARK_RULE}'
             else:
                 if pass3_group is None:
                     label = None

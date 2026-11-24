@@ -94,10 +94,11 @@ and returns it as `job_id`, while the Go ID breaks Python's status lookup.
 
 The SCA-3874 unreadable-ciphertext case compares Python's first-summary retries through
 its durable enrichment age park with Go's unreadable-ciphertext dead letter. The status
-difference is allowed only when both sides retain the seeded ciphertext, Python records
-retry attempts and an age park, and Go records the expected dead letter. Other differences
-remain visible. R7 compares the sum of the metered Python attempt and park operations
-with Go's terminal cost.
+difference receives `python_bug:unreadable_ciphertext_retry_until_age_gate` (SCA-4178)
+only when both sides retain the seeded ciphertext, Python records retry attempts and an
+age park, and Go records the expected dead letter. Other differences remain visible.
+R7 compares the sum of the metered Python attempt and park operations with Go's terminal
+cost.
 
 The lead-approved pass-3 Go-gap groups from SCA-4012 are stored in
 `approved-go-gaps-sca-4012.csv`. The reporter applies those path/field patterns only to current
