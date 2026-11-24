@@ -233,76 +233,50 @@ def _v3_finish(trigger, **row):
     db = StrictFirestore(
         {ROW: {**capture(), 'recording': True, **row}, JOB_ROW: {**job(), 'processing_trigger': trigger}}
     )
-    observed = {}
-    result = jobs._complete_server_batch_capture_txn(
-        db.transaction(),
-        db.collection(jobs.FINALIZATION_JOBS_COLLECTION).document(JOB),
-        db.document('/'.join(ROW)),
-        UID,
-        CID,
-        {**capture(), 'recording': True, **row},
-        2,
-        4,
-        NOW,
-        observed=observed,
-    )
-    assert result == 'completed'
-    return db.rows[ROW], observed
+    assert complete(db, {**capture(), 'recording': True, **row}) == 'completed'
+    return db.rows[ROW]
 
 
-def test_user_finish_of_audio_only_v3_recording_stores_manual_end():
-    row, observed = _v3_finish('client_finalize')
-    assert row['v3_manual_end'] is True
-    # No transcript yet: the batch projection's own change marks the row pending and wakes reconcile.
-    assert 'v3_pending' not in row
-    assert observed == {'manual_end': True, 'wake_manual_end': False}
-
-
-def test_user_finish_after_transcript_landed_rearms_reconcile():
-    landed = datetime(2026, 11, 4, 23, 59, tzinfo=timezone.utc)
-    row, observed = _v3_finish('client_finalize', v3_speech_landed_at=landed)
-    assert row['v3_manual_end'] is True and row['v3_pending'] is True and row['v3_pending_since'] == NOW
-    assert observed == {'manual_end': True, 'wake_manual_end': True}
+def test_user_finish_of_audio_only_v3_recording_stores_the_request_not_the_cut():
+    row = _v3_finish('client_finalize')
+    assert row['v3_manual_end_requested'] is True
+    # Admission promotes it once the recording will land as one transcript; here it must stay inert.
+    assert 'v3_manual_end' not in row and 'v3_pending' not in row
 
 
 @pytest.mark.parametrize('trigger', ['capture_end', 'server_recovery', None])
-def test_natural_end_stores_no_manual_end(trigger):
-    row, observed = _v3_finish(trigger)
-    assert 'v3_manual_end' not in row and 'v3_pending' not in row
-    assert observed == {'manual_end': False, 'wake_manual_end': False}
+def test_natural_end_stores_no_manual_end_request(trigger):
+    row = _v3_finish(trigger)
+    assert 'v3_manual_end_requested' not in row and 'v3_manual_end' not in row
 
 
-def test_legacy_capture_stores_no_manual_end():
+def test_legacy_capture_stores_no_manual_end_request():
     db = StrictFirestore({ROW: capture(), JOB_ROW: {**job(), 'processing_trigger': 'client_finalize'}})
     assert complete(db) == 'completed'
-    assert 'v3_manual_end' not in db.rows[ROW]
+    assert 'v3_manual_end_requested' not in db.rows[ROW]
 
 
 def test_manual_end_kill_switch(monkeypatch):
     monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'off')
-    row, observed = _v3_finish('client_finalize')
-    assert 'v3_manual_end' not in row
-    assert observed == {'manual_end': False, 'wake_manual_end': False}
+    assert 'v3_manual_end_requested' not in _v3_finish('client_finalize')
 
 
-@pytest.mark.parametrize('wake', [False, True])
-def test_manual_end_wake_runs_after_commit_and_never_raises(monkeypatch, wake):
-    landed = {'v3_speech_landed_at': NOW} if wake else {}
-    stored = {**capture(), 'recording': True, **landed}
-    db = StrictFirestore({ROW: stored, JOB_ROW: {**job(), 'processing_trigger': 'client_finalize'}})
-    monkeypatch.setattr(jobs.firestore, 'transactional', lambda fn: fn)
-    for name in ('stop_quiet_check_for_conversation', 'invalidate_people_stats_cache'):
-        monkeypatch.setattr(jobs, name, Mock())
-    monkeypatch.setattr(jobs.conversations_db, 'serving_for', lambda *args: False)
-    from utils.conversations.v3 import triggers
+@pytest.mark.parametrize(
+    'row,expected',
+    [
+        ({'recording': True, 'v3_manual_end_requested': True}, True),
+        ({'recording': True}, False),
+        ({'recording': True, 'v3_manual_end_requested': True, 'v3_manual_end': True}, False),
+        ({'recording': True, 'v3_manual_end_requested': True, 'deleted': True}, False),
+        ({'recording': True, 'v3_manual_end_requested': True, 'discarded': True}, False),
+        ({'v3_manual_end_requested': True}, False),
+    ],
+)
+def test_promotion_writes_the_cut_once_and_marks_nothing_pending(monkeypatch, row, expected):
+    from database import conversations_v3
 
-    calls = []
-
-    def enqueue(uid, **kwargs):
-        assert db.rows[ROW]['v3_manual_end'] is True
-        calls.append((uid, kwargs))
-        raise RuntimeError('task create failed')
-
-    monkeypatch.setattr(triggers, 'enqueue', enqueue)
-    assert lifecycle.complete_server_batch_capture(UID, CID, stored, JOB, 2, 4, firestore_client=db) == 'completed'
-    assert calls == ([(UID, {'manual_end_id': CID})] if wake else [])
+    db = StrictFirestore({ROW: dict(row)})
+    monkeypatch.setattr(conversations_v3.firestore, 'transactional', lambda fn: fn)
+    assert conversations_v3.promote_manual_end(UID, CID, firestore_client=db) is expected
+    assert bool(db.rows[ROW].get('v3_manual_end')) is (expected or bool(row.get('v3_manual_end')))
+    assert 'v3_pending' not in db.rows[ROW]

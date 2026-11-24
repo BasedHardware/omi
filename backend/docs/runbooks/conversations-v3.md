@@ -114,11 +114,15 @@ background on subsequent projections. The service reads the switch and passes it
 the pure planner. Previously written rows keep their stored visibility until rebuilt.
 A mobile capture is audio-only when the user finishes it: the transcript is produced by the
 batch pipeline afterwards. The finalization worker closes such a recording through
-`complete_server_batch_capture`, which stores `v3_manual_end` for a `client_finalize` job, so the
-window is cut and locked when the batch transcript lands. `omi_conversations_v3_batch_manual_end_total`
-counts these by whether the transcript had already landed. Set `CONVERSATIONS_V3_BATCH_MANUAL_END=off`
-on the service that runs the finalization worker (`backend`) to stop storing the marker for later
-finishes; those windows then wait out the silence and lock timers again. Stored markers remain.
+`complete_server_batch_capture`, which stores `v3_manual_end_requested` for a `client_finalize` job.
+Record admission promotes the request to `v3_manual_end` when the recording is a single batch unit,
+so the window is cut and locked when its one transcript lands. A recording of several units (an
+audio gap over 30 s, or over an hour) projects one unit at a time; cutting on the first would lock
+a partial window, so it keeps the silence and lock timers unless the fast first transcript below
+takes it. `omi_conversations_v3_batch_manual_end_total{outcome}` counts `promoted`, `fast_finish`,
+`multi_unit_deferred`, `not_promoted` and `error`. Set `CONVERSATIONS_V3_BATCH_MANUAL_END=off` on
+`backend` (finalization worker) and `backend-integration` (record admission) to stop both the
+request and the promotion for later finishes. Stored markers remain.
 `CONVERSATIONS_V3_FAST_FINISH` (default `cohort`: members of the `v3-fast-finish` rollout cohort,
 added with `scripts/rollout_cohort.py --add`, no roll; `on` for every v3 owner; `off`) adds a first
 transcript for a manually finished recording. When batch record admission stages the sealed audio,

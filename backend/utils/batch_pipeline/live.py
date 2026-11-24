@@ -370,31 +370,76 @@ def retained_record_units(
 
 
 _FAST_FINISH_TASKS: set = set()
+# Conversations whose first-transcript pass this process already started. Admission can be
+# retried or re-run; one provider transcription per recording is enough.
+_FAST_FINISH_STARTED: dict[str, None] = {}
+_FAST_FINISH_STARTED_MAX = 4096
 
 
-def _start_fast_finish(uid, conversation_id, current, units, client, key) -> None:
-    """Hand a manually finished recording's staged units to the first-transcript pass, without waiting.
+async def _manual_finish_admitted(store, uid, conversation_id, current, units, client, key) -> None:
+    """After a manually finished v3 recording is admitted: apply its cut, or start the first transcript.
 
-    Admission continues at once: the batch job stays the owner of the canonical transcript.
+    A single batch unit projects as one transcript, so its cut is safe to store now. Several units
+    project one at a time; cutting on the first would lock a partial window, so those keep the
+    silence and lock timers unless the first-transcript pass, which covers every unit at once,
+    takes the recording. Never raises and never delays admission's result.
     """
-    from utils.conversations.v3 import fast_finish
+    from config.server_batch import manual_end_marker_enabled
+    from database import conversations_v3
+    from utils.conversations.v3 import fast_finish, metrics as v3_metrics
 
     try:
-        if not fast_finish.enabled(uid) or not fast_finish.eligible(current):
+        if not current.get('recording') or not current.get('v3_manual_end_requested'):
             return
-        allowed = {private_cloud_sync_bucket, derived_audio_bucket()}
+        if not manual_end_marker_enabled():
+            return
 
-        def read(ref):
-            return read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True)
+        def promote():
+            return conversations_v3.promote_manual_end(uid, conversation_id, firestore_client=store.client)
 
-        task = asyncio.ensure_future(
-            run_blocking(storage_executor, fast_finish.run, uid, conversation_id, current, list(units), read)
-        )
-        # The loop holds tasks weakly; keep this one until it settles.
-        _FAST_FINISH_TASKS.add(task)
-        task.add_done_callback(_FAST_FINISH_TASKS.discard)
+        if fast_finish.eligible(current) and conversation_id not in _FAST_FINISH_STARTED:
+            _FAST_FINISH_STARTED[conversation_id] = None
+            while len(_FAST_FINISH_STARTED) > _FAST_FINISH_STARTED_MAX:
+                _FAST_FINISH_STARTED.pop(next(iter(_FAST_FINISH_STARTED)))
+            allowed = {private_cloud_sync_bucket, derived_audio_bucket()}
+            # The manifest and attestation hold the same reference dicts; reading adds metadata to them.
+            copied = [(start, duration, [dict(ref) for ref in refs]) for start, duration, refs in units]
+
+            def read(ref):
+                return read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True)
+
+            def refresh():
+                snapshot = (
+                    store.client.collection('users').document(uid).collection('conversations').document(conversation_id)
+                )
+                return snapshot.get().to_dict() or {}
+
+            def run():
+                outcome = fast_finish.run(uid, conversation_id, current, copied, read, refresh=refresh, promote=promote)
+                if outcome == 'written':
+                    v3_metrics.BATCH_MANUAL_END.labels('fast_finish').inc()
+                elif len(copied) == 1:
+                    # Not admitted to the fast pass, or it failed before writing: the single unit still cuts.
+                    v3_metrics.BATCH_MANUAL_END.labels('promoted' if promote() else 'not_promoted').inc()
+                else:
+                    v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
+
+            task = asyncio.ensure_future(run_blocking(storage_executor, run))
+            # The loop holds tasks weakly; keep this one until it settles.
+            _FAST_FINISH_TASKS.add(task)
+            task.add_done_callback(_FAST_FINISH_TASKS.discard)
+            return
+        if len(units) == 1:
+            promoted = await run_blocking(db_executor, promote)
+            v3_metrics.BATCH_MANUAL_END.labels('promoted' if promoted else 'not_promoted').inc()
+        else:
+            v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
     except Exception as error:
-        logger.warning('event=v3_fast_finish outcome=start_error exception_type=%s', type(error).__name__)
+        logger.warning('event=v3_manual_finish_admission outcome=error exception_type=%s', type(error).__name__)
+        try:
+            v3_metrics.BATCH_MANUAL_END.labels('error').inc()
+        except Exception:
+            pass
 
 
 async def admit_recording(store, pending, *, now=None, provider_outbox_factory=None):
@@ -471,7 +516,6 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
     # from the durable upload. The pending obligation has no TTL.
     validate_record_tail(units, row.get('finished_at'))
     validate_record_tail(units, current.get('finished_at'))
-    _start_fast_finish(uid, conversation_id, current, units, client, artifacts.key_for_owner(uid))
     from utils.batch_pipeline.language_receipt import auto_language_cohort
 
     receipt_enabled = auto_language_cohort(
@@ -547,7 +591,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         )
         staged.append(replace(item, audio_uri=uri, timing_store=batch_timing_store(refs)))
     source_attestation = attest(private_cloud_sync_bucket, uid, conversation_id, current, record_barrier, units, staged)
-    return await run_blocking(
+    admitted = await run_blocking(
         db_executor,
         admit_record_units,
         store,
@@ -574,6 +618,9 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
             **({'server_batch_only': True} if row.get('server_batch_only') is True else {}),
         },
     )
+    # Only after admission committed: a failed admission is retried and must not repeat this.
+    await _manual_finish_admitted(store, uid, conversation_id, current, units, client, artifacts.key_for_owner(uid))
+    return admitted
 
 
 async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None) -> bool:

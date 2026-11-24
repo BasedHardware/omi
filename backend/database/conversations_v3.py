@@ -579,6 +579,33 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
     return mark(client.transaction())
 
 
+def promote_manual_end(uid, cid, *, firestore_client=None):
+    """Turn a stored manual-end request into the cut. True when this call wrote it.
+
+    Called once the whole recording will land as one transcript. It does not mark the recording
+    pending: the transcript write that follows owns that wake, so a recording with no speech costs
+    no reconcile.
+    """
+    client = firestore_client or get_firestore_client()
+    ref = user_conversations(client, uid).document(cid)
+
+    @firestore.transactional
+    def promote(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        if (
+            not row.get('recording')
+            or not row.get('v3_manual_end_requested')
+            or row.get('v3_manual_end')
+            or row.get('deleted')
+            or row.get('discarded')
+        ):
+            return False
+        tx.update(ref, {'v3_manual_end': True})
+        return True
+
+    return promote(client.transaction())
+
+
 def _projection_snapshots(client, coll, tx, ids, *, batch_reads):
     if not batch_reads:
         for cid in ids:

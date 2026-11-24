@@ -40,9 +40,10 @@ to restore classification-based hiding for derived media and recognized backgrou
 on subsequent projections. The manual-end marker and classification remain stored.
 
 `CONVERSATIONS_V3_BATCH_MANUAL_END` defaults to `on`. A user finish of an audio-only
-v3 recording (server-batch capture, no transcript yet) stores `v3_manual_end` in the
-terminal transaction, so the window is cut when its batch transcript lands. Set it to
-`off` on `backend` to restore the silence and lock timers for later finishes.
+v3 recording (server-batch capture, no transcript yet) stores `v3_manual_end_requested` in the
+terminal transaction. Record admission promotes it to `v3_manual_end` for a single-unit
+recording, or when the fast first transcript covers the whole recording. Set it to `off` on
+`backend` and `backend-integration` to restore the silence and lock timers for later finishes.
 
 `CONVERSATIONS_V3_FAST_FINISH` defaults to `cohort` (the `v3-fast-finish` rollout cohort, empty
 until a member is added). For a member, or for every v3 owner with `on`, a manually

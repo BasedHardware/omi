@@ -13,7 +13,7 @@ START = datetime(2026, 11, 24, 3, 0, tzinfo=timezone.utc)
 def row(**changes):
     return {
         'recording': True,
-        'v3_manual_end': True,
+        'v3_manual_end_requested': True,
         'status': 'completed',
         'private_cloud_sync_enabled': True,
         'data_protection_level': 'enhanced',
@@ -71,7 +71,7 @@ def test_cohort_is_registered_and_empty_without_a_resolver():
 @pytest.mark.parametrize(
     'change',
     [
-        {'v3_manual_end': None},
+        {'v3_manual_end_requested': None},
         {'recording': False},
         {'status': 'processing'},
         {'transcript_segments': [{'id': 'a'}]},
@@ -108,35 +108,95 @@ def test_unit_pcm_refuses_a_short_source():
         fast_finish.unit_pcm([ref('p1', 0, 0, 4)], lambda reference: b'\x00\x00')
 
 
-def test_writes_segments_on_the_recording_clock():
-    written = {}
+@pytest.fixture(autouse=True)
+def admitted(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'on')
+
+
+def seg(start, end, **more):
+    return {
+        'id': f's{start}',
+        'text': 'hello',
+        'start': start,
+        'end': end,
+        'speaker': 'SPEAKER_01',
+        'speaker_id': 1,
+        **more,
+    }
+
+
+def one_unit(duration=10.0):
+    return [(START.timestamp(), duration, [ref('p1', 0, 0, 2)])]
+
+
+def test_writes_segments_on_the_recording_clock_inside_the_audio_span():
+    written, order = {}, []
 
     def write(uid, cid, segments):
+        order.append('write')
         written.update(uid=uid, cid=cid, segments=segments)
         return True
 
     def transcribe(pcm, language):
         assert language == 'en' and len(pcm) == 4
-        return [{'id': 's', 'text': 'hello', 'start': 1.0, 'end': 2.0}]
+        return [seg(1.0, 2.0)]
 
     units = [
         (START.timestamp() + 40.0, 10.0, [ref('p1', 0, 0, 2)]),
         (START.timestamp() + 5.0, 10.0, [ref('p1', 0, 0, 2)]),
     ]
-    outcome = fast_finish.run(UID, 'cid', row(), units, lambda reference: bytes(4), write=write, transcribe=transcribe)
+    outcome = fast_finish.run(
+        UID,
+        'cid',
+        row(),
+        units,
+        lambda reference: bytes(4),
+        write=write,
+        transcribe=transcribe,
+        refresh=row,
+        promote=lambda: order.append('promote'),
+    )
     assert outcome == 'written'
-    assert [(s['start'], s['end']) for s in written['segments']] == [(6.0, 7.0), (41.0, 42.0)]
+    # Speech at +6..7 and +41..42; the outer lines stretch to the audio they came from (+5 and +50).
+    assert [(s['start'], s['end']) for s in written['segments']] == [(5.0, 7.0), (41.0, 50.0)]
+    assert all(s['speaker_id'] is None and s['speaker'] == 'SPEAKER_01' for s in written['segments'])
     assert (written['uid'], written['cid']) == (UID, 'cid')
+    # The cut is stored before the transcript write wakes the builder.
+    assert order == ['promote', 'write']
+
+
+def test_a_member_outside_the_rollout_reads_no_audio(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'off')
+    never = lambda *args: pytest.fail('must not be called')
+    assert fast_finish.run(UID, 'cid', row(), one_unit(), never, write=never, transcribe=never) == 'not_enabled'
 
 
 def test_a_canonical_transcript_that_already_landed_wins():
-    transcribe = lambda pcm, language: [{'id': 's', 'text': 'hello', 'start': 0.0, 'end': 1.0}]
-    units = [(START.timestamp(), 10.0, [ref('p1', 0, 0, 2)])]
     refused = lambda uid, cid, segments: False
+    transcribe = lambda pcm, language: [seg(0.0, 1.0)]
     assert (
-        fast_finish.run(UID, 'cid', row(), units, lambda r: bytes(4), write=refused, transcribe=transcribe)
+        fast_finish.run(UID, 'cid', row(), one_unit(), lambda r: bytes(4), write=refused, transcribe=transcribe)
         == 'superseded'
     )
+
+
+@pytest.mark.parametrize(
+    'change', [{'deleted': True}, {'discarded': True}, {'is_locked': True}, {'record_projection_revision': 1}]
+)
+def test_a_row_that_changed_during_the_provider_call_is_not_written(change):
+    never = lambda *args: pytest.fail('must not write or promote')
+    outcome = fast_finish.run(
+        UID,
+        'cid',
+        row(),
+        one_unit(),
+        lambda r: bytes(4),
+        write=never,
+        transcribe=lambda pcm, language: [seg(0.0, 1.0)],
+        refresh=lambda: row(**change),
+        promote=never,
+    )
+    assert outcome == 'superseded'
 
 
 def boom(*args, **kwargs):
@@ -149,59 +209,142 @@ def boom(*args, **kwargs):
         (boom, None, None, 'audio_error'),
         (lambda r: bytes(4), boom, None, 'provider_error'),
         (lambda r: bytes(4), lambda pcm, language: [], None, 'empty'),
-        (
-            lambda r: bytes(4),
-            lambda pcm, language: [{'id': 's', 'text': 't', 'start': 0.0, 'end': 1.0}],
-            boom,
-            'write_error',
-        ),
+        (lambda r: bytes(4), lambda pcm, language: [seg(0.0, 1.0)], boom, 'write_error'),
     ],
 )
 def test_failures_are_counted_and_never_raise(read, transcribe, write, expected):
-    units = [(START.timestamp(), 10.0, [ref('p1', 0, 0, 2)])]
     never = lambda *args: pytest.fail('must not write')
-    outcome = fast_finish.run(UID, 'cid', row(), units, read, write=write or never, transcribe=transcribe or boom)
+    outcome = fast_finish.run(UID, 'cid', row(), one_unit(), read, write=write or never, transcribe=transcribe or boom)
     assert outcome == expected
+
+
+def test_a_failing_refresh_or_promote_never_raises():
+    transcribe = lambda pcm, language: [seg(0.0, 1.0)]
+    ok = lambda uid, cid, segments: True
+    for kwargs in ({'refresh': boom}, {'promote': boom}):
+        assert (
+            fast_finish.run(
+                UID, 'cid', row(), one_unit(), lambda r: bytes(4), write=ok, transcribe=transcribe, **kwargs
+            )
+            == 'write_error'
+        )
 
 
 def test_ineligible_and_long_recordings_are_skipped_without_reading_audio():
     never = lambda *args: pytest.fail('must not be called')
-    units = [(START.timestamp(), 10.0, [ref('p1', 0, 0, 2)])]
     assert (
-        fast_finish.run(UID, 'cid', row(v3_manual_end=None), units, never, write=never, transcribe=never)
+        fast_finish.run(UID, 'cid', row(v3_manual_end_requested=None), one_unit(), never, write=never, transcribe=never)
         == 'ineligible'
     )
-    long_units = [(START.timestamp(), fast_finish.MAX_SECONDS + 1, [ref('p1', 0, 0, 2)])]
+    long_units = one_unit(fast_finish.MAX_SECONDS + 1)
     assert fast_finish.run(UID, 'cid', row(), long_units, never, write=never, transcribe=never) == 'too_long'
     assert fast_finish.run(UID, 'cid', row(), [], never, write=never, transcribe=never) == 'too_long'
 
 
-@pytest.mark.parametrize('flag,manual,expected', [('on', True, 1), ('off', True, 0), ('on', None, 0)])
-def test_admission_starts_the_pass_without_waiting(monkeypatch, flag, manual, expected):
+class _Doc:
+    def __init__(self, data):
+        self.data = data
+
+    def collection(self, *_):
+        return self
+
+    def document(self, *_):
+        return self
+
+    def get(self):
+        return self
+
+    def to_dict(self):
+        return self.data
+
+
+class _Store:
+    def __init__(self, data):
+        self.client = _Doc(data)
+
+
+def _admit(monkeypatch, current, units, *, fast='written', promoted=True):
+    import asyncio
+
+    from database import conversations_v3
+    from utils.batch_pipeline import live
+
+    live._FAST_FINISH_STARTED.clear()
+    calls = {'fast': 0, 'promote': 0}
+
+    def run(uid, cid, row_, units_, read, *, refresh, promote):
+        calls['fast'] += 1
+        assert refresh() == current and units_ is not units and units_[0][2] is not units[0][2]
+        return fast
+
+    def promote(uid, cid, firestore_client=None):
+        calls['promote'] += 1
+        return promoted
+
+    monkeypatch.setattr(fast_finish, 'run', run)
+    monkeypatch.setattr(conversations_v3, 'promote_manual_end', promote)
+
+    async def admit():
+        await live._manual_finish_admitted(_Store(current), UID, 'cid', current, units, object(), b'k')
+        await asyncio.gather(*list(live._FAST_FINISH_TASKS))
+
+    asyncio.run(admit())
+    assert not live._FAST_FINISH_TASKS
+    return calls
+
+
+UNIT = (0.0, 1.0, [{'bucket': 'b', 'path': 'p', 'generation': 1}])
+
+
+def test_admission_hands_an_eligible_recording_to_the_fast_pass(monkeypatch):
+    assert _admit(monkeypatch, row(), [UNIT]) == {'fast': 1, 'promote': 0}
+
+
+@pytest.mark.parametrize('units,promotes', [([UNIT], 1), ([UNIT, UNIT], 0)])
+def test_without_a_fast_transcript_only_a_single_unit_recording_is_cut(monkeypatch, units, promotes):
+    # Several units project one at a time: cutting on the first would lock a partial window.
+    assert _admit(monkeypatch, row(), units, fast='not_enabled') == {'fast': 1, 'promote': promotes}
+
+
+def test_a_recording_that_already_has_a_transcript_skips_the_fast_pass(monkeypatch):
+    current = row(transcript_segments=[{'id': 'a'}])
+    assert _admit(monkeypatch, current, [UNIT]) == {'fast': 0, 'promote': 1}
+    assert _admit(monkeypatch, current, [UNIT, UNIT]) == {'fast': 0, 'promote': 0}
+
+
+@pytest.mark.parametrize('current', [row(v3_manual_end_requested=None), row(recording=False)])
+def test_a_natural_end_or_legacy_capture_is_untouched(monkeypatch, current):
+    assert _admit(monkeypatch, current, [UNIT]) == {'fast': 0, 'promote': 0}
+
+
+def test_the_kill_switch_stops_the_cut_and_the_fast_pass(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'off')
+    assert _admit(monkeypatch, row(), [UNIT]) == {'fast': 0, 'promote': 0}
+
+
+def test_a_retried_admission_starts_one_fast_pass(monkeypatch):
     import asyncio
 
     from utils.batch_pipeline import live
 
-    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', flag)
-    calls = []
+    live._FAST_FINISH_STARTED.clear()
+    started = []
+    monkeypatch.setattr(fast_finish, 'run', lambda *a, **k: started.append(1) or 'written')
 
-    def run(uid, cid, current, units, read):
-        calls.append((uid, cid, len(units)))
-        return 'written'
-
-    monkeypatch.setattr(fast_finish, 'run', run)
-
-    async def admit():
-        live._start_fast_finish(UID, 'cid', row(v3_manual_end=manual), [(0.0, 1.0, [])], object(), b'k')
+    async def admit_twice():
+        for _ in range(2):
+            await live._manual_finish_admitted(_Store(row()), UID, 'cid', row(), [UNIT, UNIT], object(), b'k')
         await asyncio.gather(*list(live._FAST_FINISH_TASKS))
 
-    asyncio.run(admit())
-    assert calls == [(UID, 'cid', 1)] * expected
-    assert not live._FAST_FINISH_TASKS
+    asyncio.run(admit_twice())
+    assert started == [1]
 
 
-def test_admission_survives_a_broken_gate(monkeypatch):
+def test_admission_survives_a_broken_hook(monkeypatch):
+    import asyncio
+
     from utils.batch_pipeline import live
 
-    monkeypatch.setattr(fast_finish, 'enabled', boom)
-    live._start_fast_finish(UID, 'cid', row(), [], object(), b'k')
+    live._FAST_FINISH_STARTED.clear()
+    monkeypatch.setattr(fast_finish, 'eligible', boom)
+    asyncio.run(live._manual_finish_admitted(_Store(row()), UID, 'cid', row(), [UNIT], object(), b'k'))
