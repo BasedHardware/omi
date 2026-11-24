@@ -78,7 +78,7 @@ WITHOUT_PHOTOS_PROFILES = (
     _list_profile(
         'main-list-default-or-multi-status', statuses=_MULTI_STATUS, sources=[[], ['omi']], **_DATES, **_SELECTORS
     ),
-    _list_profile('main-list-indexed-home', statuses=_MULTI_STATUS, indexed_home=True),
+    _list_profile('main-list-indexed-home', statuses=_MULTI_STATUS, sources=[[]], indexed_home=True),
     _list_profile('prior-meeting-context', start_date=[FROZEN_NOW], end_date=[FROZEN_LATER]),
     _list_profile('ai-profile-recent', start_date=[FROZEN_NOW - timedelta(days=7)], end_date=[FROZEN_NOW]),
     _list_profile('wrapped-2025', statuses=[['completed']], start_date=[FROZEN_NOW], end_date=[FROZEN_LATER]),
