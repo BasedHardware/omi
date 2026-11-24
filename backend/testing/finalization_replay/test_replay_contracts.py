@@ -227,12 +227,15 @@ class ReplayContractTests(unittest.TestCase):
     def test_go_discard_needs_no_attach_memo_but_flags_stale_stamps(self):
         path = 'users/owner/episode_links/conversation'
         conversation = {'discarded': True, 'episode_id': 'episode', 'transcript_segments': []}
-        link = {'episode_id': 'episode'}
+        link = {'episode_id': 'episode', 'attach_owner_id': 'episode'}
 
         def check():
             return episode_attach_go_memo_failure_reason('owner', 'conversation', conversation, {path: link})
 
         self.assertEqual(check(), 'discarded_without_memo')
+        link['attach_owner_id'] = 'wrong'
+        self.assertEqual(check(), 'owner_binding_mismatch')
+        link['attach_owner_id'] = 'episode'
         link['attach_completed'] = 'v2:old'
         self.assertEqual(check(), 'discarded_with_memo')
 

@@ -152,8 +152,11 @@ def episode_attach_go_memo_failure_reason(
 
     if is_relevance_discarded(conversation):
         link = derived_documents.get(f'users/{uid}/episode_links/{cid}') or {}
-        if any(link.get(f'attach_{field}') is not None for field in ('revision', 'completed', 'finalized', 'owner_id')):
+        if any(link.get(f'attach_{field}') is not None for field in ('revision', 'completed', 'finalized')):
             return 'discarded_with_memo'
+        owner = link.get('attach_owner_id')
+        if owner is not None and (owner != link.get('episode_id') or owner != conversation.get('episode_id')):
+            return 'owner_binding_mismatch'
         return 'discarded_without_memo'
     return _episode_attach_memo_failure_reason(
         uid,
