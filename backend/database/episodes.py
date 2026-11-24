@@ -569,7 +569,12 @@ def _commit(
     updates: Mapping[str, Any],
     link_conversation_ids: Sequence[str],
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
+    finalizing_conversation_id: Optional[str] = None,
 ) -> dict[str, Any]:
+    if finalizing_conversation_id is not None:
+        require_not_deleted(
+            transaction, client, uid, finalizing_conversation_id, FirestoreReadSite.EPISODE_FINALIZATION_MOMENT_FENCE
+        )
     pointer = _links(client, uid).document(CURRENT)
     timeline_ref = _links(client, uid).document('recorded_timeline')
     timeline_enabled = recorded_episodes_enabled()
@@ -638,6 +643,7 @@ def commit_moment(
     link_conversation_ids: Sequence[str] = (),
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
     firestore_client: Any = None,
+    finalizing_conversation_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """Either update the open episode (CAS) or close it and open ``new_episode``. Returns the stored state.
 
@@ -658,6 +664,7 @@ def commit_moment(
         dict(updates or {}),
         list(link_conversation_ids),
         dict(segment_receipts or {}) or None,
+        finalizing_conversation_id,
         transient=True,
     )
 
@@ -780,7 +787,12 @@ def _close(
     split_after: Optional[datetime] = None,
     retained_member_window: bool = False,
     synced_f: bool = False,
+    finalizing_conversation_id: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
+    if finalizing_conversation_id is not None:
+        require_not_deleted(
+            transaction, client, uid, finalizing_conversation_id, FirestoreReadSite.EPISODE_FINALIZATION_CLOSE_FENCE
+        )
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
     if timeline_enabled:
@@ -888,6 +900,7 @@ def close_episode(
     firestore_client: Any = None,
     retained_member_window: bool = False,
     synced_f: bool = False,
+    finalizing_conversation_id: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """Close a live episode once. Returns the closed state, or None when it was not live.
 
@@ -913,6 +926,7 @@ def close_episode(
         split_after,
         retained_member_window,
         synced_f,
+        finalizing_conversation_id,
         **transaction_options,
     )
 

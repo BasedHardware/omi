@@ -329,6 +329,21 @@ def test_finalized_memo_refuses_deletion_after_planning(lane, monkeypatch, marke
     assert store.rows == {**before, marker: {}}
 
 
+@pytest.mark.parametrize('status', ['cancelled', 'billing_failed'])
+@pytest.mark.parametrize('tombstoned', [False, True])
+def test_restored_account_permits_finalized_memo_unless_conversation_is_tombstoned(lane, status, tombstoned):
+    store, c, _ = lane
+    member = seed(store)
+    assert service._attach_synced('u', 'same', member, c) == 'recorded'
+    fresh = deepcopy(store.rows[('users', 'u', 'conversations', 'same')])
+    store.rows[('account_deletions', 'u')] = {'wipe_status': status}
+    if tombstoned:
+        store.rows[('users', 'u', 'deleted_conversations', 'same')] = {}
+    episode_attach_memo.complete('u', 'same', fresh, None, finalized=True, firestore_client=store)
+    link = store.rows[('users', 'u', 'episode_links', 'same')]
+    assert link.get('attach_finalized') == (None if tombstoned else content_key(fresh))
+
+
 def test_discard_after_intake_same_revision_still_schedules_and_ends_member(lane, monkeypatch):
     from utils.episodes import finalize
 

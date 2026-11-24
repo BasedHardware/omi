@@ -717,6 +717,46 @@ def test_finalization_reconciliation_refuses_deletion_after_planning(marker, mon
     assert store.rows == {**before, marker: {}}
 
 
+@pytest.mark.parametrize('marker', [('account_deletions', UID), ('users', UID, 'deleted_conversations', 'c1')])
+@pytest.mark.parametrize(
+    'path,writer',
+    [
+        ('new_tail', 'commit_moment'),
+        ('live_tail', 'commit_moment'),
+        ('close', 'close_episode'),
+        ('early_close', 'close_episode'),
+        ('discarded', 'update_episode'),
+        ('deleted', 'update_episode'),
+    ],
+)
+def test_finalization_writers_refuse_deletion_after_planning(path, writer, marker, monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch'}, {'bullets': ['New speech']})
+    if path != 'new_tail':
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    before = dict(store.rows)
+    write = getattr(episodes_db, writer)
+
+    def write_after_deletion(*args, **kwargs):
+        assert store.rows == before
+        store.rows[marker] = {}
+        return write(*args, **kwargs)
+
+    monkeypatch.setattr(episodes_db, writer, write_after_deletion)
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    row = {'id': 'c1', 'source': 'omi', 'started_at': T0, 'finished_at': T0 + timedelta(minutes=1)}
+    if path.endswith('tail'):
+        row['transcript_segments'] = _segments(LONG, start=30.0)
+    if path in {'discarded', 'deleted'}:
+        row[path] = True
+    if path == 'early_close':
+        outcome = service.close_on_finalize(UID, 'c1', trigger='client_finalize', collaborators=c)
+    else:
+        outcome = service.on_conversation_finalized(UID, 'c1', row, trigger='client_finalize', collaborators=c)
+    assert outcome == 'skipped_deleted'
+    assert store.rows == {**before, marker: {}}
+
+
 def _row(conversation_id='c1', *, text=None, start=30.0, source='omi', **extra):
     return {
         'id': conversation_id,

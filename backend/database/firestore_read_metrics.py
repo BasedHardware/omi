@@ -62,6 +62,8 @@ class FirestoreReadSite(StrEnum):
     SMART_MERGE = 'smart_merge'
     CAPTURE_GROUP_NOTES = 'capture_group_notes'
     EPISODE_FINALIZATION_UPDATE_FENCE = 'episode_finalization_update_fence'
+    EPISODE_FINALIZATION_MOMENT_FENCE = 'episode_finalization_moment_fence'
+    EPISODE_FINALIZATION_CLOSE_FENCE = 'episode_finalization_close_fence'
     EPISODE_FINALIZATION_MEMO_FENCE = 'episode_finalization_memo_fence'
     UNATTRIBUTED = 'unattributed'
 
