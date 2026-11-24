@@ -262,6 +262,11 @@ class WorkflowContractTests(unittest.TestCase):
                 'workerd helm must retain --ref "$ADMITTED_SHA" --verify-image "$REPOSITORY" --check-worktree)"',
             ),
             (
+                '--revision "$REVISION" --all -o json | jq -r \'.intake.enabled // false\')"',
+                '--revision "$REVISION" --all -o json | jq -r \'.image.digest\')"',
+                'workerd helm must retain --revision "$REVISION" --all -o json | jq -r \'.intake.enabled // false\')"',
+            ),
+            (
                 "version: v4.2.4",
                 "version: latest",
                 "workerd helm must retain version: v4.2.4",

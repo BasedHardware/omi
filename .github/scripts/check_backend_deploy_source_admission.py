@@ -800,6 +800,8 @@ WORKERD_HELM_FRAGMENTS = (
     "curl -fsS -m 5 http://127.0.0.1:18080/ready",
     "if: failure() && inputs.mode == 'workerd-install' && steps.install.outcome != 'skipped'",
     'helm -n "$NAMESPACE" rollback "$RELEASE" "$REVISION" --wait --timeout 5m',
+    "refusing a rollback that would enable private intake.",
+    '--revision "$REVISION" --all -o json | jq -r \'.intake.enabled // false\')"',
 )
 
 

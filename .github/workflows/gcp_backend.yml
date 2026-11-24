@@ -993,8 +993,18 @@ jobs:
         id: before
         run: |
           set -euo pipefail
+          if ! status_err="$(helm -n "$NAMESPACE" status "$RELEASE" 2>&1 >/dev/null)"; then
+            # A first install has nothing to restore; any other read failure refuses.
+            if [[ "$status_err" == *"release: not found"* && "${{ inputs.mode }}" == workerd-install ]]; then
+              echo "revision=0" >> "$GITHUB_OUTPUT"
+              { echo "### Prod workerd before"; echo "- No Helm release: first install"; } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "::error::Cannot read the $RELEASE Helm release: $status_err" >&2
+            exit 1
+          fi
           revision="$(helm -n "$NAMESPACE" history "$RELEASE" --max 1 -o json | jq -r '.[-1].revision')"
-          [[ "$revision" =~ ^[0-9]+$ ]] || { echo "::error::Cannot read the current $RELEASE revision." >&2; exit 1; }
+          [[ "$revision" =~ ^[1-9][0-9]*$ ]] || { echo "::error::Cannot read the current $RELEASE revision." >&2; exit 1; }
           image="$(kubectl -n "$NAMESPACE" get "deployment/$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}')"
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
           { echo "### Prod workerd before"; echo "- Helm revision: \`$revision\`"; echo "- Image: \`$image\`"; } >> "$GITHUB_STEP_SUMMARY"
@@ -1058,7 +1068,14 @@ jobs:
           REVISION: ${{ inputs.workerd_helm_revision }}
         run: |
           set -euo pipefail
-          [[ "$REVISION" =~ ^[0-9]+$ ]] || { echo '::error::workerd_helm_revision must be a Helm revision number.' >&2; exit 1; }
+          [[ "$REVISION" =~ ^[1-9][0-9]*$ ]] || { echo '::error::workerd_helm_revision must be a Helm revision number.' >&2; exit 1; }
+          # Rollback restores the worker only. Private intake has its own approval and must
+          # never come back through a rollback, so refuse a target revision with it enabled.
+          intake="$(helm -n "$NAMESPACE" get values "$RELEASE" --revision "$REVISION" --all -o json | jq -r '.intake.enabled // false')"
+          if [[ "$intake" != false ]]; then
+            echo "::error::Helm revision $REVISION has intake.enabled=$intake; refusing a rollback that would enable private intake." >&2
+            exit 1
+          fi
           helm -n "$NAMESPACE" rollback "$RELEASE" "$REVISION" --wait --timeout 5m
 
       - name: Verify rollout and readiness
@@ -1087,6 +1104,11 @@ jobs:
           REVISION: ${{ steps.before.outputs.revision }}
         run: |
           set -euo pipefail
+          if [[ "$REVISION" == 0 ]]; then
+            # First install: nothing to restore. Leave the failed release for inspection.
+            echo "- **First install failed; no prior revision to restore.**" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
           helm -n "$NAMESPACE" rollback "$RELEASE" "$REVISION" --wait --timeout 5m
           kubectl -n "$NAMESPACE" rollout status "deployment/$RELEASE" --timeout=5m
           echo "- **Install failed; restored Helm revision \`$REVISION\`.**" >> "$GITHUB_STEP_SUMMARY"
