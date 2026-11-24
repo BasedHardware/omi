@@ -14,13 +14,8 @@ The load-bearing facts this guards:
   ``--allow-rule-removal-of <apply document>`` permits dropping only rules that
   the apply variant declared (the Coldline rule); any other live rule still
   blocks. ``--allow-rule-removal`` remains as an explicit operator override.
-* No ``Delete`` action may ever reach ``chunks/``. An unscoped Delete rule counts
-  as reaching it. The single exception is ``NONCURRENT_DELETE_RULE``: a Delete
-  scoped to noncurrent ``chunks/**.opus.enc`` generations with
-  ``numNewerVersions: 1``, which deletes only strictly-superseded generations and
-  always keeps the newest generation of every object name (David, 10-23: delete
-  noncurrent ``.opus.enc`` only after the regen check; see the storage-ops
-  README for why this shape satisfies it).
+* No ``Delete`` action may reach ``chunks/``, including unscoped Deletes
+  and the historical scoped noncurrent chunk-deletion proposal.
 * At most one ``SetStorageClass`` rule is permitted, targeting COLDLINE from
   STANDARD/MULTI_REGIONAL and prefix-scoped to exactly ``chunks/``. David
   dropped the prod-stock ARCHIVE transition on 11-02 because of its one-time
@@ -67,24 +62,6 @@ LEGACY_DELETE_RULES: tuple[dict[str, Any], ...] = (
     {"action": {"type": "Delete"}, "condition": {"age": 3, "matchesPrefix": ["merged/"]}},
     {"action": {"type": "Delete"}, "condition": {"age": 30, "matchesPrefix": ["playback/"]}},
 )
-# The one permitted noncurrent rule: deletes superseded .opus.enc chunk
-# generations only. numNewerVersions: 1 keeps the newest generation of every
-# object name (a live object's current generation has zero newer versions, and
-# so does the newest generation of a fully-deleted conversation), so nothing
-# that exists today is erased; only strictly-older duplicates are removed.
-NONCURRENT_DELETE_RULE: dict[str, Any] = {
-    "action": {"type": "Delete"},
-    "condition": {
-        "isLive": False,
-        "numNewerVersions": 1,
-        "matchesPrefix": [CHUNKS_PREFIX],
-        "matchesSuffix": [".opus.enc"],
-    },
-}
-
-
-def _is_scoped_noncurrent_delete(rule: Any) -> bool:
-    return isinstance(rule, Mapping) and rule == NONCURRENT_DELETE_RULE
 
 
 def _rules(document: Mapping[str, Any] | None) -> list[Any]:
@@ -116,24 +93,21 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
         return errors
 
     set_class_rules = 0
-    noncurrent_delete_rules = 0
     for index, rule in enumerate(lifecycle["rule"]):
         if not isinstance(rule, Mapping):
             errors.append(f"desired rule {index} is not an object")
             continue
-        action = rule.get("action") if isinstance(rule.get("action"), Mapping) else {}
-        condition = rule.get("condition") if isinstance(rule.get("condition"), Mapping) else {}
+        action = rule.get("action")
+        condition = rule.get("condition")
+        action = action if isinstance(action, Mapping) else {}
+        condition = condition if isinstance(condition, Mapping) else {}
         action_type = action.get("type")
-        if _is_scoped_noncurrent_delete(rule):
-            noncurrent_delete_rules += 1
         if not isinstance(action_type, str) or action_type not in ALLOWED_ACTIONS:
             errors.append(f"desired rule {index} has unsupported action {action_type!r}")
             continue
         prod_cache_rule = bucket == PROD_BUCKET and rule == PROD_NONCURRENT_CACHE_RULE
-        if (
-            not prod_cache_rule
-            and (condition.get("isLive") is False or any(key in condition for key in NONCURRENT_CONDITION_KEYS))
-            and not _is_scoped_noncurrent_delete(rule)
+        if not prod_cache_rule and (
+            condition.get("isLive") is False or any(key in condition for key in NONCURRENT_CONDITION_KEYS)
         ):
             errors.append(
                 f"desired rule {index} targets noncurrent versions; noncurrent-version rules are forbidden "
@@ -153,7 +127,7 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
                 errors.append(
                     f"desired rule {index} is an unscoped Delete; a Delete rule must never be able to match {CHUNKS_PREFIX!r}"
                 )
-            elif not _is_scoped_noncurrent_delete(rule):
+            else:
                 for prefix in prefixes:
                     if _prefix_touches_chunks(prefix):
                         errors.append(
@@ -189,10 +163,6 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
 
     if set_class_rules > 1:
         errors.append(f"desired document declares {set_class_rules} SetStorageClass rules; at most one is expected")
-    if noncurrent_delete_rules > 1:
-        errors.append(
-            f"desired document declares {noncurrent_delete_rules} scoped noncurrent Delete rules; at most one is expected"
-        )
     if bucket == PROD_BUCKET:
         for legacy in (*LEGACY_DELETE_RULES, PROD_NONCURRENT_CACHE_RULE):
             if legacy not in lifecycle["rule"]:

@@ -211,7 +211,16 @@ def _manifest(
             if encoded is not None:
                 avoided('manifest_memo', 'payload', payload_bytes=len(encoded))
         if encoded is None:
-            encoded = blob.download_as_bytes(**download_kwargs)
+            try:
+                encoded = blob.download_as_bytes(**download_kwargs)
+            except PreconditionFailed:
+                if memo_key is None:
+                    raise
+                REPLACEMENT_CALLS.labels('manifest_memo', 'payload').inc()
+                # Restart from live metadata using the ordinary verified read.
+                return _manifest(
+                    bucket, uid, path, generation, digest, deadline=deadline, require_frame_schema=require_frame_schema
+                )
     else:
         encoded, manifest_metadata, cache_key, memo_key = observed
     raw = encoded
@@ -350,6 +359,8 @@ def gapped_frames(bucket, blob, uid: str, *, deadline=None, metadata=None, memo=
     internal gaps require one unambiguous manifest.
     """
     prefix = f'audio-outbox/{uid}/{media_name(blob.name, uid)}/'
+    # Uniqueness is established once by this operation's scoped inventory.
+    # A key hit checks both live versions and media binding again.
     key = _known_manifest_key(memo, bucket, blob, uid)
     known = memo.get(key) if memo is not None and key is not None else None
     if known is not None:

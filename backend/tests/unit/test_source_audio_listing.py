@@ -3,6 +3,7 @@
 import hashlib
 import json
 import struct
+import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -12,6 +13,7 @@ from google.api_core.exceptions import PreconditionFailed
 import pytest
 
 from utils.batch_pipeline import live, source_audio as source, record_seal_profile
+from utils.batch_pipeline.artifact_reads import ArtifactReadBudget
 from utils.other import storage
 
 
@@ -156,6 +158,7 @@ def test_stale_source_metadata_reloads_the_same_data_generation(monkeypatch):
     assert blob.reload.call_count == 0
     blob.download_as_bytes.reset_mock()
     blob.download_as_bytes.side_effect = [PreconditionFailed('metadata changed'), raw]
+    budget = ArtifactReadBudget(time.monotonic() + 30, len(raw), 1)
     pcm = source.read_reference(
         client,
         ref,
@@ -166,7 +169,9 @@ def test_stale_source_metadata_reloads_the_same_data_generation(monkeypatch):
         source_metadata=True,
         listed_source=listing,
         retry_stale_metadata=True,
+        read_budget=budget,
     )
+    assert budget.downloaded_bytes == budget.received_bytes == len(raw)
     assert pcm == raw
     assert blob.reload.call_args.kwargs['if_generation_match'] == 7
     assert [call.kwargs['if_metageneration_match'] for call in blob.download_as_bytes.call_args_list] == [3, 4]

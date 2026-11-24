@@ -570,3 +570,37 @@ def test_operation_reuses_verified_pack_and_manifest_with_live_proof(remote, mon
     assert pack.download_as_bytes.call_count == (2 if mode == 'memo_off' else 1)
     assert manifest.download_as_bytes.call_count == (3 if mode == 'memo_off' else 2 if mode == 'stale_key' else 1)
     assert remote.list_blobs.call_count == (4 if mode == 'list_off' else 3 if mode == 'stale_key' else 2)
+
+
+def test_new_manifest_precondition_race_restarts_the_live_read(remote, monkeypatch, native_opus):
+    wire(remote, monkeypatch)
+    receipt, _, _, _ = build_pack(remote, gapped_frames())
+    manifest = remote.blob(receipt.manifest_path)
+    manifest.metageneration = 1
+    manifest.reload = Mock(wraps=manifest.reload)
+    manifest.download_as_bytes = Mock(side_effect=[PreconditionFailed('metadata changed'), manifest.data])
+    decoded = audio_frame_table._manifest(
+        remote, UID, receipt.manifest_path, require_frame_schema=False, memo=ReadMemo()
+    )
+    assert decoded['media']['generation'] == receipt.generation
+    first, second = manifest.download_as_bytes.call_args_list
+    assert first.kwargs['if_metageneration_match'] == 1
+    assert 'if_metageneration_match' not in second.kwargs
+    assert manifest.reload.call_count == 2
+
+
+def test_new_pack_precondition_race_restarts_the_live_read(remote, monkeypatch, native_opus):
+    wire(remote, monkeypatch)
+    receipt, _, _, packets = build_pack(remote, gapped_frames())
+    pack = remote.blob(receipt.path)
+    pack.metageneration = 1
+    pack.reload = Mock(wraps=pack.reload)
+    pack.download_as_bytes = Mock(side_effect=[PreconditionFailed('metadata changed'), pack.data])
+    pcm = raw_audio_read.read_pack(
+        remote, receipt.path, UID, {'if_generation_match': int(receipt.generation)}, memo=ReadMemo()
+    )
+    assert pcm == decode_packets(packets)
+    assert pack.reload.call_count == 2
+    first, second = pack.download_as_bytes.call_args_list
+    assert first.kwargs['if_metageneration_match'] == 1
+    assert first.kwargs['if_generation_match'] == second.kwargs['if_generation_match'] == int(receipt.generation)

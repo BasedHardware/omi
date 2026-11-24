@@ -15,9 +15,13 @@ The prod age-30 transition matches `STANDARD` and `MULTI_REGIONAL`
 The rollback variant restores the previous size eligibility and preserves the
 live playback/merged cache rules. It can trigger catch-up transitions for
 small objects that aged past 30 days. Release should estimate the backlog
-and cost before dispatching rollback. Existing storage classes stay as they are.
+and cost before dispatching rollback.
 
-The declarations match the observed prod cache rules. The historical
+A Nov 24 read-only GCS describe at metageneration 34 confirmed that
+`merged/` Delete at day 3, `playback/` Delete at day 30, and their shared
+noncurrent Delete at day 7 were already live. The workflow blocks the update
+if the live rule set differs beyond the size floor. The [SCA-4225 handoff](https://multica-01.tail76ea03.ts.net/scaling-forever/issues/01a20dfc-3d64-7d96-85fd-139b6949ef89)
+records the exact before and after rules. The historical
 noncurrent `.opus.enc` chunk deletion proposal is absent from the live bucket
 and from both prod variants.
 

@@ -172,6 +172,9 @@ def read_reference(
             # materializer with an authenticated decoded-PCM digest may retry.
             if not retry_stale_metadata or not default_on('BATCH_SOURCE_VERIFIED_METADATA_REUSE_ENABLED'):
                 raise
+            if read_budget is not None:
+                # A failed precondition returns no object body.
+                read_budget.downloaded_bytes -= size
             REPLACEMENT_CALLS.labels('source_metadata', 'payload').inc()
             size, metageneration, metadata = reload_source()
             raw = download(size, metageneration)

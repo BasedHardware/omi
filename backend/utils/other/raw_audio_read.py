@@ -6,12 +6,12 @@ import threading
 import time
 from bisect import bisect_right
 from datetime import datetime
-from google.cloud.exceptions import NotFound
+from google.api_core.exceptions import NotFound, PreconditionFailed
 from database.audio_timeline import chunk_span, span_valid
 
 from utils import encryption
 from config.refactor_modes import default_on
-from utils.other.gcs_read_reuse import ReadMemo, avoided
+from utils.other.gcs_read_reuse import REPLACEMENT_CALLS, ReadMemo, avoided
 from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.other.raw_audio import WAL_FORMAT, decode_capture, decode_capture_frames
 from utils.other.audio_frame_table import (
@@ -339,7 +339,17 @@ def _decode_pack(bucket, blob, uid: str, download_kwargs, sample_rate: int, *, f
                 avoided('pack_memo', 'payload', payload_bytes=encoded_size)
                 return pcm
             payload_kwargs.update(if_generation_match=generation, if_metageneration_match=metageneration)
-    raw = blob.download_as_bytes(**payload_kwargs)
+    try:
+        raw = blob.download_as_bytes(**payload_kwargs)
+    except PreconditionFailed:
+        if memo_key is None:
+            raise
+        # The optimization added a version fence. Retry the ordinary read once
+        # with fresh metadata and the original caller's generation constraint.
+        REPLACEMENT_CALLS.labels('pack_memo', 'payload').inc()
+        pinned = download_kwargs.get('if_generation_match')
+        fresh_blob = bucket.blob(blob.name, generation=int(pinned)) if pinned else bucket.blob(blob.name)
+        return _decode_pack(bucket, fresh_blob, uid, {**download_kwargs, 'timeout': io_timeout(deadline)}, sample_rate)
     encoded_size = len(raw)
     if metadata.get('encrypted') == 'true':
         try:
