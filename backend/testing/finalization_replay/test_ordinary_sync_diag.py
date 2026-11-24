@@ -83,38 +83,42 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
         token_row = enriched['cases'][0]['differences'][3]
         self.assertEqual(token_row['failure_reason'], 'home_dirty_receipt_missing')
 
-    def test_python_bug_exception_labels_only_its_live_case(self):
+    def test_unreadable_park_requires_terminal_custody_and_excuses_only_the_status(self):
         report = {
-            'unexplained_differences': 4,
+            'unexplained_differences': 2,
             'cases': [
                 {
                     'name': 'unreadable-ciphertext-dead-letters',
-                    'python_status': 'discarded',
+                    'python_status': 'parked',
                     'go_status': 'failure',
+                    'go_ciphertext_kept': True,
+                    'python_retry': {
+                        'outcome': 'parked',
+                        'reason': 'age_gate_72h',
+                        'ciphertext_kept': True,
+                        'attempts': 3,
+                        'callback_pending_attempts': 2,
+                    },
                     'differences': [
                         {'path': '/status', 'kind': 'different_value'},
-                        {'path': '/conversation/discarded', 'kind': 'missing_in_go'},
                         {'path': '/conversation/transcript_segments', 'kind': 'different_value'},
-                        {'path': '/conversation/summary', 'kind': 'different_value'},
-                        {
-                            'path': '/conversation/notes_written_at',
-                            'kind': 'different_value',
-                            'reason': 'both conversation write clocks are valid',
-                        },
-                        {'path': '/conversation/finalization_job_id', 'kind': 'missing_in_python'},
                     ],
                 }
             ],
         }
         enriched = enrich(report)
+        status_row, transcript_row = enriched['cases'][0]['differences']
+        self.assertEqual(status_row['label'], 'python_bug:unreadable_ciphertext_retry_until_age_gate')
+        self.assertEqual(status_row['issue'], 'SCA-4178')
+        self.assertIsNone(transcript_row['label'])
+        self.assertEqual(enriched['unexplained_differences'], 1)
         self.assertEqual(
-            enriched['diagnostic']['label_counts'],
-            {'by_design:both conversation write clocks are valid': 1, 'python_bug:SCA-3874': 5},
+            enriched['diagnostic']['unexplained_gate']['python_bug_exceptions'],
+            {'unreadable_ciphertext_retry_until_age_gate': 1},
         )
-        self.assertEqual(enriched['unexplained_differences'], 0)
 
-        report['cases'][0]['python_status'] = 'completed'
-        with self.assertRaisesRegex(ValueError, 'stale or changed'):
+        report['cases'][0]['python_retry']['ciphertext_kept'] = False
+        with self.assertRaisesRegex(ValueError, 'stale or missing evidence'):
             enrich(report)
 
     def test_operation_table_separates_r7_overages_from_field_rows(self):

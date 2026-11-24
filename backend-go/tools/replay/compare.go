@@ -52,6 +52,18 @@ type observation struct {
 	Webhooks                       []any                      `json:"webhooks"`
 	Cost                           replayCost                 `json:"cost"`
 	GoEvidence                     map[string]any             `json:"go_evidence,omitempty"`
+	PythonRetry                    *pythonRetryEvidence       `json:"python_retry,omitempty"`
+}
+
+type pythonRetryEvidence struct {
+	Outcome         string  `json:"outcome"`
+	Reason          string  `json:"reason"`
+	CiphertextKept  bool    `json:"ciphertext_kept"`
+	Attempts        int64   `json:"attempts"`
+	CallbackPending int64   `json:"callback_pending_attempts"`
+	ElapsedSeconds  float64 `json:"elapsed_seconds"`
+	MaxAgeSeconds   float64 `json:"max_age_seconds"`
+	MaxAttempts     int64   `json:"queue_max_attempts"`
 }
 
 type operationSource struct {
@@ -136,10 +148,11 @@ type replayCase struct {
 }
 
 type difference struct {
-	Path          string `json:"path"`
-	Kind          string `json:"kind"`
-	Reason        string `json:"reason,omitempty"`
-	FailureReason string `json:"failure_reason,omitempty"`
+	Path                          string `json:"path"`
+	Kind                          string `json:"kind"`
+	Reason                        string `json:"reason,omitempty"`
+	FailureReason                 string `json:"failure_reason,omitempty"`
+	UnreadableTerminalConsequence bool   `json:"unreadable_terminal_consequence,omitempty"`
 }
 
 type caseReport struct {
@@ -149,6 +162,8 @@ type caseReport struct {
 	Differences             []difference               `json:"differences"`
 	Cost                    costPair                   `json:"cost"`
 	GoEvidence              map[string]any             `json:"go_evidence,omitempty"`
+	PythonRetry             *pythonRetryEvidence       `json:"python_retry,omitempty"`
+	GoCiphertextKept        bool                       `json:"go_ciphertext_kept,omitempty"`
 	HomeDirtyReceiptTrace   map[string]map[string]int  `json:"home_dirty_receipt_trace,omitempty"`
 	EpisodeAttachMemoChecks map[string]attachMemoCheck `json:"episode_attach_memo_checks,omitempty"`
 }
@@ -192,6 +207,7 @@ func compare(cases []replayCase) (report, error) {
 		entry := caseReport{replayCase: c, Differences: []difference{}}
 		out.OperationTable = append(out.OperationTable, operationTableRow(c))
 		if c.Python != nil {
+			entry.PythonRetry = c.Python.PythonRetry
 			entry.PythonStatus = c.Python.Status
 			entry.Cost.Python = c.Python.Cost
 			if c.Python.HomeDirtyReceiptTrace != nil {
@@ -211,6 +227,7 @@ func compare(cases []replayCase) (report, error) {
 			entry.GoStatus = c.Go.Status
 			entry.Cost.Go = c.Go.Cost
 			entry.GoEvidence = c.Go.GoEvidence
+			entry.GoCiphertextKept, _ = c.Go.GoEvidence["ciphertext_kept"].(bool)
 			if c.Go.HomeDirtyReceiptTrace != nil {
 				if entry.HomeDirtyReceiptTrace == nil {
 					entry.HomeDirtyReceiptTrace = make(map[string]map[string]int)
@@ -236,6 +253,7 @@ func compare(cases []replayCase) (report, error) {
 			return report{}, fmt.Errorf("effects must be a JSON object in both observations")
 		default:
 			entry.Differences = compareObservationsForRun(c.Python, c.Go, pythonTokenCounts, goTokenCounts)
+			markUnreadableTerminalConsequences(&entry, c.Python, c.Go)
 			matched := true
 			for _, diff := range entry.Differences {
 				if diff.Reason == "" {

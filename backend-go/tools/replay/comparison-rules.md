@@ -23,12 +23,23 @@ malformed compression, or different plaintext leaves the row unexplained.
 ## Episode attach memo
 
 Differences in `episode_links/{cid}.attach_completed`, `.attach_finalized`, and
-`.attach_revision` are by design only when each side's decrypted transcript reproduces its
-`content_key`, `attach_revision == attach_completed == content_key`,
-`attach_owner_id == episode_id`, and `attach_finalized` is null or equals `attach_completed`.
-The harness emits only a boolean check result and a value-free failure code when a precondition
-fails. Alternating engines do not reuse the other engine's memo because their re-encoded
-transcript inputs can differ.
+`.attach_revision` are by design when Go's `attach_revision`, `attach_completed`, and
+`attach_finalized` each equal the canonical key recomputed from Go's final stored conversation,
+and `attach_owner_id` matches both the episode link and conversation. Any Go failure is a `go_gap`.
+Python's values are by design only when each present memo key is absent or matches a key its own
+intake or writer path produced earlier; a present owner must bind to the link and conversation.
+Missing or changed Python cache evidence falls through to the full attach path, so older or absent
+Python memo fields use `by_design:attach_memo_cache_fallthrough`. The harness emits only boolean checks
+and value-free failure codes. See `docs/listen_pusher_pipeline/changes/2026-11-04-episode-attach-reads.md`
+for the cache behavior contract.
+
+## Go coordination stamps
+
+The exact fields `go_sync_inline_fanout_epoch`, `go_sync_inline_fanout_revision`,
+`go_empty_discard_fanout_epoch`, and `go_sync_empty_discard_home_revision` are classified as
+`by_design:go_coordination_stamp` only when present on Go and absent from Python. The exact-name
+reader audit across `backend/`, `app/`, `web/`, and `desktop/` found no readers outside the Go-owned
+receiver and tests. Similar names do not match this rule.
 
 ## Clocks
 
@@ -56,6 +67,11 @@ five-second grace; TTLs are checked against their write anchor instead of the re
 Malformed, missing, or out-of-window values add `invalid_clock` evidence and cannot justify a
 timestamp difference. The five-second allowance is limited to episode creation and episode-link
 writes; it is not applied to conversation or memory clocks.
+
+The paired ordinary-sync diagnostic pins only hourly bucket selection to the invocation's UTC day
+at 12:30, shared by both sides. Stored write timestamps remain real and are checked against their
+own replay windows and UTC bucket day. This keeps operation and difference counts independent of
+the wall-clock hour when each side runs.
 
 ## Generated IDs and tokens
 
@@ -90,20 +106,19 @@ The value-free report emits no stored row values.
 `go_finalization_notes_input_hash` and `go_finalization_notes_output_hash` are `go_gap` on
 SCA-3551: Go will write Python's notes keys instead. They are not approved as by design.
 `conversation.finalization_job_id` is also `go_gap`: the Go status route resolves that pointer
-and returns it as `job_id`, while the Go ID breaks Python's status lookup. The case-specific
-SCA-3874 exception retains precedence for its unreadable-ciphertext case.
+and returns it as `job_id`, while the Go ID breaks Python's status lookup.
 
-The only Python-bug exception is the unreadable-ciphertext case `unreadable-ciphertext-dead-letters`,
-filed as SCA-3874. While Python still discards the conversation and Go fails closed, remaining
-unexplained rows in that case receive `python_bug:SCA-3874`; independently verified by-design
-rules and Go gaps keep their own labels. The reporter requires both statuses and the status,
-discarded, and transcript sentinel differences, so it fails when Python's behavior is fixed or
-the case changes.
+The SCA-3874 unreadable-ciphertext case compares Python's first-summary retries through
+its durable enrichment age park with Go's unreadable-ciphertext dead letter. The status
+difference receives `python_bug:unreadable_ciphertext_retry_until_age_gate` (SCA-4178)
+only when both sides retain the seeded ciphertext, Python records retry attempts and an
+age park, and Go records the expected dead letter. Other differences remain visible.
+R7 compares the sum of the metered Python attempt and park operations with Go's terminal
+cost.
 
 The lead-approved pass-3 Go-gap groups from SCA-4012 are stored in
 `approved-go-gaps-sca-4012.csv`. The reporter applies those path/field patterns only to current
-unlabelled rows; existing by-design labels and the SCA-3874 case-specific exception retain
-precedence. A `<document>` pattern covers differences under that document, and a field pattern
+unlabelled rows. Existing by-design labels retain precedence. A `<document>` pattern covers differences under that document, and a field pattern
 covers its nested leaf differences. The report's unexplained gate count is `go_gap + unlabelled`;
 `python_bug:<issue>` exception rows are listed separately and excluded from that count.
 

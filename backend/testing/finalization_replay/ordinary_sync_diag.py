@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from hashlib import sha256
 import importlib
 import importlib.util
@@ -24,6 +25,7 @@ from testing.finalization_replay.driver import _ReplayKey, _clear, _observe, _se
 from testing.finalization_replay.firestore_proxy import FirestoreProxy
 from testing.finalization_replay import reference as reference_module
 from testing.finalization_replay.metrics import suspend_meter
+from testing.finalization_replay.ordinary_sync_retry import UNREADABLE, check_ciphertext, retry_to_park
 from testing.replay_harness.env import emulator_endpoint, replay_environment
 
 
@@ -35,6 +37,18 @@ def _worker_providers(worker_backend):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.provider_server, module.allow_provider_port
+
+
+def _usage_bucket_datetime(bucket):
+    """Freeze hourly usage bucket selection while retaining real write timestamps."""
+    anchor = datetime.strptime(bucket, '%Y-%m-%d-%H').replace(minute=30, tzinfo=timezone.utc)
+
+    class UsageBucketDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return anchor if tz is None else anchor.astimezone(tz)
+
+    return UsageBucketDatetime
 
 
 def _enable_worker_backend(worker_backend):
@@ -92,6 +106,7 @@ class UnexpectedGoOutcome(RuntimeError):
 
 def _go_sync(state, binary, database, key, url, firestore_proxy):
     with suspend_meter():
+        original = state.conversation.get().to_dict() if state.case['name'] == UNREADABLE else None
         job = _seed_worker_intent(state)
     firestore_proxy.reset()
     process = subprocess.run(
@@ -143,12 +158,15 @@ def _go_sync(state, binary, database, key, url, firestore_proxy):
     }
     if result[1] != 'success':
         if (
-            state.case['name'] == 'unreadable-ciphertext-dead-letters'
+            state.case['name'] == UNREADABLE
             and result[1] == 'failure'
             and cause is not None
             and cause[1] == 'conversation_unreadable'
             and row.get('status') == 'dead_letter'
         ):
+            with suspend_meter():
+                check_ciphertext(original, state.conversation.get().to_dict())
+            state.go_evidence['ciphertext_kept'] = True
             return result[1]
         raise UnexpectedGoOutcome
     with suspend_meter():
@@ -212,6 +230,10 @@ def _observe_sync(state, run, leaves, url):
         leaves.enter_context(patch.object(episode_timeline, 'attach_recorded', attach_recorded))
         leaves.enter_context(patch.object(episode_attach_memo, 'complete', complete))
     try:
+        if state.replay_side == 'python' and state.case['name'] == UNREADABLE:
+            # The route drives its own durable outbox. The direct callback
+            # harness's BYOK and provider setup does not belong to its meter.
+            return run(state)
         return reference_module.run_reference(state, leaves, url)
     finally:
         for future in futures:
@@ -245,6 +267,12 @@ def _run_side(cases, side, binary, database, key, worker_backend):
             import tiktoken
 
             tiktoken.encoding_for_model('text-embedding-3-large')
+            from utils import analytics
+
+            usage_bucket = os.environ.get('OMI_REPLAY_USAGE_BUCKET')
+            if usage_bucket is None:
+                usage_bucket = datetime.now(timezone.utc).strftime('%Y-%m-%d') + '-12'
+            cleanup.enter_context(patch.object(analytics, 'datetime', _usage_bucket_datetime(usage_bucket)))
             from database import redis_db
 
             with fakeredis.FakeRedis() as redis, patch.object(redis_db, 'r', redis), patch.object(
@@ -256,6 +284,9 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                 def invoke(state):
                     state.replay_side = side
                     if side == 'python':
+                        if state.case['name'] == UNREADABLE:
+                            state.python_retry = retry_to_park(state, worker_backend)
+                            return state.python_retry['outcome']
                         return _python_sync(state)
                     privacy_document_path = f"batch_pipeline_privacy/{sha256(state.uid.encode('utf-8')).hexdigest()}"
                     with FirestoreProxy(
@@ -294,6 +325,8 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                     if getattr(state, 'diag_missing_module', None):
                         out['errors'][side] = f'ModuleNotFoundError: {state.diag_missing_module}'
                     if side in out:
+                        if getattr(state, 'python_retry', None):
+                            out[side]['python_retry'] = state.python_retry
                         calls = getattr(state, 'replay_token_calls', [])
                         out[side]['provider_token_calls'] = calls
                         prompt = sum(call['input'] for call in calls if not call['embedding'])
@@ -313,7 +346,10 @@ def _run_side(cases, side, binary, database, key, worker_backend):
 
 def _paired(payload, worker_binary, worker_backend):
     sides = []
+    usage_bucket = datetime.now(timezone.utc).strftime('%Y-%m-%d') + '-12'
     for side in ('python', 'go'):
+        child_environment = os.environ.copy()
+        child_environment['OMI_REPLAY_USAGE_BUCKET'] = usage_bucket
         result = subprocess.run(
             [
                 sys.executable,
@@ -330,6 +366,7 @@ def _paired(payload, worker_binary, worker_backend):
             input=payload,
             capture_output=True,
             timeout=240,
+            env=child_environment,
         )
         if result.returncode:
             detail = result.stderr.decode(errors='replace')[-2000:]

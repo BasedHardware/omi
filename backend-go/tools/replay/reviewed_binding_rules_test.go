@@ -76,6 +76,40 @@ func TestCompletedPythonRevisionIsNotAGoOwnershipFence(t *testing.T) {
 	}
 }
 
+func TestGoCoordinationStampRuleUsesExactFieldNames(t *testing.T) {
+	python, goRun := ruleRun(), ruleRun()
+	goRun.Document = map[string]any{
+		"go_sync_inline_fanout_epoch":         json.Number("2"),
+		"go_sync_inline_fanout_revision":      json.Number("7"),
+		"go_empty_discard_fanout_epoch":       json.Number("3"),
+		"go_sync_empty_discard_home_revision": json.Number("8"),
+	}
+	diffs := compareObservations(python, goRun)
+	for _, field := range []string{
+		"go_sync_inline_fanout_epoch", "go_sync_inline_fanout_revision",
+		"go_empty_discard_fanout_epoch", "go_sync_empty_discard_home_revision",
+	} {
+		path := "/conversation/" + field
+		found := false
+		for _, diff := range diffs {
+			if diff.Path == path && diff.Reason == "go_coordination_stamp" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("exact Go coordination field %q lacked the approved reason: %+v", field, diffs)
+		}
+	}
+
+	goRun.Document.(map[string]any)["go_sync_inline_fanout_epochs"] = json.Number("2")
+	diffs = compareObservations(python, goRun)
+	if !hasUnexplainedAt(diffs, "/conversation/go_sync_inline_fanout_epochs") {
+		t.Fatalf("near-match coordination field was approved: %+v", diffs)
+	}
+
+}
+
 func TestHomeTokenFailureReasonNamesBrokenPrecondition(t *testing.T) {
 	fixture := homeFixtures()[0]
 	py, goRun := ruleRun(), ruleRun()

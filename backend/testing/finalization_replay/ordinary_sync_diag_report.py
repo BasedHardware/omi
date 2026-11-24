@@ -26,18 +26,10 @@ KNOWN_GAPS = [
     'erase_after is not applied; erasure and queue-row deletion are not exercised.',
 ]
 
-PYTHON_BUG_EXCEPTIONS = {
-    'unreadable-ciphertext-dead-letters': {
-        'issue': 'SCA-3874',
-        'python_status': 'discarded',
-        'go_status': 'failure',
-        'sentinels': {
-            '/status': 'different_value',
-            '/conversation/discarded': 'missing_in_go',
-            '/conversation/transcript_segments': 'different_value',
-        },
-    },
-}
+UNREADABLE_CASE = 'unreadable-ciphertext-dead-letters'
+UNREADABLE_PARK_RULE = 'SCA-4178: verified unreadable retry age-park consequences; both sides retained ciphertext'
+UNREADABLE_RETRY_BUG = 'python_bug:unreadable_ciphertext_retry_until_age_gate'
+UNREADABLE_RETRY_ISSUE = 'SCA-4178'
 
 PYTHON_BUG_ISSUE = re.compile(r'^[A-Z][A-Z0-9]*-[1-9][0-9]*$')
 DYNAMIC_DERIVED_DOCUMENT_IDS = {
@@ -133,16 +125,28 @@ def validate_label(label: object, approved_reason: object = None) -> str:
     raise ValueError(f'invalid difference label: {label!r}')
 
 
-def validate_python_bug_exception(case: dict) -> str | None:
-    exception = PYTHON_BUG_EXCEPTIONS.get(case.get('name'))
-    if exception is None:
-        return None
-    if case.get('python_status') != exception['python_status'] or case.get('go_status') != exception['go_status']:
-        raise ValueError(f"{exception['issue']} exception is stale or changed; review and remove it")
-    differences = {difference.get('path'): difference.get('kind') for difference in case.get('differences', [])}
-    if any(differences.get(path) != kind for path, kind in exception['sentinels'].items()):
-        raise ValueError(f"{exception['issue']} exception no longer matches its expected difference rows")
-    return exception['issue']
+def validate_unreadable_park(case: dict) -> bool:
+    if case.get('name') != UNREADABLE_CASE:
+        return False
+    retry = case.get('python_retry') or {}
+    pending = retry.get('callback_pending_attempts')
+    if (
+        case.get('python_status') != 'parked'
+        or case.get('go_status') != 'failure'
+        or case.get('go_ciphertext_kept') is not True
+        or retry.get('outcome') != 'parked'
+        or retry.get('reason') != 'age_gate_72h'
+        or retry.get('ciphertext_kept') is not True
+        or type(pending) is not int
+        or pending < 1
+        or retry.get('attempts') != pending + 1
+        or not any(
+            diff.get('path') == '/status' and diff.get('kind') == 'different_value'
+            for diff in case.get('differences', ())
+        )
+    ):
+        raise ValueError('SCA-4178 unreadable retry rule is stale or missing evidence')
+    return True
 
 
 def normalized_difference_location(path: str, case_name: str) -> tuple[str, str, bool]:
@@ -200,6 +204,20 @@ def pass3_go_gap_group(path: str, case_name: str, groups: list[dict[str, str]]) 
         if group_field == '<document>' or field == group_field or field.startswith(group_field + '/'):
             return group['group']
     return None
+
+
+def is_episode_attach_memo_path(path: str) -> bool:
+    if path.startswith('/go/derived_documents/'):
+        path = path.removeprefix('/go')
+    if not path.startswith('/derived_documents/') or '~1episode_links~1' not in path:
+        return False
+    return path.rsplit('/', 1)[-1] in {
+        'attach_revision',
+        'attach_completed',
+        'attach_finalized',
+        'attach_owner_id',
+        'attach_memo_evidence',
+    }
 
 
 def unlabelled_groups(cases: list[dict]) -> list[dict]:
@@ -292,7 +310,7 @@ def enrich(report: dict) -> dict:
         if operation_row['difference'] > 0:
             operation_overages.append({'case': operation_row['case'], 'difference': operation_row['difference']})
 
-        python_bug_issue = validate_python_bug_exception(case)
+        unreadable_park = validate_unreadable_park(case)
         captured_receipt_trace = case.get('home_dirty_receipt_trace') or {}
         case['home_dirty_receipt_trace'] = {side: captured_receipt_trace.get(side, {}) for side in ('python', 'go')}
         case.pop('cost', None)
@@ -314,18 +332,25 @@ def enrich(report: dict) -> dict:
                 label = validate_label(difference['label'], difference.get('reason'))
                 if label.startswith('python_bug:'):
                     raise ValueError('python_bug labels require a matching approved case-specific exception')
-            elif difference.get('path') == '/conversation/finalization_job_id' and python_bug_issue:
-                label = f'python_bug:{python_bug_issue}'
             elif difference.get('path') in {
                 '/conversation/go_finalization_notes_input_hash',
                 '/conversation/go_finalization_notes_output_hash',
                 '/conversation/finalization_job_id',
             }:
                 label = 'go_gap'
+            elif (
+                is_episode_attach_memo_path(difference.get('path', ''))
+                and (case.get('episode_attach_memo_checks', {}).get('go') or {}).get('valid') is False
+            ):
+                label = 'go_gap'
+            elif unreadable_park and (
+                difference.get('path') == '/status' or difference.pop('unreadable_terminal_consequence', False) is True
+            ):
+                label = UNREADABLE_RETRY_BUG
+                difference['issue'] = UNREADABLE_RETRY_ISSUE
+                difference['reason'] = UNREADABLE_PARK_RULE
             elif difference.get('reason'):
                 label = f"by_design:{difference['reason']}"
-            elif python_bug_issue:
-                label = f'python_bug:{python_bug_issue}'
             else:
                 if pass3_group is None:
                     label = None
