@@ -145,6 +145,11 @@ class _Capture extends CaptureProvider {
   @override
   ({String id, DateTime at, int previewWords, int previewSession})? get lastServerClose => closed;
 
+  final closedRecordings = <String>{};
+
+  @override
+  bool hasClosedServerRecording(String recordingId) => closedRecordings.contains(recordingId);
+
   @override
   void noteClientFinish() => lastClientFinish = (
         at: DateTime.now(),
@@ -584,27 +589,30 @@ void main() {
     });
   }
 
-  testWidgets("a v3 404 does not open the previous window's late close", (tester) async {
-    final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
-    addTearDown(v3.dispose);
-    final capture = _Capture()
-      ..verifiedLiveServerRecordingId = 'rec-2'
-      ..failure = ProcessAbsence.notFound;
-    await _pump(tester, capture, v3: v3);
-    final navigator = Navigator.of(tester.element(find.byType(LiveEpisodePage)));
-    navigator.pop();
-    await tester.pumpAndSettle();
-    capture.lastClientFinish =
-        (at: DateTime.now().subtract(const Duration(minutes: 2)), previewWords: 0, previewSession: 0);
-    capture.closed =
-        (id: 'rec-1', at: DateTime.now().subtract(const Duration(minutes: 1)), previewWords: 0, previewSession: 0);
+  for (final stale in [false, true]) {
+    testWidgets("a v3 404 does not open the previous window's late close (stale verified id: $stale)", (tester) async {
+      final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
+      addTearDown(v3.dispose);
+      final capture = _Capture()
+        ..verifiedLiveServerRecordingId = stale ? 'rec-1' : 'rec-2'
+        ..failure = ProcessAbsence.notFound;
+      if (stale) capture.closedRecordings.add('rec-1');
+      await _pump(tester, capture, v3: v3);
+      final navigator = Navigator.of(tester.element(find.byType(LiveEpisodePage)));
+      navigator.pop();
+      await tester.pumpAndSettle();
+      capture.lastClientFinish =
+          (at: DateTime.now().subtract(const Duration(minutes: 2)), previewWords: 0, previewSession: 0);
+      capture.closed =
+          (id: 'rec-1', at: DateTime.now().subtract(const Duration(minutes: 1)), previewWords: 0, previewSession: 0);
 
-    final outcome = await finishLiveCapture(tester.element(find.text('home')), capture);
+      final outcome = await finishLiveCapture(tester.element(find.text('home')), capture);
 
-    expect(outcome, isA<FinishAwaitingResult>());
-    expect(capture.finishes, 1);
-    await tester.pumpWidget(const SizedBox());
-  });
+      expect(outcome, isA<FinishAwaitingResult>());
+      expect(capture.finishes, 1);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 
   testWidgets('a v3 404 opens the recording that closed while Finish was in flight', (tester) async {
     final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');

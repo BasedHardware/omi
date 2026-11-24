@@ -78,7 +78,10 @@ Future<FinishOutcome> finishLiveCapture(
   final owned = liveConversationId != null;
   if (hadContent || retry || phoneOwns || owned || (v3Feedback && provider.verifiedLiveServerRecordingId != null)) {
     final previousFinish = provider.lastClientFinish;
-    final finishingRecording = provider.verifiedLiveServerRecordingId;
+    // Process Now can close a recording before Listen announces its successor: a verified recording
+    // the server already closed is the previous window's, not the one this tap finishes.
+    final verified = provider.verifiedLiveServerRecordingId;
+    final finishingRecording = verified != null && !provider.hasClosedServerRecording(verified) ? verified : null;
     provider.noteClientFinish();
     final thisFinish = provider.lastClientFinish;
     FinishOutcome outcome;
@@ -94,7 +97,7 @@ Future<FinishOutcome> finishLiveCapture(
             (previousFinish == null || serverClose.at.isAfter(previousFinish.at)) &&
             (finishingRecording != null
                 ? serverClose.id == finishingRecording
-                : thisFinish != null && !serverClose.at.isBefore(thisFinish.at));
+                : serverClose.id != verified && thisFinish != null && !serverClose.at.isBefore(thisFinish.at));
         outcome = ours ? FinishProcessing(serverClose.id) : const FinishAwaitingResult();
       } else {
         // A retry re-sends what the page held after a failed Finish.
