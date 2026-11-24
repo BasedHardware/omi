@@ -4,6 +4,9 @@ No transcript bodies are copied into scheduler metadata. Durable completion is
 separate from the Redis client projection, and can repair a lost Redis reply.
 """
 
+from database.batch_coalescing_capabilities import advertise
+from database.batch_pipeline_upload_metrics import observe_completion
+
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 import logging
@@ -86,6 +89,11 @@ def usage_stamp(now: datetime, usage_period: Any) -> datetime:
 class ProjectionStore:
     def __init__(self, store: FirestoreStore):
         self.store = store
+        try:
+            advertise(store)
+        except Exception:
+            # Missing capability advertisement keeps producers on legacy packing.
+            logger.warning('event=batch_coalescing outcome=capability_unavailable')
 
     @property
     def client(self):
@@ -800,6 +808,8 @@ class ProjectionStore:
         coalescing_receipts: list[tuple[str, str]] = []
         notes_wakes = []
         sealed_proofs: list[str] = []
+        delivered_uploads = []
+        completion_upload = {}
         finish_resolution: list[tuple[str, str]] = []
 
         @firestore.transactional
@@ -810,8 +820,11 @@ class ProjectionStore:
             zero_speech = accounting is None
             notes_wakes.clear()
             sealed_proofs.clear()
+            delivered_uploads.clear()
             session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
+            completion_upload.clear()
+            completion_upload.update(session.ledger)
             if zero_speech and (
                 binding.record_origin
                 or binding.native_record
@@ -838,6 +851,7 @@ class ProjectionStore:
             members = coalescing_completion.prepare(
                 self.client, self.store.namespace, transaction, binding, session.ledger
             )
+            delivered_uploads.extend(member for _, _, member, _ in members)
             coalescing_receipts.extend(
                 ('intakes', member['job_id']) for member in (session.ledger.get('coalescing') or {}).get('members', [])
             )
@@ -1201,6 +1215,14 @@ class ProjectionStore:
                 SOURCE_DELETED_JOBS.inc()
                 logger.info('event=batch_projection action=completion outcome=source_deleted')
             record_correctness('projection_completed', seconds=seconds)
+        observe_completion(
+            completion_upload,
+            delivered_uploads,
+            merged=bool(coalescing_receipts),
+            changed=changed,
+            result=result,
+            now=now,
+        )
         return result
 
     def _v3_finish_update(self, transaction, collection, cid, row, silent, session, now):
