@@ -140,11 +140,11 @@ func (vendor) Recover(context.Context, queue.Guarded, batchunit.Request) (batchu
 
 type anyone struct{}
 
-func (anyone) Admissible(context.Context, queue.Admitting, string) (queue.EntitlementSnapshot, error) {
-	return queue.EntitlementSnapshot{}, nil
+func (anyone) Admissible(context.Context, queue.Admitting, string) (batchunit.AccountFunding, error) {
+	return batchunit.AccountFunding{}, nil
 }
-func (anyone) Runnable(context.Context, queue.Guarded, string) (queue.EntitlementSnapshot, error) {
-	return queue.EntitlementSnapshot{}, nil
+func (anyone) Runnable(context.Context, queue.Guarded, string) (batchunit.AccountFunding, error) {
+	return batchunit.AccountFunding{}, nil
 }
 
 type quiet struct{}

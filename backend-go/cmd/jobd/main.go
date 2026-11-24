@@ -121,7 +121,7 @@ func serve(ctx context.Context, cfg config, store *queue.Store, kit *kitstore.St
 		return errors.New("invalid worker registration")
 	}
 	defer workers.Stop()
-	stopChecks := startEntitlementChecks(ctx, store, units.Accounts.Admissible)
+	stopChecks := startEntitlementChecks(ctx, store, units.Entitlement)
 	defer stopChecks()
 
 	api := &api{store: store, workers: workers, client: client, final: final, units: units, kit: kit, metrics: m}

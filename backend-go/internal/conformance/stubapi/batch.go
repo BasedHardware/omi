@@ -41,11 +41,13 @@ func (s BatchSpeech) Transcribe(ctx context.Context, g queue.Guarded, req batchu
 	return batchunit.Transcript{Text: text}, nil
 }
 
-// Recover reports nothing committed: the stub has no way to look an operation up without
-// running it. An exhausted unit therefore parks, and a redrive repeats the operation, which
-// the stub still charges once.
-func (BatchSpeech) Recover(context.Context, queue.Guarded, batchunit.Request) (batchunit.Transcript, error) {
-	return batchunit.Transcript{}, batchunit.ErrNotCommitted
+// Recover reads the kit's durable result. The speech stub itself has no read-only lookup.
+func (s BatchSpeech) Recover(ctx context.Context, g queue.Guarded, req batchunit.Request) (batchunit.Transcript, error) {
+	body, err := s.Inputs.RecoverResult(ctx, g, BatchKey(req.Owner, req.UnitID), req.Operation)
+	if errors.Is(err, kitstore.ErrAbsent) {
+		return batchunit.Transcript{}, batchunit.ErrNotCommitted
+	}
+	return batchunit.Transcript{Text: body}, err
 }
 
 // BatchResults implements batchunit.Results on the kit store.
@@ -66,34 +68,34 @@ func (r BatchResults) Put(
 type BatchAccounts struct{ Client *Client }
 
 // Admissible refuses an owner who is being deleted or whose account cannot be read.
-func (a BatchAccounts) Admissible(ctx context.Context, admitting queue.Admitting, owner string) (queue.EntitlementSnapshot, error) {
+func (a BatchAccounts) Admissible(ctx context.Context, admitting queue.Admitting, owner string) (batchunit.AccountFunding, error) {
 	if err := admitting.Err(); err != nil {
-		return queue.EntitlementSnapshot{}, err
+		return batchunit.AccountFunding{}, err
 	}
 	return a.check(ctx, owner, false)
 }
 
 // Runnable holds the whole tenant while its owner is being deleted.
-func (a BatchAccounts) Runnable(ctx context.Context, g queue.Guarded, owner string) (queue.EntitlementSnapshot, error) {
+func (a BatchAccounts) Runnable(ctx context.Context, g queue.Guarded, owner string) (batchunit.AccountFunding, error) {
 	if err := g.Err(); err != nil {
-		return queue.EntitlementSnapshot{}, err
+		return batchunit.AccountFunding{}, err
 	}
 	return a.check(ctx, owner, true)
 }
 
-func (a BatchAccounts) check(ctx context.Context, owner string, hold bool) (queue.EntitlementSnapshot, error) {
+func (a BatchAccounts) check(ctx context.Context, owner string, hold bool) (batchunit.AccountFunding, error) {
 	account, fault := a.Client.Account(ctx, owner)
 	deleting := account.Deleting || (fault != nil && fault.Cause == CauseAccountDeleting)
 	switch {
 	case deleting:
-		return queue.EntitlementSnapshot{}, &Fault{Result: Yielded, Cause: CauseAccountDeleting, Delay: holdDelay, HoldTenant: hold}
+		return batchunit.AccountFunding{}, &Fault{Result: Yielded, Cause: CauseAccountDeleting, Delay: holdDelay, HoldTenant: hold}
 	case fault != nil:
-		return queue.EntitlementSnapshot{}, fault
-	case account.EntitlementGeneration < 0 || account.AllowanceExhausted && account.EntitlementGeneration == 0:
-		// The source must supply a fence that a later funded generation can advance.
-		return queue.EntitlementSnapshot{}, &Fault{Result: Transient, Cause: CauseVendorUnavailable}
+		return batchunit.AccountFunding{}, fault
 	}
-	return queue.EntitlementSnapshot{ChangedAt: account.EntitlementChangedAt, Generation: account.EntitlementGeneration, Exhausted: account.AllowanceExhausted}, nil
+	return batchunit.AccountFunding{
+		OwnKey:      account.OwnKey,
+		Entitlement: queue.EntitlementSnapshot{ChangedAt: account.EntitlementChangedAt, Generation: account.EntitlementGeneration, Exhausted: account.AllowanceExhausted},
+	}, nil
 }
 
 // BatchObserver implements batchunit.Observer on the client's dedupe metrics.

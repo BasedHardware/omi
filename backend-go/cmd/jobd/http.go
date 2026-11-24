@@ -165,7 +165,7 @@ func (a *api) entitlementChanged(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	err := a.store.Tenant(ctx, owner, func(sc *queue.Scope) error {
-		fact, err := a.units.Accounts.Admissible(ctx, sc.Admitting(), owner)
+		fact, err := a.units.Entitlement(ctx, sc.Admitting(), owner)
 		if err != nil {
 			return err
 		}
@@ -202,14 +202,21 @@ func (a *api) batch(w http.ResponseWriter, r *http.Request) {
 	}
 	ref := wire.BatchKey(owner, data.ID)
 	ctx := r.Context()
+	var alreadyPaid bool
 	err := a.store.Tenant(ctx, owner, func(sc *queue.Scope) error {
-		return a.kit.PutInput(ctx, sc.Admitting(), ref, *data.Input)
+		var err error
+		alreadyPaid, err = a.kit.StageInput(ctx, sc.Admitting(), ref, *data.Input, queue.OperationID(ref, batchunit.StepSpeech))
+		return err
 	})
 	if err != nil {
 		routeError(w, err, "")
 		return
 	}
-	unit := batchunit.Unit{Route: data.Route, CustodyDeadline: data.CustodyDeadline, AudioDuration: time.Duration(data.DurationSeconds * float64(time.Second)), ID: data.ID, Source: batchunit.Source{Ref: ref, Version: 1}, OrderAt: data.OrderAt, RunAt: data.RunAt}
+	unit := batchunit.Unit{
+		ID: data.ID, Source: batchunit.Source{Ref: ref, Version: 1}, OrderAt: data.OrderAt, RunAt: data.RunAt,
+		AlreadyPaid: alreadyPaid, Route: data.Route, CustodyDeadline: data.CustodyDeadline,
+		AudioDuration: time.Duration(data.DurationSeconds * float64(time.Second)),
+	}
 	j, err := a.units.Admit(ctx, owner, unit)
 	if err != nil {
 		routeError(w, err, "")
