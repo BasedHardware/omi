@@ -42,7 +42,7 @@ def builder(monkeypatch):
         return fn(*args, **kwargs)
 
     monkeypatch.setattr(service, 'run_blocking', blocking)
-    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    monkeypatch.setattr(leases, 'acquire', lambda *a, promote_llm=False: 'token')
     monkeypatch.setattr(leases, 'renew', lambda *a: None)
     monkeypatch.setattr(leases, 'release', lambda *a: None)
     monkeypatch.setattr(store, 'outline_attempt', lambda *a, **kw: True)
