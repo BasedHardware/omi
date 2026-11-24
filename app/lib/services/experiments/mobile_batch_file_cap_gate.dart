@@ -7,17 +7,17 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 /// seconds after speech stops or when it reaches its length cap; the cap is
 /// what bounds how long continuous speech waits on the phone before upload.
 ///
-/// Evaluated from the PostHog flag `mobile-batch-file-cap-15s`, registered in
+/// Evaluated from the PostHog flag `mobile-batch-file-cap-smaller`, registered in
 /// `config/feature-flags.yaml`. Fail-closed: no analytics identity, a failed
 /// or late read, or a missing flag keeps the 60-second cap. Read once per app
 /// launch, so a flip takes effect on the next launch.
 /// Lifecycle: rollout; default off.
 abstract final class MobileBatchFileCapGate {
-  static const enabledFlag = 'mobile-batch-file-cap-15s';
+  static const enabledFlag = 'mobile-batch-file-cap-smaller';
   static const shortFileSeconds = 15;
 
-  /// Debug-build override: `--dart-define=OMI_MOBILE_BATCH_FILE_CAP_15S=true`.
-  static const _debugForce = bool.fromEnvironment('OMI_MOBILE_BATCH_FILE_CAP_15S');
+  /// Debug-build override: `--dart-define=OMI_MOBILE_BATCH_FILE_CAP_SMALLER=true`.
+  static const _debugForce = bool.fromEnvironment('OMI_MOBILE_BATCH_FILE_CAP_SMALLER');
 
   static bool get debugOverrideActive => kDebugMode && _debugForce;
 
