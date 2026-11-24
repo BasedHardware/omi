@@ -50,7 +50,7 @@ def _warm_imports():
 @pytest.fixture
 def real_play_reads(env, monkeypatch):
     """The real play_subscriptions readers and Google re-read over the fake store and fake Google."""
-    for name in ('get_user_fields', 'get_purchase', 'purchases_for_uid', 'update_purchase'):
+    for name in ('get_user_fields', 'get_purchase', 'purchase_keys_for_uid', 'update_purchase'):
         monkeypatch.setattr(play_db, name, getattr(env.store, name))
     monkeypatch.setattr(play_publisher, '_default', env.publisher)
     return env
@@ -544,7 +544,7 @@ def _boom(*args, **kwargs):
 @pytest.mark.parametrize('headers', NO_HISTORY_CLIENTS)
 def test_no_history_checkout_survives_every_added_dependency_failing(real_checkout, monkeypatch, headers):
     _env(real_checkout, PROD_OFF)
-    monkeypatch.setattr(play_db, 'purchases_for_uid', _boom)
+    monkeypatch.setattr(play_db, 'purchase_keys_for_uid', _boom)
     monkeypatch.setattr(play_db, 'get_purchase', _boom)
     monkeypatch.setattr(play_publisher, 'default_publisher', _boom)
     monkeypatch.setattr(play_publisher, 'recoverable_play_purchase', _boom)

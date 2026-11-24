@@ -109,9 +109,6 @@ class FakeStore:
     def purchase_keys_for_uid(self, uid):
         return [key for key, doc in self.docs.items() if doc.get('uid') == uid]
 
-    def purchases_for_uid(self, uid):
-        return [(key, dict(doc)) for key, doc in self.docs.items() if doc.get('uid') == uid]
-
     def mark_once(self, key, field, value):
         doc = self.docs.setdefault(key, {})
         if doc.get(field):

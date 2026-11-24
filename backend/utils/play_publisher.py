@@ -172,8 +172,9 @@ def recoverable_play_purchase(uid: str, publisher: Optional[PublisherClient] = N
     Raises ``PlayStateUnavailable`` when Google cannot be read for one of them.
     """
     now = int(datetime.now(timezone.utc).timestamp())
-    for key, record in play_db.purchases_for_uid(uid):
-        if not _stored_may_charge(record, now):
+    for key in play_db.purchase_keys_for_uid(uid):
+        record = play_db.get_purchase(key) or {}
+        if record.get('uid') != uid or not _stored_may_charge(record, now):
             continue
         token = record.get('purchase_token')
         if not token:

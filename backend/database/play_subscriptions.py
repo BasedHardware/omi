@@ -143,15 +143,6 @@ def has_play_history(fields: Mapping[str, Any]) -> bool:
     return any(fields.get(name) for name in HISTORY_FIELDS)
 
 
-def purchases_for_uid(uid: str, *, firestore_client: Optional[Any] = None) -> list[tuple[str, dict]]:
-    """(key, record) for every purchase document bound to ``uid``."""
-    client = firestore_client or _client.get_firestore_client()
-    return [
-        (snapshot.id, snapshot.to_dict() or {})
-        for snapshot in client.collection(COLLECTION).where('uid', '==', uid).stream()
-    ]
-
-
 def mark_once(token_hash: str, field: str, value: Any, *, firestore_client: Optional[Any] = None) -> bool:
     """Write ``field`` only when it is not set yet. Returns True when this call wrote it."""
     client = firestore_client or _client.get_firestore_client()
