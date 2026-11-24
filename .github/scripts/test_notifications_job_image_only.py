@@ -2,8 +2,13 @@
 """Exercise image-only job updates against a Cloud Run v2 API double."""
 
 import copy
+import io
+import json
+import os
 import sys
+import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -229,6 +234,32 @@ class ImageOnlyTest(unittest.TestCase):
             self.change("rollback", receipt, "67")
         self.assertEqual(self.api.writes, 1)
 
+    def test_rollback_cli_without_forward_dependencies(self):
+        receipt = self.change()
+        self.change("apply", receipt)
+
+        with tempfile.TemporaryDirectory() as runner_temp:
+            validation_dir = Path(runner_temp) / "notifications-validation"
+            validation_dir.mkdir()
+            (validation_dir / "notifications-image-receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
+            env = {
+                "MODE": "image-only-rollback",
+                "RELEASE_SHA": SOURCE,
+                "EXPECTED_GENERATION": "67",
+                "RUNNER_TEMP": runner_temp,
+            }
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch.dict(sys.modules, {"yaml": None, "render_backend_runtime_env": None}),
+                patch.object(deploy, "command", side_effect=[deploy.ROLLBACK.split("@")[1], "fake-token"]),
+                patch.object(deploy, "request_job", side_effect=lambda _token, path, body: self.api(path, body)),
+                redirect_stdout(io.StringIO()) as output,
+            ):
+                deploy.run_cli()
+
+        self.assertEqual(json.loads(output.getvalue().split("\n", 1)[1])["installed_image"], deploy.ROLLBACK)
+        self.assertEqual(self.api.writes, 2)
+
     def test_workflow_gates_and_isolates_the_image_only_job(self):
         workflow = (ROOT / ".github/workflows/gcp_notifications_job.yml").read_text()
         full, image_only = workflow.split("\n  image-only:\n", 1)
@@ -241,6 +272,20 @@ class ImageOnlyTest(unittest.TestCase):
         self.assertIn('cd .github/notifications-image-source\n            python3 backend/scripts/runtime_image_contracts.py smoke', image_only)
         for step in ("Get GKE credentials for gateway serving gate", "Verify LLM Gateway serving data plane"):
             self.assertIn(f"- name: {step}\n        if: inputs.mode != 'image-only-rollback'", image_only)
+        install = image_only.index("- name: Install pinned deploy script dependency")
+        self.assertLess(install, image_only.index("- name: Verify serving Firestore indexes"))
+        self.assertLess(install, image_only.index("- name: Google Auth (prod WIF)"))
+        install_step = image_only[install:image_only.index("\n      - name:", install + 1)]
+        self.assertIn("if: inputs.mode != 'image-only-rollback'", install_step)
+        self.assertIn("--require-hashes", install_step)
+        self.assertIn("PyYAML==6.0.1 --hash=sha256:", install_step)
+        self.assertIn("python3 backend/scripts/notifications_job_image_only_forward.py", image_only)
+        self.assertIn(
+            "- name: Roll back only the notifications job image\n"
+            "        if: inputs.mode == 'image-only-rollback'\n"
+            "        run: python3 backend/scripts/notifications_job_image_only.py",
+            image_only,
+        )
         for forbidden in ("deploy-cloudrun", "scheduler_reconcile", "gcloud monitoring", "gcloud logging",
                           "attach_cloud_run_gmp_sidecar", "jobs run"):
             self.assertNotIn(forbidden, image_only)

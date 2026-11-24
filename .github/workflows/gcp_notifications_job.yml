@@ -688,12 +688,17 @@ jobs:
             --environment=prod --project=based-hardware --region="$REGION" \
             --github-output "$GITHUB_OUTPUT"
 
-      - name: Validate or update only the notifications job image
+      - name: Validate or apply only the notifications job image
+        if: inputs.mode != 'image-only-rollback'
         env:
           OMI_LLM_GATEWAY_URL: ${{ steps.image-gateway.outputs.gateway_url }}
         run: |
           set -euo pipefail
-          python3 backend/scripts/notifications_job_image_only.py
+          python3 backend/scripts/notifications_job_image_only_forward.py
+
+      - name: Roll back only the notifications job image
+        if: inputs.mode == 'image-only-rollback'
+        run: python3 backend/scripts/notifications_job_image_only.py
 
       - name: Publish image-only validation receipt
         if: inputs.mode == 'image-only-validate'

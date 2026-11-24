@@ -301,9 +301,11 @@ def change_image(request, *, mode, source, generation, candidate, expected_env, 
     return {**details, 'applied_generation': live['generation'], 'installed_image': image, 'apply_operation': operation}
 
 
-def main():
+def main(load_expected_env=None):
     mode = os.environ['MODE']
     require(mode in {'image-only-validate', 'image-only-apply', 'image-only-rollback'}, 'Unknown image-only mode')
+    rollback = mode == 'image-only-rollback'
+    require(rollback == (load_expected_env is None), 'Image-only mode does not match this entry point')
     source = os.environ['RELEASE_SHA']
     generation = os.environ['EXPECTED_GENERATION']
     temp = Path(os.environ['RUNNER_TEMP'])
@@ -322,7 +324,7 @@ def main():
         )
         candidate = receipt['candidate']
     require(image_pin(candidate) != ROLLBACK, 'Candidate and rollback digests must be distinct')
-    if mode != 'image-only-rollback':
+    if not rollback:
         verify_candidate(candidate, source)
     # Check availability by digest, even when the live job still uses a tag.
     require(
@@ -331,16 +333,7 @@ def main():
         'Pinned rollback image does not resolve',
     )
 
-    expected = None
-    if mode != 'image-only-rollback':
-        from render_backend_runtime_env import DEFAULT_MANIFEST, _load_yaml, _render_env_entries
-
-        env = _load_yaml(DEFAULT_MANIFEST)['environments']['prod']['cloud_run']['jobs']['notifications-job']['env']
-        expected = {
-            entry['name']: entry['value']
-            for entry in _render_env_entries({name: env[name] for name in (ENDPOINT, BLANK)})
-        }
-        require(expected[ENDPOINT] and expected[ENDPOINT] != 'http://127.0.0.1:9', 'Missing verified gateway endpoint')
+    expected = load_expected_env() if load_expected_env is not None else None
     token = command('gcloud', 'auth', 'print-access-token')
     require(token, 'Cloud Run access token is missing')
 
@@ -362,8 +355,12 @@ def main():
     print(rendered)
 
 
-if __name__ == '__main__':
+def run_cli(load_expected_env=None):
     try:
-        main()
+        main(load_expected_env)
     except (ValueError, KeyError, TypeError, OSError, URLError, subprocess.CalledProcessError) as exc:
         sys.exit(f'Image-only operation failed: {exc}')
+
+
+if __name__ == '__main__':
+    run_cli()
