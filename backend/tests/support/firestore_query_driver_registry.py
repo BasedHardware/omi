@@ -246,7 +246,8 @@ BODY_DIGEST = {
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
     # Re-reviewed: quiet admission uses the shared speech clock; query/read shapes are unchanged.
     # Re-reviewed 2026-11-04: atomic blocked_byok_at metadata only; query ownership is unchanged.
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'f20f3b16e0e8d9421b86c675510cbb0fc9a4d09b3e71f70c68c3254b8209542c',
+    # Re-reviewed: the early user-finish admission is a predicate on the snapshot already held; no query.
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'a51db6a941f59c0f6816aecef624f68d923be3ea95155c1f4b6b768cc92fffa3',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
