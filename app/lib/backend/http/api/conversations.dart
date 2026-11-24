@@ -57,7 +57,7 @@ bool isRetryableInProgressConversationResponse(http.Response? response) {
   }
 }
 
-@visibleForTesting
+/// Sends the serialized Process Now request.
 typedef InProgressConversationRequestSender = Future<http.Response?> Function(ApiRequest request);
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
@@ -66,7 +66,7 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
 
 Future<InProgressProcessOutcome> processInProgressConversationOutcome({
   String? liveConversationId,
-  @visibleForTesting InProgressConversationRequestSender? sendRequest,
+  InProgressConversationRequestSender? sendRequest,
   @visibleForTesting Future<void> Function(Duration)? waitBeforeRetry,
   @visibleForTesting void Function(http.Response)? reportUnexpectedResponse,
 }) async {

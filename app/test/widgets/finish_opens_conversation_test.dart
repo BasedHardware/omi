@@ -156,7 +156,7 @@ class _Capture extends CaptureProvider {
   String? get liveCaptureSource => 'omi';
 
   @override
-  Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
+  Future<InProgressProcessOutcome> finishCaptureWithOutcome({String? liveConversationId}) async {
     finishes++;
     await answerDelay;
     final reply = answer;
@@ -512,6 +512,19 @@ void main() {
     v3.acknowledgeManualFinish(row);
   });
 
+  test('a Finish 404 uses the placeholder target to match its successor', () {
+    final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
+    addTearDown(v3.dispose);
+    final row = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'rec-1');
+    v3.startManualFinish(row, null);
+
+    expect(v3.settleManualFinish(row, null, alreadyClosed: true), isTrue);
+    expect(v3.finishHasSuccessor([_derived('other', 'rec-2')]), isFalse);
+    expect(v3.finishHasSuccessor([_derived('window-1', 'rec-1')]), isTrue);
+    expect(v3.acknowledgeManualFinish(row), isTrue);
+    expect(v3.finishRow, isNull);
+  });
+
   testWidgets('v3 Wrap Up returns to the published Home processing row', (tester) async {
     final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
     addTearDown(v3.dispose);
@@ -555,7 +568,7 @@ void main() {
     testWidgets('an already closed Finish returns to Home without an error (v3: $v3On)', (tester) async {
       final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:${v3On ? 1 : 0}');
       addTearDown(v3.dispose);
-      final capture = _Capture(preview: _Preview(v3On ? const [] : const [_line], v3On ? 0 : 4))
+      final capture = _Capture(preview: v3On ? null : _Preview(const [_line], 4))
         ..verifiedLiveServerRecordingId = 'rec-1'
         ..failure = ProcessAbsence.notFound;
       await _pump(tester, capture, v3: v3);
@@ -565,7 +578,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(LiveEpisodePage), findsNothing);
       expect(find.text("Didn't go through. Your audio is safe."), findsNothing);
-      expect(find.text("Already saved. It's on Home."), findsOneWidget);
+      expect(find.text("Already saved. It's on Home."), v3On ? findsNothing : findsOneWidget);
+      expect(find.text('home'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
   }

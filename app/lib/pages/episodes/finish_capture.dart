@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/finished_capture_page.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -30,20 +31,27 @@ HeldCapture? holdCapture(CaptureProvider provider) => provider.segments.isEmpty 
     ? null
     : (segments: List<TranscriptSegment>.of(provider.segments), photos: List<ConversationPhoto>.of(provider.photos));
 
+/// The account's live window is a valid Finish target only if this device captures it.
+String? ownedLiveFinishId(BuildContext context, CaptureProvider capture) {
+  final live = context.read<ConversationsV3Provider?>()?.live;
+  return live != null && LiveConversationEndButton.phoneCaptures(live, capture, currentLiveId: live.id)
+      ? live.id
+      : null;
+}
+
 /// Finish the live capture: the one path behind the live page's Finish, Home's Wrap Up and the
 /// record button's stop. It always answers with a [FinishOutcome]; it never throws.
 ///
 /// [retry] sends Process Now again after a failed Finish even when the page shows nothing new: the
 /// failed request processed nothing, and the controller already moved its transcript aside.
 ///
-/// [owned] allows Process Now when the live page has matched its window to the capture before any
-/// transcript arrives.
+/// A verified [liveConversationId] allows Process Now before any transcript arrives.
 Future<FinishOutcome> finishLiveCapture(
   BuildContext context,
   CaptureProvider provider, {
   EpisodeProvider? episodes,
   bool retry = false,
-  bool owned = false,
+  String? liveConversationId,
 }) async {
   final v3Feedback = context.read<ConversationsV3Provider?>()?.finishFeedbackEnabled ?? false;
   final preview = provider.livePreview;
@@ -67,19 +75,24 @@ Future<FinishOutcome> finishLiveCapture(
   // A phone recorder still restoring coordinator ownership has no source yet, but is still this phone's.
   final phoneOwns = provider.liveCaptureSource == ConversationSource.phone.name ||
       (provider.liveCaptureSource == null && EpisodePresentation.streamingSource(provider) == 'phone');
+  final owned = liveConversationId != null;
   if (hadContent || retry || phoneOwns || owned || (v3Feedback && provider.verifiedLiveServerRecordingId != null)) {
     final previousFinish = provider.lastClientFinish;
     provider.noteClientFinish();
     FinishOutcome outcome;
     try {
       // Ending the capture fires the shared finalize hook, which closes the episode.
-      final answer = await provider.finishCaptureWithOutcome();
-      // A retry re-sends what the page held after a failed Finish; a phone page with no line
-      // showed nothing, so "nothing to process yet" is the honest answer there (C5).
-      final serverClose = v3Feedback && answer.absence == ProcessAbsence.notFound ? _recentServerClose(provider) : null;
-      outcome = serverClose != null && (previousFinish == null || serverClose.at.isAfter(previousFinish.at))
-          ? FinishProcessing(serverClose.id)
-          : FinishOutcome.fromProcess(answer, heardSomething: hadContent || retry || owned || v3Feedback);
+      final answer = await provider.finishCaptureWithOutcome(liveConversationId: liveConversationId);
+      if (v3Feedback && answer.absence == ProcessAbsence.notFound) {
+        // The pointer may be gone before a result is available, or the server may have captured nothing.
+        final serverClose = _recentServerClose(provider);
+        outcome = serverClose != null && (previousFinish == null || serverClose.at.isAfter(previousFinish.at))
+            ? FinishProcessing(serverClose.id)
+            : const FinishAwaitingResult();
+      } else {
+        // A retry re-sends what the page held after a failed Finish.
+        outcome = FinishOutcome.fromProcess(answer, heardSomething: hadContent || retry || owned || v3Feedback);
+      }
     } on FinishMadeNoRequest {
       outcome = const FinishSavedForLater();
     } catch (_) {
@@ -153,6 +166,7 @@ bool presentFinishOutcome(
   final stays = outcome is FinishFailed || outcome is FinishNotReceived;
   if (homeShowsProcessing ||
       page != null ||
+      outcome is FinishAwaitingResult ||
       outcome is FinishSavedForLater ||
       (outcome is FinishNothingNew && outcome.alreadySaved)) {
     // Home is where the result lands when the reader goes back, its new row in view (C13).
@@ -183,11 +197,13 @@ bool presentFinishOutcome(
 }
 
 /// Try Again for a Finish that failed on Home: send it again and show its outcome there.
-Future<void> retryFinishFromHome(BuildContext context, CaptureProvider provider) async {
-  final outcome = await finishLiveCapture(context, provider, episodes: context.read<EpisodeProvider?>(), retry: true);
+Future<void> retryFinishFromHome(BuildContext context, CaptureProvider provider, {String? liveConversationId}) async {
+  final outcome = await finishLiveCapture(context, provider,
+      episodes: context.read<EpisodeProvider?>(), retry: true, liveConversationId: liveConversationId);
   if (!context.mounted) return;
   presentFinishOutcome(context, outcome,
-      entry: FinishEntry.home, onRetry: () => retryFinishFromHome(context, provider));
+      entry: FinishEntry.home,
+      onRetry: () => retryFinishFromHome(context, provider, liveConversationId: liveConversationId));
 }
 
 /// The record button with the microphone blocked: say so, and offer the one way to fix it
