@@ -236,6 +236,49 @@ and census separately from lateness; a lower late-work count alone is not
 evidence of processing. `job:batch_allowance_hold:tick` attributes controller
 reads. SCA-2015 owns the residual fresh-selection defects.
 
+### Provider-STT writer rollout (SCA-4089)
+
+1. Deploy the route-aware release controller with
+   `BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED=false`. Verify the serving SHA on
+   every host that can take the allowance leader lease. Confirm the release
+   host can create wakes on the provider queue.
+2. Enable the writer on the provider-STT handler after the controller checkpoint.
+   Existing provider rows park on their next scheduled funding recheck. Use the
+   existing queue for migration traffic and leave intake on its current route.
+3. For rollback, set the provider writer to false across serving revisions
+   and verify new parks stop. With route-aware controllers still serving,
+   set `BATCH_ALLOWANCE_PARK_ENABLED=off` to force-drain existing holds to
+   their original routes. Wait for provider and GPU held stock to reach zero
+   before reverting the controller. The same bounded drain applies to both
+   routes. Keep servicing provider outbox wakes throughout rollback.
+
+Parking removes the older unit's merge membership. A later BYOK unit may
+commit before the older platform-funded unit. On release the older unit
+returns to the normal provider and ordered-merge path. Hold transactions
+retain the original staged audio reference and clock. Bucket lifecycle still
+applies, including to a hold spanning the 59-day warning-to-expiry boundary
+and 60-day object lifecycle. A late release uses the existing provider
+artifact-read path. Confirm missing staged input behavior before enablement
+and escalate any proposed custody or expiry policy change.
+
+Record the controller and writer revisions and enable time under SERVING.
+In READBACK, compare matched 24-hour windows for `batch_provider` allowance
+exhaustion decisions (target at least 90% lower), `provider_pending` and
+`omi_batch_pipeline_provider_allowance_held_units`, and billed reads for
+`/v2/batch-pipeline/provider-stt/run`. Check the provider-pending census
+ceiling and age signal against the smaller dispatch backlog. Record the
+distinct held-owner count using count-only data and the observed owner-pass
+time. With 20 owners per 30-second tick, a saturated pass through 2,202 owners
+takes about 55 minutes before contention and extra drain pages.
+
+For a designated test owner record their parked-unit count, grant time,
+first owner selection, each release commit, and provider dequeue/intent
+times. Report grant-to-selection and release-to-dispatch separately. Verify
+one effective dispatch per release generation without a duplicate intent.
+Measure the tail against remaining queue capacity after ordinary traffic.
+At 10 dispatches/s, 370,000 tasks alone take over 10 hours. Several
+large owner drains and clustered scheduled rechecks share that capacity.
+
 ## Read planning envelope (round-1 correction)
 
 The prior 606-read release-page / <7M-day declaration understated queue-tail

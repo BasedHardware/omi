@@ -62,6 +62,11 @@
       "review_by": "2026-12-14",
       "registry": "config/feature-flags.yaml"
     },
+    "BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED": {
+      "owner": "batch-pipeline",
+      "review_by": "2026-12-14",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_CONTROL_CANDIDATE_FANOUT": {
       "owner": "planscost",
       "review_by": "2026-11-30"

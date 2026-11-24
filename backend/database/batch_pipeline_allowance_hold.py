@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from config.policy.kill_switches import kill_switch
+from database.outbox_provider_stt import FirestoreProviderSttOutbox
 
 STATE = 'allowance_held'
 OWNERS = 'allowance_holds'
@@ -17,6 +18,14 @@ def enabled() -> bool:
 
 def intake_enabled() -> bool:
     return enabled() and kill_switch('BATCH_ALLOWANCE_INTAKE_PARK_ENABLED', log=False)
+
+
+def provider_enabled() -> bool:
+    return enabled() and kill_switch('BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED', log=False)
+
+
+def is_provider(job: dict) -> bool:
+    return (job.get('stt_route') or {}).get('stt_route') == 'provider'
 
 
 def release_fence(owner: dict) -> tuple[str | None, float | None] | None:
@@ -45,7 +54,7 @@ def eligible(job: dict) -> bool:
         decision.get('outcome') == 'held'
         and decision.get('reason') == EXHAUSTED
         and not job.get('result')
-        and (job.get('stt_route') or {}).get('stt_route') != 'provider'
+        and not is_provider(job)
     )
 
 
@@ -62,6 +71,37 @@ def park(tx, job: dict, now: float, *, at_intake: bool = False) -> bool:
         }
     if not eligible(job) or job.get('token') or job.get('lease_until', 0) > now:
         return False
+    _park(tx, job, now)
+    return True
+
+
+def park_provider(tx, job: dict, claim, refusal: IntakeRefusal, now: float) -> bool:
+    if (
+        not provider_enabled()
+        or job.get('state') != 'provider_pending'
+        or not is_provider(job)
+        or job['stt_route'].get('provider_reason') == 'byok'
+        or claim.row_id != job['segment_id']
+        or claim.owner_id != job['owner_id']
+        or job.get('token')
+        or job.get('lease_until', 0) > now
+        or job.get('result')
+        or job.get('provider_attempts')
+        or 'provider_intent' in job
+        or tx.get_existing('results', claim.row_id) is not None
+        or not refusal.current(tx.get(OWNERS, job['owner_key']), now)
+        or not FirestoreProviderSttOutbox.park_in_transaction(tx, claim, now)
+    ):
+        return False
+    job.update(
+        compute_decision={'outcome': 'held', 'reason': EXHAUSTED, 'at': now},
+        last_policy_hold={'reason': EXHAUSTED, 'at': now},
+    )
+    _park(tx, job, now)
+    return True
+
+
+def _park(tx, job: dict, now: float) -> None:
     key = job['owner_key']
     owner = tx.get(OWNERS, key)
     if not owner:
@@ -74,7 +114,11 @@ def park(tx, job: dict, now: float, *, at_intake: bool = False) -> bool:
         job['allowance_retry_started_at'] = job.pop('retry_started_at')
     tx.put(OWNERS, key, owner)
     tx.put('jobs', job['segment_id'], job)
-    return True
+
+
+def decrement(owner: dict) -> None:
+    owner['held_count'] = max(0, owner.get('held_count', 0) - 1)
+    owner['active'] = owner['held_count'] > 0
 
 
 def restore_retry(job: dict, now: float) -> None:

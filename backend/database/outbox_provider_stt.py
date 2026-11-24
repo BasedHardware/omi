@@ -26,6 +26,7 @@ Row = dict[str, Any]
 _ROW_ID = re.compile('[0-9a-f]{64}')
 _TOKEN = re.compile('[0-9a-f]{32}')
 OPEN, CLOSED = 'open', 'closed'
+TABLE = 'provider_stt_outbox'
 TASK_PREFIX = 'pst'
 # A wake younger than this may still be queued (Cloud Tasks backoff); the sweep leaves it alone.
 REWAKE_AFTER_SECONDS = 600.0
@@ -36,7 +37,7 @@ def collection_name(stage: str | None = None) -> str:
         from utils.sync.stage import current_stage
 
         stage = current_stage()
-    return f'batch_pipeline_{stage}_provider_stt_outbox'
+    return f'batch_pipeline_{stage}_{TABLE}'
 
 
 def task_name(row_id: str, wake_token: str) -> str:
@@ -143,6 +144,26 @@ class FirestoreProviderSttOutbox:
     @staticmethod
     def _close(row: Mapping[str, Any], reason: str) -> Row:
         return {**row, 'state': CLOSED, 'closed_reason': reason, 'lease_token': None, 'lease_until': 0.0}
+
+    @staticmethod
+    def owns_claim_in_transaction(tx, claim: Claim, now: float) -> bool:
+        row = tx.get(TABLE, claim.row_id)
+        return _holds(row, claim) and row.get('owner_id') == claim.owner_id and row.get('lease_until', 0) > now
+
+    @classmethod
+    def park_in_transaction(cls, tx, claim: Claim, now: float) -> bool:
+        if not cls.owns_claim_in_transaction(tx, claim, now):
+            return False
+        row = tx.get(TABLE, claim.row_id)
+        tx.put(TABLE, claim.row_id, {**cls._close(row, 'allowance_held'), 'closed_at': now})
+        return True
+
+    @staticmethod
+    def reopen_in_transaction(tx, job: dict, now: float) -> str:
+        segment = job['segment_id']
+        row = _new_row(segment, job['owner_id'], now, (job.get('policy') or {}).get('policy_id'), now)
+        tx.put(TABLE, segment, row)
+        return row['task_token']
 
     # --- producers ------------------------------------------------------------------------------
     def enqueue(
@@ -339,7 +360,12 @@ class FirestoreProviderSttOutbox:
                     expired += 1
 
                 def rearm(old: Row | None) -> tuple[Row | None, Row | None]:
-                    if not old or old.get('state') != OPEN or old.get('lease_until', 0) > now:
+                    if (
+                        not old
+                        or old.get('state') != OPEN
+                        or old.get('task_token') != row['task_token']
+                        or old.get('lease_until', 0) > now
+                    ):
                         return old, None
                     fresh = {
                         **old,

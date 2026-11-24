@@ -2347,6 +2347,7 @@ environments:
             BATCH_PARKED_JOB_SWEEPER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED: {value: 'false', category: rollout}
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5915,6 +5916,7 @@ environments:
             BATCH_PARKED_JOB_SWEEPER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED: {value: 'false', category: rollout}
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
               value: 'true'
               category: ops_kill
@@ -6407,6 +6409,7 @@ environments:
             BATCH_PARKED_JOB_SWEEPER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_ALLOWANCE_PROVIDER_PARK_ENABLED: {value: 'false', category: rollout}
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
               value: 'true'
               category: ops_kill

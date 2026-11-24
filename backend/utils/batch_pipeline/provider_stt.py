@@ -41,6 +41,8 @@ from config.batch_pipeline_vendor_failover import (
     held_redrive_seconds,
     min_speech_seconds,
 )
+from database import batch_pipeline_allowance_hold as allowance_hold
+from database.outbox_provider_stt import FirestoreProviderSttOutbox
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.outbox import Claim, OutboxKind, Outcome
@@ -253,6 +255,31 @@ class ProviderSttStore:
     def read(self, segment_id: str) -> dict:
         return self.store.run(lambda tx: self.fence.checked(tx, segment_id)[0])
 
+    def read_for_dispatch(self, segment_id: str, now: float, claim: Claim | None):
+        def read(tx):
+            job, _ = self.fence.checked(tx, segment_id)
+            refusal = None
+            if (
+                claim is not None
+                and allowance_hold.provider_enabled()
+                and job.get('state') == PENDING
+                and (job.get('stt_route') or {}).get('provider_reason') != 'byok'
+                and 'provider_intent' not in job
+            ):
+                owner_fence = allowance_hold.release_fence(tx.get(allowance_hold.OWNERS, job['owner_key']))
+                if owner_fence is not None:
+                    refusal = allowance_hold.IntakeRefusal(now, owner_fence)
+            return job, refusal
+
+        return self.store.run(read)
+
+    def park_allowance(self, claim: Claim, refusal: allowance_hold.IntakeRefusal, now: float) -> bool:
+        def commit(tx):
+            job, _ = self.fence.checked(tx, claim.row_id)
+            return allowance_hold.park_provider(tx, job, claim, refusal, now)
+
+        return self.store.run(commit)
+
     def start(
         self,
         segment_id: str,
@@ -263,6 +290,7 @@ class ProviderSttStore:
         table_version: str = 'builtin',
         measured_vad_speech_seconds: float | None = None,
         vendor_skipped: bool = False,
+        claim: Claim | None = None,
     ):
         """CAS pending -> running, minting attempt N. Returns the job if running (ours or a prior
         intent), else None. Raises ``AttemptRefused`` when the paid-once bounds forbid the mint."""
@@ -276,6 +304,13 @@ class ProviderSttStore:
             if job.get('state') == RUNNING:
                 return job
             if job.get('state') != PENDING:
+                return None
+            # Only a current delivery may mint an intent after an allowance release.
+            if (
+                claim is not None
+                and job.get('provider_allowance_released_at') is not None
+                and not FirestoreProviderSttOutbox.owns_claim_in_transaction(tx, claim, now)
+            ):
                 return None
             attempts = bounding_attempts(attempts_of(job))
             number = check_new_attempt(attempts, service)
@@ -814,19 +849,21 @@ class ProviderSttStage:
 
     # -- drivers ----------------------------------------------------------------------------------
 
-    def run(self, segment_id: str) -> UnitOutcome:
+    def run(self, segment_id: str, *, claim: Claim | None = None) -> UnitOutcome:
         """One delivery, synchronously (vendor call through the sync seam)."""
-        plan = self._guarded(segment_id, self._prepare, segment_id)
+        plan = self._guarded(segment_id, self._prepare, segment_id, claim)
         if isinstance(plan, UnitOutcome):
             return plan
         started = time.monotonic()
         response = self._call_sync(plan)
         return self._guarded(segment_id, self._finish, plan, response, time.monotonic() - started)
 
-    async def run_async(self, segment_id: str, run_sync: Callable[..., Awaitable[Any]]) -> UnitOutcome:
+    async def run_async(
+        self, segment_id: str, run_sync: Callable[..., Awaitable[Any]], *, claim: Claim | None = None
+    ) -> UnitOutcome:
         """One delivery: Firestore/GCS/VAD work through ``run_sync`` (an executor), the vendor call
         awaited on the event loop, so a long vendor answer never holds an executor thread."""
-        plan = await run_sync(self._guarded, segment_id, self._prepare, segment_id)
+        plan = await run_sync(self._guarded, segment_id, self._prepare, segment_id, claim)
         if isinstance(plan, UnitOutcome):
             return plan
         started = time.monotonic()
@@ -918,8 +955,31 @@ class ProviderSttStage:
 
     # -- phases -----------------------------------------------------------------------------------
 
-    def _prepare(self, segment_id: str) -> UnitOutcome | _Call:
-        job = self.protocol.read(segment_id)
+    def _funding_hold(
+        self,
+        item: WorkItem,
+        route: SttRoute,
+        job: dict,
+        claim: Claim | None,
+        refusal: allowance_hold.IntakeRefusal | None,
+    ) -> UnitOutcome | None:
+        decision = self.allowed(item.owner_id, item.duration_seconds, route.provider_service)
+        now = self.clock()
+        wait = funding_retry_seconds(decision, job=job, now=now)
+        if wait is None:
+            return None
+        if (
+            claim is not None
+            and refusal is not None
+            and decision == (False, DispatchReason.ALLOWANCE_EXHAUSTED)
+            and self.protocol.park_allowance(claim, refusal, now)
+        ):
+            logger.info('event=batch_provider_stt outcome=allowance_held reason=allowance_exhausted count=1')
+            return UnitOutcome('done', 'allowance_held')
+        return UnitOutcome('deferred', 'not_due', now + wait)
+
+    def _prepare(self, segment_id: str, claim: Claim | None = None) -> UnitOutcome | _Call:
+        job, refusal = self.protocol.read_for_dispatch(segment_id, self.clock(), claim)
         if job.get('state') not in STAGE_STATES:
             return UnitOutcome('done', 'superseded')
         item = WorkItem(**{field.name: job[field.name] for field in fields(WorkItem) if field.name in job})
@@ -937,14 +997,8 @@ class ProviderSttStage:
         # A BYOK unit was funded at admission; the keyless re-check would hold it forever.
         if route.provider_reason == 'byok':
             record_decision(DispatchPath.BATCH_PROVIDER, True, DispatchReason.BYOK)
-        elif (
-            wait := funding_retry_seconds(
-                self.allowed(item.owner_id, item.duration_seconds, route.provider_service),
-                job=job,
-                now=self.clock(),
-            )
-        ) is not None:
-            return UnitOutcome('deferred', 'not_due', self.clock() + wait)
+        elif (held := self._funding_hold(item, route, job, claim, refusal)) is not None:
+            return held
         audio = self.artifacts.fetch_audio(item)
         inspected, failure = None, None
         try:
@@ -955,16 +1009,9 @@ class ProviderSttStage:
         # one durable provider intent; denial must leave it unspent.
         if (
             route.provider_reason != 'byok'
-            and (
-                wait := funding_retry_seconds(
-                    self.allowed(item.owner_id, item.duration_seconds, route.provider_service),
-                    job=job,
-                    now=self.clock(),
-                )
-            )
-            is not None
+            and (held := self._funding_hold(item, route, job, claim, refusal)) is not None
         ):
-            return UnitOutcome('deferred', 'not_due', self.clock() + wait)
+            return held
         attempts = attempts_of(job)
         candidates = self._candidates(route)
         open_services = [service for service in candidates if _can_attempt(attempts, service)]
@@ -1001,6 +1048,7 @@ class ProviderSttStage:
                 measured_vad_speech_seconds=_speech_seconds(inspected) if failure is None else None,
                 # Same condition _call_sync uses to answer silence without a vendor call.
                 vendor_skipped=skip_vendor,
+                claim=claim,
             )
         except AttemptRefused:
             # Read-to-mint race on the attempt list; never mint past the bounds. Re-evaluate later.
@@ -1010,6 +1058,12 @@ class ProviderSttStage:
             return UnitOutcome('done', 'superseded')
         if started['provider_intent']['token'] != token:
             return self._reconcile(segment_id, started, item, route)
+        released_at = started.get('provider_allowance_released_at')
+        if released_at is not None and len(started[ATTEMPTS_FIELD]) == 1:
+            logger.info(
+                'event=batch_provider_stt action=allowance_dispatch delay_seconds=%.3f count=1',
+                max(0.0, started['provider_intent']['started_at'] - released_at),
+            )
         if service != route.provider_service:
             vendor_metrics.failover(route.provider_service, service)
 
@@ -1339,7 +1393,7 @@ class ProviderSttConsumer:
         self.settled = settled
 
     def _wake_merge(self, owner_id: str, unit: UnitOutcome) -> None:
-        if self.settled is None or (unit.outcome, unit.reason) != ('done', 'processed'):
+        if self.settled is None or unit.reason not in ('processed', 'allowance_held'):
             return
         try:
             self.settled(owner_id)
@@ -1358,14 +1412,18 @@ class ProviderSttConsumer:
         if unit.outcome == 'retry':
             return Result(Outcome.RETRY, RetryReason(unit.reason), self.clock() + RETRY_SECONDS)
         outcome = {'done': Outcome.DONE, 'deferred': Outcome.DEFERRED, 'discarded': Outcome.DISCARDED}[unit.outcome]
-        return Result(outcome, ConsumerReason(unit.reason), unit.available_at)
+        return Result(
+            outcome, ConsumerReason(unit.reason), unit.available_at, already_settled=unit.reason == 'allowance_held'
+        )
 
     def process(self, claim: Claim, heartbeat: Callable[[], bool]) -> Result:
         segment_id = self._segment(claim)
         if segment_id is None:
             # A malformed row can never succeed; close it rather than re-wake it forever.
             return Result(Outcome.DISCARDED, ConsumerReason.UNKNOWN)
-        return self._result(self.stage_factory().run(segment_id))
+        unit = self.stage_factory().run(segment_id, claim=claim)
+        self._wake_merge(claim.owner_id, unit)
+        return self._result(unit)
 
     async def process_async(
         self, claim: Claim, heartbeat: Callable[[], bool], run_sync: Callable[..., Awaitable[Any]]
@@ -1374,6 +1432,6 @@ class ProviderSttConsumer:
         if segment_id is None:
             return Result(Outcome.DISCARDED, ConsumerReason.UNKNOWN)
         stage = await run_sync(self.stage_factory)
-        unit = await stage.run_async(segment_id, run_sync)
+        unit = await stage.run_async(segment_id, run_sync, claim=claim)
         self._wake_merge(claim.owner_id, unit)
         return self._result(unit)

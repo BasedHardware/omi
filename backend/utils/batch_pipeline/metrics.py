@@ -294,12 +294,18 @@ class QueueMetrics:
             registry=registry,
             fresh=self._timeliness_sample_visible,
         )
-        self._allowance_due = self._allowance_expires = 0.0
+        self._allowance_due = self._allowance_expires = self._provider_allowance_expires = 0.0
         self.allowance_held = _FreshQueueGauge(
             'omi_batch_allowance_held_units',
             'Policy parked stock, separate from lateness; hourly leader-only aggregate, no job reads',
             registry=registry,
             fresh=lambda: self._timeliness_sample_visible() and time.monotonic() < self._allowance_expires,
+        )
+        self.provider_allowance_held = _FreshQueueGauge(
+            'omi_batch_pipeline_provider_allowance_held_units',
+            'Provider-STT units parked for allowance, sampled by the timeliness leader',
+            registry=registry,
+            fresh=lambda: self._timeliness_sample_visible() and time.monotonic() < self._provider_allowance_expires,
         )
         self.timeliness_all_time = _FreshQueueGauge(
             'omi_batch_timeliness_all_time_units',
@@ -761,6 +767,18 @@ class QueueMetrics:
                 self._allowance_due = now + 300
                 logging.getLogger(__name__).warning(
                     'event=batch_allowance_count outcome=unavailable exception_type=%s', type(error).__name__
+                )
+            try:
+                self.provider_allowance_held.set(
+                    allowance_held_count(store.client, store.namespace, provider_only=True)
+                )
+                self._provider_allowance_expires = time.monotonic() + 3600 + interval
+            except Exception as error:
+                self._provider_allowance_expires = 0.0
+                self._allowance_due = now + 300
+                logging.getLogger(__name__).warning(
+                    'event=batch_allowance_count route=provider outcome=unavailable exception_type=%s',
+                    type(error).__name__,
                 )
         # Companion counts run only after the epoch gauges above are published,
         # so a slow or failed COUNT can never delay or stale the epoch series.

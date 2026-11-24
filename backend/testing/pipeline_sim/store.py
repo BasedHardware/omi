@@ -394,6 +394,8 @@ class SimStore:
 
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         """Model of database/batch_pipeline_recovery.quarantine_fenced (fence recheck, revoke only)."""
+        from database import batch_pipeline_allowance_hold as allowance_hold
+
         job = self.rows.get(('jobs', segment_id), {})
         if job.get('state') not in {'leased', 'retry', 'allowance_held'} | PROVIDER_STATES:
             return False
@@ -404,6 +406,12 @@ class SimStore:
         ):
             return False
         revoked = {**job, 'state': 'privacy_blocked', 'token': '', 'lease_until': 0.0, 'privacy_blocked_at': now}
+        if job['state'] == allowance_hold.STATE:
+            address = (allowance_hold.OWNERS, job['owner_key'])
+            owner = deepcopy(self.rows.get(address, {}))
+            if owner:
+                allowance_hold.decrement(owner)
+                self.apply(address, owner)
         if job['state'] in PROVIDER_STATES:
             revoked['merge_pending'] = False
         self.apply(('jobs', segment_id), revoked)

@@ -65,8 +65,12 @@ class Result:
     # claim_key answered DEFERRED (the outbox already re-armed the row and created its wake)
     defer_cause: str | None = None  # DEFERRED only: the domain cause the outbox records instead of ``reason``
 
+    already_settled: bool = False  # DONE after atomically closing the claimed row with a domain write.
+
     def __post_init__(self) -> None:
         outcome = Outcome(self.outcome)
+        if self.already_settled and outcome is not Outcome.DONE:
+            raise ValueError('already_settled requires done')
         if outcome is Outcome.RETRY:
             if not isinstance(self.reason, RetryReason):
                 raise TypeError('RETRY requires a RetryReason')
@@ -92,6 +96,8 @@ _LOST_LEASE = Result(Outcome.STALE, ConsumerReason.STALE_TOKEN)
 
 def _settle(consumer: QueueConsumer, outbox: Outbox, claim: Claim, result: Result, now: float) -> Result:
     """Apply a consumer's result to the row. A fenced-out write means the lease was lost: STALE."""
+    if result.already_settled:
+        return result
     reason = result.reason.value
     if result.outcome in (Outcome.DONE, Outcome.DISCARDED):
         settled = outbox.ack(claim, reason, now=now)

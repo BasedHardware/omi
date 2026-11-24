@@ -18,7 +18,7 @@ from database.batch_pipeline_privacy import (
     privacy_owner_key,
 )
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
-from database.batch_pipeline_allowance_hold import STATE as ALLOWANCE_HELD, OWNERS as ALLOWANCE_OWNERS
+from database.batch_pipeline_allowance_hold import decrement, STATE as ALLOWANCE_HELD, OWNERS as ALLOWANCE_OWNERS
 
 NAMESPACES = ('batch_pipeline_prod', 'batch_pipeline_dev')
 PAGE_SIZE = 100
@@ -106,8 +106,7 @@ def _delete_job(
         touched.extend([('jobs', snapshot.id), ('results', snapshot.id), ('owners', key), ('queues', queue_key)])
         touched.extend([('control', scheduler_control_key(key)), *(('jobs', p.id) for p in predecessors)])
         if hold:
-            hold['held_count'] = max(0, hold.get('held_count', 0) - 1)
-            hold['active'] = hold['held_count'] > 0
+            decrement(hold)
             transaction.set(hold_ref, hold)
             touched.append((ALLOWANCE_OWNERS, key))
         if queue.get('head') == snapshot.id:
