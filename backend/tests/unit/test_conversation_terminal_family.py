@@ -218,7 +218,7 @@ def test_persist_writes_home_visibility_with_its_source_flags(store, monkeypatch
     [(path, payload)] = tx.sets + tx.updates
     assert path == PATH
     assert {key: payload[key] for key in patch} == patch
-    assert payload['home_visible'] is visible
+    assert payload['home_list_visible'] is visible
 
 
 @pytest.mark.parametrize(

@@ -126,7 +126,7 @@ remote Git operations, or deployment are required for its local verification.
 
 ## Default Home for v3 owners (SCA-4102)
 
-The collection index for `discarded`, `status`, `home_visible`, and descending
+The collection index for `discarded`, `status`, `home_list_visible`, and descending
 `created_at` filters out raw recordings and hidden v3 windows before reading
 conversation documents. The API still checks row visibility after the query.
 The rollout is independent of `OMI_INDEXED_LIST_READS_ENABLED`.

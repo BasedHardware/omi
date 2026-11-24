@@ -571,7 +571,7 @@ async def test_undo_restores_every_row_and_claim_exactly(owner, strict, ledger):
     for entry in priors(strict):
         if not entry.get('created'):
             restored = strict.rows[path(entry['id'])]
-            assert restored['home_visible'] is home_visibility_index.visible(restored)
+            assert restored['home_list_visible'] is home_visibility_index.visible(restored)
     assert ledger.run['status'] == 'undone'
     # Restored exactly, the run keeps no copies of the owner's rows.
     assert not priors(strict)

@@ -4,7 +4,7 @@ import os
 
 from google.cloud import firestore
 
-FIELD = 'home_visible'
+FIELD = 'home_list_visible'
 FLAGS = ('recording', 'home_hidden')
 
 

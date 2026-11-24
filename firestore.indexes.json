@@ -13,7 +13,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "home_visible",
+          "fieldPath": "home_list_visible",
           "order": "ASCENDING"
         },
         {

@@ -29,10 +29,10 @@ def test_stamp_uses_post_write_truthiness(current, patch, expected):
 
 def test_dry_run_reports_both_kinds_of_drift_and_capped_read_cost(monkeypatch):
     rows = [
-        {'recording': True, 'home_visible': True},
+        {'recording': True, 'home_list_visible': True},
         {'home_hidden': False},
-        {'home_visible': True},
-        {'home_visible': 1},
+        {'home_list_visible': True},
+        {'home_list_visible': 1},
     ]
     snapshots = [
         SimpleNamespace(id=str(i), reference=str(i), to_dict=lambda row=row: row) for i, row in enumerate(rows)
