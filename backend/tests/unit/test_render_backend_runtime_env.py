@@ -1750,6 +1750,23 @@ def test_prod_backend_renders_sibling_skip_preservation_pin(monkeypatch):
     assert rendered['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED'] == 'false'
 
 
+def test_prod_logging_reductions_render_only_on_backend_integration(monkeypatch):
+    prod = _MANIFEST['environments']['prod']
+    _set_workflow_bound_env(monkeypatch, prod)
+    expected = {
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED': 'true',
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT': '1',
+        'BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED': 'true',
+    }
+
+    for name, service in prod['cloud_run']['services'].items():
+        rendered = dict(_MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](service['env'])))
+        actual = {key: rendered[key] for key in expected if key in rendered}
+        assert actual == (expected if name == 'backend-integration' else {}), name
+    pump = prod['cloud_run']['services']['backend-projection-pump']
+    assert set(expected) <= set(pump['forbidden_env'])
+
+
 def test_prod_backfill_renders_sibling_skip_and_poll_backoff_preservation_pins(monkeypatch):
     prod = _MANIFEST['environments']['prod']
     _set_workflow_bound_env(monkeypatch, prod)
