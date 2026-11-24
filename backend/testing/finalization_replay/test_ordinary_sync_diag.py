@@ -261,6 +261,49 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
             ],
         )
 
+    def test_reviewed_state_version_and_whitespace_rows_are_exact_go_gaps(self):
+        report = {
+            'unexplained_differences': 5,
+            'cases': [
+                {
+                    'name': 'empty-capture',
+                    'differences': [
+                        {
+                            'path': '/derived_documents/users~1replay-empty-capture~1episodes~14a3517ab-b5a4-58fc-9d1f-7525f189b614/state_version',
+                            'kind': 'different_value',
+                        }
+                    ],
+                },
+                {
+                    'name': 'transcript-empty-text',
+                    'differences': [
+                        {
+                            'path': '/derived_documents/users~1replay-transcript-empty-text~1episodes~1514b6b9f-53d4-5569-8092-f0cdc6a3aa25/state_version',
+                            'kind': 'different_value',
+                        }
+                    ],
+                },
+                {
+                    'name': 'transcript-whitespace',
+                    'differences': [{'path': '/conversation/transcript_segments', 'kind': 'different_value'}],
+                },
+                {
+                    'name': 'other-case',
+                    'differences': [{'path': '/conversation/transcript_segments', 'kind': 'different_value'}],
+                },
+                {
+                    'name': 'transcript-whitespace',
+                    'differences': [{'path': '/conversation/transcript_segments', 'kind': 'missing_in_go'}],
+                },
+            ],
+        }
+
+        enriched = enrich(report)
+        labels = [case['differences'][0]['label'] for case in enriched['cases']]
+        self.assertEqual(labels, ['go_gap', 'go_gap', 'go_gap', None, None])
+        self.assertEqual(enriched['diagnostic']['label_counts']['go_gap'], 3)
+        self.assertEqual(enriched['diagnostic']['label_counts']['unlabelled'], 2)
+
 
 if __name__ == '__main__':
     unittest.main()

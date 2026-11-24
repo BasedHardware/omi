@@ -36,6 +36,11 @@ GO_COORDINATION_FIELDS = {
     'go_empty_discard_fanout_epoch',
     'go_sync_empty_discard_home_revision',
 }
+REVIEWED_GO_GAP_ROWS = {
+    ('empty-capture', '/derived_documents/users/<uid>/episodes/<episode-id>', 'state_version'),
+    ('transcript-empty-text', '/derived_documents/users/<uid>/episodes/<episode-id>', 'state_version'),
+    ('transcript-whitespace', '/conversation', 'transcript_segments'),
+}
 UNREADABLE_RETRY_CONSEQUENCE_PATHS = {
     '/conversation/finalization_status': 'missing_in_python',
     '/go/admitted': 'invalid_binding',
@@ -253,6 +258,13 @@ def pass3_go_gap_group(path: str, case_name: str, groups: list[dict[str, str]]) 
     return None
 
 
+def is_reviewed_go_gap_row(difference: dict, case_name: str) -> bool:
+    if difference.get('kind') != 'different_value':
+        return False
+    path_pattern, field, side_specific = normalized_difference_location(difference.get('path', ''), case_name)
+    return not side_specific and (case_name, path_pattern, field) in REVIEWED_GO_GAP_ROWS
+
+
 def unlabelled_groups(cases: list[dict]) -> list[dict]:
     groups = {}
     for case in cases:
@@ -376,6 +388,8 @@ def enrich(report: dict) -> dict:
                 or difference.get('failure_reason') == 'go_attach_memo_invalid'
                 or difference.get('failure_reason') in {'profile_refresh_proof_failed', 'task_vector_proof_failed'}
             ):
+                label = 'go_gap'
+            elif is_reviewed_go_gap_row(difference, case.get('name', '')):
                 label = 'go_gap'
             elif is_go_coordination_stamp_difference(difference):
                 label = 'by_design:go_coordination_stamp'
