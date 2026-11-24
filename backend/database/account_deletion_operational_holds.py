@@ -39,10 +39,11 @@ class StoragePrefixPurgeBlocked(StoragePrefixPurgeError):
     """Named object generations remain protected by Cloud Storage."""
 
     def __init__(self, objects: dict[tuple[str, str, int], str], *, unverified: int = 0):
-        self.objects = objects
+        self.objects: dict[tuple[str, str, int], str] = objects
         self.unverified = unverified
         super().__init__(
-            'owner storage purge left objects under the owner prefix: ' f'blocked={objects!r}, unverified={unverified}'
+            'owner storage purge left objects under the owner prefix: '
+            f'reason=protected_prefix blocked_generations={len(objects)} unverified_generations={unverified}'
         )
 
 

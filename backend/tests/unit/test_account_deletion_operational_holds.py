@@ -19,6 +19,7 @@ from google.cloud.firestore_v1.types import Document
 from database import account_deletion_operational_holds as holds
 from scripts import account_deletion_operational_holds as operator
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.log_sanitizer import sanitize
 
 UID = 'synthetic-owner'
 
@@ -325,6 +326,27 @@ def test_conversation_purge_names_protected_generation_and_continues(reason):
         holds.delete_owner_bucket_prefix(bucket, PREFIX, real_gcs=True)
     assert blocked.value.objects == {(bucket.name, protected.name, protected.generation): reason}
     other.delete.assert_called_once()
+
+
+def test_protected_generation_exception_keeps_object_details_out_of_logs():
+    bucket = 'syntheticprivatebucket'
+    owner_id = 'syntheticprivateowner'
+    conversation_id = 'syntheticprivateconversation'
+    blob_path = f'chunks/{owner_id}/{conversation_id}/syntheticprivateclip'
+    generation = 91234567
+    objects = {(bucket, blob_path, generation): 'objectUnderActiveHold'}
+    error = holds.StoragePrefixPurgeBlocked(objects, unverified=2)
+
+    assert error.objects == objects
+    assert error.unverified == 2
+    expected = (
+        'owner storage purge left objects under the owner prefix: '
+        'reason=protected_prefix blocked_generations=1 unverified_generations=2'
+    )
+    for rendered in (str(error), sanitize(str(error))):
+        assert rendered == expected
+        for private_value in (bucket, owner_id, conversation_id, blob_path, 'syntheticprivateclip', str(generation)):
+            assert private_value not in rendered
 
 
 @pytest.mark.parametrize('foreign_object', [True, False], ids=['empty-prefix', 'empty-bucket'])
