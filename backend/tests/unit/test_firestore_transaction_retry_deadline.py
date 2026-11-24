@@ -10,9 +10,13 @@ budget (1,380 s default minus a 120 s safety margin), batch projection's full
 """
 
 import logging
+from unittest.mock import Mock
 
 import pytest
 from google.api_core.exceptions import Aborted, InvalidArgument
+from google.auth.credentials import AnonymousCredentials
+from google.cloud import firestore
+from google.cloud.firestore_v1 import types
 
 import database.firestore_transaction_retry as firestore_transaction_retry
 from database.firestore_transaction_retry import (
@@ -376,11 +380,6 @@ def test_existing_outcome_tokens_are_unchanged(caplog):
 
 @pytest.mark.parametrize('failure_phase', ['begin', 'read', 'commit'])
 def test_sdk_cleanup_preserves_retryable_error_and_restarts_fresh(failure_phase):
-    from unittest.mock import Mock
-
-    from google.auth.credentials import AnonymousCredentials
-    from google.cloud import firestore
-    from google.cloud.firestore_v1 import types
 
     client = firestore.Client(project='transaction-retry-test', credentials=AnonymousCredentials())
     rpc = Mock()

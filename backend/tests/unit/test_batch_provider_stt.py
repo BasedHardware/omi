@@ -8,9 +8,13 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from database import batch_pipeline_intake
 from database import sync_ledger  # noqa: F401  # warm legacy_dark's lazy ledger import outside the call budget
+from database.firestore_transaction_retry import FirestoreContentionExhausted
+from routers import batch_provider_stt
 from utils.batch_pipeline.intake import stranded_adopter
 from testing.pipeline_sim.store import CustomerData, SimStore
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
@@ -930,10 +934,6 @@ def test_consumer_contract_and_malformed_rows_close_without_work():
     ],
 )
 def test_route_rejects_malformed_tasks_with_400_and_requires_task_auth(body, monkeypatch):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-    from routers import batch_provider_stt
-
     app = FastAPI()
     app.include_router(batch_provider_stt.router)
     client = TestClient(app)
@@ -1707,11 +1707,6 @@ def test_a_legacy_silent_intent_without_the_marker_also_settles_as_silence(world
 
 
 def test_provider_stage_transaction_exhaustion_releases_lease_and_retries(monkeypatch):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    from database.firestore_transaction_retry import FirestoreContentionExhausted
-    from routers import batch_provider_stt
 
     outbox = PushOutbox(_claim())
     stage = ProviderSttStage(None, None)

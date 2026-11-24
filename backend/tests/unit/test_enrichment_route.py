@@ -17,8 +17,10 @@ from unittest.mock import Mock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
+from google.api_core.exceptions import Aborted
 
 from database import _client as firestore_client
+from database import firestore_transaction_retry
 from database.outbox_firestore import ENRICHMENT_OUTBOX
 from database.summary_processing import EmptyFailureOutcome
 import database.summary_processing as summary_processing
@@ -1481,11 +1483,9 @@ def test_enrichment_early_abort_and_streak_metrics_pass_the_gmp_sync_allowlist()
 
 @pytest.mark.parametrize('budget', ['0', '300'])
 def test_claim_contention_is_409_and_leaves_custody_untouched(rows, client, monkeypatch, budget):
-    from google.api_core.exceptions import Aborted
 
     state = deepcopy(rows[0][KEY])
     monkeypatch.setenv('ENRICHMENT_DELIVERY_BUDGET_SECONDS', budget)
-    from database import firestore_transaction_retry
 
     def contended(_row_id):
         deadline = firestore_transaction_retry._retry_deadline.get()
