@@ -41,7 +41,7 @@ from utils.conversations.layer import read_product as read_product_conversation
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
@@ -55,6 +55,7 @@ from utils.sync.repeat_work_metrics import conversation_scope
 from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
 from utils.episodes.timeline import episode_at as episode_at, episodes_between as episodes_between
 from database import episode_timeline, episode_attach_memo
+from database.episode_finalization_fence import EpisodeFinalizationDeleted
 from database import episode_live_members as live_members_db
 from config import episode_live_members as live_members
 from database._client import get_firestore_client
@@ -140,6 +141,7 @@ class Collaborators:
     owner_name: Optional[Callable[[str], Optional[str]]] = None
     now: Optional[Callable[[], datetime]] = None
     extras: dict[str, Any] = field(default_factory=dict)
+    finalizing_conversation_id: Optional[str] = None
 
 
 def _now(c: Collaborators) -> datetime:
@@ -394,7 +396,8 @@ def _close(
             conversations_db.get_conversation, uid, cid, firestore_client=c.firestore_client
         )
         if row and not any(row.get(key) for key in ('deleted', 'discarded', 'sync_merged_into')):
-            _record_recovered(uid, str(episode['id']), cid, row, c)
+            if _record_recovered(uid, str(episode['id']), cid, row, c) == 'skipped_deleted':
+                raise EpisodeFinalizationDeleted
     if not synced_f:
         episode = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or episode
     items = provisional_items(episode)
@@ -446,8 +449,9 @@ def _close(
         expected_conversation_ids=episode.get('conversation_ids') if split_after is not None else None,
         split_after=split_after,
         firestore_client=c.firestore_client,
-        **({'retained_member_window': True} if retained_member_window else {}),
-        **({'synced_f': True} if synced_f else {}),
+        finalizing_conversation_id=c.finalizing_conversation_id or None,
+        retained_member_window=retained_member_window,
+        synced_f=synced_f,
     )
     if closed is not None:
         if (
@@ -747,6 +751,8 @@ def record_moment(
     for _ in range(2):
         try:
             outcome = _record_moment_once(uid, moment, c, member_episode_id=member_episode_id, f_detaches=f_detaches)
+        except EpisodeFinalizationDeleted:
+            return 'skipped_deleted'
         except episodes_db.EpisodeConflict:
             if moment.recovery_receipts is not None:
                 moment.recovery_receipts.invalidate()
@@ -865,6 +871,7 @@ def _settle_boundary(
             },
             link_conversation_ids=[moment.conversation_id],
             firestore_client=c.firestore_client,
+            finalizing_conversation_id=c.finalizing_conversation_id,
         )
         return 'parallel'
     else:
@@ -1037,6 +1044,7 @@ def _record_moment_once(
                 new_episode={**base, **_with_conversation(base, moment.conversation_id, moment.source)},
                 link_conversation_ids=[moment.conversation_id],
                 firestore_client=c.firestore_client,
+                finalizing_conversation_id=c.finalizing_conversation_id,
             )
         metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_short')
         return 'skipped_short'
@@ -1096,6 +1104,7 @@ def _record_moment_once(
                 new_episode={**base, **_with_conversation(base, moment.conversation_id, moment.source)},
                 link_conversation_ids=[moment.conversation_id],
                 firestore_client=c.firestore_client,
+                finalizing_conversation_id=c.finalizing_conversation_id,
             )
         return failure.outcome
 
@@ -1211,6 +1220,7 @@ def _record_moment_once(
             link_conversation_ids=[moment.conversation_id],
             segment_receipts=segment_receipts,
             firestore_client=c.firestore_client,
+            finalizing_conversation_id=c.finalizing_conversation_id,
         )
     elif closed is not None or member_episode_id:
         stored = episodes_db.update_episode(
@@ -1221,6 +1231,7 @@ def _record_moment_once(
             segment_receipts=segment_receipts,
             firestore_client=c.firestore_client,
             recovery_conversation_id=moment.conversation_id if walk is not None else None,
+            finalizing_conversation_id=c.finalizing_conversation_id,
         )
     else:
         stored = episodes_db.commit_moment(
@@ -1231,6 +1242,7 @@ def _record_moment_once(
             link_conversation_ids=[moment.conversation_id],
             segment_receipts=segment_receipts,
             firestore_client=c.firestore_client,
+            finalizing_conversation_id=c.finalizing_conversation_id,
         )
     if receipt_state is not None:
         receipt_state.committed(stored, segment_receipts)
@@ -1275,18 +1287,18 @@ def on_conversation_finalized(
             # No app of this user can show episodes: no tail update, no reconciliation reads.
             metrics.record_moment_skipped_no_client('finalize')
             return 'skipped_no_client'
-        outcome = composer.after_finalized(
-            uid,
-            conversation_id,
-            _on_finalized(uid, conversation_id, row, trigger, absorbed_from, c),
-            c,
-            row=row if not absorbed_from else None,
-        )
+        c = replace(c, finalizing_conversation_id=conversation_id)
+        outcome = _on_finalized(uid, conversation_id, row, trigger, absorbed_from, c)
+        if outcome == 'skipped_deleted':
+            return outcome
+        outcome = composer.after_finalized(uid, conversation_id, outcome, c, row=row if not absorbed_from else None)
         if trigger == SYNC_UPDATE and not absorbed_from and outcome not in {'error', 'conflict', 'skipped_discarded'}:
             episode_attach_memo.complete(
                 uid, conversation_id, row, None, finalized=True, firestore_client=c.firestore_client
             )
         return outcome
+    except EpisodeFinalizationDeleted:
+        return 'skipped_deleted'
     except Exception as error:
         logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
         return 'error'
@@ -1316,11 +1328,14 @@ def close_on_finalize(
             return 'kept_open'
         from utils.episodes.live import tracker
 
+        c = replace(c, finalizing_conversation_id=conversation_id)
         pending = tracker.flush(uid, conversation_id, trigger='finalize')
-        if pending is not None:
-            record_moment(uid, pending, c)
+        if pending is not None and record_moment(uid, pending, c) == 'skipped_deleted':
+            return 'skipped_deleted'
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
         return _close_for_finalize(uid, episode, conversation_id, trigger, c, _now(c))
+    except EpisodeFinalizationDeleted:
+        return 'skipped_deleted'
     except Exception as error:
         logger.warning('event=episode_finalize_close outcome=error exception_type=%s', type(error).__name__)
         return 'error'
@@ -1437,6 +1452,7 @@ def _join_live_synced(
         updates=_sync_member_updates(episode, conversation_id, source, finished=finished, started=started, now=_now(c)),
         link_conversation_ids=[conversation_id],
         firestore_client=c.firestore_client,
+        finalizing_conversation_id=c.finalizing_conversation_id,
     )
     return 'joined'
 
@@ -1478,6 +1494,7 @@ def _rejoin_closed_synced(
             ),
             link_conversation_ids=[conversation_id],
             firestore_client=c.firestore_client,
+            finalizing_conversation_id=c.finalizing_conversation_id,
         )
         if reopened is not None:
             metrics.record_boundary('sync_rejoin')
@@ -1496,6 +1513,7 @@ def _rejoin_closed_synced(
         updates=_sync_member_updates(closed, conversation_id, source, finished=finished, started=started, now=_now(c)),
         link_conversation_ids=[conversation_id],
         firestore_client=c.firestore_client,
+        finalizing_conversation_id=c.finalizing_conversation_id,
     )
     metrics.record_boundary('sync_rejoin_member')
     return 'rejoined_member'
@@ -1624,6 +1642,8 @@ def _attach_recorded_synced(
             closed = _close(
                 uid, owner, boundary.reason or 'moved_on', c, now=started, split_after=started, synced_f=True
             )
+        except EpisodeFinalizationDeleted:
+            raise
         except episodes_db.EpisodeConflict:
             closed = None
             metrics.record_boundary('f_later_member')
@@ -1748,6 +1768,7 @@ def attach_recorded(
         detach_from=detach_from,
         attach_row=row,
         admission=admission,
+        finalizing_conversation_id=c.finalizing_conversation_id,
     )
     if isinstance(placed, str):
         raise AdmissionClosed()
@@ -1940,7 +1961,9 @@ def _on_finalized(
             else row
         )
         outcome = _attach_synced(uid, conversation_id, sync_row, c, absorbed_from=absorbed_from)
-        if outcome in {'conflict', 'skipped_discarded'} or (episode is None and not recorded_episodes_enabled()):
+        if outcome in {'conflict', 'skipped_discarded', 'skipped_deleted'} or (
+            episode is None and not recorded_episodes_enabled()
+        ):
             return outcome
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
     if (
@@ -1950,7 +1973,7 @@ def _on_finalized(
         and recorded_episodes_enabled()
     ):
         outcome = _attach_synced(uid, conversation_id, row, c)
-        if outcome == 'conflict':
+        if outcome in {'conflict', 'skipped_deleted'}:
             return outcome
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
     if segments and not absorbed_from and trigger not in {SYNC_UPDATE, 'capture_group'}:
@@ -1967,7 +1990,8 @@ def _on_finalized(
             calendar_identity=_calendar_identity(row),
             language=row.get('language'),
         )
-        record_moment(uid, tail, c)
+        if record_moment(uid, tail, c) == 'skipped_deleted':
+            return 'skipped_deleted'
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
     if not episode:
         return 'no_episode'
@@ -1993,6 +2017,7 @@ def _end_discarded(uid: str, conversation_id: str, row: Mapping[str, Any], trigg
                     'discarded_conversation_ids': [*(episode.get('discarded_conversation_ids') or []), conversation_id],
                 },
                 firestore_client=c.firestore_client,
+                finalizing_conversation_id=c.finalizing_conversation_id,
             )
             return
         except episodes_db.EpisodeConflict:
@@ -2052,6 +2077,7 @@ def _repoint_absorbed(uid: str, episode: Mapping[str, Any], donor_id: str, survi
         },
         segment_receipts=receipt_transfer,
         link_conversation_ids=[survivor_id],
+        finalizing_conversation_id=c.finalizing_conversation_id,
         firestore_client=c.firestore_client,
     )
 
@@ -2087,6 +2113,7 @@ def _reconcile(
             str(episode['id']),
             expected_version=int(episode.get('state_version') or 0),
             updates={'provisional_items': items},
+            finalizing_conversation_id=conversation_id,
             firestore_client=c.firestore_client,
         )
         metrics.record_provisional_outcomes(counts)
