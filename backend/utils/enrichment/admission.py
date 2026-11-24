@@ -20,10 +20,10 @@ TRANSCRIPT_DECODE_FAILURES = cast(
 
 def require_transcript_decoded(row: dict) -> None:
     if row.get('_recovery_transcript_decoded') is False:
-        from utils.enrichment.outbox import FirstSummaryCallbackPending
+        from utils.enrichment.outbox import TranscriptUnreadable
 
         TRANSCRIPT_DECODE_FAILURES.inc()
-        raise FirstSummaryCallbackPending('transcript_decode_failed')
+        raise TranscriptUnreadable('transcript_decode_failed')
 
 
 class SyncConversationPersistenceFenced(RuntimeError):

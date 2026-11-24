@@ -411,6 +411,9 @@ class FirestoreEnrichmentOutbox:
         outbox = _outbox()
         version = claim.payload.get('version')
         custody_conflict = reason == outbox.V3_CUSTODY_DEFER_REASON
+        # A terminal hold keeps the obligation and its counted reason instead of retiring it:
+        # an unreadable transcript is not evidence that the summary was delivered (SCA-4178).
+        retained_hold = custody_conflict or outbox.terminal_hold(reason)
         observed: dict[str, int] = {}
 
         def finish(old):
@@ -428,7 +431,7 @@ class FirestoreEnrichmentOutbox:
                 old.pop(SUPERSEDE_STREAK_FIELD, None)
             summary_seen = old.get('summary_seen_by') == claim.lease_token
             if old['version'] == version:
-                if custody_conflict:
+                if retained_hold:
                     # Retain the obligation and its reason without waking it again.
                     old.pop('summary_seen_by', None)
                     old.update(
@@ -478,7 +481,7 @@ class FirestoreEnrichmentOutbox:
         _observe_streak(observed, settled)
         if pending is not None:
             self._rearmed(pending)
-        elif settled and custody_conflict:
+        elif settled and retained_hold:
             logger.info('event=enrichment_outbox outcome=held reason=%s', reason)
         return settled
 

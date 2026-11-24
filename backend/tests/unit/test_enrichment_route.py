@@ -109,7 +109,16 @@ def wrong_key_conversation(monkeypatch):
     return store, path, conversation
 
 
-def test_wrong_key_transcript_keeps_ciphertext_and_retries(rows, client, monkeypatch, wrong_key_conversation):
+def test_wrong_key_transcript_parks_in_one_delivery_with_ciphertext_kept(
+    rows, client, monkeypatch, wrong_key_conversation
+):
+    """SCA-4178: an undecodable stored transcript is permanent, not a pending callback.
+
+    One delivery reaches a counted terminal park: the row keeps its reason without being
+    retired or re-woken, the ciphertext is byte-for-byte intact, no provider step runs, and
+    a redelivery does no work. The old shape answered 409 ``callback_pending``, which the
+    queue retried 868 times into the 72 h age gate (13,890 Firestore operations).
+    """
     store, path, conversation = wrong_key_conversation
     ciphertext = conversation['transcript_segments']
     assert isinstance(ciphertext, str) and ciphertext
@@ -121,19 +130,67 @@ def test_wrong_key_transcript_keeps_ciphertext_and_retries(rows, client, monkeyp
     monkeypatch.setattr(callback.lifecycle_service, 'rule_discard_outcome', discard)
     monkeypatch.setattr(callback, 'occasion_relevance_enabled', lambda: False)
     decode_failures_before = TRANSCRIPT_DECODE_FAILURES._value.get()
+    state_rows, tasks = rows
+    wakes_before = len(tasks)
 
-    token = rows[0][KEY]['task_token']
-    response = client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+    token = state_rows[KEY]['task_token']
+    payload = {'kind': 'enrichment', 'key': KEY, 'task_token': token}
+    response = client.post('/v2/enrichment/run', json=payload)
 
-    assert response.status_code == 409
-    assert response.json() == {'status': 'retry', 'reason': 'callback_pending'}
-    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+    assert response.status_code == 200
+    assert response.json() == {'status': 'discarded', 'reason': 'transcript_unreadable'}
+    row = state_rows[KEY]
+    assert row['dormant'] and row['due_at'] is None and row['task_due_at'] is None
+    assert row['lease_until'] == 0 and row['owner'] is None
+    assert row['held_reason'] == 'transcript_unreadable' and row['held_at'] is not None
+    assert row['uid'] == 'u' and row['conversation_id'] == 'c'  # kept findable for a later revision
+    assert len(tasks) == wakes_before  # terminal: no successor wake
     assert store.rows[path]['transcript_segments'].encode('utf-8') == ciphertext.encode('utf-8')
     assert store.rows[path] == conversation
     assert TRANSCRIPT_DECODE_FAILURES._value.get() == decode_failures_before + 1
     process.assert_not_called()
     claim_summary.assert_not_called()
     discard.assert_not_called()
+
+    # A Cloud Tasks redelivery of the parked row is consumed as stale without another attempt.
+    redelivery = client.post('/v2/enrichment/run', json=payload)
+    assert redelivery.status_code == 200
+    assert redelivery.json()['status'] == 'stale'
+    assert TRANSCRIPT_DECODE_FAILURES._value.get() == decode_failures_before + 1
+    assert state_rows[KEY]['held_reason'] == 'transcript_unreadable'
+    assert store.rows[path] == conversation
+
+
+def test_wrong_key_transcript_parks_the_legacy_handler_row_too(rows, wrong_key_conversation):
+    """The batch/finalization binding parks the same row on its first delivery."""
+    store, path, conversation = wrong_key_conversation
+    ciphertext = conversation['transcript_segments']
+    state_rows, tasks = rows
+    token = state_rows[KEY]['task_token']
+
+    assert reprocess.run(KEY, token, callback.enrich_conversation, now=10_000.0) == 'held'
+    row = state_rows[KEY]
+    assert row['dormant'] and row['due_at'] is None and row['lease_until'] == 0 and row['owner'] is None
+    assert row['held_reason'] == 'transcript_unreadable'
+    assert len(tasks) == 1  # no successor wake
+    assert store.rows[path]['transcript_segments'].encode('utf-8') == ciphertext.encode('utf-8')
+    assert store.rows[path] == conversation
+    assert reprocess.run(KEY, token, callback.enrich_conversation, now=10_001.0) == 'stale'
+    assert len(tasks) == 1
+
+
+def test_a_new_content_revision_reopens_the_unreadable_park(rows, client, wrong_key_conversation):
+    """The guard still never discards: new bytes get their own classification."""
+    state_rows, tasks = rows
+    token = state_rows[KEY]['task_token']
+    client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+    assert state_rows[KEY]['dormant'] and state_rows[KEY]['held_reason'] == 'transcript_unreadable'
+
+    reprocess.mark('u', 'c', 'en', now=10_500.0)
+    row = state_rows[KEY]
+    assert not row['dormant'] and row.get('held_reason') is None and row.get('held_at') is None
+    assert row['due_at'] is not None
+    assert tasks[-1]['task_token'] == row['task_token']
 
 
 @pytest.mark.parametrize('reuse_snapshot', ['true', 'false'])

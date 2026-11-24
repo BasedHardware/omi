@@ -13,6 +13,7 @@ Mirrors ``utils.enrichment.outbox.run`` outcome for outcome, with every settleme
 | blocked (empty budget spent) | STALE empty_output_blocked | consumer: ``record_empty_failure`` retired it |
 | v3 custody conflict | DEFERRED / DISCARDED v3_custody_conflict | ``defer`` twice, then ``ack`` holds the row |
 | empty first summary | DEFERRED not_due (``empty_output``) | ``defer`` at +``ENRICHMENT_EMPTY_OUTPUT_BACKOFF_SECONDS`` (120s) |
+| unreadable transcript | DISCARDED transcript_unreadable | ``ack`` parks dormant; ciphertext untouched |
 | callback pending | RETRY callback_pending | ``release``: 409, the queue retry claims again |
 | transient Firestore / gateway fault | RETRY dependency_warming | ``release``: 409, the queue retry claims again |
 
@@ -308,6 +309,17 @@ class EnrichmentConsumer:
             )
         except rows.FirstSummaryCallbackPending as error:
             return _callback_pending(_cause(error), now)
+        except rows.TranscriptUnreadable:
+            # SCA-4178: the stored ciphertext cannot be decrypted, so rerunning this
+            # delivery cannot produce a summary. Park the obligation on the FIRST delivery
+            # with its counted reason (``ack`` retains it dormant) instead of answering a
+            # 409 callback_pending that Cloud Tasks retries until the age gate. The
+            # conversation, its ciphertext and any delivered summary are untouched, no
+            # provider call was made, and a later content revision reopens the row.
+            logger.info(
+                'event=enrichment_consumer outcome=discarded reason=%s', ConsumerReason.TRANSCRIPT_UNREADABLE.value
+            )
+            return Result(Outcome.DISCARDED, ConsumerReason.TRANSCRIPT_UNREADABLE)
         except HTTPException as error:
             # Processing's HTTP contract for a failed LLM/provider/app step: retry without a fast 5xx.
             if not (error.status_code == 429 or error.status_code >= 500):

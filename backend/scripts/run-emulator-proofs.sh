@@ -102,6 +102,9 @@ run_proof "summary task recovery, concurrency and expiry" \
   tests/integration/test_summary_debt_repair_firestore.py \
   tests/integration/test_summary_task_promotion_emulator.py \
   tests/integration/test_candidate_accept_expiry_emulator.py -q
+run_proof "unreadable transcript (terminal park, ciphertext custody, operation budget)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider \
+  tests/integration/test_enrichment_unreadable_transcript_firestore.py
 run_proof "desktop screen sync frame request delivery, expiry and quota" \
   "$PYTHON" -m pytest -q tests/integration/test_screen_sync_frame_queue_emulator.py
 

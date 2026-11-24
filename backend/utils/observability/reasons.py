@@ -396,6 +396,7 @@ class ConsumerReason(StrEnum):
     LEASE_HELD = 'lease_held'
     EMPTY_OUTPUT_BLOCKED = 'empty_output_blocked'
     V3_CUSTODY_CONFLICT = 'v3_custody_conflict'
+    TRANSCRIPT_UNREADABLE = 'transcript_unreadable'
 
 
 class RampReason(StrEnum):
@@ -935,6 +936,7 @@ class FallbackReason(StrEnum):
     AUTHORIZATION_UNAVAILABLE = 'authorization_unavailable'
     UNMIGRATED_PRINCIPAL = 'unmigrated_principal'
     DOCUMENT_SIZE_LIMIT = 'document_size_limit'
+    TRANSCRIPT_UNREADABLE = 'transcript_unreadable'
     KEPT_OVER_80PCT = 'kept_over_80pct'
     NONE = 'none'
     DEFERRALS_EXHAUSTED = 'deferrals_exhausted'
