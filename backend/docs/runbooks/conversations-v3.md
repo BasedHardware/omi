@@ -171,6 +171,17 @@ while later speech still belongs to the same outline stretch. Later speech
 gets its own continuation. Reconciliation can merge settled cards when the
 outline and the loaded source claims cover the complete merge.
 
+`CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800 (three hours).
+The first transcript line whose recorded start reaches the limit starts a new
+stretch. The earlier live stretch locks and enters normal processing, and the
+successor owns the live row. This boundary applies with either cohesion setting
+and in historical planning. Values from 120 to 10800 set a shorter or equal
+limit. Invalid values use 10800. To roll back, set
+`CONVERSATIONS_V3_MAX_WINDOW_SECONDS=0` on builder and backfill runners
+(`off` is also accepted). Stored windows and claims retain their existing
+ownership. Track `omi_conversations_v3_window_cap_cuts_total` and verify that
+live windows stay within three hours plus the configured lock delay.
+
 A silence gap above 300 seconds also switches on sit-down cutting:
 - The outline sees pauses of 2 minutes or more as `---- N min without speech ----`
   marker lines. A sit-down rule replaces the hard-boundary sentence.
