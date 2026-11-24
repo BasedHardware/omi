@@ -90,13 +90,9 @@ from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.other.from_segments_503 import FromSegments503Route
-from utils.other.request_deadline import (
-    RequestDeadlineExceeded,
-    from_segments_request_deadline,
-    request_deadline_absolute,
-)
-from utils.other.request_deadline_workers import call_within_request_deadline, wait_for_from_segments_processing
-from utils.llm.gateway_error_contract import retryable_processing_response
+from utils.other.raise_site import raise_site_of
+from utils.other.request_deadline import RequestDeadlineExceeded, from_segments_request_deadline
+from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.observability.external_lists import (
     observe_action_items_page,
@@ -135,7 +131,7 @@ from utils.conversations.meeting_receipt import (
     projected_meeting_treatment_eligible,
     record_finalized_meeting_receipt,
 )
-from utils.executors import ExecutorSaturatedError, db_executor, postprocess_executor
+from utils.executors import postprocess_executor
 from utils.external_read_contract import ignore_unknown_query, pagination_headers, utc_window
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
@@ -1801,7 +1797,7 @@ def _is_stale_from_segments_claim(conversation: dict, client_session_id: str, no
         return False
     if conversation.get('status') != ConversationStatus.processing.value:
         return False
-    claimed_at = conversation.get('processing_admitted_at') or external_data.get('from_segments_claimed_at')
+    claimed_at = external_data.get('from_segments_claimed_at')
     if not isinstance(claimed_at, datetime):
         return False
     if claimed_at.tzinfo is None:
@@ -2119,102 +2115,6 @@ def _ingest_conversation_from_segments(
 
     if request.folder_id is not None and not folders_db.get_folder(uid, request.folder_id):
         raise HTTPException(status_code=422, detail="folder_id does not match any of your folders")
-    bounded_processing = bool(request.client_session_id) and request_deadline_absolute() is not None
-    args = (uid, request, transcript_segments, started_at, finished_at)
-    kwargs = {
-        'client_device_id': client_device_id,
-        'client_platform': client_platform,
-        'bounded_processing': bounded_processing,
-    }
-    if not bounded_processing:
-        replay = _replay_from_segments(uid, request, bounded_processing=False)
-        if replay is not None:
-            return replay
-        return _process_validated_segments(*args, **kwargs)
-    try:
-        # A retry can resolve a persisted result even when all processing slots
-        # are busy. Only a lookup miss can reach processing admission.
-        replay = call_within_request_deadline(
-            _replay_from_segments, uid, request, bounded_processing=True, executor=db_executor
-        )
-        if replay is not None:
-            return replay
-        return wait_for_from_segments_processing(_process_validated_segments, *args, **kwargs)
-    except RequestDeadlineExceeded as error:
-        raise retryable_processing_response('request_budget_exhausted') from error
-    except ExecutorSaturatedError as error:
-        raise retryable_processing_response('from_segments_processing_capacity') from error
-
-
-def _replay_from_segments(
-    uid: str,
-    request: CreateConversationFromTranscriptRequest,
-    *,
-    bounded_processing: bool,
-) -> Optional[ConversationResponse]:
-    session_id = request.client_session_id
-    if not session_id:
-        return None
-    conversation_id = _from_segments_conversation_id(uid, session_id)
-    # One point read suppresses retries even when a prior delete failed during cleanup.
-    # Residual race: a create already past this read can overlap a delete commit;
-    # this guard deliberately does not transact across the two collections.
-    # A live conversation deleted elsewhere is tombstoned under its raw
-    # client session id (the ws doc id), not this derived uuid5 — check both.
-    if conversation_tombstones.is_deleted(uid, conversation_id) or conversation_tombstones.is_deleted(uid, session_id):
-        logger.info(
-            "from_segments_tombstoned_reject uid=%s client_session_id=%s conversation_id=%s",
-            uid,
-            sanitize(session_id),
-            conversation_id,
-        )
-        return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
-    existing_conversation = read_product_conversation(
-        conversations_db.get_conversation,
-        uid,
-        conversation_id,
-        read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY,
-    )
-    if existing_conversation:
-        if _is_stale_from_segments_claim(existing_conversation, session_id, datetime.now(timezone.utc)):
-            logger.warning(
-                "from-segments idempotency stale claim for uid=%s client_session_id=%s conversation_id=%s; retrying",
-                uid,
-                session_id,
-                conversation_id,
-            )
-            conversations_db.delete_conversation(uid, conversation_id)
-        else:
-            logger.info(
-                "from-segments idempotency hit for uid=%s client_session_id=%s conversation_id=%s",
-                uid,
-                session_id,
-                conversation_id,
-            )
-            if bounded_processing and existing_conversation.get('status') == ConversationStatus.processing:
-                raise retryable_processing_response('from_segments_processing_in_flight')
-            existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
-            existing_conversation = _apply_late_from_segments_context(uid, existing_conversation, request)
-            receipt = record_finalized_meeting_receipt(uid, existing_conversation)
-            if receipt is not None:
-                existing_conversation['meeting_treatment_eligible'] = bool(
-                    receipt.get('meeting_treatment_eligible')
-                )
-            return _conversation_response_from_data(existing_conversation)
-    return None
-
-
-def _process_validated_segments(
-    uid: str,
-    request: CreateConversationFromTranscriptRequest,
-    transcript_segments: list[TranscriptSegment],
-    started_at: datetime,
-    finished_at: datetime,
-    *,
-    client_device_id: Optional[str],
-    client_platform: Optional[str],
-    bounded_processing: bool,
-) -> ConversationResponse:
     calendar_context = request.calendar_meeting_context.to_context() if request.calendar_meeting_context else None
 
     # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
@@ -2227,9 +2127,63 @@ def _process_validated_segments(
     # the transcript path (CreateConversation has no text_source field).
     source = request.source or ConversationSource.phone
 
-    conversation_id = (
-        _from_segments_conversation_id(uid, request.client_session_id) if request.client_session_id else None
-    )
+    conversation_id = None
+    resumable_conversation = None
+    if request.client_session_id:
+        conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
+        # One point read suppresses retries even when a prior delete failed during cleanup.
+        # Residual race: a create already past this read can overlap a delete commit;
+        # this guard deliberately does not transact across the two collections.
+        # A live conversation deleted elsewhere is tombstoned under its raw
+        # client session id (the ws doc id), not this derived uuid5 — check both.
+        if conversation_tombstones.is_deleted(uid, conversation_id) or conversation_tombstones.is_deleted(
+            uid, request.client_session_id
+        ):
+            logger.info(
+                "from_segments_tombstoned_reject uid=%s client_session_id=%s conversation_id=%s",
+                uid,
+                sanitize(request.client_session_id),
+                conversation_id,
+            )
+            return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
+        existing_conversation = read_product_conversation(
+            conversations_db.get_conversation,
+            uid,
+            conversation_id,
+            read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY,
+        )
+        if existing_conversation:
+            metadata = existing_conversation.get('external_data') or {}
+            if (
+                existing_conversation.get('status') == ConversationStatus.in_progress
+                and metadata.get('from_segments_client_session_id') == request.client_session_id
+            ):
+                resumable_conversation = OmiConversation.model_validate(existing_conversation)
+            elif _is_stale_from_segments_claim(
+                existing_conversation, request.client_session_id, datetime.now(timezone.utc)
+            ):
+                logger.warning(
+                    "from-segments idempotency stale claim for uid=%s client_session_id=%s conversation_id=%s; retrying",
+                    uid,
+                    request.client_session_id,
+                    conversation_id,
+                )
+                conversations_db.delete_conversation(uid, conversation_id)
+            else:
+                logger.info(
+                    "from-segments idempotency hit for uid=%s client_session_id=%s conversation_id=%s",
+                    uid,
+                    request.client_session_id,
+                    conversation_id,
+                )
+                existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
+                existing_conversation = _apply_late_from_segments_context(uid, existing_conversation, request)
+                receipt = record_finalized_meeting_receipt(uid, existing_conversation)
+                if receipt is not None:
+                    existing_conversation['meeting_treatment_eligible'] = bool(
+                        receipt.get('meeting_treatment_eligible')
+                    )
+                return _conversation_response_from_data(existing_conversation)
 
     resolved_client_device_id = client_device_id or request.client_device_id
     resolved_client_platform = client_platform or request.client_platform
@@ -2266,8 +2220,19 @@ def _process_validated_segments(
         }
     OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(path='from_segments', status=evidence_status).inc()
 
-    # Create conversation object with transcript segments
-    if conversation_id:
+    # Reuse the persisted transcript and metadata on a budget retry.
+    if resumable_conversation is not None:
+        if not lifecycle_service.admit_processing(
+            uid,
+            resumable_conversation.id,
+            extra_updates={'external_data.from_segments_claimed_at': datetime.now(timezone.utc)},
+        ):
+            raise HTTPException(status_code=409, detail="Conversation creation already in progress")
+        resumable_conversation.status = ConversationStatus.processing
+        create_conversation_obj = resumable_conversation
+        client_projection = resumable_conversation.client_processing
+        language_code = resumable_conversation.language or 'en'
+    elif conversation_id:
         create_conversation_obj = OmiConversation(
             id=conversation_id,
             created_at=started_at,
@@ -2313,8 +2278,6 @@ def _process_validated_segments(
                     request.client_session_id,
                     conversation_id,
                 )
-                if bounded_processing and existing_conversation.get('status') == ConversationStatus.processing:
-                    raise retryable_processing_response('from_segments_processing_in_flight')
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
                 existing_conversation = _apply_late_from_segments_context(uid, existing_conversation, request)
                 receipt = record_finalized_meeting_receipt(uid, existing_conversation)
@@ -2350,7 +2313,7 @@ def _process_validated_segments(
     # Process conversation. The idempotent (client_session_id) path creates a
     # processing row; the admission guard's lease heartbeat keeps it fresh so the
     # crash-orphan sweep can never terminalize active work. rollback_on_failure is
-    # False because this path owns its own recovery (delete on exception below).
+    # False because this path retains the row only for a request budget cut.
     # Only pass client_projection when accepted: mocks and other callers that
     # still use a 3-positional signature stay compatible, and omitting it is
     # the same as None on the coordinator.
@@ -2368,9 +2331,18 @@ def _process_validated_segments(
                 conversation = process_conversation(uid, language_code, create_conversation_obj, **process_kwargs)
         else:
             conversation = process_conversation(uid, language_code, create_conversation_obj, **process_kwargs)
-    except Exception:
-        if request.client_session_id and conversation_id:
-            conversations_db.delete_conversation(uid, conversation_id)
+    except Exception as error:
+        budget_cut = isinstance(error, RequestDeadlineExceeded) or raise_site_of(error) == 'request_budget_exhausted'
+        if conversation_id:
+            if budget_cut:
+                try:
+                    lifecycle_service.rollback_processing_admission(uid, conversation_id)
+                except Exception:
+                    logger.warning('from_segments_budget_claim_rollback_failed')
+            else:
+                conversations_db.delete_conversation(uid, conversation_id)
+        if isinstance(error, RequestDeadlineExceeded):
+            raise conversation_processing_http_exception(error) from error
         raise
     # Non-idempotent ingest: the coordinator's generic persist stripped the
     # field (paid / flag-off deferred). Stamp it now. The session-id path

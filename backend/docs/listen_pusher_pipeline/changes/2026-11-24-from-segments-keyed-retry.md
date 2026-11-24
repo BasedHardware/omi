@@ -1,27 +1,19 @@
-# Keyed from-segments uploads can finish after the request deadline
+# Keyed from-segments uploads retain their claim on a request budget cut
 
-The Firebase-authenticated `POST /v1/conversations/from-segments` route gives
-keyed uploads up to 25 seconds of total request time. When the HTTP wait expires,
-the existing retryable 503 carries `request_budget_exhausted`. An admitted
-worker can finish the persisted claim with its own model budgets and owns
-cleanup on processing failure.
+When synchronous processing of a keyed from-segments upload hits the request
+deadline, the route returns the existing retryable 503 with the
+`request_budget_exhausted` attribution tag. The lifecycle rolls the stored
+claim back to `in_progress`. A retry can atomically re-admit that row and
+process the original transcript under the same conversation ID.
 
-A retry checks tombstones and the persisted conversation on the database pool
-before requesting a processing slot. A completed claim returns its existing
-conversation and applies late client metadata through the existing replay path.
-An active claim returns `from_segments_processing_in_flight`. New and stale
-claims remain subject to processing capacity. The existing atomic claim
-creation resolves a concurrent insert after a lookup miss.
+The retry receives the usual request budget. If enrichment repeatedly needs
+more time than that budget, the row stays available for another retry and
+processing can still time out. A provider timeout follows the existing error
+and cleanup path.
 
-## Rollout
+## Rollout and verification
 
-Pending review and backend deployment. This change requires no feature flag or
-data migration.
-
-## Verification
-
-`tests/unit/test_developer_from_segments_idempotency.py` covers budget expiry
-with a live claim, active and completed retries while processing admission is
-full, and capacity rejection for a new key. After rollout, verify that a retry
-after a budget cut returns the original conversation ID and track the route's
-503 share of valid uploads under SCA-3846.
+Pending backend rollout. No flag or migration is required. The idempotency
+regression test covers the tagged 503, retained row, successful retry with the
+original transcript, and the creation event. After rollout, check for a 200 on
+a previously cut upload and track the valid-attempt 503 share in SCA-3846.
