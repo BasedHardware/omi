@@ -54,6 +54,7 @@ UserSubscriptionResponse _response({
   bool prepaidCodeRedeem = false,
   bool prepaid = false,
   String? priceId,
+  PaymentIssue? paymentIssue,
 }) =>
     UserSubscriptionResponse(
       subscription: Subscription(
@@ -75,6 +76,7 @@ UserSubscriptionResponse _response({
       trialEligible: trialEligible,
       playBilling: play,
       prepaidCodeRedeem: prepaidCodeRedeem,
+      paymentIssue: paymentIssue,
     );
 
 class _Usage extends UsageProvider {
@@ -210,6 +212,14 @@ class _FakeWebView extends w.PlatformWebViewWidget {
   _FakeWebView(super.params) : super.implementation();
   @override
   Widget build(BuildContext context) => const SizedBox();
+}
+
+class _PopCounter extends NavigatorObserver {
+  _PopCounter(this.onPop);
+  final void Function(Route<dynamic> route) onPop;
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => onPop(route);
 }
 
 class _World {
@@ -728,23 +738,19 @@ void main() {
     testWidgets('hosted paywall: a navigation callback after the page closed navigates nowhere', (tester) async {
       final web = _FakeWeb();
       w.WebViewPlatform.instance = web;
-      final world = await _pump(tester, [_response(play: null)], child: _openHosted());
+      await _pump(tester, [_response(play: null)], child: _openHosted());
       await tester.tap(find.text('open'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(web.loaded.length, 1);
+      const next = w.NavigationRequest(url: 'https://example.invalid/next', isMainFrame: true);
       // While open and not on Play, the page may navigate.
-      expect(
-          await web.navigation.request(const w.NavigationRequest(url: 'https://example.invalid/x', isMainFrame: true)),
-          w.NavigationDecision.navigate);
-      world.responses[0] = _response(plan: PlanType.unlimitedV2, stripeId: 'sub_1');
-      await world.usage.fetchSubscription(fresh: true);
+      expect(await web.navigation.request(next), w.NavigationDecision.navigate);
+      // Closed by the reader (Android back), still no Play: a URL the Play rule would allow is refused.
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.byType(WebPaywallPage), findsNothing);
-      expect(
-          await web.navigation
-              .request(const w.NavigationRequest(url: 'https://checkout.stripe.com/c/pay', isMainFrame: true)),
-          w.NavigationDecision.prevent);
+      expect(await web.navigation.request(next), w.NavigationDecision.prevent);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
     test('the hosted paywall loads no page at all once this client sells through Google Play', () {
@@ -1428,6 +1434,185 @@ void main() {
     expect(find.byType(PlayPlansContent), findsOneWidget);
     expect(find.byKey(const Key('play_subscribe')), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  // ---- redeeming from the trial paywall: the success sheet stays, then the paywall closes as redeemed ----
+
+  Future<(_World, List<Object?>)> openTrialAndRedeem(WidgetTester tester) async {
+    final results = <Object?>[];
+    final prepaidPlan = _response(
+        plan: PlanType.unlimitedV2,
+        stripeId: 'sub_prepaid',
+        cancelAtPeriodEnd: true,
+        prepaid: true,
+        prepaidCodeRedeem: true);
+    final world = await _pump(
+      tester,
+      [_response(prepaidCodeRedeem: true)],
+      child: Builder(
+        builder: (context) => TextButton(
+          onPressed: () async => results.add(await Navigator.of(context).push<Object?>(
+              MaterialPageRoute(builder: (_) => TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 24))))),
+          child: const Text('open'),
+        ),
+      ),
+    );
+    prepaidCodeRedeemer = (code) async {
+      world.responses
+        ..clear()
+        ..add(prepaidPlan);
+      return ApiSuccess(PrepaidCodeRedemption(plan: 'Omi Pro', endsAt: DateTime(2027, 11, 24), months: 12));
+    };
+    addTearDown(() => prepaidCodeRedeemer = redeemPrepaidCode);
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    final entry = find.byKey(const ValueKey('prepaid_code_entry'));
+    await tester.scrollUntilVisible(entry, 200, scrollable: find.byType(Scrollable).first);
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('prepaid_code_field')), 'OMI-TRYBE-ABCD1234');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('prepaid_code_redeem')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 5)); // both subscription reads after the redemption
+    await tester.pumpAndSettle();
+    expect(world.usage.paywallClosedForPlay, isTrue);
+    // The success sheet stays on top of the paywall until the reader is done with it.
+    expect(find.byKey(const ValueKey('prepaid_code_success')), findsOneWidget);
+    expect(find.textContaining('Your Omi Pro plan ends'), findsWidgets);
+    expect(find.byType(TrialPaywallPage), findsOneWidget);
+    expect(results, isEmpty);
+    return (world, results);
+  }
+
+  testWidgets('trial paywall: redeem, the success sheet stays, Done closes the paywall as redeemed', (tester) async {
+    final (_, results) = await openTrialAndRedeem(tester);
+    await tester.tap(find.byKey(const ValueKey('prepaid_code_done')));
+    await tester.pumpAndSettle();
+    expect(find.byType(TrialPaywallPage), findsNothing);
+    expect(results, [true]);
+    expect(find.text('open'), findsOneWidget); // the app is usable again
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('trial paywall: redeem, Android back closes the sheet and then the paywall as redeemed', (tester) async {
+    final (_, results) = await openTrialAndRedeem(tester);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('prepaid_code_success')), findsNothing);
+    expect(find.byType(TrialPaywallPage), findsNothing);
+    expect(results, [true]);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  // Outline and the trial downsell have no code entry; their auto-close must still never pop a route above them.
+  for (final name in ['outline', 'trial', 'upsell']) {
+    testWidgets('$name paywall: paid outside Play while covered closes once, after the cover is gone', (tester) async {
+      final results = <Object?>[];
+      var paywallPops = 0;
+      final observer = _PopCounter((route) {
+        if (route.settings.name == 'paywall') paywallPops++;
+      });
+      final world = _World([_response(play: null)]);
+      addTearDown(world.billing.dispose);
+      addTearDown(world.usage.dispose);
+      world.usage.debugSetAvailablePlans({
+        'plans': [
+          {
+            'id': 'price_year',
+            'plan_id': 'unlimited_v2',
+            'title': 'Unlimited Annual',
+            'interval': 'year',
+            'unit_amount': 26991,
+            'currency': 'usd',
+            'price_string': r'$269.91/yr',
+            'is_active': false,
+          },
+        ],
+      });
+      await world.usage.fetchSubscription();
+      late BuildContext opener;
+      await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: world.usage,
+        child: MaterialApp(
+          navigatorObservers: [observer],
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: Scaffold(body: Builder(builder: (context) {
+            opener = context;
+            return const Text('home');
+          })),
+        ),
+      ));
+      final offer = PaywallOffer.forUsage(world.usage)!;
+      unawaited(Navigator.of(opener)
+          .push<Object?>(MaterialPageRoute(
+            settings: const RouteSettings(name: 'paywall'),
+            builder: (_) => switch (name) {
+              'outline' => const OutlinePaywallPage(source: 'test'),
+              'trial' => TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 24)),
+              _ => Scaffold(body: TrialUpsellContent(offer: offer, price: offer.yearly!, source: 'test')),
+            },
+          ))
+          .then(results.add));
+      await tester.pumpAndSettle();
+      // Something sits on top of the paywall when the reader turns out to pay outside Play.
+      unawaited(Navigator.of(opener)
+          .push(MaterialPageRoute(builder: (_) => const Scaffold(body: Text('cover'))))
+          .then((_) {}));
+      await tester.pumpAndSettle();
+      world.responses[0] = _response(plan: PlanType.unlimitedV2, stripeId: 'sub_1');
+      await world.usage.fetchSubscription(fresh: true);
+      await tester.pumpAndSettle();
+      expect(find.text('cover'), findsOneWidget); // never popped by the paywall underneath
+      expect(paywallPops, 0);
+      await tester.binding.handlePopRoute(); // the reader leaves the cover
+      await tester.pumpAndSettle();
+      expect(find.text('home'), findsOneWidget);
+      expect(paywallPops, 1);
+      expect(results, [false]);
+      await world.usage.fetchSubscription(fresh: true);
+      await tester.pumpAndSettle();
+      expect(paywallPops, 1); // exactly once
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  }
+
+  // ---- code entry eligibility: a recoverable payer or a failed latest read sees no entry ---------------
+
+  for (final surface in ['plans', 'trial']) {
+    Widget? child() => surface == 'plans' ? null : TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 24));
+
+    testWidgets('$surface: a past-due Stripe agreement (Free with a payment issue) sees no code entry', (tester) async {
+      final world = await _pump(
+          tester,
+          [
+            _response(
+                stripeId: 'sub_past_due',
+                prepaidCodeRedeem: true,
+                paymentIssue: const PaymentIssue(status: 'past_due', plan: PlanType.unlimitedV2))
+          ],
+          child: child());
+      expect(world.usage.canRedeemPrepaidCode, isFalse);
+      expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('$surface: a failed latest read hides the code entry and keeps the Play restrictions', (tester) async {
+      final world = await _pump(tester, [_response(prepaidCodeRedeem: true)], child: child());
+      expect(world.usage.canRedeemPrepaidCode, isTrue);
+      world.responses[0] = null; // the next read fails
+      await world.usage.fetchSubscription(fresh: true);
+      await tester.pumpAndSettle();
+      expect(world.usage.canRedeemPrepaidCode, isFalse);
+      expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+      expect(world.usage.buysThroughPlay, isTrue); // cached Play setup still governs purchases
+      expect(find.byType(PaymentWebViewPage), findsNothing);
+      // A good read brings it back for a truly Free reader.
+      world.responses
+        ..clear()
+        ..add(_response(prepaidCodeRedeem: true));
+      await world.usage.fetchSubscription(fresh: true);
+      await tester.pumpAndSettle();
+      expect(world.usage.canRedeemPrepaidCode, isTrue);
+      expect(find.byKey(const ValueKey('prepaid_code_entry')), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  }
 
   testWidgets('Play build: a prepaid plan never gets the Stripe storefront', (tester) async {
     final world = _World(

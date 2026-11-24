@@ -88,9 +88,12 @@ class TrialUpsellContentState extends State<TrialUpsellContent> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     // This Stripe trial is never sold on a Play build: close if Play setup arrives while it is open.
-    if (context.select<UsageProvider, bool>((usage) => usage.buysThroughPlay) && !_closed) {
+    // Only while this sheet is the top route, so it never pops a route above it.
+    if (context.select<UsageProvider, bool>((usage) => usage.buysThroughPlay) &&
+        !_closed &&
+        ModalRoute.of(context)?.isCurrent == true) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _closed) return;
+        if (!mounted || _closed || ModalRoute.of(context)?.isCurrent != true) return;
         _closed = true;
         Navigator.of(context).pop(false);
       });

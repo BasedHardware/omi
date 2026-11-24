@@ -139,9 +139,13 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
     final l10n = context.l10n;
     final top = MediaQuery.paddingOf(context).top;
     // Paid outside Play on a Play build (the plan or Play setup arrived while open): close, nothing bought.
-    if (context.select<UsageProvider, bool>((usage) => usage.paywallClosedForPlay) && !_dismissed) {
+    // Only while this page is the top route: a code-success sheet above it stays until Done (ModalRoute.of
+    // rebuilds this page when it is on top again).
+    if (context.select<UsageProvider, bool>((usage) => usage.paywallClosedForPlay) &&
+        !_dismissed &&
+        ModalRoute.of(context)?.isCurrent == true) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _dismissed) return;
+        if (!mounted || _dismissed || ModalRoute.of(context)?.isCurrent != true) return;
         _dismissed = true;
         Navigator.of(context).pop(false);
       });

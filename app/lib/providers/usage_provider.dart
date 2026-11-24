@@ -772,8 +772,12 @@ class UsageProvider with ChangeNotifier {
   bool get canRedeemPrepaidCode {
     final response = subscription;
     if (response == null || !response.prepaidCodeRedeem) return false;
-    if (billingProviderUnknown) return false;
+    // Unknown provider, or the latest read failed after an earlier success: eligibility is stale. The cached
+    // Play setup still governs purchases (buysThroughPlay); only redemption waits for a good read.
+    if (billingProviderUnknown || _subscriptionReadFailed) return false;
     final sub = response.subscription;
+    // A past-due Stripe agreement shows as Free but can still bill (the server would answer has_plan).
+    if (response.paymentIssue != null && sub.stripeSubscriptionId != null) return false;
     if (buysThroughPlay && sub.plan.isPaid) return false;
     return !(sub.plan.isPaid && sub.status == SubscriptionStatus.active);
   }

@@ -1,6 +1,7 @@
 """No-card code redemption on a Google Play build: open to every Play client whatever the redemption switch,
 with every live-plan refusal kept, and byte-identical responses to main for every other client and setting."""
 
+import asyncio
 import hashlib
 import json
 import os
@@ -305,3 +306,141 @@ def test_pin_main_responses(client):
     with open(BASE_FILE, 'w') as handle:
         json.dump(pins, handle, indent=2, sort_keys=True)
         handle.write('\n')
+
+
+# ---- a Play purchase that lands while a code is being redeemed ---------------------------------
+
+
+@pytest.fixture
+def race(world, env, monkeypatch):
+    """Real redemption and real Play verify over one account: the user document and Google are shared fakes."""
+    for name in ('get_user_fields', 'get_purchase', 'purchase_keys_for_uid', 'update_purchase'):
+        monkeypatch.setattr(play_db, name, getattr(env.store, name))
+    monkeypatch.setattr(play_publisher, '_default', env.publisher)
+    monkeypatch.setattr(
+        redemption.users_db,
+        'get_existing_user_subscription_and_fields',
+        lambda uid, fields: (
+            env.users.get_user_subscription(uid),
+            {name: env.store.users.get(uid, {}).get(name) for name in fields},
+        ),
+    )
+    env.publisher.resources[TOKEN] = resource()
+    return SimpleNamespace(world=world, env=env)
+
+
+def _verify_play():
+    return play_billing.verify_and_bind(UID, TOKEN, 'omi_pro')
+
+
+def test_play_verified_after_the_first_check_refuses_and_releases_the_claim(race, monkeypatch):
+    claim = race.world.ledger.claim
+
+    def claim_then_play(*args, **kwargs):
+        taken = claim(*args, **kwargs)
+        assert _verify_play().status == 'active'  # another device buys Play while the code is claimed
+        return taken
+
+    monkeypatch.setattr(redemption.redemptions_db, 'claim', claim_then_play)
+    with pytest.raises(redemption.PrepaidCodeError) as error:
+        redemption.redeem_prepaid_code(UID, CODE['code'])
+    assert (error.value.status_code, error.value.reason) == (409, 'has_plan')
+    assert race.world.ledger.docs == {}  # the code is free again
+    assert race.world.stripe.created == [] and race.world.stripe.promos[0]['times_redeemed'] == 0
+    assert _row(race.env).provider == 'play'
+
+
+def test_play_unreadable_at_the_re_check_releases_the_claim(race, monkeypatch):
+    claim = race.world.ledger.claim
+
+    def claim_then_play_unreadable(*args, **kwargs):
+        taken = claim(*args, **kwargs)
+        race.env.store.set_user_fields(UID, {play_db.BOUND_FIELD: True})
+        race.env.publisher.resources[TOKEN] = resource('SUBSCRIPTION_STATE_ON_HOLD')
+        race.env.store.docs[play_db.token_key(TOKEN)] = {'uid': UID, 'state': 'SUBSCRIPTION_STATE_ON_HOLD'}
+        race.env.publisher.fail = RuntimeError('timeout')
+        return taken
+
+    monkeypatch.setattr(redemption.redemptions_db, 'claim', claim_then_play_unreadable)
+    with pytest.raises(redemption.PrepaidCodeError) as error:
+        redemption.redeem_prepaid_code(UID, CODE['code'])
+    assert (error.value.status_code, error.value.reason) == (503, 'try_again')
+    assert race.world.ledger.docs == {} and race.world.stripe.created == []
+
+
+def _overlap_lines(caplog):
+    return [r.getMessage() for r in caplog.records if r.getMessage().startswith('prepaid_code_play_overlap ')]
+
+
+def test_play_verified_after_the_re_check_keeps_both_and_the_webhook_never_cancels_the_term(race, monkeypatch, caplog):
+    from utils import play_stripe_guard
+
+    create = race.world.stripe.Subscription.create
+
+    def play_then_create(idempotency_key, **params):
+        assert _verify_play().status == 'active'  # the narrowest window: after the re-check, before Stripe
+        return create(idempotency_key=idempotency_key, **params)
+
+    monkeypatch.setattr(race.world.stripe.Subscription, 'create', staticmethod(play_then_create))
+    assert redemption.redeem_prepaid_code(UID, CODE['code'])['status'] == 'redeemed'
+    (prepaid_sub,) = race.world.stripe.created
+    # The Stripe webhook then sees the prepaid subscription next to the live Play row.
+    monkeypatch.setattr(
+        play_stripe_guard.stripe_utils,
+        'cancel_and_refund_checkout_subscription',
+        lambda sid: pytest.fail('a prepaid subscription is never cancelled or refunded'),
+    )
+    monkeypatch.setattr(play_stripe_guard.play_subscriptions_db, 'get_user_pointer', race.env.store.get_user_pointer)
+    with caplog.at_level('ERROR'):
+        for _ in range(2):
+            asyncio.run(play_stripe_guard.refuse_stripe_for_play_subscriber(UID, prepaid_sub['id'], prepaid_sub))
+    key = play_db.token_key(TOKEN)
+    assert _overlap_lines(caplog) == [f'prepaid_code_play_overlap uid={UID} purchase={key[:12]} code=promo_1'] * 2
+    assert race.world.ledger.docs['promo_1']['subscription_id'] == prepaid_sub['id']  # the term stands
+
+
+def test_the_webhook_still_cancels_and_refunds_an_ordinary_stripe_subscription_next_to_play(monkeypatch):
+    from utils import play_stripe_guard
+
+    undone = []
+    monkeypatch.setattr(
+        play_stripe_guard.stripe_utils,
+        'cancel_and_refund_checkout_subscription',
+        lambda sid: undone.append(sid) or {'refund_id': 're_1'},
+    )
+    monkeypatch.setattr(play_stripe_guard.play_subscriptions_db, 'get_user_pointer', lambda uid: 'ab' * 32)
+
+    async def notice(intent):
+        return None
+
+    monkeypatch.setattr(play_stripe_guard, 'dispatch_notification_async', notice)
+    paid = {'id': 'sub_card', 'status': 'active', 'metadata': {'uid': UID}}
+    asyncio.run(play_stripe_guard.refuse_stripe_for_play_subscriber(UID, 'sub_card', paid))
+    asyncio.run(play_stripe_guard.refuse_stripe_for_play_subscriber(UID, 'sub_checkout'))  # checkout path, no object
+    assert undone == ['sub_card', 'sub_checkout']
+
+
+def test_play_side_observation_of_a_prepaid_overlap_logs_it_and_tells_no_one(env, monkeypatch, caplog):
+    env.users.customers[UID] = 'cus_1'
+    env.stripe_subs.append(
+        {
+            'id': 'sub_prepaid',
+            'status': 'active',
+            'metadata': {'uid': UID, prepaid_marker: '1', 'redeemed_promotion_code_id': 'promo_9'},
+        }
+    )
+    monkeypatch.setattr(play_billing, 'dispatch_notification', lambda intent: pytest.fail('no notice for $0'))
+    key = 'cd' * 32
+    with caplog.at_level('ERROR'):
+        play_billing._record_stripe_conflict(UID, key, SimpleNamespace(state='SUBSCRIPTION_STATE_ACTIVE'))
+    assert _overlap_lines(caplog) == [f'prepaid_code_play_overlap uid={UID} purchase={key[:12]} code=promo_9']
+    assert not [r for r in caplog.records if r.getMessage().startswith('play_billing_double_charge')]
+    # A paid card subscription next to it is still a double charge.
+    env.stripe_subs.append({'id': 'sub_card', 'status': 'active', 'metadata': {'uid': UID}})
+    with caplog.at_level('ERROR'):
+        caplog.clear()
+        try:
+            play_billing._record_stripe_conflict(UID, key, SimpleNamespace(state='SUBSCRIPTION_STATE_ACTIVE'))
+        except Exception:
+            pass
+    assert [r for r in caplog.records if r.getMessage().startswith('play_billing_double_charge')]

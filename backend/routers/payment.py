@@ -1775,7 +1775,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
                     )
                 ):
-                    await play_stripe_guard.refuse_stripe_for_play_subscriber(uid, subscription_obj['id'])
+                    await play_stripe_guard.refuse_stripe_for_play_subscriber(
+                        uid, subscription_obj['id'], subscription_obj
+                    )
                     return {"status": "success", "message": PLAY_CHECKOUT_REFUSED}
                 # Resolve prior entitlement before reconciliation; emit only
                 # after the authoritative write so stale deletion is not churn.
