@@ -34,7 +34,7 @@ func (s BatchSpeech) Transcribe(ctx context.Context, g queue.Guarded, req batchu
 	text, fault := s.Client.Speech(ctx, VendorInput{
 		UID: req.Owner, Subject: req.UnitID, Job: BatchKey(req.Owner, req.UnitID), Request: req.Operation,
 		Input: input, Hash: hash, Version: ImplementationVersion,
-	})
+	}, req.Route, req.BYOK)
 	if fault != nil {
 		return batchunit.Transcript{}, fault
 	}

@@ -303,6 +303,16 @@ func TestAWriteThatOutlivesItsGuardIsRefusedByFirestoreAfterAnErase(t *testing.T
 	}
 }
 
+type routeRecorder struct {
+	vendor
+	calls chan batchunit.Request
+}
+
+func (v routeRecorder) Transcribe(ctx context.Context, g queue.Guarded, req batchunit.Request) (batchunit.Transcript, error) {
+	v.calls <- req
+	return v.vendor.Transcribe(ctx, g, req)
+}
+
 // Capture order is observed at the result writer, after a later BYOK capture committed.
 func TestGrantAndPeriodReleasePreserveLateCaptures(t *testing.T) {
 	t.Parallel()
@@ -313,7 +323,8 @@ func TestGrantAndPeriodReleasePreserveLateCaptures(t *testing.T) {
 			b := docstoretest.Open(t)
 			results, _ := adapter(b)
 			h := queuetest.Open(t, queuetest.Policy(), batchunit.Declaration(batchdocs.Causes()...))
-			service := &batchunit.Service{Queue: h.Store, Speech: vendor{}, Results: results, Accounts: anyone{}, Observer: quiet{}, Keys: func(owner, id string) string { return owner + "/" + id }}
+			recorder := routeRecorder{calls: make(chan batchunit.Request, 8)}
+			service := &batchunit.Service{Queue: h.Store, Speech: recorder, Results: results, Accounts: anyone{}, Observer: quiet{}, Keys: func(owner, id string) string { return owner + "/" + id }}
 			if err := h.Store.HoldCondition(ctx, "owner", queue.Entitlement, 1); err != nil {
 				t.Fatal(err)
 			}
@@ -357,6 +368,25 @@ func TestGrantAndPeriodReleasePreserveLateCaptures(t *testing.T) {
 				if !ok || !at.Equal(capture.Add(time.Duration(i)*time.Minute)) || doc.Data()["late_capture"] != true {
 					t.Fatalf("bad late capture at %v", at)
 				}
+			}
+			for _, want := range []struct {
+				id    string
+				route batchunit.Route
+				byok  bool
+			}{
+				{"byok", batchunit.Provider, true}, {"ja", batchunit.Provider, false}, {"en", batchunit.Parakeet, false},
+			} {
+				select {
+				case got := <-recorder.calls:
+					if got.UnitID != want.id || got.Route != want.route || got.BYOK != want.byok {
+						t.Fatalf("wrong speech dispatch: %+v", got)
+					}
+				default:
+					t.Fatalf("missing dispatch for %s", want.id)
+				}
+			}
+			if len(recorder.calls) != 0 {
+				t.Fatal("duplicate route dispatch")
 			}
 		})
 	}
