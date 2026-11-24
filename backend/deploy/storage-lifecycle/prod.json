@@ -3,6 +3,7 @@
   "project": "based-hardware",
   "lifecycle": {
     "rule": [
+      {"action": {"type": "Delete"}, "condition": {"age": 3, "matchesPrefix": ["merged/"]}},
       {"action": {"type": "Delete"}, "condition": {"age": 30, "matchesPrefix": ["playback/"]}},
       {
         "action": {"type": "SetStorageClass", "storageClass": "COLDLINE"},
@@ -10,19 +11,18 @@
           "age": 30,
           "matchesPrefix": ["chunks/"],
           "matchesStorageClass": ["STANDARD", "MULTI_REGIONAL"],
-          "matchesSuffix": [".batch.enc", ".batch.bin"],
-          "sizeAboveBytes": 131072
+          "matchesSuffix": [".batch.enc", ".batch.bin"]
         }
       },
       {
         "action": {"type": "Delete"},
         "condition": {
-          "daysSinceNoncurrentTime": 7,
           "isLive": false,
-          "matchesPrefix": ["playback/", "merged/"]
+          "numNewerVersions": 1,
+          "matchesPrefix": ["chunks/"],
+          "matchesSuffix": [".opus.enc"]
         }
-      },
-      {"action": {"type": "Delete"}, "condition": {"age": 3, "matchesPrefix": ["merged/"]}}
+      }
     ]
   }
 }

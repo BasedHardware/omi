@@ -10,9 +10,10 @@ offset and stop below the page size) page past a hidden run.
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from fastapi import Response
+from fastapi import Request, Response
 
 from database import conversations as db
+from database import home_visibility_index
 from tests.unit.test_fsr_wq4_cursor import CountingQuery, budget, rows
 
 PAGE = 50  # app/lib/providers/conversation_provider.dart _conversationPageSize
@@ -343,3 +344,70 @@ def test_run_the_scout_cannot_explain_keeps_full_document_refills(monkeypatch):
     assert ids == visible[:PAGE]
     assert 'lean' not in counts and 'hydrated' not in counts
     assert counts['reads'] == info['storage_rows'] == 200
+
+
+def home_request(mode):
+    return Request({'type': 'http', 'query_string': b'', 'headers': [(b'x-omi-home-page-mode', mode.encode())]})
+
+
+def test_indexed_home_reads_fifty_candidates_across_equal_timestamp_pages(monkeypatch, routes):
+    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setenv('OMI_HOME_VISIBILITY_INDEX_OWNERS', 'u')
+    hidden = 1200
+    data, _ = owner(before=10, hidden=hidden)
+    # The last document on page one and the first on page two share a sort key.
+    data[PAGE + hidden]['created_at'] = data[PAGE + hidden - 1]['created_at']
+    for i, row in enumerate(data):
+        if row.get('home_hidden') and i % 2:
+            row.pop('home_hidden')
+            row['recording'] = True
+        home_visibility_index.stamp(row)
+    visible = [
+        row['id']
+        for row in sorted(data, key=lambda row: (row['created_at'], row['id']), reverse=True)
+        if db.is_visible_conversation(row, hide_home=True)
+    ]
+
+    query = CountingQuery(data)
+    monkeypatch.setattr(db, 'db', query)
+    first, response = call_route(routes, request=home_request('auto'))
+    assert [row['id'] for row in first] == visible[:PAGE]
+    assert response.headers['X-Omi-Home-Page-Mode'] == 'indexed'
+    assert query.counts['reads'] == PAGE
+
+    second, response = call_route(
+        routes, request=home_request('indexed'), cursor=response.headers['X-Omi-Next-Cursor'], offset=PAGE
+    )
+    assert [row['id'] for row in second] == visible[PAGE : 2 * PAGE]
+    assert response.headers['X-Omi-Home-Page-Mode'] == 'indexed'
+    assert query.counts['reads'] == 2 * PAGE
+
+    # Offset-only clients that opted in use offsets from the same candidate set.
+    second, response = call_route(routes, request=home_request('indexed'), offset=PAGE)
+    assert [row['id'] for row in second] == visible[PAGE : 2 * PAGE]
+
+
+def test_home_index_leaves_other_queries_and_released_clients_on_legacy(monkeypatch, routes):
+    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setenv('OMI_HOME_VISIBILITY_INDEX_OWNERS', 'u')
+    data, visible = owner()
+    monkeypatch.setattr(db, 'db', CountingQuery(data))
+
+    for kwargs in (
+        {},
+        {'request': home_request('auto'), 'start_date': data[-1]['created_at']},
+        {'request': home_request('legacy')},
+    ):
+        body, response = call_route(routes, **kwargs)
+        assert [row['id'] for row in body] == visible[:PAGE]
+        assert response.headers.get('X-Omi-Home-Page-Mode') != 'indexed'
+
+
+def test_home_gate_rollback_restarts_indexed_continuations(monkeypatch, routes):
+    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.delenv('OMI_HOME_VISIBILITY_INDEX_OWNERS', raising=False)
+    data, visible = owner()
+    monkeypatch.setattr(db, 'db', CountingQuery(data))
+    body, response = call_route(routes, request=home_request('indexed'), offset=1000, cursor='old-cursor')
+    assert [row['id'] for row in body] == visible[:PAGE]
+    assert response.headers['X-Omi-Home-Page-Mode'] == 'legacy'

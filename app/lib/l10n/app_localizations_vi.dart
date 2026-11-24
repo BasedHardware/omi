@@ -15830,7 +15830,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Thanh toán qua omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Cập nhật thẻ tại omi.me để lấy lại $plan.';
+  String playStripePlanPaused(String plan) {
+    return 'Gói $plan của bạn đang tạm dừng.';
   }
 }

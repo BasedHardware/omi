@@ -14,14 +14,18 @@ The load-bearing facts this guards:
   ``--allow-rule-removal-of <apply document>`` permits dropping only rules that
   the apply variant declared (the Coldline rule); any other live rule still
   blocks. ``--allow-rule-removal`` remains as an explicit operator override.
-* No ``Delete`` action may reach ``chunks/``, including unscoped Deletes
-  and the historical scoped noncurrent chunk-deletion proposal.
+* No ``Delete`` action may ever reach ``chunks/``. An unscoped Delete rule counts
+  as reaching it. The single exception is ``NONCURRENT_DELETE_RULE``: a Delete
+  scoped to noncurrent ``chunks/**.opus.enc`` generations with
+  ``numNewerVersions: 1``, which deletes only strictly-superseded generations and
+  always keeps the newest generation of every object name (David, 10-23: delete
+  noncurrent ``.opus.enc`` only after the regen check; see the storage-ops
+  README for why this shape satisfies it).
 * At most one ``SetStorageClass`` rule is permitted, targeting COLDLINE from
   STANDARD/MULTI_REGIONAL and prefix-scoped to exactly ``chunks/``. David
   dropped the prod-stock ARCHIVE transition on 11-02 because of its one-time
   operation cost. The new-empty-bucket forward policy is a separate contract.
-* For prod, the existing seven-day noncurrent playback/merged cache Delete is
-  preserved verbatim. All other noncurrent-version rules (``isLive: false`` and friends) are
+* All other noncurrent-version rules (``isLive: false`` and friends) are
   forbidden: a bucket-wide noncurrent rule would move ``playback/`` noncurrent
   versions to Coldline, which the 30-day Delete rule then early-deletes.
 """
@@ -40,28 +44,28 @@ ALLOWED_SOURCE_CLASSES = {"STANDARD", "MULTI_REGIONAL"}
 NONCURRENT_CONDITION_KEYS = ("daysSinceNoncurrentTime", "noncurrentTimeBefore", "numNewerVersions")
 
 PROD_BUCKET = "omi-private-cloud-sync"
-PROD_COLDLINE_RULE: dict[str, Any] = {
-    "action": {"type": "SetStorageClass", "storageClass": "COLDLINE"},
-    "condition": {
-        "age": 30,
-        "matchesPrefix": ["chunks/"],
-        "matchesStorageClass": ["STANDARD", "MULTI_REGIONAL"],
-        "matchesSuffix": [".batch.enc", ".batch.bin"],
-    },
-}
-PROD_SIZE_FLOOR = 131072
-PROD_NONCURRENT_CACHE_RULE: dict[str, Any] = {
-    "action": {"type": "Delete"},
-    "condition": {"daysSinceNoncurrentTime": 7, "isLive": False, "matchesPrefix": ["playback/", "merged/"]},
-}
-PROD_COLDLINE_SIZE_RULE = {
-    **PROD_COLDLINE_RULE,
-    "condition": {**PROD_COLDLINE_RULE["condition"], "sizeAboveBytes": PROD_SIZE_FLOOR},
-}
 LEGACY_DELETE_RULES: tuple[dict[str, Any], ...] = (
     {"action": {"type": "Delete"}, "condition": {"age": 3, "matchesPrefix": ["merged/"]}},
     {"action": {"type": "Delete"}, "condition": {"age": 30, "matchesPrefix": ["playback/"]}},
 )
+# The one permitted noncurrent rule: deletes superseded .opus.enc chunk
+# generations only. numNewerVersions: 1 keeps the newest generation of every
+# object name (a live object's current generation has zero newer versions, and
+# so does the newest generation of a fully-deleted conversation), so nothing
+# that exists today is erased; only strictly-older duplicates are removed.
+NONCURRENT_DELETE_RULE: dict[str, Any] = {
+    "action": {"type": "Delete"},
+    "condition": {
+        "isLive": False,
+        "numNewerVersions": 1,
+        "matchesPrefix": [CHUNKS_PREFIX],
+        "matchesSuffix": [".opus.enc"],
+    },
+}
+
+
+def _is_scoped_noncurrent_delete(rule: Any) -> bool:
+    return isinstance(rule, Mapping) and rule == NONCURRENT_DELETE_RULE
 
 
 def _rules(document: Mapping[str, Any] | None) -> list[Any]:
@@ -93,22 +97,22 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
         return errors
 
     set_class_rules = 0
+    noncurrent_delete_rules = 0
     for index, rule in enumerate(lifecycle["rule"]):
         if not isinstance(rule, Mapping):
             errors.append(f"desired rule {index} is not an object")
             continue
-        action = rule.get("action")
-        condition = rule.get("condition")
-        action = action if isinstance(action, Mapping) else {}
-        condition = condition if isinstance(condition, Mapping) else {}
+        action = rule.get("action") if isinstance(rule.get("action"), Mapping) else {}
+        condition = rule.get("condition") if isinstance(rule.get("condition"), Mapping) else {}
         action_type = action.get("type")
+        if _is_scoped_noncurrent_delete(rule):
+            noncurrent_delete_rules += 1
         if not isinstance(action_type, str) or action_type not in ALLOWED_ACTIONS:
             errors.append(f"desired rule {index} has unsupported action {action_type!r}")
             continue
-        prod_cache_rule = bucket == PROD_BUCKET and rule == PROD_NONCURRENT_CACHE_RULE
-        if not prod_cache_rule and (
+        if (
             condition.get("isLive") is False or any(key in condition for key in NONCURRENT_CONDITION_KEYS)
-        ):
+        ) and not _is_scoped_noncurrent_delete(rule):
             errors.append(
                 f"desired rule {index} targets noncurrent versions; noncurrent-version rules are forbidden "
                 "(they would Coldline playback/ noncurrent versions that the 30-day Delete rule early-deletes)"
@@ -127,15 +131,13 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
                 errors.append(
                     f"desired rule {index} is an unscoped Delete; a Delete rule must never be able to match {CHUNKS_PREFIX!r}"
                 )
-            else:
+            elif not _is_scoped_noncurrent_delete(rule):
                 for prefix in prefixes:
                     if _prefix_touches_chunks(prefix):
                         errors.append(
                             f"desired rule {index} is a Delete rule whose prefix {prefix!r} can match {CHUNKS_PREFIX!r}"
                         )
         else:  # SetStorageClass
-            if "sizeAboveBytes" in condition and rule != PROD_COLDLINE_SIZE_RULE:
-                errors.append(f"desired rule {index} must use the reviewed prod Coldline size floor")
             target_class = action.get("storageClass")
             set_class_rules += 1
             if target_class != "COLDLINE":
@@ -163,8 +165,12 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
 
     if set_class_rules > 1:
         errors.append(f"desired document declares {set_class_rules} SetStorageClass rules; at most one is expected")
+    if noncurrent_delete_rules > 1:
+        errors.append(
+            f"desired document declares {noncurrent_delete_rules} scoped noncurrent Delete rules; at most one is expected"
+        )
     if bucket == PROD_BUCKET:
-        for legacy in (*LEGACY_DELETE_RULES, PROD_NONCURRENT_CACHE_RULE):
+        for legacy in LEGACY_DELETE_RULES:
             if legacy not in lifecycle["rule"]:
                 errors.append(f"desired document is missing the legacy prod rule {json.dumps(legacy, sort_keys=True)}")
     return errors
@@ -189,24 +195,7 @@ def validate_against_live(
 
     desired_rules = _rules(desired)
     live_rules = _rules(live)
-    if bucket == PROD_BUCKET:
-        # The JSON API can encode int64 fields as decimal strings.
-        string_size_rule = {
-            **PROD_COLDLINE_SIZE_RULE,
-            "condition": {**PROD_COLDLINE_SIZE_RULE["condition"], "sizeAboveBytes": str(PROD_SIZE_FLOOR)},
-        }
-        live_rules = [PROD_COLDLINE_SIZE_RULE if rule == string_size_rule else rule for rule in live_rules]
-
-        # Check both directions so a stale declaration cannot introduce a
-        # Delete or remove a live rule during apply or rollback.
-        def without_size_floor(rules):
-            return [PROD_COLDLINE_RULE if rule == PROD_COLDLINE_SIZE_RULE else rule for rule in rules]
-
-        if without_size_floor(live_rules) != without_size_floor(desired_rules):
-            errors.append(
-                "prod lifecycle may only change the reviewed Coldline size floor against the live ordered rules"
-            )
-    elif not allow_rule_removal:
+    if not allow_rule_removal:
         # Scoped removal (rollback): only rules the apply variant declared may
         # be dropped; a later live rule the apply never contained still blocks.
         droppable: Sequence[Any] = (

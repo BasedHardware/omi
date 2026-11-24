@@ -127,16 +127,18 @@ def read_reference(
         read_budget.begin()
     # Data generation alone does not fence metadata-only updates (sample rate,
     # encryption/checksum metadata). Only a versioned listing can replace the GET.
+    reuse_metadata = default_on('BATCH_SOURCE_VERIFIED_METADATA_REUSE_ENABLED')
     listed = listed_source or {}
     size = listed.get('size')
     metageneration = listed.get('metageneration')
     use_listing = (
-        size is not None
+        reuse_metadata
+        and size is not None
         and (not source_metadata or 'metadata' in listed)
         and type(metageneration) is int
         and metageneration > 0
     )
-    record_source_proof = record_source_proof and default_on('BATCH_SOURCE_VERIFIED_METADATA_REUSE_ENABLED')
+    record_source_proof = record_source_proof and reuse_metadata
 
     def reload_source():
         record_seal_profile.metadata_reload()
@@ -170,7 +172,7 @@ def read_reference(
         except PreconditionFailed:
             # Seal and ACK callers must refuse raced inventory proof. Only a
             # materializer with an authenticated decoded-PCM digest may retry.
-            if not retry_stale_metadata or not default_on('BATCH_SOURCE_VERIFIED_METADATA_REUSE_ENABLED'):
+            if not retry_stale_metadata:
                 raise
             if read_budget is not None:
                 # A failed precondition returns no object body.

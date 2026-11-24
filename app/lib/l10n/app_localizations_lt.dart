@@ -15853,7 +15853,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Mokama per omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Atnaujinkite kortelę omi.me, kad susigrąžintumėte $plan.';
+  String playStripePlanPaused(String plan) {
+    return 'Jūsų $plan planas pristabdytas.';
   }
 }

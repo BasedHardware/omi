@@ -12322,5 +12322,5 @@
     "prepaidCodeResult": "{reason, select, invalid{हा कोड वैध नाही. तपासा आणि पुन्हा प्रयत्न करा.} used{हा कोड आधीच वापरला गेला आहे.} expired{या कोडची मुदत संपली आहे.} hasPlan{तुमच्याकडे आधीच प्लॅन आहे. तुमचा कोड वापरला गेला नाही. प्लॅन संपल्यावर तो रिडीम करा.} notPrepaid{हा कोड येथे रिडीम करता येत नाही. प्लॅन निवडताना तो वापरा.} notEligible{हा कोड या खात्यावर वापरता येत नाही.} rateLimited{खूप प्रयत्न झाले. नंतर पुन्हा प्रयत्न करा.} other{काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.}}",
     "playStripeBilledOnWeb": "omi.me द्वारे बिल केले जाते. येथे कधीही रद्द करा.",
     "playStripeBilledOnWebShort": "omi.me द्वारे बिल केले जाते.",
-    "playStripeUpdateCardToGetPlanBack": "{plan} परत मिळवण्यासाठी omi.me वर तुमचे कार्ड अपडेट करा."
+    "playStripePlanPaused": "तुमचा {plan} प्लॅन थांबवला आहे."
 }

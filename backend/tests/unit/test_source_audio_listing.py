@@ -145,7 +145,33 @@ def test_listing_to_walk_keeps_identical_references_without_reload(monkeypatch):
     )
 
 
-def test_stale_source_metadata_reloads_the_same_data_generation(monkeypatch):
+def test_disabled_metadata_reuse_reloads_even_with_a_complete_listing(monkeypatch):
+    monkeypatch.setenv('BATCH_SOURCE_VERIFIED_METADATA_REUSE_ENABLED', 'false')
+    raw = b'\x01\x00' * 10
+    client, bucket, blob, ref = reader(raw, metadata={'record_sample_rate': '16000'})
+    blob.metageneration = 4
+    listing = {'size': len(raw), 'metadata': {'record_sample_rate': '8000'}, 'metageneration': 3}
+    pcm = source.read_reference(
+        client,
+        ref,
+        'u',
+        'c',
+        {'synthetic'},
+        b'x' * 32,
+        source_metadata=True,
+        listed_source=listing,
+        record_source_proof=True,
+        retry_stale_metadata=True,
+    )
+    assert pcm == raw
+    assert ref['sample_rate'] == 16000
+    assert 'source_metageneration' not in ref
+    bucket.blob.assert_called_once_with(ref['path'], generation=7)
+    blob.reload.assert_called_once_with(if_generation_match=7, timeout=30, retry=None)
+    blob.download_as_bytes.assert_called_once_with(if_generation_match=7, timeout=60, retry=None)
+
+
+def test_stale_source_metadata_reloads_the_same_data_generation():
     raw = b'\x01\x00' * 10
     client, _, blob, ref = reader(raw, metadata={'record_sample_rate': '16000'})
     blob.metageneration = 4
@@ -176,21 +202,6 @@ def test_stale_source_metadata_reloads_the_same_data_generation(monkeypatch):
     assert blob.reload.call_args.kwargs['if_generation_match'] == 7
     assert [call.kwargs['if_metageneration_match'] for call in blob.download_as_bytes.call_args_list] == [3, 4]
     assert all(call.kwargs['if_generation_match'] == 7 for call in blob.download_as_bytes.call_args_list)
-    monkeypatch.setenv('BATCH_SOURCE_VERIFIED_METADATA_REUSE_ENABLED', 'false')
-    blob.download_as_bytes.side_effect = PreconditionFailed('metadata changed')
-    with pytest.raises(PreconditionFailed):
-        source.read_reference(
-            client,
-            ref,
-            'u',
-            'c',
-            {'synthetic'},
-            b'x' * 32,
-            source_metadata=True,
-            listed_source=listing,
-            retry_stale_metadata=True,
-        )
-    assert blob.reload.call_count == 1
 
 
 def test_materialization_reuses_a_verified_non_adjacent_pack_only_with_equal_decoder_settings(monkeypatch):

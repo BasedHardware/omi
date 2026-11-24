@@ -170,10 +170,13 @@ bool presentFinishOutcome(
   final v3 = context.read<ConversationsV3Provider?>();
   final homeShowsProcessing = outcome is FinishProcessing &&
       v3?.finishRow != null &&
-      context.read<ConversationProvider?>()?.showsDefaultHome == true;
+      context.read<ConversationProvider?>()?.showsPendingFinishOnHome == true;
   final page = homeShowsProcessing ? null : finishedPageFor(outcome);
   final message = finishMessage(context, outcome);
   final stays = outcome is FinishFailed || outcome is FinishNotReceived;
+  if (outcome is FinishAwaitingResult) {
+    unawaited(context.read<ConversationProvider?>()?.resetToDefaultHome());
+  }
   if (homeShowsProcessing ||
       page != null ||
       outcome is FinishAwaitingResult ||

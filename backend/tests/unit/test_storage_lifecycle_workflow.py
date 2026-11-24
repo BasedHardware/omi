@@ -44,15 +44,3 @@ def test_rollback_rule_removal_is_scoped_to_the_apply_variant_rules() -> None:
     assert '--allow-rule-removal)' not in text.replace(
         '--allow-rule-removal-of', ''
     ), 'blanket --allow-rule-removal must not be wired into the automatic rollback path'
-
-
-def test_prod_patch_is_fenced_by_the_preflight_metageneration() -> None:
-    steps = _workflow()['jobs']['apply']['steps']
-    preflight = next(index for index, step in enumerate(steps) if '--live before.json' in step.get('run', ''))
-    apply = next(index for index, step in enumerate(steps) if '--request PATCH' in step.get('run', ''))
-    script = steps[apply]['run']
-    assert preflight < apply
-    assert 'if [[ "$RESOLVED_ENVIRONMENT" == "prod" ]]' in script
-    assert '.metageneration' in script and 'before.json' in script
-    assert '?ifMetagenerationMatch=${metageneration}' in script
-    assert "jq '{lifecycle: .}'" in script

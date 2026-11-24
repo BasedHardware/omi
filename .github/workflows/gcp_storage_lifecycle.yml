@@ -198,7 +198,7 @@ jobs:
         run: |
           set -euo pipefail
           extra=()
-          if [[ "$RESOLVED_ENVIRONMENT" != "prod" && "$LIFECYCLE_VARIANT" == "rollback" ]]; then
+          if [[ "$LIFECYCLE_VARIANT" == "rollback" ]]; then
             # Scoped removal: only rules the apply variant declared (the Coldline
             # rule) may be dropped; a later live rule still blocks the rollback.
             apply_file="backend/deploy/storage-lifecycle/${RESOLVED_ENVIRONMENT}.json"
@@ -216,19 +216,8 @@ jobs:
           set -euo pipefail
           python3 -c "import json,sys;json.dump(json.load(open(sys.argv[1]))['lifecycle'],open('apply.json','w'))" \
             "${{ steps.select.outputs.file }}"
-          if [[ "$RESOLVED_ENVIRONMENT" == "prod" ]]; then
-            metageneration="$(jq -er '.metageneration | tostring | select(test("^[1-9][0-9]*$"))' before.json)"
-            jq '{lifecycle: .}' apply.json > patch.json
-            token="$(gcloud auth print-access-token)"
-            test -n "$token"
-            printf 'Authorization: Bearer %s\n' "$token" | curl --fail-with-body --silent --show-error --max-time 60 \
-              --request PATCH --header @- --header 'Content-Type: application/json' \
-              --data-binary @patch.json --output patch-response.json \
-              "https://storage.googleapis.com/storage/v1/b/${{ steps.select.outputs.bucket }}?ifMetagenerationMatch=${metageneration}"
-          else
-            gcloud storage buckets update "gs://${{ steps.select.outputs.bucket }}" \
-              --project="${{ steps.select.outputs.project }}" --lifecycle-file=apply.json
-          fi
+          gcloud storage buckets update "gs://${{ steps.select.outputs.bucket }}" \
+            --project="${{ steps.select.outputs.project }}" --lifecycle-file=apply.json
 
       - name: Assert the applied lifecycle equals the checked-in document
         run: |
