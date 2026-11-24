@@ -2223,6 +2223,12 @@
     "authFailedToRetrieveToken": "Falha ao recuperar o token do Firebase, tente novamente.",
     "authUnexpectedErrorFirebase": "Erro inesperado ao fazer login, erro do Firebase, tente novamente.",
     "authUnexpectedError": "Erro inesperado ao fazer login, tente novamente",
+    "accountSignInMethods": "Métodos de login",
+    "accountAddSignInMethod": "Adicionar método de login",
+    "accountAddSignInMethodDetails": "Adicione uma forma de entrar nesta conta Omi. Seu plano, suas gravações e suas integrações continuam nesta conta.",
+    "accountSignInConflictTitle": "Este login pertence a outra conta",
+    "accountSignInConflictDetails": "Você continua nesta conta. Cada conta Omi mantém seu próprio plano, gravações e integrações.",
+    "accountSignInMethodAdded": "Método de login adicionado",
     "authFailedToLinkGoogle": "Falha ao vincular com o Google, tente novamente.",
     "authFailedToLinkApple": "Falha ao vincular com a Apple, tente novamente.",
     "onboardingBluetoothRequired": "A permissão de Bluetooth é necessária para conectar ao seu dispositivo.",
@@ -4417,6 +4423,7 @@
     "processingNewestFirst": "Vamos processar primeiro as gravações mais recentes, até ao limite disponível. As restantes continuarão em espera.",
     "processingAction": "Processar gravações pendentes",
     "processingProgress": "A processar as suas gravações pendentes…",
+    "waitingForTranscriptionAllowance": "À espera de cota de transcrição disponível",
     "processingDeferred": "À espera de processamento",
     "processingCount": "{count, plural, =1{1 conversa em espera} other{{count} conversas em espera}}",
     "playbackPartialAudioSaved": "{saved} de {total} de áudio guardado",
@@ -4791,5 +4798,5 @@
     "prepaidCodeFieldHint": "Introduza o seu código",
     "prepaidCodeRedeem": "Resgatar",
     "prepaidCodeRedeemed": "Código resgatado",
-    "prepaidCodeResult": "{reason, select, invalid{Este código não é válido. Verifique-o e tente novamente.} used{Este código já foi usado.} expired{Este código expirou.} hasPlan{Já tem um plano. O seu código não foi usado.} notPrepaid{Este código não pode ser resgatado aqui. Use-o quando escolher um plano.} notEligible{Este código não pode ser usado nesta conta.} rateLimited{Demasiadas tentativas. Tente mais tarde.} other{Algo correu mal. Tente novamente.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Este código não é válido. Verifique-o e tente novamente.} used{Este código já foi usado.} expired{Este código expirou.} hasPlan{Já tem um plano. O seu código não foi usado. Resgate-o quando o seu plano terminar.} notPrepaid{Este código não pode ser resgatado aqui. Use-o quando escolher um plano.} notEligible{Este código não pode ser usado nesta conta.} rateLimited{Demasiadas tentativas. Tente mais tarde.} other{Algo correu mal. Tente novamente.}}"
 }

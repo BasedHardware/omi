@@ -2288,7 +2288,15 @@ class CaptureController extends ChangeNotifier
         Logger.debug("Double tap: processing conversation");
         PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
         HapticFeedback.lightImpact(); // The tap's only feedback on the phone until the processing row.
-        forceProcessingCurrentConversation();
+        unawaited(
+          forceProcessingCurrentConversation(manualFinish: true).catchError(
+            (Object error, StackTrace stack) => _reportDetachedCaptureError(
+              'capture_process_now',
+              error,
+              stack,
+            ),
+          ),
+        );
       }
       return;
     }
@@ -4381,18 +4389,27 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  Future<void> forceProcessingCurrentConversation() async {
+  Future<void> forceProcessingCurrentConversation({bool manualFinish = false, String? liveConversationId}) async {
     final recordingSessionId = activeRecordingId;
     final conversationRevision = _systemSurfaceConversationRevision;
     final close = _admitConversationClose(processNow: true);
     _pendingProcessCloses.add(close);
     final placeholderOwner = ++_processingPlaceholderOwner;
     var requestAdmitted = false;
+    final confirmedProcessing = _firstCaptureProcess;
+    final showManualFinish = manualFinish || confirmedProcessing;
+    final placeholder = OptimisticProcessingPlaceholder.conversation(
+      targetConversationId: _conversation?.id,
+    );
+    final actions = externalActions;
+    final sourceId = verifiedLiveServerRecordingId ?? _conversation?.id;
     try {
       // Publish the skeleton before waiting for disk, preserving immediate Process Now feedback.
-      externalActions.addProcessingConversation(
-        OptimisticProcessingPlaceholder.conversation(targetConversationId: _conversation?.id),
-      );
+      if (showManualFinish) {
+        actions.onManualFinishStarted(placeholder, sourceId,
+            liveConversationId: liveConversationId, captureId: recordingSessionId);
+      }
+      actions.addProcessingConversation(placeholder);
       _finalizeGate.markFinalized();
       externalActions.onLiveFinalized();
       await close.snapshot;
@@ -4402,13 +4419,13 @@ class CaptureController extends ChangeNotifier
           conversationRevision != _systemSurfaceConversationRevision) {
         // A matching server close may already have bound this cut during the drain.
         close.bind(null);
+        if (showManualFinish) actions.onManualFinishSettled(placeholder, null, showFailure: false);
         if (placeholderOwner == _processingPlaceholderOwner) {
           externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
         }
         return;
       }
       _resetLiveConversationWindow();
-      final confirmedProcessing = _firstCaptureProcess;
       final Future<InProgressProcessOutcome> request = _processInProgressOutcomeOverride != null
           ? _processInProgressOutcomeOverride!()
           : _processInProgressConversationOverride != null
@@ -4425,12 +4442,15 @@ class CaptureController extends ChangeNotifier
         _pendingProcessCloses.remove(close);
         if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
         if (conversationId != null) _rememberConversationClose(conversationId);
+        if (showManualFinish) actions.onManualFinishSettled(placeholder, outcome, showFailure: !confirmedProcessing);
         await OptimisticProcessingPlaceholder.applyProcessResult(
           result: outcome.response,
           absence: outcome.absence,
           actions: externalActions,
           onCreated: _processConversationCreated,
-          onNoConversation: _onProcessProducedNoConversation,
+          // A manual v3 finish that reports its own failure owns the user copy; keep analytics here.
+          onNoConversation: (absence) => _onProcessProducedNoConversation(absence,
+              finishOwnsCopy: showManualFinish && !confirmedProcessing && actions.v3FinishFeedbackEnabled),
           removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
         );
         if (close.sessionStartSeconds > 0 && conversationId != null) {
@@ -4446,6 +4466,9 @@ class CaptureController extends ChangeNotifier
         close.bind(null);
         _pendingProcessCloses.remove(close);
         if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
+        if (showManualFinish) {
+          actions.onManualFinishSettled(placeholder, null, showFailure: !confirmedProcessing);
+        }
         await OptimisticProcessingPlaceholder.handleFailure(
           actions: externalActions,
           removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
@@ -4456,6 +4479,16 @@ class CaptureController extends ChangeNotifier
       });
     } catch (_) {
       close.bind(null);
+      if (showManualFinish) {
+        // The detail button is still available to retry a failed local drain.
+        actions.onManualFinishSettled(placeholder, null,
+            showFailure: !confirmedProcessing && liveConversationId == null);
+      }
+      if (placeholderOwner == _processingPlaceholderOwner) {
+        actions.removeProcessingConversation(
+          OptimisticProcessingPlaceholder.id,
+        );
+      }
       rethrow;
     } finally {
       if (!requestAdmitted) _pendingProcessCloses.remove(close);
@@ -4542,12 +4575,13 @@ class CaptureController extends ChangeNotifier
     return null;
   }
 
-  void _onProcessProducedNoConversation(ProcessAbsence absence) {
+  void _onProcessProducedNoConversation(ProcessAbsence absence, {bool finishOwnsCopy = false}) {
     if (_conversationDeliveredForCurrentCapture) return;
     switch (absence) {
       case ProcessAbsence.emptyBody:
-        _announceNoConversation(EmptyRecordingReason.emptyDeleted);
+        _announceNoConversation(EmptyRecordingReason.emptyDeleted, showUserCopy: !finishOwnsCopy);
       case ProcessAbsence.notFound:
+        if (externalActions.v3FinishFeedbackEnabled) return;
         // POST /v1/conversations returns 404 both when nothing was captured and
         // when the conversation was already finalized. Let the conversation-created
         // path set [_deliveredExplanationGeneration] before treating this as empty.

@@ -7070,6 +7070,26 @@ class AppLocalizationsUk extends AppLocalizations {
   String get authUnexpectedError => 'Неочікувана помилка під час входу, спробуйте ще раз';
 
   @override
+  String get accountSignInMethods => 'Способи входу';
+
+  @override
+  String get accountAddSignInMethod => 'Додати спосіб входу';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Додайте спосіб входу до цього облікового запису Omi. Ваш тариф, записи й інтеграції залишаться в цьому обліковому записі.';
+
+  @override
+  String get accountSignInConflictTitle => 'Цей спосіб входу прив’язано до іншого облікового запису';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Ви досі в цьому обліковому записі. У кожному обліковому записі Omi залишаються його тариф, записи й інтеграції.';
+
+  @override
+  String get accountSignInMethodAdded => 'Спосіб входу додано';
+
+  @override
   String get authFailedToLinkGoogle => 'Не вдалося зв\'язати з Google, спробуйте ще раз.';
 
   @override
@@ -14390,6 +14410,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get processingProgress => 'Обробка записів в очікуванні…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Очікуємо на доступну квоту транскрибування';
+
+  @override
   String get processingDeferred => 'Очікує на обробку';
 
   @override
@@ -15825,7 +15848,7 @@ class AppLocalizationsUk extends AppLocalizations {
         'invalid': 'Цей код недійсний. Перевірте його та спробуйте ще раз.',
         'used': 'Цей код уже використано.',
         'expired': 'Термін дії цього коду минув.',
-        'hasPlan': 'У вас уже є план. Ваш код не використано.',
+        'hasPlan': 'У вас уже є план. Ваш код не використано. Активуйте його після завершення плану.',
         'notPrepaid': 'Цей код не можна активувати тут. Використайте його під час вибору плану.',
         'notEligible': 'Цей код не можна використати в цьому акаунті.',
         'rateLimited': 'Забагато спроб. Спробуйте пізніше.',

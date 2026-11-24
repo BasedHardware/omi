@@ -2223,6 +2223,12 @@
     "authFailedToRetrieveToken": "Nem sikerült lekérni a Firebase tokent, kérjük próbálja újra.",
     "authUnexpectedErrorFirebase": "Váratlan hiba a bejelentkezés során, Firebase hiba, kérjük próbálja újra.",
     "authUnexpectedError": "Váratlan hiba a bejelentkezés során, kérjük próbálja újra",
+    "accountSignInMethods": "Bejelentkezési módok",
+    "accountAddSignInMethod": "Bejelentkezési mód hozzáadása",
+    "accountAddSignInMethodDetails": "Adj hozzá egy bejelentkezési módot ehhez az Omi-fiókhoz. A csomagod, a felvételeid és az integrációid továbbra is ehhez a fiókhoz tartoznak.",
+    "accountSignInConflictTitle": "Ez a bejelentkezési mód egy másik fiókhoz tartozik",
+    "accountSignInConflictDetails": "Továbbra is ebbe a fiókba vagy bejelentkezve. Minden Omi-fiók megőrzi a saját csomagját, felvételeit és integrációit.",
+    "accountSignInMethodAdded": "Bejelentkezési mód hozzáadva",
     "authFailedToLinkGoogle": "Nem sikerült a Google-lel összekapcsolni, kérjük próbálja újra.",
     "authFailedToLinkApple": "Nem sikerült az Apple-lel összekapcsolni, kérjük próbálja újra.",
     "onboardingBluetoothRequired": "Bluetooth-engedély szükséges az eszközhöz való csatlakozáshoz.",
@@ -4478,6 +4484,7 @@
     "processingNewestFirst": "Először a legújabb felvételeket dolgozzuk fel a rendelkezésre álló keretig. A többi tovább várakozik.",
     "processingAction": "Várakozó felvételek feldolgozása",
     "processingProgress": "A várakozó felvételeid feldolgozása…",
+    "waitingForTranscriptionAllowance": "Várakozás az elérhető átírási keretre",
     "processingDeferred": "Feldolgozásra vár",
     "processingCount": "{count, plural, =1{1 beszélgetés várakozik} other{{count} beszélgetés várakozik}}",
     "playbackPartialAudioSaved": "{saved} / {total} hang elmentve",
@@ -4852,5 +4859,5 @@
     "prepaidCodeFieldHint": "Add meg a kódodat",
     "prepaidCodeRedeem": "Beváltás",
     "prepaidCodeRedeemed": "Kód beváltva",
-    "prepaidCodeResult": "{reason, select, invalid{Ez a kód érvénytelen. Ellenőrizd, és próbáld újra.} used{Ezt a kódot már felhasználták.} expired{Ez a kód lejárt.} hasPlan{Már van csomagod. A kódodat nem használtuk fel.} notPrepaid{Ez a kód itt nem váltható be. Használd, amikor csomagot választasz.} notEligible{Ez a kód ezen a fiókon nem használható.} rateLimited{Túl sok próbálkozás. Próbáld újra később.} other{Hiba történt. Próbáld újra.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Ez a kód érvénytelen. Ellenőrizd, és próbáld újra.} used{Ezt a kódot már felhasználták.} expired{Ez a kód lejárt.} hasPlan{Már van csomagod. A kódodat nem használtuk fel. Váltsd be, amikor a csomagod lejár.} notPrepaid{Ez a kód itt nem váltható be. Használd, amikor csomagot választasz.} notEligible{Ez a kód ezen a fiókon nem használható.} rateLimited{Túl sok próbálkozás. Próbáld újra később.} other{Hiba történt. Próbáld újra.}}"
 }

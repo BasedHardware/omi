@@ -7042,6 +7042,26 @@ class AppLocalizationsDa extends AppLocalizations {
   String get authUnexpectedError => 'Uventet fejl under login, prøv venligst igen';
 
   @override
+  String get accountSignInMethods => 'Loginmetoder';
+
+  @override
+  String get accountAddSignInMethod => 'Tilføj loginmetode';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Tilføj en måde at logge ind på denne Omi-konto. Dit abonnement, dine optagelser og dine integrationer bliver på denne konto.';
+
+  @override
+  String get accountSignInConflictTitle => 'Denne loginmetode er knyttet til en anden konto';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Du er stadig logget ind på denne konto. Hver Omi-konto beholder sit abonnement, sine optagelser og sine integrationer.';
+
+  @override
+  String get accountSignInMethodAdded => 'Loginmetode tilføjet';
+
+  @override
   String get authFailedToLinkGoogle => 'Kunne ikke forbinde med Google, prøv venligst igen.';
 
   @override
@@ -14349,6 +14369,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get processingProgress => 'Behandler dine ventende optagelser…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Venter på ledig transskriptionskvote';
+
+  @override
   String get processingDeferred => 'Venter på behandling';
 
   @override
@@ -15783,7 +15806,7 @@ class AppLocalizationsDa extends AppLocalizations {
         'invalid': 'Denne kode er ikke gyldig. Tjek den og prøv igen.',
         'used': 'Denne kode er allerede brugt.',
         'expired': 'Denne kode er udløbet.',
-        'hasPlan': 'Du har allerede en plan. Din kode blev ikke brugt.',
+        'hasPlan': 'Du har allerede en plan. Din kode blev ikke brugt. Indløs den, når din plan slutter.',
         'notPrepaid': 'Denne kode kan ikke indløses her. Brug den, når du vælger en plan.',
         'notEligible': 'Denne kode kan ikke bruges på denne konto.',
         'rateLimited': 'For mange forsøg. Prøv igen senere.',

@@ -318,6 +318,13 @@ llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_nam
 admission_executor = MonitoredThreadPoolExecutor(name="admission", max_workers=4, thread_name_prefix="admission")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
+# The from-segments route bounds its auth dependency by the request deadline. A
+# stalled identity/Firestore call cannot be interrupted, so the wait is
+# abandoned at the deadline; this pool holds those abandoned calls apart from
+# the critical pool that gates every other request.
+auth_deadline_executor = MonitoredThreadPoolExecutor(
+    name="auth_deadline", max_workers=16, max_queue_size=64, thread_name_prefix="auth-deadline"
+)
 # Optional per-window LID must not hold the shared sync coordination pool.
 # Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
 record_language_executor = MonitoredThreadPoolExecutor(
@@ -392,6 +399,7 @@ _ALL_EXECUTORS = [
     stripe_executor,
     admission_executor,
     sync_executor,
+    auth_deadline_executor,
     record_language_executor,
     postprocess_executor,
     cleanup_executor,

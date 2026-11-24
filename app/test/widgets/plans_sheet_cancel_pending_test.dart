@@ -34,7 +34,7 @@ class _Usage extends UsageProvider {
   Future<void> loadAvailablePlans() async {}
 
   @override
-  Future<void> fetchSubscription() async {
+  Future<void> fetchSubscription({bool fresh = false}) async {
     if (!clearCancelOnFetch || subscription == null) return;
     final current = subscription!;
     debugSetSubscription(
@@ -195,9 +195,10 @@ void main() {
   testWidgets('resubscribe uses the current price and replaces the ends line', (tester) async {
     final usage = await _pump(
       tester,
-      clearCancelOnFetch: true,
       sessionResult: {'status': 'reactivated', 'message': 'ok', 'next_billing_date': _periodEndSeconds},
     );
+    // The server clears the cancel only after Resubscribe, not on the sheet's opening read.
+    usage.clearCancelOnFetch = true;
     final l10n = AppLocalizations.of(tester.element(find.byType(PlansSheet)));
     final date = _date(tester);
 

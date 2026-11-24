@@ -2228,6 +2228,12 @@
     "authFailedToRetrieveToken": "Неуспешно извличане на Firebase токен, моля опитайте отново.",
     "authUnexpectedErrorFirebase": "Неочаквана грешка при влизане, грешка на Firebase, моля опитайте отново.",
     "authUnexpectedError": "Неочаквана грешка при влизане, моля опитайте отново",
+    "accountSignInMethods": "Начини за вход",
+    "accountAddSignInMethod": "Добавяне на начин за вход",
+    "accountAddSignInMethodDetails": "Добавете начин за вход в този акаунт в Omi. Планът, записите и интеграциите ви остават в този акаунт.",
+    "accountSignInConflictTitle": "Този начин за вход е свързан с друг акаунт",
+    "accountSignInConflictDetails": "Все още сте влезли в този акаунт. Всеки акаунт в Omi запазва своя план, записи и интеграции.",
+    "accountSignInMethodAdded": "Начинът за вход е добавен",
     "authFailedToLinkGoogle": "Неуспешно свързване с Google, моля опитайте отново.",
     "authFailedToLinkApple": "Неуспешно свързване с Apple, моля опитайте отново.",
     "onboardingBluetoothRequired": "За свързване с вашето устройство е необходимо разрешение за Bluetooth.",
@@ -4382,6 +4388,7 @@
     "processingNewestFirst": "Ще обработим първо най-новите записи до наличния лимит. Останалите ще продължат да чакат.",
     "processingAction": "Обработване на чакащите записи",
     "processingProgress": "Обработване на чакащите ви записи…",
+    "waitingForTranscriptionAllowance": "Изчаква се налична квота за транскрипция",
     "processingDeferred": "Чака обработка",
     "processingCount": "{count, plural, =1{1 чакащ разговор} other{{count} чакащи разговора}}",
     "playbackPartialAudioSaved": "Запазени {saved} от {total} аудио",
@@ -4756,5 +4763,5 @@
     "prepaidCodeFieldHint": "Въведете вашия код",
     "prepaidCodeRedeem": "Активирай",
     "prepaidCodeRedeemed": "Кодът е активиран",
-    "prepaidCodeResult": "{reason, select, invalid{Този код не е валиден. Проверете го и опитайте отново.} used{Този код вече е използван.} expired{Този код е изтекъл.} hasPlan{Вече имате план. Кодът ви не е използван.} notPrepaid{Този код не може да се активира тук. Използвайте го, когато изберете план.} notEligible{Този код не може да се използва в този акаунт.} rateLimited{Твърде много опити. Опитайте по-късно.} other{Нещо се обърка. Опитайте отново.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Този код не е валиден. Проверете го и опитайте отново.} used{Този код вече е използван.} expired{Този код е изтекъл.} hasPlan{Вече имате план. Кодът ви не е използван. Активирайте го, след като планът ви приключи.} notPrepaid{Този код не може да се активира тук. Използвайте го, когато изберете план.} notEligible{Този код не може да се използва в този акаунт.} rateLimited{Твърде много опити. Опитайте по-късно.} other{Нещо се обърка. Опитайте отново.}}"
 }

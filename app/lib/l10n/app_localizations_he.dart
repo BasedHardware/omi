@@ -7002,6 +7002,26 @@ class AppLocalizationsHe extends AppLocalizations {
   String get authUnexpectedError => 'שגיאה בלתי צפויה בעת הכניסה, אנא נסה שוב';
 
   @override
+  String get accountSignInMethods => 'דרכי כניסה';
+
+  @override
+  String get accountAddSignInMethod => 'הוספת דרך כניסה';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'אפשר להוסיף דרך כניסה לחשבון Omi הזה. התוכנית, ההקלטות והאינטגרציות יישארו בחשבון הזה.';
+
+  @override
+  String get accountSignInConflictTitle => 'דרך הכניסה הזו משויכת לחשבון אחר';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'החיבור לחשבון הזה נשאר פעיל. כל חשבון Omi שומר על התוכנית, ההקלטות והאינטגרציות שלו.';
+
+  @override
+  String get accountSignInMethodAdded => 'דרך הכניסה נוספה';
+
+  @override
   String get authFailedToLinkGoogle => 'כישלון בקישור עם Google, אנא נסה שוב.';
 
   @override
@@ -14254,6 +14274,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get processingProgress => 'ההקלטות הממתינות שלך בעיבוד…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'בהמתנה למכסת תמלול זמינה';
+
+  @override
   String get processingDeferred => 'ממתין לעיבוד';
 
   @override
@@ -15678,7 +15701,7 @@ class AppLocalizationsHe extends AppLocalizations {
         'invalid': 'הקוד הזה אינו תקף. בדקו אותו ונסו שוב.',
         'used': 'הקוד הזה כבר נוצל.',
         'expired': 'תוקף הקוד הזה פג.',
-        'hasPlan': 'כבר יש לכם תוכנית. הקוד שלכם לא נוצל.',
+        'hasPlan': 'כבר יש לכם תוכנית. הקוד שלכם לא נוצל. ממשו אותו כשהתוכנית שלכם תסתיים.',
         'notPrepaid': 'לא ניתן לממש את הקוד הזה כאן. השתמשו בו כשתבחרו תוכנית.',
         'notEligible': 'לא ניתן להשתמש בקוד הזה בחשבון הזה.',
         'rateLimited': 'יותר מדי ניסיונות. נסו שוב מאוחר יותר.',

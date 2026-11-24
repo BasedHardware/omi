@@ -24,11 +24,8 @@ const omiHardwareMarkerScript = "document.getElementById('omi-app-hardware') !==
 Uri omiHardwareUrl(String source) =>
     Uri.https('www.omi.me', '/products/omi', {'view': omiHardwareView, '_ref': source});
 
-/// The host in lower case without a trailing root dot (`app.omi.me.` is `app.omi.me`).
-String _hostOf(Uri uri) {
-  final host = uri.host.toLowerCase();
-  return host.endsWith('.') ? host.substring(0, host.length - 1) : host;
-}
+/// The host in lower case without trailing root dots (`app.omi.me.` and `app.omi.me..` are `app.omi.me`).
+String _hostOf(Uri uri) => uri.host.toLowerCase().replaceFirst(RegExp(r'\.+$'), '');
 
 bool _isStoreHost(String host) => host == 'www.omi.me' || host == 'omi.me';
 

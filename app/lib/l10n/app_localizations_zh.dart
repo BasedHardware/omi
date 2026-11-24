@@ -6947,6 +6947,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authUnexpectedError => '登录时发生意外错误，请重试';
 
   @override
+  String get accountSignInMethods => '登录方式';
+
+  @override
+  String get accountAddSignInMethod => '添加登录方式';
+
+  @override
+  String get accountAddSignInMethodDetails => '为此 Omi 账号添加一种登录方式。您的订阅套餐、录音和集成仍保留在此账号中。';
+
+  @override
+  String get accountSignInConflictTitle => '此登录方式属于另一个账号';
+
+  @override
+  String get accountSignInConflictDetails => '您仍登录在当前账号。每个 Omi 账号都有各自的订阅套餐、录音和集成。';
+
+  @override
+  String get accountSignInMethodAdded => '已添加登录方式';
+
+  @override
   String get authFailedToLinkGoogle => '与Google关联失败，请重试。';
 
   @override
@@ -14134,6 +14152,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get processingProgress => '正在处理等待中的录音…';
 
   @override
+  String get waitingForTranscriptionAllowance => '正在等待可用的转写额度';
+
+  @override
   String get processingDeferred => '等待处理';
 
   @override
@@ -15537,7 +15558,7 @@ class AppLocalizationsZh extends AppLocalizations {
         'invalid': '此兑换码无效。请检查后重试。',
         'used': '此兑换码已被使用。',
         'expired': '此兑换码已过期。',
-        'hasPlan': '你已有套餐。你的兑换码未被使用。',
+        'hasPlan': '你已有套餐。你的兑换码未被使用。请在套餐结束后再兑换。',
         'notPrepaid': '此兑换码无法在这里使用。请在选择套餐时使用。',
         'notEligible': '此兑换码无法用于此账户。',
         'rateLimited': '尝试次数过多。请稍后再试。',

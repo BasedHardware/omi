@@ -90,7 +90,13 @@ class _PlayPlansContentState extends State<PlayPlansContent> {
   }
 
   Future<void> _manage(String productId) async {
-    final opened = await _open(playManageSubscriptionUri(productId));
+    final usage = context.read<UsageProvider>()..markOpenedPlayManage();
+    var opened = false;
+    try {
+      opened = await _open(playManageSubscriptionUri(productId));
+    } finally {
+      if (!opened) usage.clearOpenedPlayManage();
+    }
     if (!opened && mounted) OmiFeedback.error(context, context.l10n.playManageSubscription);
   }
 
@@ -299,7 +305,7 @@ class _PlayPlansLoadingState extends State<PlayPlansLoading> {
   @override
   Widget build(BuildContext context) {
     final usage = context.watch<UsageProvider>();
-    final failed = usage.error != null && !usage.isLoading;
+    final failed = usage.billingProviderFailed;
     return DecoratedBox(
       decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
       child: SizedBox(

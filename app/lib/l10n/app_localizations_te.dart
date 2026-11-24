@@ -7101,6 +7101,26 @@ class AppLocalizationsTe extends AppLocalizations {
   String get authUnexpectedError => 'సైన్ ఇన్ చేసేటప్పుడు అనిర్దేశ్య లోపం, దయచేసి ప్రయత్నించండి';
 
   @override
+  String get accountSignInMethods => 'సైన్ ఇన్ పద్ధతులు';
+
+  @override
+  String get accountAddSignInMethod => 'సైన్ ఇన్ పద్ధతిని జోడించండి';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'ఈ Omi ఖాతాలోకి సైన్ ఇన్ చేయడానికి మరో పద్ధతిని జోడించండి. మీ ప్లాన్, రికార్డింగ్‌లు, ఇంటిగ్రేషన్‌లు ఈ ఖాతాలోనే ఉంటాయి.';
+
+  @override
+  String get accountSignInConflictTitle => 'ఈ సైన్ ఇన్ పద్ధతి మరో ఖాతాకు చెందినది';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'మీరు ఇంకా ఈ ఖాతాలోనే సైన్ ఇన్ అయి ఉన్నారు. ప్రతి Omi ఖాతాకు దాని ప్లాన్, రికార్డింగ్‌లు, ఇంటిగ్రేషన్‌లు ఉంటాయి.';
+
+  @override
+  String get accountSignInMethodAdded => 'సైన్ ఇన్ పద్ధతి జోడించబడింది';
+
+  @override
   String get authFailedToLinkGoogle => 'Google సાથে లింక్ చేయడానికి విఫలమైంది, దయచేసి ప్రయత్నించండి.';
 
   @override
@@ -14421,6 +14441,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get processingProgress => 'మీ వేచి ఉన్న రికార్డింగ్‌లు ప్రాసెస్ అవుతున్నాయి…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'లిప్యంతరీకరణ కోటా అందుబాటులోకి రావడానికి వేచి ఉంది';
+
+  @override
   String get processingDeferred => 'ప్రాసెసింగ్ కోసం వేచి ఉంది';
 
   @override
@@ -15855,7 +15878,7 @@ class AppLocalizationsTe extends AppLocalizations {
         'invalid': 'ఈ కోడ్ చెల్లదు. తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.',
         'used': 'ఈ కోడ్ ఇప్పటికే ఉపయోగించబడింది.',
         'expired': 'ఈ కోడ్ గడువు ముగిసింది.',
-        'hasPlan': 'మీకు ఇప్పటికే ప్లాన్ ఉంది. మీ కోడ్ ఉపయోగించబడలేదు.',
+        'hasPlan': 'మీకు ఇప్పటికే ప్లాన్ ఉంది. మీ కోడ్ ఉపయోగించబడలేదు. ప్లాన్ ముగిసిన తర్వాత దాన్ని రిడీమ్ చేయండి.',
         'notPrepaid': 'ఈ కోడ్‌ను ఇక్కడ రిడీమ్ చేయలేరు. ప్లాన్ ఎంచుకునేటప్పుడు దీన్ని ఉపయోగించండి.',
         'notEligible': 'ఈ కోడ్‌ను ఈ ఖాతాలో ఉపయోగించలేరు.',
         'rateLimited': 'చాలా ప్రయత్నాలు. తర్వాత మళ్లీ ప్రయత్నించండి.',

@@ -2228,6 +2228,12 @@
     "authFailedToRetrieveToken": "Firebase-Token konnte nicht abgerufen werden, bitte versuchen Sie es erneut.",
     "authUnexpectedErrorFirebase": "Unerwarteter Fehler bei der Anmeldung, Firebase-Fehler, bitte versuchen Sie es erneut.",
     "authUnexpectedError": "Unerwarteter Fehler bei der Anmeldung, bitte versuchen Sie es erneut",
+    "accountSignInMethods": "Anmeldemethoden",
+    "accountAddSignInMethod": "Anmeldemethode hinzufügen",
+    "accountAddSignInMethodDetails": "Füge eine Anmeldemethode für dieses Omi-Konto hinzu. Dein Tarif, deine Aufnahmen und deine Integrationen bleiben bei diesem Konto.",
+    "accountSignInConflictTitle": "Diese Anmeldemethode ist mit einem anderen Konto verknüpft",
+    "accountSignInConflictDetails": "Du bist weiterhin bei diesem Konto angemeldet. Jedes Omi-Konto behält seinen Tarif, seine Aufnahmen und seine Integrationen.",
+    "accountSignInMethodAdded": "Anmeldemethode hinzugefügt",
     "authFailedToLinkGoogle": "Verknüpfung mit Google fehlgeschlagen, bitte versuchen Sie es erneut.",
     "authFailedToLinkApple": "Verknüpfung mit Apple fehlgeschlagen, bitte versuchen Sie es erneut.",
     "onboardingBluetoothRequired": "Bluetooth-Berechtigung ist erforderlich, um sich mit Ihrem Gerät zu verbinden.",
@@ -4382,6 +4388,7 @@
     "processingNewestFirst": "Wir verarbeiten zuerst die neuesten Aufnahmen, soweit das Kontingent reicht. Der Rest wartet weiter.",
     "processingAction": "Wartende Aufnahmen verarbeiten",
     "processingProgress": "Deine wartenden Aufnahmen werden verarbeitet…",
+    "waitingForTranscriptionAllowance": "Warten auf verfügbares Transkriptionskontingent",
     "processingDeferred": "Wartet auf Verarbeitung",
     "processingCount": "{count, plural, =1{1 Gespräch wartet} other{{count} Gespräche warten}}",
     "playbackPartialAudioSaved": "{saved} von {total} Audio gespeichert",
@@ -4756,5 +4763,5 @@
     "prepaidCodeFieldHint": "Code eingeben",
     "prepaidCodeRedeem": "Einlösen",
     "prepaidCodeRedeemed": "Code eingelöst",
-    "prepaidCodeResult": "{reason, select, invalid{Dieser Code ist ungültig. Prüfe ihn und versuche es erneut.} used{Dieser Code wurde bereits verwendet.} expired{Dieser Code ist abgelaufen.} hasPlan{Du hast bereits einen Plan. Dein Code wurde nicht verwendet.} notPrepaid{Dieser Code kann hier nicht eingelöst werden. Verwende ihn, wenn du einen Plan wählst.} notEligible{Dieser Code kann für dieses Konto nicht verwendet werden.} rateLimited{Zu viele Versuche. Versuche es später erneut.} other{Etwas ist schiefgelaufen. Bitte versuche es erneut.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Dieser Code ist ungültig. Prüfe ihn und versuche es erneut.} used{Dieser Code wurde bereits verwendet.} expired{Dieser Code ist abgelaufen.} hasPlan{Du hast bereits einen Plan. Dein Code wurde nicht verwendet. Löse ihn ein, wenn dein Plan endet.} notPrepaid{Dieser Code kann hier nicht eingelöst werden. Verwende ihn, wenn du einen Plan wählst.} notEligible{Dieser Code kann für dieses Konto nicht verwendet werden.} rateLimited{Zu viele Versuche. Versuche es später erneut.} other{Etwas ist schiefgelaufen. Bitte versuche es erneut.}}"
 }

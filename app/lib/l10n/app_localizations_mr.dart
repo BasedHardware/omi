@@ -7069,6 +7069,26 @@ class AppLocalizationsMr extends AppLocalizations {
   String get authUnexpectedError => 'साइन इन करताना अनपेक्षित त्रुटी, कृपया पुन्हा प्रयत्न करा';
 
   @override
+  String get accountSignInMethods => 'साइन इन करण्याचे मार्ग';
+
+  @override
+  String get accountAddSignInMethod => 'साइन इन करण्याचा मार्ग जोडा';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'या Omi खात्यात साइन इन करण्याचा आणखी एक मार्ग जोडा. तुमचा प्लॅन, रेकॉर्डिंग आणि इंटिग्रेशन्स याच खात्यात राहतील.';
+
+  @override
+  String get accountSignInConflictTitle => 'हा साइन इन पर्याय दुसऱ्या खात्याशी जोडलेला आहे';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'तुम्ही अजूनही याच खात्यात साइन इन केलेले आहात. प्रत्येक Omi खात्याचा प्लॅन, रेकॉर्डिंग आणि इंटिग्रेशन्स त्याच खात्यात राहतात.';
+
+  @override
+  String get accountSignInMethodAdded => 'साइन इन करण्याचा मार्ग जोडला';
+
+  @override
   String get authFailedToLinkGoogle => 'Google सह लिंक करण्यात अयशस्वी, कृपया पुन्हा प्रयत्न करा.';
 
   @override
@@ -14370,6 +14390,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get processingProgress => 'तुमच्या प्रतीक्षेतील रेकॉर्डिंगवर प्रक्रिया होत आहे…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'लिप्यंतरणाचा कोटा उपलब्ध होण्याची प्रतीक्षा आहे';
+
+  @override
   String get processingDeferred => 'प्रक्रियेच्या प्रतीक्षेत';
 
   @override
@@ -15800,7 +15823,7 @@ class AppLocalizationsMr extends AppLocalizations {
         'invalid': 'हा कोड वैध नाही. तपासा आणि पुन्हा प्रयत्न करा.',
         'used': 'हा कोड आधीच वापरला गेला आहे.',
         'expired': 'या कोडची मुदत संपली आहे.',
-        'hasPlan': 'तुमच्याकडे आधीच प्लॅन आहे. तुमचा कोड वापरला गेला नाही.',
+        'hasPlan': 'तुमच्याकडे आधीच प्लॅन आहे. तुमचा कोड वापरला गेला नाही. प्लॅन संपल्यावर तो रिडीम करा.',
         'notPrepaid': 'हा कोड येथे रिडीम करता येत नाही. प्लॅन निवडताना तो वापरा.',
         'notEligible': 'हा कोड या खात्यावर वापरता येत नाही.',
         'rateLimited': 'खूप प्रयत्न झाले. नंतर पुन्हा प्रयत्न करा.',

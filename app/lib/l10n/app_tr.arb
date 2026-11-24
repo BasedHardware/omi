@@ -2223,6 +2223,12 @@
     "authFailedToRetrieveToken": "Firebase jetonu alınamadı, lütfen tekrar deneyin.",
     "authUnexpectedErrorFirebase": "Giriş yaparken beklenmeyen hata, Firebase hatası, lütfen tekrar deneyin.",
     "authUnexpectedError": "Giriş yaparken beklenmeyen hata, lütfen tekrar deneyin",
+    "accountSignInMethods": "Oturum açma yöntemleri",
+    "accountAddSignInMethod": "Oturum açma yöntemi ekle",
+    "accountAddSignInMethodDetails": "Bu Omi hesabına giriş yapmak için bir yöntem ekleyin. Planınız, kayıtlarınız ve entegrasyonlarınız bu hesapta kalır.",
+    "accountSignInConflictTitle": "Bu oturum açma yöntemi başka bir hesaba ait",
+    "accountSignInConflictDetails": "Bu hesapta oturumunuz açık kalır. Her Omi hesabı kendi planını, kayıtlarını ve entegrasyonlarını korur.",
+    "accountSignInMethodAdded": "Oturum açma yöntemi eklendi",
     "authFailedToLinkGoogle": "Google ile bağlantı kurulamadı, lütfen tekrar deneyin.",
     "authFailedToLinkApple": "Apple ile bağlantı kurulamadı, lütfen tekrar deneyin.",
     "onboardingBluetoothRequired": "Cihazınıza bağlanmak için Bluetooth izni gereklidir.",
@@ -4417,6 +4423,7 @@
     "processingNewestFirst": "Önce en yeni kayıtları kullanılabilir kotaya sığdığı kadar işleriz. Kalanlar beklemeye devam eder.",
     "processingAction": "Bekleyen kayıtları işle",
     "processingProgress": "Bekleyen kayıtlarınız işleniyor…",
+    "waitingForTranscriptionAllowance": "Kullanılabilir deşifre kotası bekleniyor",
     "processingDeferred": "İşlenmeyi bekliyor",
     "processingCount": "{count, plural, =1{1 konuşma bekliyor} other{{count} konuşma bekliyor}}",
     "playbackPartialAudioSaved": "Sesin {saved} kadarı kaydedildi (toplam {total})",
@@ -4791,5 +4798,5 @@
     "prepaidCodeFieldHint": "Kodunuzu girin",
     "prepaidCodeRedeem": "Kullan",
     "prepaidCodeRedeemed": "Kod kullanıldı",
-    "prepaidCodeResult": "{reason, select, invalid{Bu kod geçerli değil. Kontrol edip tekrar deneyin.} used{Bu kod zaten kullanılmış.} expired{Bu kodun süresi dolmuş.} hasPlan{Zaten bir planınız var. Kodunuz kullanılmadı.} notPrepaid{Bu kod burada kullanılamaz. Bir plan seçerken kullanın.} notEligible{Bu kod bu hesapta kullanılamaz.} rateLimited{Çok fazla deneme. Daha sonra tekrar deneyin.} other{Bir sorun oluştu. Lütfen tekrar deneyin.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Bu kod geçerli değil. Kontrol edip tekrar deneyin.} used{Bu kod zaten kullanılmış.} expired{Bu kodun süresi dolmuş.} hasPlan{Zaten bir planınız var. Kodunuz kullanılmadı. Planınız bittikten sonra kullanın.} notPrepaid{Bu kod burada kullanılamaz. Bir plan seçerken kullanın.} notEligible{Bu kod bu hesapta kullanılamaz.} rateLimited{Çok fazla deneme. Daha sonra tekrar deneyin.} other{Bir sorun oluştu. Lütfen tekrar deneyin.}}"
 }

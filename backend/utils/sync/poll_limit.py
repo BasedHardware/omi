@@ -37,6 +37,9 @@ def with_poll_hint(status: dict, *, uid: str | None = None, surface_open: bool =
     queued work may wait 60s. A new/active job immediately selects the short
     interval, independent of previous hints. Surface-open callers can explicitly
     request foreground cadence on this read-only endpoint.
+
+    The authenticated job-status route uses sync_job_poll_response to record
+    cohort telemetry before calling this pacing helper.
     """
     # Custody holds do not benefit from foreground polling or the generic
     # backoff rollback. Five minutes also matches held-partial reconciliation.
@@ -45,10 +48,7 @@ def with_poll_hint(status: dict, *, uid: str | None = None, surface_open: bool =
         'batch_artifact_missing',
         'source_alignment_pending',
     }:
-        record_active_sync_uploader(uid, status)
         return {**status, 'poll_after_ms': 300000}
-    record_active_sync_uploader(uid, status)
-    record_first_terminal_read(uid, status)
     if not poll_backoff(uid):
         return status
     result = dict(status)
@@ -59,3 +59,10 @@ def with_poll_hint(status: dict, *, uid: str | None = None, surface_open: bool =
         else 60000 if state == 'queued' and not surface_open else 20000
     )
     return result
+
+
+def sync_job_poll_response(status: dict, uid: str, surface_open: bool) -> dict:
+    """Record the resolved GET status before applying cohort-dependent pacing."""
+    record_active_sync_uploader(uid, status)
+    record_first_terminal_read(uid, status)
+    return with_poll_hint(status, uid=uid, surface_open=surface_open)

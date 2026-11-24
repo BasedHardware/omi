@@ -7123,6 +7123,26 @@ class AppLocalizationsFr extends AppLocalizations {
   String get authUnexpectedError => 'Erreur inattendue lors de la connexion, veuillez réessayer';
 
   @override
+  String get accountSignInMethods => 'Modes de connexion';
+
+  @override
+  String get accountAddSignInMethod => 'Ajouter un mode de connexion';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Ajoutez un mode de connexion à ce compte Omi. Votre forfait, vos enregistrements et vos intégrations restent associés à ce compte.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ce mode de connexion est associé à un autre compte';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Vous êtes toujours connecté à ce compte. Chaque compte Omi conserve son forfait, ses enregistrements et ses intégrations.';
+
+  @override
+  String get accountSignInMethodAdded => 'Mode de connexion ajouté';
+
+  @override
   String get authFailedToLinkGoogle => 'Échec de la liaison avec Google, veuillez réessayer.';
 
   @override
@@ -14476,6 +14496,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get processingProgress => 'Traitement de vos enregistrements en attente…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'En attente d’un quota de transcription disponible';
+
+  @override
   String get processingDeferred => 'En attente de traitement';
 
   @override
@@ -15923,7 +15946,7 @@ class AppLocalizationsFr extends AppLocalizations {
         'invalid': 'Ce code n\'est pas valide. Vérifiez-le et réessayez.',
         'used': 'Ce code a déjà été utilisé.',
         'expired': 'Ce code a expiré.',
-        'hasPlan': 'Vous avez déjà un forfait. Votre code n\'a pas été utilisé.',
+        'hasPlan': 'Vous avez déjà un forfait. Votre code n\'a pas été utilisé. Utilisez-le à la fin de votre forfait.',
         'notPrepaid': 'Ce code ne peut pas être utilisé ici. Utilisez-le lorsque vous choisissez un forfait.',
         'notEligible': 'Ce code ne peut pas être utilisé sur ce compte.',
         'rateLimited': 'Trop de tentatives. Réessayez plus tard.',

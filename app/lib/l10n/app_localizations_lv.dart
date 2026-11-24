@@ -7075,6 +7075,26 @@ class AppLocalizationsLv extends AppLocalizations {
   String get authUnexpectedError => 'Neparedzēta kļūda pierakstīšanās laikā, lūdzu, mēģiniet vēlreiz';
 
   @override
+  String get accountSignInMethods => 'Pierakstīšanās veidi';
+
+  @override
+  String get accountAddSignInMethod => 'Pievienot pierakstīšanās veidu';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Pievienojiet jaunu pierakstīšanās veidu šim Omi kontam. Jūsu plāns, ieraksti un integrācijas paliks šajā kontā.';
+
+  @override
+  String get accountSignInConflictTitle => 'Šis pierakstīšanās veids ir saistīts ar citu kontu';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Jūs joprojām esat pierakstījies šajā kontā. Katrs Omi konts saglabā savu plānu, ierakstus un integrācijas.';
+
+  @override
+  String get accountSignInMethodAdded => 'Pierakstīšanās veids pievienots';
+
+  @override
   String get authFailedToLinkGoogle => 'Neizdevās savienot ar Google, lūdzu, mēģiniet vēlreiz.';
 
   @override
@@ -14393,6 +14413,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get processingProgress => 'Notiek gaidošo ierakstu apstrāde…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Gaida pieejamu transkripcijas kvotu';
+
+  @override
   String get processingDeferred => 'Gaida apstrādi';
 
   @override
@@ -15827,7 +15850,7 @@ class AppLocalizationsLv extends AppLocalizations {
         'invalid': 'Šis kods nav derīgs. Pārbaudiet to un mēģiniet vēlreiz.',
         'used': 'Šis kods jau ir izmantots.',
         'expired': 'Šī koda derīgums ir beidzies.',
-        'hasPlan': 'Jums jau ir plāns. Jūsu kods netika izmantots.',
+        'hasPlan': 'Jums jau ir plāns. Jūsu kods netika izmantots. Izmantojiet to, kad jūsu plāns beigsies.',
         'notPrepaid': 'Šo kodu šeit nevar izmantot. Izmantojiet to, izvēloties plānu.',
         'notEligible': 'Šo kodu nevar izmantot šajā kontā.',
         'rateLimited': 'Pārāk daudz mēģinājumu. Mēģiniet vēlāk.',

@@ -7057,6 +7057,26 @@ class AppLocalizationsFa extends AppLocalizations {
   String get authUnexpectedError => 'خطای غیرمنتظره در ورود، لطفاً دوباره تلاش کنید';
 
   @override
+  String get accountSignInMethods => 'روش‌های ورود';
+
+  @override
+  String get accountAddSignInMethod => 'افزودن روش ورود';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'یک روش ورود به این حساب Omi اضافه کنید. طرح، ضبط‌ها و سرویس‌های متصل شما در همین حساب باقی می‌مانند.';
+
+  @override
+  String get accountSignInConflictTitle => 'این روش ورود به حساب دیگری متصل است';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'هنوز وارد همین حساب هستید. هر حساب Omi طرح، ضبط‌ها و سرویس‌های متصل خودش را حفظ می‌کند.';
+
+  @override
+  String get accountSignInMethodAdded => 'روش ورود اضافه شد';
+
+  @override
   String get authFailedToLinkGoogle => 'پیوند با Google ناموفق بود، لطفاً دوباره تلاش کنید.';
 
   @override
@@ -14354,6 +14374,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get processingProgress => 'در حال پردازش ضبط‌های منتظر شما…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'در انتظار سهمیهٔ رونویسی صوت';
+
+  @override
   String get processingDeferred => 'در انتظار پردازش';
 
   @override
@@ -15784,7 +15807,7 @@ class AppLocalizationsFa extends AppLocalizations {
         'invalid': 'این کد معتبر نیست. آن را بررسی کنید و دوباره امتحان کنید.',
         'used': 'این کد قبلاً استفاده شده است.',
         'expired': 'این کد منقضی شده است.',
-        'hasPlan': 'شما از قبل یک طرح دارید. کد شما استفاده نشد.',
+        'hasPlan': 'شما از قبل یک طرح دارید. کد شما استفاده نشد. پس از پایان طرحتان از آن استفاده کنید.',
         'notPrepaid': 'این کد اینجا قابل استفاده نیست. هنگام انتخاب طرح از آن استفاده کنید.',
         'notEligible': 'این کد در این حساب قابل استفاده نیست.',
         'rateLimited': 'تلاش‌های زیادی انجام شد. بعداً دوباره امتحان کنید.',

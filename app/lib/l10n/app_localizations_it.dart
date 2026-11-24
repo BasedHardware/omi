@@ -7095,6 +7095,26 @@ class AppLocalizationsIt extends AppLocalizations {
   String get authUnexpectedError => 'Errore imprevisto durante l\'accesso, riprova';
 
   @override
+  String get accountSignInMethods => 'Metodi di accesso';
+
+  @override
+  String get accountAddSignInMethod => 'Aggiungi un metodo di accesso';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Aggiungi un modo per accedere a questo account Omi. Il tuo piano, le registrazioni e le integrazioni restano associati a questo account.';
+
+  @override
+  String get accountSignInConflictTitle => 'Questo metodo di accesso è associato a un altro account';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Sei ancora connesso a questo account. Ogni account Omi conserva il suo piano, le sue registrazioni e le sue integrazioni.';
+
+  @override
+  String get accountSignInMethodAdded => 'Metodo di accesso aggiunto';
+
+  @override
   String get authFailedToLinkGoogle => 'Collegamento con Google non riuscito, riprova.';
 
   @override
@@ -14435,6 +14455,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get processingProgress => 'Elaborazione delle registrazioni in attesa…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'In attesa di una quota di trascrizione disponibile';
+
+  @override
   String get processingDeferred => 'In attesa di elaborazione';
 
   @override
@@ -15871,7 +15894,7 @@ class AppLocalizationsIt extends AppLocalizations {
         'invalid': 'Questo codice non è valido. Controllalo e riprova.',
         'used': 'Questo codice è già stato usato.',
         'expired': 'Questo codice è scaduto.',
-        'hasPlan': 'Hai già un piano. Il tuo codice non è stato usato.',
+        'hasPlan': 'Hai già un piano. Il tuo codice non è stato usato. Riscattalo quando il tuo piano finisce.',
         'notPrepaid': 'Questo codice non può essere riscattato qui. Usalo quando scegli un piano.',
         'notEligible': 'Questo codice non può essere usato su questo account.',
         'rateLimited': 'Troppi tentativi. Riprova più tardi.',

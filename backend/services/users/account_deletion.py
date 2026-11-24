@@ -594,9 +594,12 @@ def background_wipe_user_data(
             except Exception as persist_err:
                 logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(persist_err))}')
         required_failures, best_effort_failures = _purge_failures(purge_result)
-        failed_operations = [failure['operation'] for failure in required_failures + best_effort_failures] or [
-            current_operation
-        ]
+        failed_operations = [failure['operation'] for failure in required_failures + best_effort_failures]
+        # A later step's failure is named even when the derived purge already recorded best-effort failures
+        # (for example play_billing_records), so no failing step is hidden behind an earlier one.
+        if current_operation != 'derived_data' and current_operation not in failed_operations:
+            failed_operations.append(current_operation)
+        failed_operations = failed_operations or [current_operation]
         _emit_deletion_telemetry(
             uid,
             ACCOUNT_DELETION_WIPE_FAILED,

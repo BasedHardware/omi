@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "روش‌های ورود",
+    "accountAddSignInMethod": "افزودن روش ورود",
+    "accountAddSignInMethodDetails": "یک روش ورود به این حساب Omi اضافه کنید. طرح، ضبط‌ها و سرویس‌های متصل شما در همین حساب باقی می‌مانند.",
+    "accountSignInConflictTitle": "این روش ورود به حساب دیگری متصل است",
+    "accountSignInConflictDetails": "هنوز وارد همین حساب هستید. هر حساب Omi طرح، ضبط‌ها و سرویس‌های متصل خودش را حفظ می‌کند.",
+    "accountSignInMethodAdded": "روش ورود اضافه شد",
     "authFailedToLinkGoogle": "پیوند با Google ناموفق بود، لطفاً دوباره تلاش کنید.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "جدیدترین ضبط‌ها را ابتدا تا حد سهم باقی‌مانده پردازش می‌کنیم. بقیه در انتظار می‌مانند.",
     "processingAction": "پردازش ضبط‌های منتظر",
     "processingProgress": "در حال پردازش ضبط‌های منتظر شما…",
+    "waitingForTranscriptionAllowance": "در انتظار سهمیهٔ رونویسی صوت",
     "processingDeferred": "در انتظار پردازش",
     "processingCount": "{count, plural, =1{۱ گفتگو در انتظار} other{{count} گفتگو در انتظار}}",
     "playbackPartialAudioSaved": "{saved} از {total} صدا ذخیره شد",
@@ -12313,5 +12320,5 @@
     "prepaidCodeFieldHint": "کد خود را وارد کنید",
     "prepaidCodeRedeem": "استفاده",
     "prepaidCodeRedeemed": "کد اعمال شد",
-    "prepaidCodeResult": "{reason, select, invalid{این کد معتبر نیست. آن را بررسی کنید و دوباره امتحان کنید.} used{این کد قبلاً استفاده شده است.} expired{این کد منقضی شده است.} hasPlan{شما از قبل یک طرح دارید. کد شما استفاده نشد.} notPrepaid{این کد اینجا قابل استفاده نیست. هنگام انتخاب طرح از آن استفاده کنید.} notEligible{این کد در این حساب قابل استفاده نیست.} rateLimited{تلاش‌های زیادی انجام شد. بعداً دوباره امتحان کنید.} other{مشکلی پیش آمد. لطفاً دوباره امتحان کنید.}}"
+    "prepaidCodeResult": "{reason, select, invalid{این کد معتبر نیست. آن را بررسی کنید و دوباره امتحان کنید.} used{این کد قبلاً استفاده شده است.} expired{این کد منقضی شده است.} hasPlan{شما از قبل یک طرح دارید. کد شما استفاده نشد. پس از پایان طرحتان از آن استفاده کنید.} notPrepaid{این کد اینجا قابل استفاده نیست. هنگام انتخاب طرح از آن استفاده کنید.} notEligible{این کد در این حساب قابل استفاده نیست.} rateLimited{تلاش‌های زیادی انجام شد. بعداً دوباره امتحان کنید.} other{مشکلی پیش آمد. لطفاً دوباره امتحان کنید.}}"
 }

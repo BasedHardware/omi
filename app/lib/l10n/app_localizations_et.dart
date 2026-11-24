@@ -7054,6 +7054,26 @@ class AppLocalizationsEt extends AppLocalizations {
   String get authUnexpectedError => 'Ootamatu viga sisselogimisel, palun proovige uuesti';
 
   @override
+  String get accountSignInMethods => 'Sisselogimisviisid';
+
+  @override
+  String get accountAddSignInMethod => 'Lisa sisselogimisviis';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Lisa sellele Omi kontole sisselogimisviis. Sinu pakett, salvestised ja integratsioonid jäävad sellele kontole.';
+
+  @override
+  String get accountSignInConflictTitle => 'See sisselogimisviis on seotud teise kontoga';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Oled endiselt sellele kontole sisse logitud. Igal Omi kontol on oma pakett, salvestised ja integratsioonid.';
+
+  @override
+  String get accountSignInMethodAdded => 'Sisselogimisviis lisatud';
+
+  @override
   String get authFailedToLinkGoogle => 'Google\'iga sidumine ebaõnnestus, palun proovige uuesti.';
 
   @override
@@ -14353,6 +14373,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get processingProgress => 'Sinu ootel salvestiste töötlemine…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Ootab saadaolevat transkribeerimismahtu';
+
+  @override
   String get processingDeferred => 'Ootab töötlemist';
 
   @override
@@ -15784,7 +15807,7 @@ class AppLocalizationsEt extends AppLocalizations {
         'invalid': 'See kood ei kehti. Kontrolli seda ja proovi uuesti.',
         'used': 'Seda koodi on juba kasutatud.',
         'expired': 'Selle koodi kehtivus on lõppenud.',
-        'hasPlan': 'Sul on juba pakett. Sinu koodi ei kasutatud.',
+        'hasPlan': 'Sul on juba pakett. Sinu koodi ei kasutatud. Lunasta see, kui su pakett lõpeb.',
         'notPrepaid': 'Seda koodi ei saa siin lunastada. Kasuta seda paketi valimisel.',
         'notEligible': 'Seda koodi ei saa selles kontos kasutada.',
         'rateLimited': 'Liiga palju katseid. Proovi hiljem uuesti.',

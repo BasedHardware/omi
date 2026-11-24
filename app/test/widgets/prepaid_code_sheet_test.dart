@@ -38,7 +38,7 @@ class _Usage extends UsageProvider {
   @override
   bool get billingProviderUnknown => false;
   @override
-  Future<void> fetchSubscription({bool force = false}) async => fetches++;
+  Future<void> fetchSubscription({bool fresh = false}) async => fetches++;
 }
 
 Widget _app(Widget child) => MaterialApp(
@@ -51,7 +51,6 @@ Future<List<String>> _pumpSheet(WidgetTester tester, ApiResult<PrepaidCodeRedemp
     {List<int>? redeemed}) async {
   final codes = <String>[];
   await tester.pumpWidget(_app(PrepaidCodeSheet(
-    source: PrepaidCodeSource.plansSheet,
     redeem: (code) async {
       codes.add(code);
       return answer(code);
@@ -115,7 +114,7 @@ void main() {
     (400, 'invalid_code', "This code isn't valid. Check it and try again."),
     (409, 'code_used', 'This code has already been used.'),
     (400, 'code_expired', 'This code has expired.'),
-    (409, 'has_plan', 'You already have a plan. Your code was not used.'),
+    (409, 'has_plan', 'You already have a plan. Your code was not used. Redeem it after your plan ends.'),
     (400, 'not_prepaid', "This code can't be redeemed here. Use it when you choose a plan."),
     (400, 'not_eligible', "This code can't be used on this account."),
     (429, null, 'Too many tries. Try again later.'),
@@ -149,7 +148,7 @@ void main() {
   testWidgets('the entry opens the sheet', (tester) async {
     await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>(
       create: (_) => _Usage(_response(switchOn: true)),
-      child: _app(const PrepaidCodeEntry(source: PrepaidCodeSource.plansSheet)),
+      child: _app(const PrepaidCodeEntry()),
     ));
     await tester.tap(find.text('Have a code?'));
     await tester.pumpAndSettle();

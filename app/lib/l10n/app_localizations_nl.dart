@@ -7073,6 +7073,26 @@ class AppLocalizationsNl extends AppLocalizations {
   String get authUnexpectedError => 'Onverwachte fout bij aanmelden, probeer het opnieuw';
 
   @override
+  String get accountSignInMethods => 'Inlogmethoden';
+
+  @override
+  String get accountAddSignInMethod => 'Inlogmethode toevoegen';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Voeg een manier toe om in te loggen op dit Omi-account. Je abonnement, opnamen en koppelingen blijven bij dit account.';
+
+  @override
+  String get accountSignInConflictTitle => 'Deze inlogmethode hoort bij een ander account';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Je bent nog steeds ingelogd op dit account. Elk Omi-account behoudt zijn eigen abonnement, opnamen en koppelingen.';
+
+  @override
+  String get accountSignInMethodAdded => 'Inlogmethode toegevoegd';
+
+  @override
   String get authFailedToLinkGoogle => 'Koppelen met Google mislukt, probeer het opnieuw.';
 
   @override
@@ -14399,6 +14419,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get processingProgress => 'Je wachtende opnamen worden verwerkt…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Wachten op beschikbare transcriptieruimte';
+
+  @override
   String get processingDeferred => 'Wacht op verwerking';
 
   @override
@@ -15833,7 +15856,7 @@ class AppLocalizationsNl extends AppLocalizations {
         'invalid': 'Deze code is ongeldig. Controleer hem en probeer het opnieuw.',
         'used': 'Deze code is al gebruikt.',
         'expired': 'Deze code is verlopen.',
-        'hasPlan': 'Je hebt al een abonnement. Je code is niet gebruikt.',
+        'hasPlan': 'Je hebt al een abonnement. Je code is niet gebruikt. Wissel hem in als je abonnement afloopt.',
         'notPrepaid': 'Deze code kan hier niet worden ingewisseld. Gebruik hem wanneer je een abonnement kiest.',
         'notEligible': 'Deze code kan niet op dit account worden gebruikt.',
         'rateLimited': 'Te veel pogingen. Probeer het later opnieuw.',

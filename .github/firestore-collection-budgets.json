@@ -317,6 +317,18 @@
       "reviewed": "2026-11-14"
     },
     {
+      "site": "backend/database/batch_pipeline_admission_view.py",
+      "expression": "f'{store.namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Conversation API (#25918)",
+      "unit": "conversation list or detail request with eligible capture metadata",
+      "reads_per_unit_budget": 256,
+      "reads_per_day_budget": 2400000,
+      "basis": "planning-bound",
+      "source": "#25918: request cap includes the minimum read for empty queries. Daily planning uses 240000 recordings/day from the native-close intake envelope times 10 billed document equivalents per recording for repeated list/detail views and retained holds. The view frequency is an assumption to verify with Firestore caller metrics, not a serving limit or measured traffic.",
+      "reviewed": "2026-11-24"
+    },
+    {
       "site": "backend/database/batch_pipeline_purge.py",
       "expression": "f'{namespace}_{ALLOWANCE_OWNERS}'",
       "collection_pattern": "batch_pipeline_*_allowance_holds",

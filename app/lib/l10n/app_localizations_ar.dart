@@ -7007,6 +7007,26 @@ class AppLocalizationsAr extends AppLocalizations {
   String get authUnexpectedError => 'خطأ غير متوقع أثناء تسجيل الدخول، يرجى المحاولة مرة أخرى';
 
   @override
+  String get accountSignInMethods => 'طرق تسجيل الدخول';
+
+  @override
+  String get accountAddSignInMethod => 'إضافة طريقة لتسجيل الدخول';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'أضف طريقة لتسجيل الدخول إلى حساب Omi هذا. تبقى خطتك وتسجيلاتك وعمليات التكامل مرتبطة بهذا الحساب.';
+
+  @override
+  String get accountSignInConflictTitle => 'طريقة تسجيل الدخول هذه مرتبطة بحساب آخر';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'لا تزال مسجّل الدخول إلى هذا الحساب. يحتفظ كل حساب Omi بخطته وتسجيلاته وعمليات التكامل الخاصة به.';
+
+  @override
+  String get accountSignInMethodAdded => 'تمت إضافة طريقة تسجيل الدخول';
+
+  @override
   String get authFailedToLinkGoogle => 'فشل الربط بحساب Google، يرجى المحاولة مرة أخرى.';
 
   @override
@@ -14278,6 +14298,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get processingProgress => 'جارٍ معالجة تسجيلاتك المنتظرة…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'في انتظار حصّة النسخ الصوتي';
+
+  @override
   String get processingDeferred => 'في انتظار المعالجة';
 
   @override
@@ -15704,7 +15727,7 @@ class AppLocalizationsAr extends AppLocalizations {
         'invalid': 'هذا الرمز غير صالح. تحقق منه وحاول مرة أخرى.',
         'used': 'تم استخدام هذا الرمز بالفعل.',
         'expired': 'انتهت صلاحية هذا الرمز.',
-        'hasPlan': 'لديك خطة بالفعل. لم يتم استخدام رمزك.',
+        'hasPlan': 'لديك خطة بالفعل. لم يتم استخدام رمزك. استرده بعد انتهاء خطتك.',
         'notPrepaid': 'لا يمكن استرداد هذا الرمز هنا. استخدمه عند اختيار خطة.',
         'notEligible': 'لا يمكن استخدام هذا الرمز على هذا الحساب.',
         'rateLimited': 'محاولات كثيرة جدًا. حاول لاحقًا.',

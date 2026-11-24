@@ -168,7 +168,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     final usage = context.read<UsageProvider>();
     setState(() => _busy = true);
     try {
-      await usage.fetchSubscription().timeout(const Duration(seconds: 4));
+      await usage.fetchSubscription(fresh: true).timeout(const Duration(seconds: 4));
     } catch (_) {
       return;
     } finally {
@@ -247,7 +247,6 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
       // Server switch on: redeem a prepaid code right here, no card. Never for a Play-billed reader.
       if (canRedeemCode)
         PrepaidCodeEntry(
-          source: PrepaidCodeSource.paywall,
           center: true,
           style: _Paper.label(size: 13, color: _Paper.textSecondary),
           // Redeemed: the reader is Pro now, so close the paywall the way a restored purchase does.

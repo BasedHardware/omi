@@ -14,9 +14,11 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/subscription.dart';
+import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/pages/paywall/trial_paywall_page.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
+import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
 import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
@@ -66,7 +68,7 @@ UserSubscriptionResponse _response({
     );
 
 class _Usage extends UsageProvider {
-  _Usage({required super.subscriptionRequest, required super.playBilling});
+  _Usage({required super.subscriptionRequest, required super.playBilling, super.usageRequest, super.deviceTimeZone});
 
   int checkoutSessions = 0;
 
@@ -180,7 +182,9 @@ void main() {
 
   testWidgets('Android Play-billed reader sees Play prices and buys through Play, never the Stripe webview',
       (tester) async {
-    final world = await _pump(tester, [_response(), _response(plan: PlanType.unlimitedV2, provider: 'play')]);
+    // Reads: before the sheet, the sheet's opening read, then after the purchase.
+    final world =
+        await _pump(tester, [_response(), _response(), _response(plan: PlanType.unlimitedV2, provider: 'play')]);
     expect(world.usage.playBilledPurchaser, isTrue);
     expect(find.byType(PlayPlansContent), findsOneWidget);
     expect(find.textContaining('₹22,500.00'), findsWidgets);
@@ -230,7 +234,8 @@ void main() {
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('Restore sends the owned Play purchase to the server', (tester) async {
-    final world = await _pump(tester, [_response(), _response(plan: PlanType.unlimitedV2, provider: 'play')]);
+    final world =
+        await _pump(tester, [_response(), _response(), _response(plan: PlanType.unlimitedV2, provider: 'play')]);
     world.platform.owned = [playPurchase(PurchaseStatus.restored, token: 'owned')];
     await tester.tap(find.byKey(const Key('play_restore')));
     await tester.pumpAndSettle();
@@ -356,6 +361,77 @@ void main() {
       expect(find.text('In 7 days'), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   }
+
+  for (final page in ['outline', 'trial']) {
+    testWidgets('$page paywall: a failed subscription read stays failed after a usage read clears the shared error',
+        (tester) async {
+      var calls = 0;
+      final world = _World([_response()]);
+      final usage = _Usage(
+        subscriptionRequest: () async => ++calls == 1 ? null : _response(),
+        playBilling: world.billing,
+        usageRequest: ({required period, required timeZone}) async => UserUsageResponse(history: []),
+        deviceTimeZone: () async => 'UTC',
+      );
+      addTearDown(usage.dispose);
+      await usage.fetchSubscription();
+      await usage.fetchUsageStats(period: 'monthly');
+      expect(usage.error, isNull); // the usage read cleared the shared error...
+      expect(usage.billingProviderFailed, isTrue); // ...but the subscription read is still known to have failed
+      expect(usage.billingProviderPending, isFalse);
+      tester.view.physicalSize = const Size(430, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: page == 'outline'
+              ? const OutlinePaywallPage(source: 'test')
+              : TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 22)),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('play_plans_error')), findsOneWidget);
+      expect(find.byKey(const Key('trial_paywall_timeline_pending')), findsNothing);
+      // A successful subscription read clears it.
+      await usage.fetchSubscription();
+      expect(calls, 2);
+      expect(usage.billingProviderFailed, isFalse);
+      expect(usage.billingProviderUnknown, isFalse);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  }
+
+  testWidgets('plans sheet: a failed subscription read keeps Retry after a usage read clears the shared error',
+      (tester) async {
+    final world = _World([_response()]);
+    final usage = _Usage(
+      subscriptionRequest: () async => null,
+      playBilling: world.billing,
+      usageRequest: ({required period, required timeZone}) async => UserUsageResponse(history: []),
+      deviceTimeZone: () async => 'UTC',
+    );
+    addTearDown(usage.dispose);
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+      value: usage,
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: [Locale('en')],
+        home: Scaffold(body: PlayPlansLoading()),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(OmiErrorState), findsOneWidget);
+    // A usage read while the sheet is open clears the shared error; the failed plan read still shows Retry.
+    await usage.fetchUsageStats(period: 'monthly');
+    await tester.pumpAndSettle();
+    expect(usage.error, isNull);
+    expect(usage.billingProviderFailed, isTrue);
+    expect(find.byType(OmiErrorState), findsOneWidget);
+    expect(find.byType(PlanOptionShimmer), findsNothing);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('outline paywall: a failed subscription read shows Retry instead of a skeleton forever', (tester) async {
     var calls = 0;
@@ -709,4 +785,19 @@ void main() {
     expect(find.textContaining('Cancel'), findsNothing);
     expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
   }, variant: TargetPlatformVariant.all());
+
+  testWidgets('switch off after a redeem: the prepaid plan still shows only its end date', (tester) async {
+    await _pump(tester, [
+      _response(
+          play: null,
+          plan: PlanType.unlimitedV2,
+          stripeId: 'sub_prepaid',
+          cancelAtPeriodEnd: true,
+          prepaid: true,
+          prepaidCodeRedeem: false)
+    ]);
+    expect(find.byKey(const ValueKey('plans_sheet_prepaid_ends')), findsOneWidget);
+    expect(find.textContaining('Resubscribe'), findsNothing);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 }
