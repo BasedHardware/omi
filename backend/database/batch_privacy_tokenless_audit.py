@@ -74,7 +74,10 @@ def _count_cancelled(future):
 
 def _audit(store, uid, hit, budget):
     try:
-        with read_origin('job:projection_tokenless_audit'):
+        with (
+            read_origin('job:projection_tokenless_audit'),
+            metrics.batch_privacy_path(metrics.BatchPrivacyPath.PROJECTION_PRECHECK_AUDIT),
+        ):
             outcome = read_snapshot(store, lambda view: _compare(view, uid, hit, budget), budget)
     except Exception:
         _record(INCOMPLETE, 'failed')

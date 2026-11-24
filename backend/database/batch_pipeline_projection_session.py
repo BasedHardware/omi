@@ -16,6 +16,7 @@ from config.batch_pipeline import (
     HELD_DEAD_LETTER_SECONDS,
 )
 
+from database.privacy_check_metrics import BatchPrivacyPath, with_batch_privacy_path
 from database.batch_pipeline_privacy import (
     assert_batch_write_allowed,
     check_projection_precheck,
@@ -372,6 +373,7 @@ class ProjectionSession:
                 # it. Reconcile its receipt, while later input parts still owe
                 # their own assignments. Never authorize input deletion here.
 
+    @with_batch_privacy_path(BatchPrivacyPath.PROJECTION_PREPARE)
     def prepare(
         self,
         transaction,
