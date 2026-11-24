@@ -1219,12 +1219,9 @@ class _ConversationsPageState extends State<ConversationsPage>
         final localToday = localHomeDay(clock.now());
         final withLive = episodeLive
             ? _withTodayRow(builtRows, clock.now(), _ConversationListRowKind.liveEpisode)
-            : v3LiveShown
-                ? _pinFirstInDay(builtRows, v3Live.id)
-                : livePlaceholder
-                    ? _withTodayRow(builtRows, clock.now(), _ConversationListRowKind.v3LivePlaceholder)
-                    : builtRows;
-        // Only the default view: a search or folder shows what it matched.
+            : livePlaceholder
+                ? _withTodayRow(builtRows, clock.now(), _ConversationListRowKind.v3LivePlaceholder)
+                : builtRows;
         // Default Home already projected every local entry together with server
         // rows. A second insertion can resurrect stale ready/noise entries and
         // bypass the one-row fold. Filtered views keep their adapter; capability negotiation never disables the fold.
@@ -1244,9 +1241,12 @@ class _ConversationsPageState extends State<ConversationsPage>
                 ],
                 clock.now())
             : withLive;
-        final conversationRows = showManualFinish
+        final rowsWithManualFinish = showManualFinish
             ? _withProcessingRows(rowsWithLocalProcessing, [manualFinish], clock.now())
             : rowsWithLocalProcessing;
+        // Pin the server live row after inserting Processing, which treats it as an ordinary conversation.
+        final conversationRows =
+            !episodeLive && v3LiveShown ? _pinFirstInDay(rowsWithManualFinish, v3Live.id) : rowsWithManualFinish;
 
         if (showRecordings &&
             !convoProvider.isSelectionModeActive &&
