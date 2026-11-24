@@ -156,13 +156,16 @@ def assert_batch_write_allowed(
         and transaction is not None
         and snapshots is None
         and live_version_out is None
-        and lever_enabled('bpp_shared_owner_cache', uid)
         and lever_percent('privacy_checks_shadow') == 0
-        and shared_cache.available(client)
-        and not ttl_disabled()
     )
     shared_shadow = shared_eligible and lever_enabled('bpp_shared_owner_shadow', uid)
-    shared_enforce = shared_eligible and lever_percent('bpp_shared_owner_shadow') == 0
+    shared_enforce = (
+        shared_eligible
+        and lever_percent('bpp_shared_owner_shadow') == 0
+        and lever_enabled('bpp_shared_owner_cache', uid)
+    )
+    if (shared_shadow or shared_enforce) and (not shared_cache.available(client) or ttl_disabled()):
+        shared_shadow = shared_enforce = False
     # A generation-memo hit would hide the live lookups needed for shadow proof.
     negative_shadow = lever_enabled('privacy_negative_lookup_cache', uid) and lever_enabled(
         'privacy_checks_shadow', uid
@@ -207,7 +210,7 @@ def assert_batch_write_allowed(
         # Reuse this snapshot for the walk so each sample pays one token read.
         owner = privacy_owner_key(uid)
         started = time.time()
-        candidate = shared_cache.read(client, owner, frozenset(ids), expected_generation)
+        candidate = shared_cache.read(client, owner, frozenset(ids), expected_generation, shadow=True)
         reference = client.collection(PRIVACY_COLLECTION).document(owner)
         snapshot = metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
         version = token_version(snapshot)
@@ -215,16 +218,25 @@ def assert_batch_write_allowed(
         kwargs['walk_out'] = shared_walk = {}
 
         def compare_shared(generation: int | None) -> None:
-            shared_cache.compare(candidate, version, generation)
+            # This comparison and refill are observational and cannot replace
+            # the authoritative allow or refusal, even with malformed metadata.
+            try:
+                shared_cache.compare(candidate, version, generation)
+            except Exception:
+                shared_cache.SHADOW.labels('unavailable').inc()
+                return
             if version is not None and generation is not None:
-                shared_cache.store(
-                    client,
-                    owner,
-                    frozenset(ids) | shared_walk.get('verified', set()),
-                    version,
-                    generation,
-                    started=started,
-                )
+                try:
+                    shared_cache.store(
+                        client,
+                        owner,
+                        frozenset(ids) | shared_walk.get('verified', set()),
+                        version,
+                        generation,
+                        started=started,
+                    )
+                except Exception:
+                    shared_cache.OUTCOMES.labels('set_error').inc()
 
         try:
             generation = _assert_batch_write_allowed_live(client, transaction, uid, **kwargs)

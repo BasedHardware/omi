@@ -128,7 +128,13 @@ def test_shared_owner_cache_expiry_coverage_and_plane(shared_owner_world, monkey
 
 def test_shared_shadow_distinguishes_unfenced_mismatch_from_recent_revocation(shared_owner_world, monkeypatch):
     db, reads, revision, _ = shared_owner_world
-    enable(monkeypatch, 'bpp_shared_owner_shadow')
+    monkeypatch.setenv(
+        'FIRESTORE_READ_LEVERS',
+        '{"bpp_shared_owner_cache":0,"bpp_status_skip":0,"bpp_shared_owner_shadow":100,"privacy_checks_shadow":0}',
+    )
+    shadow_gets = shared_cache.OUTCOMES.labels('shadow_get_attempt')._value
+    certified_gets = shared_cache.OUTCOMES.labels('certified_get_attempt')._value
+    before_gets = shadow_gets.get(), certified_gets.get()
     changes = shared_cache.SHADOW.labels('authority_changed')
     mismatches = shared_cache.SHADOW.labels('mismatch')
     matches = shared_cache.SHADOW.labels('match')
@@ -145,6 +151,46 @@ def test_shared_shadow_distinguishes_unfenced_mismatch_from_recent_revocation(sh
     with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
         check(db, shared_owner_cache=True)
     assert (changes._value.get(), mismatches._value.get(), matches._value.get()) == tuple(x + 1 for x in before)
+    assert (shadow_gets.get(), certified_gets.get()) == (before_gets[0] + 4, before_gets[1])
+
+
+def test_malformed_shadow_version_preserves_authoritative_allow(shared_owner_world, monkeypatch):
+    db, reads, _, redis = shared_owner_world
+    enable(monkeypatch, 'bpp_shared_owner_shadow')
+    assert check(db, shared_owner_cache=True) == 7
+    (key,) = redis.keys()
+    original_candidate = redis.get(key)
+
+    db.rows[TOKEN]['generation'] = 8
+    monkeypatch.setattr(privacy, 'token_version', lambda snapshot: ('a' * 32, 'invalid-revision', 0))
+    unavailable = shared_cache.SHADOW.labels('unavailable')._value
+    mismatch = shared_cache.SHADOW.labels('mismatch')._value
+    before = unavailable.get(), mismatch.get()
+    reads.clear()
+
+    assert check(db, shared_owner_cache=True) == 8
+    assert TOKEN in reads and SOURCE in reads
+    assert (unavailable.get(), mismatch.get()) == (before[0] + 1, before[1])
+    assert redis.get(key) == original_candidate
+
+
+def test_shared_owner_set_errors_do_not_inflate_get_attempts(shared_owner_world, monkeypatch):
+    from redis.exceptions import ConnectionError
+
+    db, _, _, redis = shared_owner_world
+    attempts = shared_cache.OUTCOMES.labels('certified_get_attempt')._value
+    hits = shared_cache.OUTCOMES.labels('certified_hit')._value
+    set_errors = shared_cache.OUTCOMES.labels('set_error')._value
+    before = attempts.get(), hits.get(), set_errors.get()
+    assert check(db, shared_owner_cache=True) == 7
+    assert check(db, shared_owner_cache=True) == 7
+
+    def fail_set(*args, **kwargs):
+        raise ConnectionError('test Redis SET failure')
+
+    monkeypatch.setattr(redis, 'set', fail_set)
+    shared_cache.store(db, privacy.privacy_owner_key(UID), frozenset(), ('a' * 32, '', 0), 7, started=time.time())
+    assert (attempts.get(), hits.get(), set_errors.get()) == tuple(x + n for x, n in zip(before, (2, 1, 1)))
 
 
 def test_shared_owner_redis_error_falls_back_to_the_live_walk(shared_owner_world, monkeypatch):
@@ -163,11 +209,15 @@ def test_shared_owner_redis_error_falls_back_to_the_live_walk(shared_owner_world
 
     monkeypatch.setattr(redis, 'get', broken)
     monkeypatch.setattr(redis, 'set', reject_store)
+    attempts = shared_cache.OUTCOMES.labels('certified_get_attempt')._value
+    get_errors = shared_cache.OUTCOMES.labels('get_error')._value
+    before = attempts.get(), get_errors.get()
     assert check(db, shared_owner_cache=True) == 7
     assert SOURCE in reads and TOKEN in reads
     reads.clear()
     assert check(db, shared_owner_cache=True) == 7
     assert SOURCE in reads and calls == ['get']
+    assert (attempts.get(), get_errors.get()) == (before[0] + 1, before[1] + 1)
 
 
 def test_counters_measure_live_check_reads_walks_and_absent_user_default(world):

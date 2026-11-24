@@ -64,11 +64,11 @@ def _coverage(ids) -> frozenset[str]:
     return frozenset(hashlib.sha256(cid.encode()).hexdigest() for cid in ids)
 
 
-def _fallback(error: Exception) -> None:
+def _fallback(error: Exception, *, outcome: str) -> None:
     global _redis_retry_at
     if isinstance(error, RedisError):
         _redis_retry_at = time.monotonic() + REDIS_RETRY_SECONDS
-    OUTCOMES.labels('error').inc()
+    OUTCOMES.labels(outcome).inc()
     record_fallback(
         component='batch_pipeline_privacy',
         from_mode='redis_owner_cache',
@@ -78,13 +78,15 @@ def _fallback(error: Exception) -> None:
     )
 
 
-def read(client, owner: str, ids, expected_generation: int | None) -> Decision | None:
+def read(client, owner: str, ids, expected_generation: int | None, *, shadow: bool = False) -> Decision | None:
     key = _key(client, owner)
     if len(ids) > MAX_IDS:
         OUTCOMES.labels('uncovered').inc()
         return None
     try:
-        raw = _redis().get(key)
+        redis = _redis()
+        OUTCOMES.labels('shadow_get_attempt' if shadow else 'certified_get_attempt').inc()
+        raw = redis.get(key)
         if raw is None:
             OUTCOMES.labels('miss').inc()
             return None
@@ -114,7 +116,7 @@ def read(client, owner: str, ids, expected_generation: int | None) -> Decision |
         OUTCOMES.labels('covered').inc()
         return Decision(started, (token, revision, nanos), generation)
     except (RedisError, ValueError, TypeError, OverflowError) as error:
-        _fallback(error)
+        _fallback(error, outcome='get_error')
         return None
 
 
@@ -130,7 +132,7 @@ def store(client, owner: str, ids, version, generation: int, *, started: float) 
         _redis().set(key, payload, px=remaining)
         OUTCOMES.labels('stored').inc()
     except (RedisError, ValueError) as error:
-        _fallback(error)
+        _fallback(error, outcome='set_error')
 
 
 def compare(candidate: Decision | None, live_version, live_generation: int | None) -> None:
