@@ -561,7 +561,8 @@ def _admit(monkeypatch, current, units, *, fast='written', promoted=True, member
         assert row_ == expected and refresh() == expected
         assert units_ is not units and units_[0][2] is not units[0][2]
         # A single unit is cut by admission before the pass; several units only by the pass itself.
-        assert (cut is None) is (len(units) == 1)
+        # A promoted single unit still gets the manual-end wake after a written pass.
+        assert (cut is None) is (len(units) == 1 and not promoted)
         if cut is not None and fast == 'written':
             cut()
         return fast
@@ -597,9 +598,15 @@ def _admit(monkeypatch, current, units, *, fast='written', promoted=True, member
 UNIT = (0.0, 1.0, [{'bucket': 'b', 'path': 'p', 'generation': 1}])
 
 
-@pytest.mark.parametrize('fast', ['written', 'provider_error', 'not_funded'])
-def test_admission_cuts_a_single_unit_itself_before_the_pass(monkeypatch, fast):
-    assert _admit(monkeypatch, row(), [UNIT], fast=fast) == {'fast': 1, 'promote': 1, 'cut': 0}
+@pytest.mark.parametrize('fast,wakes', [('written', 1), ('provider_error', 0), ('not_funded', 0)])
+def test_admission_cuts_a_single_unit_itself_before_the_pass(monkeypatch, fast, wakes):
+    # The cut is stored before the pass; a written pass sends its own manual-end wake, since the
+    # writer's plain wake can share an owner-minute task name with a reconcile that already ran.
+    assert _admit(monkeypatch, row(), [UNIT], fast=fast) == {'fast': 1, 'promote': 1, 'cut': wakes}
+
+
+def test_a_single_unit_that_was_not_promoted_gets_no_manual_end_wake(monkeypatch):
+    assert _admit(monkeypatch, row(), [UNIT], promoted=False) == {'fast': 1, 'promote': 1, 'cut': 0}
 
 
 @pytest.mark.parametrize('fast,cuts', [('written', 1), ('provider_error', 0), ('superseded', 0), ('not_funded', 0)])
