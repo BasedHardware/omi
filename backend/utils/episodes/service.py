@@ -449,9 +449,9 @@ def _close(
         expected_conversation_ids=episode.get('conversation_ids') if split_after is not None else None,
         split_after=split_after,
         firestore_client=c.firestore_client,
-        **({'finalizing_conversation_id': c.finalizing_conversation_id} if c.finalizing_conversation_id else {}),
-        **({'retained_member_window': True} if retained_member_window else {}),
-        **({'synced_f': True} if synced_f else {}),
+        finalizing_conversation_id=c.finalizing_conversation_id,
+        retained_member_window=retained_member_window,
+        synced_f=synced_f,
     )
     if closed is not None:
         if (
