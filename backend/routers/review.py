@@ -10,6 +10,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 
 from config.open_loops import open_loops_enabled
 from database import candidates, notifications as notification_db, review_changes, review_store
+from database.legal_holds import (
+    DestructiveGateTakeover,
+    DestructiveOperationInProgress,
+    LegalHoldAuthorityUnavailable,
+)
 from database.open_loops import get_cards as get_open_loop_cards
 from models.entity_pages import EntitiesResponse, EntityCorrection, EntityPage
 from models.open_loops import (
@@ -31,6 +36,7 @@ from models.review import (
 from utils import entity_pages, review
 from utils.open_loops import service as open_loops_service
 from utils.other import endpoints as auth
+from utils.other.account_gate_http import account_gate_busy_http_exception
 from utils.speaker_tag_prompts.service import TagPromptInvalid
 from utils.task_intelligence.task_links import TaskLinkValidationError
 
