@@ -10,6 +10,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/devices/firmware_device_session.dart';
+import 'package:omi/services/wals/wal.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -20,6 +21,11 @@ import 'firmware_update_dialog.dart';
 /// Test seam for the count of recordings still only on the pendant.
 @visibleForTesting
 int Function()? debugUnsyncedDeviceRecordings;
+
+/// Unsynced on-device recordings that belong to [deviceId]. The sync caches keep WALs from a
+/// previously connected pendant, so the sync-first check counts only the pendant being updated.
+int unsyncedRecordingsOnPendant(Iterable<Wal> missingOnDevice, String deviceId) =>
+    missingOnDevice.where((wal) => wal.device == deviceId).length;
 
 class FirmwareUpdate extends StatefulWidget {
   final BtDevice? device;
@@ -459,7 +465,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     final debugCount = debugUnsyncedDeviceRecordings;
     if (debugCount != null) return debugCount();
     try {
-      return Provider.of<SyncProvider>(context, listen: false).missingWalsOnDevice.length;
+      final wals = Provider.of<SyncProvider>(context, listen: false).missingWalsOnDevice;
+      return unsyncedRecordingsOnPendant(wals, widget.device!.id);
     } on ProviderNotFoundException {
       return 0;
     }
