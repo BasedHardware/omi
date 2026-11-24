@@ -486,11 +486,13 @@ PROVIDER_429_BACKOFF_CAP_SECONDS = 60.0
 # Flex cap leaves Standard well above its own 7d p99 (conv-structure 35.9s,
 # memory-l1 18.8s): 60-15=45s and 60-10=50s. A Flex 429 returns fast and costs
 # almost none of that. Kill switch: LLM_GATEWAY_FLEX_FIRST_LANES=off.
+#
+# omi:auto:conv-structure is deliberately not on the list: about half of its Flex attempts in prod
+# timed out at the cap, so its summaries go straight to Standard. Its cap below applies only when
+# LLM_GATEWAY_FLEX_FIRST_LANES names the lane.
 FLEX_FIRST_LANES_ENV_VAR = 'LLM_GATEWAY_FLEX_FIRST_LANES'
 FLEX_FIRST_TIMEOUT_MS_ENV_VAR = 'LLM_GATEWAY_FLEX_FIRST_TIMEOUT_MS'
-DEFAULT_FLEX_FIRST_LANES = frozenset(
-    {'omi:auto:conv-structure', 'omi:auto:memory-l1', 'omi:auto:conversation-v3-summary'}
-)
+DEFAULT_FLEX_FIRST_LANES = frozenset({'omi:auto:memory-l1', 'omi:auto:conversation-v3-summary'})
 DEFAULT_FLEX_FIRST_TIMEOUT_MS = 10_000
 FLEX_FIRST_LANE_TIMEOUT_MS = {'omi:auto:conv-structure': 15_000, 'omi:auto:memory-l1': 10_000}
 
