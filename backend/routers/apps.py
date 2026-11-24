@@ -530,10 +530,25 @@ def _get_categories():
 # ******************************************************
 
 
+def _project_payment_links(items: list[dict], http_request: Optional[Request], uid: Optional[str]) -> list[dict]:
+    """A Google Play build gets no Stripe payment link for any app; every other client gets today's bytes."""
+    if http_request and play_billing_config.hide_payment_links(http_request.headers, uid):
+        for item in items:
+            if item.get('payment_link'):
+                item['payment_link'] = None
+    return items
+
+
 @router.get('/v1/apps', tags=['v1'], response_model=List[AppBaseModel])
-def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
+def get_apps(
+    uid: str = Depends(auth.get_current_user_uid),
+    include_reviews: bool = True,
+    http_request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+):
     apps = get_available_apps(uid, include_reviews=include_reviews)
-    return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps]
+    return _project_payment_links(
+        [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps], http_request, uid
+    )
 
 
 @router.get('/v1/apps/enabled', tags=['v1'], response_model=List[str])
@@ -830,19 +845,29 @@ def search_apps(
 
 
 @router.get('/v1/approved-apps', tags=['v1'], response_model=List[AppBaseModel])
-def get_approved_apps(include_reviews: bool = False):
+def get_approved_apps(
+    include_reviews: bool = False,
+    http_request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+):
     apps = get_approved_available_apps(include_reviews=include_reviews)
     # Always exclude persona type apps
     filtered_apps = [app for app in apps if not app.is_a_persona()]
-    return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps]
+    return _project_payment_links(
+        [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps], http_request, None
+    )
 
 
 @router.get('/v1/apps/popular', tags=['v1'], response_model=List[AppBaseModel])
-def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+def get_popular_apps_endpoint(
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+):
     apps = get_popular_apps()
     # Always exclude persona type apps
     filtered_apps = [app for app in apps if not app.is_a_persona()]
-    return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps]
+    return _project_payment_links(
+        [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps], http_request, uid
+    )
 
 
 @router.post('/v1/apps', tags=['v1'], response_model=AppCreateResponse)
@@ -1289,14 +1314,8 @@ def get_app_details(
     app.is_user_paid = get_is_user_paid_app(app.id, uid)
 
     # payment link. A Google Play build never gets one: its Stripe link would be an outside digital purchase.
-    # The app already shows a paid app with no link as not purchasable.
-    if (
-        app.payment_link
-        and http_request
-        and play_billing_config.client_uses_play(
-            http_request.headers.get('X-App-Platform'), http_request.headers.get('X-App-Build'), uid
-        )
-    ):
+    # The app change that shows such a paid app as unavailable ships in the companion app PR.
+    if app.payment_link and http_request and play_billing_config.hide_payment_links(http_request.headers, uid):
         app.payment_link = None
     elif app.payment_link:
         app.payment_link = f'{app.payment_link}?client_reference_id=uid_{uid}'

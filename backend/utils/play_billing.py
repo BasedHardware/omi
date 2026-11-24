@@ -309,6 +309,8 @@ def _clear_pending(uid: str, token_hash: str) -> None:
 
 CONFLICT_FIELD = 'stripe_conflict_at'
 CONFLICT_NOTIFIED_FIELD = 'stripe_conflict_notified_at'
+CONFLICT_NOTICE_CLAIM_FIELD = 'stripe_conflict_notice_claimed_at'
+NOTICE_CLAIM_SECONDS = 600
 DOUBLE_CHARGE_LOG = 'play_billing_double_charge uid=%s purchase=%s state=%s'
 
 
@@ -347,8 +349,17 @@ def _record_stripe_conflict(uid: str, token_hash: str, state: PlayState) -> None
         logger.warning('play_billing Stripe overlap not confirmed as a paid subscription uid=%s', uid)
         return
     logger.error(DOUBLE_CHARGE_LOG, uid, token_hash[:12], state.state)
-    play_db.mark_once(token_hash, CONFLICT_FIELD, int(time.time()))
+    now = int(time.time())
+    play_db.mark_once(token_hash, CONFLICT_FIELD, now)
     if (play_db.get_purchase(token_hash) or {}).get(CONFLICT_NOTIFIED_FIELD):
+        return
+    # One sender at a time: claim the notice atomically; an abandoned claim expires and is retried.
+    if not play_db.compare_and_set(
+        token_hash,
+        CONFLICT_NOTICE_CLAIM_FIELD,
+        now,
+        lambda claimed: not claimed or claimed < now - NOTICE_CLAIM_SECONDS,
+    ):
         return
     try:
         outcome = dispatch_notification(
@@ -362,10 +373,11 @@ def _record_stripe_conflict(uid: str, token_hash: str, state: PlayState) -> None
         )
     except Exception:
         outcome = None
-    if outcome is not None and outcome.status == NotificationDispatchStatus.DISPATCHED:
-        play_db.mark_once(token_hash, CONFLICT_NOTIFIED_FIELD, int(time.time()))
-    else:
-        logger.warning('play_billing double charge notice not sent for uid=%s', uid)
+    if outcome is not None and outcome.status == NotificationDispatchStatus.DISPATCHED and (outcome.delivered or 0) > 0:
+        play_db.mark_once(token_hash, CONFLICT_NOTIFIED_FIELD, now)
+        return
+    logger.warning('play_billing double charge notice not delivered for uid=%s', uid)
+    play_db.compare_and_set(token_hash, CONFLICT_NOTICE_CLAIM_FIELD, None, lambda claimed: claimed == now)
 
 
 def _settle(uid: str, token_hash: str, state: PlayState, token: str, publisher: PublisherClient, *, fresh: bool) -> str:
@@ -440,10 +452,11 @@ def verify_and_bind(uid: str, purchase_token: str, product_id: str, publisher: O
     if fresh and state.has_access(now) and _live_stripe_subscription(uid):
         raise PlayBillingError(*_STRIPE_ACTIVE)
     play_db.remember_account(expected_account, uid)
+    # History marker first: checkout must never see a bound purchase without it (a marker alone is harmless).
+    play_db.mark_play_history(uid)
     owner = play_db.bind_purchase(token_hash, uid, _record(state, purchase_token, now, revoked_through=through))
     if owner != uid:
         raise PlayBillingError(*_OWNED_ELSEWHERE)
-    play_db.set_user_fields(uid, {play_db.BOUND_FIELD: True})
     outcome = _settle(uid, token_hash, state, purchase_token, publisher, fresh=fresh)
     if outcome == 'active':
         return VerifyResult('active', play_subscription(replace(state, acknowledged=True), now))
@@ -529,11 +542,12 @@ def apply_token(
             play_db.record_unbound(token_hash, record)
             logger.warning('play_billing notification for a token with no known owner; recorded, not granted')
             return 'unbound'
+        play_db.mark_play_history(uid)  # before the bind: see verify_and_bind
         if play_db.bind_purchase(token_hash, uid, record) != uid:
             return 'unbound'
-        play_db.set_user_fields(uid, {play_db.BOUND_FIELD: True})
         fresh = True
     else:
+        play_db.mark_play_history(uid)  # repairs a marker an earlier attempt never wrote
         play_db.update_purchase(token_hash, record)
     if revoked or not paid_after_refund(state, through):
         _clear_pending(uid, token_hash)

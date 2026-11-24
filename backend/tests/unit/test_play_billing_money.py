@@ -357,9 +357,9 @@ def test_stripe_checkout_is_refused_while_a_play_purchase_is_pending(monkeypatch
     monkeypatch.setattr(
         subscription_utils.play_subscriptions_db, 'get_user_fields', lambda uid: {play_db.PENDING_FIELD: 'k'}
     )
-    monkeypatch.setattr(
-        subscription_utils.play_subscriptions_db, 'get_purchase', lambda key: {'state': 'SUBSCRIPTION_STATE_PENDING'}
-    )
+    from utils import play_publisher
+
+    monkeypatch.setattr(play_publisher, 'recoverable_play_purchase', lambda uid: 'SUBSCRIPTION_STATE_PENDING')
     allowed, reason = subscription_utils.can_user_make_payment(UID, 'price_any')
     assert allowed is False and 'Google Play purchase' in reason
 

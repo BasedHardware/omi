@@ -109,12 +109,18 @@ class FakeStore:
     def purchase_keys_for_uid(self, uid):
         return [key for key, doc in self.docs.items() if doc.get('uid') == uid]
 
-    def mark_once(self, key, field, value):
-        doc = self.docs.setdefault(key, {})
-        if doc.get(field):
+    def compare_and_set(self, key, field, value, can_replace):
+        # Sequential only; the real helper's atomicity is tested against interleaved callers.
+        if key not in self.docs or not can_replace(self.docs[key].get(field)):
             return False
-        doc[field] = value
+        self.docs[key][field] = value
         return True
+
+    def mark_once(self, key, field, value):
+        return self.compare_and_set(key, field, value, lambda current: not current)
+
+    def mark_play_history(self, uid):
+        self.set_user_fields(uid, {self.BOUND_FIELD: True})
 
     def due_for_reconcile(self, now, limit):
         rows = [dict(v, _key=k) for k, v in self.docs.items() if v.get('next_check_at') and v['next_check_at'] <= now]

@@ -1316,16 +1316,16 @@ PLAY_REFUSAL_CODES = {
 }
 
 
-def play_admission_refusal(uid: str) -> Optional[str]:
+def play_admission_refusal(uid: str, fields: Optional[dict] = None) -> Optional[str]:
     """Why a new Stripe agreement must wait for a Google Play one, or None.
 
-    Reads only the user's Play fields (the read the pending check always made). A user with no Play
-    history gets no further read. Otherwise every purchase they own that Google may still charge or
-    let them restore is re-read from Google. Independent of ``ANDROID_BILLING``: a rollback keeps it.
+    ``fields`` are the user's Play fields when the caller already read them; otherwise they are read here
+    (the read the pending check always made). A user with no Play history gets no further read. Otherwise
+    every purchase they own that is not provably ended, pending included, is re-read from Google.
+    Independent of ``ANDROID_BILLING``: a rollback keeps it.
     """
-    fields = play_subscriptions_db.get_user_fields(uid)
-    if play_subscriptions_db.pending_play_purchase(uid, fields):
-        return PLAY_PENDING_REASON
+    if fields is None:
+        fields = play_subscriptions_db.get_user_fields(uid)
     if not play_subscriptions_db.has_play_history(fields):
         return None
     from utils import play_publisher

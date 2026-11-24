@@ -9,9 +9,9 @@ Play back to its uid, so a notification for a token no client delivered can stil
 """
 
 import hashlib
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 
-from google.api_core.exceptions import AlreadyExists, Conflict
+from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 
 from database import _client
 
@@ -130,9 +130,9 @@ def is_play_customer(uid: str) -> bool:
     return bool(get_user_fields(uid).get(CUSTOMER_FIELD))
 
 
-def pending_play_purchase(uid: str, fields: Optional[Mapping[str, Any]] = None) -> bool:
+def pending_play_purchase(uid: str) -> bool:
     """A Play purchase for this uid is still waiting for Google to clear the payment."""
-    key = (get_user_fields(uid) if fields is None else fields).get(PENDING_FIELD)
+    key = get_user_fields(uid).get(PENDING_FIELD)
     if not key:
         return False
     return (get_purchase(key) or {}).get('state') == 'SUBSCRIPTION_STATE_PENDING'
@@ -143,15 +143,48 @@ def has_play_history(fields: Mapping[str, Any]) -> bool:
     return any(fields.get(name) for name in HISTORY_FIELDS)
 
 
-def mark_once(token_hash: str, field: str, value: Any, *, firestore_client: Optional[Any] = None) -> bool:
-    """Write ``field`` only when it is not set yet. Returns True when this call wrote it."""
+def mark_play_history(uid: str, *, firestore_client: Optional[Any] = None) -> None:
+    """Set the user's Play history marker. Written before a purchase is bound and on every retry that sees one.
+
+    A missing user document means the account is gone, so there is nothing to protect.
+    """
+    try:
+        set_user_fields(uid, {BOUND_FIELD: True}, firestore_client=firestore_client)
+    except NotFound:
+        pass
+
+
+def compare_and_set(
+    token_hash: str,
+    field: str,
+    value: Any,
+    can_replace: Callable[[Any], bool],
+    *,
+    firestore_client: Optional[Any] = None,
+    attempts: int = 5,
+) -> bool:
+    """Atomically set one field of a purchase document when ``can_replace(current)`` holds.
+
+    The update carries the read's update time as a precondition, so a concurrent writer makes it fail and
+    the decision is taken again on fresh data. Returns True when this call wrote the field.
+    """
     client = firestore_client or _client.get_firestore_client()
     ref = client.collection(COLLECTION).document(token_hash)
-    snapshot = ref.get()
-    if snapshot.exists and (snapshot.to_dict() or {}).get(field):
-        return False
-    ref.set({field: value}, merge=True)
-    return True
+    for _ in range(attempts):
+        snapshot = ref.get()
+        if not snapshot.exists or not can_replace((snapshot.to_dict() or {}).get(field)):
+            return False
+        try:
+            ref.update({field: value}, option=client.write_option(last_update_time=snapshot.update_time))
+            return True
+        except FailedPrecondition:
+            continue
+    raise RuntimeError(f'purchase {token_hash[:12]} kept changing; {field} not written')
+
+
+def mark_once(token_hash: str, field: str, value: Any, *, firestore_client: Optional[Any] = None) -> bool:
+    """Write ``field`` only when it is not set yet (atomic). Returns True when this call wrote it."""
+    return compare_and_set(token_hash, field, value, lambda current: not current, firestore_client=firestore_client)
 
 
 def purchase_keys_for_uid(uid: str, *, firestore_client: Optional[Any] = None) -> list[str]:

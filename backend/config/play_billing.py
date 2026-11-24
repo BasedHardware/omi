@@ -91,6 +91,16 @@ def client_uses_play(
     return android_billing_mode(environ) == 'play' or user_in_play_cohort(uid, environ)
 
 
+def hide_payment_links(headers: Optional[Mapping[str, str]], uid: Optional[str]) -> bool:
+    """True when app responses for this request must carry no Stripe payment link (a Google Play build).
+
+    The one projection rule for every response that serialises an app's ``payment_link``.
+    """
+    if headers is None:
+        return False
+    return client_uses_play(headers.get('X-App-Platform'), headers.get('X-App-Build'), uid)
+
+
 # Refusal for a new Stripe charge from a client that must buy through Google Play.
 USE_GOOGLE_PLAY = 'use_google_play'
 USE_GOOGLE_PLAY_MESSAGE = 'Subscribe with Google Play in the app.'
