@@ -1489,6 +1489,7 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         # Firestore writes: billed writes by collection, caller and origin (write probe).
         'omi_firestore_billed_writes_total',
         'omi_firestore_billed_writes_by_caller_total',
+        'omi_firestore_billed_writes_by_origin_total',
         'omi_firestore_write_caller_label_overflow_total',
         'omi_firestore_ambiguous_commit_writes_total',
         'omi_firestore_noop_writes_by_caller_total',

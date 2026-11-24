@@ -147,7 +147,7 @@ FIRESTORE_BILLED_READS_BY_ORIGIN = Counter(
 # by-caller counter is no longer naming every product frame.
 FIRESTORE_CALLER_LABEL_OVERFLOW = Counter(
     'omi_firestore_caller_label_overflow_total',
-    'Firestore read caller labels dropped because the bounded caller set is full.',
+    'Firestore caller labels dropped because the bounded caller set is full.',
 )
 
 
@@ -516,11 +516,7 @@ def _is_plumbing_module(module: str) -> bool:
     return module.startswith(_PLUMBING_PREFIXES)
 
 
-# Shared with the write probe, which skips the same SDK and runtime frames.
-is_plumbing_module = _is_plumbing_module
-
-
-def bound_caller(label: str) -> str:
+def bound_caller(label: str, *, extra_overflow: Counter | None = None) -> str:
     """Accept a ``module:function`` label, or ``other`` once the cap is full.
 
     A well-formed label that does not fit increments the overflow counter.
@@ -537,6 +533,8 @@ def bound_caller(label: str) -> str:
                 return label
             if len(_known_callers) >= MAX_CALLERS:
                 FIRESTORE_CALLER_LABEL_OVERFLOW.inc()
+                if extra_overflow is not None:
+                    extra_overflow.inc()
                 return _OTHER
             _known_callers.add(label)
             return label
@@ -544,14 +542,19 @@ def bound_caller(label: str) -> str:
         return _OTHER
 
 
-def call_site() -> str:
+def call_site(
+    *,
+    skip_frame: Callable[[str, str], bool] | None = None,
+    extra_overflow: Counter | None = None,
+    use_privacy_caller: bool = True,
+) -> str:
     """First product frame, as a bounded ``module:function`` label.
 
     Skips this probe, Firestore plumbing wrappers, and runtime frames so the
-    label names the function that asked for the read.
+    label names the function that requested the operation.
     """
     try:
-        privacy_caller = current_privacy_read_caller()
+        privacy_caller = current_privacy_read_caller() if use_privacy_caller else None
         if privacy_caller is not None:
             return bound_caller(privacy_caller)
         frame = inspect.currentframe()
@@ -559,10 +562,15 @@ def call_site() -> str:
         while frame is not None:
             module = frame.f_globals.get('__name__') or ''
             name = frame.f_code.co_name
-            if _is_plumbing_module(module) or not name or name.startswith('<'):
+            if (
+                _is_plumbing_module(module)
+                or not name
+                or name.startswith('<')
+                or (skip_frame is not None and skip_frame(module, name))
+            ):
                 frame = frame.f_back
                 continue
-            return bound_caller(f'{module}:{name}')
+            return bound_caller(f'{module}:{name}', extra_overflow=extra_overflow)
     except Exception:
         return _OTHER
     return _OTHER
