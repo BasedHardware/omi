@@ -150,6 +150,33 @@ def active_rows(lane):
     return result
 
 
+def test_joined_commit_publishes_on_first_read_and_replays_lost_reply(lane, monkeypatch):
+    from utils.batch_pipeline.merge import OrderedMerge
+    from utils.batch_pipeline.scheduler import owner_key
+    from utils.mcp_server.handlers.conversations import fetch_conversation_for_detail
+
+    monkeypatch.setenv('BATCH_PIPELINE_JOINED_MERGE_ENABLED', 'true')
+    monkeypatch.setattr(lane.conversations, 'get_firestore_client', lambda: lane.client)
+    batch = lane.seed()
+    sid = batch.ids[0]
+    result = lane.WorkResult(sid, f'gs://synthetic/results/{sid}#1')
+    assert lane.queue.complete(result, batch.leases[sid].token, 1)
+    merge = OrderedMerge(lane.store, joined_writer=lane.projector.commit_joined_merge)
+    merge.commit_next(lane.uid, 2)  # Drop the successful reply before restarting.
+
+    entry = lane.projector.store.ref('results', sid).get().to_dict()
+    outputs = entry['projection_parts']['0']['transcript_outputs']
+    assert len(outputs) == 1
+    target = fetch_conversation_for_detail(lane.uid, outputs[0]['conversation_id'])
+    assert target['transcript_segments'][0]['text'] == 'We discussed the project.'
+    stored = lane.user.collection('conversations').document(outputs[0]['conversation_id']).get().to_dict()
+    assert stored['sync_content_revision'] == outputs[0]['sync_content_revision']
+    owner = lane.store.run(lambda tx: tx.get('owners', owner_key(lane.uid)))
+    assert owner['watermark']['segment_id'] == owner['projection_watermark'] == sid
+    assert OrderedMerge(lane.store, joined_writer=lane.projector.commit_joined_merge).commit_next(lane.uid, 3) is None
+    assert lane.projector.store.ref('results', sid).get().to_dict() == entry
+
+
 def test_replay_has_one_assignment_one_enrichment_version_and_durable_before_client(lane):
     batch = lane.seed()
     lane.finish(batch)
@@ -920,7 +947,7 @@ def test_backfill_enrichment_retains_configured_worker_queue_and_audience(lane, 
     assert dispatch['audience'] == 'https://synthetic.invalid/v2/sync-jobs/run'
 
 
-def multipart(lane, count):
+def multipart(lane, count, *, merge=True):
     duration = (count - 1) * 150 + 10
     batch = lane.seed(duration_seconds=duration)
     lane.payload.update(
@@ -930,8 +957,30 @@ def multipart(lane, count):
         words=[{'word': f'Group {i}.', 'timestamp': [i * 150, i * 150 + 1]} for i in range(count)],
         diarization={'turns': [{'start': 0, 'end': duration, 'speaker': 'SPEAKER_00'}]},
     )
-    lane.finish(batch)
+    if merge:
+        lane.finish(batch)
     return batch
+
+
+def test_joined_merge_keeps_unsupported_multipart_artifact_staged(lane, monkeypatch):
+    from utils.batch_pipeline.merge import OrderedMerge
+    from utils.batch_pipeline.scheduler import owner_key
+
+    monkeypatch.setenv('BATCH_PIPELINE_JOINED_MERGE_ENABLED', 'true')
+    batch = multipart(lane, 2, merge=False)
+    sid = batch.ids[0]
+    result = lane.WorkResult(sid, f'gs://synthetic/results/{sid}#1')
+    assert lane.queue.complete(result, batch.leases[sid].token, 1)
+    merge = OrderedMerge(lane.store, joined_writer=lane.projector.commit_joined_merge)
+
+    assert merge.commit_next(lane.uid, 2) is None
+
+    assert not lane.projector.store.ref('results', sid).get().exists
+    job = lane.projector.store.ref('jobs', sid).get().to_dict()
+    assert job['state'] == 'result_ready' and job['result'] == result.to_dict()
+    owner = lane.store.run(lambda tx: tx.get('owners', owner_key(lane.uid)))
+    assert owner.get('watermark') is None and owner.get('projection_watermark') is None
+    assert active_rows(lane) == []
 
 
 @pytest.mark.parametrize('count', [2, 3])

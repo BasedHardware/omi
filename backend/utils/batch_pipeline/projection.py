@@ -1048,14 +1048,18 @@ class Projector:
             or job.get('result') != entry['result']
             or job.get('shadow')
             or not job.get('projection_binding')
-            or not job.get('policy_parts', {}).get('projection')
             or entry['result'].get('outcome') != 'success'
         ):
             return None
-        binding = normalized_binding(job['projection_binding'])
-        item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
-        policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
         try:
+            if (job.get('policy_parts') or {}).get('projection') is None:
+                self.store.policy(segment_id)
+                job = self.store.ref('jobs', segment_id).get().to_dict() or {}
+            if job.get('state') != 'result_ready' or job.get('result') != entry['result']:
+                return None
+            binding = normalized_binding(job['projection_binding'])
+            item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
+            policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
             preflight = self.store.session(segment_id, binding, self.clock(), policy=policy)
             self.store.check(preflight, staged_merge=entry)
             if preflight.job != job:
