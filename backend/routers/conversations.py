@@ -31,6 +31,8 @@ import database.users as users_db
 from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
 from database import conversation_tombstones
 from database.legal_holds import (
+    DestructiveGateTakeover,
+    DestructiveOperationInProgress,
     LegalHoldActive,
     LegalHoldAuthorityUnavailable,
     assert_account_deletion_permitted,
@@ -2184,6 +2186,10 @@ def _assign_manual_speaker(
             background_tasks=background_tasks,
             **({"time_range": time_range} if time_range is not None else {}),
         )
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as error:
+        # The write fence stays exclusive; while a destructive operation owns the
+        # account gate the edit is retryable, not a server fault (#SCA-4074).
+        raise account_gate_busy_http_exception() from error
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except PermissionError as error:
