@@ -32,6 +32,7 @@ from database.batch_pipeline_projection_protocol import (
 )
 from database.batch_pipeline_projection_finish import projection_finish_state_fields
 from database.privacy_ttl_cache import ttl_seconds
+from database.batch_privacy_tokenless import EnforcedHit
 
 from database.sync_ledger import sync_content_ledger_ref, LEDGER_RETENTION_DAYS
 from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
@@ -153,6 +154,7 @@ class ProjectionSession:
         self._privacy_fence_ids: set[str] | None = None
         self.followup_privacy_proof: FollowupPrivacyProof | None = None
         self._followup_privacy_failed = False
+        self.tokenless_precheck_hits: list[EnforcedHit] = []
 
     def receipt(self) -> dict:
         parts = self.entry.get('projection_parts') or {}
@@ -232,6 +234,7 @@ class ProjectionSession:
                     generation=self.binding.privacy_generation,
                     read_time=precheck_time,
                     verified_out=checked,
+                    audit_hits=self.tokenless_precheck_hits,
                 )
             generation = assert_batch_write_allowed(
                 self.client,
@@ -381,6 +384,7 @@ class ProjectionSession:
     ):
         if privacy_deleted and privacy_refusal is not None:
             raise ProjectionBlocked('privacy dispositions must be distinct')
+        self.tokenless_precheck_hits.clear()
         self._privacy_refusal_transaction = None
         self._privacy_replay_transaction = None
         self._source_deletion_transaction = None

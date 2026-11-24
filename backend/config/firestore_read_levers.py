@@ -58,6 +58,7 @@ KNOWN_LEVERS = frozenset(
         'finjob_candidate_queries',  # conversation_finalization_jobs:{scan_in_progress,get_abandoned_byok,get_stale_processing}
         'bpp_shared_owner_cache',  # ship-on: Redis owner memo, certified by the transactional token
         'bpp_tokenless_owner_cache',  # speculative projection precheck only; off until qualified
+        'bpp_tokenless_owner_audit',  # percentage of the 1% maximum enforced-hit audit rate
         'bpp_tokenless_owner_shadow',  # sampled full-walk comparison; disables tokenless enforcement
         'bpp_shared_owner_shadow',  # sampled tokenless comparison; never authorizes
         'bpp_status_skip',  # ship-on: content-free, read-only status polls

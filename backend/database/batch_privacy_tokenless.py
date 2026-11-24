@@ -79,6 +79,14 @@ def _timestamp(value):
 
 
 @dataclass(frozen=True)
+class EnforcedHit:
+    ids: frozenset[str]
+    generation: int
+    read_at: float
+    deadline: float
+
+
+@dataclass(frozen=True)
 class Probe:
     key: str
     raw: bytes | None

@@ -40,6 +40,9 @@ from database.batch_account_authority_schema import (
 )
 from database.home_feed_writer import augment_home_writes, affects_home, bulk_erasure_scope
 from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS, TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
+from database.batch_privacy_tokenless import invalidate
+from database.privacy_check_metrics import ACCOUNT_AUTHORITY_WRITES
+from utils.executors import db_executor, run_blocking
 
 # Protobuf builds this class dynamically; the installed module has no typed declaration.
 Status = cast(Any, status_pb2).Status
@@ -218,8 +221,6 @@ def _observe_account_writes(request: Any) -> None:
     try:
         observations = account_write_observations(request)
         if observations:
-            from database.privacy_check_metrics import ACCOUNT_AUTHORITY_WRITES
-
             for family, group, certified in observations:
                 ACCOUNT_AUTHORITY_WRITES.labels(family, group, 'true' if certified else 'false').inc()
     except Exception:
@@ -264,8 +265,6 @@ def _invalidate_tokenless(tokens: set[str]) -> None:
     # The Firestore Commit has already succeeded. Cache failures cannot change
     # its outcome; the absolute precheck deadline bounds an uncertain delivery.
     try:
-        from database.batch_privacy_tokenless import invalidate
-
         invalidate(tokens)
     except Exception:
         pass
@@ -298,8 +297,6 @@ def _wrap_commit(original: Any) -> Any:
             prepared, count, source, tokens = prepare(request, kwargs)
             result = await original(client, request=prepared, **kwargs)
             if tokens and os.getenv('REDIS_DB_HOST') and not os.getenv('FIRESTORE_EMULATOR_HOST'):
-                from utils.executors import db_executor, run_blocking
-
                 try:
                     await run_blocking(db_executor, _invalidate_tokenless, tokens)
                 except Exception:

@@ -123,7 +123,17 @@ def read_batch_owner_snapshot(
 
 
 @metrics.with_batch_plan
-def check_projection_precheck(client, transaction, uid, *, ids, generation, read_time, verified_out):
+def check_projection_precheck(
+    client,
+    transaction,
+    uid,
+    *,
+    ids,
+    generation,
+    read_time,
+    verified_out,
+    audit_hits: list[tokenless.EnforcedHit] | None = None,
+):
     """Allow speculative projection planning. This does not export a proof."""
     if transaction is not None and (mode := tokenless.mode(client, uid, precheck=True)):
         ids = tuple(ids)
@@ -137,6 +147,7 @@ def check_projection_precheck(client, transaction, uid, *, ids, generation, read
             read_time=read_time,
             verified_out=verified_out,
             precheck=True,
+            audit_hits=audit_hits,
         )
         if result is not None:
             return result
@@ -152,7 +163,17 @@ def check_projection_precheck(client, transaction, uid, *, ids, generation, read
 
 
 def _tokenless_projection_check(
-    client, transaction, uid, ids, generation, *, mode, read_time=None, verified_out=None, precheck=False
+    client,
+    transaction,
+    uid,
+    ids,
+    generation,
+    *,
+    mode,
+    read_time=None,
+    verified_out=None,
+    precheck=False,
+    audit_hits=None,
 ):
     ids = frozenset(ids)
     site = 'precheck' if precheck else 'certified'
@@ -162,9 +183,11 @@ def _tokenless_projection_check(
         return None
     if precheck:
         metrics.called('batch')
-        if mode == 'enforce' and probe.candidate(read_time) is not None:
+        if mode == 'enforce' and (candidate := probe.candidate(read_time)) is not None:
             tokenless.CACHE.labels(site, 'hit').inc()
             metrics.decision('batch')
+            if audit_hits is not None:
+                audit_hits.append(tokenless.EnforcedHit(ids, generation, *candidate))
             return generation
 
     authority: list[Any] = []

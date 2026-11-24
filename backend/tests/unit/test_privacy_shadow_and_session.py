@@ -660,7 +660,7 @@ def tokenless_world(shared_owner_world, monkeypatch):
     return db, reads, revision, redis, clock
 
 
-def tokenless_precheck(db, clock, *, ids=('source',), generation=7, skew=0):
+def tokenless_precheck(db, clock, *, ids=('source',), generation=7, skew=0, audit_hits=None):
     return privacy.check_projection_precheck(
         db,
         db.transaction(),
@@ -669,6 +669,7 @@ def tokenless_precheck(db, clock, *, ids=('source',), generation=7, skew=0):
         generation=generation,
         read_time=datetime.fromtimestamp(clock[0] + skew, timezone.utc),
         verified_out=set(),
+        audit_hits=audit_hits,
     )
 
 
@@ -677,16 +678,20 @@ def test_tokenless_precheck_pins_deadline_and_exact_redirect_scope(tokenless_wor
     survivor = ('users', UID, 'conversations', 'survivor')
     db.rows[SOURCE].update(deleted=True, sync_merged_into='survivor')
     db.rows[survivor] = {}
-    assert tokenless_precheck(db, clock) == 7
-    assert survivor in reads
+    hits = []
+    assert tokenless_precheck(db, clock, audit_hits=hits) == 7
+    assert survivor in reads and hits == []
     (key,) = redis.keys()
     proof = redis.get(key)
     assert len(json.loads(proof)[3]) == 2
 
     clock[0] += 299
     reads.clear()
-    assert tokenless_precheck(db, clock) == 7
+    assert tokenless_precheck(db, clock, audit_hits=hits) == 7
     assert reads == [] and redis.get(key) == proof
+    (hit,) = hits
+    assert (hit.ids, hit.generation) == (frozenset({'source'}), 7)
+    assert (hit.read_at, hit.deadline) == tuple(json.loads(proof)[5:7])
 
     reads.clear()
     assert tokenless_precheck(db, clock, ids=('source', 'survivor')) == 7
@@ -789,3 +794,11 @@ def test_tokenless_shadow_evaluates_both_sites_and_cannot_authorize_writes(token
             call()
         assert mismatches.get() == before + 1
         assert redis.get(key) == proof
+
+
+@pytest.mark.parametrize('profile', ['sidecar', 'sync', 'projection_pump'])
+def test_projection_audit_metrics_are_scraped(profile):
+    path = Path(__file__).parents[2] / 'deploy' / f'cloud_run_gmp_{profile}.yaml'
+    rules = yaml.safe_load(path.read_text())['spec']['endpoints'][0]['metricRelabeling']
+    for name in ('omi_batch_pipeline_tokenless_audit_total', 'omi_batch_pipeline_tokenless_audit_incomplete_total'):
+        assert kept(name, rules)
