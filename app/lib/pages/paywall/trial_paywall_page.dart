@@ -224,6 +224,18 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     final l10n = context.l10n;
     final top = MediaQuery.paddingOf(context).top;
     final bottom = MediaQuery.paddingOf(context).bottom;
+    // Paid outside Play on a Play build (the plan or Play setup arrived while open): close, nothing bought.
+    // Only while this page is the top route: a code-success sheet above it stays until Done (ModalRoute.of
+    // rebuilds this page when it is on top again).
+    if (context.select<UsageProvider, bool>((usage) => usage.paywallClosedForPlay) &&
+        !_dismissed &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _dismissed || ModalRoute.of(context)?.isCurrent != true) return;
+        _dismissed = true;
+        Navigator.of(context).pop(false);
+      });
+    }
     final now = widget.now ?? DateTime.now();
     final dateFormat = DateFormat.yMMMd(Localizations.localeOf(context).toString());
     String onDay(int days) => dateFormat.format(now.add(Duration(days: days)));
@@ -246,8 +258,8 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
         ),
       const SizedBox(height: 4),
       // Shopify buyers with an included year land here, not on the plans sheet with
-      // its code field; their code goes in Stripe Checkout's promotion code box (not on Google Play).
-      // Server switch on: redeem a prepaid code right here, no card. Never for a Play-billed reader.
+      // its code field; their code goes in Stripe Checkout's promotion code box.
+      // Server switch on, or a Google Play build: redeem a prepaid code right here, no card.
       if (canRedeemCode)
         PrepaidCodeEntry(
           center: true,

@@ -15821,7 +15821,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'صورتحساب از طریق omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'برای بازگرداندن $plan، کارت خود را در omi.me به‌روزرسانی کنید.';
+  String playStripePlanPaused(String plan) {
+    return 'طرح $plan شما متوقف شده است.';
   }
 }

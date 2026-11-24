@@ -17,8 +17,6 @@ from utils.promotion_redemption import RedemptionError, redeem_promotion_code
 
 logger = logging.getLogger(__name__)
 
-PLAY_BILLED = 'play_billed'
-
 router = APIRouter()
 
 
@@ -62,13 +60,15 @@ def redeem_prepaid_code_endpoint(
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_build: Optional[str] = Header(None, alias='X-App-Build'),
 ):
-    """Redeem a fully prepaid Omi Pro code with no card. Errors carry a reason code as ``detail``."""
-    if not prepaid_code_config.enabled_for(uid):
+    """Redeem a fully prepaid Omi Pro code with no card. Errors carry a reason code as ``detail``.
+
+    Open to the switch's readers and to every Google Play build (same helper the subscription response
+    uses): a Play build has no other way to activate a code. No payment is taken either way, and the
+    live-plan refusals below cover Stripe and Google Play alike."""
+    if not prepaid_code_config.enabled_for(uid) and not play_billing_config.client_uses_play(
+        x_app_platform, x_app_build, uid
+    ):
         raise HTTPException(status_code=404, detail='Not Found')
-    # Play-billed Android builds sell Omi Pro through Google Play only; the app never offers this
-    # there, and a direct call is refused the same way (same helper the subscription response uses).
-    if play_billing_config.client_uses_play(x_app_platform, x_app_build, uid):
-        raise HTTPException(status_code=409, detail=PLAY_BILLED)
     auth.check_rate_limit_inline(uid, 'payments:prepaid_code')
     try:
         return redeem_prepaid_code(uid, body.code)

@@ -15960,7 +15960,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Facturé via omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Mettez à jour votre carte sur omi.me pour retrouver $plan.';
+  String playStripePlanPaused(String plan) {
+    return 'Votre forfait $plan est en pause.';
   }
 }

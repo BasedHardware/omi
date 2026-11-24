@@ -15572,7 +15572,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get playStripeBilledOnWebShort => '通过 omi.me 计费。';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return '请在 omi.me 更新你的银行卡以恢复 $plan。';
+  String playStripePlanPaused(String plan) {
+    return '你的 $plan 方案已暂停。';
   }
 }

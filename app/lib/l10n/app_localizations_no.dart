@@ -15834,7 +15834,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Faktureres via omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Oppdater kortet ditt på omi.me for å få $plan tilbake.';
+  String playStripePlanPaused(String plan) {
+    return '$plan-abonnementet ditt er satt på pause.';
   }
 }
