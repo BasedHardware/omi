@@ -156,6 +156,7 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   int limit = 50,
   int offset = 0,
   String? cursor,
+  String? homeMode,
   List<ConversationStatus> statuses = const [],
   bool includeDiscarded = false,
   DateTime? startDate,
@@ -188,7 +189,11 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   }
   var response = await makeApiCall(
       url: url,
-      headers: {'X-Omi-Home-Ownership': '1', if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')},
+      headers: {
+        'X-Omi-Home-Ownership': '1',
+        if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(','),
+        if (homeMode != null) ConversationPageHeaders.homeModeHeader: homeMode,
+      },
       method: 'GET',
       body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
@@ -653,11 +658,13 @@ class ConversationApi {
     void Function(int)? onStorageCount,
     void Function(ConversationPageHeaders)? onPageHeaders,
     String? cursor,
+    String? homeMode,
   }) =>
       _listHomeConversations(this,
           limit: limit,
           offset: offset,
           cursor: cursor,
+          homeMode: homeMode,
           onPageHeaders: onPageHeaders,
           statuses: statuses,
           includeDiscarded: includeDiscarded,

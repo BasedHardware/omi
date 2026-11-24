@@ -18,6 +18,7 @@ from google.api_core.exceptions import InvalidArgument
 
 from database import action_items as tasks_db
 from database import conversations as conversations_db
+from database import home_visibility_index
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
@@ -189,7 +190,12 @@ def owner(strict, monkeypatch):
 
 
 def conversations(strict):
-    return {p[-1]: deepcopy(row) for p, row in strict.rows.items() if p[:3] == ('users', UID, 'conversations')}
+    # Compare conversation data independently of the backfilled derived index bit.
+    return {
+        p[-1]: deepcopy({key: value for key, value in row.items() if key != home_visibility_index.FIELD})
+        for p, row in strict.rows.items()
+        if p[:3] == ('users', UID, 'conversations')
+    }
 
 
 async def rederive(report=None):
@@ -562,6 +568,10 @@ async def test_undo_restores_every_row_and_claim_exactly(owner, strict, ledger):
     # The created row leaves through the conversation deletion helper (children included).
     assert len(ledger.erased) == 1 and ledger.erased[0] not in before
     assert conversations(strict) == before
+    for entry in priors(strict):
+        if not entry.get('created'):
+            restored = strict.rows[path(entry['id'])]
+            assert restored['home_list_visible'] is home_visibility_index.visible(restored)
     assert ledger.run['status'] == 'undone'
     # Restored exactly, the run keeps no copies of the owner's rows.
     assert not priors(strict)
@@ -772,6 +782,7 @@ async def test_undo_refuses_to_remove_a_task_bearing_created_card(undo_task_card
     groups = backfill._undo_groups(priors(strict))
     assert len(groups) > 1 and cid not in {entry['id'] for entry in groups[0]}
     before_undo = conversations(strict)
+    card_before_undo = deepcopy(strict.rows[path(cid)])
 
     def link_task():
         task_service.create_action_item(UID, {'description': 'Owner task', 'conversation_id': cid})
@@ -787,7 +798,7 @@ async def test_undo_refuses_to_remove_a_task_bearing_created_card(undo_task_card
     else:
         link_task()
     assert backfill.undo_run(UID, RUN) == UNDO_TASK_BLOCK
-    assert not ledger.erased and strict.rows[path(cid)] == before_undo[cid]
+    assert not ledger.erased and strict.rows[path(cid)] == card_before_undo
     assert strict.rows[path('r9')]['claims'] == before_undo['r9']['claims']
     assert strict.rows[('users', UID, 'action_items', 'linked-task')]['conversation_id'] == cid
     if not late:
