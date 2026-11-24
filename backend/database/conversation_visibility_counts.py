@@ -41,7 +41,7 @@ def matches_list_predicates(
     starred: Optional[bool] = None,
     date_field: str = 'created_at',
 ) -> bool:
-    if not include_discarded and data.get('discarded'):
+    if not include_discarded and data.get('discarded') is not False:
         return False
     if statuses and data.get('status') not in statuses:
         return False
@@ -80,8 +80,8 @@ def count_hidden(
     """Count hidden rows that would otherwise match the list query.
 
     Equality on `deleted` only matches documents that have the field, so
-    pre-#15193 conversations (no `deleted` field) are not subtracted. Tombstones
-    per user are few. Pending holds use a single-field deadline range and are
+    pre-#15193 conversations (no `deleted` field) are not subtracted.
+    Pending holds use a single-field deadline range and are
     deduplicated against tombstones/duplicate links, without a new composite index.
     """
     matching = 0
@@ -131,7 +131,11 @@ def count_hidden(
         matching += count_layer('home_hidden')
         if not include_recordings:
             matching -= count_layer('recording', 'home_hidden')
-    queries = [(collection.where(filter=FieldFilter('deleted', '==', True)).select(HIDDEN_LAYER_FIELDS), False)]
+    deleted = collection.where(filter=FieldFilter('deleted', '==', True))
+    if not include_discarded:
+        # Match the base count and skip donor redirects before streaming.
+        deleted = deleted.where(filter=FieldFilter('discarded', '==', False))
+    queries = [(deleted.select(HIDDEN_LAYER_FIELDS), False)]
     if not include_discarded:
         duplicates = collection.where(filter=FieldFilter('dream_duplicate_of', '>', ''))
         queries.append((duplicates.select(HIDDEN_LAYER_FIELDS), False))

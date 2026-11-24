@@ -64,11 +64,21 @@ def rotation_seconds() -> tuple[float, float]:
     return age, cap
 
 
+def manual_end_home_visible_enabled() -> bool:
+    return os.getenv('CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE', 'on').strip().lower() not in {
+        'off',
+        'false',
+        '0',
+        'no',
+    }
+
+
 def stretch_cohesion_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_STRETCH_COHESION', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 
 
 DEFAULT_BOUNDARY_SECONDS = 300
+DEFAULT_MAX_WINDOW_SECONDS = 10800
 HISTORICAL_SITDOWN_TIMING = (900, 3600)
 # Stamped by the transaction that makes new recording speech visible; custom lock timing counts from it.
 SPEECH_LANDED_FIELD = 'v3_speech_landed_at'
@@ -89,6 +99,17 @@ def boundary_seconds(*, cohesion: bool) -> tuple[int, int]:
         _boundary_seconds('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', 1800),
         _boundary_seconds('CONVERSATIONS_V3_LOCK_SECONDS', 3600),
     )
+
+
+def max_window_seconds() -> int:
+    raw = os.getenv('CONVERSATIONS_V3_MAX_WINDOW_SECONDS', '').strip().lower()
+    if raw == 'off':
+        return 0
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_MAX_WINDOW_SECONDS
+    return value if value == 0 or 120 <= value <= DEFAULT_MAX_WINDOW_SECONDS else DEFAULT_MAX_WINDOW_SECONDS
 
 
 def backfill_enabled() -> bool:

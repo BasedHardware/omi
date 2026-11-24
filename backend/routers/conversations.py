@@ -10,6 +10,7 @@ from utils.generated_compute import require_generated_compute, generated_compute
 import asyncio
 import hashlib
 import os
+import time
 from contextlib import ExitStack, nullcontext
 
 from fastapi.responses import StreamingResponse
@@ -30,6 +31,8 @@ import database.users as users_db
 from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
 from database import conversation_tombstones
 from database.legal_holds import (
+    DestructiveGateTakeover,
+    DestructiveOperationInProgress,
     LegalHoldActive,
     LegalHoldAuthorityUnavailable,
     assert_account_deletion_permitted,
@@ -1186,6 +1189,7 @@ def get_conversations(
     # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
     # legacy sync piece there would duplicate them.
     show_held = default_home and not conversations_v3_enabled(uid)
+    read_started = time.monotonic()
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
@@ -1210,6 +1214,7 @@ def get_conversations(
         show_held=show_held,
     )
 
+    read_done = time.monotonic()
     conversations = home_membership.project_list(
         uid,
         conversations,
@@ -1237,6 +1242,21 @@ def get_conversations(
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
+    # Read meter: what one list page cost. Counts and timings only, never the owner or the query.
+    logger.info(
+        'conversation_list_read home=%s paged=%s limit=%d docs=%s storage_rows=%s hidden=%s rows=%d '
+        'truncated=%s read_ms=%d total_ms=%d',
+        default_home,
+        'cursor' if cursor else ('offset' if offset else 'first'),
+        limit,
+        getattr(budget, 'docs_scanned', None),
+        page.get('storage_rows'),
+        page.get('hidden_rows'),
+        len(conversations),
+        budget.truncated,
+        (read_done - read_started) * 1000,
+        (time.monotonic() - read_started) * 1000,
+    )
     return conversations
 
 
@@ -2166,6 +2186,10 @@ def _assign_manual_speaker(
             background_tasks=background_tasks,
             **({"time_range": time_range} if time_range is not None else {}),
         )
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as error:
+        # The write fence stays exclusive; while a destructive operation owns the
+        # account gate the edit is retryable, not a server fault (#SCA-4074).
+        raise account_gate_busy_http_exception() from error
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except PermissionError as error:
@@ -3037,7 +3061,9 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
             from utils.executors import start_background_task
 
             work = start_background_task(
-                reconcile(uid, on_open=True, conversation_id=conversation_id), name='v3-reconcile-open'
+                reconcile(uid, on_open=True, conversation_id=conversation_id),
+                name='v3-reconcile-open',
+                bounded_provider_failure=True,
             )
             await asyncio.wait_for(asyncio.shield(work), timeout=8)
         except Exception as exc:

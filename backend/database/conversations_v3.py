@@ -579,6 +579,40 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
     return mark(client.transaction())
 
 
+def promote_manual_end(uid, cid, *, firestore_client=None):
+    """Turn a stored manual-end request into the cut. True when this call wrote it.
+
+    Called once the whole recording will land as one transcript. It does not mark the recording
+    pending when no speech has landed: the transcript write that follows owns that wake, so a
+    recording with no speech costs no reconcile.
+    """
+    client = firestore_client or get_firestore_client()
+    ref = user_conversations(client, uid).document(cid)
+
+    @firestore.transactional
+    def promote(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        if (
+            not row.get('recording')
+            or not row.get('v3_manual_end_requested')
+            # The cut is materialised from finished_at; without it the marker would be inert.
+            or not row.get('finished_at')
+            or row.get('v3_manual_end')
+            or row.get('deleted')
+            or row.get('discarded')
+        ):
+            return False
+        update: dict[str, Any] = {'v3_manual_end': True}
+        if row.get('v3_speech_landed_at') is not None:
+            # Speech already landed, so its reconcile may have run without the cut. Leave the
+            # recording pending: the sweep re-enqueues an owner whose pending is older than ten minutes.
+            update.update(v3_pending=True, v3_pending_since=row.get('v3_pending_since') or datetime.now(timezone.utc))
+        tx.update(ref, update)
+        return True
+
+    return promote(client.transaction())
+
+
 def _projection_snapshots(client, coll, tx, ids, *, batch_reads):
     if not batch_reads:
         for cid in ids:

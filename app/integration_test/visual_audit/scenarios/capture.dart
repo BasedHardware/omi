@@ -55,6 +55,8 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   LocalSttFailure? get localSttFailure => null;
 
   @override
+  String? get activeRecordingId => null;
+  @override
   bool get pendantCaptureVerified => true;
   @override
   bool get pendantCaptureActionRequired => false;

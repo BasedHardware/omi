@@ -256,11 +256,11 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                     # word minimum on its own words; a five-minute stretch is judged whole (#25786).
                     candidate['_stretch_words'] = word_count(part) if sitdown else group['_stretch_words']
                     candidate['_stretch_partition'] = first_result
-                # A model can undo a topic split, never a recorded silence boundary.
+                # A model can undo a topic split within a stretch. Keep a cap boundary even without cohesion.
                 prior = result[-1] if result else None
                 if (
                     prior
-                    and (not cohesion or len(result) > first_result)
+                    and (not (cohesion or group.get('after_window_cap')) or len(result) > first_result)
                     and entry.get('resumes_previous')
                     and not prior.get('manual_end')
                     and prior['kind'] == candidate['kind']
@@ -316,7 +316,7 @@ def is_unlocked(row):
     return row.get('status') == 'in_progress' or bool(row.get('v3_unlocked'))
 
 
-def build(uid, window, recordings, existing=None, *, allocated=None):
+def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_home_visible=True):
     lines = window['lines']
     start, end = lines[0]['start'], max(line['end'] for line in lines)
     if existing and (not is_unlocked(existing) or window.get('_held_provisional')):
@@ -432,6 +432,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         words=words,
         finished=window['finished'] and not window.get('_title_preview'),
         manual_end=manual_end,
+        manual_end_home_visible=manual_end_home_visible,
     )
     row: dict[str, Any] = {
         **(existing or {}),

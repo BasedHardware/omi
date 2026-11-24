@@ -41,8 +41,13 @@ PostHog: `Account Deletion Wipe Failed` with `failed_operations` containing `bil
 1. `status 403` (or 401): the runtime service account lost Play Console access (View financial data / Manage
    orders). Restore it; the next retry clears every stuck deletion.
 2. `status 5xx` or `unavailable`: a Google outage or a purchase that is chargeable again (resubscribed in Play).
-   Wait for the next retries; if one key stays stuck more than a day, look the purchase up in Play Console
-   (Order management) by the user's order and cancel it there, then let the wipe retry.
+   Wait for the next retries. If one key stays stuck more than a day, list the uid's
+   `play_subscription_purchases` documents (the log line carries the uid), open the one whose id matches the
+   masked key (its first 3 and 10th to 12th characters) and read its `purchase_token` (the account's email and
+   order id are already gone). Cancel with the call the wipe makes, `subscriptionsv2.cancel` with
+   `DEVELOPER_REQUESTED_STOP_PAYMENTS` (`PublisherClient.cancel` in `utils/play_publisher.py`), or read
+   `latestOrderId` with `subscriptionsv2.get` and cancel that order in Play Console (Order management). Then let
+   the wipe retry.
 3. `has no confirmed deletion cancel`: a purchase appeared after the billing step; the next retry cancels it.
 4. Never delete `play_subscription_purchases` documents by hand while Google can still charge them: that is how
    a deleted account keeps being billed.
