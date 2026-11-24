@@ -1386,9 +1386,8 @@ def get_user_subscription_endpoint(
 
 
 def _apply_prepaid_code_switch(response: UserSubscriptionResponse, uid: str, *, uses_play: bool = False) -> None:
-    """Only the ability to redeem follows the switch. A stored prepaid plan keeps its `prepaid` marker
-    either way, so a redeemed reader never sees Resubscribe when the switch or cohort changes. A Play build always can.
-    """
+    """Only the ability to redeem follows the switch (a Play build always can). A stored prepaid plan keeps
+    its `prepaid` marker either way, so a redeemed reader never sees Resubscribe when the switch changes."""
     if uses_play or prepaid_code_config.enabled_for(uid):
         response.prepaid_code_redeem = True
 
