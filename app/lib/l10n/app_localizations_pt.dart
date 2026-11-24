@@ -7058,6 +7058,26 @@ class AppLocalizationsPt extends AppLocalizations {
   String get authUnexpectedError => 'Erro inesperado ao fazer login, tente novamente';
 
   @override
+  String get accountSignInMethods => 'Métodos de login';
+
+  @override
+  String get accountAddSignInMethod => 'Adicionar método de login';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Adicione uma forma de entrar nesta conta Omi. Seu plano, suas gravações e suas integrações continuam nesta conta.';
+
+  @override
+  String get accountSignInConflictTitle => 'Este login pertence a outra conta';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Você continua nesta conta. Cada conta Omi mantém seu próprio plano, gravações e integrações.';
+
+  @override
+  String get accountSignInMethodAdded => 'Método de login adicionado';
+
+  @override
   String get authFailedToLinkGoogle => 'Falha ao vincular com o Google, tente novamente.';
 
   @override
@@ -15824,7 +15844,7 @@ class AppLocalizationsPt extends AppLocalizations {
         'invalid': 'Este código não é válido. Verifique-o e tente novamente.',
         'used': 'Este código já foi usado.',
         'expired': 'Este código expirou.',
-        'hasPlan': 'Já tem um plano. O seu código não foi usado.',
+        'hasPlan': 'Já tem um plano. O seu código não foi usado. Resgate-o quando o seu plano terminar.',
         'notPrepaid': 'Este código não pode ser resgatado aqui. Use-o quando escolher um plano.',
         'notEligible': 'Este código não pode ser usado nesta conta.',
         'rateLimited': 'Demasiadas tentativas. Tente mais tarde.',

@@ -7036,6 +7036,26 @@ class AppLocalizationsHi extends AppLocalizations {
   String get authUnexpectedError => 'साइन इन करते समय अप्रत्याशित त्रुटि, कृपया पुनः प्रयास करें';
 
   @override
+  String get accountSignInMethods => 'साइन इन करने के तरीके';
+
+  @override
+  String get accountAddSignInMethod => 'साइन इन का तरीका जोड़ें';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'इस Omi खाते में साइन इन करने का एक तरीका जोड़ें। आपका प्लान, रिकॉर्डिंग और इंटीग्रेशन इसी खाते में बने रहेंगे।';
+
+  @override
+  String get accountSignInConflictTitle => 'साइन इन का यह तरीका किसी दूसरे खाते से जुड़ा है';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'आप अभी भी इसी खाते में साइन इन हैं। हर Omi खाते का प्लान, रिकॉर्डिंग और इंटीग्रेशन उसी खाते में रहते हैं।';
+
+  @override
+  String get accountSignInMethodAdded => 'साइन इन का तरीका जोड़ दिया गया';
+
+  @override
   String get authFailedToLinkGoogle => 'Google से लिंक करने में विफल, कृपया पुनः प्रयास करें।';
 
   @override
@@ -15777,7 +15797,7 @@ class AppLocalizationsHi extends AppLocalizations {
         'invalid': 'यह कोड मान्य नहीं है। जांचें और फिर से कोशिश करें।',
         'used': 'यह कोड पहले ही इस्तेमाल हो चुका है।',
         'expired': 'इस कोड की अवधि समाप्त हो गई है।',
-        'hasPlan': 'आपके पास पहले से एक प्लान है। आपका कोड इस्तेमाल नहीं हुआ।',
+        'hasPlan': 'आपके पास पहले से एक प्लान है। आपका कोड इस्तेमाल नहीं हुआ। प्लान खत्म होने के बाद इसे रिडीम करें।',
         'notPrepaid': 'यह कोड यहां रिडीम नहीं हो सकता। प्लान चुनते समय इसका इस्तेमाल करें।',
         'notEligible': 'यह कोड इस खाते पर इस्तेमाल नहीं हो सकता।',
         'rateLimited': 'बहुत ज़्यादा कोशिशें। बाद में फिर कोशिश करें।',

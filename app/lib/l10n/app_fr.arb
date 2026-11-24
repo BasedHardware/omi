@@ -2223,6 +2223,12 @@
     "authFailedToRetrieveToken": "Échec de la récupération du jeton Firebase, veuillez réessayer.",
     "authUnexpectedErrorFirebase": "Erreur inattendue lors de la connexion, erreur Firebase, veuillez réessayer.",
     "authUnexpectedError": "Erreur inattendue lors de la connexion, veuillez réessayer",
+    "accountSignInMethods": "Modes de connexion",
+    "accountAddSignInMethod": "Ajouter un mode de connexion",
+    "accountAddSignInMethodDetails": "Ajoutez un mode de connexion à ce compte Omi. Votre forfait, vos enregistrements et vos intégrations restent associés à ce compte.",
+    "accountSignInConflictTitle": "Ce mode de connexion est associé à un autre compte",
+    "accountSignInConflictDetails": "Vous êtes toujours connecté à ce compte. Chaque compte Omi conserve son forfait, ses enregistrements et ses intégrations.",
+    "accountSignInMethodAdded": "Mode de connexion ajouté",
     "authFailedToLinkGoogle": "Échec de la liaison avec Google, veuillez réessayer.",
     "authFailedToLinkApple": "Échec de la liaison avec Apple, veuillez réessayer.",
     "onboardingBluetoothRequired": "L'autorisation Bluetooth est requise pour connecter votre appareil.",
@@ -4792,5 +4798,5 @@
     "prepaidCodeFieldHint": "Saisissez votre code",
     "prepaidCodeRedeem": "Utiliser",
     "prepaidCodeRedeemed": "Code utilisé",
-    "prepaidCodeResult": "{reason, select, invalid{Ce code n'est pas valide. Vérifiez-le et réessayez.} used{Ce code a déjà été utilisé.} expired{Ce code a expiré.} hasPlan{Vous avez déjà un forfait. Votre code n'a pas été utilisé.} notPrepaid{Ce code ne peut pas être utilisé ici. Utilisez-le lorsque vous choisissez un forfait.} notEligible{Ce code ne peut pas être utilisé sur ce compte.} rateLimited{Trop de tentatives. Réessayez plus tard.} other{Une erreur s'est produite. Veuillez réessayer.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Ce code n'est pas valide. Vérifiez-le et réessayez.} used{Ce code a déjà été utilisé.} expired{Ce code a expiré.} hasPlan{Vous avez déjà un forfait. Votre code n'a pas été utilisé. Utilisez-le à la fin de votre forfait.} notPrepaid{Ce code ne peut pas être utilisé ici. Utilisez-le lorsque vous choisissez un forfait.} notEligible{Ce code ne peut pas être utilisé sur ce compte.} rateLimited{Trop de tentatives. Réessayez plus tard.} other{Une erreur s'est produite. Veuillez réessayer.}}"
 }

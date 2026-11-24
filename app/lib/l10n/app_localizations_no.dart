@@ -7056,6 +7056,26 @@ class AppLocalizationsNo extends AppLocalizations {
   String get authUnexpectedError => 'Uventet feil under pålogging, vennligst prøv igjen';
 
   @override
+  String get accountSignInMethods => 'Innloggingsmetoder';
+
+  @override
+  String get accountAddSignInMethod => 'Legg til en innloggingsmetode';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Legg til en måte å logge på denne Omi-kontoen. Abonnementet, opptakene og integrasjonene dine blir værende på denne kontoen.';
+
+  @override
+  String get accountSignInConflictTitle => 'Denne innloggingen tilhører en annen konto';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Du er fortsatt logget på denne kontoen. Hver Omi-konto beholder sitt eget abonnement, sine opptak og sine integrasjoner.';
+
+  @override
+  String get accountSignInMethodAdded => 'Innloggingsmetoden er lagt til';
+
+  @override
   String get authFailedToLinkGoogle => 'Kunne ikke koble til Google, vennligst prøv igjen.';
 
   @override
@@ -15799,7 +15819,8 @@ class AppLocalizationsNo extends AppLocalizations {
         'invalid': 'Denne koden er ikke gyldig. Sjekk den og prøv igjen.',
         'used': 'Denne koden er allerede brukt.',
         'expired': 'Denne koden har utløpt.',
-        'hasPlan': 'Du har allerede et abonnement. Koden din ble ikke brukt.',
+        'hasPlan':
+            'Du har allerede et abonnement. Koden din ble ikke brukt. Løs den inn når abonnementet ditt slutter.',
         'notPrepaid': 'Denne koden kan ikke løses inn her. Bruk den når du velger et abonnement.',
         'notEligible': 'Denne koden kan ikke brukes på denne kontoen.',
         'rateLimited': 'For mange forsøk. Prøv igjen senere.',

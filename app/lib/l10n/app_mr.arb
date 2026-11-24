@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "साइन इन करण्याचे मार्ग",
+    "accountAddSignInMethod": "साइन इन करण्याचा मार्ग जोडा",
+    "accountAddSignInMethodDetails": "या Omi खात्यात साइन इन करण्याचा आणखी एक मार्ग जोडा. तुमचा प्लॅन, रेकॉर्डिंग आणि इंटिग्रेशन्स याच खात्यात राहतील.",
+    "accountSignInConflictTitle": "हा साइन इन पर्याय दुसऱ्या खात्याशी जोडलेला आहे",
+    "accountSignInConflictDetails": "तुम्ही अजूनही याच खात्यात साइन इन केलेले आहात. प्रत्येक Omi खात्याचा प्लॅन, रेकॉर्डिंग आणि इंटिग्रेशन्स त्याच खात्यात राहतात.",
+    "accountSignInMethodAdded": "साइन इन करण्याचा मार्ग जोडला",
     "authFailedToLinkGoogle": "Google सह लिंक करण्यात अयशस्वी, कृपया पुन्हा प्रयत्न करा.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -12314,5 +12320,5 @@
     "prepaidCodeFieldHint": "तुमचा कोड टाका",
     "prepaidCodeRedeem": "रिडीम करा",
     "prepaidCodeRedeemed": "कोड रिडीम झाला",
-    "prepaidCodeResult": "{reason, select, invalid{हा कोड वैध नाही. तपासा आणि पुन्हा प्रयत्न करा.} used{हा कोड आधीच वापरला गेला आहे.} expired{या कोडची मुदत संपली आहे.} hasPlan{तुमच्याकडे आधीच प्लॅन आहे. तुमचा कोड वापरला गेला नाही.} notPrepaid{हा कोड येथे रिडीम करता येत नाही. प्लॅन निवडताना तो वापरा.} notEligible{हा कोड या खात्यावर वापरता येत नाही.} rateLimited{खूप प्रयत्न झाले. नंतर पुन्हा प्रयत्न करा.} other{काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.}}"
+    "prepaidCodeResult": "{reason, select, invalid{हा कोड वैध नाही. तपासा आणि पुन्हा प्रयत्न करा.} used{हा कोड आधीच वापरला गेला आहे.} expired{या कोडची मुदत संपली आहे.} hasPlan{तुमच्याकडे आधीच प्लॅन आहे. तुमचा कोड वापरला गेला नाही. प्लॅन संपल्यावर तो रिडीम करा.} notPrepaid{हा कोड येथे रिडीम करता येत नाही. प्लॅन निवडताना तो वापरा.} notEligible{हा कोड या खात्यावर वापरता येत नाही.} rateLimited{खूप प्रयत्न झाले. नंतर पुन्हा प्रयत्न करा.} other{काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.}}"
 }

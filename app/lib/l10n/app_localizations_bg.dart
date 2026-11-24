@@ -7081,6 +7081,26 @@ class AppLocalizationsBg extends AppLocalizations {
   String get authUnexpectedError => 'Неочаквана грешка при влизане, моля опитайте отново';
 
   @override
+  String get accountSignInMethods => 'Начини за вход';
+
+  @override
+  String get accountAddSignInMethod => 'Добавяне на начин за вход';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Добавете начин за вход в този акаунт в Omi. Планът, записите и интеграциите ви остават в този акаунт.';
+
+  @override
+  String get accountSignInConflictTitle => 'Този начин за вход е свързан с друг акаунт';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Все още сте влезли в този акаунт. Всеки акаунт в Omi запазва своя план, записи и интеграции.';
+
+  @override
+  String get accountSignInMethodAdded => 'Начинът за вход е добавен';
+
+  @override
   String get authFailedToLinkGoogle => 'Неуспешно свързване с Google, моля опитайте отново.';
 
   @override
@@ -15846,7 +15866,7 @@ class AppLocalizationsBg extends AppLocalizations {
         'invalid': 'Този код не е валиден. Проверете го и опитайте отново.',
         'used': 'Този код вече е използван.',
         'expired': 'Този код е изтекъл.',
-        'hasPlan': 'Вече имате план. Кодът ви не е използван.',
+        'hasPlan': 'Вече имате план. Кодът ви не е използван. Активирайте го, след като планът ви приключи.',
         'notPrepaid': 'Този код не може да се активира тук. Използвайте го, когато изберете план.',
         'notEligible': 'Този код не може да се използва в този акаунт.',
         'rateLimited': 'Твърде много опити. Опитайте по-късно.',

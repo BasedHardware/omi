@@ -2228,6 +2228,12 @@
     "authFailedToRetrieveToken": "فشل استرداد رمز Firebase، يرجى المحاولة مرة أخرى.",
     "authUnexpectedErrorFirebase": "خطأ غير متوقع أثناء تسجيل الدخول، خطأ في Firebase، يرجى المحاولة مرة أخرى.",
     "authUnexpectedError": "خطأ غير متوقع أثناء تسجيل الدخول، يرجى المحاولة مرة أخرى",
+    "accountSignInMethods": "طرق تسجيل الدخول",
+    "accountAddSignInMethod": "إضافة طريقة لتسجيل الدخول",
+    "accountAddSignInMethodDetails": "أضف طريقة لتسجيل الدخول إلى حساب Omi هذا. تبقى خطتك وتسجيلاتك وعمليات التكامل مرتبطة بهذا الحساب.",
+    "accountSignInConflictTitle": "طريقة تسجيل الدخول هذه مرتبطة بحساب آخر",
+    "accountSignInConflictDetails": "لا تزال مسجّل الدخول إلى هذا الحساب. يحتفظ كل حساب Omi بخطته وتسجيلاته وعمليات التكامل الخاصة به.",
+    "accountSignInMethodAdded": "تمت إضافة طريقة تسجيل الدخول",
     "authFailedToLinkGoogle": "فشل الربط بحساب Google، يرجى المحاولة مرة أخرى.",
     "authFailedToLinkApple": "فشل الربط بحساب Apple، يرجى المحاولة مرة أخرى.",
     "onboardingBluetoothRequired": "يتطلب إذن البلوتوث للاتصال بجهازك.",
@@ -4757,5 +4763,5 @@
     "prepaidCodeFieldHint": "أدخل رمزك",
     "prepaidCodeRedeem": "استرداد",
     "prepaidCodeRedeemed": "تم استرداد الرمز",
-    "prepaidCodeResult": "{reason, select, invalid{هذا الرمز غير صالح. تحقق منه وحاول مرة أخرى.} used{تم استخدام هذا الرمز بالفعل.} expired{انتهت صلاحية هذا الرمز.} hasPlan{لديك خطة بالفعل. لم يتم استخدام رمزك.} notPrepaid{لا يمكن استرداد هذا الرمز هنا. استخدمه عند اختيار خطة.} notEligible{لا يمكن استخدام هذا الرمز على هذا الحساب.} rateLimited{محاولات كثيرة جدًا. حاول لاحقًا.} other{حدث خطأ ما. يرجى المحاولة مرة أخرى.}}"
+    "prepaidCodeResult": "{reason, select, invalid{هذا الرمز غير صالح. تحقق منه وحاول مرة أخرى.} used{تم استخدام هذا الرمز بالفعل.} expired{انتهت صلاحية هذا الرمز.} hasPlan{لديك خطة بالفعل. لم يتم استخدام رمزك. استرده بعد انتهاء خطتك.} notPrepaid{لا يمكن استرداد هذا الرمز هنا. استخدمه عند اختيار خطة.} notEligible{لا يمكن استخدام هذا الرمز على هذا الحساب.} rateLimited{محاولات كثيرة جدًا. حاول لاحقًا.} other{حدث خطأ ما. يرجى المحاولة مرة أخرى.}}"
 }

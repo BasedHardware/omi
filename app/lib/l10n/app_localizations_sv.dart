@@ -7060,6 +7060,26 @@ class AppLocalizationsSv extends AppLocalizations {
   String get authUnexpectedError => 'Oväntat fel vid inloggning, försök igen';
 
   @override
+  String get accountSignInMethods => 'Inloggningsmetoder';
+
+  @override
+  String get accountAddSignInMethod => 'Lägg till en inloggningsmetod';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Lägg till ett sätt att logga in på det här Omi-kontot. Ditt abonnemang, dina inspelningar och dina integrationer finns kvar på det här kontot.';
+
+  @override
+  String get accountSignInConflictTitle => 'Den här inloggningen tillhör ett annat konto';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Du är fortfarande inloggad på det här kontot. Varje Omi-konto behåller sitt abonnemang, sina inspelningar och sina integrationer.';
+
+  @override
+  String get accountSignInMethodAdded => 'Inloggningsmetoden har lagts till';
+
+  @override
   String get authFailedToLinkGoogle => 'Kunde inte koppla till Google, försök igen.';
 
   @override
@@ -15803,7 +15823,7 @@ class AppLocalizationsSv extends AppLocalizations {
         'invalid': 'Den här koden är inte giltig. Kontrollera den och försök igen.',
         'used': 'Den här koden har redan använts.',
         'expired': 'Den här koden har gått ut.',
-        'hasPlan': 'Du har redan en plan. Din kod användes inte.',
+        'hasPlan': 'Du har redan en plan. Din kod användes inte. Lös in den när din plan tar slut.',
         'notPrepaid': 'Den här koden kan inte lösas in här. Använd den när du väljer en plan.',
         'notEligible': 'Den här koden kan inte användas på det här kontot.',
         'rateLimited': 'För många försök. Försök igen senare.',

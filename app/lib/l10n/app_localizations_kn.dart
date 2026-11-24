@@ -7084,6 +7084,26 @@ class AppLocalizationsKn extends AppLocalizations {
   String get authUnexpectedError => 'ಸೈನ್ ಇನ್ ವಿಫಲ, ದಯವಿಟ್ಟು ಪುನಃ ಪ್ರಯತ್ನಿಸಿ';
 
   @override
+  String get accountSignInMethods => 'ಸೈನ್ ಇನ್ ವಿಧಾನಗಳು';
+
+  @override
+  String get accountAddSignInMethod => 'ಸೈನ್ ಇನ್ ವಿಧಾನವನ್ನು ಸೇರಿಸಿ';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'ಈ Omi ಖಾತೆಗೆ ಸೈನ್ ಇನ್ ಮಾಡುವ ಒಂದು ವಿಧಾನವನ್ನು ಸೇರಿಸಿ. ನಿಮ್ಮ ಪ್ಲಾನ್, ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಇಂಟಿಗ್ರೇಷನ್‌ಗಳು ಈ ಖಾತೆಯಲ್ಲೇ ಉಳಿಯುತ್ತವೆ.';
+
+  @override
+  String get accountSignInConflictTitle => 'ಈ ಸೈನ್ ಇನ್ ವಿಧಾನವು ಬೇರೆ ಖಾತೆಗೆ ಲಿಂಕ್ ಆಗಿದೆ';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'ನೀವು ಇನ್ನೂ ಈ ಖಾತೆಗೆ ಸೈನ್ ಇನ್ ಆಗಿದ್ದೀರಿ. ಪ್ರತಿ Omi ಖಾತೆಯ ಪ್ಲಾನ್, ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಇಂಟಿಗ್ರೇಷನ್‌ಗಳು ಆಯಾ ಖಾತೆಯಲ್ಲೇ ಉಳಿಯುತ್ತವೆ.';
+
+  @override
+  String get accountSignInMethodAdded => 'ಸೈನ್ ಇನ್ ವಿಧಾನವನ್ನು ಸೇರಿಸಲಾಗಿದೆ';
+
+  @override
   String get authFailedToLinkGoogle => 'Google ಸಹಿತ ಲಿಂಕ್ ವಿಫಲವಾಗಿದೆ, ದಯವಿಟ್ಟು ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.';
 
   @override
@@ -15847,7 +15867,7 @@ class AppLocalizationsKn extends AppLocalizations {
         'invalid': 'ಈ ಕೋಡ್ ಮಾನ್ಯವಾಗಿಲ್ಲ. ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
         'used': 'ಈ ಕೋಡ್ ಈಗಾಗಲೇ ಬಳಸಲಾಗಿದೆ.',
         'expired': 'ಈ ಕೋಡ್‌ನ ಅವಧಿ ಮುಗಿದಿದೆ.',
-        'hasPlan': 'ನಿಮ್ಮ ಬಳಿ ಈಗಾಗಲೇ ಪ್ಲಾನ್ ಇದೆ. ನಿಮ್ಮ ಕೋಡ್ ಬಳಸಲಾಗಿಲ್ಲ.',
+        'hasPlan': 'ನಿಮ್ಮ ಬಳಿ ಈಗಾಗಲೇ ಪ್ಲಾನ್ ಇದೆ. ನಿಮ್ಮ ಕೋಡ್ ಬಳಸಲಾಗಿಲ್ಲ. ಪ್ಲಾನ್ ಮುಗಿದ ನಂತರ ಅದನ್ನು ರಿಡೀಮ್ ಮಾಡಿ.',
         'notPrepaid': 'ಈ ಕೋಡ್ ಅನ್ನು ಇಲ್ಲಿ ರಿಡೀಮ್ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ. ಪ್ಲಾನ್ ಆಯ್ಕೆ ಮಾಡುವಾಗ ಬಳಸಿ.',
         'notEligible': 'ಈ ಕೋಡ್ ಅನ್ನು ಈ ಖಾತೆಯಲ್ಲಿ ಬಳಸಲು ಸಾಧ್ಯವಿಲ್ಲ.',
         'rateLimited': 'ತುಂಬಾ ಪ್ರಯತ್ನಗಳು. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',

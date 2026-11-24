@@ -13299,6 +13299,42 @@ abstract class AppLocalizations {
   /// **'Unexpected error signing in, please try again'**
   String get authUnexpectedError;
 
+  /// Heading for the sign-in methods in Account settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign-in methods'**
+  String get accountSignInMethods;
+
+  /// Confirmation title shown before opening a provider sign-in.
+  ///
+  /// In en, this message translates to:
+  /// **'Add sign-in method'**
+  String get accountAddSignInMethod;
+
+  /// Explains what adding a sign-in method to the current account will do.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a way to sign in to this Omi account. Your plan, recordings and integrations stay with this account.'**
+  String get accountAddSignInMethodDetails;
+
+  /// Title shown when a sign-in method is already bound to a different account.
+  ///
+  /// In en, this message translates to:
+  /// **'This sign-in belongs to another account'**
+  String get accountSignInConflictTitle;
+
+  /// Explains a rejected provider link and how to open the separate account.
+  ///
+  /// In en, this message translates to:
+  /// **'You’re still signed in here. Each Omi account keeps its plan, recordings and integrations.'**
+  String get accountSignInConflictDetails;
+
+  /// Confirmation after adding a new sign-in method to the current account.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign-in method added'**
+  String get accountSignInMethodAdded;
+
   /// Error message when linking Google account fails
   ///
   /// In en, this message translates to:
@@ -27732,7 +27768,7 @@ abstract class AppLocalizations {
   /// Why a prepaid code was not redeemed. The code is never used when this shows.
   ///
   /// In en, this message translates to:
-  /// **'{reason, select, invalid{This code isn\'t valid. Check it and try again.} used{This code has already been used.} expired{This code has expired.} hasPlan{You already have a plan. Your code was not used.} notPrepaid{This code can\'t be redeemed here. Use it when you choose a plan.} notEligible{This code can\'t be used on this account.} rateLimited{Too many tries. Try again later.} other{Something went wrong. Please try again.}}'**
+  /// **'{reason, select, invalid{This code isn\'t valid. Check it and try again.} used{This code has already been used.} expired{This code has expired.} hasPlan{You already have a plan. Your code was not used. Redeem it after your plan ends.} notPrepaid{This code can\'t be redeemed here. Use it when you choose a plan.} notEligible{This code can\'t be used on this account.} rateLimited{Too many tries. Try again later.} other{Something went wrong. Please try again.}}'**
   String prepaidCodeResult(String reason);
 }
 

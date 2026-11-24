@@ -7067,6 +7067,26 @@ class AppLocalizationsBn extends AppLocalizations {
   String get authUnexpectedError => 'সাইন ইন করতে অপ্রত্যাশিত ত্রুটি, দয়া করে আবার চেষ্টা করুন';
 
   @override
+  String get accountSignInMethods => 'সাইন-ইন পদ্ধতি';
+
+  @override
+  String get accountAddSignInMethod => 'সাইন-ইন পদ্ধতি যোগ করুন';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'এই Omi অ্যাকাউন্টে সাইন ইন করার একটি পদ্ধতি যোগ করুন। আপনার প্ল্যান, রেকর্ডিং এবং ইন্টিগ্রেশন এই অ্যাকাউন্টেই থাকবে।';
+
+  @override
+  String get accountSignInConflictTitle => 'এই সাইন-ইন পদ্ধতিটি অন্য একটি অ্যাকাউন্টের সঙ্গে যুক্ত';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'আপনি এখনও এই অ্যাকাউন্টে সাইন ইন আছেন। প্রতিটি Omi অ্যাকাউন্টের প্ল্যান, রেকর্ডিং ও ইন্টিগ্রেশন সেই অ্যাকাউন্টেই থাকে।';
+
+  @override
+  String get accountSignInMethodAdded => 'সাইন-ইন পদ্ধতি যোগ করা হয়েছে';
+
+  @override
   String get authFailedToLinkGoogle => 'Google এর সাথে লিঙ্ক করতে ব্যর্থ, দয়া করে আবার চেষ্টা করুন।';
 
   @override
@@ -15789,7 +15809,7 @@ class AppLocalizationsBn extends AppLocalizations {
         'invalid': 'এই কোডটি বৈধ নয়। যাচাই করে আবার চেষ্টা করুন।',
         'used': 'এই কোডটি আগেই ব্যবহার করা হয়েছে।',
         'expired': 'এই কোডের মেয়াদ শেষ হয়ে গেছে।',
-        'hasPlan': 'আপনার ইতিমধ্যে একটি প্ল্যান আছে। আপনার কোড ব্যবহার করা হয়নি।',
+        'hasPlan': 'আপনার ইতিমধ্যে একটি প্ল্যান আছে। আপনার কোড ব্যবহার করা হয়নি। প্ল্যান শেষ হলে এটি রিডিম করুন।',
         'notPrepaid': 'এই কোডটি এখানে রিডিম করা যাবে না। প্ল্যান বেছে নেওয়ার সময় এটি ব্যবহার করুন।',
         'notEligible': 'এই কোডটি এই অ্যাকাউন্টে ব্যবহার করা যাবে না।',
         'rateLimited': 'অনেকবার চেষ্টা করা হয়েছে। পরে আবার চেষ্টা করুন।',

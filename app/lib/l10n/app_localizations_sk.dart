@@ -7055,6 +7055,26 @@ class AppLocalizationsSk extends AppLocalizations {
   String get authUnexpectedError => 'Neočakávaná chyba';
 
   @override
+  String get accountSignInMethods => 'Spôsoby prihlásenia';
+
+  @override
+  String get accountAddSignInMethod => 'Pridať spôsob prihlásenia';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Pridajte spôsob prihlásenia do tohto účtu Omi. Váš plán, nahrávky a integrácie zostanú v tomto účte.';
+
+  @override
+  String get accountSignInConflictTitle => 'Tento spôsob prihlásenia patrí k inému účtu';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Stále ste v tomto účte. Každý účet Omi si ponechá svoj plán, nahrávky a integrácie.';
+
+  @override
+  String get accountSignInMethodAdded => 'Spôsob prihlásenia bol pridaný';
+
+  @override
   String get authFailedToLinkGoogle => 'Nepodarilo sa prepojiť Google účet';
 
   @override
@@ -15790,7 +15810,7 @@ class AppLocalizationsSk extends AppLocalizations {
         'invalid': 'Tento kód nie je platný. Skontrolujte ho a skúste to znova.',
         'used': 'Tento kód už bol použitý.',
         'expired': 'Platnosť tohto kódu vypršala.',
-        'hasPlan': 'Už máte plán. Váš kód nebol použitý.',
+        'hasPlan': 'Už máte plán. Váš kód nebol použitý. Uplatnite ho, keď váš plán skončí.',
         'notPrepaid': 'Tento kód tu nemožno uplatniť. Použite ho pri výbere plánu.',
         'notEligible': 'Tento kód nemožno použiť v tomto účte.',
         'rateLimited': 'Príliš veľa pokusov. Skúste to neskôr.',

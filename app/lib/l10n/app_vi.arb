@@ -2223,6 +2223,12 @@
     "authFailedToRetrieveToken": "Không thể lấy mã thông báo",
     "authUnexpectedErrorFirebase": "Đã xảy ra lỗi không mong muốn. Vui lòng thử lại.",
     "authUnexpectedError": "Lỗi không mong muốn",
+    "accountSignInMethods": "Phương thức đăng nhập",
+    "accountAddSignInMethod": "Thêm phương thức đăng nhập",
+    "accountAddSignInMethodDetails": "Thêm cách đăng nhập vào tài khoản Omi này. Gói dịch vụ, bản ghi và các tích hợp của bạn vẫn thuộc tài khoản này.",
+    "accountSignInConflictTitle": "Phương thức đăng nhập này thuộc tài khoản khác",
+    "accountSignInConflictDetails": "Bạn vẫn đang đăng nhập vào tài khoản hiện tại. Mỗi tài khoản Omi giữ gói dịch vụ, bản ghi và các tích hợp riêng.",
+    "accountSignInMethodAdded": "Đã thêm phương thức đăng nhập",
     "authFailedToLinkGoogle": "Không thể liên kết tài khoản Google",
     "authFailedToLinkApple": "Không thể liên kết tài khoản Apple",
     "onboardingBluetoothRequired": "Cần có Bluetooth để kết nối thiết bị Omi của bạn",
@@ -4757,5 +4763,5 @@
     "prepaidCodeFieldHint": "Nhập mã của bạn",
     "prepaidCodeRedeem": "Đổi",
     "prepaidCodeRedeemed": "Đã đổi mã",
-    "prepaidCodeResult": "{reason, select, invalid{Mã này không hợp lệ. Hãy kiểm tra và thử lại.} used{Mã này đã được sử dụng.} expired{Mã này đã hết hạn.} hasPlan{Bạn đã có gói. Mã của bạn chưa được sử dụng.} notPrepaid{Không thể đổi mã này tại đây. Hãy dùng khi bạn chọn gói.} notEligible{Không thể dùng mã này cho tài khoản này.} rateLimited{Quá nhiều lần thử. Hãy thử lại sau.} other{Đã xảy ra lỗi. Vui lòng thử lại.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Mã này không hợp lệ. Hãy kiểm tra và thử lại.} used{Mã này đã được sử dụng.} expired{Mã này đã hết hạn.} hasPlan{Bạn đã có gói. Mã của bạn chưa được sử dụng. Hãy đổi mã sau khi gói của bạn kết thúc.} notPrepaid{Không thể đổi mã này tại đây. Hãy dùng khi bạn chọn gói.} notEligible{Không thể dùng mã này cho tài khoản này.} rateLimited{Quá nhiều lần thử. Hãy thử lại sau.} other{Đã xảy ra lỗi. Vui lòng thử lại.}}"
 }

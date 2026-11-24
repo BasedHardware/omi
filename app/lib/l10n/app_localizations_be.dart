@@ -7076,6 +7076,26 @@ class AppLocalizationsBe extends AppLocalizations {
   String get authUnexpectedError => 'Неўдаўдаўёнауўхіба пры ўваходзе, спрабуйце яшчэ раз';
 
   @override
+  String get accountSignInMethods => 'Спосабы ўваходу';
+
+  @override
+  String get accountAddSignInMethod => 'Дадаць спосаб уваходу';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Дадайце спосаб уваходу ў гэты ўліковы запіс Omi. Ваш тарыфны план, запісы і інтэграцыі застануцца ў гэтым уліковым запісе.';
+
+  @override
+  String get accountSignInConflictTitle => 'Гэты спосаб уваходу звязаны з іншым уліковым запісам';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Вы па-ранейшаму ўвайшлі ў гэты ўліковы запіс. Кожны ўліковы запіс Omi захоўвае свой тарыфны план, запісы і інтэграцыі.';
+
+  @override
+  String get accountSignInMethodAdded => 'Спосаб уваходу дададзены';
+
+  @override
   String get authFailedToLinkGoogle => 'Не вдалося звязаць з Google, спрабуйце яшчэ раз.';
 
   @override
@@ -15830,7 +15850,7 @@ class AppLocalizationsBe extends AppLocalizations {
         'invalid': 'Гэты код несапраўдны. Праверце яго і паспрабуйце зноў.',
         'used': 'Гэты код ужо выкарыстаны.',
         'expired': 'Тэрмін дзеяння гэтага кода скончыўся.',
-        'hasPlan': 'У вас ужо ёсць план. Ваш код не выкарыстаны.',
+        'hasPlan': 'У вас ужо ёсць план. Ваш код не выкарыстаны. Актывуйце яго пасля заканчэння плана.',
         'notPrepaid': 'Гэты код нельга актываваць тут. Выкарыстайце яго пры выбары плана.',
         'notEligible': 'Гэты код нельга выкарыстаць на гэтым акаўнце.',
         'rateLimited': 'Занадта шмат спроб. Паспрабуйце пазней.',

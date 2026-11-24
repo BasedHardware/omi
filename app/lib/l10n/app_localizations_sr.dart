@@ -7061,6 +7061,26 @@ class AppLocalizationsSr extends AppLocalizations {
   String get authUnexpectedError => 'Неочекивана грешка при пријави, молим покушајте поново';
 
   @override
+  String get accountSignInMethods => 'Начини пријављивања';
+
+  @override
+  String get accountAddSignInMethod => 'Додај начин пријављивања';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Додајте начин пријављивања на овај Omi налог. Ваш пакет, снимци и интеграције остају на овом налогу.';
+
+  @override
+  String get accountSignInConflictTitle => 'Овај начин пријављивања припада другом налогу';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'И даље сте на овом налогу. Сваки Omi налог задржава свој пакет, снимке и интеграције.';
+
+  @override
+  String get accountSignInMethodAdded => 'Начин пријављивања је додат';
+
+  @override
   String get authFailedToLinkGoogle => 'Неуспешна повезивање са Google, молим покушајте поново.';
 
   @override
@@ -15802,7 +15822,7 @@ class AppLocalizationsSr extends AppLocalizations {
         'invalid': 'Овај код није важећи. Проверите га и покушајте поново.',
         'used': 'Овај код је већ искоришћен.',
         'expired': 'Овај код је истекао.',
-        'hasPlan': 'Већ имате план. Ваш код није искоришћен.',
+        'hasPlan': 'Већ имате план. Ваш код није искоришћен. Искористите га када вам план истекне.',
         'notPrepaid': 'Овај код не може да се искористи овде. Искористите га када изаберете план.',
         'notEligible': 'Овај код не може да се користи на овом налогу.',
         'rateLimited': 'Превише покушаја. Покушајте касније.',

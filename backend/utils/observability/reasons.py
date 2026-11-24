@@ -845,6 +845,15 @@ class RecoveryFailureReason(StrEnum):
     ABANDONED_RUNNING = 'abandoned_running'
 
 
+class ConvStructureFlexFallbackReason(StrEnum):
+    """Why a conversation structure request fell back from Flex to Standard."""
+
+    UNKNOWN = 'unknown'
+    TIMEOUT = 'timeout'
+    HTTP_429 = 'http_429'
+    OTHER = 'other'
+
+
 class FallbackReason(StrEnum):
     """Every reason `record_fallback` may emit (superset of LiveSttReason)."""
 

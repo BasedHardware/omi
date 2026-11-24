@@ -7106,6 +7106,26 @@ class AppLocalizationsEl extends AppLocalizations {
   String get authUnexpectedError => 'Απρόσμενο σφάλμα κατά τη σύνδεση, παρακαλώ δοκιμάστε ξανά';
 
   @override
+  String get accountSignInMethods => 'Τρόποι σύνδεσης';
+
+  @override
+  String get accountAddSignInMethod => 'Προσθήκη τρόπου σύνδεσης';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Προσθέστε έναν τρόπο σύνδεσης σε αυτόν τον λογαριασμό Omi. Το πρόγραμμά σας, οι εγγραφές και οι συνδέσεις με άλλες υπηρεσίες παραμένουν σε αυτόν τον λογαριασμό.';
+
+  @override
+  String get accountSignInConflictTitle => 'Αυτός ο τρόπος σύνδεσης είναι συνδεδεμένος με άλλον λογαριασμό';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Παραμένετε συνδεδεμένοι σε αυτόν τον λογαριασμό. Κάθε λογαριασμός Omi διατηρεί το δικό του πρόγραμμα, τις εγγραφές και τις συνδέσεις του με άλλες υπηρεσίες.';
+
+  @override
+  String get accountSignInMethodAdded => 'Ο τρόπος σύνδεσης προστέθηκε';
+
+  @override
   String get authFailedToLinkGoogle => 'Αποτυχία σύνδεσης με Google, παρακαλώ δοκιμάστε ξανά.';
 
   @override
@@ -15898,7 +15918,8 @@ class AppLocalizationsEl extends AppLocalizations {
         'invalid': 'Αυτός ο κωδικός δεν είναι έγκυρος. Ελέγξτε τον και δοκιμάστε ξανά.',
         'used': 'Αυτός ο κωδικός έχει ήδη χρησιμοποιηθεί.',
         'expired': 'Αυτός ο κωδικός έχει λήξει.',
-        'hasPlan': 'Έχετε ήδη πρόγραμμα. Ο κωδικός σας δεν χρησιμοποιήθηκε.',
+        'hasPlan':
+            'Έχετε ήδη πρόγραμμα. Ο κωδικός σας δεν χρησιμοποιήθηκε. Εξαργυρώστε τον όταν λήξει το πρόγραμμά σας.',
         'notPrepaid': 'Αυτός ο κωδικός δεν εξαργυρώνεται εδώ. Χρησιμοποιήστε τον όταν επιλέξετε πρόγραμμα.',
         'notEligible': 'Αυτός ο κωδικός δεν μπορεί να χρησιμοποιηθεί σε αυτόν τον λογαριασμό.',
         'rateLimited': 'Πάρα πολλές προσπάθειες. Δοκιμάστε αργότερα.',

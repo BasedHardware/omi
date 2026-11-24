@@ -220,6 +220,30 @@ class WorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("workerd publish must not touch a serving surface: kubectl", CHECKER.validate(root))
 
+    def test_workerd_publish_keys_images_by_backend_go_tree(self) -> None:
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            '--label "omi.workerd.backend-go-tree=$tree"',
+            '--label "omi.workerd.unused=$tree"',
+        )
+        self.assertIn(
+            'workerd publish must retain --label "omi.workerd.backend-go-tree=$tree"',
+            CHECKER.validate(root),
+        )
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            'tree_image="$repository:tree-$recipe-${tree:0:20}"',
+            'tree_image="$image"',
+        )
+        self.assertIn(
+            'workerd publish must retain tree_image="$repository:tree-$recipe-${tree:0:20}"',
+            CHECKER.validate(root),
+        )
+
     def test_current_workflows_are_valid(self) -> None:
         self.assertEqual(CHECKER.validate(), [])
 

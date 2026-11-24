@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "Načini prijave",
+    "accountAddSignInMethod": "Dodaj način prijave",
+    "accountAddSignInMethodDetails": "Dodajte način prijave v ta račun Omi. Vaš paket, posnetki in integracije ostanejo v tem računu.",
+    "accountSignInConflictTitle": "Ta način prijave pripada drugemu računu",
+    "accountSignInConflictDetails": "Še vedno ste v tem računu. Vsak račun Omi obdrži svoj paket, posnetke in integracije.",
+    "accountSignInMethodAdded": "Način prijave je dodan",
     "authFailedToLinkGoogle": "Povezovanje s Google ni uspelo, prosimo, poskusite ponovno.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -12314,5 +12320,5 @@
     "prepaidCodeFieldHint": "Vnesite svojo kodo",
     "prepaidCodeRedeem": "Unovči",
     "prepaidCodeRedeemed": "Koda unovčena",
-    "prepaidCodeResult": "{reason, select, invalid{Ta koda ni veljavna. Preverite jo in poskusite znova.} used{Ta koda je že bila uporabljena.} expired{Tej kodi je potekla veljavnost.} hasPlan{Že imate paket. Vaša koda ni bila uporabljena.} notPrepaid{Te kode ni mogoče unovčiti tukaj. Uporabite jo, ko izberete paket.} notEligible{Te kode ni mogoče uporabiti v tem računu.} rateLimited{Preveč poskusov. Poskusite pozneje.} other{Prišlo je do napake. Poskusite znova.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Ta koda ni veljavna. Preverite jo in poskusite znova.} used{Ta koda je že bila uporabljena.} expired{Tej kodi je potekla veljavnost.} hasPlan{Že imate paket. Vaša koda ni bila uporabljena. Unovčite jo, ko se vaš paket konča.} notPrepaid{Te kode ni mogoče unovčiti tukaj. Uporabite jo, ko izberete paket.} notEligible{Te kode ni mogoče uporabiti v tem računu.} rateLimited{Preveč poskusov. Poskusite pozneje.} other{Prišlo je do napake. Poskusite znova.}}"
 }

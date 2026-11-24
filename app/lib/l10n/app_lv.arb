@@ -2223,6 +2223,12 @@
     "authFailedToRetrieveToken": "Neizdevās iegūt Firebase marķieri, lūdzu, mēģiniet vēlreiz.",
     "authUnexpectedErrorFirebase": "Neparedzēta kļūda pierakstīšanās laikā, Firebase kļūda, lūdzu, mēģiniet vēlreiz.",
     "authUnexpectedError": "Neparedzēta kļūda pierakstīšanās laikā, lūdzu, mēģiniet vēlreiz",
+    "accountSignInMethods": "Pierakstīšanās veidi",
+    "accountAddSignInMethod": "Pievienot pierakstīšanās veidu",
+    "accountAddSignInMethodDetails": "Pievienojiet jaunu pierakstīšanās veidu šim Omi kontam. Jūsu plāns, ieraksti un integrācijas paliks šajā kontā.",
+    "accountSignInConflictTitle": "Šis pierakstīšanās veids ir saistīts ar citu kontu",
+    "accountSignInConflictDetails": "Jūs joprojām esat pierakstījies šajā kontā. Katrs Omi konts saglabā savu plānu, ierakstus un integrācijas.",
+    "accountSignInMethodAdded": "Pierakstīšanās veids pievienots",
     "authFailedToLinkGoogle": "Neizdevās savienot ar Google, lūdzu, mēģiniet vēlreiz.",
     "authFailedToLinkApple": "Neizdevās savienot ar Apple, lūdzu, mēģiniet vēlreiz.",
     "onboardingBluetoothRequired": "Bluetooth atļauja ir nepieciešama, lai izveidotu savienojumu ar ierīci.",
@@ -4757,5 +4763,5 @@
     "prepaidCodeFieldHint": "Ievadiet savu kodu",
     "prepaidCodeRedeem": "Izmantot",
     "prepaidCodeRedeemed": "Kods izmantots",
-    "prepaidCodeResult": "{reason, select, invalid{Šis kods nav derīgs. Pārbaudiet to un mēģiniet vēlreiz.} used{Šis kods jau ir izmantots.} expired{Šī koda derīgums ir beidzies.} hasPlan{Jums jau ir plāns. Jūsu kods netika izmantots.} notPrepaid{Šo kodu šeit nevar izmantot. Izmantojiet to, izvēloties plānu.} notEligible{Šo kodu nevar izmantot šajā kontā.} rateLimited{Pārāk daudz mēģinājumu. Mēģiniet vēlāk.} other{Kaut kas nogāja greizi. Lūdzu, mēģiniet vēlreiz.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Šis kods nav derīgs. Pārbaudiet to un mēģiniet vēlreiz.} used{Šis kods jau ir izmantots.} expired{Šī koda derīgums ir beidzies.} hasPlan{Jums jau ir plāns. Jūsu kods netika izmantots. Izmantojiet to, kad jūsu plāns beigsies.} notPrepaid{Šo kodu šeit nevar izmantot. Izmantojiet to, izvēloties plānu.} notEligible{Šo kodu nevar izmantot šajā kontā.} rateLimited{Pārāk daudz mēģinājumu. Mēģiniet vēlāk.} other{Kaut kas nogāja greizi. Lūdzu, mēģiniet vēlreiz.}}"
 }

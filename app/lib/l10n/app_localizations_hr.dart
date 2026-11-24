@@ -7082,6 +7082,26 @@ class AppLocalizationsHr extends AppLocalizations {
   String get authUnexpectedError => 'Neočekivana greška pri prijavi, molim vas pokušajte ponovno';
 
   @override
+  String get accountSignInMethods => 'Načini prijave';
+
+  @override
+  String get accountAddSignInMethod => 'Dodaj način prijave';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Dodajte način prijave na ovaj Omi račun. Vaš paket, snimke i integracije ostaju na ovom računu.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ovaj način prijave povezan je s drugim računom';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'I dalje ste prijavljeni na ovaj račun. Svaki Omi račun zadržava svoj paket, snimke i integracije.';
+
+  @override
+  String get accountSignInMethodAdded => 'Način prijave dodan je';
+
+  @override
   String get authFailedToLinkGoogle => 'Povezivanje s Google-om nije uspjelo, molim vas pokušajte ponovno.';
 
   @override
@@ -15831,7 +15851,7 @@ class AppLocalizationsHr extends AppLocalizations {
         'invalid': 'Ovaj kôd nije valjan. Provjerite ga i pokušajte ponovno.',
         'used': 'Ovaj kôd je već iskorišten.',
         'expired': 'Ovaj kôd je istekao.',
-        'hasPlan': 'Već imate plan. Vaš kôd nije iskorišten.',
+        'hasPlan': 'Već imate plan. Vaš kôd nije iskorišten. Iskoristite ga kada vam plan istekne.',
         'notPrepaid': 'Ovaj kôd ne može se iskoristiti ovdje. Iskoristite ga kada odaberete plan.',
         'notEligible': 'Ovaj kôd ne može se koristiti na ovom računu.',
         'rateLimited': 'Previše pokušaja. Pokušajte kasnije.',

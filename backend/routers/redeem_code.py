@@ -5,9 +5,10 @@ import logging
 from typing import Optional
 
 import stripe
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from config import play_billing as play_billing_config
 from config import prepaid_code_redeem as prepaid_code_config
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
@@ -15,6 +16,8 @@ from utils.prepaid_code_redemption import TRY_AGAIN, PrepaidCodeError, redeem_pr
 from utils.promotion_redemption import RedemptionError, redeem_promotion_code
 
 logger = logging.getLogger(__name__)
+
+PLAY_BILLED = 'play_billed'
 
 router = APIRouter()
 
@@ -56,10 +59,16 @@ class RedeemPrepaidCodeResponse(BaseModel):
 def redeem_prepaid_code_endpoint(
     body: RedeemCodeRequest,
     uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_app_build: Optional[str] = Header(None, alias='X-App-Build'),
 ):
     """Redeem a fully prepaid Omi Pro code with no card. Errors carry a reason code as ``detail``."""
     if not prepaid_code_config.enabled_for(uid):
         raise HTTPException(status_code=404, detail='Not Found')
+    # Play-billed Android builds sell Omi Pro through Google Play only; the app never offers this
+    # there, and a direct call is refused the same way (same helper the subscription response uses).
+    if play_billing_config.client_uses_play(x_app_platform, x_app_build, uid):
+        raise HTTPException(status_code=409, detail=PLAY_BILLED)
     auth.check_rate_limit_inline(uid, 'payments:prepaid_code')
     try:
         return redeem_prepaid_code(uid, body.code)

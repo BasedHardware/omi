@@ -7072,6 +7072,26 @@ class AppLocalizationsEs extends AppLocalizations {
   String get authUnexpectedError => 'Error inesperado al iniciar sesión, por favor inténtalo de nuevo';
 
   @override
+  String get accountSignInMethods => 'Métodos de inicio de sesión';
+
+  @override
+  String get accountAddSignInMethod => 'Añadir método de inicio de sesión';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Añade un método para iniciar sesión en esta cuenta de Omi. Tu plan, tus grabaciones y tus integraciones se conservan en esta cuenta.';
+
+  @override
+  String get accountSignInConflictTitle => 'Este método de inicio de sesión está vinculado a otra cuenta';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Sigues con la sesión iniciada en esta cuenta. Cada cuenta de Omi conserva su plan, sus grabaciones y sus integraciones.';
+
+  @override
+  String get accountSignInMethodAdded => 'Método de inicio de sesión añadido';
+
+  @override
   String get authFailedToLinkGoogle => 'Error al vincular con Google, por favor inténtalo de nuevo.';
 
   @override
@@ -15841,7 +15861,7 @@ class AppLocalizationsEs extends AppLocalizations {
         'invalid': 'Este código no es válido. Revísalo e inténtalo de nuevo.',
         'used': 'Este código ya se ha usado.',
         'expired': 'Este código ha caducado.',
-        'hasPlan': 'Ya tienes un plan. Tu código no se ha usado.',
+        'hasPlan': 'Ya tienes un plan. Tu código no se ha usado. Canjéalo cuando termine tu plan.',
         'notPrepaid': 'Este código no se puede canjear aquí. Úsalo cuando elijas un plan.',
         'notEligible': 'Este código no se puede usar en esta cuenta.',
         'rateLimited': 'Demasiados intentos. Inténtalo más tarde.',
