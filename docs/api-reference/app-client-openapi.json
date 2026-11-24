@@ -71254,7 +71254,7 @@
     },
     "/v1/payments/prepaid-code/redeem": {
       "post": {
-        "description": "Redeem a fully prepaid Omi Pro code with no card. Errors carry a reason code as ``detail``.",
+        "description": "Redeem a fully prepaid Omi Pro code with no card. Errors carry a reason code as ``detail``.\n\nOpen to the switch's readers and to every Google Play build (same helper the subscription response\nuses): a Play build has no other way to activate a code. No payment is taken either way, and the\nlive-plan refusals below cover Stripe and Google Play alike.",
         "operationId": "redeem_prepaid_code_endpoint_v1_payments_prepaid_code_redeem_post",
         "parameters": [
           {
