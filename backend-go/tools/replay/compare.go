@@ -267,7 +267,11 @@ func compare(cases []replayCase) (report, error) {
 		case c.Python.Effects == nil || c.Go.Effects == nil:
 			return report{}, fmt.Errorf("effects must be a JSON object in both observations")
 		default:
-			entry.Differences = compareObservationsForRun(c.Python, c.Go, pythonTokenCounts, goTokenCounts)
+			diffs, terminalChecks := compareObservationsForRun(c.Python, c.Go, pythonTokenCounts, goTokenCounts)
+			entry.Differences = diffs
+			if terminalChecks != nil {
+				entry.EpisodeAttachMemoChecks = terminalChecks
+			}
 			markUnreadableTerminalConsequences(&entry, c.Python, c.Go)
 			matched := true
 			for _, diff := range entry.Differences {

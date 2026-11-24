@@ -365,3 +365,81 @@ func TestProtectedFieldReasonDoesNotExposePlaintext(t *testing.T) {
 		t.Fatalf("protected comparison report leaked data or omitted rule evidence: %s", string(encoded))
 	}
 }
+
+func TestTerminalEpisodeMemoShape(t *testing.T) {
+	fields := []string{"attach_revision", "attach_completed", "attach_finalized", "attach_owner_id"}
+	for _, cid := range []string{"empty-capture", "transcript-empty-text", unreadableReplayCase} {
+		t.Run(cid, func(t *testing.T) {
+			python, goRun := ruleRun(), ruleRun()
+			path := "users/replay-" + cid + "/episode_links/" + cid
+			deadLetter := cid == unreadableReplayCase
+			for _, obs := range []*observation{python, goRun} {
+				obs.OwnerID, obs.ConversationID = "replay-"+cid, cid
+				obs.Document = map[string]any{"episode_id": "episode"}
+				link := map[string]any{"episode_id": "episode"}
+				obs.Derived[path] = link
+				if !deadLetter {
+					obs.Status = "discarded"
+					mustMap(obs.Document)["discarded"] = true
+					link["attach_owner_id"] = "episode"
+					for _, f := range fields[:3] {
+						link[f] = nil
+					}
+				}
+			}
+			if deadLetter {
+				python.Status, goRun.Status = "parked", "failure"
+				goRun.GoEvidence = map[string]any{"job": map[string]any{"state": "dead_letter", "cause": "conversation_unreadable"}}
+				mustMap(goRun.Document)["finalization_status"] = "dead_letter"
+			}
+
+			verify := func(t *testing.T, invalidSide string) {
+				t.Helper()
+				terminalReport, err := compare([]replayCase{{Name: cid, Python: python, Go: goRun}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				entry := terminalReport.Cases[0]
+				for _, side := range []string{"go", "python"} {
+					check := entry.EpisodeAttachMemoChecks[side]
+					invalid := side == invalidSide
+					if check.Valid == invalid || (check.FailureReason != "") != invalid ||
+						hasUnexplainedAt(entry.Differences, "/"+side+"/episode_attach_memo") != invalid {
+						t.Fatalf("%s memo check %+v, expected invalid side %q", side, check, invalidSide)
+					}
+				}
+				for _, d := range entry.Differences {
+					if strings.HasSuffix(d.Path, "/attach_memo_evidence") {
+						t.Fatalf("live memo proof was applied to terminal output: %+v", d)
+					}
+				}
+			}
+			verify(t, "")
+			for _, side := range []string{"python", "go"} {
+				obs := python
+				if side == "go" {
+					obs = goRun
+				}
+				link := mustMap(obs.Derived[path])
+				for _, field := range fields {
+					original, present := link[field]
+					t.Run(side+"/"+field, func(t *testing.T) {
+						link[field] = "stale"
+						verify(t, side)
+						if deadLetter {
+							link[field] = nil // a stored null is still a surviving field
+						} else {
+							delete(link, field) // discarded stamps must be present, including explicit nulls
+						}
+						verify(t, side)
+					})
+					if present {
+						link[field] = original
+					} else {
+						delete(link, field)
+					}
+				}
+			}
+		})
+	}
+}

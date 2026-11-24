@@ -8,20 +8,24 @@ import (
 )
 
 func compareObservations(python, goRun *observation) []difference {
-	return compareObservationsForRun(
+	diffs, _ := compareObservationsForRun(
 		python,
 		goRun,
 		generatedHomeTokenCounts([]replayCase{{Python: python}}, false),
 		generatedHomeTokenCounts([]replayCase{{Go: goRun}}, true),
 	)
+	return diffs
 }
 
-func compareObservationsForRun(python, goRun *observation, pythonTokens, goTokens map[string]int) []difference {
+func compareObservationsForRun(python, goRun *observation, pythonTokens, goTokens map[string]int) ([]difference, map[string]attachMemoCheck) {
 	diffs := []difference{}
 	compareValue(&diffs, "/status", python.Status, goRun.Status)
 	compareValue(&diffs, "/conversation", python.Document, goConversation(goRun, python))
 	compareDerivedDocuments(&diffs, python, goRun)
-	validateGoAttachMemoEvidence(&diffs, goRun)
+	terminalChecks := terminalMemoChecks(python, goRun)
+	if terminalChecks == nil {
+		validateGoAttachMemoEvidence(&diffs, goRun)
+	}
 	compareObject(&diffs, "/effects", python.Effects, goRun.Effects)
 	compareObject(&diffs, "/provider_calls", countProviderCalls(python.ProviderCalls), countProviderCalls(goRun.ProviderCalls))
 	compareObject(&diffs, "/webhooks", webhookGroups(python), webhookGroups(goRun))
@@ -29,10 +33,10 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	reviewRuledSyncWrites(&diffs, python, goRun)
 	for i := range diffs {
 		diff := &diffs[i]
-		if diff.Reason == "" {
+		if terminalChecks == nil && diff.Reason == "" {
 			diff.Reason = approvedEpisodeAttachMemoDifference(diff.Path, python, goRun)
 		}
-		if diff.Reason == "" && goRun.EpisodeAttachMemoExpected && !goRun.EpisodeAttachMemoValid &&
+		if terminalChecks == nil && diff.Reason == "" && goRun.EpisodeAttachMemoExpected && !goRun.EpisodeAttachMemoValid &&
 			episodeAttachMemoField(diff.Path, goRun) {
 			diff.FailureReason = "go_attach_memo_invalid"
 		}
@@ -80,9 +84,6 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 				}
 			}
 			if diff.Reason == "" {
-				diff.Reason = approvedEpisodeAttachMemoDifference(diff.Path, python, goRun)
-			}
-			if diff.Reason == "" {
 				diff.Reason = approvedGoOnlyDifference(diff.Path, python, goRun)
 			}
 		}
@@ -96,9 +97,17 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	validateHomeTokenEvidence(&diffs, "go", goRun, goTokens)
 	validateBinding(&diffs, "/python", python, false)
 	validateBinding(&diffs, "/go", goRun, true)
-	validateEpisodeAttachMemoEvidence(&diffs, python, goRun)
+	if terminalChecks == nil {
+		validateEpisodeAttachMemoEvidence(&diffs, python, goRun)
+	} else {
+		for _, side := range []string{"python", "go"} {
+			if check := terminalChecks[side]; !check.Valid {
+				diffs = append(diffs, difference{Path: "/" + side + "/episode_attach_memo", Kind: "invalid_binding", FailureReason: check.FailureReason})
+			}
+		}
+	}
 	validateReviewedGoOnlyFields(&diffs, python, goRun)
-	return diffs
+	return diffs, terminalChecks
 }
 
 func validateGoAttachMemoEvidence(diffs *[]difference, goRun *observation) {
