@@ -101,7 +101,8 @@ def reconcile_request():
 
 @pytest.mark.asyncio
 async def test_reconcile_route_answers_provider_5xx_as_retryable(monkeypatch, reconcile_request):
-    async def fail(_uid):
+    async def fail(_uid, *, background):
+        assert background is True
         assert request_log_trace_id() == 'a' * 32
         raise provider_502()
 

@@ -1276,3 +1276,76 @@ def config_with_routes(active_route, lkg_route):
 
 def byok_policy():
     return gateway_config().lanes[LANE_ID].credential_policy.model_copy(update={'mode': CredentialMode.BYOK})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'lane,budget,flex_ms',
+    [
+        ('conv-structure', 57_000, 17_000),
+        ('memory-l1', 57_000, 33_000),
+        ('conversation-v3-summary', 57_000, 27_000),
+        ('conversation-v3-outline', 110_000, 65_000),
+    ],
+)
+async def test_background_flex_retries_within_shared_budget(monkeypatch, lane, budget, flex_ms):
+    lane = f'omi:auto:{lane}'
+    request = {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
+    resolved = resolve_chat_completion_route(gateway_config(), request)
+    reply = fake_success_response(resolved.active_route.primary)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=3),
+            {**reply, 'service_tier': 'flex'},
+        ]
+    )
+    slept = _install_retry_clock(monkeypatch)
+    outcome = {'lane_id': lane, 'outcome': 'flex'}
+    previous = REGISTRY.get_sample_value('llm_gateway_flex_first_total', outcome) or 0
+
+    await execute_chat_completion(
+        resolved, omi_credentials(), ProviderRegistry({'openai': provider}), background_flex_budget_ms=budget
+    )
+
+    assert slept == [3]
+    assert [call.request['service_tier'] for call in provider.calls] == ['flex', 'flex']
+    assert [call.timeout_ms for call in provider.calls] == pytest.approx([flex_ms, flex_ms - 3_000], abs=1)
+    assert REGISTRY.get_sample_value('llm_gateway_flex_first_total', outcome) == previous + 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'failure, retry_after', [(FailureClass.TIMEOUT_BEFORE_OUTPUT, None), (FailureClass.PROVIDER_429_OMI_PAID, 90)]
+)
+async def test_background_flex_preserves_standard_after_timeout_or_long_retry_after(monkeypatch, failure, retry_after):
+    lane = 'omi:auto:conversation-v3-outline'
+    resolved = resolve_chat_completion_route(
+        gateway_config(), {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
+    )
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(failure, retry_after_seconds=retry_after),
+            fake_success_response(resolved.active_route.primary),
+        ]
+    )
+    slept = _install_retry_clock(monkeypatch)
+    await execute_chat_completion(
+        resolved, omi_credentials(), ProviderRegistry({'openai': provider}), background_flex_budget_ms=80_000
+    )
+    assert slept == []
+    assert [call.request.get('service_tier') for call in provider.calls] == ['flex', None]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('budget', [0, 45_000])
+async def test_scoped_memory_flex_needs_background_intent_and_standard_reserve(monkeypatch, budget):
+    lane = 'omi:auto:conv-structure'
+    resolved = resolve_chat_completion_route(
+        gateway_config(), {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
+    )
+    provider = FakeChatCompletionProvider([fake_success_response(resolved.active_route.primary)])
+    _install_retry_clock(monkeypatch)
+    await execute_chat_completion(
+        resolved, omi_credentials(), ProviderRegistry({'openai': provider}), background_flex_budget_ms=budget
+    )
+    assert [call.request.get('service_tier') for call in provider.calls] == [None]

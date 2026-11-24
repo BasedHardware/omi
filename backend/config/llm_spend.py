@@ -29,3 +29,20 @@ def topic_deterministic_short_enabled() -> bool:
         'CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED',
         os.getenv('CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED', 'true').strip().lower() not in _FALSE_WORDS,
     )
+
+
+def outline_cache_prefix_enabled() -> bool:
+    """Revert to the legacy wire prompt and cache policy with OMI_OUTLINE_CACHE_PREFIX=off."""
+    return os.getenv('OMI_OUTLINE_CACHE_PREFIX', 'true').strip().lower() not in _FALSE_WORDS
+
+
+def background_outline_flex_enabled() -> bool:
+    """Use streamed realtime outlines with LLM_GATEWAY_BACKGROUND_OUTLINE_FLEX=off."""
+    return background_flex_retry_enabled() and (
+        os.getenv('LLM_GATEWAY_BACKGROUND_OUTLINE_FLEX', 'true').strip().lower() not in _FALSE_WORDS
+    )
+
+
+def background_flex_retry_enabled() -> bool:
+    """Restore legacy Flex-first dispatch with LLM_GATEWAY_BACKGROUND_FLEX_RETRY=off."""
+    return os.getenv('LLM_GATEWAY_BACKGROUND_FLEX_RETRY', 'true').strip().lower() not in _FALSE_WORDS

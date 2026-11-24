@@ -877,3 +877,32 @@ async def test_queued_processing_skips_foreign_candidate_before_lease(monkeypatc
     pending.assert_called_once_with('synthetic')
     acquire.assert_not_called()
     created_delivery.assert_awaited_once_with('synthetic')
+
+
+def test_open_takes_preemptible_outline_lease_and_old_provider_cannot_publish(strict):
+    uid, key, fingerprint = 'synthetic', 'builder', 'synthetic-revision'
+    token = leases.acquire(uid, key, firestore_client=strict)
+    assert store.outline_attempt(uid, token, fingerprint, preemptible=True, firestore_client=strict)
+    assert leases.acquire(uid, key, firestore_client=strict) is None
+    foreground = leases.acquire(uid, key, promote_llm=True, firestore_client=strict)
+    assert foreground and foreground != token
+    with pytest.raises(store.Conflict, match='lease_lost'):
+        leases.mark_llm_preemptible(uid, key, token, False, firestore_client=strict)
+    with pytest.raises(store.Conflict, match='lease_lost'):
+        store.save_outline(uid, token, fingerprint, [], firestore_client=strict)
+    assert store.outline_attempt(uid, foreground, fingerprint, firestore_client=strict)
+    assert not store.outline_attempt(uid, foreground, fingerprint, firestore_client=strict)
+    assert leases.acquire(uid, key, promote_llm=True, firestore_client=strict) is None
+
+
+def test_open_can_promote_summary_only_until_background_result_returns(strict):
+    uid, key = 'synthetic', 'summary-conversation'
+    token = leases.acquire(uid, key, firestore_client=strict)
+    assert leases.acquire(uid, key, promote_llm=True, firestore_client=strict) is None
+    leases.mark_llm_preemptible(uid, key, token, True, firestore_client=strict)
+    leases.mark_llm_preemptible(uid, key, token, False, firestore_client=strict)
+    assert leases.acquire(uid, key, promote_llm=True, firestore_client=strict) is None
+    leases.mark_llm_preemptible(uid, key, token, True, firestore_client=strict)
+    assert leases.acquire(uid, key, promote_llm=True, firestore_client=strict) is not None
+    with pytest.raises(store.Conflict, match='lease_lost'):
+        leases.mark_llm_preemptible(uid, key, token, False, firestore_client=strict)

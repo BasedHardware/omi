@@ -2,17 +2,21 @@
 
 import asyncio
 import json
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
+from datetime import datetime
 from typing import Callable
 
 from langchain_core.callbacks import BaseCallbackHandler
 from openai import DefaultAsyncHttpxClient
 
+from utils.llm import background_flex
 from utils.llm.gateway_client import feature_auto_lane_id
 from utils.llm.usage_tracker import track_usage
 from utils.generated_compute import require_current_generated_compute
 from utils.conversations.v3 import metrics
+from utils.conversations.v3.outline import OUTLINE_CACHE_PREFIX
+from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, EXPLICIT_CACHE_OPTIONS, prefix_cache_key
 from utils.summary_quality import valid_title
 
 OUTLINE_DEADLINE_SECONDS = 60
@@ -29,9 +33,9 @@ def get_or_create_omi_gateway_llm(*args, **kwargs):
     return gateway_llm(*args, **kwargs)
 
 
-_notes_mode: ContextVar[tuple[str, bool, Callable[[str], None] | None] | None] = ContextVar(
-    'v3_notes_mode', default=None
-)
+_notes_mode: ContextVar[
+    tuple[str, bool, Callable[[str], None] | None, tuple[str, str, datetime | None] | None] | None
+] = ContextVar('v3_notes_mode', default=None)
 
 
 class CallEvents(BaseCallbackHandler):
@@ -64,8 +68,8 @@ class SectionEvents(BaseCallbackHandler):
 
 
 @contextmanager
-def notes_mode(uid, *, foreground=False, emit=None):
-    token = _notes_mode.set((uid, foreground, emit))
+def notes_mode(uid, *, foreground=False, emit=None, background_lease=None):
+    token = _notes_mode.set((uid, foreground, emit, background_lease))
     try:
         yield
     finally:
@@ -80,7 +84,7 @@ def notes_client():
     mode = _notes_mode.get()
     if mode is None:
         return None
-    uid, foreground, emit = mode
+    uid, foreground, emit, _ = mode
     feature = 'conversation_v3_summary_open' if foreground else 'conversation_v3_summary'
     require_current_generated_compute(feature, uid=uid, provider='openai', allow_byok=False)
     options = {'request_timeout': 90, 'max_retries': 0}
@@ -95,6 +99,31 @@ def notes_client():
     return model.model_copy(update={'callbacks': callbacks})
 
 
+@asynccontextmanager
+async def summary_model_attempt():
+    """Let an explicit open replace only the lease held by a background model call."""
+    mode = _notes_mode.get()
+    if mode is None or mode[1] or mode[3] is None:
+        yield
+        return
+    from database import conversations_v3_leases as leases
+    from utils.executors import db_executor, run_blocking
+
+    uid, _, _, (cid, token, closed_at) = mode
+    feature = 'conversation_v3_summary'
+    key = 'summary-' + cid
+    with background_flex.background_flex(closed_at, features=frozenset({feature})):
+        # The gateway needs 30s Standard reserve plus 12s of Flex headroom.
+        if background_flex.budget_ms(feature) <= 42_000:
+            yield
+            return
+        await run_blocking(db_executor, leases.mark_llm_preemptible, uid, key, token, True)
+        try:
+            yield
+        finally:
+            await run_blocking(db_executor, leases.mark_llm_preemptible, uid, key, token, False)
+
+
 def outline(uid, messages):
     require_current_generated_compute('conversation_v3_outline', uid=uid, provider='openai', allow_byok=False)
     with track_usage(uid, 'conversation_v3_outline'):
@@ -107,12 +136,55 @@ def outline(uid, messages):
         return asyncio.run(_stream_outline(model, messages))
 
 
+async def background_outline(uid, messages, *, budget_ms):
+    """A bounded, nonstreaming call for a builder lease that foreground can take over."""
+    feature = 'conversation_v3_outline'
+    with track_usage(uid, feature):
+        model = get_or_create_omi_gateway_llm(
+            feature_auto_lane_id(feature), options={'request_timeout': 115, 'max_retries': 0}, feature=feature
+        )
+        messages, options = _outline_cache_request(messages)
+        async with asyncio.timeout(budget_ms / 1000 + 3):
+            response = await model.ainvoke(
+                messages,
+                reasoning_effort='none',
+                response_format={'type': 'json_object'},
+                extra_headers={background_flex.BUDGET_HEADER: str(budget_ms)},
+                **options,
+            )
+        if not isinstance(response.content, str) or response.response_metadata.get('finish_reason') != 'stop':
+            return ''
+        return response.content
+
+
+def _outline_cache_request(messages):
+    if not messages or messages[0] != ('system', OUTLINE_CACHE_PREFIX):
+        return messages, {}
+    prefix = {
+        'role': 'system',
+        'content': [
+            {
+                'type': 'text',
+                'text': OUTLINE_CACHE_PREFIX,
+                'prompt_cache_breakpoint': dict(EXPLICIT_CACHE_BREAKPOINT),
+            }
+        ],
+    }
+    return [prefix, *messages[1:]], {
+        'extra_body': {
+            'prompt_cache_options': dict(EXPLICIT_CACHE_OPTIONS),
+            'prompt_cache_key': prefix_cache_key('v3-outline', OUTLINE_CACHE_PREFIX),
+        }
+    }
+
+
 async def _stream_outline(model, messages):
     # Each executor call owns its event loop, so give it a fresh connection pool.
     async with DefaultAsyncHttpxClient() as transport:
         client = model.root_async_client.with_options(http_client=transport)
+        messages, cache_options = _outline_cache_request(messages)
         stream = model.model_copy(update={'root_async_client': client, 'async_client': client.chat.completions}).bind(
-            reasoning_effort='none', response_format={'type': 'json_object'}
+            reasoning_effort='none', response_format={'type': 'json_object'}, **cache_options
         )
         deadline = asyncio.timeout(OUTLINE_DEADLINE_SECONDS)
         try:

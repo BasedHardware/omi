@@ -43,6 +43,7 @@ from llm_gateway.gateway.schemas import ProviderRejection
 from llm_gateway.gateway.executor import (
     ProviderRegistry,
     execute_chat_completion,
+    BACKGROUND_FLEX_MAX_BUDGET_MS,
     _map_provider_failure,  # type: ignore[reportPrivateUsage]  # shared gateway failure mapper
     output_budget_for,
     provider_request_for,
@@ -79,6 +80,16 @@ _THROTTLED_FAILURE_CLASSES = frozenset({FailureClass.BYOK_RATE_LIMIT, FailureCla
 # Keep CRLF atomic: without the atomic group, the regex engine can backtrack
 # from ``\r\n`` to ``\r`` + ``\n`` and split a multi-line SSE event at its
 # first line ending.
+
+
+def _background_flex_budget(request: Request, service: str) -> int | None:
+    if service != 'backend':
+        return None
+    raw = request.headers.get('x-omi-background-flex-budget-ms', '')
+    if not (raw.isascii() and raw.isdigit() and 1 <= len(raw) <= 6):
+        return None
+    budget = int(raw)
+    return budget if budget <= BACKGROUND_FLEX_MAX_BUDGET_MS else None
 
 
 @router.post('/v1/chat/completions', response_model=None)
@@ -178,6 +189,7 @@ async def _create_chat_completion(
                 provider_registry,
                 attempt_trace=attempt_trace,
                 max_provider_attempts=1 if keyed_request else None,
+                background_flex_budget_ms=_background_flex_budget(request, caller.name),
             )
         schedule_attempt_trace(accounting_context, attempt_trace)
         _safe_observe(

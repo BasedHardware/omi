@@ -24,7 +24,7 @@ from utils.cloud_tasks import verify_listen_finalization_cloud_tasks_oidc
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import quiet_finalization
-from utils.conversations.processing_trigger import trigger_for_finalization_job
+from utils.conversations.processing_trigger import ProcessingTrigger, trigger_for_finalization_job
 from utils.conversations.processing_retry import processing_failure_code
 from utils.conversations.recovery import RecoveryStructureUnavailableError, recovery_minimum_terminal_enabled
 from utils.conversations.finalizer import (
@@ -284,13 +284,15 @@ async def run_listen_finalization_job(
             return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
 
         try:
+            trigger = trigger_for_finalization_job(job)
             disposition = await finalize_persisted_conversation(
                 job['uid'],
                 job['conversation_id'],
                 finalization_job_id=job_id,
                 dispatch_generation=dispatch_generation,
                 lease_epoch=claimed_lease_epoch,
-                trigger=trigger_for_finalization_job(job),
+                trigger=trigger,
+                background_flex_eligible=trigger is ProcessingTrigger.CAPTURE_END,
                 final_attempt=max(task_retry_count, failed_attempts)
                 >= get_listen_finalization_tasks_max_attempts_for_worker() - 1,
             )

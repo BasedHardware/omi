@@ -18,7 +18,7 @@ def lease_ref(client, uid, key):
     return client.collection('users').document(uid).collection('conversation_v3_leases').document(key)
 
 
-def acquire(uid, key, *, now=None, firestore_client=None):
+def acquire(uid, key, *, promote_llm=False, now=None, firestore_client=None):
     client = firestore_client or get_firestore_client()
     now = now or datetime.now(timezone.utc)
     token = uuid4().hex
@@ -29,7 +29,9 @@ def acquire(uid, key, *, now=None, firestore_client=None):
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() or {}
         if row.get('until') and row['until'] > now:
-            return None
+            if not (promote_llm and row.get('llm_preemptible') is True):
+                return None
+        row.pop('llm_preemptible', None)
         tx.set(ref, {**row, 'token': token, 'until': now + timedelta(seconds=LEASE_SECONDS)})
         return token
 
@@ -54,6 +56,21 @@ def held(uid, key, *, now=None, firestore_client=None):
     client = firestore_client or get_firestore_client()
     row = lease_ref(client, uid, key).get().to_dict() or {}
     return bool(row.get('token') and row.get('until') and row['until'] > (now or datetime.now(timezone.utc)))
+
+
+def mark_llm_preemptible(uid, key, token, preemptible, *, firestore_client=None):
+    """Limit takeover to the paid call and discard a result if foreground took over."""
+    client = firestore_client or get_firestore_client()
+    ref = lease_ref(client, uid, key)
+
+    @firestore.transactional
+    def finish(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        if row.get('token') != token or not row.get('until') or row['until'] <= datetime.now(timezone.utc):
+            raise Conflict('lease_lost')
+        tx.update(ref, {'llm_preemptible': preemptible})
+
+    finish(client.transaction())
 
 
 def renew(uid, key, token, *, firestore_client=None):

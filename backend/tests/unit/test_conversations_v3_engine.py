@@ -652,3 +652,24 @@ def test_copy_carries_the_recording_location_and_keeps_its_own():
         'geolocation': kept,
     }
     assert planner.build('u', window, {'r': row}, prior)['geolocation'] == kept
+
+
+@pytest.mark.parametrize('cohesion', [False, True])
+@pytest.mark.parametrize('silence_gap', [timedelta(minutes=5), timedelta(minutes=15)])
+def test_outline_reuses_identical_prefix_and_numbered_lines_after_append(cohesion, silence_gap):
+    row = recording(segments=[{'text': 'Hablamos de la entrega', 'start': 0, 'end': 10, 'is_user': True}])
+
+    def render(cache_prefix):
+        (group,) = outline.stretches([row], NOW + timedelta(hours=1), silence_gap=silence_gap)
+        return outline.messages(
+            group, timezone.utc, cohesion=cohesion, silence_gap=silence_gap, cache_prefix=cache_prefix
+        )
+
+    legacy = render(False)
+    initial = render(True)
+    row['transcript_segments'].append({'text': 'Mañana confirmamos', 'start': 6 * 10, 'end': 70, 'is_user': True})
+    updated = render(True)
+    assert initial[0] == updated[0] == ('system', outline.OUTLINE_CACHE_PREFIX)
+    assert initial[2][1].split('\n\nStretch')[0] == 'Transcript:\n' + legacy[1][1].split('\n\nTranscript:\n')[1]
+    assert updated[2][1].startswith(initial[2][1].split('\n\nStretch')[0] + '\n')
+    assert updated[2][1].endswith('Stretch 12:00 to 12:01.')

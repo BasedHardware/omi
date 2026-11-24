@@ -17,6 +17,7 @@ from jsonschema import validate as validate_json_schema
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, PrivateAttr, ValidationError
 
+from utils.llm import background_flex
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.gateway_observability import record_direct_exception_surface, record_gateway_request_result
 from utils.llm.gateway_resilience import gateway_circuit, gateway_transport_timeout, observe_gateway_first_byte
@@ -120,6 +121,8 @@ class GatewayContextChatOpenAI(ChatOpenAI):
         raw_headers = payload.get('extra_headers')
         headers = dict(raw_headers) if isinstance(raw_headers, Mapping) else {}
         headers.update(_gateway_usage_headers(feature=self._omi_gateway_feature))
+        if self._omi_gateway_feature is not None and self._omi_gateway_feature in background_flex.SCOPED_FEATURES:
+            headers[background_flex.BUDGET_HEADER] = str(background_flex.budget_ms(self._omi_gateway_feature))
         if headers:
             payload['extra_headers'] = headers
 

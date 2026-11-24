@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from config.conversations_v3 import live_recap_enabled
+from config.llm_spend import background_flex_retry_enabled
 from database import conversations_v3 as store
 from models.conversation import Conversation
 from utils.conversations.v3 import models, planner, policy, recap_telemetry, visibility
@@ -113,7 +114,8 @@ async def prepare(uid, row, *, live=False, observation: recap_telemetry.RecapObs
         # No foreground model work: the stream serves the stored row, as processing would.
         return None
     check_cohort()
-    token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'])
+    promotion = {'promote_llm': True} if background_flex_retry_enabled() and not live else {}
+    token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'], **promotion)
     if token is None:
         _record(observation, 'lease_conflict')
         raise HTTPException(409, 'summary_in_progress')

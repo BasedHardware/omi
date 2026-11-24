@@ -117,7 +117,7 @@ async def test_on_open_respects_the_custom_stt_paid_notes_allowance(monkeypatch,
 
     monkeypatch.setattr(summary, 'run_blocking', blocking)
     monkeypatch.setattr(summary, 'should_skip_omi_paid_postprocessing', lambda *a, **kw: exhausted)
-    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    monkeypatch.setattr(leases, 'acquire', lambda *a, **kw: 'token')
     row = {'id': 'c', 'uses_custom_stt': True, 'source': 'omi', 'transcript_segments': [{'text': 'word ' * 400}]}
     assert await summary.prepare('u', row) == (None if exhausted else 'token')
 
@@ -273,7 +273,7 @@ async def test_summary_route_returns_409_before_streaming_response(monkeypatch):
     monkeypatch.setattr(summary, 'run_blocking', blocking)
     monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: {'id': 'c'})
     monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
-    monkeypatch.setattr(leases, 'acquire', lambda *a: None)
+    monkeypatch.setattr(leases, 'acquire', lambda *a, **kw: None)
     monkeypatch.setattr(routes, 'StreamingResponse', lambda *a, **kw: pytest.fail('headers already sent'))
     with pytest.raises(HTTPException) as error:
         await routes.conversation_summary_stream('c', 'u')
@@ -527,7 +527,7 @@ async def test_early_stream_exit_releases_preacquired_summary_token(monkeypatch,
 
     released = []
     monkeypatch.setattr(summary, 'run_blocking', blocking)
-    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    monkeypatch.setattr(leases, 'acquire', lambda *a, **kw: 'token')
     monkeypatch.setattr(leases, 'release', lambda *a: released.append(a))
     row = {'id': 'c', 'finished_at': AT}
     token = await summary.prepare('u', row)
@@ -1011,3 +1011,47 @@ async def test_explicit_summary_open_locks_configured_preview_with_live_recap_pr
     assert response.media_type == 'text/event-stream'
     assert reconciles == [(True, 'c')]
     assert prepared[0]['status'] == 'processing' and not prepared[0]['v3_unlocked']
+
+
+@pytest.mark.asyncio
+async def test_background_outline_sends_same_lane_and_explicit_cache_prefix(monkeypatch):
+    import httpx
+    from openai import AsyncOpenAI
+    from utils.conversations.v3 import models, outline
+    from utils.llm.gateway_client import GatewayContextChatOpenAI
+
+    async def gateway(request):
+        payload = json.loads(request.content)
+        assert request.headers['x-omi-background-flex-budget-ms'] == '83000'
+        assert not payload.get('stream')
+        assert payload['model'] == 'omi:auto:conversation-v3-outline'
+        assert payload['reasoning_effort'] == 'none'
+        assert payload['response_format'] == {'type': 'json_object'}
+        assert payload['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
+        assert payload['messages'][0]['content'][0] == {
+            'type': 'text',
+            'text': outline.OUTLINE_CACHE_PREFIX,
+            'prompt_cache_breakpoint': {'mode': 'explicit'},
+        }
+        return httpx.Response(
+            200,
+            json={
+                'id': 'synthetic',
+                'object': 'chat.completion',
+                'created': 0,
+                'model': 'omi:auto:conversation-v3-outline',
+                'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': '{}'}, 'finish_reason': 'stop'}],
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(gateway)) as transport:
+        async_client = AsyncOpenAI(api_key='test', base_url='http://gateway.invalid/v1', http_client=transport)
+        model = GatewayContextChatOpenAI(
+            api_key='test',
+            model='omi:auto:conversation-v3-outline',
+            root_async_client=async_client,
+            async_client=async_client.chat.completions,
+        )
+        monkeypatch.setattr(models, 'get_or_create_omi_gateway_llm', lambda *a, **kw: model)
+        messages = [('system', outline.OUTLINE_CACHE_PREFIX), ('human', 'Synthetic speech')]
+        assert await models.background_outline('u', messages, budget_ms=83_000) == '{}'

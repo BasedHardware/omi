@@ -21,7 +21,7 @@ class ReconcileRequest(BaseModel):
 async def reconcile(body: ReconcileRequest, request: Request, _retry: int = Depends(verify_cloud_tasks_oidc)):
     try:
         with bind_request_log_trace(dict(request.headers.raw)):
-            return {'outcome': await service.reconcile(body.uid)}
+            return {'outcome': await service.reconcile(body.uid, background=True)}
     except Exception as error:
         # The composition boundary may already have answered a provider fault
         # with the typed retryable contract (and recorded its metric). Re-raise
