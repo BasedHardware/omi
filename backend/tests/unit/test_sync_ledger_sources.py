@@ -261,3 +261,26 @@ def test_fed_conversation_with_neither_row_nor_tombstone_is_gone_not_live():
     # A live row (no tombstone) still keeps it.
     client.docs[f'{CONVERSATIONS}/vanished'] = {'status': 'completed'}
     assert sources.staging_plan(UID, ['a'], firestore_client=client).shared_live == ('job-shared',)
+
+
+def test_recorded_job_without_ledger_rows_is_settled_only_if_a_pass_saw_it_completed():
+    client = _Client({f'{TOMBSTONES}/a': {}})
+    recorded = {'job-x': ['a']}
+    assert sources.staging_plan(UID, ['a'], recorded=recorded, firestore_client=client) == sources.StagingPlan(
+        in_flight=('job-x',)
+    )
+    assert sources.staging_plan(UID, ['a'], recorded=recorded, settled=['job-x'], firestore_client=client).erasable == (
+        'job-x',
+    )
+
+
+def test_staging_sources_records_fed_conversations_and_settled_jobs():
+    client = _Client(
+        {
+            f'{LEDGER}/done': _row('job-done', new=['a'], updated=['b']),
+            f'{LEDGER}/running': _row('job-running', new=['a'], status='processing'),
+        }
+    )
+    found = sources.staging_sources(UID, ['a'], firestore_client=client)
+    assert found.fed == {'job-done': ['a', 'b'], 'job-running': ['a']}
+    assert found.settled == frozenset({'job-done'})

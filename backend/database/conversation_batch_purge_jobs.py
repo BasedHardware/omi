@@ -60,6 +60,10 @@ AUDIO_ROW_LIVE_RETRY_SECONDS = 300
 # Staging kept for a live sibling stays owed (the ledger that links them expires) and is rechecked daily.
 AUDIO_SHARED_LIVE_RECHECK_SECONDS = 24 * 60 * 60
 AUDIO_GATE_KIND = 'audio_conversation_deletion'
+# Fields an audio run's outcome records; a later outcome that does not set one clears it.
+AUDIO_DETAIL_FIELDS = ('last_reason', 'blocked_objects', 'unverified', 'in_flight_uploads', 'shared_live')
+# Passes that left staging waiting re-read the ledger and merge what it shows into the record.
+AUDIO_RESOURCE_REASONS = frozenset({'staging_in_flight', 'staging_unsettled', 'staging_kept_for_live_sibling'})
 SEGMENTS = 'segments'
 TOMBSTONES = 'deleted_conversations'
 # Renewed by every checkpoint/unit; a dead or wedged worker loses ownership after this.
@@ -397,6 +401,9 @@ def finish_run(
         if result == 'completed':
             transaction.delete(ref)
             return True
+        if collection == AUDIO_COLLECTION:
+            # A stale reason or count from an earlier outcome must not describe this one.
+            extra = {**{field: firestore.DELETE_FIELD for field in AUDIO_DETAIL_FIELDS}, **extra}
         release = {
             'run_token': None,
             'lease_generation': None,
@@ -415,6 +422,10 @@ def finish_run(
         wait = HOLD_RECHECK_SECONDS if result == 'held' else REDRIVE_SECONDS
         if retry_after is not None:
             wait = retry_after
+        if result == 'held' and collection == AUDIO_COLLECTION:
+            # A deliberate hold (storage hold, staging waiting, switch off, legal hold) made its
+            # decision: it is not a lost task, so it must not trip the stuck-obligation alert.
+            release['attempts'] = 0
         transaction.update(ref, {**release, 'due_at': current + timedelta(seconds=wait)})
         return False
 
@@ -696,8 +707,13 @@ def _gate_busy(error: BaseException, uid: str) -> bool:
     return lost_gate_to_peer(error, uid, kind=AUDIO_GATE_KIND)
 
 
-def _record_staging(client: Any, job: str, token: str, sources: dict[str, list[str]]) -> None:
-    """Persist the staging jobs (and their fed conversations) under run ownership; never shrinks."""
+def _record_staging(
+    client: Any, job: str, token: str, sources: dict[str, list[str]], settled: Iterable[str]
+) -> tuple[dict[str, list[str]], list[str]]:
+    """Merge staging jobs, their fed conversations and settled jobs into the record under run ownership.
+
+    Never shrinks: a sibling or settled state once seen stays recorded. Returns the merged record.
+    """
     ref = client.collection(AUDIO_COLLECTION).document(job)
 
     def body(transaction):
@@ -708,9 +724,11 @@ def _record_staging(client: Any, job: str, token: str, sources: dict[str, list[s
         merged = {key: list(value) for key, value in (row.get('staging_sources') or {}).items()}
         for key, ids in sources.items():
             merged[key] = sorted(set(merged.get(key, [])) | set(ids))
-        transaction.update(ref, {'staging_sources': merged, 'staging_recorded_at': _now()})
+        done = sorted(set(row.get('staging_settled') or []) | set(settled))
+        transaction.update(ref, {'staging_sources': merged, 'staging_settled': done, 'staging_recorded_at': _now()})
+        return merged, done
 
-    _in_transaction(client, body)
+    return _in_transaction(client, body)
 
 
 def run_audio_erasure_job(
@@ -766,21 +784,20 @@ def run_audio_erasure_job(
             # Account deletion supersedes: the wipe removed the subtree and every owner storage prefix.
             return 'no_tombstone' if finish('completed') else 'superseded'
         recorded = {key: list(value) for key, value in (row.get('staging_sources') or {}).items()}
-        if row.get('staging_recorded_at') is None:
-            # Record before any hold: the ledger expires, a held obligation may outlive it.
+        settled = list(row.get('staging_settled') or [])
+        if row.get('staging_recorded_at') is None or row.get('last_reason') in AUDIO_RESOURCE_REASONS:
+            # Record before any hold: the ledger expires and a held obligation may outlive it. A pass
+            # that left staging waiting re-reads it, so siblings fed since the last record are kept.
             from database.sync_ledger_sources import staging_sources
 
             try:
-                found = staging_sources(uid, [conversation_id, *donors], firestore_client=client)
-                _record_staging(client, job, token, found)
+                found = staging_sources(uid, [conversation_id, *donors], extra_jobs=recorded, firestore_client=client)
+                recorded, settled = _record_staging(client, job, token, found.fed, found.settled)
             except RunSuperseded:
                 raise
             except Exception:
                 if enabled():
                     raise
-                found = {}
-            for key, ids in found.items():
-                recorded[key] = sorted(set(recorded.get(key, [])) | set(ids))
         if not enabled():
             # Kill switch off: armed obligations stay owed and resume when it is back on.
             finish('held', reason='switched_off')
@@ -792,7 +809,7 @@ def run_audio_erasure_job(
             return 'conversation_row_live'
         assert_account_deletion_permitted(uid)
         try:
-            summary = erase(uid, conversation_id, donors, staging=recorded)
+            summary = erase(uid, conversation_id, donors, staging=recorded, settled=settled)
         except LegalHoldActive:
             raise
         except StoragePrefixPurgeBlocked as error:

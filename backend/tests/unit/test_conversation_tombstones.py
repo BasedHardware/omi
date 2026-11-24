@@ -147,7 +147,7 @@ def test_non_cascade_delete_purges_prompt_evidence_and_primary_audio_after_inten
         'delete_owner_prompt_embedding_cache': purge,
         'delete_conversation_screen_frames': MagicMock(),
         'delete_conversation_and_frame_evidence': hard_delete,
-        'delete_privacy_conversation_audio': MagicMock(),
+        'delete_conversation_audio_under_gate': MagicMock(),
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
         'record_product_event': MagicMock(),
@@ -184,7 +184,7 @@ def test_delete_owes_audio_durably_before_the_primary_row_goes(store):
         'delete_owner_prompt_embedding_cache': MagicMock(),
         'delete_conversation_screen_frames': MagicMock(),
         'delete_conversation_and_frame_evidence': hard_delete,
-        'delete_privacy_conversation_audio': MagicMock(),
+        'delete_conversation_audio_under_gate': MagicMock(),
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
         'record_product_event': MagicMock(),
@@ -212,7 +212,7 @@ def test_unarmed_audio_obligation_fails_the_delete_before_the_primary_row_goes(s
         'delete_owner_prompt_embedding_cache': MagicMock(),
         'delete_conversation_screen_frames': MagicMock(),
         'delete_conversation_and_frame_evidence': hard_delete,
-        'delete_privacy_conversation_audio': MagicMock(),
+        'delete_conversation_audio_under_gate': MagicMock(),
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
         'record_product_event': MagicMock(),
@@ -264,7 +264,7 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         'delete_conversation_screen_frames': cleanup,
         'delete_conversation_and_frame_evidence': hard_delete,
         'action_items_db': MagicMock(get_action_items_by_conversation=MagicMock(return_value=[])),
-        'delete_privacy_conversation_audio': MagicMock(),
+        'delete_conversation_audio_under_gate': MagicMock(),
         'delete_owner_prompt_embedding_cache': MagicMock(),
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
@@ -304,7 +304,7 @@ def test_background_audio_purge_reports_provider_outcome_once(error, outcome, re
     purge = MagicMock(side_effect=error)
     logger = MagicMock()
     namespace = {
-        'delete_privacy_conversation_audio': purge,
+        'delete_conversation_audio_under_gate': purge,
         'logger': logger,
         'sanitize': sanitize,
     }
@@ -318,6 +318,28 @@ def test_background_audio_purge_reports_provider_outcome_once(error, outcome, re
     assert reason in logger.error.call_args.args[4]
     logger.warning.assert_not_called()
     logger.exception.assert_not_called()
+
+
+@pytest.mark.parametrize('name', ['LegalHoldActive', 'LegalHoldAuthorityUnavailable', 'DestructiveOperationInProgress'])
+def test_background_audio_sweep_stopped_by_a_hold_retains_and_reports(name):
+    stop = type(name, (RuntimeError,), {})
+    purge = MagicMock(side_effect=stop('held'))
+    logger = MagicMock()
+    namespace = {'delete_conversation_audio_under_gate': purge, 'logger': logger, 'sanitize': sanitize}
+    background_purge = function('routers/conversations.py', '_delete_privacy_audio_after_response', namespace)
+    background_purge('u', 'c', source_ids=['donor'])
+    purge.assert_called_once_with('u', 'c', source_ids=['donor'])
+    logger.warning.assert_called_once()
+    assert logger.warning.call_args.args[1:] == ('c', name)
+    logger.error.assert_not_called()
+
+
+def test_background_audio_sweep_surfaces_unexpected_errors():
+    purge = MagicMock(side_effect=RuntimeError('boom'))
+    namespace = {'delete_conversation_audio_under_gate': purge, 'logger': MagicMock(), 'sanitize': sanitize}
+    background_purge = function('routers/conversations.py', '_delete_privacy_audio_after_response', namespace)
+    with pytest.raises(RuntimeError, match='boom'):
+        background_purge('u', 'c', source_ids=[])
 
 
 def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch):

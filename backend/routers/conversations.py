@@ -51,7 +51,7 @@ from database.vector_db import (
 )
 import database.vector_db as vector_db
 from utils.other.storage import (
-    delete_privacy_conversation_audio,
+    delete_conversation_audio_under_gate,
     delete_owner_prompt_embedding_cache,
     get_app_thumbnail_url,
 )
@@ -1853,7 +1853,7 @@ def erase_accepted_conversation(uid: str, conversation_id: str, audio_source_ids
             audio_source_ids=audio_source_ids,
         )
     for func, args, kwargs in cleanup.calls:
-        if func is delete_privacy_conversation_audio:
+        if func is delete_conversation_audio_under_gate:
             known = list(kwargs.get('source_ids') or [])
             kwargs = {**kwargs, 'source_ids': known + [source for source in audio_source_ids if source not in known]}
         func(*args, **kwargs)
@@ -1863,7 +1863,7 @@ def _delete_privacy_audio_after_response(uid: str, conversation_id: str, *, sour
     from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked, StoragePrefixPurgeError
 
     try:
-        delete_privacy_conversation_audio(uid, conversation_id, source_ids=source_ids)
+        delete_conversation_audio_under_gate(uid, conversation_id, source_ids=source_ids)
     except StoragePrefixPurgeError as error:
         logger.error(
             'event=conversation_audio_purge uid=%s conversation_id=%s outcome=%s reason=%s',
@@ -1871,6 +1871,22 @@ def _delete_privacy_audio_after_response(uid: str, conversation_id: str, *, sour
             conversation_id,
             'blocked' if isinstance(error, StoragePrefixPurgeBlocked) else 'failed',
             sanitize(error),
+        )
+    except RuntimeError as error:
+        # The whole sweep holds the audio gate: a legal hold (or an unreadable hold authority, or a
+        # busy gate) stops it before any erasure. This best-effort path has no retry, so the audio is
+        # retained and reported (the durable obligation is the retrying path).
+        if type(error).__name__ not in {
+            'LegalHoldActive',
+            'LegalHoldAuthorityUnavailable',
+            'DestructiveOperationInProgress',
+            'DestructiveGateTakeover',
+        }:
+            raise
+        logger.warning(
+            'event=conversation_audio_purge conversation_id=%s outcome=retained reason=%s',
+            conversation_id,
+            type(error).__name__,
         )
 
 
@@ -1959,7 +1975,7 @@ def _delete_conversation_under_gate(
         except Exception as error:
             raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
     else:
-        purge_audio = _delete_privacy_audio_after_response if record_event else delete_privacy_conversation_audio
+        purge_audio = _delete_privacy_audio_after_response if record_event else delete_conversation_audio_under_gate
         background_tasks.add_task(purge_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation

@@ -160,18 +160,40 @@ def _job_rows(
     return by_job
 
 
-def staging_sources(uid: str, conversation_ids: Iterable[str], *, firestore_client: Any = None) -> dict[str, list[str]]:
-    """Each staging job these conversations reach, with every conversation that job fed.
+@dataclass(frozen=True)
+class StagingSources:
+    """What the durable audio obligation records from the ledger before it can expire."""
 
-    The durable audio obligation records this on its first run: ledger rows
-    expire (45 days) while an obligation may stay held longer, and the record
-    keeps both the prefix and its sibling set known after they are gone.
+    # Staging job -> every conversation its ledger rows fed (merged across passes, never shrinks).
+    fed: dict[str, list[str]]
+    # Jobs whose ledger rows were all seen ``completed``: only these count as settled once the rows expire.
+    settled: frozenset[str]
+
+
+def staging_sources(
+    uid: str,
+    conversation_ids: Iterable[str],
+    *,
+    extra_jobs: Iterable[str] = (),
+    firestore_client: Any = None,
+) -> StagingSources:
+    """Each staging job these conversations reach (plus ``extra_jobs``), its fed conversations and settled state.
+
+    The durable audio obligation records this on its first run and again on
+    every pass that left staging waiting: ledger rows expire (45 days) while an
+    obligation may stay held longer, and the record keeps the prefix, its
+    sibling set and whether it was ever seen settled known after they are gone.
     """
     conversation_ids = [cid for cid in conversation_ids if cid]
-    if not uid or not conversation_ids:
-        return {}
-    by_job = _job_rows(uid, conversation_ids, (), _client(firestore_client))
-    return {job: sorted({cid for row in rows.values() for cid in row.conversation_ids}) for job, rows in by_job.items()}
+    extra = [job for job in extra_jobs if _SAFE_ID.match(str(job))]
+    if not uid or (not conversation_ids and not extra):
+        return StagingSources({}, frozenset())
+    by_job = _job_rows(uid, conversation_ids, extra, _client(firestore_client))
+    fed = {job: sorted({cid for row in rows.values() for cid in row.conversation_ids}) for job, rows in by_job.items()}
+    settled = frozenset(
+        job for job, rows in by_job.items() if rows and all(row.status == SETTLED_STATUS for row in rows.values())
+    )
+    return StagingSources(fed, settled)
 
 
 def staging_plan(
@@ -179,6 +201,7 @@ def staging_plan(
     conversation_ids: Iterable[str],
     *,
     recorded: Mapping[str, Iterable[str]] | None = None,
+    settled: Iterable[str] = (),
     firestore_client: Any = None,
 ) -> StagingPlan:
     """Sort the staging directories of the uploads that fed these conversations.
@@ -194,9 +217,11 @@ def staging_plan(
     durable obligation retries them.
 
     ``recorded`` (job id -> fed conversation ids, from ``staging_sources``) is
-    authoritative alongside the ledger: a recorded job is always considered,
-    its recorded siblings always count, and once its ledger rows have expired
-    the upload is past any processing, so it is settled.
+    authoritative alongside the ledger: a recorded job is always considered and
+    its recorded siblings always count. Once its ledger rows have expired, a
+    recorded job is settled only if it is in ``settled`` (a pass saw every row
+    completed); otherwise it stays in flight, held rather than erased, because
+    a conversation it fed after the record could be unknown.
     """
     conversation_ids = [cid for cid in conversation_ids if cid]
     recorded = {job: list(ids) for job, ids in (recorded or {}).items() if _SAFE_ID.match(str(job))}
@@ -206,6 +231,7 @@ def staging_plan(
     by_job = _job_rows(uid, conversation_ids, recorded, firestore_client)
     if not by_job:
         return StagingPlan()
+    settled_jobs = set(settled)
     fed_by_job = {
         job: {cid for row in rows.values() for cid in row.conversation_ids} | set(recorded.get(job, ()))
         for job, rows in by_job.items()
@@ -218,7 +244,7 @@ def staging_plan(
         rows = by_job[job].values()
         if not fed_by_job[job] <= deleted:
             shared_live.append(job)
-        elif any(row.status != SETTLED_STATUS for row in rows):
+        elif any(row.status != SETTLED_STATUS for row in rows) or (not rows and job not in settled_jobs):
             in_flight.append(job)
         else:
             erasable.append(job)

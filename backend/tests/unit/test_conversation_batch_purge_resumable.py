@@ -692,7 +692,7 @@ def test_storage_hold_is_reported_on_the_obligation_and_retried(tombstone_db, au
 
     calls = []
 
-    def erase(uid, cid, sources, *, staging):
+    def erase(uid, cid, sources, *, staging, settled):
         calls.append((uid, cid, sources))
         if len(calls) == 1:
             raise StoragePrefixPurgeBlocked({('syncing', 'syncing/uid1/job/1.bin', 1): 'objectUnderActiveHold'})
@@ -716,7 +716,7 @@ def test_retry_after_the_primary_row_is_gone_still_finishes_the_audio(tombstone_
     erase = MagicMock()
     generation = _audio_generation(tombstone_db, audio_job)
     assert purge_jobs.run_audio_erasure_job(audio_job, generation, erase=erase) == 'erased'
-    erase.assert_called_once_with(UID, 'c1', ['donor'], staging={})
+    erase.assert_called_once_with(UID, 'c1', ['donor'], staging={}, settled=[])
     assert _audio_row(tombstone_db) is None
 
 
@@ -792,7 +792,7 @@ def test_legal_hold_and_account_wipe_stop_the_audio_erasure(monkeypatch, tombsto
 
 
 def test_rearm_during_a_run_is_erased_again_not_completed(tombstone_db, audio_job):
-    def erase(uid, cid, sources, *, staging):
+    def erase(uid, cid, sources, *, staging, settled):
         purge_jobs.arm_audio_erasure(UID, 'c1', ['late-donor'])  # a retried delete re-arms meanwhile
 
     assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
@@ -918,8 +918,8 @@ def test_obligation_runs_before_donor_tombstones_and_still_erases_the_donor_uplo
     tombstone_db.docs[f'users/{UID}/conversations/donor'] = {'deleted': True}  # absorbed, tombstone not yet written
     erased = []
 
-    def erase(uid, cid, donors, *, staging):
-        plan = sources.staging_plan(uid, [cid, *donors], recorded=staging)
+    def erase(uid, cid, donors, *, staging, settled):
+        plan = sources.staging_plan(uid, [cid, *donors], recorded=staging, settled=settled)
         erased.extend(plan.erasable)
         return {'shared_live': len(plan.shared_live)}
 
@@ -943,8 +943,8 @@ def test_recorded_staging_outlives_the_ledger_and_keeps_the_obligation_owed(monk
     }
     plans = []
 
-    def erase(uid, cid, donors, *, staging):
-        plan = sources.staging_plan(uid, [cid, *donors], recorded=staging)
+    def erase(uid, cid, donors, *, staging, settled):
+        plan = sources.staging_plan(uid, [cid, *donors], recorded=staging, settled=settled)
         plans.append(plan)
         if len(plans) == 1:
             raise StoragePrefixPurgeBlocked({('syncing', 'syncing/uid1/job-x/1.bin', 1): 'objectUnderActiveHold'})
@@ -972,7 +972,10 @@ def test_recorded_live_sibling_still_protects_its_staging_after_the_ledger_expir
     plan = sources.staging_plan(UID, ['c1'], recorded={'job-x': ['c1', 'sibling']})
     assert plan == sources.StagingPlan(shared_live=('job-x',))
     tombstone_db.docs[f'users/{UID}/deleted_conversations/sibling'] = {}
-    assert sources.staging_plan(UID, ['c1'], recorded={'job-x': ['c1', 'sibling']}).erasable == ('job-x',)
+    assert sources.staging_plan(UID, ['c1'], recorded={'job-x': ['c1', 'sibling']}).in_flight == ('job-x',)
+    assert sources.staging_plan(UID, ['c1'], recorded={'job-x': ['c1', 'sibling']}, settled=['job-x']).erasable == (
+        'job-x',
+    )
 
 
 def test_audio_gate_contention_is_busy_not_failure(monkeypatch, tombstone_db, audio_job):
@@ -989,3 +992,108 @@ def test_audio_gate_contention_is_busy_not_failure(monkeypatch, tombstone_db, au
     )
     assert kinds == [purge_jobs.AUDIO_GATE_KIND]
     assert _audio_row(tombstone_db)['last_outcome'] == 'busy'
+
+
+def _ledger_erase(sources, plans, *, block_first=False):
+    from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked
+    from database.sync_ledger_sources import StagingInFlight
+
+    def erase(uid, cid, donors, *, staging, settled):
+        plan = sources.staging_plan(uid, [cid, *donors], recorded=staging, settled=settled)
+        plans.append(plan)
+        if plan.in_flight:
+            raise StagingInFlight(len(plan.in_flight))
+        return {'shared_live': len(plan.shared_live)}
+
+    return erase
+
+
+def test_sibling_fed_after_the_first_record_survives_the_ledger_ttl(monkeypatch, tombstone_db, audio_job):
+    from database import sync_ledger_sources as sources
+
+    ledger = _fake_ledger(monkeypatch, tombstone_db)
+    upload = f'{ledger}/upload'
+    tombstone_db.docs[upload] = {
+        'job_id': 'job-x',
+        'status': 'processing',
+        'result': {'new_memories': ['c1'], 'updated_memories': []},
+    }
+    plans = []
+    erase = _ledger_erase(sources, plans)
+    # First run: still processing, only c1 known; held in flight.
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'staging_in_flight'
+    )
+    assert _audio_row(tombstone_db)['staging_sources'] == {'job-x': ['c1']}
+    # The upload then feeds a new, live conversation and completes.
+    tombstone_db.docs[upload] = {
+        'job_id': 'job-x',
+        'status': 'completed',
+        'result': {'new_memories': ['c1', 'late'], 'updated_memories': []},
+    }
+    tombstone_db.docs[f'users/{UID}/conversations/late'] = {'status': 'completed'}
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'staging_kept_for_live_sibling'
+    )
+    row = _audio_row(tombstone_db)
+    assert row['staging_sources'] == {'job-x': ['c1', 'late']} and row['staging_settled'] == ['job-x']
+    # The ledger row expires; the recorded live sibling still protects the staging.
+    tombstone_db.docs.pop(upload)
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'staging_kept_for_live_sibling'
+    )
+    assert plans[-1].shared_live == ('job-x',) and not plans[-1].erasable
+
+
+def test_unsettled_recorded_job_is_held_after_its_ledger_expires(monkeypatch, tombstone_db, audio_job):
+    from database import sync_ledger_sources as sources
+
+    ledger = _fake_ledger(monkeypatch, tombstone_db)
+    tombstone_db.docs[f'{ledger}/upload'] = {
+        'job_id': 'job-x',
+        'status': 'processing',
+        'result': {'new_memories': ['c1'], 'updated_memories': []},
+    }
+    plans = []
+    erase = _ledger_erase(sources, plans)
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'staging_in_flight'
+    )
+    tombstone_db.docs.pop(f'{ledger}/upload')
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'staging_in_flight'
+    )
+    assert plans[-1].in_flight == ('job-x',) and not plans[-1].erasable
+    assert _audio_row(tombstone_db) is not None
+
+
+def test_deliberate_holds_reset_attempts_but_failures_keep_counting(tombstone_db, audio_job):
+    from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked
+
+    blocked = StoragePrefixPurgeBlocked({('b', 'o', 1): 'objectUnderActiveHold'})
+    erase = MagicMock(side_effect=[blocked] * 9 + [RuntimeError('ledger unavailable')])
+    for _ in range(9):
+        purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase)
+        assert _audio_row(tombstone_db)['attempts'] == 0  # never reaches the stuck-obligation alert
+    with pytest.raises(RuntimeError):
+        purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase)
+    assert _audio_row(tombstone_db)['attempts'] == 1  # a real failure still counts toward the alert
+
+
+def test_a_new_outcome_clears_detail_fields_it_does_not_set(tombstone_db, audio_job):
+    from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked
+    from google.cloud import firestore
+
+    erase = MagicMock(
+        side_effect=[
+            StoragePrefixPurgeBlocked({('b', 'o', 1): 'objectUnderActiveHold'}, unverified=2),
+            RuntimeError('x'),
+        ]
+    )
+    purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase)
+    assert _audio_row(tombstone_db)['blocked_objects'] == 1
+    with pytest.raises(RuntimeError):
+        purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase)
+    row = _audio_row(tombstone_db)
+    assert row['last_reason'] == 'RuntimeError'
+    assert row['blocked_objects'] is firestore.DELETE_FIELD and row['unverified'] is firestore.DELETE_FIELD

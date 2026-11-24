@@ -467,7 +467,7 @@ def test_durable_audio_erasure_runs_every_step_under_the_audio_gate(monkeypatch)
     monkeypatch.setattr(
         storage_mod,
         'delete_privacy_conversation_audio',
-        lambda uid, cid, *, source_ids, strict_staging, recorded_staging: erased.append(
+        lambda uid, cid, *, source_ids, strict_staging, recorded_staging, settled_staging: erased.append(
             (uid, cid, source_ids, strict_staging, len(gates))
         )
         or {'shared_live': 0},
@@ -482,3 +482,76 @@ def test_recorded_staging_reaches_the_plan_on_the_durable_path(monkeypatch):
     storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True, recorded_staging={'job-a': ['c']})
     assert looked_up == [('u', ['c'], {'job-a': ['c']})]
     assert not any(name.startswith('syncing/u/job-a/') for name in syncing.names)
+
+
+def test_held_canonical_pack_is_reported_as_a_blocked_object_and_other_steps_run(monkeypatch):
+    private, syncing, _derived, _ = _staging_buckets(monkeypatch, ['job-a'])
+    canonical = SimpleNamespace(name='canonical')
+    monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
+    monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: canonical)
+
+    def held_pack(bucket, uid, cid):
+        raise Forbidden('held', errors=[{'reason': 'objectUnderActiveHold'}])
+
+    monkeypatch.setattr(storage_mod.audio_packs, 'delete_conversation', held_pack)
+
+    @contextmanager
+    def gate(*args, **kwargs):
+        yield
+
+    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', gate)
+    with pytest.raises(account_deletion_operational_holds.StoragePrefixPurgeBlocked) as error:
+        storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True)
+    pack = storage_mod.audio_packs.owner_prefix(storage_mod.audio_packs.PACK_PREFIX, 'u') + 'c'
+    assert error.value.objects == {('canonical', pack, 0): 'objectUnderActiveHold'}
+    # The held pack did not stop the conversation prefix or the staging purge.
+    assert 'chunks/u/c/a.bin' not in private.names
+    assert not any(name.startswith('syncing/u/job-a/') for name in syncing.names)
+
+
+def test_non_hold_canonical_failure_still_raises(monkeypatch):
+    _staging_buckets(monkeypatch, [])
+    monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
+    monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: SimpleNamespace(name='canonical'))
+
+    def denied(bucket, uid, cid):
+        raise Forbidden('denied', errors=[{'reason': 'insufficientPermissions'}])
+
+    monkeypatch.setattr(storage_mod.audio_packs, 'delete_conversation', denied)
+
+    @contextmanager
+    def gate(*args, **kwargs):
+        yield
+
+    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', gate)
+    with pytest.raises(Forbidden):
+        storage_mod.delete_privacy_conversation_audio('u', 'c')
+
+
+def test_best_effort_audio_sweep_holds_the_audio_gate_and_a_hold_stops_it(monkeypatch):
+    from database.legal_holds import LegalHoldActive
+
+    gates = []
+    swept = MagicMock(return_value={'shared_live': 0})
+    monkeypatch.setattr(storage_mod, 'delete_privacy_conversation_audio', swept)
+
+    @contextmanager
+    def gate(uid, *, kind, wait_seconds=0.0, **kwargs):
+        gates.append((uid, kind))
+        yield 'token'
+
+    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', gate)
+    storage_mod.delete_conversation_audio_under_gate('u', 'c', source_ids=['donor'])
+    assert gates == [('u', 'audio_conversation_deletion')]
+    swept.assert_called_once_with('u', 'c', source_ids=['donor'])
+
+    @contextmanager
+    def held(uid, **kwargs):
+        raise LegalHoldActive('held')
+        yield  # pragma: no cover
+
+    swept.reset_mock()
+    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', held)
+    with pytest.raises(LegalHoldActive):
+        storage_mod.delete_conversation_audio_under_gate('u', 'c')
+    swept.assert_not_called()

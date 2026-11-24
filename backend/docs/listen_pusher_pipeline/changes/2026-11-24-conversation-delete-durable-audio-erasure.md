@@ -35,12 +35,21 @@ that the audio cleanup is durable: failures are retried, not only logged.
   - On its first run the obligation records every staging job it reaches, with all the conversations that job
     fed (`staging_sources`), before any hold or kill-switch check. Content-ledger rows expire after 45 days, and a
     held obligation can outlive them. The recorded set is used together with any fresh ledger read: its prefixes
-    stay owed, and its recorded siblings still count as live. A recorded job with no ledger rows left is past any
-    processing, so it counts as settled.
+    stay owed, and its recorded siblings still count as live. Every pass that left staging waiting
+    (`staging_in_flight`, `staging_unsettled` or `staging_kept_for_live_sibling`) re-reads the ledger and merges new
+    siblings into the record; the record never shrinks. A recorded job also records whether a pass ever saw all its
+    ledger rows `completed` (`staging_settled`). Once its ledger rows expire, only a job recorded as settled counts as
+    settled; any other recorded job stays in flight and is held, because a conversation it fed after the record could
+    be unknown.
   - The obligation is never discharged while a recorded prefix is kept for a live sibling. It stays held
     (`last_reason=staging_kept_for_live_sibling`, rechecked daily) and erases the prefix once that sibling is
     deleted.
   - Contention on the account's audio gate counts as `busy` (30 s retry), not as a failure.
+  - A held canonical audio-pack object (`objectUnderActiveHold`, `retentionPolicyNotMet`) is reported like any other
+    held object (`storage_hold`), and the other steps still run.
+  - Deliberate holds (`storage_hold`, `staging_*`, `switched_off`, `conversation_row_live`, a legal hold) reset the
+    dispatch attempt count, so they do not trip the reconciler's "still pending" error; real failures still count.
+    Each outcome clears detail fields left by an earlier outcome that it does not set.
   - Ledger-read and provider failures redrive.
   - Accepted (busy-gate) cascades arm the same obligation, with the donors recorded at acceptance.
 - **Unchanged.** Tombstone-first ordering, the held-account deferral (no erasure while a hold is active), the
@@ -53,7 +62,11 @@ Only the durable obligation retries staging that has to stay. These paths erase 
 sibling-safe rule, but keep in-flight or shared staging without a retry:
 
 - The after-response background erasure, used when the kill switch is off or obligation dispatch is not configured
-  (dev, local). That path is the kill switch's documented fallback.
+  (dev, local). That path is the kill switch's documented fallback. Its whole sweep holds the account's
+  `audio_conversation_deletion` gate (`storage.delete_conversation_audio_under_gate`). A legal hold placed after the
+  delete was accepted, an unreadable hold authority, or a busy gate therefore stops it before any erasure. Because
+  this path has no retry, the audio is then retained and logged as
+  `event=conversation_audio_purge outcome=retained reason=<LegalHoldActive|...>`.
 - The conversations-v3 recording audio purge (`utils/conversations/v3/service.purge_audio`). It erases a
   recording's audio, which is not a user conversation delete. It has no tombstone, which is the runner's only
   authority to erase, so arming an obligation there would complete as `no_tombstone`.
