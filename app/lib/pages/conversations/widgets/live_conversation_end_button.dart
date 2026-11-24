@@ -53,8 +53,10 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
     if (EpisodePresentation.streamingSource(capture) == null) return false;
     // The account-wide in-progress pointer and transcript can come from another device.
     final recordings = conversation.v3?.recordingIds ?? const <String>[];
-    return recordings.contains(capture.activeRecordingId) ||
-        recordings.contains(capture.verifiedLiveServerRecordingId) ||
+    // Listen rotates its server recording on silence while the client capture ID stays; once the
+    // server ID is verified, only it binds End, so a stale earlier window cannot end the next one.
+    final verified = capture.verifiedLiveServerRecordingId;
+    return recordings.contains(verified ?? capture.activeRecordingId) ||
         LiveConversationEndButton.ownsCapture(conversation, capture.locallyReceivedSegmentIds);
   }
 
