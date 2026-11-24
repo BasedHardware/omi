@@ -218,9 +218,6 @@ for _cohort in DEMAND_COHORTS:
     initialize_metric(WINDOW_FIRST_TEXT, demand_cohort=_cohort)
 
 LEG_ATTEMPTS = Counter('omi_stt_leg_attempts_total', 'Configured-chain connection results', ['to_mode', 'outcome'])
-RECONNECT = Counter(
-    'omi_stt_reconnect_total', 'Bounded live STT reconnect decisions', ['provider', 'reason', 'outcome']
-)
 REPLAY_SECONDS = Counter('omi_stt_replay_seconds_total', 'Live STT audio replayed after reconnect', ['provider'])
 LANGUAGE_CONSTRAINT = Counter(
     'omi_stt_language_constraint_total',

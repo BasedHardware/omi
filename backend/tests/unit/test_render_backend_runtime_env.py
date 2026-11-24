@@ -854,6 +854,8 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
             # Keiki iMessage/WhatsApp signing secrets (David, 2026-10-30: build the Keiki integration).
             'KEIKI_IMESSAGE_SIGNING_SECRET',
             'KEIKI_WHATSAPP_SIGNING_SECRET',
+            # Google Play Billing account-id HMAC key (purchase binding; backend serves the Play routes).
+            'PLAY_ACCOUNT_ID_HMAC_KEY',
         },
         'backend-sync': common
         | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
@@ -1716,11 +1718,17 @@ def test_record_close_notify_renders_on_every_cloud_run_listener(environment, se
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
 
 
-def test_prod_silence_read_skip_is_on_for_every_role_but_the_pump_and_listen_pins():
+def test_prod_silence_read_skip_respects_backend_backfill_pump_and_listen_pins():
     key = 'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'
     prod = _MANIFEST['environments']['prod']
-    for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+    for name in ('backend-sync', 'backend-integration'):
         assert prod['cloud_run']['services'][name]['env'][key] == {'value': 'true', 'category': 'ops_kill'}
+    assert prod['cloud_run']['services']['backend-sync-backfill']['env'][key] == {
+        'value': 'false',
+        'category': 'ops_kill',
+    }
+    # SCA-3555: keep live backend behavior until the SCA-1824 guard covers first traffic.
+    assert prod['cloud_run']['services']['backend']['env'][key] == {'value': 'false', 'category': 'ops_kill'}
     # SCA-3318: the pump's one-key activation keeps its dark successor's false; widening it is a later change.
     assert prod['cloud_run']['services']['backend-projection-pump']['env'][key] == {
         'value': 'false',
@@ -1731,3 +1739,64 @@ def test_prod_silence_read_skip_is_on_for_every_role_but_the_pump_and_listen_pin
     chart = Path(__file__).resolve().parents[2] / 'charts/backend-listen/prod_omi_backend_listen_values.yaml'
     values = yaml.safe_load(chart.read_text())
     assert [entry['value'] for entry in values['env'] if entry['name'] == key] == ['false']
+
+
+def test_prod_backend_renders_sibling_skip_preservation_pin(monkeypatch):
+    prod = _MANIFEST['environments']['prod']
+    _set_workflow_bound_env(monkeypatch, prod)
+    backend = prod['cloud_run']['services']['backend']
+    rendered = dict(_MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](backend['env'])))
+
+    assert rendered['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED'] == 'false'
+
+
+def test_prod_logging_reductions_render_only_on_backend_integration(monkeypatch):
+    prod = _MANIFEST['environments']['prod']
+    _set_workflow_bound_env(monkeypatch, prod)
+    expected = {
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED': 'true',
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT': '1',
+        'BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED': 'true',
+    }
+
+    for name, service in prod['cloud_run']['services'].items():
+        rendered = dict(_MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](service['env'])))
+        actual = {key: rendered[key] for key in expected if key in rendered}
+        assert actual == (expected if name == 'backend-integration' else {}), name
+    pump = prod['cloud_run']['services']['backend-projection-pump']
+    assert set(expected) <= set(pump['forbidden_env'])
+
+
+def test_prod_backfill_renders_sibling_skip_and_poll_backoff_preservation_pins(monkeypatch):
+    prod = _MANIFEST['environments']['prod']
+    _set_workflow_bound_env(monkeypatch, prod)
+    backfill = prod['cloud_run']['services']['backend-sync-backfill']
+    rendered = _MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](backfill['env']))
+
+    for key, expected in {
+        'BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED': 'false',
+        'SYNC_POLL_BACKOFF_ENABLED': 'false',
+        'SYNC_POLL_BACKOFF_PERCENT': '0',
+    }.items():
+        assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
+
+
+@pytest.mark.parametrize(('environment', 'enabled', 'percent'), [('dev', 'false', '0'), ('prod', 'true', '5')])
+def test_job_status_poll_cohort_renders_for_client_facing_backend(monkeypatch, environment, enabled, percent):
+    # Client GET /v2/sync-local-files/{job_id} goes to backend. The sync worker
+    # processes Cloud Tasks, and keys in its env alone cannot configure client polls.
+    config = _MANIFEST['environments'][environment]
+    _set_workflow_bound_env(monkeypatch, config)
+    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
+    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
+    monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', environment])
+
+    assert _MODULE['main']() == 0
+    output = _read_workflow_outputs()
+    block = '\n'.join(_job_env_block(output, 'backend').splitlines()[1:-1])
+    rendered = _MODULE['_parse_deploy_cloud_run_env_vars'](block)
+    assert [value for key, value in rendered if key == 'SYNC_POLL_BACKOFF_ENABLED'] == [enabled]
+    assert [value for key, value in rendered if key == 'SYNC_POLL_BACKOFF_PERCENT'] == [percent]
+    service = config['cloud_run']['services']['backend']
+    removed = _MODULE['_action_removed_env_names']('backend') | set(service.get('forbidden_env', []))
+    assert removed.isdisjoint({'SYNC_POLL_BACKOFF_ENABLED', 'SYNC_POLL_BACKOFF_PERCENT'})

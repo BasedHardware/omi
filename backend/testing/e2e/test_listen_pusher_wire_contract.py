@@ -7,11 +7,16 @@ are controlled by the hermetic E2E harness.
 
 from __future__ import annotations
 
+import sys
+from collections.abc import Iterator
+from concurrent.futures import CancelledError, Future
+from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
+from starlette.testclient import WebSocketTestSession
 
 from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from fakes.firestore import get_mock_firestore
@@ -41,6 +46,18 @@ PCM8_AUDIO_FRAME = b'\x80' * 480
 MULTI_LANGUAGE_PARAKEET_LISTEN_URL = (
     '/v4/listen?language=es&sample_rate=8000&codec=pcm8&source=omi&stt_service=parakeet&vad_gate=disabled'
 )
+
+
+@contextmanager
+def _terminal_websocket(session: WebSocketTestSession) -> Iterator[WebSocketTestSession]:
+    websocket = session.__enter__()
+    try:
+        yield websocket
+    finally:
+        # Starlette waits on the portal future on exit. The server's close
+        # frame is asserted in the body, where cancellation still propagates.
+        with suppress(CancelledError):
+            session.__exit__(*sys.exc_info())
 
 
 def _configure_live_wire_contract(monkeypatch: Any, pusher: ScriptedPusherPeer, parakeet_api_url: str) -> None:
@@ -388,8 +405,9 @@ def test_listen_pusher_wire_contract_terminal_or_fenced_response_is_not_replayed
         parakeet.close()
 
 
+@pytest.mark.parametrize('cancelled_portal_future', [False, True], ids=['normal-exit', 'cancelled-portal-future'])
 def test_listen_pusher_wire_contract_provider_connect_failure_is_terminal(
-    client, test_uid, monkeypatch, fake_firestore
+    client, test_uid, monkeypatch, fake_firestore, cancelled_portal_future
 ):
     """A provider-connect failure sends bounded stt_failed/1011 before pusher work exists."""
 
@@ -404,7 +422,7 @@ def test_listen_pusher_wire_contract_provider_connect_failure_is_terminal(
         clear_finalization_jobs(fake_firestore, test_uid)
         seed_listen_user(test_uid, uses_custom_stt=False, single_language_mode=True)
 
-        with client.websocket_connect(NATIVE_LISTEN_URL, headers=NATIVE_AUTH_HEADERS) as websocket:
+        with _terminal_websocket(client.websocket_connect(NATIVE_LISTEN_URL, headers=NATIVE_AUTH_HEADERS)) as websocket:
             failed = receive_until(
                 websocket,
                 lambda payload: isinstance(payload, dict)
@@ -417,6 +435,12 @@ def test_listen_pusher_wire_contract_provider_connect_failure_is_terminal(
             close_message = websocket.receive()
             assert close_message['type'] == 'websocket.close'
             assert close_message['code'] == 1011
+            if cancelled_portal_future:
+                future: Future[None] = Future()
+                assert future.cancel()
+                # Force the same future.result() failure Starlette can surface
+                # on exit, after the terminal wire assertions have run.
+                websocket.exit_stack.callback(future.result)
 
         assert pusher.connection_count == 0
         assert pusher.frames == []

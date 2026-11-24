@@ -590,3 +590,6 @@ tests/unit/test_pipeline_lab_chain_vector_product.py::test_without_a_lab_index_t
 tests/unit/test_pipeline_lab_ingest_cassette.py::test_prerecorded_adapter_calls_product_entry_point_with_wav
 tests/unit/test_pipeline_lab_ingest_lanes.py::test_record_lane_runs_real_worker_and_projection
 tests/unit/test_pipeline_lab_ingest_lanes.py::test_sync_lane_records_exact_segments_then_replays_them
+# The first outline-stream case pays the event loop, httpx mock transport and SSE parsing in its call;
+# CI measured 1.13-1.56s CPU on PR #26115 (0.3s locally).
+tests/unit/test_conversations_v3_stream.py::test_paid_outline_stream_deadline_discards_partial_reply_and_closes_stream[False]

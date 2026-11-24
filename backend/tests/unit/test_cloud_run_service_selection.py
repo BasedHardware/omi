@@ -221,6 +221,7 @@ def test_step_census_refuses_an_unclassified_new_step():
     # its shell is exercised in test_cloud_run_live_caps.py.
     # `Resolve production backend memory` reads local ops config and writes only
     # step outputs. It runs for the production backend/sync deploy paths.
+    # SCA-3681 removes the manual development datastore smoke from the census.
     memory = step('Resolve production backend memory')
     assert memory['if'] == (
         "${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && "
@@ -229,7 +230,7 @@ def test_step_census_refuses_an_unclassified_new_step():
     )
     assert (
         hashlib.sha256(json.dumps([s['name'] for s in STEPS]).encode()).hexdigest()
-        == "36ae1be07abee676dfe48c15a93fe687f228fbb9d14c90f4804cfa187878f34a"
+        == "5e6374a62dc5795f042318f5f355a5ec8b27d99d535d292097f960557f05853b"
     )
 
 

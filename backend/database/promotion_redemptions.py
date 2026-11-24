@@ -22,6 +22,7 @@ def claim(
     subscription_id: str,
     coupon_id: str,
     attribution: Optional[Mapping[str, str]] = None,
+    extra: Optional[Mapping[str, Any]] = None,
     firestore_client: Optional[Any] = None,
 ) -> bool:
     client = firestore_client or get_firestore_client()
@@ -31,6 +32,7 @@ def claim(
         'coupon_id': coupon_id,
         'redeemed_at': datetime.now(timezone.utc),
         **dict(attribution or {}),
+        **dict(extra or {}),
     }
     try:
         client.collection(COLLECTION).document(promotion_code_id).create(document)
@@ -42,3 +44,14 @@ def claim(
 def release(promotion_code_id: str, *, firestore_client: Optional[Any] = None) -> None:
     client = firestore_client or get_firestore_client()
     client.collection(COLLECTION).document(promotion_code_id).delete()
+
+
+def get(promotion_code_id: str, *, firestore_client: Optional[Any] = None) -> Optional[dict]:
+    client = firestore_client or get_firestore_client()
+    snapshot = client.collection(COLLECTION).document(promotion_code_id).get()
+    return snapshot.to_dict() if snapshot.exists else None
+
+
+def set_subscription(promotion_code_id: str, subscription_id: str, *, firestore_client: Optional[Any] = None) -> None:
+    client = firestore_client or get_firestore_client()
+    client.collection(COLLECTION).document(promotion_code_id).update({'subscription_id': subscription_id})

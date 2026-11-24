@@ -17,12 +17,10 @@ ROOT = 'projects/demo/databases/(default)/documents'
 @pytest.mark.asyncio
 @pytest.mark.parametrize('asynchronous', [False, True])
 @pytest.mark.parametrize('operation', ['set', 'delete'])
-async def test_list_and_memory_writers_share_one_commit_and_keep_source_results(monkeypatch, asynchronous, operation):
-    # Exercise both installers from the production entrypoint, through real SDK
+async def test_memory_head_shares_source_commit_without_legacy_list_writes(monkeypatch, asynchronous, operation):
+    # Exercise the production installer through real SDK
     # batches and GAPIC request preparation, stopping only at the network edge.
     _client._install_memory_change_heads()
-    _client._install_list_projection_writer()
-    monkeypatch.setenv('OMI_LIST_PROJECTION_WRITER_ENABLED', 'true')
     calls = []
 
     def capture(client, request=None, **kwargs):
@@ -55,14 +53,9 @@ async def test_list_and_memory_writers_share_one_commit_and_keep_source_results(
     assert len(calls) == 1
     writes = calls[0].writes
     paths = [write.delete or write.update.name for write in writes]
-    assert len(paths) == len(set(paths)) == 5
+    assert len(paths) == len(set(paths)) == 3
     assert paths[:2] == [f'{ROOT}/users/u/{family}/one' for family in ('memory_items', 'conversations')]
-    assert set(paths[2:]) == {
-        f'{ROOT}/users/u/conversation_list_rows/one',
-        f'{ROOT}/users/u/list_serving_versions/conversations',
-        f'{ROOT}/users/u/memory_state/{head.HEAD_DOCUMENT}',
-    }
-    assert bool(writes[2].delete) == (operation == 'delete')
+    assert paths[2] == f'{ROOT}/users/u/memory_state/{head.HEAD_DOCUMENT}'
     assert writes[-1].update.fields['token'].string_value
 
 

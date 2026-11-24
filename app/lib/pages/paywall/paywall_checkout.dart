@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
+import 'package:omi/services/billing/play_billing.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart' show UpgradeBillingProviderStage;
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
@@ -11,7 +14,8 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-enum PaywallCheckoutOutcome { purchased, cancelled, failed }
+/// [pending]: Google Play accepted a purchase whose payment has not cleared; nothing to retry or upsell.
+enum PaywallCheckoutOutcome { purchased, cancelled, failed, pending }
 
 /// The purchase path shared by every paywall variant: the same Stripe Checkout session and in-app
 /// webview the `PlansSheet` uses for a free user, with the same analytics. Variants only change
@@ -49,6 +53,9 @@ abstract final class PaywallCheckout {
       report(l10n.resubscribeFirstToChangePlans, error: true);
       return PaywallCheckoutOutcome.failed;
     }
+    if (provider.playBilledPurchaser) {
+      return _startPlay(context, plan: plan, interval: interval, source: source, report: report, trialDays: trialDays);
+    }
     PlatformManager.instance.analytics.upgradePlanSelected(plan: plan, billingInterval: interval, source: source);
     try {
       final session = await provider.createUserCheckoutSession(priceId: priceId, trialDays: trialDays);
@@ -75,7 +82,7 @@ abstract final class PaywallCheckout {
         report(message, error: false);
         PlatformManager.instance.analytics
             .upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
-        await provider.fetchSubscription();
+        await provider.fetchSubscription(fresh: true);
         return PaywallCheckoutOutcome.purchased;
       }
       final url = session['url'] as String?;
@@ -97,7 +104,7 @@ abstract final class PaywallCheckout {
       }
       PlatformManager.instance.analytics
           .upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
-      await provider.fetchSubscription();
+      await provider.fetchSubscription(fresh: true);
       await provider.loadAvailablePlans();
       return PaywallCheckoutOutcome.purchased;
     } catch (_) {
@@ -105,6 +112,66 @@ abstract final class PaywallCheckout {
       return PaywallCheckoutOutcome.failed;
     }
   }
+}
+
+/// Google Play Billing: Play's sheet in the user's currency, then the server confirms the entitlement.
+Future<PaywallCheckoutOutcome> _startPlay(
+  BuildContext context, {
+  required String plan,
+  required String interval,
+  required String source,
+  required void Function(String message, {required bool error}) report,
+  int? trialDays,
+}) async {
+  final provider = context.read<UsageProvider>();
+  final l10n = context.l10n;
+  final analytics = PlatformManager.instance.analytics;
+  final config = provider.playBilling!;
+  final offer = provider.playOffers?.forInterval(interval);
+  if (offer == null) {
+    report(l10n.couldNotLaunchUpgradePage, error: true);
+    return PaywallCheckoutOutcome.failed;
+  }
+  final previousPlan = provider.subscription?.subscription.plan.wireName ?? 'basic';
+  analytics.upgradePlanSelected(plan: plan, billingInterval: interval, source: source);
+  analytics.playBillingStage(stage: UpgradeBillingProviderStage.selected, billingInterval: interval);
+  final withTrial = trialDays != null && trialDays > 0 && provider.subscription?.trialEligible == true;
+  final result = await provider.playBillingService.purchase(
+    offer: offer,
+    withTrial: withTrial,
+    obfuscatedAccountId: config.obfuscatedAccountId,
+  );
+  switch (result.outcome) {
+    case PlayPurchaseOutcome.purchased:
+      await provider.fetchSubscription(fresh: true);
+      final days = withTrial ? offer.trialDays : null;
+      report(days != null && days > 0 ? l10n.paywallTrialStarted(days) : l10n.subscriptionSuccessfulCharged,
+          error: false);
+      analytics.upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
+      analytics.playBillingStage(stage: UpgradeBillingProviderStage.succeeded, billingInterval: interval);
+      return PaywallCheckoutOutcome.purchased;
+    case PlayPurchaseOutcome.pending:
+      report(l10n.playPurchasePending, error: false);
+      analytics.playBillingStage(stage: UpgradeBillingProviderStage.pending, billingInterval: interval);
+      return PaywallCheckoutOutcome.pending;
+    case PlayPurchaseOutcome.cancelled:
+      analytics.upgradeCancelled();
+      analytics.playBillingStage(stage: UpgradeBillingProviderStage.cancelled, billingInterval: interval);
+      return PaywallCheckoutOutcome.cancelled;
+    case PlayPurchaseOutcome.failed:
+      report(playRefusalMessage(l10n, result.code), error: true);
+      analytics.playBillingStage(stage: UpgradeBillingProviderStage.failed, billingInterval: interval);
+      return PaywallCheckoutOutcome.failed;
+  }
+}
+
+/// User-facing text for a Play purchase the server did not confirm.
+String playRefusalMessage(AppLocalizations l10n, String? code) {
+  return switch (code) {
+    'stripe_subscription_active' => l10n.checkoutExistingSubscription,
+    'purchase_owned_elsewhere' => l10n.playPurchaseOtherAccount,
+    _ => l10n.playPurchaseNotConfirmed,
+  };
 }
 
 /// The tier a free user is offered: the catalog's Omi Pro (`unlimited_v2`) tier, as two prices
@@ -128,6 +195,32 @@ class PaywallOffer {
   /// Only Omi Pro is offered; a retired tier is never a fallback.
   /// While a cancellation is pending, the offer is that subscription's current price instead,
   /// or null when the catalog does not contain it.
+  /// Play's prices for a Play-billed reader (null until Play answers); the server catalog otherwise.
+  static PaywallOffer? forUsage(UsageProvider usage, {bool cancelAtPeriodEnd = false, String? currentPriceId}) {
+    if (usage.billingProviderUnknown) return null;
+    if (usage.playBilledPurchaser) {
+      final offers = usage.playOffers;
+      return offers == null ? null : fromPlay(offers);
+    }
+    return fromCatalog(usage.availablePlans, cancelAtPeriodEnd: cancelAtPeriodEnd, currentPriceId: currentPriceId);
+  }
+
+  static PaywallOffer? fromPlay(PlayOffers offers) {
+    PaywallPrice? price(PlayPlanOffer? plan) => plan == null
+        ? null
+        : PaywallPrice(
+            priceId: 'play:${plan.basePlanId}',
+            interval: plan.interval,
+            amountMinor: playMinorUnits(plan.priceMicros, plan.currencyCode),
+            currency: plan.currencyCode.toLowerCase(),
+            display: plan.formattedPrice,
+            trialDisplay: plan.trialFormattedPrice,
+            trialDays: plan.trialFormattedPrice == null ? null : plan.trialDays,
+          );
+    final offer = PaywallOffer(tierId: 'unlimited_v2', monthly: price(offers.monthly), yearly: price(offers.yearly));
+    return offer.monthly == null && offer.yearly == null ? null : offer;
+  }
+
   static PaywallOffer? fromCatalog(
     Map<String, dynamic>? catalog, {
     bool cancelAtPeriodEnd = false,
@@ -201,15 +294,31 @@ class PaywallOffer {
 
 @immutable
 class PaywallPrice {
-  const PaywallPrice(
-      {required this.priceId, required this.interval, required this.amountMinor, required this.currency});
+  const PaywallPrice({
+    required this.priceId,
+    required this.interval,
+    required this.amountMinor,
+    required this.currency,
+    this.display,
+    this.trialDisplay,
+    this.trialDays,
+  });
 
   final String priceId;
   final String interval;
   final int amountMinor;
   final String currency;
 
-  String get formatted => formatBillingPrice(amountMinor, currency);
+  /// Google Play's own price string; shown as-is when set.
+  final String? display;
+
+  /// Google Play's own string for the free-trial phase, when Play lists a trial for this account.
+  final String? trialDisplay;
+
+  /// Google Play's free-trial length for this account; null when Play lists no free trial phase.
+  final int? trialDays;
+
+  String get formatted => display ?? formatBillingPrice(amountMinor, currency);
 
   String get formattedPerMonth => formatBillingPrice(perMonthMinor, currency);
 

@@ -63,7 +63,7 @@ from database.redis_db import (
 )
 from database.legal_holds import external_write_fence, destructive_operation_gate
 from utils.other import audio_packs
-from database.account_deletion_operational_holds import delete_owner_bucket_prefix
+from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked, delete_owner_bucket_prefix
 from utils import encryption
 from utils.sync.staged_prefetch import MAX_FILE_BYTES, StagedBytes, staged_prefetch
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
@@ -1247,6 +1247,18 @@ def list_audio_chunks(
     return finish_audio_listing(chunks, raw_chunks, source_identity)
 
 
+def count_retained_raw_conversation_objects(uid: str, conversation_id: str) -> int:
+    """Count raw object versions under this conversation's three storage prefixes."""
+    bucket_names = {private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()}
+    count = 0
+    for bucket_name in filter(None, bucket_names):
+        bucket = _get_storage_client().bucket(bucket_name)
+        listing_kwargs = {'versions': True} if _uses_real_gcs_bucket(bucket) else {}
+        for prefix in ('chunks', 'audio', 'raw-live'):
+            count += sum(1 for _ in bucket.list_blobs(prefix=f'{prefix}/{uid}/{conversation_id}/', **listing_kwargs))
+    return count
+
+
 def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_into: str | None = None) -> None:
     """Purge canonical and derived conversation objects, including old generations."""
     if os.getenv('BUCKET_CANONICAL_AUDIO') and merged_into:
@@ -1255,10 +1267,24 @@ def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_in
             audio_packs.link_conversations(canonical, uid, [conversation_id], merged_into)
 
     bucket_names = {private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()}
+    blocked: dict[tuple[str, str, int], str] = {}
+    unverified = 0
     for bucket_name in filter(None, bucket_names):
         bucket = _get_storage_client().bucket(bucket_name)
-        for prefix in ('chunks', 'audio', 'merged', 'playback', 'raw-live', 'audio-outbox', 'record-wal'):
-            _delete_owner_bucket_prefix(bucket, f'{prefix}/{uid}/{conversation_id}/')
+        for prefix in ('chunks', 'audio', 'merged', 'playback', 'raw-live', 'audio-outbox'):
+            try:
+                _delete_owner_bucket_prefix(bucket, f'{prefix}/{uid}/{conversation_id}/')
+            except StoragePrefixPurgeBlocked as error:
+                blocked.update(error.objects)
+                unverified += error.unverified
+        if not blocked:
+            # Keep the existing fail-fast sweep for original-custody WAL objects.
+            delete_owner_bucket_prefix(
+                bucket,
+                f'record-wal/{uid}/{conversation_id}/',
+                real_gcs=_uses_real_gcs_bucket(bucket),
+                tolerate_object_races=False,
+            )
         if bucket_name == private_cloud_sync_bucket:
             # Original sync files may span conversations; deleting a linked
             # conversation removes the shared original too, so its audio cannot
@@ -1273,6 +1299,8 @@ def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_in
                     if metadata.get('conversation_id') == conversation_id or conversation_id in links:
                         blob.delete()
         invalidate_pack_index(bucket, uid, conversation_id)
+    if blocked:
+        raise StoragePrefixPurgeBlocked(blocked, unverified=unverified)
 
 
 @object_get_reader(Reader.PLAYBACK_MEDIA)
@@ -2772,4 +2800,49 @@ def delete_privacy_conversation_audio(uid: str, conversation_id: str, *, source_
             conversation_ids.extend(source_ids or [])
             for cid in set(conversation_ids):
                 audio_packs.delete_conversation(canonical, uid, cid)
-    delete_conversation_audio_files(uid, conversation_id)
+    # Merge donors' prefixes hold audio that now belongs to this conversation.
+    # Sync staging is keyed by upload, so every prefix is attempted before a block is raised.
+    owned: List[str] = []
+    for cid in [conversation_id, *(source_ids or [])]:
+        if cid not in owned:
+            owned.append(cid)
+    blocked: dict[tuple[str, str, int], str] = {}
+    unverified = 0
+    steps: List[Tuple[Callable[..., Any], Any]] = [(delete_conversation_audio_files, cid) for cid in owned]
+    steps.append((delete_conversation_sync_staging, owned))
+    for purge, target in steps:
+        try:
+            purge(uid, target)
+        except StoragePrefixPurgeBlocked as error:
+            blocked.update(error.objects)
+            unverified += error.unverified
+    if blocked:
+        raise StoragePrefixPurgeBlocked(blocked, unverified=unverified)
+
+
+def delete_conversation_sync_staging(uid: str, conversation_ids: List[str]) -> int:
+    """Purge the raw sync uploads (``syncing/{uid}/{job_id}/``) that fed these conversations.
+
+    Staging is keyed by upload job and its bucket has no lifecycle delete, so
+    without this the raw audio of a deleted conversation is kept forever. The
+    sync content ledger maps conversations to jobs; held objects stay and raise.
+    """
+    from database.sync_ledger_sources import staging_job_ids
+
+    job_ids = staging_job_ids(uid, conversation_ids)
+    if not job_ids:
+        return 0
+    deleted = 0
+    blocked: dict[tuple[str, str, int], str] = {}
+    unverified = 0
+    for name in dict.fromkeys(filter(None, (syncing_local_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()))):
+        bucket = _get_storage_client().bucket(name)
+        for job_id in job_ids:
+            try:
+                deleted += _delete_owner_bucket_prefix(bucket, f'syncing/{uid}/{job_id}/')
+            except StoragePrefixPurgeBlocked as error:
+                blocked.update(error.objects)
+                unverified += error.unverified
+    if blocked:
+        raise StoragePrefixPurgeBlocked(blocked, unverified=unverified)
+    return deleted

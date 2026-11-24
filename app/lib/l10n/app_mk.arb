@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 не е детектирано",
+    "v2Undetected": "Офлајн синхронизацијата не е достапна",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "Видиме дека имате V1 уред или вашиот уред не е поврзан. Функционалност на SD картичка е достапна само за V2 уреди.",
+    "v2UndetectedMessage": "За офлајн синхронизација е потребен поврзан уред Omi со меморија на SD-картичка. Вашиот тековен уред не го поддржува тоа.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },
@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "Начини на најавување",
+    "accountAddSignInMethod": "Додај начин на најавување",
+    "accountAddSignInMethodDetails": "Додај начин за најавување на оваа сметка на Omi. Твојот план, снимките и интеграциите остануваат на оваа сметка.",
+    "accountSignInConflictTitle": "Ова најавување е поврзано со друга сметка",
+    "accountSignInConflictDetails": "Сè уште си најавен на оваа сметка. Секоја сметка на Omi ги задржува својот план, снимките и интеграциите.",
+    "accountSignInMethodAdded": "Начинот на најавување е додаден",
     "authFailedToLinkGoogle": "Неуспешно поврзување со Google, ве молиме обидете се повторно.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "Прво ќе ги обработиме најновите снимки до достапниот лимит. Останатите ќе останат на чекање.",
     "processingAction": "Обработи снимки на чекање",
     "processingProgress": "Обработка на вашите снимки на чекање…",
+    "waitingForTranscriptionAllowance": "Се чека достапна квота за транскрипција",
     "processingDeferred": "Чека обработка",
     "processingCount": "{count, plural, =1{1 разговор на чекање} other{{count} разговори на чекање}}",
     "playbackPartialAudioSaved": "Зачувано {saved} од {total} аудио",
@@ -12292,5 +12299,26 @@
     "conversationLiveNoEdits": "Почекајте да заврши за да го промените.",
     "finishedSummaryReady": "Резимето е готово",
     "writingSummaryStatus": "Пишува резиме…",
-    "stillWorkingOnIt": "Сè уште се работи на тоа."
+    "stillWorkingOnIt": "Сè уште се работи на тоа.",
+    "deviceReadyToUse": "Подготовено за употреба",
+    "firmwareUpdateFirmwareTooOld": "Фирмверот на вашиот уред е премногу стар за ова ажурирање. Контактирајте со поддршката за помош при ажурирањето на уредот.",
+    "firmwareUpdateAppRequired": "Ова ажурирање на фирмверот бара понова верзија на апликацијата Omi. Ажурирајте ја апликацијата од вашата продавница за апликации, па проверете повторно.",
+    "quietPayerTitle": "Нема снимки 5 дена",
+    "quietPayerMessage": "Проверете го вашиот Omi.",
+    "quietPayerCheck": "Провери",
+    "playManageSubscription": "Управувај со претплатата",
+    "playBilledByGoogle": "Се наплаќа преку Google Play",
+    "playPurchasePending": "Плаќањето чека. Omi Pro започнува штом Google Play го потврди.",
+    "playPurchaseOtherAccount": "Ова купување на Google Play припаѓа на друга Omi сметка.",
+    "playPurchaseNotConfirmed": "Сè уште не можевме да го потврдиме купувањето. Ќе пробаме повторно автоматски.",
+    "playRenewalTerms": "Автоматски се обновува по прикажаната цена додека не откажете. Управувајте или откажете во секое време на Google Play.",
+    "playPaidAppUnavailable": "Не е достапно на Android",
+    "pageNotAvailableInApp": "Оваа страница не е достапна во апликацијата.",
+    "shopOrderPlacedCheckEmail": "Нарачката е направена. Потврдата ќе ја најдете во е-поштата.",
+    "prepaidCodeEntry": "Имате код?",
+    "prepaidCodeTitle": "Искористете код",
+    "prepaidCodeFieldHint": "Внесете го вашиот код",
+    "prepaidCodeRedeem": "Искористи",
+    "prepaidCodeRedeemed": "Кодот е искористен",
+    "prepaidCodeResult": "{reason, select, invalid{Овој код не е важечки. Проверете го и обидете се повторно.} used{Овој код е веќе искористен.} expired{Овој код е истечен.} hasPlan{Веќе имате план. Вашиот код не е искористен. Искористете го кога ќе заврши вашиот план.} notPrepaid{Овој код не може да се искористи тука. Искористете го кога ќе изберете план.} notEligible{Овој код не може да се користи на оваа сметка.} rateLimited{Премногу обиди. Обидете се подоцна.} other{Нешто тргна наопаку. Обидете се повторно.}}"
 }

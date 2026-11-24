@@ -39,6 +39,7 @@ environment_shared:
         UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
         SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+        SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
         SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
         SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
         SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -82,6 +83,7 @@ environment_shared:
         BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
         BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
         BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+        BATCH_PARKED_JOB_SWEEPER_ENABLED: {value: 'true', category: ops_kill}
         BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
         BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
         BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0.001', category: ops_kill}
@@ -148,9 +150,6 @@ environment_shared:
         AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
           value: 'false'
           category: rollout
-        AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
-          value: 'false'
-          category: rollout
         AUDIO_ARCHIVE_PERCENT:
           category: rollout
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -159,12 +158,6 @@ environment_shared:
           category: rollout
         BUCKET_AUDIO_DERIVED:
           value: ''
-          category: rollout
-        AUDIO_MERGE_WORKER_URL:
-          value: ''
-          category: rollout
-        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-          value: 'false'
           category: rollout
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           category: rollout
@@ -288,9 +281,6 @@ environment_shared:
         DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
         DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
-        STT_RESILIENT_RECONNECT:
-          value: 'false'
-          category: rollout
         STT_LIVE_DEMAND_ENABLED:
           category: rollout
         STT_LIVE_DEMAND_PERCENT:
@@ -326,14 +316,11 @@ environment_shared:
           value: '100'
           category: rollout
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
-          category: rollout
+          category: ops_kill
         PARAKEET_WINDOW_MAX_SESSIONS:
           category: rollout
         PARAKEET_WINDOW_POST_TIMEOUT_SECONDS:
           value: '8'
-          category: rollout
-        PARAKEET_WINDOW_DIARIZATION:
-          value: 'false'
           category: rollout
         PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
           value: '1.2'
@@ -481,9 +468,6 @@ environment_shared:
         PROACTIVITY_V2_POSTHOG_HOST:
           value: https://us.posthog.com
           category: rollout
-        SONIOX_ORDERED_FINALIZE:
-          value: 'false'
-          category: rollout
         BUCKET_OBJECT_LAKE:
           category: storage_retention
         OBJECT_LAKE_KMS_KEY:
@@ -551,7 +535,7 @@ environment_shared:
           category: reliability
         PARAKEET_STREAM_ALLOCATION_PERCENT:
           value: '100'
-          category: rollout
+          category: ops_kill
       values_file: backend/charts/parakeet/{env}_omi_parakeet_values.yaml
     pusher:
       capabilities:
@@ -597,6 +581,7 @@ environment_shared:
         BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
         SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+        SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
         SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
         SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
         SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -651,9 +636,6 @@ environment_shared:
         AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
           value: 'false'
           category: rollout
-        AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
-          value: 'false'
-          category: rollout
         AUDIO_ARCHIVE_PERCENT:
           category: rollout
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -662,12 +644,6 @@ environment_shared:
           category: rollout
         BUCKET_AUDIO_DERIVED:
           value: ''
-          category: rollout
-        AUDIO_MERGE_WORKER_URL:
-          value: ''
-          category: rollout
-        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-          value: 'false'
           category: rollout
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           category: rollout
@@ -718,9 +694,6 @@ environment_shared:
           category: rollout
         PROACTIVITY_V2_POSTHOG_HOST:
           value: https://us.posthog.com
-          category: rollout
-        SONIOX_ORDERED_FINALIZE:
-          value: 'false'
           category: rollout
         BUCKET_OBJECT_LAKE:
           category: storage_retention
@@ -1020,6 +993,7 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PARKED_JOB_SWEEPER_ENABLED: {value: 'true', category: ops_kill}
           BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'false', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
@@ -1086,9 +1060,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
             category: rollout
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
-            value: 'false'
-            category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -1096,9 +1067,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
-            value: ''
-            category: rollout
-          AUDIO_MERGE_WORKER_URL:
             value: ''
             category: rollout
           REDIS_DB_PORT:
@@ -1147,9 +1115,6 @@ environment_shared:
           OMI_VERTEX_RESERVATION_PROJECT:
             value: '{compute_project}'
             category: runtime_identity
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
-            category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_UNION:
             value: 'false'
             category: rollout
@@ -1327,9 +1292,6 @@ environment_shared:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
-            category: rollout
           REVIEW_SURFACE_MODE:
             value: 'on'
             category: rollout
@@ -1425,6 +1387,7 @@ environment_shared:
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
           SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -1435,6 +1398,7 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PARKED_JOB_SWEEPER_ENABLED: {value: 'true', category: ops_kill}
           BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'true', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
@@ -1500,9 +1464,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
             category: rollout
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
-            value: 'false'
-            category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -1510,9 +1471,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
-            value: ''
-            category: rollout
-          AUDIO_MERGE_WORKER_URL:
             value: ''
             category: rollout
           OMI_VERTEX_RESERVATION_PROJECT:
@@ -1569,9 +1527,6 @@ environment_shared:
             category: rollout
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
             category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_UNION:
             value: 'false'
@@ -1730,9 +1685,6 @@ environment_shared:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
-            category: rollout
           BUCKET_OBJECT_LAKE:
             category: storage_retention
           OBJECT_LAKE_KMS_KEY:
@@ -1816,6 +1768,7 @@ environment_shared:
           SYNC_BACKFILL_OWNER_CONCURRENCY_THRESHOLD: {value: '8', category: reliability}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
           SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -1826,6 +1779,7 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PARKED_JOB_SWEEPER_ENABLED: {value: 'true', category: ops_kill}
           BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'false', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
@@ -1893,9 +1847,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
             category: rollout
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
-            value: 'false'
-            category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -1903,9 +1854,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
-            value: ''
-            category: rollout
-          AUDIO_MERGE_WORKER_URL:
             value: ''
             category: rollout
           REDIS_DB_PORT:
@@ -1956,9 +1904,6 @@ environment_shared:
             category: rollout
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
             category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_UNION:
             value: 'false'
@@ -2114,9 +2059,6 @@ environment_shared:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
-            category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
@@ -2183,6 +2125,7 @@ environment_shared:
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
           SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -2192,6 +2135,7 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PARKED_JOB_SWEEPER_ENABLED: {value: 'true', category: ops_kill}
           BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'true', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
@@ -2258,9 +2202,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
             category: rollout
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
-            value: 'false'
-            category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -2268,9 +2209,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
-            value: ''
-            category: rollout
-          AUDIO_MERGE_WORKER_URL:
             value: ''
             category: rollout
           REDIS_DB_PORT:
@@ -2321,9 +2259,6 @@ environment_shared:
             category: rollout
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
             category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_UNION:
             value: 'false'
@@ -2442,9 +2377,6 @@ environment_shared:
             category: rollout
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
-            category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
             category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'

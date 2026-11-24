@@ -61,6 +61,7 @@ from database.redis_db import (
     try_acquire_client_device_write_lock,
     try_acquire_user_platform_write_lock,
 )
+from utils.other.request_deadline import request_deadline_remaining_seconds
 from models.users import (
     LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
     LOCATION_CONTEXT_PURPOSE,
@@ -74,6 +75,18 @@ from models.other import Person
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _request_deadline_firestore_kwargs() -> dict[str, float]:
+    """Pass the active route budget to Firestore, or skip work after expiry."""
+    remaining = request_deadline_remaining_seconds()
+    if remaining is None:
+        return {}
+    if remaining <= 0.0:
+        raise TimeoutError('request deadline expired before Firestore call')
+    return {'timeout': remaining}
+
+
 # Run-lock TTL (30 minutes) plus grace for a dead worker's last heartbeat.
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(minutes=45)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
@@ -174,11 +187,11 @@ def record_client_device(
         if label:
             updates['label'] = label
 
-        snapshot = doc_ref.get()
+        snapshot = doc_ref.get(**_request_deadline_firestore_kwargs())
         if not snapshot.exists:
             updates['first_seen_at'] = now
 
-        doc_ref.set(updates, merge=True)
+        doc_ref.set(updates, merge=True, **_request_deadline_firestore_kwargs())
     except Exception as e:  # noqa: BLE001
         logger.warning("record_client_device failed for uid=%s: %s", uid, e)
 
@@ -219,7 +232,7 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
         # `signup_platform` is set_once. Read the doc (single read) and only
         # include the field in the write if it's not already present. Cheaper
         # than a transaction for a field that almost never changes.
-        snapshot = user_ref.get()
+        snapshot = user_ref.get(**_request_deadline_firestore_kwargs())
         if snapshot.exists:
             data = snapshot.to_dict() or {}
             if not data.get('signup_platform'):
@@ -232,7 +245,7 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
             updates['signup_os'] = os_value
             updates['signup_platform_at'] = now
 
-        user_ref.set(updates, merge=True)
+        user_ref.set(updates, merge=True, **_request_deadline_firestore_kwargs())
     except Exception as e:  # noqa: BLE001
         logger.warning("record_user_platform failed for uid=%s: %s", uid, e)
 
@@ -2702,5 +2715,8 @@ def write_ai_user_profile_if_unchanged(uid: str, expected_text: str, profile: di
 
 
 def delete_ai_user_profile(uid: str) -> None:
-    db.collection('users').document(uid).update({'ai_user_profile': firestore.DELETE_FIELD})
+    # ai_user_profile_v2 was written by the retired Dream state pass (a96ada8922); nothing reads it.
+    db.collection('users').document(uid).update(
+        {'ai_user_profile': firestore.DELETE_FIELD, 'ai_user_profile_v2': firestore.DELETE_FIELD}
+    )
     invalidate(_USER_AI_PROFILE_CACHE, uid)

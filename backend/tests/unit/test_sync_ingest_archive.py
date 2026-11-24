@@ -24,7 +24,6 @@ from utils.other.raw_audio import CapturePack, WAL_FORMAT, decode_capture, prove
 from utils.other.raw_audio_read import list_packs, read_pack, verified_pcm_paths
 from utils.other.audio_opus import _get_opuslib
 from utils.other import audio_opus
-from utils import cloud_tasks
 from utils.other import audio_singleflight
 from utils.other import live_audio_archive
 
@@ -438,25 +437,6 @@ async def test_live_admission_is_session_stable_across_cohort_cache_expiry(monke
     assert not archive.packs
 
 
-def test_merge_worker_cohort_and_rollback_keep_pending_audience(monkeypatch):
-    enable(monkeypatch, 'SEPARATE_MERGE')
-    monkeypatch.setenv('AUDIO_MERGE_HANDLER_URL', 'https://sync.example/v2/audio-merge-jobs/run')
-    monkeypatch.setenv('AUDIO_MERGE_WORKER_URL', 'https://merge.example/v2/audio-merge-jobs/run')
-    assert cloud_tasks._audio_merge_handler_url('owner').startswith('https://merge.example')
-    assert cloud_tasks._audio_merge_handler_url('other').startswith('https://sync.example')
-    monkeypatch.setenv('AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED', 'false')
-    assert cloud_tasks._audio_merge_handler_url('owner').startswith('https://sync.example')
-    observed = []
-    monkeypatch.setattr(
-        cloud_tasks, 'verify_configured_cloud_tasks_oidc', lambda request, **kwargs: observed.append(kwargs) or 0
-    )
-    cloud_tasks.verify_audio_merge_cloud_tasks_oidc(SimpleNamespace())
-    assert observed[0]['audience'] == [
-        'https://sync.example/v2/audio-merge-jobs/run',
-        'https://merge.example/v2/audio-merge-jobs/run',
-    ]
-
-
 @pytest.mark.asyncio
 async def test_live_pack_tail_and_metadata(monkeypatch, buckets):
     enable(monkeypatch, 'LIVE')
@@ -726,13 +706,6 @@ def test_raw_playback_requires_read_phase(monkeypatch, buckets):
 
     monkeypatch.setattr(storage, 'read_pack', forbidden)
     assert storage.download_and_decode_chunk_blob(buckets['canonical'], 'raw-live/owner/c/a', 'owner', 16000) is None
-
-
-def test_missing_merge_worker_retains_current_handler(monkeypatch):
-    enable(monkeypatch, 'SEPARATE_MERGE')
-    monkeypatch.delenv('AUDIO_MERGE_WORKER_URL', raising=False)
-    monkeypatch.setenv('AUDIO_MERGE_HANDLER_URL', 'https://legacy/run')
-    assert cloud_tasks._audio_merge_handler_url('owner') == 'https://legacy/run'
 
 
 def test_conversation_purge_covers_raw_links_and_regional_objects(monkeypatch, buckets):

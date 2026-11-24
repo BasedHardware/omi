@@ -120,7 +120,7 @@ void main() {
     provider.notifyListeners();
     await provider.pendingLiveSegmentWrite;
 
-    final loaded = await LocalSegmentStore.at(dir).loadSession('live-1700000000');
+    final loaded = await LocalSegmentStore.at(dir).loadSession(provider.activeCaptureSessionId!);
     expect(transcriptSha256(loaded), '6698e08ad93c92100b75e3ab279d15bfa3a70288b1693377841759a26e588d40');
   });
 
@@ -136,7 +136,7 @@ void main() {
     provider.notifyListeners();
     await provider.pendingLiveSegmentWrite;
 
-    final loaded = await LocalSegmentStore.at(dir).loadSession('live-1700000001');
+    final loaded = await LocalSegmentStore.at(dir).loadSession(provider.activeCaptureSessionId!);
 
     expect(loaded.map((s) => s.text), ['second']);
   });
@@ -153,13 +153,13 @@ void main() {
     provider.notifyListeners();
     await provider.pendingLiveSegmentWrite;
 
-    expect(await LocalSegmentStore.at(Directory(blocked.path)).loadSession('live-1700000002'), isEmpty);
+    expect(await LocalSegmentStore.at(Directory(blocked.path)).loadSession(provider.activeCaptureSessionId!), isEmpty);
 
     await blocked.delete();
     provider.notifyListeners();
     await provider.pendingLiveSegmentWrite;
 
-    final loaded = await LocalSegmentStore.at(Directory(blocked.path)).loadSession('live-1700000002');
+    final loaded = await LocalSegmentStore.at(Directory(blocked.path)).loadSession(provider.activeCaptureSessionId!);
 
     expect(loaded.map((s) => s.text), ['only']);
   });

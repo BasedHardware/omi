@@ -119,6 +119,18 @@ def test_deleted_event_maps_to_ended_with_cancellation_reason():
     assert _count(event='ended', plan='architect', interval='month', reason='cancellation_requested') == before + 1
 
 
+def test_stripe_payment_failed_reason_records_payment_failure():
+    """Stripe sends cancellation_details.reason='payment_failed' for dunning cancels."""
+    before = _count(event='ended', plan='architect', interval='month', reason='payment_failure')
+    record_subscription_event(
+        stripe_event_type='customer.subscription.deleted',
+        subscription_obj=_subscription_obj(
+            price_id=_ARCHITECT_MONTH_PRICE, status='canceled', cancellation_details={'reason': 'payment_failed'}
+        ),
+    )
+    assert _count(event='ended', plan='architect', interval='month', reason='payment_failure') == before + 1
+
+
 def test_deleted_event_with_no_cancellation_reason_records_none():
     before = _count(event='ended', plan='unlimited', interval='year', reason='none')
 

@@ -180,6 +180,8 @@ env:
       configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
   - name: BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED
     value: "false"
+  - name: CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED
+    value: "off"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
@@ -189,7 +191,7 @@ env:
   - name: HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED
     value: "true"
   - name: SYNC_FUTURE_CAPTURE_CLAMP_ENABLED
-    value: 'false'
+    value: 'true'
   - name: HOME_TRANSCRIPTION_MAX_AGE_SECONDS
     value: "86400"
   - name: HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED
@@ -244,6 +246,8 @@ env:
     value: "true"
   - name: BATCH_HELD_DEAD_LETTER_ENABLED
     value: "true"
+  - name: BATCH_PARKED_JOB_SWEEPER_ENABLED
+    value: "true"
   - name: RECORD_INTAKE_AGE_PRIORITY_ENABLED
     value: "true"
   - name: RECORD_SEAL_REPAIR_FRESH_ENABLED
@@ -295,7 +299,9 @@ env:
   - name: CONVERSATIONS_V3_ROTATION_MAX_SECONDS
     value: "300"
   - name: SYNC_POLL_BACKOFF_ENABLED
-    value: "false"
+    value: "true"
+  - name: SYNC_POLL_BACKOFF_PERCENT
+    value: "5"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_LIVE_ADMISSION_ENABLED
@@ -338,8 +344,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
-    value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "100"
   - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
@@ -347,8 +351,6 @@ env:
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
   - name: BUCKET_AUDIO_DERIVED
-    value: ""
-  - name: AUDIO_MERGE_WORKER_URL
     value: ""
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
   - name: PROACTIVITY_V2_POSTHOG_TOKEN
@@ -722,8 +724,6 @@ env:
     value: "parakeet,modulate-velma-2"
   - name: PRERECORDED_SONIOX_FAILOVER_ENABLED
     value: "true"
-  - name: STT_RESILIENT_RECONNECT
-    value: "false"
   - name: STT_LIVE_DEMAND_ENABLED
     value: "true"
   - name: STT_LIVE_DEMAND_PERCENT
@@ -769,8 +769,6 @@ env:
     value: "3"
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
-  - name: PARAKEET_WINDOW_DIARIZATION
-    value: "false"
   - name: PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS
     value: "1.2"
   - name: PARAKEET_WINDOW_PACE_SECONDS
@@ -871,16 +869,12 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "false"
-  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
     value: 'true'
   - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
     value: "true"
   - name: SONIOX_WIRE_LEDGER
     value: "true"
-  - name: SONIOX_ORDERED_FINALIZE
-    value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "true"
   # Fair-use system (PR #5748)
@@ -936,6 +930,11 @@ env:
     value: 'true'
   # Quiet-check empty exit; evaluated on backend-sync (Cloud Tasks handler), pinned here for consistency (lead2 9b4ffd).
   - name: QUIET_EMPTY_EXIT_ENABLED
+    value: 'true'
+  # SCA-4019: hold a mobile server-batch capture across a socket drop for the 120 s reconnect
+  # grace; the producer drain releases the lease and persists a bounded deadline, so a held row
+  # seals at the deadline. Rollback: 'false' here and on backend-sync in one config train.
+  - name: LISTEN_BATCH_RECONNECT_ENABLED
     value: 'true'
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"

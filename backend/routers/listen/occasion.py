@@ -6,7 +6,6 @@ from models.conversation_enums import ConversationStatus
 from models.conversation_continuity import resumable_continuation
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
 from utils.transcribe_decisions import normalize_listen_source, should_attach_to_existing_in_progress
-from routers.listen.boundary_poll import merge_permitted
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,8 +28,6 @@ async def occasion_attach_target(controller) -> Optional[str]:
         )
         or controller._occasion_span_exceeded(existing)
     ):
-        return None
-    if not await merge_permitted(controller, existing):
         return None
     existing = await controller._continuity_row(existing)
     if not resumable_continuation(

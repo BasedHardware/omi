@@ -22,6 +22,8 @@ import 'package:omi/services/devices/transports/rayban_meta_transport.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
 import 'package:omi/utils/logger.dart';
 
+enum OfflineStorageCapability { unverified, supported, unsupported }
+
 /// Status of the device's offline storage (new multi-file firmware protocol).
 class StorageStatus {
   final int totalUsedBytes;
@@ -130,19 +132,20 @@ class RingCommandAck {
 }
 
 class DeviceConnectionFactory {
+  static DeviceType resolveDeviceType(BtDevice device) {
+    // Some OmiGlass devices advertise as Omi.
+    if (device.type == DeviceType.omi && device.name.toLowerCase().contains('glass')) {
+      return DeviceType.openglass;
+    }
+    return device.type;
+  }
+
   static DeviceConnection? create(BtDevice device) {
     DeviceTransport transport;
 
     // Create transport based on device locator
     final locator = device.locator;
     if (locator == null) return null;
-
-    // Use name-based detection as fallback for OmiGlass devices (some advertise as DeviceType.omi).
-    final deviceName = device.name.toLowerCase();
-    final isOmiGlass = device.type == DeviceType.openglass ||
-        deviceName.contains('openglass') ||
-        deviceName.contains('omiglass') ||
-        deviceName.contains('glass');
 
     switch (locator.kind) {
       case TransportKind.bluetooth:
@@ -161,13 +164,8 @@ class DeviceConnectionFactory {
         break;
     }
 
-    switch (device.type) {
+    switch (resolveDeviceType(device)) {
       case DeviceType.omi:
-        // Check if this is actually an OmiGlass device by name
-        if (isOmiGlass) {
-          Logger.debug('DeviceConnectionFactory: Device name suggests OmiGlass, creating OmiGlassConnection');
-          return OmiGlassConnection(device, transport);
-        }
         return OmiDeviceConnection(device, transport);
       case DeviceType.openglass:
         return OmiGlassConnection(device, transport);
@@ -600,6 +598,23 @@ abstract class DeviceConnection {
 
   Future<bool> performClearRing() async {
     return false;
+  }
+
+  /// A readable status confirms support. Only known transport capabilities or
+  /// completed GATT discovery can prove that this connection lacks storage.
+  Future<OfflineStorageCapability> probeOfflineStorageCapability() async {
+    if (!await isConnected()) return OfflineStorageCapability.unverified;
+    final link = transport;
+    if (link is WatchTransport || link is RayBanMetaTransport) {
+      return OfflineStorageCapability.unsupported;
+    }
+    if (link is NativeBleTransport &&
+        link.servicesDiscovered &&
+        !link.hasCharacteristic(storageDataStreamServiceUuid, storageReadControlCharacteristicUuid)) {
+      return OfflineStorageCapability.unsupported;
+    }
+    final storage = await performGetStorageList();
+    return storage.isNotEmpty ? OfflineStorageCapability.supported : OfflineStorageCapability.unverified;
   }
 
   // --- Legacy storage protocol ---

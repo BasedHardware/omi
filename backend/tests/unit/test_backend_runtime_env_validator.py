@@ -268,6 +268,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "true"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
         {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
+        {"name": "SYNC_POLL_BACKOFF_PERCENT", "value": "0"},
         {"name": "SYNC_RECORD_COVERAGE_WAIT_MEMO", "value": "true"},
         {"name": "SYNC_RECORD_WAIT_MEMO_FIRST", "value": "true"},
         {"name": "SYNC_RECORD_DECODE_FAILURE_MEMO", "value": "true"},
@@ -279,13 +280,11 @@ def with_memory_env(payload: str) -> str:
         {"name": "AUDIO_ARCHIVE_SYNC_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_COALESCE_ENABLED", "value": "true"},
-        {"name": "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_PERCENT", "value": "0"},
         {"name": "AUDIO_ARCHIVE_STOP_PCM_PERCENT", "value": "0"},
         {"name": "AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT", "value": "0"},
         {"name": "AUDIO_ARCHIVE_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
         {"name": "BUCKET_AUDIO_DERIVED", "value": ""},
-        {"name": "AUDIO_MERGE_WORKER_URL", "value": ""},
         {"name": "REDIS_DB_PORT", "value": "13151"},
         {"name": "CLIENT_SUMMARIES_AT_CAP_ENABLED", "value": "true"},
         {"name": "DESKTOP_UPDATE_POINTERS_MODE", "value": "primary"},
@@ -401,12 +400,10 @@ def with_audio_timeline_span_env(payload: str) -> str:
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_RETENTION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION", "value": "false"},\n'
-        '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_UNION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS", "value": "false"},\n'
         '        {"name": "SONIOX_CAPTURE_AXIS_DIAGNOSTICS", "value": "false"},\n'
-        '        {"name": "SONIOX_WIRE_LEDGER", "value": "false"},\n'
-        '        {"name": "SONIOX_ORDERED_FINALIZE", "value": "false"},',
+        '        {"name": "SONIOX_WIRE_LEDGER", "value": "false"},',
     )
 
 
@@ -664,6 +661,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         r'\n        {"name": "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED", "value": "true"},'
         r'\n        {"name": "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},'
+        r'\n        {"name": "BATCH_PARKED_JOB_SWEEPER_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_TERMINAL_FAMILY_MODE", "value": "on"},',
         payload,
@@ -2025,6 +2023,7 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
+        {"name": "PREPAID_CODE_REDEEM", "value": "off"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -2351,6 +2350,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
+        {"name": "PREPAID_CODE_REDEEM", "value": "off"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -2436,6 +2436,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
+        {"name": "PREPAID_CODE_REDEEM", "value": "off"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -4167,6 +4168,7 @@ def test_quality_push_switches_are_bound_on_every_owning_backend_host(environmen
         for key in (
             'RECORD_SEAL_REPAIR_FRESH_ENABLED',
             'BATCH_HELD_DEAD_LETTER_ENABLED',
+            'BATCH_PARKED_JOB_SWEEPER_ENABLED',
             'RECORD_INTAKE_AGE_PRIORITY_ENABLED',
         ):
             assert key in classification['kinds']['config']
@@ -4228,23 +4230,27 @@ def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key,
     }
 
 
-@pytest.mark.parametrize('environment', ['dev', 'prod'])
-def test_future_capture_admissions_default_off_until_reader_rollout(environment):
+@pytest.mark.parametrize(('environment', 'enabled'), [('dev', 'false'), ('prod', 'true')])
+def test_future_capture_clamp_respects_backend_and_backfill_preservation_pins(environment, enabled):
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
-    expected = {'value': 'false', 'category': 'rollout'}
-    hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
+    hosts = {'backend-listen': config['gke']['backend-listen'], **config['cloud_run']['services']}
     # SCA-3120: prod adds the derived projection pump as a sixth reader.
     assert len(hosts) == (6 if environment == 'prod' else 5)
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
-    for host in hosts:
-        assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == expected
-        assert renderer['_render_env_entries']({'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': expected}) == [
-            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': 'false'}
+    for name, host in hosts.items():
+        # SCA-3555: backend keeps the live value until its SCA-3501 activation step.
+        # SCA-3544: backfill preserves false during its catch-up.
+        host_value = 'false' if name in ('backend', 'backend-sync-backfill') else enabled
+        assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == {'value': host_value, 'category': 'rollout'}
+        # Render this host's own manifest entry (not the expected literal).
+        entry = {'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED']}
+        assert renderer['_render_env_entries'](entry) == [
+            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': host_value}
         ]
     values = yaml.safe_load((ROOT.parent / config['gke']['backend-listen']['values_file']).read_text())
     assert {entry['name']: entry.get('value') for entry in values['env']}[
         'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'
-    ] == 'false'
+    ] == enabled
 
 
 @pytest.mark.parametrize('service', ['all', 'backend-sync'])

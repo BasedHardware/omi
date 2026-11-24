@@ -55,6 +55,8 @@ if hasattr(cfg, 'boundary_seconds'):  # #25794: silence gap and lock delay as se
     kwargs = {'silence_gap': timedelta(seconds=gap), 'lock_delay': timedelta(seconds=lock)}
     if 'silence_gap' in inspect.signature(outline.messages).parameters:
         msg_kw['silence_gap'] = timedelta(seconds=gap)
+if hasattr(cfg, 'max_window_seconds'):
+    kwargs['max_window'] = timedelta(seconds=cfg.max_window_seconds())
 groups = outline.stretches(eligible, now, **kwargs)
 if 'sitdown' in inspect.signature(outline.messages).parameters:
     msg_kw['sitdown'] = sitdown

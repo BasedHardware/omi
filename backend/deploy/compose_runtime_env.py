@@ -158,7 +158,22 @@ def _resolve_derived_services(env_config: ConfigDict) -> None:
         if source_name in derived:
             raise ValueError(f'Cloud Run service {name} derives from derived service {source_name!r}')
         own = {key: value for key, value in config.items() if key != DERIVE_FROM_KEY}
-        services[name] = _deep_merge(source, own)
+        own_forbidden = list(dict.fromkeys(own.get('forbidden_env', [])))
+        own_env = _as_config_dict(own.get('env')) or {}
+        conflict = sorted(set(own_forbidden) & set(own_env))
+        if conflict:
+            raise ValueError(f'Cloud Run service {name} both declares and forbids env vars: {", ".join(conflict)}')
+
+        resolved = _deep_merge(source, own)
+        inherited_forbidden = list(source.get('forbidden_env', []))
+        resolved_forbidden = list(dict.fromkeys([*inherited_forbidden, *own_forbidden]))
+        if resolved_forbidden:
+            resolved['forbidden_env'] = resolved_forbidden
+        resolved_env = _as_config_dict(resolved.get('env'))
+        if resolved_env is not None:
+            for key in own_forbidden:
+                resolved_env.pop(key, None)
+        services[name] = resolved
 
 
 def _overlay_path(env: str, runtime_env_dir: Path = RUNTIME_ENV_DIR) -> Path:
