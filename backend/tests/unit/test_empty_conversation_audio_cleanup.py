@@ -6,6 +6,7 @@ from unittest.mock import Mock, call
 import pytest
 
 from utils.conversations import lifecycle
+from utils.log_sanitizer import hash_log_identifier
 from utils.other import storage
 
 
@@ -43,7 +44,10 @@ def test_committed_empty_generation_only_lists_raw_prefixes(monkeypatch, storage
     records = [record for record in caplog.records if record.message.startswith('Retained audio for empty')]
     assert len(records) == 1
     assert records[0].levelno == logging.INFO
-    assert 'retained_raw_objects=3 count_error=none' in records[0].message
+    assert records[0].message == (
+        f'Retained audio for empty conversation uid_hash={hash_log_identifier("uid")} '
+        f'conversation_id_hash={hash_log_identifier("conversation")} retained_raw_objects=3 count_error=none'
+    )
 
 
 def test_refused_delete_never_touches_audio(monkeypatch, storage_boundaries):

@@ -55,7 +55,7 @@ from utils.other.storage import (
     get_app_thumbnail_url,
 )
 from utils.screen_frames.store import delete_conversation_screen_frames
-from utils.log_sanitizer import sanitize
+from utils.log_sanitizer import hash_log_identifier
 from models.calendar_context import CalendarMeetingContext
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -1844,12 +1844,16 @@ def _delete_privacy_audio_after_response(uid: str, conversation_id: str, *, sour
     try:
         delete_privacy_conversation_audio(uid, conversation_id, source_ids=source_ids)
     except StoragePrefixPurgeError as error:
+        blocked = isinstance(error, StoragePrefixPurgeBlocked)
         logger.error(
-            'event=conversation_audio_purge uid=%s conversation_id=%s outcome=%s reason=%s',
-            uid,
-            conversation_id,
-            'blocked' if isinstance(error, StoragePrefixPurgeBlocked) else 'failed',
-            sanitize(error),
+            'event=conversation_audio_purge uid_hash=%s conversation_id_hash=%s outcome=%s reason=%s '
+            'blocked_generations=%d unverified_generations=%s',
+            hash_log_identifier(uid),
+            hash_log_identifier(conversation_id),
+            'blocked' if blocked else 'failed',
+            'protected_prefix' if blocked else 'prefix_purge_failed',
+            len(error.objects) if blocked else 0,
+            error.unverified if blocked else 'unknown',
         )
 
 

@@ -59,6 +59,7 @@ from utils.llm.gateway_error_contract import (
     is_byok_account_state_http_exception,
     is_retryable_processing_http_exception,
 )
+from utils.log_sanitizer import hash_log_identifier
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_intake_outcome
 from utils.other.storage import count_retained_raw_conversation_objects
@@ -997,9 +998,10 @@ def _log_retained_empty_recording_audio(uid: str, conversation_id: str) -> None:
         # The row is already gone. A failed inventory cannot change that outcome.
         count_error = type(error).__name__
     logger.info(
-        'Retained audio for empty conversation uid=%s conversation_id=%s retained_raw_objects=%s count_error=%s',
-        uid,
-        conversation_id,
+        'Retained audio for empty conversation uid_hash=%s conversation_id_hash=%s '
+        'retained_raw_objects=%s count_error=%s',
+        hash_log_identifier(uid),
+        hash_log_identifier(conversation_id),
         count,
         count_error,
     )
