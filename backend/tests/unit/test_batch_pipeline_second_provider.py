@@ -531,3 +531,136 @@ def test_byok_admission_still_checks_managed_soniox_allowance(setup, monkeypatch
     assert recovery.recover('bad', binding.owner_id) == 'failed_held'
     second.assert_not_called()
     assert allowed.call_args.args[2] == 'soniox'
+
+
+def guarded_setup(setup, monkeypatch, legacy_dependencies, *, soniox=None, speech=(0, 5), close='true'):
+    """A language-guarded held unit under the safety net; both recognizers answer empty by default."""
+    client, binding, artifacts, alternate, second, recovery = second_setup(
+        setup, monkeypatch, legacy_dependencies, soniox=soniox or Mock(return_value=([], 'vi')), speech=speech
+    )
+    job = row(client)
+    job.pop('worker_empty_evidence')
+    job['worker_failure'] = {'stage': 'vad_windows', 'reason': 'unsupported_language'}
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED', close)
+    return client, binding, artifacts, alternate, second, recovery
+
+
+def test_language_guarded_close_switch_settles_two_empty_answers(setup, monkeypatch, legacy_dependencies, caplog):
+    caplog.set_level('INFO')
+    client, binding, artifacts, alternate, second, recovery = guarded_setup(setup, monkeypatch, legacy_dependencies)
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    job = row(client)
+    assert job['result']['outcome'] == 'no_recoverable_speech'
+    assert all(r['outcome'] == 'empty' and r['word_count'] == 0 for r in job['recovery']['recognizers'].values())
+    assert set(job['recovery']['recognizers']) == {'modulate', 'soniox'}
+    payload = artifacts.persist_recovery_result.call_args.args[1]
+    assert result_outcome(payload) == 'no_recoverable_speech'
+    # Parakeet never ran: the evidence names the guard, never a GPU retry.
+    assert payload['recognition_evidence'] == LANGUAGE_GUARD_EMPTY_EVIDENCE
+    assert payload['words'] == [] and payload['speech_seconds'] == 5
+    assert set(payload['recognizer_receipts']) == {'modulate', 'soniox'}
+    assert 'reason=no_recoverable_speech' in caplog.text
+    # Still one paid call each, and nothing more on later sweeps.
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    alternate.assert_called_once()
+    second.assert_called_once()
+
+
+@pytest.mark.parametrize('other_switch', ['false', 'true'])
+def test_language_guarded_close_is_default_off_and_independent_of_the_unguarded_switch(
+    setup, monkeypatch, legacy_dependencies, other_switch
+):
+    client, binding, artifacts, _, second, recovery = guarded_setup(
+        setup, monkeypatch, legacy_dependencies, close='false'
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', other_switch)
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    second.assert_called_once()
+    assert not row(client).get('result')
+    artifacts.persist_recovery_result.assert_not_called()
+
+
+def test_language_guarded_close_switch_leaves_an_unguarded_unit_held(setup, monkeypatch, legacy_dependencies):
+    client, binding, artifacts, _, second, recovery = second_setup(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED', 'true')
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    second.assert_called_once()
+    artifacts.persist_recovery_result.assert_not_called()
+
+
+@pytest.mark.parametrize('error', [TimeoutError('synthetic'), ('malformed',)])
+def test_language_guarded_close_switch_needs_a_validated_second_empty_answer(
+    setup, monkeypatch, legacy_dependencies, error
+):
+    soniox = Mock(side_effect=error) if isinstance(error, Exception) else Mock(return_value=error)
+    client, binding, artifacts, _, second, recovery = guarded_setup(
+        setup, monkeypatch, legacy_dependencies, soniox=soniox
+    )
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    assert not row(client).get('result')
+    artifacts.persist_recovery_result.assert_not_called()
+    second.assert_called_once()
+
+
+def test_language_guarded_close_switch_keeps_second_recognizer_words(setup, monkeypatch, legacy_dependencies):
+    client, binding, _, _, second, recovery = guarded_setup(
+        setup, monkeypatch, legacy_dependencies, soniox=Mock(return_value=(WORDS, 'vi'))
+    )
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert row(client)['result']['outcome'] == 'success'
+
+
+def test_language_guarded_close_switch_never_closes_without_the_second_recognizer(
+    setup, monkeypatch, legacy_dependencies
+):
+    """Above the independent ceiling Soniox is not asked, so one empty answer keeps the unit held."""
+    client, binding, artifacts, alternate, second, recovery = guarded_setup(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS', '0.001')
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    second.assert_not_called()
+    assert not row(client).get('result')
+    artifacts.persist_recovery_result.assert_not_called()
+
+
+def test_language_guarded_close_needs_terminal_disposition(setup, monkeypatch, legacy_dependencies):
+    client, binding, artifacts, _, second, recovery = guarded_setup(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false')
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    artifacts.persist_recovery_result.assert_not_called()
+
+
+def test_guarded_no_speech_fence_needs_the_switch_and_both_empty_receipts(monkeypatch):
+    from utils.batch_pipeline.contracts import held_result_allowed
+
+    empty = lambda name: {'provider': name, 'outcome': 'empty', 'word_count': 0}
+    guarded = {
+        'duration_seconds': 5,
+        'worker_failure': {'stage': 'vad_windows', 'reason': 'unsupported_language'},
+        'recovery': {'recognizers': {'modulate': empty('modulate'), 'soniox': empty('soniox')}},
+    }
+    monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED', raising=False)
+    assert not held_result_allowed(guarded, 'no_recoverable_speech')
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED', 'true')
+    assert held_result_allowed(guarded, 'no_recoverable_speech')
+    # A saved result cannot settle on one receipt, an error, a refusal or words.
+    for soniox in (None, {**empty('soniox'), 'outcome': 'error'}, {'provider': 'soniox', 'outcome': 'refused'}):
+        recognizers = {'modulate': empty('modulate'), **({'soniox': soniox} if soniox else {})}
+        assert not held_result_allowed({**guarded, 'recovery': {'recognizers': recognizers}}, 'no_recoverable_speech')
+    words = {'provider': 'modulate', 'outcome': 'words', 'word_count': 3}
+    recognizers = {'modulate': words, 'soniox': empty('soniox')}
+    assert not held_result_allowed({**guarded, 'recovery': {'recognizers': recognizers}}, 'no_recoverable_speech')
+    # Words and unguarded units keep their existing rule either way.
+    assert held_result_allowed(guarded, 'success')
+    assert held_result_allowed({'duration_seconds': 5}, 'no_recoverable_speech')
+
+
+def test_settlement_counter_reports_a_language_guarded_close(setup, monkeypatch, legacy_dependencies, settlements):
+    count, total = settlements
+    client, binding, _, _, _, recovery = guarded_setup(setup, monkeypatch, legacy_dependencies)
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    labels = dict(modulate='empty', soniox='empty', speech='2s_or_more', language_guarded='true')
+    assert count(result='no_recoverable_speech', **labels) == 1
+    assert count(result='failed_held', **labels) == 0
+    assert total() == 1

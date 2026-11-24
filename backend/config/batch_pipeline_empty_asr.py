@@ -11,6 +11,10 @@ def two_recognizer_empty_close_enabled() -> bool:
     return os.getenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', 'false').strip().lower() == 'true'
 
 
+def language_guarded_empty_close_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED', 'false').strip().lower() == 'true'
+
+
 def two_empty_recognizers(receipts) -> bool:
     """Two distinct recognizers that each returned a validated empty answer."""
     return (
@@ -27,14 +31,12 @@ def two_empty_recognizers(receipts) -> bool:
     )
 
 
-def terminal_empty_allowed(spans, *, recognizer_receipts=None) -> bool:
+def terminal_empty_allowed(spans, *, recognizer_receipts=None, language_guarded=False) -> bool:
     # A recognizer returning blanks cannot establish that VAD-positive audio is
     # disposable, including sub-second speech. Strict-VAD silence is separate.
     # Two independent recognizers that both return a validated empty answer may,
     # behind their own switch: no automatic step follows that hold, so retaining
     # it only keeps the whole upload unfinished on the phone until it expires.
-    return (
-        not safety_net_enabled()
-        or not spans
-        or (two_recognizer_empty_close_enabled() and two_empty_recognizers(recognizer_receipts))
-    )
+    # A language-guarded unit never reached Parakeet, so it has its own switch.
+    close_enabled = language_guarded_empty_close_enabled if language_guarded else two_recognizer_empty_close_enabled
+    return not safety_net_enabled() or not spans or (close_enabled() and two_empty_recognizers(recognizer_receipts))
