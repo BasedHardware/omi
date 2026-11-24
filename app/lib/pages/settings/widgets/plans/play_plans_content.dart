@@ -305,7 +305,7 @@ class _PlayPlansLoadingState extends State<PlayPlansLoading> {
   @override
   Widget build(BuildContext context) {
     final usage = context.watch<UsageProvider>();
-    final failed = usage.error != null && !usage.isLoading;
+    final failed = usage.billingProviderFailed;
     return DecoratedBox(
       decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
       child: SizedBox(

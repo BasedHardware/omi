@@ -1,6 +1,7 @@
 // The plan is re-read when the app resumes (Google Play or the Stripe portal may have changed it)
 // and when Plans & Billing opens, so a cancel or resubscribe shows without relaunching the app.
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -406,5 +407,9 @@ void main() {
       expect(server.usage.subscription!.subscription.plan, PlanType.unlimitedV2);
       await tester.pump(const Duration(seconds: 5));
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  });
+
+  test('Home mounts the resume observer', () {
+    expect(File('lib/pages/home/page.dart').readAsStringSync(), contains('PlanRefreshOnResume(child:'));
   });
 }
