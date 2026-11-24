@@ -1,12 +1,7 @@
 import unittest
 
 from testing.finalization_replay.ordinary_sync_diag import _stored_sync_cases
-from testing.finalization_replay.ordinary_sync_diag_report import (
-    enrich,
-    family_for_path,
-    unlabelled_groups,
-    unreadable_terminal_consequences,
-)
+from testing.finalization_replay.ordinary_sync_diag_report import enrich, family_for_path, unlabelled_groups
 
 
 class OrdinarySyncDiagnosticTests(unittest.TestCase):
@@ -125,37 +120,6 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
         report['cases'][0]['python_retry']['ciphertext_kept'] = False
         with self.assertRaisesRegex(ValueError, 'stale or missing evidence'):
             enrich(report)
-
-    def test_unreadable_consequences_require_same_ciphertext_and_no_provider_calls(self):
-        uid, cid = 'fixture', 'capture'
-        attention = f'users/{uid}/processing_attention_items/conv-summary:{cid}:terminal'
-        case = {
-            'go_evidence': {'job': {'state': 'dead_letter', 'cause': 'conversation_unreadable'}},
-            'go': {
-                'owner_id': uid,
-                'conversation_id': cid,
-                'conversation': {'finalization_status': 'dead_letter', 'transcript_segments': 'ciphertext'},
-                'derived_documents': {attention: {'failure_code': 'conversation_unreadable'}},
-                'provider_calls': [],
-            },
-            'python': {
-                'conversation': {'transcript_segments': 'ciphertext'},
-                'derived_documents': {
-                    'sync_reprocess_outbox/parked': {'uid': uid, 'conversation_id': cid, 'age_gate_parked': True},
-                    'sync_reprocess_outbox/unrelated': {'uid': uid, 'conversation_id': 'other', 'age_gate_parked': True},
-                },
-                'provider_calls': [],
-            },
-        }
-        paths = {path for path, _ in unreadable_terminal_consequences(case)}
-        self.assertIn('/derived_documents/sync_reprocess_outbox~1parked', paths)
-        self.assertIn('/derived_documents/' + attention.replace('/', '~1'), paths)
-        self.assertNotIn('/derived_documents/sync_reprocess_outbox~1unrelated', paths)
-        case['python']['provider_calls'] = ['notes']
-        self.assertEqual(unreadable_terminal_consequences(case), set())
-        case['python']['provider_calls'] = []
-        case['python']['conversation']['transcript_segments'] = 'other-ciphertext'
-        self.assertEqual(unreadable_terminal_consequences(case), set())
 
     def test_operation_table_separates_r7_overages_from_field_rows(self):
         report = {

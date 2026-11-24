@@ -148,10 +148,11 @@ type replayCase struct {
 }
 
 type difference struct {
-	Path          string `json:"path"`
-	Kind          string `json:"kind"`
-	Reason        string `json:"reason,omitempty"`
-	FailureReason string `json:"failure_reason,omitempty"`
+	Path                          string `json:"path"`
+	Kind                          string `json:"kind"`
+	Reason                        string `json:"reason,omitempty"`
+	FailureReason                 string `json:"failure_reason,omitempty"`
+	UnreadableTerminalConsequence bool   `json:"unreadable_terminal_consequence,omitempty"`
 }
 
 type caseReport struct {
@@ -252,6 +253,7 @@ func compare(cases []replayCase) (report, error) {
 			return report{}, fmt.Errorf("effects must be a JSON object in both observations")
 		default:
 			entry.Differences = compareObservationsForRun(c.Python, c.Go, pythonTokenCounts, goTokenCounts)
+			markUnreadableTerminalConsequences(&entry, c.Python, c.Go)
 			matched := true
 			for _, diff := range entry.Differences {
 				if diff.Reason == "" {

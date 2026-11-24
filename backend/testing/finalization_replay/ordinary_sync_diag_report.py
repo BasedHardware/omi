@@ -7,7 +7,6 @@ import json
 import re
 import sys
 from collections import Counter, defaultdict
-from hashlib import sha256
 from pathlib import Path
 
 FAMILIES = (
@@ -148,57 +147,6 @@ def validate_unreadable_park(case: dict) -> bool:
     ):
         raise ValueError('SCA-3874 terminal custody rule is stale or missing evidence')
     return True
-
-
-def unreadable_terminal_consequences(case: dict) -> set[tuple[str, str]]:
-    python = case.get('python') or {}
-    go = case.get('go') or {}
-    job = (case.get('go_evidence') or {}).get('job') or {}
-    py_row = python.get('conversation') or {}
-    go_row = go.get('conversation') or {}
-    ciphertext = py_row.get('transcript_segments')
-    if (
-        job.get('state') != 'dead_letter'
-        or job.get('cause') != 'conversation_unreadable'
-        or go_row.get('finalization_status') != 'dead_letter'
-        or not ciphertext
-        or ciphertext != go_row.get('transcript_segments')
-        or python.get('provider_calls') != []
-        or go.get('provider_calls') != []
-    ):
-        return set()
-
-    consequences = {('/conversation/finalization_status', 'missing_in_python'), ('/go/admitted', 'invalid_binding')}
-    uid, cid = go['owner_id'], go['conversation_id']
-    for path, doc in python['derived_documents'].items():
-        if path.startswith('sync_reprocess_outbox/') and doc and doc.get('uid') == uid and (
-            doc.get('conversation_id') == cid and doc.get('age_gate_parked') is True
-        ):
-            consequences.add(('/derived_documents/' + path.replace('/', '~1'), 'missing_in_go'))
-    attention = f'users/{uid}/processing_attention_items/conv-summary:{cid}:'
-    for path, doc in go['derived_documents'].items():
-        if path.startswith(attention) and doc and doc.get('failure_code') == job['cause']:
-            consequences.add(('/derived_documents/' + path.replace('/', '~1'), 'missing_in_python'))
-
-    privacy = python.get('batch_pipeline_privacy') or {}
-    operations = (python.get('cost') or {}).get('firestore_operations') or {}
-    if (
-        all((privacy.get(phase) or {}).get('exists') is False for phase in ('seed', 'final'))
-        and operations.get('batch_pipeline_privacy_document_reads') == case['python_retry']['callback_pending_attempts']
-        and all(operations.get(f'batch_pipeline_privacy_document_{op}') == 0 for op in ('writes', 'deletes'))
-    ):
-        digest = sha256(uid.encode()).hexdigest()
-        doc_path = f'/python/derived_documents/batch_pipeline_privacy~1{digest}'
-        consequences.update(
-            {
-                ('/python/batch_pipeline_privacy/final', 'missing_document'),
-                ('/python/batch_pipeline_privacy/final_snapshot', 'invalid_binding'),
-                ('/python/firestore_operations/batch_pipeline_privacy_document', 'invalid_operations'),
-                (f'{doc_path}/memo_schema', 'missing_evidence'),
-                (f'{doc_path}/memo_token', 'invalid_binding'),
-            }
-        )
-    return consequences
 
 
 def normalized_difference_location(path: str, case_name: str) -> tuple[str, str, bool]:
@@ -363,7 +311,6 @@ def enrich(report: dict) -> dict:
             operation_overages.append({'case': operation_row['case'], 'difference': operation_row['difference']})
 
         unreadable_park = validate_unreadable_park(case)
-        unreadable_consequences = unreadable_terminal_consequences(case) if unreadable_park else set()
         captured_receipt_trace = case.get('home_dirty_receipt_trace') or {}
         case['home_dirty_receipt_trace'] = {side: captured_receipt_trace.get(side, {}) for side in ('python', 'go')}
         case.pop('cost', None)
@@ -398,7 +345,7 @@ def enrich(report: dict) -> dict:
                 label = 'go_gap'
             elif unreadable_park and (
                 difference.get('path') == '/status'
-                or (difference.get('path'), difference.get('kind')) in unreadable_consequences
+                or difference.pop('unreadable_terminal_consequence', False) is True
             ):
                 label = UNREADABLE_RETRY_BUG
                 difference['issue'] = UNREADABLE_RETRY_ISSUE
