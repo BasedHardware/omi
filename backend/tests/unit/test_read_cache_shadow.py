@@ -1,6 +1,7 @@
 """Shadow outcomes, sampling, admission, and isolation from a slow/failing read."""
 
 import threading
+from datetime import datetime, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -128,3 +129,70 @@ def test_real_executor_is_bounded_and_does_not_wait(monkeypatch, caplog):
         release.set()
         for future in completed:
             future.result(timeout=3)
+
+
+@pytest.fixture
+def monthly(monkeypatch):
+    from database import user_usage
+
+    monkeypatch.setenv('OMI_USAGE_MONTH_TOTAL_SHADOW_RATE', '1')
+    monkeypatch.setenv('FSR_USAGE_MONTH_TOTAL_EPOCH', 'v1')
+    pending, metric, fetch = [], Mock(), Mock(return_value=totals())
+    monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))
+    monkeypatch.setattr(shadow, 'MONTH_SHADOW', metric)
+    monkeypatch.setattr(user_usage, 'read_hourly_usage_for_shadow', fetch)
+    return pending, metric, fetch
+
+
+def observe_month(path='total_uncached', values=None, epoch='v1'):
+    now = datetime(2026, 11, 24, tzinfo=timezone.utc)
+    shadow.compare_month(path, 'private-uid', now, now, values or totals(), None, now, epoch)
+
+
+@pytest.mark.parametrize('field', shadow.USAGE_FIELDS)
+def test_monthly_mismatch_compares_each_field_and_only_labels_bucket(monthly, monkeypatch, field):
+    pending, metric, fetch = monthly
+    monkeypatch.setenv('K_SERVICE', 'backend-sync')
+    observe_month(values={**totals(), field: 20})
+    fetch.assert_not_called()
+    pending.pop()()
+    metric.labels.assert_called_once_with(
+        service='backend-sync', epoch='v1', path='total_uncached', outcome='mismatch', delta_bucket='le_60'
+    )
+    metric.labels.return_value.inc.assert_called_once_with()
+
+
+def test_cross_epoch_hit_and_saturation_are_not_completed(monthly, monkeypatch):
+    pending, metric, fetch = monthly
+    observe_month(path='cache_hit', epoch='retired')
+    assert metric.labels.call_args.kwargs['outcome'] == 'race'
+    monkeypatch.setattr(executors, 'submit_with_context', Mock(side_effect=executors.ExecutorSaturatedError))
+    observe_month()
+    assert metric.labels.call_args.kwargs['outcome'] == 'skipped'
+    assert not pending
+    fetch.assert_not_called()
+
+
+def test_monthly_error_never_escapes_or_logs_values(monthly, caplog):
+    pending, metric, fetch = monthly
+    fetch.side_effect = RuntimeError('private-uid')
+    observe_month(path='free_allowance')
+    pending.pop()()
+    assert metric.labels.call_args.kwargs['outcome'] == 'error'
+    assert 'private-uid' not in caplog.text
+
+
+def test_monthly_kill_switch_and_default_rate(monthly, monkeypatch):
+    pending, metric, fetch = monthly
+    monkeypatch.setenv('OMI_USAGE_MONTH_TOTAL_SHADOW_ENABLED', 'false')
+    observe_month()
+    monkeypatch.delenv('OMI_USAGE_MONTH_TOTAL_SHADOW_ENABLED')
+    monkeypatch.delenv('OMI_USAGE_MONTH_TOTAL_SHADOW_RATE')
+    monkeypatch.setattr(shadow.random, 'random', lambda: 0.01)
+    observe_month()
+    assert not pending
+    monkeypatch.setattr(shadow.random, 'random', lambda: 0.0099)
+    observe_month()
+    assert len(pending) == 1
+    fetch.assert_not_called()
+    metric.labels.assert_not_called()

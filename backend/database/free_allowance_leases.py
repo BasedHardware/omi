@@ -224,14 +224,17 @@ def chargeable_seconds(uid: str, now: datetime, *, firestore_client: Any = None)
     now = now.astimezone(timezone.utc)
 
     @firestore.transactional
-    def read(transaction: Any) -> float:
+    def read(transaction: Any) -> tuple[float, Any, Any]:
         with monthly_usage_totals.publication_fence(user, transaction, firestore_client=client):
-            usage = monthly_usage_totals.month_ref(user, now).get(transaction=transaction).to_dict()
+            snapshot = monthly_usage_totals.month_ref(user, now).get(transaction=transaction)
+            usage = snapshot.to_dict()
             used = monthly_usage_totals.verified_transcription_seconds(usage, now)
             state = _state(_ref(user, month).get(transaction=transaction).to_dict())
-            return used + state['ptt_seconds'] + _held(state)
+            return used + state['ptt_seconds'] + _held(state), usage, snapshot
 
-    return read(client.transaction(max_attempts=3))
+    chargeable, usage, snapshot = read(client.transaction(max_attempts=3))
+    monthly_usage_totals.observe_verified_month(uid, now, usage, getattr(snapshot, 'read_time', None), client)
+    return chargeable
 
 
 def prepare_settlement(

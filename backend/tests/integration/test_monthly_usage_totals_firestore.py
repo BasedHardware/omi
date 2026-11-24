@@ -448,3 +448,33 @@ def test_deletion_inventory_cannot_miss_a_racing_cold_seed(lane, monkeypatch):
         assert seed.result(timeout=20)['transcription_seconds'] == 9
         erased.result(timeout=20)
     assert not totals.month_ref(user, NOW).get().exists, 'derived usage survived the wipe inventory'
+
+
+def test_shadow_observes_served_snapshot_after_atomic_hourly_write(lane, monkeypatch):
+    from unittest.mock import Mock
+
+    from database import free_allowance_leases as ledger
+    from utils import executors, read_cache_shadow as shadow
+
+    client, uid, _ = lane
+    pending, metric = [], Mock()
+    monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))
+    monkeypatch.setattr(shadow, 'MONTH_SHADOW', metric)
+    monkeypatch.setenv('OMI_USAGE_MONTH_TOTAL_SHADOW_RATE', '1')
+    earlier = NOW.replace(day=1)
+    user_usage.update_hourly_usage(uid, earlier, {'transcription_seconds': 11}, firestore_client=client)
+    user_usage.update_hourly_usage(uid, NOW, {'transcription_seconds': 7}, firestore_client=client)
+    totals.establish_verified_month(uid, NOW, firestore_client=client)
+    partial = user_usage.get_monthly_usage_stats_since(uid, NOW, NOW)
+    assert partial['transcription_seconds'] == 7
+    assert ledger.chargeable_seconds(uid, NOW, firestore_client=client) == 18
+
+    user_usage.update_hourly_usage(uid, NOW, {'transcription_seconds': 5}, firestore_client=client)
+    assert len(pending) == 3
+    for compare in pending:
+        compare()
+    assert [(c.kwargs['path'], c.kwargs['outcome']) for c in metric.labels.call_args_list] == [
+        ('free_allowance', 'match'),
+        ('total_uncached', 'match'),
+        ('free_allowance', 'match'),
+    ]

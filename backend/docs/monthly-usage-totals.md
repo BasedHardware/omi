@@ -216,3 +216,55 @@ For example, 1M such attempts/day adds 3M reads/day; the modeled 40M/day gross
 reader reduction would then be at most 37M/day before seeds/fallbacks/retries.
 Neither W nor the net saving is measured yet. Measure actual rates and
 contention before considering shards or booking savings.
+
+## Monthly usage shadow (SCA-4276 step 1)
+
+Set `OMI_USAGE_MONTH_TOTAL_SHADOW_ENABLED=false` to stop these checks.
+By default, `OMI_USAGE_MONTH_TOTAL_SHADOW_RATE=0.01` samples each eligible call.
+The shadow uses the existing cache-shadow pool (two workers per process, no
+queue). Each job issues one hourly query with the served cutoff, at the serving
+Firestore read timestamp, with a five-second deadline and no retry. The limit
+is 745 hourly documents so a complete 744-hour month can still qualify. A query
+hitting the limit is incomplete. The shadow writes no Firestore data and its
+result is used only for metrics.
+
+`omi_usage_month_total_shadow_total` groups outcomes by `service`, `epoch` and
+`path` (`total_uncached`, `cache_hit`, `free_allowance`). Free allowance covers
+the verified monthly baseline used by the chargeable-seconds ledger and the
+establishment path. PTT charges and holds remain outside this comparison.
+The cache path compares the value in the Redis hit against its source snapshot.
+The existing cache key, generation, TTL and returned value are preserved.
+Cache entries with no projection timestamp (including hourly fallbacks and old
+entries) count as skips. A cross-epoch cache hit or Firestore abort counts as a
+race. The snapshot comparison measures equivalence at fill time, so the cache
+invalidation and freshness checks in the artifact gate still apply.
+
+`match` and `mismatch` are completed comparisons. A mismatch uses the largest
+absolute difference among the five usage fields, with `delta_bucket` of
+`le_1`, `le_60`, `le_3600` or `gt_3600`. Other outcomes use `none`. Treat
+`race`, `skipped` (including saturated admission), `error`, and missing series
+as no completed comparison. Source-read telemetry uses
+`job:usage_month_total_shadow`. Include it and legacy `job:read_cache_shadow`
+reads in the rollout's net read calculation.
+
+For the later ramp gate, require **at least 100 completed comparisons per
+service, target epoch and serving path**, with zero mismatches, in its
+artifact-bound qualification window. Require `total_uncached` before expanding
+the total lever and `cache_hit` before expanding the cache lever. Require the
+same floor for `free_allowance` wherever the verified baseline is used. Use
+synthetic/loopback traffic to meet floors that the live 1% sample cannot reach,
+and keep the existing two-hour equivalence, latency, accounting and contention
+requirements. At 100 comparisons the probability of missing a uniformly
+distributed 1% mismatch remains about 37%, so the floor is a coverage check.
+
+The SCA-4276 attestation window ending 2026-11-24 20:20 UTC measured 24.33M
+hourly reads/day across the listen and pusher since-date paths. At full
+enrollment and the same workload, the expected hourly shadow cost for those
+paths is about **243,300 reads/day** at 1% (about **12,165/day** at 5% reader
+enrollment). Both levers were at 0 on those services in the attestation, so
+that allowance caller pool contributes no projected/cache samples until a
+separate ramp. Already-enabled Cloud Run and verified Free allowance paths add
+their own shadow traffic. Per service, estimate it as the sample rate times
+the eligible calls/day times the mean hourly source documents per call, with
+a one-read floor for empty queries. The attestation did not measure that
+eligible pool. Measure it separately before attributing aggregate cost.
