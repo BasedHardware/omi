@@ -53,15 +53,29 @@ function fixture() {
   const comments = {1:[]};
   const statuses = [];
   const calls = [];
+  const refs = new Set();
   const github = {rest:{pulls:{get:async ({pull_number}) => ({data:prs.find(p => p.number === pull_number)}),list:'prs'},
     issues:{listComments:'comments',createComment:async ({issue_number,body}) => {
       comments[issue_number].push({id:10,user:{type:'Bot'},body});
-    }},repos:{createCommitStatus:async s => statuses.push(s),compareCommitsWithBasehead:async args => {
+    }},git:{
+      createRef:async ({ref}) => {
+        const key = ref.slice('refs/'.length);
+        if (refs.has(key)) throw Object.assign(new Error('Reference already exists'),{status:422});
+        refs.add(key);
+      },
+      getRef:async ({ref}) => {
+        if (!refs.has(ref)) throw Object.assign(new Error('Reference not found'),{status:404});
+      },
+      deleteRef:async ({ref}) => assert.ok(refs.delete(ref)),
+    },repos:{createCommitStatus:async s => statuses.push({...s,node_id:String(statuses.length + 1)}),compareCommitsWithBasehead:async args => {
       calls.push(args);return {data:{files:ui,commits:[{sha:'d'.repeat(40)}],total_commits:1}};
     }}},paginate:async (method,args) => method === 'prs' ? prs.map(p => ({...p})) : comments[args.issue_number],
     graphql:async (query,args) => ({repository:{object:{oid:args.oid,authors:{totalCount:0,nodes:[]}}}})};
-  const context = {repo:{owner:'test',repo:'test'},payload:{pull_request:{number:1}}};
-  return {p,prs,comments,statuses,calls,github,context};
+  github.paginate.iterator = async function* (method,{ref}) {
+    yield {data:statuses.filter(s => s.sha === ref).reverse()};
+  };
+  const context = {repo:{owner:'test',repo:'test'},sha:p.base.sha,payload:{pull_request:{number:1}}};
+  return {p,prs,comments,statuses,calls,github,context,refs};
 }
 test('over 100 same-head requests coalesce on main and keep the latest decision', async () => {
   const workflow = readFileSync(join(__dirname,'../../workflows/ui-author-approval.yml'),'utf8');
@@ -84,17 +98,20 @@ test('over 100 same-head requests coalesce on main and keep the latest decision'
     pending = request.inputs;
     requests++;
   }};
-  const evaluate = inputs => run.evaluateDispatch({github,context:{repo:context.repo,payload:{inputs}}});
+  const evaluate = inputs => run.evaluateDispatch({github,context:{...context,payload:{inputs}}});
   const atDecision = Promise.withResolvers();
   const finish = Promise.withResolvers();
-  const saveStatus = github.rest.repos.createCommitStatus;
-  github.rest.repos.createCommitStatus = async status => {
-    if (status.state === 'success') {
+  const list = github.paginate;
+  github.paginate = Object.assign(async (method,args) => {
+    const result = await list(method,args);
+    if (method === 'comments' && requests === 1) {
       atDecision.resolve();
+      const snapshot = [...result];
       await finish.promise;
+      return snapshot;
     }
-    await saveStatus(status);
-  };
+    return result;
+  },{iterator:list.iterator});
   f.comments[1].push(approve);
   await run.requestEvaluation(f);
   const running = evaluate(pending);
@@ -107,22 +124,69 @@ test('over 100 same-head requests coalesce on main and keep the latest decision'
     f.comments[1].push({id:2,user:nik,body:`/reject-ui ${f.p.head.sha}`});
     await run.requestEvaluation({github,context:commentContext});
     assert.equal(requests,103);
-    assert.deepEqual(f.statuses.map(s => s.state),['pending']);
+    assert.ok(f.statuses.every(s => s.state === 'pending'));
   } finally {
     finish.resolve();
     await running;
   }
   await evaluate(pending);
-  assert.deepEqual(f.statuses.map(({state,sha}) => [state,sha]),[
-    ['pending',f.p.head.sha],['success',f.p.head.sha],
-    ['pending',f.p.head.sha],['failure',f.p.head.sha],
+  assert.deepEqual(f.statuses.filter(s => s.state !== 'pending').map(({state,sha}) => [state,sha]),[
+    ['failure',f.p.head.sha],
   ]);
 });
-test('a dispatch rejection fails the request without publishing approval', async () => {
+test('a dispatch rejection replaces a same-head approval and cannot be evaluated by an old dispatch', async () => {
   const f = fixture();
-  f.github.rest.actions = {createWorkflowDispatch:async () => {throw new Error('rate limited');}};
+  const {github,context,statuses,refs} = f;
+  let inputs;
+  github.rest.actions = {createWorkflowDispatch:async request => {inputs = request.inputs;}};
+  f.comments[1].push(approve);
+  await run.requestEvaluation(f);
+  const evaluate = () => run.evaluateDispatch({github,context:{...context,payload:{inputs}}});
+  await evaluate();
+  assert.equal(statuses.at(-1).state,'success');
+  github.rest.actions.createWorkflowDispatch = async () => {
+    assert.equal(statuses.at(-1).state,'pending');
+    throw new Error('rate limited');
+  };
   await assert.rejects(run.requestEvaluation(f),/Could not request UI approval evaluation.*rate limited/);
-  assert.deepEqual(f.statuses,[]);
+  await evaluate();
+  assert.deepEqual(statuses.map(s => s.state),['pending','pending','success','pending','failure']);
+  assert.equal(refs.size,0);
+});
+test('request admission waits for a success write already in flight', async () => {
+  const f = fixture();
+  const {github,context,statuses} = f;
+  let inputs;
+  github.rest.actions = {createWorkflowDispatch:async request => {inputs = request.inputs;}};
+  f.comments[1].push(approve);
+  await run.requestEvaluation(f);
+  const writing = Promise.withResolvers();
+  const requested = Promise.withResolvers();
+  const finish = Promise.withResolvers();
+  const save = github.rest.repos.createCommitStatus;
+  github.rest.repos.createCommitStatus = async status => {
+    if (status.state === 'success') {
+      writing.resolve();
+      await finish.promise;
+    }
+    await save(status);
+  };
+  const getRef = github.rest.git.getRef;
+  github.rest.git.getRef = async args => {
+    await getRef(args);
+    requested.resolve();
+  };
+  const running = run.evaluateDispatch({github,context:{...context,payload:{inputs}}});
+  await writing.promise;
+  const request = run.requestEvaluation(f);
+  try {
+    await requested.promise;
+    assert.deepEqual(statuses.map(s => s.state),['pending','pending']);
+  } finally {
+    finish.resolve();
+    await Promise.all([running,request]);
+  }
+  assert.deepEqual(statuses.map(s => s.state),['pending','pending','success','pending','pending']);
 });
 test('the dispatched worker rejects invalid routing inputs before writing status', async () => {
   const {github, context, statuses} = fixture();

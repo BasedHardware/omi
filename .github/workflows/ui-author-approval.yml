@@ -23,11 +23,13 @@ jobs:
     if: github.event_name == 'pull_request_target' || github.event.issue.pull_request
     permissions:
       actions: write
-      contents: read
+      contents: write
       pull-requests: read
+      statuses: write
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
+      # Both jobs need trusted code and write access to the per-head lock ref.
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.workflow_sha }}
@@ -48,7 +50,7 @@ jobs:
       group: ui-author-approval-${{ inputs.head_sha }}
       cancel-in-progress: false
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
       issues: write
       statuses: write

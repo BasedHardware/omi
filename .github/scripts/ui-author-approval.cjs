@@ -1,4 +1,5 @@
 // Account-scoped UI approval. All inputs are API data, never executable PR code.
+const {setTimeout: delay} = require('node:timers/promises');
 const ACTOR_ID = 9387252; // Git-on-my-level, stable across login renames.
 const NIK_ID = 43514161;
 const APPROVER_IDS = new Set([NIK_ID, ACTOR_ID]);
@@ -12,6 +13,7 @@ const GENERATED_API_FILES = new Set([
   'desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift',
 ]);
 const STATUS = 'UI author approval';
+const READY = 'Checking account-scoped UI approval';
 const MARKER = '<!-- ui-author-approval:git-on-my-level -->';
 const isActor = user => user?.id === ACTOR_ID;
 const isUI = path => !GENERATED_API_FILES.has(path) && (/^(app\/lib\/(pages|widgets|ui|l10n)\/|desktop\/macos\/Desktop\/(Sources\/(Views|Components|Theme|UI)\/|Resources\/)|desktop\/windows\/src\/(components|pages|views|styles)\/|web\/[^/]+\/(app|src)\/.*\.(tsx|jsx|vue|css|scss|html|svg|png|jpg|webp)$|frontend\/.*\.(tsx|jsx|vue|css|scss|html|svg|png|jpg|webp)$)/.test(path)
@@ -133,16 +135,64 @@ async function unchangedUI(github, repo, approvedSha, headSha) {
   }
 }
 
-async function evaluateHead({github, context, headSha, pullNumber}) {
+const publishStatus = (github, repo, sha, state, description) => github.rest.repos.createCommitStatus({
+  ...repo,sha,state,context:STATUS,description,
+});
+
+async function latestStatus(github, repo, sha) {
+  const pages = github.paginate.iterator(github.rest.repos.listCommitStatusesForRef, {
+    ...repo,ref:sha,per_page:100,
+  });
+  for await (const {data} of pages) {
+    const latest = data.find(status => status.context.toLowerCase() === STATUS.toLowerCase());
+    if (latest) return latest;
+  }
+}
+
+// Status creation is append-only, with no compare-and-set. Serialize the
+// read/write pair with request admission, without putting PR jobs in the
+// worker's cancellable queue. GitHub creates a named ref at most once.
+async function withStatusLock(github, context, sha, operation) {
+  const ref = `tags/ui-author-approval-lock/${sha}`;
+  const args = {...context.repo,ref};
+  const deadline = Date.now() + 45_000;
+  for (;;) {
+    try {
+      await github.rest.git.createRef({...args,ref:`refs/${ref}`,sha:context.sha});
+      break;
+    } catch (error) {
+      if (![409,422].includes(error.status)) throw error;
+      try {
+        await github.rest.git.getRef(args);
+      } catch (lookupError) {
+        // A previous holder may have released between create and lookup.
+        if (lookupError.status !== 404) throw lookupError;
+      }
+      if (Date.now() >= deadline) throw new Error(`Could not acquire UI approval status lock: ${ref}`,{cause:error});
+      await delay(200 + Math.random() * 300);
+    }
+  }
+  try {
+    return await operation();
+  } finally {
+    await github.rest.git.deleteRef(args);
+  }
+}
+
+async function evaluateHead({github, context, headSha, pullNumber, requestId}) {
   const repo = context.repo;
   const pull_number = pullNumber ?? (context.payload.pull_request?.number || context.payload.issue.number);
   const trigger = (await github.rest.pulls.get({...repo,pull_number})).data;
   if (!headSha && (trigger.state !== 'open' || trigger.base.ref !== 'main')) return;
   const sha = headSha || trigger.head.sha;
-  const status = (state, description) => github.rest.repos.createCommitStatus({
-    ...repo,sha,state,context:STATUS,description,
-  });
-  await status('pending','Checking account-scoped UI approval');
+  const status = (state, description) => {
+    if (!requestId) return publishStatus(github,repo,sha,state,description);
+    return withStatusLock(github,context,sha,async () => {
+      const latest = await latestStatus(github,repo,sha);
+      if (latest?.node_id === requestId) await publishStatus(github,repo,sha,state,description);
+    });
+  };
+  if (!requestId) await status('pending',READY);
   try {
     // Commit statuses are shared by SHA, so every open main PR sharing this
     // SHA must satisfy its own requirements before any run may write success.
@@ -189,17 +239,25 @@ async function evaluateHead({github, context, headSha, pullNumber}) {
 async function requestEvaluation({github, context}) {
   const pull_number = context.payload.pull_request?.number || context.payload.issue.number;
   const {data: pr} = await github.rest.pulls.get({...context.repo,pull_number});
-  if (!/^[a-f0-9]{40}$/.test(pr.head.sha)) throw new Error('Invalid head SHA');
-  try {
-    await github.rest.actions.createWorkflowDispatch({
-      ...context.repo,
-      workflow_id:'ui-author-approval.yml',
-      ref:'main',
-      inputs:{pull_number:String(pull_number),head_sha:pr.head.sha},
-    });
-  } catch (error) {
-    throw new Error(`Could not request UI approval evaluation for ${pr.head.sha}: ${error.message}`,{cause:error});
-  }
+  const sha = pr.head.sha;
+  if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('Invalid head SHA');
+  return withStatusLock(github,context,sha,async () => {
+    await publishStatus(github,context.repo,sha,'pending','Requesting UI approval evaluation');
+    try {
+      await github.rest.actions.createWorkflowDispatch({
+        ...context.repo,
+        workflow_id:'ui-author-approval.yml',
+        ref:'main',
+        inputs:{pull_number:String(pull_number),head_sha:sha},
+      });
+    } catch (error) {
+      await publishStatus(github,context.repo,sha,'failure','Could not dispatch UI approval evaluation; see workflow logs');
+      throw new Error(`Could not request UI approval evaluation for ${sha}: ${error.message}`,{cause:error});
+    }
+    // Dispatch arrival is unordered. Any surviving worker may evaluate the
+    // latest successfully dispatched request, after capturing its status ID.
+    await publishStatus(github,context.repo,sha,'pending',READY);
+  });
 }
 
 async function evaluateDispatch({github, context}) {
@@ -209,7 +267,9 @@ async function evaluateDispatch({github, context}) {
       || !/^[a-f0-9]{40}$/.test(headSha)) {
     throw new Error('Invalid UI approval evaluation inputs');
   }
-  return evaluateHead({github,context,headSha,pullNumber});
+  const latest = await withStatusLock(github,context,headSha,() => latestStatus(github,context.repo,headSha));
+  if (latest?.state !== 'pending' || latest.description !== READY || !latest.node_id) return;
+  return evaluateHead({github,context,headSha,pullNumber,requestId:latest.node_id});
 }
 
 module.exports = evaluateHead;
