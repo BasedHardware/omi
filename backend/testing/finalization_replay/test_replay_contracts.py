@@ -159,17 +159,19 @@ class ReplayContractTests(unittest.TestCase):
             'attach_finalized': 'v2:final',
         }
 
-        def check(python_keys=None):
+        def check(python_keys=None, *, has_link=True):
             return ordinary_sync_attach_memo_failure_reason(
                 'owner',
                 'conversation',
                 conversation,
-                {path: link},
+                {path: link} if has_link else {},
                 python_keys=python_keys,
                 key_fn=lambda *_: 'v2:final',
             )
 
         self.assertEqual(check(), '')
+        self.assertEqual(check(has_link=False), 'missing_link')
+        self.assertEqual(check([], has_link=False), '')
         self.assertEqual(check([]), 'completed_key_mismatch')
         self.assertEqual(check(['v2:final']), '')
         link['attach_finalized'] = 'v2:old'

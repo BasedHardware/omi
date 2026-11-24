@@ -138,6 +138,8 @@ def ordinary_sync_attach_memo_failure_reason(uid, cid, conversation, documents, 
         from database.episode_attach_memo import current_key as key_fn
     final_key = key_fn(uid, conversation)
     link = documents.get(f'users/{uid}/episode_links/{cid}')
+    if link is None and python_keys is not None:
+        return ''
     if not isinstance(link, dict):
         return 'missing_link'
 
