@@ -2,12 +2,15 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace, asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+import asyncio
+import time
 
 import pytest
 import fakeredis
 
+from database.conversations import get_conversation
 from database import batch_pipeline_projection_claim as projection_claims
 from tests.integration.test_batch_pipeline_projection_firestore import lane, active_rows, frozen_manifest
 from utils.batch_pipeline.live import register_recording, record_identity
@@ -104,6 +107,7 @@ def test_native_zero_preview_stop_wakes_v3_only_after_projection(lane, monkeypat
     from database import conversation_finalization_jobs as jobs
     from utils.conversations.v3 import triggers
 
+    monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'on')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', lease_mode)
     monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
     item, binding, live = native(lane, status='processing')
@@ -171,6 +175,173 @@ def test_native_zero_preview_stop_wakes_v3_only_after_projection(lane, monkeypat
     if manual:
         assert projected['v3_pending'] is True
     assert sum('-native-ready-' in key for key in tasks) == int(manual)
+
+
+async def test_allowance_held_recording_releases_and_publishes_one_transcript(lane, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import conversations
+    from tests.unit.test_batch_pipeline_artifacts import ObjectClient
+    from utils import stt_cap_dispatch
+    from utils.batch_pipeline import admission, allowance_hold, pump as pump_module
+    from utils.batch_pipeline.artifact_policy import create_artifact_store
+    from utils.batch_pipeline.contracts import PoolCapacity
+    from utils.batch_pipeline.projection import Projector
+    from utils.conversations import transcribing_hold
+
+    monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    item, binding, live = native(lane)
+    segment = item.segment_id
+    captured = datetime.fromtimestamp(item.capture_at, timezone.utc)
+    live.update(
+        transcript_segments=[],
+        structured={'title': '', 'overview': '', 'emoji': '', 'category': 'other'},
+        home_transcription_pending_at=captured,
+        home_transcription_deadline_at=captured + timedelta(hours=2),
+    )
+    reference = lane.user.collection('conversations').document(live['id'])
+    reference.set(lane.conversations.encode_conversation_for_write(lane.uid, live, 'standard'))
+    assert register_recording(lane.uid, live, store=lane.store, now=captured.timestamp())
+
+    # Exercise the real HTTP list/detail readers against the fixture's namespace.
+    app = FastAPI()
+    app.include_router(conversations.router)
+    app.dependency_overrides[conversations.auth.get_current_user_uid] = lambda: lane.uid
+    monkeypatch.setattr(transcribing_hold, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(transcribing_hold, '_open_admission_store', lambda _: lane.store)
+
+    def read_wire():
+        with TestClient(app) as client, monkeypatch.context() as scope:
+            scope.setattr(lane.conversations, 'get_conversation', get_conversation)
+            listed = client.get('/v1/conversations')
+            detail = client.get(f"/v1/conversations/{live['id']}")
+        assert listed.status_code == detail.status_code == 200, (listed.text, detail.text)
+        [home] = listed.json()
+        return home, detail.json()
+
+    # The object transport is synthetic. The artifact store encrypts, registers,
+    # generation-pins and authorizes each read.
+    objects = ObjectClient()
+    artifacts = create_artifact_store(
+        lane.store, objects, 'synthetic-batch-bucket', b'synthetic-master-key-0123456789012345'
+    )
+    audio = frozen_manifest(lane, SimpleNamespace(items=[item], binding=binding))
+    item = replace(item, audio_uri=artifacts.stage_audio(item, audio), requires_compute_admission=True)
+    [(source_key, source_object)] = list(objects.objects.items())
+    assert audio not in source_object[1]
+    intake = {'owner_id': lane.uid, 'lane': 'backfill', 'total_audio_seconds': item.duration_seconds}
+    assert (
+        admit(
+            lane.store,
+            [item],
+            binding,
+            time.time(),
+            namespace=lane.store.namespace,
+            intake=intake,
+            require_artifacts=True,
+        )['outcome']
+        == 'batch'
+    )
+
+    def read_job():
+        return lane.store.run(lambda tx: tx.get('jobs', segment))
+
+    eligible = False
+
+    def funded_allowance(*args, **kwargs):
+        reason = 'plan_within_allowance' if eligible else 'plan_allowance_exhausted'
+        return SimpleNamespace(managed=eligible, reason=reason)
+
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'true')
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'true')
+    monkeypatch.setenv('SYNC_BACKFILL_ADMISSION_LIMITS', 'false')
+    monkeypatch.setattr(stt_cap_dispatch, 'funded_allowance', funded_allowance)
+    monkeypatch.setattr(allowance_hold, 'get_data_plane_firestore_client', lambda: lane.client)
+
+    def authorize(leases):
+        return asyncio.run(
+            admission.authorize(
+                lane.store, [{'segment_id': lease.item.segment_id, 'token': lease.token} for lease in leases]
+            )
+        )
+
+    class Worker:
+        calls = 0
+
+        def process_batch(self, items, *, authorize_dispatch):
+            self.calls += 1
+            [work] = items
+            assert work.segment_id == segment and artifacts.fetch_audio(work) == audio
+            assert authorize_dispatch({segment}) == {segment: None}
+            return [WorkResult(segment, artifacts.persist_result(work, lane.payload))]
+
+    worker = Worker()
+    pump = pump_module.Pump(
+        lane.queue, worker, capacity=lambda: PoolCapacity(time.time(), 1), authorize_compute=authorize
+    )
+    controller = allowance_hold.AllowanceHolds(lane.store, allowance_hold.entitlement)
+    assert await pump.run_once() == 0
+    held_job = read_job()
+    assert held_job['state'] == 'allowance_held'
+    assert held_job['compute_decision']['reason'] == 'allowance_exhausted'
+    assert held_job['attempt'] == worker.calls == 0
+    assert objects.objects[source_key] == source_object
+    for row in read_wire():
+        assert row['id'] == live['id']
+        assert row['transcription_admission'] == 'allowance_held'
+        assert row['transcription_wait'] == 'overdue'
+        assert not row.get('transcript_segments')
+    assert await pump.run_once() == 0
+
+    # Skip the polling interval while preserving the real owner-generation
+    # transaction, readiness timestamps and leases.
+    monkeypatch.setattr(allowance_hold, 'CHECK_SECONDS', 0)
+    assert controller.tick(time.time()) == 0
+    lane.user.update({'subscription': {'plan': 'plus', 'status': 'active'}})
+    eligible = True
+    assert controller.tick(time.time()) == 1
+    assert read_job()['state'] == 'ready'
+    assert read_job()['audio_uri'] == item.audio_uri
+    home, detail = read_wire()
+    assert home['home_step'] == 'transcribing'
+    for row in (home, detail):
+        assert row['transcription_admission'] == 'processing'
+        assert row['status'] == 'processing'
+        assert row.get('transcription_wait') is None
+    assert controller.tick(time.time()) == 0
+    assert await pump.run_once() == 1
+    assert worker.calls == 1 and read_job()['attempt'] == 1
+
+    projector = Projector(
+        lane.store,
+        artifacts.load_result,
+        fetch_audio=artifacts.fetch_audio,
+        publish=lambda _, result: lane.published.append(result),
+    )
+    result = projector.project(segment)
+    assert result['outcome'] == 'success' and result['failed_segments'] == 0
+    assert lane.published == [result]
+    tasks_at_completion = list(lane.tasks)
+    [row] = active_rows(lane)
+    assert row['id'] == live['id'] and row['record_projection_revision'] == 1
+    assert [entry['text'] for entry in row['transcript_segments']] == ['We discussed the project.']
+    assert projector.status(lane.uid, binding.content_id)['status'] == 'completed'
+    home, detail = read_wire()
+    for view in (home, detail):
+        assert view['id'] == live['id']
+        assert view.get('transcription_admission') is None
+    assert [entry['text'] for entry in detail['transcript_segments']] == ['We discussed the project.']
+    assert projector.project(segment) == result
+    assert await pump.run_once() == controller.tick(time.time()) == 0
+    [replayed] = active_rows(lane)
+    assert replayed['record_projection_revision'] == 1
+    assert replayed['transcript_segments'] == row['transcript_segments']
+    assert read_wire() == (home, detail)
+    # The completion signal can be redelivered, with the same result.
+    assert all(published == result for published in lane.published)
+    assert worker.calls == 1
+    assert tasks_at_completion and lane.tasks == tasks_at_completion
+    assert objects.objects[source_key] == source_object
 
 
 def test_concurrent_wal_and_record_admission_share_one_obligation(lane):

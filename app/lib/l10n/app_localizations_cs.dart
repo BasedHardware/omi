@@ -560,11 +560,11 @@ class AppLocalizationsCs extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 nedetekováno';
+  String get v2Undetected => 'Offline synchronizace není k dispozici';
 
   @override
   String get v2UndetectedMessage =>
-      'Vidíme, že máte buď zařízení V1, nebo vaše zařízení není připojeno. Funkce SD karty je dostupná pouze pro zařízení V2.';
+      'Offline synchronizace vyžaduje připojené zařízení Omi s úložištěm na SD kartě. Vaše aktuální zařízení ji nepodporuje.';
 
   @override
   String get endConversation => 'Ukončit konverzaci';
@@ -7049,6 +7049,26 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'Neočekávaná chyba při přihlašování, zkuste to prosím znovu';
+
+  @override
+  String get accountSignInMethods => 'Způsoby přihlášení';
+
+  @override
+  String get accountAddSignInMethod => 'Přidat způsob přihlášení';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Přidejte způsob přihlášení k tomuto účtu Omi. Tarif, nahrávky a integrace zůstanou u tohoto účtu.';
+
+  @override
+  String get accountSignInConflictTitle => 'Tento způsob přihlášení je spojen s jiným účtem';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Stále jste přihlášeni k tomuto účtu. Každý účet Omi si zachovává svůj tarif, nahrávky a integrace.';
+
+  @override
+  String get accountSignInMethodAdded => 'Způsob přihlášení byl přidán';
 
   @override
   String get authFailedToLinkGoogle => 'Propojení s Google se nezdařilo, zkuste to prosím znovu.';
@@ -14359,6 +14379,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get processingProgress => 'Zpracovávání čekajících nahrávek…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Čeká se na dostupný limit přepisu';
+
+  @override
   String get processingDeferred => 'Čeká na zpracování';
 
   @override
@@ -15313,9 +15336,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get stopThese => 'Zastavit tyto';
 
   @override
-  String get meetingActionItemsTitle => 'Akční položky';
-
-  @override
   String get addToTasks => 'Přidat do úkolů';
 
   @override
@@ -15719,4 +15739,96 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Stále na tom pracujeme.';
+
+  @override
+  String get deviceReadyToUse => 'Připraveno k použití';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmware vašeho zařízení je pro tuto aktualizaci příliš starý. Obraťte se na podporu, která vám s aktualizací zařízení pomůže.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Tato aktualizace firmwaru vyžaduje novější verzi aplikace Omi. Aktualizujte aplikaci v obchodě s aplikacemi a poté proveďte kontrolu znovu.';
+
+  @override
+  String get quietPayerTitle => 'Žádné nahrávky za 5 dní';
+
+  @override
+  String get quietPayerMessage => 'Zkontrolujte svůj Omi.';
+
+  @override
+  String get quietPayerCheck => 'Zkontrolovat';
+
+  @override
+  String get playManageSubscription => 'Spravovat předplatné';
+
+  @override
+  String get playBilledByGoogle => 'Účtováno přes Google Play';
+
+  @override
+  String get playPurchasePending => 'Platba čeká na vyřízení. Omi Pro začne, jakmile ji Google Play potvrdí.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Tento nákup v Google Play patří jinému účtu Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Nákup se zatím nepodařilo potvrdit. Zkusíme to znovu automaticky.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automaticky se obnovuje za uvedenou cenu, dokud ho nezrušíte. Spravovat nebo zrušit ho můžete kdykoli v Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Na Androidu není k dispozici';
+
+  @override
+  String get pageNotAvailableInApp => 'Tato stránka není v aplikaci dostupná.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Objednávka byla odeslána. Potvrzení najdete v e-mailu.';
+
+  @override
+  String get prepaidCodeEntry => 'Máte kód?';
+
+  @override
+  String get prepaidCodeTitle => 'Uplatnit kód';
+
+  @override
+  String get prepaidCodeFieldHint => 'Zadejte svůj kód';
+
+  @override
+  String get prepaidCodeRedeem => 'Uplatnit';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kód uplatněn';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Tento kód není platný. Zkontrolujte ho a zkuste to znovu.',
+        'used': 'Tento kód už byl použit.',
+        'expired': 'Platnost tohoto kódu vypršela.',
+        'hasPlan': 'Už máte plán. Váš kód nebyl použit. Uplatněte ho, až váš plán skončí.',
+        'notPrepaid': 'Tento kód zde nelze uplatnit. Použijte ho při výběru plánu.',
+        'notEligible': 'Tento kód nelze použít v tomto účtu.',
+        'rateLimited': 'Příliš mnoho pokusů. Zkuste to později.',
+        'other': 'Něco se pokazilo. Zkuste to znovu.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Účtováno přes omi.me. Zrušit můžete kdykoli zde.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Účtováno přes omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Váš tarif $plan je pozastaven.';
+  }
 }

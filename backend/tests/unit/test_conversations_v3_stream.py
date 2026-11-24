@@ -22,6 +22,56 @@ from utils.conversations.v3 import policy, service
 AT = datetime(2026, 11, 16, tzinfo=timezone.utc)
 
 
+@pytest.fixture
+def outline_gateway(monkeypatch, stall):
+    import asyncio
+    import httpx
+
+    # The first OpenAI chat client loads the SDK's entire resource package.
+    # Charge that one-time import to fixture setup instead of stream execution.
+    import openai.resources  # noqa: F401
+
+    from utils.conversations.v3 import models
+
+    class GatewayStream(httpx.AsyncByteStream):
+        closed = False
+
+        async def __aiter__(self):
+            chunk = {'id': 'test', 'object': 'chat.completion.chunk', 'created': 0, 'model': 'test'}
+            chunk['choices'] = [{'index': 0, 'delta': {'role': 'assistant', 'content': 'outline'}}]
+            yield f'data: {json.dumps(chunk)}\n\n'.encode()
+            if stall:
+                await asyncio.Event().wait()
+            chunk['choices'] = [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]
+            yield f'data: {json.dumps(chunk)}\n\n'.encode()
+            yield b'data: [DONE]\n\n'
+
+        async def aclose(self):
+            self.closed = True
+
+    stream = GatewayStream()
+
+    async def gateway(request):
+        assert json.loads(request.content)['stream'] is True
+        assert request.extensions['timeout']['read'] == 30
+        return httpx.Response(200, headers={'Content-Type': 'text/event-stream'}, stream=stream)
+
+    monkeypatch.setattr(models, 'OUTLINE_DEADLINE_SECONDS', 0.25 if stall else 5)
+    monkeypatch.setattr(models, 'require_current_generated_compute', lambda *a, **kw: None)
+    monkeypatch.setattr(
+        models, 'DefaultAsyncHttpxClient', lambda: httpx.AsyncClient(transport=httpx.MockTransport(gateway))
+    )
+
+    return models, stream
+
+
+@pytest.mark.parametrize('stall', [False, True])
+def test_paid_outline_stream_deadline_discards_partial_reply_and_closes_stream(outline_gateway, stall):
+    models, stream = outline_gateway
+    assert models.outline('u', [('human', 'synthetic speech')]) == ('' if stall else 'outline')
+    assert stream.closed
+
+
 def test_section_frames_carry_newlines_as_the_chat_crlf_marker():
     frame = summary.section_frame('## Decisions\n- Ship Friday\n- Freeze Thursday')
     assert frame == 'data: ## Decisions__CRLF__- Ship Friday__CRLF__- Freeze Thursday\n\n'

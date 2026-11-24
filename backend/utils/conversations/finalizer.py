@@ -18,6 +18,7 @@ from config.merge_before_processing import enabled as merge_before_processing_en
 from utils.enrichment.admission import ConversationAbsorbed
 from config.server_batch import owned as server_batch_owned
 from config.server_batch import has_audio as server_batch_has_audio
+from config.server_batch import live_audio_uncommitted as server_batch_live_audio_uncommitted
 from config.server_batch import proven_empty as server_batch_proven_empty
 from config.episodes import episodes_enabled_for
 from config.episode_attach import noop_schedule_enabled
@@ -228,6 +229,10 @@ async def _episode_after_absorb(uid: str, donor_id: str, trigger: ProcessingTrig
         logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
 
 
+class ServerBatchArchiveNotClosed(RuntimeError):
+    """The batch producer has not published the archive-close barrier."""
+
+
 class ConversationFinalizationError(RuntimeError):
     """A persisted-conversation failure classified by its owning entrypoint.
 
@@ -278,6 +283,32 @@ async def _yield_live_member_notes(job_id: str, generation: int, lease_epoch: in
     return ConversationFinalizationDisposition.deferred if yielded else ConversationFinalizationDisposition.fenced
 
 
+# The listen session commits the audio it holds with the next frame after its rollover, or at teardown.
+LIVE_ARCHIVE_COMMIT_WAIT_SECONDS = 30.0
+LIVE_ARCHIVE_COMMIT_POLL_SECONDS = 0.5
+
+
+async def _await_live_archive_commit(uid: str, conversation_id: str, conversation_data: dict) -> dict:
+    """Wait for the live session to commit the audio of a recording finished inside its first archive window.
+
+    Returns the newest row. A row that never gains audio keeps the caller's existing not-closed retry.
+    """
+    deadline = asyncio.get_running_loop().time() + LIVE_ARCHIVE_COMMIT_WAIT_SECONDS
+    while server_batch_live_audio_uncommitted(conversation_data) and asyncio.get_running_loop().time() < deadline:
+        await asyncio.sleep(LIVE_ARCHIVE_COMMIT_POLL_SECONDS)
+        latest = await run_blocking(
+            db_executor,
+            conversations_db.get_conversation,
+            uid,
+            conversation_id,
+            read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
+        )
+        if not latest:
+            break
+        conversation_data = latest
+    return conversation_data
+
+
 async def finalize_persisted_conversation(
     uid: str,
     conversation_id: str,
@@ -322,9 +353,11 @@ async def finalize_persisted_conversation(
                 raise ConversationFinalizationError('fanout_completion_conflict')
             logger.info('event=server_batch_finalization outcome=discarded')
             return ConversationFinalizationDisposition.discarded
+        if trigger is ProcessingTrigger.CLIENT_FINALIZE and server_batch_live_audio_uncommitted(conversation_data):
+            conversation_data = await _await_live_archive_commit(uid, conversation_id, conversation_data)
         if not server_batch_has_audio(conversation_data):
             if not conversation_data.get('server_batch_audio_closed'):
-                raise RuntimeError('server batch archive is not closed')
+                raise ServerBatchArchiveNotClosed('server batch archive is not closed')
             if not await run_blocking(
                 db_executor,
                 lifecycle_service.delete_empty_recording_conversation,
@@ -898,6 +931,14 @@ async def _load_admitted_conversation(
             raise ConversationFinalizationError('record_registration_refused')
         return ConversationFinalizationDisposition.fenced, None, None
     for _ in range(3):
+        # A retry can arrive after the lazy transcript commit and before the old
+        # job is acknowledged. Completed intake still owes only first-open work.
+        if (
+            conversation_data.get('deferred') is True
+            and not conversation_data.get('record_lane_owner')
+            and conversation_data.get('status') == ConversationStatus.completed
+        ):
+            return ConversationFinalizationDisposition.fenced, None, None
         try:
             owner = (
                 None

@@ -170,7 +170,8 @@ class FirestoreTransaction:
         if address not in self.cache:
             options = {}
             if self.read_budget is not None:
-                options = dict(timeout=self.read_budget.timeout(10), retry=None)
+                deadline = getattr(self.read_budget, 'point', self.read_budget.timeout)
+                options = dict(timeout=deadline(10), retry=None)
             snapshot = self._ref(table, key).get(transaction=self.transaction, **options)
             self.exists[address] = snapshot.exists
             self.cache[address] = (snapshot.to_dict() or {}) if snapshot.exists else {}

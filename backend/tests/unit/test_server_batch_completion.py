@@ -11,6 +11,7 @@ from unittest.mock import Mock
 import pytest
 
 from database import conversation_finalization_jobs as jobs
+from database import conversations_v3
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.conversations import lifecycle
 
@@ -325,3 +326,82 @@ def test_native_manual_upload_proof_uses_admission_fields_not_current_row():
     assert (
         native_finish.upload_revision({'record_input_upload_revision': 7, 'v3_native_manual_input_revision': 8}) is None
     )
+
+
+def _v3_finish(trigger, **row):
+    db = StrictFirestore(
+        {ROW: {**capture(), 'recording': True, **row}, JOB_ROW: {**job(), 'processing_trigger': trigger}}
+    )
+    assert complete(db, {**capture(), 'recording': True, **row}) == 'completed'
+    return db.rows[ROW]
+
+
+def test_user_finish_of_audio_only_v3_recording_stores_the_request_not_the_cut():
+    row = _v3_finish('client_finalize')
+    assert row['v3_manual_end_requested'] is True
+    # Admission promotes it once the recording will land as one transcript; here it must stay inert.
+    assert 'v3_manual_end' not in row and 'v3_pending' not in row
+
+
+@pytest.mark.parametrize('trigger', ['capture_end', 'server_recovery', None])
+def test_natural_end_stores_no_manual_end_request(trigger):
+    row = _v3_finish(trigger)
+    assert 'v3_manual_end_requested' not in row and 'v3_manual_end' not in row
+
+
+def test_a_legacy_force_process_job_counts_as_a_user_finish():
+    stored = {**capture(), 'recording': True}
+    db = StrictFirestore({ROW: stored, JOB_ROW: {**job(), 'force_process': True}})
+    assert complete(db, stored) == 'completed'
+    assert db.rows[ROW]['v3_manual_end_requested'] is True
+
+
+def test_legacy_capture_stores_no_manual_end_request():
+    db = StrictFirestore({ROW: capture(), JOB_ROW: {**job(), 'processing_trigger': 'client_finalize'}})
+    assert complete(db) == 'completed'
+    assert 'v3_manual_end_requested' not in db.rows[ROW]
+
+
+def test_manual_end_kill_switch(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'off')
+    assert 'v3_manual_end_requested' not in _v3_finish('client_finalize')
+
+
+@pytest.mark.parametrize(
+    'row,expected',
+    [
+        ({'recording': True, 'v3_manual_end_requested': True, 'finished_at': NOW}, True),
+        # The cut is materialised from finished_at; without it the marker would be inert.
+        ({'recording': True, 'v3_manual_end_requested': True}, False),
+        ({'recording': True, 'finished_at': NOW}, False),
+        (
+            {
+                'recording': True,
+                'v3_manual_end_requested': True,
+                'finished_at': NOW,
+                'v3_native_manual_stop': {'job_id': JOB, 'revision': 3, 'finished_at': NOW},
+            },
+            False,
+        ),
+        ({'recording': True, 'v3_manual_end_requested': True, 'finished_at': NOW, 'v3_manual_end': True}, False),
+        ({'recording': True, 'v3_manual_end_requested': True, 'finished_at': NOW, 'deleted': True}, False),
+        ({'recording': True, 'v3_manual_end_requested': True, 'finished_at': NOW, 'discarded': True}, False),
+        ({'v3_manual_end_requested': True, 'finished_at': NOW}, False),
+    ],
+)
+def test_promotion_writes_the_cut_once_and_marks_nothing_pending(monkeypatch, row, expected):
+    db = StrictFirestore({ROW: dict(row)})
+    monkeypatch.setattr(conversations_v3.firestore, 'transactional', lambda fn: fn)
+    assert conversations_v3.promote_manual_end(UID, CID, firestore_client=db) is expected
+    assert bool(db.rows[ROW].get('v3_manual_end')) is (expected or bool(row.get('v3_manual_end')))
+    assert 'v3_pending' not in db.rows[ROW]
+
+
+def test_promotion_after_speech_landed_leaves_the_recording_pending(monkeypatch):
+    db = StrictFirestore(
+        {ROW: {'recording': True, 'v3_manual_end_requested': True, 'finished_at': NOW, 'v3_speech_landed_at': NOW}}
+    )
+    monkeypatch.setattr(conversations_v3.firestore, 'transactional', lambda fn: fn)
+    assert conversations_v3.promote_manual_end(UID, CID, firestore_client=db) is True
+    # Its reconcile may already have run without the cut; pending hands it to the sweep.
+    assert db.rows[ROW]['v3_manual_end'] is True and db.rows[ROW]['v3_pending'] is True

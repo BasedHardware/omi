@@ -14,6 +14,8 @@ Live V3 undo also uses a bounded conversation_id projection of linked tasks.
 Projected client BatchGet of folder membership is covered by
 test_folder_delete_concurrency_emulator.py; all of its reads obey the same
 read-before-write rule. BatchGet does not promise request-order results.
+Finalization admission's transaction-bound ``photos.limit(1)`` existence probe is
+modelled as a read: a finish that reaches it after a write is rejected.
 Transaction deletes are proven by test_recurring_voice_privacy_firestore.py:
 removed profiles must disappear rather than leave documents outside TTL.
 It also models the app-review config document's top-level merge write, which
@@ -66,7 +68,8 @@ def _assert_storable(value: Any, *, in_array: bool = False) -> None:
 
 _SUPPORTED_OPERATIONS = (
     'document get/create, transaction-bound document get, transaction create/set/update/delete, bounded equality id queries, '
-    'app-review config merge writes, projected client folder-membership BatchGet'
+    'app-review config merge writes, projected client folder-membership BatchGet, '
+    'transaction-bound conversation photos.limit(1) existence probe'
 )
 
 
@@ -134,7 +137,7 @@ class StrictFirestoreDocument:
                 ["private_cloud_sync_enabled"],
                 ['uses_custom_stt', 'private_cloud_sync_enabled', 'data_protection_level'],
                 ['discarded', 'deleted', 'sync_merged_into'],
-                ['external_data', 'created_at', 'deleted', 'sync_merged_from'],
+                ['external_data', 'created_at', 'deleted', 'sync_merged_from', 'status'],
                 [
                     'discarded',
                     'deleted',
@@ -263,8 +266,35 @@ class StrictFirestoreCollection:
             raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
         return StrictFirestoreIdQuery(self._database, self._path).where(filter=filter)
 
+    def limit(self, count: int) -> StrictFirestorePhotoProbe:
+        # Finalization admission asks whether a conversation still has a legacy photo child.
+        if self._path[-1] != 'photos' or len(self._path) % 2 == 0 or count != 1:
+            raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+        return StrictFirestorePhotoProbe(self._database, self._path)
+
     def stream(self, *args: Any, **kwargs: Any) -> None:
         raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+
+
+class StrictFirestorePhotoProbe:
+    """Transaction-bound ``photos.limit(1)`` existence probe; it is a read, so it must precede writes."""
+
+    def __init__(self, database: StrictFirestore, path: tuple[str, ...]):
+        self._database = database
+        self._path = path
+
+    def stream(self, *, transaction: StrictFirestoreTransaction | None = None):
+        if transaction is None:
+            raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+        if transaction._database is not self._database:
+            raise ForeignTransactionError('Firestore transaction and query must belong to the same store')
+        transaction._assert_read_allowed()
+        rows = [
+            StrictFirestoreSnapshot(value)
+            for path, value in sorted(self._database.rows.items())
+            if path[:-1] == self._path
+        ]
+        return iter(rows[:1])
 
 
 class StrictFirestoreIdQuery:

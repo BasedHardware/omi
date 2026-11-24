@@ -57,7 +57,7 @@ bool isRetryableInProgressConversationResponse(http.Response? response) {
   }
 }
 
-@visibleForTesting
+/// Sends the serialized Process Now request.
 typedef InProgressConversationRequestSender = Future<http.Response?> Function(ApiRequest request);
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
@@ -65,7 +65,8 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
 }
 
 Future<InProgressProcessOutcome> processInProgressConversationOutcome({
-  @visibleForTesting InProgressConversationRequestSender? sendRequest,
+  String? liveConversationId,
+  InProgressConversationRequestSender? sendRequest,
   @visibleForTesting Future<void> Function(Duration)? waitBeforeRetry,
   @visibleForTesting void Function(http.Response)? reportUnexpectedResponse,
 }) async {
@@ -73,7 +74,7 @@ Future<InProgressProcessOutcome> processInProgressConversationOutcome({
     url: '${Env.apiBaseUrl}v1/conversations',
     headers: const {},
     method: 'POST',
-    body: jsonEncode({}),
+    body: jsonEncode({if (liveConversationId != null) 'live_conversation_id': liveConversationId}),
   );
   Future<http.Response?> sendProductionRequest(ApiRequest request) => makeApiCall(
         url: request.url,
@@ -89,9 +90,8 @@ Future<InProgressProcessOutcome> processInProgressConversationOutcome({
   if (isRetryableInProgressConversationResponse(response)) {
     final delay = parseApiRetryAfter(response!, DateTime.now) ?? const Duration(seconds: 2);
     await (waitBeforeRetry ?? (duration) => Future<void>.delayed(duration))(delay);
-    // The backend rolls the failed admission back before returning this typed
-    // response. Replaying the identical empty POST therefore re-admits the same
-    // in-progress conversation; never retry other 5xx or an exhausted second try.
+    // This typed failure rolls back admission, so replay the same request once.
+    // Other 5xx responses may have left work in flight.
     response = await send(request);
   }
   if (response == null) return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
@@ -156,6 +156,7 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   int limit = 50,
   int offset = 0,
   String? cursor,
+  String? homeMode,
   List<ConversationStatus> statuses = const [],
   bool includeDiscarded = false,
   DateTime? startDate,
@@ -188,7 +189,11 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   }
   var response = await makeApiCall(
       url: url,
-      headers: {'X-Omi-Home-Ownership': '1', if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')},
+      headers: {
+        'X-Omi-Home-Ownership': '1',
+        if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(','),
+        if (homeMode != null) ConversationPageHeaders.homeModeHeader: homeMode,
+      },
       method: 'GET',
       body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
@@ -653,11 +658,13 @@ class ConversationApi {
     void Function(int)? onStorageCount,
     void Function(ConversationPageHeaders)? onPageHeaders,
     String? cursor,
+    String? homeMode,
   }) =>
       _listHomeConversations(this,
           limit: limit,
           offset: offset,
           cursor: cursor,
+          homeMode: homeMode,
           onPageHeaders: onPageHeaders,
           statuses: statuses,
           includeDiscarded: includeDiscarded,

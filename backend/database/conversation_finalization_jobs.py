@@ -18,7 +18,7 @@ from typing import Any, Callable, Literal, Mapping, NotRequired, TypedDict
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from config import listen_reconnect
+from config import listen_reconnect, server_batch
 from config.episodes import home_transcription_deadline_seconds
 from config.firestore_read_levers import lever_enabled
 from config.account_cutover import cutover_enforcement_enabled
@@ -60,8 +60,13 @@ from models.conversation_continuity import continuation_timeout
 from utils.conversations.backfill_stats import same_timestamp_revision
 from utils.account_cutover.fence import background_job_should_skip_account
 from utils.conversations.terminal_relevance import stamp_terminal_decision
-from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, is_recovery_trigger
 from database.server_batch_capture_handoff import capture_allowed, manual_stop_patch
+from utils.conversations.processing_trigger import (
+    PROCESSING_MODES,
+    ProcessingTrigger,
+    is_recovery_trigger,
+    trigger_for_finalization_job,
+)
 from utils.conversations.lifecycle_clocks import speech_clock
 from utils.conversations.recovery import (
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
@@ -351,6 +356,9 @@ def _conversation_has_finalization_content(
     return next(iter(conversation_ref.collection('photos').limit(1).stream(transaction=transaction)), None) is not None
 
 
+SERVER_BATCH_ARCHIVE_UNREADY = 'server_batch_archive_unready'
+
+
 def recovery_admission_refusal(
     uid: str,
     conversation: Mapping[str, Any],
@@ -402,7 +410,16 @@ def recovery_admission_refusal(
     cut = recovery_cutoff if recovery_cutoff.tzinfo else recovery_cutoff.replace(tzinfo=timezone.utc)
     if (finished_at if finished_at.tzinfo else finished_at.replace(tzinfo=timezone.utc)) > cut:
         return 'not_stale'
-    if not (conversation.get('audio_files') or conversations_db.raw_conversation_has_content(uid, dict(conversation))):
+    if conversation.get('audio_files'):
+        if (
+            server_batch.owned(conversation)
+            and not server_batch.has_audio(conversation)
+            and not conversations_db.raw_conversation_has_content(uid, dict(conversation), log_decode_failure=False)
+        ):
+            # Audio file references alone cannot take the committed-audio path
+            # and also preclude empty cleanup, even after a close without bounds.
+            return SERVER_BATCH_ARCHIVE_UNREADY
+    elif not conversations_db.raw_conversation_has_content(uid, dict(conversation)):
         return 'no_content'
     if recovery_audio_file_ids(conversation) is None:
         return 'oversized_audio_files'
@@ -663,8 +680,12 @@ def _create_or_get_finalization_intent_txn(
         if not is_recovery_trigger(trigger) and not _conversation_has_finalization_content(
             uid, loaded, conversation_ref, transaction
         ):
-            intent = _no_finalization_intent('no_content')
-            return intent
+            # A finish inside the first 60 s archive window: the live session still holds the audio.
+            if trigger is not ProcessingTrigger.CLIENT_FINALIZE or not server_batch.user_finish_admits(
+                uid, loaded, now
+            ):
+                intent = _no_finalization_intent('no_content')
+                return intent
 
         # The lifecycle service owns this pure decision, but it is evaluated while
         # Firestore holds the conversation transaction snapshot. A late disconnect
@@ -1094,6 +1115,14 @@ def mark_finalization_completed(
     )
 
 
+def _is_client_finalize(job: Mapping[str, Any]) -> bool:
+    """The user ended this capture. Uses the documented resolver, so a legacy force_process job counts."""
+    try:
+        return trigger_for_finalization_job(job) is ProcessingTrigger.CLIENT_FINALIZE
+    except ValueError:
+        return False
+
+
 def _complete_server_batch_capture_txn(
     transaction: Any,
     job_ref: Any,
@@ -1110,6 +1139,10 @@ def _complete_server_batch_capture_txn(
 
     No external fanout is owed by a zero-preview capture: register_recording
     already reserved its durable batch obligation. All reads precede writes.
+
+    A user finish (``client_finalize``) of a v3 recording also stores ``v3_manual_end_requested``.
+    An explicit stop with native provenance waits for the sealed transcript projection.
+    Requests without that provenance can still use the existing admission and projection paths.
     """
     job_snapshot = job_ref.get(transaction=transaction)
     conversation_snapshot = conversation_ref.get(transaction=transaction)
@@ -1157,6 +1190,11 @@ def _complete_server_batch_capture_txn(
 
     terminal = {**current, 'status': 'completed'}
     stamp_terminal_decision(terminal, path='lifecycle_terminal')
+    manual_end_update: dict[str, Any] = (
+        {'v3_manual_end_requested': True}
+        if current.get('recording') is True and _is_client_finalize(job) and server_batch.manual_end_marker_enabled()
+        else {}
+    )
     transaction.update(
         conversation_ref,
         {
@@ -1165,6 +1203,7 @@ def _complete_server_batch_capture_txn(
             'relevance_decision': terminal['relevance_decision'],
             'home_transcription_pending_at': now,
             'home_transcription_deadline_at': now + timedelta(seconds=home_transcription_deadline_seconds()),
+            **manual_end_update,
         },
     )
     transaction.update(
@@ -3238,6 +3277,7 @@ def _reacquire_deferred_processing_txn(transaction: Any, conversation_ref: Any, 
         not python_owns_finalization(data)
         or data.get('status') not in {'processing', 'completed'}
         or data.get('discarded')
+        or data.get('deleted')
         or data.get('deferred') is not True
     ):
         return False
@@ -3248,20 +3288,24 @@ def _reacquire_deferred_processing_txn(transaction: Any, conversation_ref: Any, 
     return True
 
 
-def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+def reacquire_deferred_processing(
+    uid: str, conversation_id: str, *, admitted_at: datetime | None = None, firestore_client: Any = None
+) -> bool:
     """Atomically claim deferred ownership and renew the lease in one transaction."""
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_reacquire_deferred_processing_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
+    return transactional(transaction, _conversation_ref(client, uid, conversation_id), admitted_at or _now())
 
 
-def recover_deferred_processing_failure(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+def recover_deferred_processing_failure(
+    uid: str, conversation_id: str, *, expected_admitted_at: datetime | None = None, firestore_client: Any = None
+) -> bool:
     """Atomically re-arm deferred enrichment without exposing a stuck processing row."""
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(recover_deferred_processing_failure_txn)
-    completed = transactional(transaction, _conversation_ref(client, uid, conversation_id))
+    completed = transactional(transaction, _conversation_ref(client, uid, conversation_id), expected_admitted_at)
     if completed:
         stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
     return completed

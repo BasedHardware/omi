@@ -81,7 +81,9 @@ def group_rids(group):
     return {line['conversation_id'] for line in group['lines']}
 
 
-def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_on_landing=False):
+def stretches(
+    members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_on_landing=False, max_window=timedelta(0)
+):
     lines = []
     seen = []
     for row in sorted(
@@ -171,7 +173,18 @@ def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_o
             and previous['end'] <= max(prior_line['end'], native_cuts[prior_line['conversation_id']])
             and previous['end'] <= line['start']
         )
-        if native_cut or silence or (previous and previous['manual_end']):
+        capped = False
+        if (
+            previous is not None
+            and not silence
+            and not native_cut
+            and not previous['manual_end']
+            and max_window
+            and line['start'] - previous['lines'][0]['start'] >= max_window
+        ):
+            previous['window_cap_end'] = True
+            capped = True
+        if native_cut or silence or capped or (previous and previous['manual_end']):
             key = hashlib.sha256(f"{line['conversation_id']}:{line['start'].isoformat()}".encode()).hexdigest()[:24]
             groups.append(
                 {
@@ -179,6 +192,7 @@ def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_o
                     'end': line['end'],
                     'lines': [],
                     'manual_end': False,
+                    'after_window_cap': capped,
                     'after_manual_end': bool(not silence and previous and (native_cut or previous['manual_end'])),
                 }
             )
@@ -200,7 +214,7 @@ def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_o
             group['native_manual_source'] = native_source
         group['legacy_manual_end'] = group['manual_end']
         group['manual_end'] = native_manual_end or group['legacy_manual_end']
-        # A later stretch begins only after recorded silence or a manual cut, so only the last one can
+        # Silence, a manual cut or the window cap starts a later stretch, so only the last one can
         # still be open. Page continuation and future-dated speech must not also hold an earlier one
         # open: two open stretches never commit (multiple_open_conversations parks the owner).
         later = index + 1 < len(groups)

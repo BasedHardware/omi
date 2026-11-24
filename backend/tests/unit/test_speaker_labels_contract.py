@@ -24,6 +24,7 @@ from pydantic import ValidationError
 
 from database import conversations as conversations_db
 from database import voice_profiles as voice_profiles_db
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from models.other import Person
 from models.speaker_labels import RejectSpeakerRequest, VoiceMatch, VoiceMatchesResponse
 from models.transcript_segment import TranscriptSegment
@@ -643,3 +644,20 @@ def test_generated_ids_fit_the_released_doc_id_contract():
 
     for _ in range(1000):
         assert speaker_labels_router._valid_document_id(str(uuid.uuid4()))
+
+
+@pytest.mark.parametrize(
+    'error_type',
+    [DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable],
+)
+def test_reject_route_maps_destructive_gate_to_account_gate_busy(client, monkeypatch, error_type):
+    """A live account gate makes the reject retryable (409), never an unhandled 500."""
+
+    def gate_busy(*args, **kwargs):
+        raise error_type('external data write blocked by destructive operation')
+
+    monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', gate_busy)
+    response = client.post('/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_me'})
+    assert response.status_code == 409
+    assert response.json() == {'detail': 'account_gate_busy'}
+    assert response.headers['Retry-After'] == '2'

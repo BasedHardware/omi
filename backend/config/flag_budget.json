@@ -24,7 +24,7 @@
     "config/batch_language_recovery.py": "planscost"
   },
   "seed_review_by": "2026-11-15",
-  "budget": 161,
+  "budget": 159,
   "names": {
     "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED": {
       "owner": "batch-custody / lead2",
@@ -46,8 +46,9 @@
       "review_by": "2026-12-14"
     },
     "BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED": {
-      "owner": "intakefallback / batch rollout lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline lead",
+      "review_by": "2026-12-06",
+      "reason": "shadow readout pending; ramp or retire decision on SCA-3850"
     },
     "BATCH_ADMISSION_PARALLEL_CALLS": {
       "owner": "planscost",
@@ -72,8 +73,14 @@
       "registry": "config/feature-flags.yaml"
     },
     "BATCH_LEGACY_CAPACITY_FALLBACK_ENABLED": {
-      "owner": "overflow / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "Review the GPU saturation fallback alongside legacy-sync retirement on SCA-3850"
+    },
+    "BATCH_PARKED_JOB_SWEEPER_ENABLED": {
+      "owner": "omi-pipeline",
+      "review_by": "2026-12-18",
+      "registry": "config/feature-flags.yaml"
     },
     "BATCH_PIPELINE_API_URL": {
       "seeded": "2026-10-25"
@@ -119,7 +126,8 @@
     },
     "BATCH_PIPELINE_CONTENTION_RETRY_ENABLED": {
       "owner": "batch record lane / rollout lead",
-      "review_by": "2026-11-28"
+      "review_by": "2026-12-05",
+      "reason": "Retain the legacy transaction fallback while Pipeline rechecks bounded retries under contention and verifies worker rollback. Review permanent budget placement by December 5."
     },
     "BATCH_PIPELINE_CONTEXT_SECONDS": {
       "seeded": "2026-10-25"
@@ -208,6 +216,11 @@
       "review_by": "2026-12-18",
       "registry": "config/feature-flags.yaml"
     },
+    "BATCH_PIPELINE_MERGE_AGED_GPU_RELEASE_ENABLED": {
+      "owner": "Goal: Pipeline",
+      "review_by": "2026-12-07",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST": {
       "owner": "q12-post-seal",
       "review_by": "2026-12-18",
@@ -226,7 +239,8 @@
     },
     "BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS": {
       "owner": "Goal: Pipeline / SCA-1960",
-      "review_by": "2026-11-28"
+      "review_by": "2026-12-05",
+      "reason": "SCA-1960: retain owner-drain admission diagnostics for Pipeline troubleshooting. By December 5, confirm whether the telemetry has readers. If it has none, retire the flag through review. Otherwise, review permanent budget placement."
     },
     "BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS": {
       "owner": "provider-stt drain",
@@ -274,8 +288,16 @@
     },
     "BATCH_PIPELINE_PROJECTION_OVERLAP_DIAGNOSTICS": {
       "owner": "firestore-cost / projection overlap source owner",
-      "review_by": "2026-11-24",
-      "reason": "Default-on diagnostic off switch requested by PR25596 review; review after the first qualified overlap readout. Does not change discovery or the seeded flag budget."
+      "review_by": "2026-12-01",
+      "reason": "SCA-3850: give firestore-cost one week to review the off switch against its first qualified overlap readout"
+    },
+    "BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED": {
+      "owner": "Margin (SCA-3664)",
+      "review_by": "2026-12-07"
+    },
+    "BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT": {
+      "owner": "Margin (SCA-3664)",
+      "review_by": "2026-12-07"
     },
     "BATCH_PIPELINE_PROJECTION_PREFETCH": {
       "seeded": "2026-10-25"
@@ -305,16 +327,19 @@
     },
     "BATCH_PIPELINE_PROTECTED_SHARE_ENABLED": {
       "owner": "Pipeline / SCA-1894",
-      "review_by": "2026-11-23",
-      "registry": "config/feature-flags.yaml"
+      "review_by": "2026-11-30",
+      "registry": "config/feature-flags.yaml",
+      "reason": "SCA-3850: align with the approved registry extension; qualify synthetic load and obtain lead approval before the first CPU scheduler step"
     },
     "BATCH_PIPELINE_PROTECTED_SHARE_PERCENT": {
       "owner": "Pipeline / SCA-1894",
-      "review_by": "2026-11-23"
+      "review_by": "2026-11-30",
+      "reason": "SCA-3850: review the share limit with the protected-share scheduler canary decision"
     },
     "BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED": {
       "owner": "provider-stt drain",
-      "review_by": "2026-11-27",
+      "review_by": "2026-12-04",
+      "reason": "SCA-2015: the November 28 metered-release contract review will inform whether to remove the legacy switch or give it a permanent budget slot.",
       "registry": "config/feature-flags.yaml"
     },
     "BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS": {
@@ -422,8 +447,9 @@
       "seeded": "2026-10-25"
     },
     "BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT": {
-      "owner": "flightcut / batch rollout lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline lead",
+      "review_by": "2026-12-06",
+      "reason": "shadow readout pending; ramp or retire decision on SCA-3850"
     },
     "BATCH_PIPELINE_SWEEP_AGE_GATE": {
       "owner": "omi-pipeline",
@@ -437,7 +463,8 @@
     },
     "BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED": {
       "owner": "margin / SCA-1800",
-      "review_by": "2026-11-26"
+      "review_by": "2026-12-03",
+      "reason": "SCA-1800: retain the rollback switch for upload coalescing on backend-integration and backend-sync. Margin to review Release's effective-setting and safe-drain evidence and identify a permanent budget slot by 2026-12-03."
     },
     "BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED": {
       "owner": "planscost / gpu efficiency sprint",
@@ -492,12 +519,14 @@
       "review_by": "2026-12-04"
     },
     "BATCH_PULL_MULTI_LEASE_ENABLED": {
-      "owner": "pulleff / batch rollout lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline lead",
+      "review_by": "2026-12-06",
+      "reason": "permanent budget slot pending on SCA-3850"
     },
     "BATCH_SHARD_SPREAD_ENABLED": {
       "owner": "batch record lane / rollout lead",
-      "review_by": "2026-11-28"
+      "review_by": "2026-12-05",
+      "reason": "Retain the legacy pull fallback while Pipeline rechecks shard-claim expiry, fairness, privacy and capacity fences. Review permanent budget placement by December 5."
     },
     "BATCH_SKIP_UNCHANGED_CONTROL_WRITE_ENABLED": {
       "owner": "pinecone2 / batch rollout lead",
@@ -514,60 +543,73 @@
       "registry": "config/feature-flags.yaml"
     },
     "BATCH_VENDOR_FAILOVER_ENABLED": {
-      "owner": "vroute-d / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "Preserve the vendor failover kill switch and paid-attempt control pending a permanent budget slot on SCA-3850"
     },
     "BATCH_VENDOR_HELD_REDRIVE_ENABLED": {
-      "owner": "vroute-d / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "Preserve the ability to pause vendor-held redrive pending a permanent budget slot on SCA-3850"
     },
     "BATCH_VENDOR_HELD_REDRIVE_SECONDS": {
-      "owner": "vroute-d / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "Preserve outage retry cadence tuning pending a permanent budget slot on SCA-3850"
     },
     "BATCH_VENDOR_HELD_STALE_GRACE_SECONDS": {
-      "owner": "vroute-d / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "Preserve the stalled-redrive grace threshold pending a permanent budget slot on SCA-3850"
     },
     "BATCH_VENDOR_MIN_SPEECH_SECONDS": {
       "owner": "blindspot-audit / two-lane lead",
       "review_by": "2026-12-13"
     },
     "BATCH_VENDOR_OVERFLOW_ENABLED": {
-      "owner": "overflow / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "Preserve the ability to disable vendor overflow under GPU saturation pending a permanent budget slot on SCA-3850"
     },
     "BATCH_VENDOR_OVERFLOW_ENTER_SECONDS": {
-      "owner": "overflow / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "Preserve the saturation age threshold pending a permanent budget slot on SCA-3850"
     },
     "BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS": {
-      "owner": "overflow / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "Preserve the saturation backlog threshold pending a permanent budget slot on SCA-3850"
     },
     "BATCH_VENDOR_OVERFLOW_PRIORITIES": {
-      "owner": "overflow / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "Preserve operator control over overflow eligibility by priority pending a permanent budget slot on SCA-3850"
     },
     "BATCH_VENDOR_ROUTE_TABLE": {
-      "owner": "vroute-b / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "Preserve vendor policy tuning for prices, caps, GPU floor and language coverage pending a permanent budget slot on SCA-3850"
     },
     "BATCH_VENDOR_ROUTING_ENABLED": {
-      "owner": "vroute-b / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "Preserve the master routing rollback for new admissions pending a permanent budget slot on SCA-3850"
     },
     "BATCH_VENDOR_ROUTING_PERCENT": {
-      "owner": "vroute-b / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "Retain the dated rollout control while the cohort ramp and environment fallback retirement are pending on SCA-3850"
     },
     "BATCH_VENDOR_ROUTING_SHADOW_PERCENT": {
-      "owner": "vroute-b / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "budget disposition or reviewed removal pending on SCA-3850"
     },
     "BATCH_VENDOR_ROUTING_UID_ALLOWLIST": {
-      "owner": "vroute-b / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "budget disposition or reviewed removal pending on SCA-3850"
     },
     "BUCKET_AUDIO_DERIVED": {
       "seeded": "2026-10-25"
@@ -610,12 +652,14 @@
     },
     "CONVERSATION_MERGE_BEFORE_PROCESSING": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "CONVERSATION_OCCASION_RELEVANCE_ENABLED": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "CONVERSATION_SPEAKER_ANCHOR_SECONDS": {
@@ -658,7 +702,8 @@
     },
     "EPISODE_CARRY_ON_SESSION_END": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "EPISODE_COMPOSER_REUSE": {
@@ -683,28 +728,32 @@
     },
     "EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED": {
       "owner": "quality-lead",
-      "review_by": "2026-11-22",
-      "reason": "2026-11-16 renewed: default-off opt-in detach (gated off in d4dcd04); quality lead decides keep-and-ramp or delete by 2026-11-22",
+      "review_by": "2026-11-30",
+      "reason": "SCA-3850: decision overdue, tracked on this issue",
       "registry": "config/feature-flags.yaml"
     },
     "EPISODE_HARD_CAP_ACROSS_CONVERSATIONS": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "EPISODE_LIVE_TIMER_START_ENABLED": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "EPISODE_MOMENT_OUTPUT_VALIDATOR": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "EPISODE_RECORDED_TIME_ENABLED": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "FIRESTORE_EMULATOR_HOST": {
@@ -717,7 +766,8 @@
     },
     "HOME_HIDE_BELOW_FLOOR_ROWS": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED": {
@@ -755,7 +805,8 @@
     },
     "LATE_AUDIO_SYNC_INTAKE_ENABLED": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28",
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850",
       "registry": "config/feature-flags.yaml"
     },
     "LISTEN_LIVE_TAIL_CATCHUP_RATE": {
@@ -849,9 +900,6 @@
     "PARAKEET_WINDOW_ALLOCATION_PERCENT": {
       "seeded": "2026-10-25"
     },
-    "PARAKEET_WINDOW_DIARIZATION": {
-      "seeded": "2026-10-25"
-    },
     "PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED": {
       "owner": "dazheng (live STT / rollout lead)",
       "review_by": "2026-12-14"
@@ -879,7 +927,8 @@
     },
     "PRERECORDED_SONIOX_FAILOVER_ENABLED": {
       "owner": "refactor-lead",
-      "review_by": "2026-11-24"
+      "review_by": "2026-12-01",
+      "reason": "SCA-3850: give refactor-lead one week to decide the failover gate disposition"
     },
     "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED": {
       "owner": "refactor-lead",
@@ -1051,14 +1100,16 @@
     },
     "STT_IDLE_REOPEN_COST_RESELECT_ENABLED": {
       "owner": "idlereopen / two-lane lead",
-      "review_by": "2026-11-26"
+      "review_by": "2026-12-03",
+      "reason": "SCA-3850: retain the default-off operations switch recorded in the registry after the first-text regression. Review the longer-term budget disposition with the two-lane lead by 2026-12-03."
     },
     "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT": {
       "seeded": "2026-10-25"
     },
     "STT_PRERECORDED_LANGUAGE_GATE_CONFIDENT_SKIP": {
-      "owner": "lidprobe / two-lane lead",
-      "review_by": "2026-11-29"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "Preserve rollback to vendor-only language probing until legacy-sync retirement review on SCA-3850"
     },
     "STT_PRERECORDED_LANGUAGE_GATE_PERCENT": {
       "seeded": "2026-10-25"
@@ -1073,9 +1124,6 @@
       "seeded": "2026-10-25"
     },
     "STT_PRERECORDED_VENDOR_FAIL_FAST": {
-      "seeded": "2026-10-25"
-    },
-    "STT_RESILIENT_RECONNECT": {
       "seeded": "2026-10-25"
     },
     "STT_ROUTING_DISRUPTION_GATE": {
@@ -1131,13 +1179,13 @@
     },
     "SYNC_BACKFILL_WORKER_API_URL": {
       "owner": "infracost / syncsplit",
-      "review_by": "2026-11-23",
-      "reason": "2026-11-10 renewed by flagrulings: review_by expiry failed every backend unit shard; owner to confirm keep or delete"
+      "review_by": "2026-11-30",
+      "reason": "SCA-3850: worker service URL; review a permanent budget slot with syncsplit"
     },
     "SYNC_BACKFILL_WORKER_AUDIENCE": {
       "owner": "infracost / syncsplit",
-      "review_by": "2026-11-23",
-      "reason": "2026-11-10 renewed by flagrulings: review_by expiry failed every backend unit shard; owner to confirm keep or delete"
+      "review_by": "2026-11-30",
+      "reason": "SCA-3850: worker service token audience; review a permanent budget slot with syncsplit"
     },
     "SYNC_CAPTURE_END_SILENCE_SECONDS": {
       "owner": "lifecycle-owner (SCA-1766)",
@@ -1173,9 +1221,9 @@
       "seeded": "2026-10-25"
     },
     "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED": {
-      "owner": "Q12-AD / sync capture recovery",
-      "review_by": "2026-11-22",
-      "reason": "2026-11-16 renewed: review_by expiry failed the flag-budget guard for every branch; enabling waits on the product decision how recovered future-dated recordings appear on Home; quality lead keeps or deletes by 2026-11-22"
+      "owner": "Pipeline / Omi Control Owners (Sol)",
+      "review_by": "2026-12-06",
+      "reason": "capture-clamp graduation or permanent budget decision pending on SCA-3850"
     },
     "SYNC_INLINE_BACKFILL_CONCURRENCY": {
       "seeded": "2026-10-25"
@@ -1198,7 +1246,8 @@
     },
     "SYNC_PROCESSING_HOLD_ENABLED": {
       "owner": "rollout-meetings / occasion architecture",
-      "review_by": "2026-11-28"
+      "review_by": "2026-12-05",
+      "reason": "registry keep recorded, budget disposition pending on SCA-3850"
     },
     "SYNC_PROCESSING_QUIET_SECONDS": {
       "owner": "lifecycle-owner (SCA-1766)",
@@ -1260,8 +1309,8 @@
     },
     "LISTEN_BATCH_RECONNECT_ENABLED": {
       "owner": "capture-quality / Release",
-      "review_by": "2026-11-23",
-      "reason": "Aligned 2026-11-21 to the registry extension (until 2026-11-23, David's 2026-11-17 bulk ruling: extend); ramp not expanded by 2026-11-20 and the lapsed date turned main's unit tests red"
+      "review_by": "2026-11-30",
+      "reason": "SCA-3682: Release decision by November 27 after listen drains; target gate removal by November 30 or relabel the registry entry if the go-ahead slips"
     },
     "LISTEN_BATCH_RECONNECT_GRACE_SECONDS": {
       "owner": "capture-quality / Release",
@@ -1314,6 +1363,14 @@
     },
     "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {
       "on": "2026-11-16",
+      "replaced_by": null
+    },
+    "PARAKEET_WINDOW_DIARIZATION": {
+      "on": "2026-11-22",
+      "replaced_by": null
+    },
+    "STT_RESILIENT_RECONNECT": {
+      "on": "2026-11-22",
       "replaced_by": null
     }
   }

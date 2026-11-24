@@ -14,6 +14,9 @@ from models.conversation import Conversation, CreateConversation
 from models.structured import Structured
 from models.conversation_enums import ConversationStatus
 from utils.conversations.meeting_treatment import meeting_treatment_verdict
+from utils.llm.gateway_error_contract import conversation_processing_http_exception
+from utils.other.raise_site import raise_site_of
+from utils.other.request_deadline import RequestDeadlineExceeded
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -632,6 +635,75 @@ def test_client_session_id_stale_claim_is_deleted_and_reprocessed(monkeypatch):
     assert response.id == expected_id
     delete.assert_called_once_with('uid1', expected_id)
     process.assert_called_once()
+
+
+def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch):
+    row = {}
+
+    def create(_uid, payload, *, idempotent):
+        assert idempotent and not row
+        row.update(payload)
+        return True
+
+    def rollback(_uid, conversation_id):
+        assert row['id'] == conversation_id
+        assert row['status'] == ConversationStatus.processing
+        row['status'] = ConversationStatus.in_progress
+        return True
+
+    def admit(_uid, conversation_id, *, extra_updates):
+        assert row['id'] == conversation_id
+        assert row['status'] == ConversationStatus.in_progress
+        row['status'] = ConversationStatus.processing
+        return True
+
+    def process(_uid, _language, conversation, **_kwargs):
+        if processor.call_count == 1:
+            raise conversation_processing_http_exception(RequestDeadlineExceeded('budget spent'))
+        assert conversation.id == row['id']
+        assert conversation.transcript_segments[0].text == 'hello world'
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    processor = MagicMock(side_effect=process)
+    create_claim = MagicMock(side_effect=create)
+    delete = MagicMock()
+    event = MagicMock()
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *_args, **_kwargs: dict(row) or None)
+    monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', create_claim)
+    monkeypatch.setattr(developer.lifecycle_service, 'rollback_processing_admission', rollback)
+    monkeypatch.setattr(developer.lifecycle_service, 'admit_processing', admit)
+    monkeypatch.setattr(
+        developer.lifecycle_service, 'persist_processed_conversation', lambda _uid, data: row.update(data)
+    )
+    monkeypatch.setattr(developer, 'process_conversation', processor)
+    monkeypatch.setattr(developer, 'record_product_event', event)
+
+    request = _request(client_session_id='local-session-1')
+    with pytest.raises(HTTPException) as cut:
+        developer._create_conversation_from_segments('uid1', request)
+    assert cut.value.status_code == 503
+    assert cut.value.headers == {'Retry-After': '2'}
+    assert raise_site_of(cut.value) == 'request_budget_exhausted'
+    assert row['status'] == ConversationStatus.in_progress
+    event.assert_not_called()
+
+    response = developer._create_conversation_from_segments(
+        'uid1',
+        _request(
+            client_session_id='local-session-1',
+            transcript_segments=[{**_segment(), 'text': 'changed on retry'}],
+        ),
+        client_kind='ios',
+        app_build='12574',
+    )
+    assert response.status == 'completed'
+    assert response.id == row['id']
+    assert row['status'] == ConversationStatus.completed
+    create_claim.assert_called_once()
+    delete.assert_not_called()
+    event.assert_called_once_with('conversation_created', client_kind='ios', app_build='12574', uid='uid1')
 
 
 def test_client_session_id_claim_is_released_when_processing_fails(monkeypatch):

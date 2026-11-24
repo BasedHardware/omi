@@ -9,6 +9,10 @@
 {{- if lt (int .Values.recordSealWorker.targetBacklogPerWorker) 1 }}
 {{- fail "recordSealWorker.targetBacklogPerWorker must be positive" }}
 {{- end }}
+{{- $current := dict }}
+{{- if .Values.recordSealWorker.preserveLiveFreshEnv }}
+{{- $current = lookup "apps/v1" "Deployment" .Release.Namespace "record-seal-worker" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -49,7 +53,14 @@ spec:
           readinessProbe:
             httpGet: {path: /metrics, port: metrics}
           env:
+            {{- if $current }}
+            {{- $freshEnv := include "batch-pipeline-worker.liveEnv" (dict "deployment" $current "container" "seal" "names" (list "RECORD_SEAL_REPAIR_FRESH_ENABLED")) | fromYamlArray }}
+            {{- with $freshEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- else }}
             - {name: RECORD_SEAL_REPAIR_FRESH_ENABLED, value: {{ if hasKey .Values.recordSealRepair "freshEnabled" }}{{ .Values.recordSealRepair.freshEnabled | quote }}{{ else }}"true"{{ end }}}
+            {{- end }}
             - {name: RECORD_SEAL_REPAIR_ENABLED, value: {{ .Values.recordSealWorker.runtimeEnabled | quote }}}
             - {name: RECORD_AUDIO_PARTIAL_ENABLED, value: {{ .Values.recordSealRules.partialEnabled | quote }}}
             - {name: RECORD_SEAL_OVERLAP_TRIM_ENABLED, value: {{ .Values.recordSealRules.overlapTrimEnabled | quote }}}

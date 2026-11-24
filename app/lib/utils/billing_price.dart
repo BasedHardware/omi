@@ -17,6 +17,13 @@ String formatBillingPrice(int amountMinor, String currency) {
       .format(amountMinor / math.pow(10, digits));
 }
 
+/// Play micros (1/1,000,000 of the currency unit) in the minor units [formatBillingPrice] uses.
+int playMinorUnits(int micros, String currency) {
+  final code = currency.trim().toUpperCase();
+  final digits = _zeroDecimal.contains(code) ? 0 : (_threeDecimal.contains(code) ? 3 : 2);
+  return (micros / math.pow(10, 6 - digits)).round();
+}
+
 // Stripe's charge units, rather than CLDR's cash/payout units (notably ISK/UGX).
 const _zeroDecimal = {
   'BIF',

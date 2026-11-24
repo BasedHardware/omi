@@ -34,6 +34,7 @@ import threading
 import time
 import urllib.parse
 from dataclasses import dataclass, field
+from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, Optional
 
@@ -135,7 +136,7 @@ class LlmProxy:
         self._locks_guard = threading.Lock()
         self._server: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
-        self._active = 0  # handlers still running: a call is answered before its spend is settled
+        self._active = 0  # handlers can still be settling streamed calls
         self._idle = threading.Condition()
 
     # ---- lifecycle ---------------------------------------------------------------
@@ -329,11 +330,12 @@ class _Handler(BaseHTTPRequestHandler):
                 entry = owner.cache_get(key) if config.mode != 'refresh' else None
                 if entry is not None:
                     owner.counters['hits'] += 1
-                    self._serve_cached(entry, call)
+                    send_response = self._cached_response(entry, call)
                 elif config.mode == 'replay':
                     owner.counters['misses'] += 1
                     call.extra.update(status=409, error='cache_miss')
-                    self._send(
+                    send_response = partial(
+                        self._send,
                         409,
                         _error_body(
                             'pipeline_lab_cache_miss', 'cache_miss', 'replay mode: request not in the lab cache'
@@ -342,12 +344,19 @@ class _Handler(BaseHTTPRequestHandler):
                     )
                 else:
                     owner.counters['misses'] += 1
-                    self._forward(body, parsed, stream, key, call)
+                    send_response = self._forward(body, parsed, stream, key, call)
         finally:
             call.ms = round((time.monotonic() - started) * 1000.0, 1)
             owner.log(call)
+        # Buffered callers can export conversation artifacts as soon as they receive
+        # the response. Publish the attributed call before those callers resume.
+        if send_response is not None:
+            try:
+                send_response()
+            except (BrokenPipeError, ConnectionResetError):
+                self.close_connection = True
 
-    def _serve_cached(self, entry: dict[str, Any], call: LlmCall) -> None:
+    def _cached_response(self, entry: dict[str, Any], call: LlmCall) -> Callable[[], None]:
         payload = base64.b64decode(entry['body_b64']) if 'body_b64' in entry else entry.get('body', '').encode('utf-8')
         call.cache_hit = True
         call.model = entry.get('model') or call.model
@@ -356,7 +365,8 @@ class _Handler(BaseHTTPRequestHandler):
         call.output = entry.get('output')
         call.usd = 0.0
         call.extra.update(status=int(entry.get('status') or 200), recorded_usd=entry.get('usd'))
-        self._send(
+        return partial(
+            self._send,
             int(entry.get('status') or 200),
             payload,
             entry.get('content_type') or 'application/json',
@@ -376,7 +386,7 @@ class _Handler(BaseHTTPRequestHandler):
             headers['Authorization'] = 'Bearer ' + self.owner.config.upstream_token
         return headers
 
-    def _forward(self, body: bytes, parsed: Any, stream: bool, key: str, call: LlmCall) -> None:
+    def _forward(self, body: bytes, parsed: Any, stream: bool, key: str, call: LlmCall) -> Callable[[], None] | None:
         owner = self.owner
         config = owner.config
         assert owner.ledger is not None
@@ -387,12 +397,12 @@ class _Handler(BaseHTTPRequestHandler):
             owner.cap_reached = True
             owner.counters['refused'] += 1
             call.extra.update(status=402, error='spend_cap_reached')
-            self._send(
+            return partial(
+                self._send,
                 402,
                 _error_body('pipeline_lab_spend_cap', 'spend_cap_reached', str(stop)),
                 extra={'x-should-retry': 'false', 'X-Pipeline-Lab-Call-Id': call.id},
             )
-            return
 
         upstream = urllib.parse.urlsplit(config.upstream)
         connection_cls = http.client.HTTPSConnection if upstream.scheme == 'https' else http.client.HTTPConnection
@@ -435,11 +445,13 @@ class _Handler(BaseHTTPRequestHandler):
                 break
             content_type = response.getheader('Content-Type') or 'application/json'
             event_stream = 'text/event-stream' in content_type
+            send_response = None
             if event_stream or stream:
                 payload = self._relay_stream(response, content_type, call.id)
             else:
                 payload = response.read()
-                self._send(
+                send_response = partial(
+                    self._send,
                     response.status,
                     payload,
                     content_type,
@@ -453,11 +465,9 @@ class _Handler(BaseHTTPRequestHandler):
             else:
                 owner.ledger.release(reservation)
             call.extra.update(status=502, error=f'upstream_transport:{type(error).__name__}')
-            try:
-                self._send(502, _error_body('pipeline_lab_upstream', 'upstream_transport', type(error).__name__))
-            except OSError:
-                pass
-            return
+            return partial(
+                self._send, 502, _error_body('pipeline_lab_upstream', 'upstream_transport', type(error).__name__)
+            )
         finally:
             if connection is not None:
                 connection.close()
@@ -468,7 +478,7 @@ class _Handler(BaseHTTPRequestHandler):
             owner.counters['errors'] += 1
             owner.ledger.settle(reservation, 0.0)
             call.extra['error'] = f'upstream_http_{status}'
-            return
+            return send_response
         usage = wire.parse_usage(payload, event_stream or stream)
         cost = config.prices.cost(usage) if usage.known else reservation.usd
         owner.ledger.settle(reservation, cost)
@@ -495,6 +505,7 @@ class _Handler(BaseHTTPRequestHandler):
                 'recorded_run': config.run_id,
             },
         )
+        return send_response
 
     def _relay_stream(self, response: http.client.HTTPResponse, content_type: str, call_id: str) -> bytes:
         """Relay upstream chunks to the client as they arrive; return the full body."""

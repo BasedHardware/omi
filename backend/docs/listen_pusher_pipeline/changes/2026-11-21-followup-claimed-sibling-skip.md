@@ -23,8 +23,10 @@ durable outbox re-offers the row, so this affects outcome metrics only.
 ## Rollout and flags
 
 `BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED`, a kill switch, default on. `false` restores the
-original per-sibling check order exactly. Rollback: set it to `false` on backend-integration (one config key),
-or revert the code. Activation needs David's approval on the release issue (SCA-3508).
+original per-sibling check order exactly. David activated it on every prod role on 2026-11-22 (SCA-3544, #26006).
+Rollback: set it to `false` explicitly on backend, backend-sync, backend-integration and
+backend-projection-pump. The pump's overlay derives from integration, but it deploys as its own Cloud Run
+revision and Cloud Run merges env per service, so redeploy the pump too. Or revert the code.
 
 ## Readback
 

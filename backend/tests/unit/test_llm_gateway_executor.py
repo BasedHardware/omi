@@ -4,6 +4,7 @@ from dataclasses import replace
 from functools import cache
 
 import pytest
+from prometheus_client import REGISTRY
 
 import llm_gateway.gateway.executor as executor
 from llm_gateway.gateway.auth import ServiceCaller
@@ -534,6 +535,25 @@ async def test_executor_does_not_use_lkg_when_active_route_policy_rejects_failur
 
 
 @pytest.mark.asyncio
+async def test_live_title_lane_does_not_retry_after_provider_timeout(monkeypatch):
+    request = {
+        'model': 'omi:auto:conversation-v3-live-title',
+        'messages': [{'role': 'user', 'content': 'Discuss the release schedule.'}],
+        'max_completion_tokens': 32,
+    }
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, request['model'])
+    resolved = resolve_chat_completion_route(gateway_config(), request)
+    provider = FakeChatCompletionProvider([ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)])
+
+    with pytest.raises(GatewayProviderFailureError) as exc_info:
+        await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
+
+    assert exc_info.value.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT
+    assert len(provider.calls) == 1
+    assert provider.calls[0].request['max_completion_tokens'] == 32
+
+
+@pytest.mark.asyncio
 async def test_executor_remains_error_when_active_and_lkg_routes_both_fail():
     config = config_with_active_route(active_route_with_fallbacks([]))
     resolved = resolve_chat_completion_route(config, valid_request())
@@ -972,11 +992,8 @@ async def test_embedding_429_retry_sleeps_and_stays_on_the_same_provider(monkeyp
 
 def test_flex_first_default_lanes_and_kill_switch(monkeypatch):
     monkeypatch.delenv(executor.FLEX_FIRST_LANES_ENV_VAR, raising=False)
-    assert executor.flex_first_lanes() == {
-        'omi:auto:conv-structure',
-        'omi:auto:memory-l1',
-        'omi:auto:conversation-v3-summary',
-    }
+    # The v3 summary lanes are Standard-only: Flex served about 5% of conversation-v3-summary in prod.
+    assert executor.flex_first_lanes() == {'omi:auto:conv-structure', 'omi:auto:memory-l1'}
     for off in ('off', '', 'none', 'false', '0'):
         monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, off)
         assert executor.flex_first_lanes() == frozenset()
@@ -1054,6 +1071,46 @@ async def test_flex_first_failure_falls_back_to_standard_without_backoff(monkeyp
     assert [attempt.retry_ordinal for attempt in trace.attempts] == [1, 2]
     assert [attempt.outcome for attempt in trace.attempts] == ['error', 'success']
     assert result.response['choices'][0]['message']['content'] == '{"answer":"standard"}'
+
+
+@pytest.mark.parametrize(
+    ('lane_id', 'failure_class', 'reason'),
+    [
+        ('omi:auto:conv-structure', FailureClass.TIMEOUT_BEFORE_OUTPUT, 'timeout'),
+        ('omi:auto:conv-structure', FailureClass.PROVIDER_429_OMI_PAID, 'http_429'),
+        ('omi:auto:conv-structure', FailureClass.PROVIDER_5XX_OMI_PAID, 'other'),
+        (LANE_ID, FailureClass.TIMEOUT_BEFORE_OUTPUT, None),
+    ],
+)
+@pytest.mark.asyncio
+async def test_flex_fallback_reason_counts_reconcile_for_conv_structure(monkeypatch, lane_id, failure_class, reason):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, lane_id)
+    if lane_id == LANE_ID:
+        resolved = _route_with_attempts(1)
+    else:
+        request = valid_request(model=lane_id)
+        request.pop('response_format')
+        resolved = resolve_chat_completion_route(gateway_config(), request)
+    fallback_labels = {'lane_id': lane_id, 'outcome': 'fallback_standard'}
+    previous_total = REGISTRY.get_sample_value('llm_gateway_flex_first_total', fallback_labels) or 0
+    reason_metric = 'llm_gateway_conv_structure_flex_fallback_reason_total'
+    previous_reason_family_total = REGISTRY.get_sample_value('omi_reason_total', {'family': 'fallback'})
+    previous_counts = {
+        bucket: REGISTRY.get_sample_value(reason_metric, {'reason': bucket})
+        for bucket in ('timeout', 'http_429', 'other')
+    }
+    provider = FakeChatCompletionProvider(
+        [ProviderFailure(failure_class), fake_success_response(resolved.active_route.primary)]
+    )
+    _install_retry_clock(monkeypatch)
+
+    await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
+
+    assert REGISTRY.get_sample_value('llm_gateway_flex_first_total', fallback_labels) == previous_total + 1
+    for bucket, previous in previous_counts.items():
+        assert REGISTRY.get_sample_value(reason_metric, {'reason': bucket}) == previous + (bucket == reason)
+    assert REGISTRY.get_sample_value(reason_metric, {'reason': 'unknown'}) is None
+    assert REGISTRY.get_sample_value('omi_reason_total', {'family': 'fallback'}) == previous_reason_family_total
 
 
 @pytest.mark.asyncio

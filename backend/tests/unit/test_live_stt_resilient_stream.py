@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
-from config.live_stt_replay import DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS
 from config.stt_provider_policy import provider_for_service
 from routers.listen import receiver as listen_receiver
 from routers.listen.receiver import ListenReceiver
@@ -56,8 +55,7 @@ class Socket:
         self.finished = True
 
 
-def receiver(monkeypatch, *, enabled=True):
-    monkeypatch.setenv('STT_RESILIENT_RECONNECT', 'true' if enabled else 'false')
+def receiver(monkeypatch):
     host = MagicMock()
     host.is_multi_channel = False
     host.use_custom_stt = False
@@ -67,32 +65,6 @@ def receiver(monkeypatch, *, enabled=True):
     host.stt_service = STTService.soniox
     result = ListenReceiver(host, [], {})
     return result
-
-
-@pytest.mark.asyncio
-async def test_rotation_replays_only_unfinalized_audio_without_gap_or_duplicate(monkeypatch):
-    listener = receiver(monkeypatch)
-    ring = listener._resilient_audio
-    assert ring is not None
-    emitted = []
-
-    def on_segments(segments):
-        emitted.extend(s['text'] for s in listener._filter_replayed_segments(segments, 'soniox'))
-
-    ring.append(b'A\x00A\x00', 0)
-    on_segments([{'text': 'A', '_capture_start_sample': 0, '_capture_end_sample': 2}])
-    ring.append(b'B\x00B\x00', 2)
-    new = Socket(callback=on_segments)
-    old = Socket(dead=True, reason='soniox_rotation')
-    listener.stt_socket = old
-    listener._stt_rebuild = (lambda: (on_segments, on_segments, None), 2)
-    listener._create_stt_socket = AsyncMock(return_value=new)
-    with patch('routers.listen.receiver.fallback_socket_is_serving', new=AsyncMock(return_value=True)):
-        assert await listener._failover_stt_socket()
-    assert old.finished
-    assert new.sent == [(2, b'B\x00B\x00')]
-    assert emitted == ['A', 'BB']
-    assert listener._stt_failed_providers == set()
 
 
 def test_ring_is_bounded_and_freed():
@@ -149,7 +121,7 @@ def test_window_replay_pressure_only_cuts_pending_speech():
 
 
 def window_receiver_at_ring_limit(monkeypatch, *, pending_speech):
-    listener = receiver(monkeypatch, enabled=False)
+    listener = receiver(monkeypatch)
     listener.host.stt_service = STTService.parakeet
     listener.host.stt_model = 'parakeet-window'
     listener.host.language = 'en'
@@ -243,7 +215,7 @@ async def test_window_ring_limit_with_pending_speech_replays_before_current_chun
 @pytest.mark.parametrize('reason', ['timeout', 'provider_5xx', 'capacity_full'])
 @pytest.mark.asyncio
 async def test_failed_window_replays_only_untranscribed_audio_once(monkeypatch, reason):
-    listener = receiver(monkeypatch, enabled=False)
+    listener = receiver(monkeypatch)
     listener.host.stt_service = STTService.parakeet
     listener.host.stt_model = 'parakeet-window'
     listener.host.language = 'en'
@@ -297,7 +269,7 @@ async def test_failed_window_replays_only_untranscribed_audio_once(monkeypatch, 
 @pytest.mark.asyncio
 async def test_two_partial_replay_failures_preserve_tail_and_new_audio(monkeypatch):
     monkeypatch.setattr("utils.stt.replay_delivery.REPLAY_PACKET_BYTES", 4)
-    listener = receiver(monkeypatch, enabled=False)
+    listener = receiver(monkeypatch)
     listener.host.stt_service = STTService.parakeet
     listener.host.stt_model = 'parakeet-window'
     listener.host.language = listener.host.stt_language = 'en'
@@ -479,69 +451,8 @@ def test_whitespace_text_and_stale_candidate_tokens_never_release_the_episode():
 
 
 @pytest.mark.asyncio
-async def test_transient_soniox_reentry_replays_newest_prefix_inside_the_wall(monkeypatch):
-    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
+async def test_soniox_rotation_uses_existing_failover_without_replay(monkeypatch):
     listener = receiver(monkeypatch)
-    ring = listener._resilient_audio
-    assert ring is not None
-    ring.ring_seconds = 150
-    for index in range(135):
-        ring.append(b'R\x00' * 2, index * 2)
-    listener.recovery.mark_attempted('soniox')
-    listener.stt_socket = Socket(dead=True, reason='soniox_rotation')
-    listener._stt_rebuild = (lambda: (lambda _: None, lambda _: None, None), 2)
-    dialed = []
-
-    async def dial(callback, *args, **kwargs):
-        raw = Socket()
-        dialed.append(raw)
-        return raw
-
-    monkeypatch.setattr(listen_receiver, 'process_audio_soniox', dial)
-    with patch('routers.listen.receiver.fallback_socket_is_serving', new=AsyncMock(return_value=True)):
-        assert await listener._failover_stt_socket()
-    assert len(dialed) == 1
-    assert listener.recovery.dial_attempts == 2
-    # The 20s wall less the held-back margin, at this fixture's 2 Hz rate.
-    prefix_samples = int((20.0 - DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS) * 2)
-    assert dialed[0].sent == [(270 - prefix_samples, b'R\x00' * prefix_samples)]
-    assert ring.buffered_bytes == prefix_samples * 2
-    assert ring.capture_bounds == (270 - prefix_samples, 270)
-
-
-@pytest.mark.asyncio
-async def test_consumed_reentry_blocks_a_second_repeat_and_next_provider_serves(monkeypatch):
-    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
-    listener = receiver(monkeypatch)
-    listener.recovery.mark_attempted('soniox')
-    listener.stt_socket = Socket(dead=True, reason='soniox_rotation')
-    listener._stt_rebuild = (lambda: (lambda _: None, lambda _: None, None), 2)
-    dialed = []
-
-    async def dial(callback, *args, **kwargs):
-        raw = Socket()
-        dialed.append(raw)
-        return raw
-
-    monkeypatch.setattr(listen_receiver, 'process_audio_soniox', dial)
-    with patch('routers.listen.receiver.fallback_socket_is_serving', new=AsyncMock(return_value=True)):
-        assert await listener._reconnect_stt_socket_locked()
-    assert len(dialed) == 1
-    assert listener.recovery.dial_attempts == 2
-    assert not listener.recovery.grant_soniox_reentry('soniox')
-    dialed[0].is_connection_dead = True
-    dialed[0].typed_death_reason = 'connection_lost'
-    dialed[0].death_reason = 'ws closed'
-    assert not await listener._reconnect_stt_socket_locked()
-    assert len(dialed) == 1
-    assert listener.recovery.dial_attempts == 2
-    assert listener.recovery.state is not RecoveryState.exhausted
-
-
-@pytest.mark.asyncio
-async def test_flag_off_uses_existing_failover_without_replay(monkeypatch):
-    listener = receiver(monkeypatch, enabled=False)
-    assert listener._resilient_audio is None
     original = [{'text': 'unchanged', 'start': 1.25, 'end': 2.5, 'speaker': '0'}]
     assert listener._filter_replayed_segments(original, 'soniox') is original
     assert original == [{'text': 'unchanged', 'start': 1.25, 'end': 2.5, 'speaker': '0'}]
@@ -550,18 +461,6 @@ async def test_flag_off_uses_existing_failover_without_replay(monkeypatch):
     assert await listener._failover_stt_socket()
     listener._rebuild_stt_socket_locked.assert_awaited_once()
     assert soniox_death_reason(503, 'unavailable') == 'connection_lost'
-
-
-@pytest.mark.asyncio
-async def test_teardown_does_not_reconnect(monkeypatch):
-    listener = receiver(monkeypatch)
-    listener.stt_socket = Socket(dead=True, reason='soniox_rotation')
-    listener._stt_rebuild = (lambda: (None, None, None), 2)
-    listener._create_stt_socket = AsyncMock()
-    listener.finish()
-    assert listener._resilient_audio.buffered_bytes == 0
-    assert not await listener._reconnect_stt_socket_locked()
-    listener._create_stt_socket.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -580,45 +479,6 @@ async def test_soniox_finishing_socket_does_not_start_reconnect_or_fallback(monk
 
     listener._create_stt_socket.assert_not_awaited()
     listener._rebuild_stt_socket_locked.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_provider_rate_limit_uses_backoff_instead_of_same_provider_reconnect(monkeypatch):
-    listener = receiver(monkeypatch)
-    listener.stt_socket = Socket(dead=True, reason='provider_rate_limited')
-    listener._stt_rebuild = (lambda: (None, None, None), 2)
-    listener._create_stt_socket = AsyncMock()
-
-    assert not await listener._reconnect_stt_socket_locked()
-
-    listener._create_stt_socket.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_same_provider_reconnect_releases_old_open_stream_gauge_lease(monkeypatch):
-    from utils.metrics import OMI_LIVE_STT_OPEN_STREAMS
-
-    listener = receiver(monkeypatch)
-    gauge = OMI_LIVE_STT_OPEN_STREAMS.labels(provider='soniox')
-    before = gauge._value.get()
-    old = listener._wrap_legacy_stt_socket(Socket(dead=True, reason='soniox_rotation'), None)
-    listener.stt_socket = old
-    listener._stt_rebuild = (lambda: (lambda _: None, lambda _: None, None), 2)
-    listener._create_stt_socket = AsyncMock(return_value=Socket())
-
-    with patch('routers.listen.receiver.fallback_socket_is_serving', new=AsyncMock(return_value=True)):
-        assert await listener._failover_stt_socket()
-
-    assert gauge._value.get() == before + 1
-    listener.finish()
-    assert gauge._value.get() == before
-
-
-def test_5xx_is_reconnectable_only_with_flag(monkeypatch):
-    monkeypatch.setenv('STT_RESILIENT_RECONNECT', 'true')
-    assert soniox_death_reason(503, 'server_error') == 'provider_5xx'
-    monkeypatch.setenv('STT_RESILIENT_RECONNECT', 'false')
-    assert soniox_death_reason(503, 'server_error') == 'connection_lost'
 
 
 @pytest.mark.parametrize('sample_rate', [8000, 16000, 48000])

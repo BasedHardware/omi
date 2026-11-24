@@ -37,7 +37,6 @@ import database.daily_summaries as daily_summaries_db
 from database._client import db
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
-from utils.list_version_check import ListVersionCheck
 
 from models.calendar_context import DevCalendarMeetingContext
 from models.folder import Folder
@@ -90,6 +89,10 @@ from dependencies import (
 from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
+from utils.other.from_segments_503 import FromSegments503Route
+from utils.other.raise_site import raise_site_of
+from utils.other.request_deadline import RequestDeadlineExceeded, from_segments_request_deadline
+from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.observability.external_lists import (
     observe_action_items_page,
@@ -145,7 +148,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(route_class=external_lists.ExternalListCacheRoute)
+router = APIRouter(route_class=FromSegments503Route)
 FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
@@ -875,16 +878,9 @@ def get_action_items(
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
     observe_action_items_page(limit, offset)
-    version_check = ListVersionCheck.start(request, uid, 'action_items')
-    if version_check.not_modified is not None:
-        return version_check.not_modified
     with read_component(ReadComponent.OTHER):
         budget = list_read_budget_for_request(request, route='developer-action-items', owner_uid=uid, context=auth)
-        cached = (
-            external_lists.cached_external_list(request, response, auth, locals())
-            if not (version_check.active and 'lp1-' in request.headers.get('if-none-match', ''))
-            else None
-        )
+        cached = external_lists.cached_external_list(request, response, auth, locals())
         observe_action_items_shape(
             conversation_id is not None, start_date is not None or end_date is not None, completed, cached is not None
         )
@@ -905,7 +901,6 @@ def get_action_items(
     valid_action_items = external_lists.validate_developer_action_items(action_items, ActionItemResponse, uid, logger)
     observe_action_items_rows('returned', len(valid_action_items))
     finish_list_budget(response, budget)
-    version_check.finish(response, truncated=budget.truncated)
     return valid_action_items
 
 
@@ -2133,6 +2128,7 @@ def _ingest_conversation_from_segments(
     source = request.source or ConversationSource.phone
 
     conversation_id = None
+    resumable_conversation = None
     if request.client_session_id:
         conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
         # One point read suppresses retries even when a prior delete failed during cleanup.
@@ -2157,7 +2153,13 @@ def _ingest_conversation_from_segments(
             read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY,
         )
         if existing_conversation:
-            if _is_stale_from_segments_claim(
+            metadata = existing_conversation.get('external_data') or {}
+            if (
+                existing_conversation.get('status') == ConversationStatus.in_progress
+                and metadata.get('from_segments_client_session_id') == request.client_session_id
+            ):
+                resumable_conversation = OmiConversation.model_validate(existing_conversation)
+            elif _is_stale_from_segments_claim(
                 existing_conversation, request.client_session_id, datetime.now(timezone.utc)
             ):
                 logger.warning(
@@ -2218,8 +2220,19 @@ def _ingest_conversation_from_segments(
         }
     OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(path='from_segments', status=evidence_status).inc()
 
-    # Create conversation object with transcript segments
-    if conversation_id:
+    # Reuse the persisted transcript and metadata on a budget retry.
+    if resumable_conversation is not None:
+        if not lifecycle_service.admit_processing(
+            uid,
+            resumable_conversation.id,
+            extra_updates={'external_data.from_segments_claimed_at': datetime.now(timezone.utc)},
+        ):
+            raise HTTPException(status_code=409, detail="Conversation creation already in progress")
+        resumable_conversation.status = ConversationStatus.processing
+        create_conversation_obj = resumable_conversation
+        client_projection = resumable_conversation.client_processing
+        language_code = resumable_conversation.language or 'en'
+    elif conversation_id:
         create_conversation_obj = OmiConversation(
             id=conversation_id,
             created_at=started_at,
@@ -2300,7 +2313,7 @@ def _ingest_conversation_from_segments(
     # Process conversation. The idempotent (client_session_id) path creates a
     # processing row; the admission guard's lease heartbeat keeps it fresh so the
     # crash-orphan sweep can never terminalize active work. rollback_on_failure is
-    # False because this path owns its own recovery (delete on exception below).
+    # False because this path retains the row only for a request budget cut.
     # Only pass client_projection when accepted: mocks and other callers that
     # still use a 3-positional signature stay compatible, and omitting it is
     # the same as None on the coordinator.
@@ -2318,9 +2331,18 @@ def _ingest_conversation_from_segments(
                 conversation = process_conversation(uid, language_code, create_conversation_obj, **process_kwargs)
         else:
             conversation = process_conversation(uid, language_code, create_conversation_obj, **process_kwargs)
-    except Exception:
-        if request.client_session_id and conversation_id:
-            conversations_db.delete_conversation(uid, conversation_id)
+    except Exception as error:
+        budget_cut = isinstance(error, RequestDeadlineExceeded) or raise_site_of(error) == 'request_budget_exhausted'
+        if conversation_id:
+            if budget_cut:
+                try:
+                    lifecycle_service.rollback_processing_admission(uid, conversation_id)
+                except Exception:
+                    logger.warning('from_segments_budget_claim_rollback_failed')
+            else:
+                conversations_db.delete_conversation(uid, conversation_id)
+        if isinstance(error, RequestDeadlineExceeded):
+            raise conversation_processing_http_exception(error) from error
         raise
     # Non-idempotent ingest: the coordinator's generic persist stripped the
     # field (paid / flag-off deferred). Stamp it now. The session-id path
@@ -2403,6 +2425,7 @@ def _ingest_conversation_from_segments(
 def create_conversation_from_segments_user(
     request: CreateConversationFromTranscriptRequest,
     http_request: Request,
+    _deadline: Any = Depends(from_segments_request_deadline),
     uid: str = Depends(with_rate_limit(get_current_user_uid, "conversations:from-segments")),
 ):
     """Create a conversation from already-transcribed segments (Firebase-authed).

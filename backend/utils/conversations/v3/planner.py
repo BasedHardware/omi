@@ -1,5 +1,6 @@
 """Pure boundary and late-speech policy. No switch reads and no IO."""
 
+from utils.conversations.v3.live import FINISH_WINDOW_FIELD
 from utils.conversations.v3 import policy, visibility
 from utils.conversations.v3.outline import SILENCE, playback_origin, sitdown as is_sitdown
 from utils.conversations.v3.word_floor import text_word_count
@@ -268,11 +269,11 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                     # word minimum on its own words; a five-minute stretch is judged whole (#25786).
                     candidate['_stretch_words'] = word_count(part) if sitdown else group['_stretch_words']
                     candidate['_stretch_partition'] = first_result
-                # A model can undo a topic split, never a recorded silence boundary.
+                # A model can undo a topic split within a stretch. Keep a cap boundary even without cohesion.
                 prior = result[-1] if result else None
                 if (
                     prior
-                    and (not cohesion or len(result) > first_result)
+                    and (not (cohesion or group.get('after_window_cap')) or len(result) > first_result)
                     and entry.get('resumes_previous')
                     and not prior.get('manual_end')
                     and prior['kind'] == candidate['kind']
@@ -333,7 +334,7 @@ def is_unlocked(row):
     return row.get('status') == 'in_progress' or bool(row.get('v3_unlocked'))
 
 
-def build(uid, window, recordings, existing=None, *, allocated=None):
+def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_home_visible=True):
     lines = window['lines']
     start, end = lines[0]['start'], max(line['end'] for line in lines)
     if existing and (not is_unlocked(existing) or window.get('_held_provisional')):
@@ -425,6 +426,10 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
     title = (prior.get('user_title') if preview else None) or (
         structured.get('title') if title_locked else window['title']
     )
+    # Carry the title-only preview through new speech until an outline or user title wins.
+    keep_live_title = prior.get(policy.LIVE_TITLE_STATE) == 'published' and not window['finished'] and not title
+    if keep_live_title:
+        title = structured.get('title')
     native_tail = window.get('_native_manual_tail') if window.get('native_manual_end') else None
     native_binding = policy.native_manual_binding(recordings[native_tail['conversation_id']]) if native_tail else None
     legacy_manual_end = (window.get('manual_end') and not window.get('native_manual_end')) or (
@@ -460,6 +465,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         words=words,
         finished=window['finished'] and not window.get('_title_preview'),
         manual_end=manual_end or keeps_native_visibility,
+        manual_end_home_visible=manual_end_home_visible and bool(legacy_manual_end),
     )
     row: dict[str, Any] = {
         **(existing or {}),
@@ -525,7 +531,8 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         'title_locked': bool(
             title_locked
             or (
-                not window.get('_title_preview')
+                not keep_live_title
+                and not window.get('_title_preview')
                 and title
                 and (not hidden or not window['finished'])
                 and kind not in {'media', 'background'}
@@ -543,6 +550,8 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
             'emoji': structured.get('emoji') if title_locked else window.get('emoji', '💬'),
         },
     }
+    if prior.get(policy.LIVE_TITLE_STATE) == 'published' and not keep_live_title:
+        row[policy.LIVE_TITLE_STATE] = 'attempted'
     if not (existing or {}).get('summary_covers_through'):
         row['structured']['sections'] = [
             {'heading': str(s.get('title') or '')[:120], 'body_markdown': ''} for s in window.get('sections') or []
@@ -560,6 +569,14 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
     row['v3_recording_ids'] = list(
         dict.fromkeys([*(existing or {}).get('v3_recording_ids', []), *row['v3_recording_ids']])
     )
+    if manual_end and (
+        prior.get(FINISH_WINDOW_FIELD) == cid
+        or any(
+            recordings.get(rid, {}).get(FINISH_WINDOW_FIELD) == cid and recordings.get(rid, {}).get('v3_manual_end')
+            for rid in row['v3_recording_ids']
+        )
+    ):
+        row[FINISH_WINDOW_FIELD] = cid
     row['_v3_claims'] = claims
     if retained or window.get('_held_provisional'):
         for rid in row['v3_recording_ids']:

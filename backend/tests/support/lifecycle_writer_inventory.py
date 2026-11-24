@@ -1,6 +1,11 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Finish projects processing into the HTTP response. Only the v3 builder stores window status.
+    'utils/conversations/v3/finish.py': [
+        ('_acknowledge', 'status', 'ConversationStatus.completed', ('status',)),
+        ('_acknowledge', 'status', 'ConversationStatus.processing', ('status',)),
+    ],
     'database/batch_summary_debt.py': [
         ('arm_projection_summary', 'summary_due_at', "candidate['summary_due_at']", ('summary_due_at',)),
         (
@@ -88,6 +93,26 @@ FIELD_SITES = {
                 'tokens_used',
                 'updated_at',
                 'window',
+            ),
+        ),
+    ],
+    # Frozen owner-scoped reply nested in the WAL witness; never writes conversation status.
+    'database/record_wal_duplicate.py': [
+        (
+            '_completed_status',
+            'status',
+            "'completed'",
+            (
+                'failed_segments',
+                'job_id',
+                'lane',
+                'poll_after_ms',
+                'processed_segments',
+                'result',
+                'status',
+                'successful_segments',
+                'total_files',
+                'total_segments',
             ),
         ),
     ],
@@ -400,14 +425,22 @@ FIELD_SITES = {
         ('settle_billed.commit', 'status', "'settled'", ('expires_at', 'months', 'status')),
     ],
     'database/batch_pipeline_coalescing_completion.py': [
-        ('write', 'status', "'completed'", ('expires_at', 'result', 'status', 'updated_at')),
+        ('write', 'status', "'completed'", ('completed_at', 'expires_at', 'result', 'status', 'updated_at')),
     ],
     'utils/batch_pipeline/upload_coalescing.py': [
         (
             'member_status',
             'status',
             "'completed'",
-            ('poll_after_ms', 'processed_segments', 'result', 'status', 'successful_segments', 'total_segments'),
+            (
+                'completed_at',
+                'poll_after_ms',
+                'processed_segments',
+                'result',
+                'status',
+                'successful_segments',
+                'total_segments',
+            ),
         ),
         (
             'queued',
@@ -435,7 +468,20 @@ FIELD_SITES = {
             'enqueue.commit',
             'state',
             "'holding'",
-            ('bytes', 'files', 'first_accept_at', 'id', 'key', 'members', 'release_by', 'scan_at', 'seconds', 'state'),
+            (
+                'bytes',
+                'files',
+                'first_accept_at',
+                'id',
+                'key',
+                'members',
+                'profile',
+                'release_by',
+                'scan_at',
+                'seconds',
+                'state',
+                'window_seconds',
+            ),
         ),
         (
             'enqueue.commit',
@@ -1686,6 +1732,9 @@ FIELD_SITES = {
             ('client_mutation_id', 'conversation', 'conversation_id', 'status'),
         ),
     ],
+    'database/conversation_parked_status.py': [
+        ('settle_in_transaction', 'status', "'completed'", ('status',)),
+    ],
     'database/conversation_processing_recovery.py': [
         ('_complete_orphan_conversation_txn', 'status', "'completed'", ('status',)),
         ('_complete_unstampable_orphan_conversation_txn', 'status', "'completed'", ('status',)),
@@ -1733,6 +1782,9 @@ FIELD_SITES = {
             ),
         ),
         ('ensure_quiet_check_progress.repair', 'status', "'quiet_done'", ('reconcile_after_at', 'status')),
+    ],
+    'database/conversation_tombstones.py': [
+        ('accept_deletion.body', 'status', "'completed'", ('status',)),
     ],
     'database/conversation_terminal_title.py': [
         (
@@ -2772,7 +2824,12 @@ FIELD_SITES = {
         ('mark_job_queued_for_retry', 'status', "'queued'", ('attempt', 'last_error', 'status')),
     ],
     'database/sync_ledger.py': [
-        ('_mark_completed_transaction', 'status', "'completed'", ('expires_at', 'result', 'status', 'updated_at')),
+        (
+            '_mark_completed_transaction',
+            'status',
+            "'completed'",
+            ('completed_at', 'expires_at', 'result', 'status', 'updated_at'),
+        ),
         (
             '_processing_claim_updates',
             'status',
@@ -2801,7 +2858,7 @@ FIELD_SITES = {
             'complete_batch_projection_in_transaction',
             'status',
             "'completed'",
-            ('expires_at', 'result', 'status', 'updated_at'),
+            ('completed_at', 'expires_at', 'result', 'status', 'updated_at'),
         ),
     ],
     'database/sync_redrive.py': [
@@ -3008,6 +3065,7 @@ FIELD_SITES = {
             'status',
             "'completed'",
             (
+                'completed_at',
                 'errors',
                 'failed_segments',
                 'job_id',
@@ -3102,6 +3160,7 @@ FIELD_SITES = {
             'status',
             "status; literal aliases=[('status', ('completed', 'failed', 'processing', " "'queued'))]",
             (
+                'completed_at',
                 'errors',
                 'failed_segments',
                 'job_id',
@@ -3408,6 +3467,7 @@ FIELD_SITES = {
     ],
     'utils/conversations/process_conversation.py': [
         ('_store_budget_waiting', 'status', 'ConversationStatus.completed', ('status',)),
+        ('_store_deferred_conversation', 'status', 'ConversationStatus.completed', ('status',)),
         ('_store_deferred_conversation', 'status', 'ConversationStatus.processing', ('status',)),
         ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
         ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
@@ -4463,6 +4523,7 @@ FIELD_SITES = {
     'utils/processing_backlog.py': [
         ('allowance_increased.limit', 'status', "'active'", ('current_period_end', 'status'))
     ],
+    'utils/prepaid_code_redemption.py': [('_result', 'status', "'redeemed'", ('ends_at', 'months', 'plan', 'status'))],
     'utils/promotion_redemption.py': [
         (
             'redeem_promotion_code',
@@ -4602,6 +4663,7 @@ FIELD_SITES = {
             'status',
             "'completed'",
             (
+                'completed_at',
                 'failed_segments',
                 'job_id',
                 'lane',
@@ -4794,6 +4856,8 @@ FIELD_SITES = {
     'utils/workers/retry.py': [('retry_response', 'status', "'retry'", ('reason', 'status'))],
     'utils/conversations/transcribing_hold.py': [
         ('project', 'status', "'completed' if status == 'failed' else status", ('status', 'structured')),
+        # Current same-owner job evidence changes only the list/detail wire copy.
+        ('project', 'status', "'processing'", ('status', 'structured', 'summary_retryable', 'transcription_admission')),
         # API response only; never sent to a lifecycle persistence helper.
         ('retry_wire', 'status', "'processing'", ('home_step', 'status', 'structured', 'summary_retryable')),
     ],
@@ -4809,6 +4873,8 @@ FIELD_SITES = {
 # Unclassified sites remain visible pending the typed-outcome redesign.
 KNOWN_TERMINAL_WRITERS = {
     'conversation': {
+        # A terminal-empty acknowledgement is an HTTP projection, with no conversation status write.
+        ('utils/conversations/v3/finish.py', '_acknowledge'): 'response_only',
         (
             'database/conversations_v3.py',
             'commit_projection.commit',
@@ -4841,6 +4907,7 @@ KNOWN_TERMINAL_WRITERS = {
             '_terminalize_exhausted_requeued_job_txn',
         ): 'known_extra_writer: dead_letter',
         ('database/conversation_merge_jobs.py', 'finish_recovery.commit'): 'unclassified',
+        ('database/conversation_tombstones.py', 'accept_deletion.body'): 'known_extra_writer: deletion_tombstone',
         (
             'database/conversation_processing_recovery.py',
             '_complete_orphan_conversation_txn',
@@ -4872,6 +4939,7 @@ KNOWN_TERMINAL_WRITERS = {
         ('utils/conversations/lifecycle.py', 'fail_and_discard_processing'): 'owner',
         ('utils/conversations/lifecycle.py', 'transition'): 'owner',
         ('utils/conversations/process_conversation.py', '_store_budget_waiting'): 'unclassified',
+        ('utils/conversations/process_conversation.py', '_store_deferred_conversation'): 'owner',
         ('utils/conversations/process_conversation.py', 'process_conversation'): 'unclassified',
         ('scripts/staging/replay.py', 'StagingFirestoreSeeder.seed_capture'): 'unclassified',
         ('utils/dream_canary.py', 'seed'): 'unclassified',

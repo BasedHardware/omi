@@ -67,10 +67,10 @@ from database.server_batch_audio import close_server_batch_audio
 from utils.observability.recording_rotation import record_rotation
 from utils.conversations.v3 import policy as v3_policy
 from config.conversations_v3 import recording_rotation_enabled, rotation_seconds
-from utils.episodes import boundaries, boundary_runtime
+from utils.episodes.boundaries import ingest_context
 from utils.episodes.batch_close import attach_admitted_batch_capture
 from routers.listen.occasion import occasion_attach_target
-from routers.listen.boundary_poll import poll_calendar, ingest_calendar, conversation_action, merge_permitted
+from routers.listen.boundary_poll import poll_calendar, ingest_calendar
 
 logger = logging.getLogger(__name__)
 
@@ -152,8 +152,6 @@ class LiveConversationController:
         )
         if not existing_protocol and not eligible:
             return True
-        if not await merge_permitted(self, row):
-            return False
         if conversation_id not in self._batch_producer_tokens and len(self._batch_producer_tokens) >= 64:
             raise WebSocketException(code=1013, reason='Recording session rotation limit; reconnect')
         token = self._batch_producer_tokens.get(conversation_id) or uuid.uuid4().hex
@@ -1473,22 +1471,10 @@ class LiveConversationController:
                 seconds_since_last_update=(self.clock() - finished_at).total_seconds(),
                 conversation_creation_timeout=continuation_timeout(timed_row, self.host.conversation_creation_timeout),
             )
-            boundary_action = await conversation_action(self, conversation)
-            if boundary_action == 'hold':
-                action = ConversationLifecycleAction.continue_current
-            elif boundary_action == 'close':
-                await self.host.persistence.call(
-                    boundary_runtime.apply_signal_edges,
-                    self.host.request.uid,
-                    arrival_at=self.clock(),
-                    quiet=(self.clock() - finished_at).total_seconds() >= boundaries.QUIET_SECONDS,
-                )
-                action = ConversationLifecycleAction.process_and_create_new
-            if (
-                boundary_action != 'hold'
-                and action == ConversationLifecycleAction.continue_current
-                and self._occasion_span_exceeded(conversation)
-            ):
+            external_data = conversation.get('external_data')
+            if isinstance(external_data, dict) and (context := external_data.get('calendar_meeting_context')):
+                await self.host.persistence.call(ingest_context, self.host.request.uid, context)
+            if action == ConversationLifecycleAction.continue_current and self._occasion_span_exceeded(conversation):
                 # One occasion is capped like a smart-merged chain: all-day capture still rolls over.
                 logger.info('event=occasion_span_rollover conversation=%s', conversation_id)
                 action = ConversationLifecycleAction.process_and_create_new
@@ -1498,11 +1484,7 @@ class LiveConversationController:
                 and self.clock() >= edge
             ):
                 action = ConversationLifecycleAction.process_and_create_new
-            if (
-                boundary_action != 'hold'
-                and action == ConversationLifecycleAction.continue_current
-                and self._v3_rotation_due(conversation)
-            ):
+            if action == ConversationLifecycleAction.continue_current and self._v3_rotation_due(conversation):
                 logger.info('event=v3_recording_rotation conversation=%s', conversation_id)
                 await self._rotate_v3_recording(conversation_id)
                 continue

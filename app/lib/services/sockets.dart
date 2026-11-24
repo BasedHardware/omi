@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/mutex.dart';
@@ -69,8 +71,16 @@ class SocketServicePool extends ISocketService {
     Geolocation? geolocation,
     bool localPreview = false,
   }) async {
+    final uid = SharedPreferencesUtil().uid;
+    final customConfig = customSttConfig?.isEnabled == true ? customSttConfig : null;
+    final custodyOwner = customConfig != null ? null : TranscriptSegmentSocketService.captureListenOwner(uid);
+    bool ownerIsCurrent() =>
+        SharedPreferencesUtil().uid == uid &&
+        (custodyOwner == null || AuthService.instance.isSessionSnapshotCurrent(custodyOwner));
+
     await _mutex.acquire();
     try {
+      if (!ownerIsCurrent()) return null;
       final sttConfigId = customSttConfig?.sttConfigId ?? 'omi:default';
 
       // Check if we can reuse existing socket (same codec, sample rate, config, and connected)
@@ -81,7 +91,8 @@ class SocketServicePool extends ISocketService {
           _socket?.sttConfigId == sttConfigId &&
           _socket?.geolocation?.time == geolocation?.time &&
           _socket?.clientConversationId == clientConversationId &&
-          _socket?.localPreview == localPreview) {
+          _socket?.localPreview == localPreview &&
+          (custodyOwner == null ? _socket?.audioCustodyEnabled != true : _socket?.hasCurrentListenOwner(uid) == true)) {
         Logger.debug("Reusing existing socket connection");
         return _socket;
       }
@@ -92,13 +103,14 @@ class SocketServicePool extends ISocketService {
 
       // new socket
       await _socket?.stop();
+      if (!ownerIsCurrent()) return null;
 
-      if (customSttConfig != null && customSttConfig.isEnabled) {
+      if (customConfig != null) {
         _socket = TranscriptSocketServiceFactory.createFromCustomConfig(
           sampleRate,
           codec,
           language,
-          customSttConfig,
+          customConfig,
           source: source,
           geolocation: geolocation,
           clientConversationId: clientConversationId,
@@ -114,10 +126,15 @@ class SocketServicePool extends ISocketService {
           clientConversationId: clientConversationId,
           // Custom STT never declares it: the server refuses it there anyway.
           localPreview: localPreview,
+          custodyOwner: custodyOwner,
         );
       }
 
       await _socket?.start();
+      if (!ownerIsCurrent()) {
+        await _socket?.stop(reason: 'stale Listen owner');
+        return null;
+      }
       if (_socket?.state != SocketServiceState.connected) {
         return null;
       }

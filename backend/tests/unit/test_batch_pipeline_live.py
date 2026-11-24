@@ -1302,3 +1302,15 @@ def test_late_record_transcript_has_durable_episode_read_recovery_marker(monkeyp
     monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED', 'false')
     result, _ = replace_record(recording(), incoming(), {'start': 100, 'end': 102})
     assert 'episode_transcript_updated_at' not in result
+
+
+@pytest.mark.parametrize('whole_native_record', [True, False])
+def test_batch_projection_honors_late_v3_finish_only_with_whole_record(whole_native_record, monkeypatch):
+    monkeypatch.delenv('CONVERSATIONS_V3_BATCH_MANUAL_END', raising=False)
+    original = recording(recording=True, v3_manual_end_requested=True, transcript_segments=[])
+    result, _ = replace_record(
+        original, incoming(), {'start': 100, 'end': 102, 'whole_native_record': whole_native_record}
+    )
+    assert result['v3_manual_end_requested'] is True
+    assert result.get('v3_manual_end', False) == whole_native_record
+    assert result.get('v3_pending', False) == whole_native_record

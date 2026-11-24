@@ -1,13 +1,12 @@
 """Authenticated, idempotent capture boundary evidence intake."""
 
-from datetime import datetime, timezone
+from datetime import timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Body
 
 from models.boundary_evidence import BoundarySignal
 from utils.episodes import boundary_store
-from utils.episodes.boundaries import boundary_roster as boundary_roster
 from utils.executors import db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 
@@ -38,7 +37,4 @@ async def store_boundary_evidence(
         raise HTTPException(status_code=409, detail='Boundary evidence capacity reached')
     except ValueError:
         raise HTTPException(status_code=409, detail='Boundary evidence identity conflict')
-    from utils.episodes.boundary_runtime import apply_signal_edges
-
-    await run_blocking(db_executor, apply_signal_edges, uid, arrival_at=datetime.now(timezone.utc))
     return {'stored': stored}

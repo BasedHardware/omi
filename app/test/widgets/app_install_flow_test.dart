@@ -390,7 +390,27 @@ void main() {
 
     expect(enableCalls, 0, reason: 'missing payment link must not attempt an unpaid install');
     expect(find.text('Invalid payment URL'), findsOneWidget);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+  testWidgets('Android: a missing payment link shows "Not available on Android" and never calls enable',
+      (tester) async {
+    var enableCalls = 0;
+    await pumpDetail(
+      tester,
+      _app(paid: true),
+      enableApp: (_) async {
+        enableCalls++;
+        return (true, '');
+      },
+    );
+    await settle(tester);
+
+    expect(find.byKey(const Key('app_detail_paid_unavailable')), findsOneWidget);
+    expect(find.text('Subscribe'), findsNothing);
+    await tester.tap(find.byKey(const Key('app_detail_paid_unavailable')));
+    await settle(tester);
+    expect(enableCalls, 0);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   group('app home with a one-use launch grant', () {
     App homeApp(String homeUrl, {bool enabled = true}) => App(

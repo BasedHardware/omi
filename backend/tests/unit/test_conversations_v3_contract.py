@@ -84,17 +84,20 @@ def test_native_ready_name_survives_live_tombstone_and_retains_same_revision(mon
 
 @pytest.mark.asyncio
 async def test_busy_native_ready_leaves_cloud_task_retryable(monkeypatch):
+    from starlette.requests import Request
+
     from routers import conversations_v3_tasks
 
     async def busy(uid):
         return 'busy'
 
     monkeypatch.setattr(service, 'reconcile', busy)
+    http_request = Request({'type': 'http', 'headers': []})
     request = conversations_v3_tasks.ReconcileRequest(uid='owner')
-    assert await conversations_v3_tasks.reconcile(request) == {'outcome': 'busy'}
+    assert await conversations_v3_tasks.reconcile(request, http_request) == {'outcome': 'busy'}
     request = conversations_v3_tasks.ReconcileRequest(uid='owner', trigger='native_manual_ready')
     with pytest.raises(HTTPException) as error:
-        await conversations_v3_tasks.reconcile(request)
+        await conversations_v3_tasks.reconcile(request, http_request)
     assert error.value.status_code == 503
 
 
@@ -362,7 +365,6 @@ def test_recordings_never_embed_even_on_completed_replay(monkeypatch, update_onl
 )
 def test_released_capture_poll_keeps_recording_identity(monkeypatch, statuses, capture):
     from types import SimpleNamespace
-    from utils.episodes import home_membership
 
     class CapturedRead(BaseException):
         pass
@@ -373,11 +375,6 @@ def test_released_capture_poll_keeps_recording_identity(monkeypatch, statuses, c
         bound.update(kwargs)
         raise CapturedRead()
 
-    monkeypatch.setattr(routes, 'home_transcription_presentation_gate_enabled', lambda: False)
-    monkeypatch.setattr(routes, 'home_step_projection_enabled', lambda: False)
-    monkeypatch.setattr(home_membership, 'held_for', lambda request: False)
-    monkeypatch.setattr(home_membership, 'live_suppression_for', lambda *a: False)
-    monkeypatch.setattr(routes.ListVersionCheck, 'start', lambda *a: SimpleNamespace(not_modified=None))
     monkeypatch.setattr(routes, 'list_read_budget_for_request', lambda *a, **kw: None)
     monkeypatch.setattr(db, 'get_conversations_without_photos', read)
     with pytest.raises(CapturedRead):

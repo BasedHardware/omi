@@ -37,6 +37,8 @@ STAGING_DIFF_ALLOWLIST: tuple[str, ...] = (
     'FIREBASE_SIGNER_SERVICE_ACCOUNT',
     '*_SERVICE_ACCOUNT',
     '*_INVOKER_SA',
+    # Google Play Billing push identity: prod-only, empty (routes closed) in staging.
+    'PLAY_RTDN_PUSH_SA',
     'OMI_DEPLOYMENT',
     '*_CEILING_USD',
     '*_DAILY_USD',
@@ -45,7 +47,8 @@ STAGING_DIFF_ALLOWLIST: tuple[str, ...] = (
     'MCP_OAUTH_CLAUDE_CLIENT_*',
     'LADDER_V1_*_PRICE_ID',
     'SYNC_LEDGER_FENCE_MODE',
-    # Staging has no projection pump, so integration keeps the serving sweep that prod hands to the pump.
+    # Prod pins this key explicitly on integration ('true') and on the dark pump; staging has no pump and
+    # keeps the default. Both environments run the sweep on integration (SCA-3318, 2026-11-22).
     'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
     # Independent staging rollout inputs; prod supplies these at deploy time.
     'RECORD_TOKEN_LEASE_MODE',

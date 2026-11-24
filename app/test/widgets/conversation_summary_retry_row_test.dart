@@ -209,6 +209,19 @@ void main() {
         if (title != null) 'structured': {...heldListRowJson()['structured'] as Map<String, dynamic>, 'title': title},
       });
 
+  testWidgets('an authoritative allowance hold is labeled in a conversation card before any retry', (tester) async {
+    await _pumpRow(tester,
+        conversation: ServerConversation.fromJson({
+          ...heldListRowJson(),
+          'transcription_admission': 'allowance_held',
+        }));
+    final l10n = _l10n(tester);
+    expect(find.text(l10n.summaryTranscriptionPendingTitle), findsOneWidget);
+    expect(find.text(l10n.waitingForTranscriptionAllowance), findsOneWidget);
+    expect(_retryButton, findsNothing);
+    expect(_indicator, findsNothing);
+  });
+
   testWidgets('a held row answered 409 says Not transcribed yet once, as its title, with no error', (tester) async {
     TranscriptionPendingConversations.reset();
     addTearDown(TranscriptionPendingConversations.reset);

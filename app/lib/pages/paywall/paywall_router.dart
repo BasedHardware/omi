@@ -50,6 +50,9 @@ abstract final class PaywallRouter {
     }
     final page = switch (resolved.variant) {
       PaywallVariant.outline => OutlinePaywallPage(source: source),
+      // The hosted page renders its own (Stripe) pricing: never for a Google Play purchaser.
+      PaywallVariant.web when usage.playBilledPurchaser || usage.billingProviderUnknown =>
+        OutlinePaywallPage(source: source),
       PaywallVariant.web => WebPaywallPage(source: source, url: resolved.webUrl!),
       PaywallVariant.trial => TrialPaywallPage(source: source),
       PaywallVariant.control => null,

@@ -274,7 +274,6 @@ def test_projection_and_firestore_read_ops_are_preserved_from_serving():
         'shift-cloud-run-traffic',
         'verify-serving-release-vector',
         'smoke-promoted-production-serving-api',
-        'smoke-what-matters-now-datastore-query',
     ],
 )
 def test_actual_restore_condition_recovers_cancelled_and_failed_steps(step_id, outcome):

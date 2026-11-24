@@ -93,6 +93,7 @@ def make_database_client_stub() -> ModuleType:
     client_mod.run_transactional = run_transactional
     client_mod.transaction_body = transaction_body
     client_mod.in_transaction_body = in_body.get
+
     # The data-plane seam (database/_client.py's get_data_plane_firestore_client()):
     # memory_apply_store and screen/frame sync import
     # `data_plane_db` at their module boundary instead of the shared `db` above.

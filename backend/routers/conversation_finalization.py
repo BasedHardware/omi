@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
+from utils.enrichment.retry_reason import expected_retry_reason
 from fastapi.responses import JSONResponse
 
 from config.conversation_processing_retry import DETERMINISTIC_PROCESSING_FAILURE, PROCESSING_BURST_ATTEMPTS
@@ -30,6 +31,7 @@ from utils.conversations.recovery import RecoveryStructureUnavailableError, reco
 from utils.conversations.finalizer import (
     ConversationFinalizationDisposition,
     ConversationFinalizationError,
+    ServerBatchArchiveNotClosed,
     finalize_persisted_conversation,
 )
 from utils.executors import db_executor, postprocess_executor, run_blocking
@@ -132,11 +134,9 @@ async def run_listen_finalization_job(
         except (ValueError, TypeError):
             return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
         except Exception as error:
-            # Same mapping as routers.batch_pipeline.enrichment_response: an expected retry (for example a
+            # Same mapping as routers.enrichment.enrichment_response: an expected retry (for example a
             # first summary whose callback is still pending) answers 409; only an unexpected failure is 500.
             # Never 503 (contract (d)): Cloud Tasks system-throttles the whole queue on it.
-            from routers.batch_pipeline import expected_retry_reason
-
             reason = expected_retry_reason(error)
             if reason is None:
                 logger.error(
@@ -387,10 +387,12 @@ async def run_listen_finalization_job(
         raise
     except Exception as error:
         logger.warning(
-            'listen finalization worker failed stage=handler exception_type=%s job_hash=%s dispatch_generation=%s',
+            'listen finalization worker failed stage=handler exception_type=%s job_hash=%s dispatch_generation=%s '
+            'reason=%s',
             type(error).__name__,
             finalization_diagnostic_id(job_id),
             dispatch_generation,
+            'server_batch_archive_not_closed' if isinstance(error, ServerBatchArchiveNotClosed) else 'worker_failed',
         )
         if claimed_lease_epoch is not None:
             try:

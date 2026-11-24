@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 గుర్తించబడలేదు",
+    "v2Undetected": "ఆఫ్‌లైన్ సింక్ అందుబాటులో లేదు",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "V1 డివైస్ ఉందని లేదా మీ డివైస్ కనెక్ట్ చేయబడలేదని మేము చూస్తున్నాము. SD కార్డ్ కార్యకలాపం V2 డివైసెస్‌కు మాత్రమే అందుబాటులో ఉంది.",
+    "v2UndetectedMessage": "ఆఫ్‌లైన్ సింక్ కోసం SD కార్డ్ స్టోరేజ్ ఉన్న కనెక్ట్ చేయబడిన Omi పరికరం అవసరం. మీ ప్రస్తుత పరికరం దీనికి మద్దతు ఇవ్వదు.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },
@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "సైన్ ఇన్ పద్ధతులు",
+    "accountAddSignInMethod": "సైన్ ఇన్ పద్ధతిని జోడించండి",
+    "accountAddSignInMethodDetails": "ఈ Omi ఖాతాలోకి సైన్ ఇన్ చేయడానికి మరో పద్ధతిని జోడించండి. మీ ప్లాన్, రికార్డింగ్‌లు, ఇంటిగ్రేషన్‌లు ఈ ఖాతాలోనే ఉంటాయి.",
+    "accountSignInConflictTitle": "ఈ సైన్ ఇన్ పద్ధతి మరో ఖాతాకు చెందినది",
+    "accountSignInConflictDetails": "మీరు ఇంకా ఈ ఖాతాలోనే సైన్ ఇన్ అయి ఉన్నారు. ప్రతి Omi ఖాతాకు దాని ప్లాన్, రికార్డింగ్‌లు, ఇంటిగ్రేషన్‌లు ఉంటాయి.",
+    "accountSignInMethodAdded": "సైన్ ఇన్ పద్ధతి జోడించబడింది",
     "authFailedToLinkGoogle": "Google సાથে లింక్ చేయడానికి విఫలమైంది, దయచేసి ప్రయత్నించండి.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "అందుబాటులో ఉన్న కోటాలో కొత్త రికార్డింగ్‌లను ముందుగా ప్రాసెస్ చేస్తాము. మిగిలినవి వేచి ఉంటాయి.",
     "processingAction": "వేచి ఉన్న రికార్డింగ్‌లను ప్రాసెస్ చేయండి",
     "processingProgress": "మీ వేచి ఉన్న రికార్డింగ్‌లు ప్రాసెస్ అవుతున్నాయి…",
+    "waitingForTranscriptionAllowance": "లిప్యంతరీకరణ కోటా అందుబాటులోకి రావడానికి వేచి ఉంది",
     "processingDeferred": "ప్రాసెసింగ్ కోసం వేచి ఉంది",
     "processingCount": "{count, plural, =1{1 సంభాషణ వేచి ఉంది} other{{count} సంభాషణలు వేచి ఉన్నాయి}}",
     "playbackPartialAudioSaved": "{saved} ఆడియో సేవ్ చేయబడింది, మొత్తం {total}",
@@ -12172,7 +12179,6 @@
     "capturePendantDisconnectedShort": "Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది",
     "forYou": "మీ కోసం",
     "stopThese": "వీటిని ఆపండి",
-    "meetingActionItemsTitle": "చర్య అంశాలు",
     "addToTasks": "పనులకు జోడించండి",
     "showInTranscript": "ట్రాన్స్‌క్రిప్ట్‌లో చూపండి",
     "tentativeTaskDueDate": "సుమారు గడువు {date}",
@@ -12292,5 +12298,29 @@
     "conversationLiveNoEdits": "మార్చడానికి అది ముగిసే వరకు వేచి ఉండండి.",
     "finishedSummaryReady": "సారాంశం సిద్ధంగా ఉంది",
     "writingSummaryStatus": "సారాంశం తయారవుతోంది…",
-    "stillWorkingOnIt": "ఇంకా పని జరుగుతోంది."
+    "stillWorkingOnIt": "ఇంకా పని జరుగుతోంది.",
+    "deviceReadyToUse": "వాడుకకు సిద్ధం",
+    "firmwareUpdateFirmwareTooOld": "ఈ నవీకరణకు మీ పరికరంలోని ఫర్మ్‌వేర్ చాలా పాతది. మీ పరికరాన్ని నవీకరించడంలో సహాయం కోసం సపోర్ట్‌ను సంప్రదించండి.",
+    "firmwareUpdateAppRequired": "ఈ ఫర్మ్‌వేర్ నవీకరణకు కొత్త వెర్షన్ Omi యాప్ అవసరం. మీ యాప్ స్టోర్ నుండి యాప్‌ను నవీకరించి, మళ్లీ తనిఖీ చేయండి.",
+    "quietPayerTitle": "5 రోజులుగా రికార్డింగ్‌లు లేవు",
+    "quietPayerMessage": "మీ Omiని తనిఖీ చేయండి.",
+    "quietPayerCheck": "తనిఖీ",
+    "playManageSubscription": "సబ్‌స్క్రిప్షన్ నిర్వహించండి",
+    "playBilledByGoogle": "Google Play ద్వారా బిల్ చేయబడుతుంది",
+    "playPurchasePending": "మీ చెల్లింపు పెండింగ్‌లో ఉంది. Google Play నిర్ధారించగానే Omi Pro మొదలవుతుంది.",
+    "playPurchaseOtherAccount": "ఈ Google Play కొనుగోలు మరో Omi ఖాతాకు చెందినది.",
+    "playPurchaseNotConfirmed": "మీ కొనుగోలును ఇంకా నిర్ధారించలేకపోయాము. మేము ఆటోమేటిక్‌గా మళ్లీ ప్రయత్నిస్తాము.",
+    "playRenewalTerms": "మీరు రద్దు చేసే వరకు చూపిన ధరకు ఆటోమేటిక్‌గా పునరుద్ధరించబడుతుంది. Google Playలో ఎప్పుడైనా నిర్వహించండి లేదా రద్దు చేయండి.",
+    "playPaidAppUnavailable": "Androidలో అందుబాటులో లేదు",
+    "pageNotAvailableInApp": "ఈ పేజీ యాప్‌లో అందుబాటులో లేదు.",
+    "shopOrderPlacedCheckEmail": "ఆర్డర్ చేయబడింది. నిర్ధారణ కోసం మీ ఇమెయిల్ చూడండి.",
+    "prepaidCodeEntry": "కోడ్ ఉందా?",
+    "prepaidCodeTitle": "కోడ్ రిడీమ్ చేయండి",
+    "prepaidCodeFieldHint": "మీ కోడ్ నమోదు చేయండి",
+    "prepaidCodeRedeem": "రిడీమ్",
+    "prepaidCodeRedeemed": "కోడ్ రిడీమ్ అయింది",
+    "prepaidCodeResult": "{reason, select, invalid{ఈ కోడ్ చెల్లదు. తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.} used{ఈ కోడ్ ఇప్పటికే ఉపయోగించబడింది.} expired{ఈ కోడ్ గడువు ముగిసింది.} hasPlan{మీకు ఇప్పటికే ప్లాన్ ఉంది. మీ కోడ్ ఉపయోగించబడలేదు. ప్లాన్ ముగిసిన తర్వాత దాన్ని రిడీమ్ చేయండి.} notPrepaid{ఈ కోడ్‌ను ఇక్కడ రిడీమ్ చేయలేరు. ప్లాన్ ఎంచుకునేటప్పుడు దీన్ని ఉపయోగించండి.} notEligible{ఈ కోడ్‌ను ఈ ఖాతాలో ఉపయోగించలేరు.} rateLimited{చాలా ప్రయత్నాలు. తర్వాత మళ్లీ ప్రయత్నించండి.} other{ఏదో తప్పు జరిగింది. దయచేసి మళ్లీ ప్రయత్నించండి.}}",
+    "playStripeBilledOnWeb": "omi.me ద్వారా బిల్ చేయబడుతుంది. ఎప్పుడైనా ఇక్కడ రద్దు చేయండి.",
+    "playStripeBilledOnWebShort": "omi.me ద్వారా బిల్ చేయబడుతుంది.",
+    "playStripePlanPaused": "మీ {plan} ప్లాన్ పాజ్ చేయబడింది."
 }
