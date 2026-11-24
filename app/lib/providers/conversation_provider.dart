@@ -110,12 +110,10 @@ class ConversationProvider extends ChangeNotifier {
   bool hasDailySummaries = false; // whether user has any daily summaries
   bool get hasActiveHomeFilter => showStarredOnly || selectedFolderId != null || selectedStartDate != null;
 
-  bool get showsDefaultHome =>
-      !hasActiveSearch &&
-      !hasActiveHomeFilter &&
-      !showShortConversations &&
-      !showDiscardedConversations &&
-      !isSelectionModeActive;
+  bool get showsDefaultHome => showsPendingFinishOnHome && !showShortConversations && !showDiscardedConversations;
+
+  /// Saved list preferences filter conversations, while a pending Finish is an activity row.
+  bool get showsPendingFinishOnHome => !hasActiveSearch && !hasActiveHomeFilter && !isSelectionModeActive;
 
   DateTime? selectedStartDate;
   DateTime? selectedEndDate;
@@ -736,6 +734,35 @@ class ConversationProvider extends ChangeNotifier {
     } else {
       fetchConversations();
     }
+  }
+
+  /// Clear transient Home filters and reload the list for the pending Finish row.
+  Future<void> resetToDefaultHome() async {
+    if (showsPendingFinishOnHome) return;
+
+    showStarredOnly = false;
+    selectedFolderId = null;
+    selectedStartDate = null;
+    selectedEndDate = null;
+    isSelectionModeActive = false;
+    selectedConversationIds.clear();
+    _searchRequestGeneration++;
+    previousQuery = '';
+    selectedSpeakerId = null;
+    searchStartDate = null;
+    searchEndDate = null;
+    searchedConversations = [];
+    currentSearchPage = 0;
+    totalSearchPages = 0;
+    lastSearchResult = null;
+    _isLoadingConversationSearch = false;
+    isFetchingConversations = false;
+    isLoadingConversations = _isLoadingConversationList;
+
+    assert(showsPendingFinishOnHome, 'Reset every transient filter that hides the pending Finish row.');
+    groupedConversations = {};
+    notifyListeners();
+    await fetchConversations();
   }
 
   void toggleStarredFilter() {
