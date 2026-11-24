@@ -103,34 +103,43 @@ def test_prod_re_declares_the_two_legacy_delete_rules_verbatim():
             assert legacy in rules, name
 
 
-def test_prod_noncurrent_delete_rule_is_pinned():
-    rules = _rules(_load("prod.json"))
-    assert NONCURRENT_DELETE_RULE in rules, "prod must declare the scoped noncurrent .opus.enc delete rule"
-    assert rules.count(NONCURRENT_DELETE_RULE) == 1
-    condition = NONCURRENT_DELETE_RULE["condition"]
-    assert condition["isLive"] is False
-    assert condition["numNewerVersions"] == 1, (
-        "numNewerVersions > 1 or 0 changes which generations survive; 1 keeps exactly the newest "
-        "generation of every object name (David 10-23 regen-check ruling)"
-    )
-    assert condition["matchesPrefix"] == ["chunks/"]
-    assert condition["matchesSuffix"] == [".opus.enc"], "wider suffixes would delete noncurrent PCM batch generations"
+def test_prod_rollback_only_removes_the_size_floor():
+    desired = _load("prod.json")
+    before = _load("prod.rollback.json")
+    desired_rules, before_rules = _rules(desired), _rules(before)
+    assert NONCURRENT_DELETE_RULE not in desired_rules
+    assert NONCURRENT_DELETE_RULE not in before_rules
+    assert desired_rules[1]["condition"].pop("sizeAboveBytes") == 131072
+    assert desired_rules == before_rules
 
 
-def test_rollback_files_only_drop_rules_the_apply_variant_added():
-    for apply_name, rollback_name in zip(APPLY_FILES, ROLLBACK_FILES):
-        apply_rules = _rules(_load(apply_name))
-        rollback_rules = _rules(_load(rollback_name))
-        assert all(rule["action"]["type"] == "Delete" for rule in rollback_rules)
-        assert all(rule in apply_rules for rule in rollback_rules)
-        dropped = [rule for rule in apply_rules if rule not in rollback_rules]
-        expected = ["Delete", "SetStorageClass"] if apply_name == "prod.json" else ["SetStorageClass"]
-        assert (
-            sorted(rule["action"]["type"] for rule in dropped) == expected
-        ), f"{apply_name}: rollback must drop exactly the rules the apply variant added beyond legacy"
-        if apply_name == "prod.json":
-            assert NONCURRENT_DELETE_RULE in dropped
-        assert _load(apply_name)["bucket"] == _load(rollback_name)["bucket"]
+def test_prod_live_check_rejects_retention_drift_and_accepts_only_size_floor():
+    desired = _load("prod.json")
+    before = _load("prod.rollback.json")
+    live = {
+        "name": desired["bucket"],
+        "versioning": {"enabled": True},
+        "lifecycle": before["lifecycle"],
+    }
+    assert validate_against_live(desired, live) == []
+    live["lifecycle"] = desired["lifecycle"]
+    assert validate_against_live(before, live) == []
+    live["lifecycle"]["rule"][1]["condition"]["sizeAboveBytes"] = "131072"
+    expected_after = _load("prod.json")
+    assert validate_against_live(expected_after, live, expect_applied=True) == []
+    unexpected = {**expected_after, "lifecycle": {"rule": _rules(expected_after) + [NONCURRENT_DELETE_RULE]}}
+    assert validate_against_live(unexpected, live)
+    live["lifecycle"]["rule"].pop()
+    assert validate_against_live(before, live, allow_rule_removal=True)
+
+
+def test_dev_rollback_only_drops_coldline():
+    apply_rules = _rules(_load("development.json"))
+    rollback_rules = _rules(_load("development.rollback.json"))
+    assert all(rule["action"]["type"] == "Delete" for rule in rollback_rules)
+    assert all(rule in apply_rules for rule in rollback_rules)
+    dropped = [rule for rule in apply_rules if rule not in rollback_rules]
+    assert [rule["action"]["type"] for rule in dropped] == ["SetStorageClass"]
 
 
 def test_bucket_wide_set_storage_class_rule_is_rejected():
@@ -191,7 +200,7 @@ def test_scoped_noncurrent_delete_rule_passes_and_near_misses_are_rejected():
     base = {
         "bucket": "omi-private-cloud-sync",
         "project": "based-hardware",
-        "lifecycle": {"rule": list(_rules(_load("prod.json")))},
+        "lifecycle": {"rule": [*_rules(_load("prod.json")), NONCURRENT_DELETE_RULE]},
     }
     assert validate_desired_document(base) == []
 

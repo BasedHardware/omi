@@ -26,6 +26,7 @@ from utils.batch_pipeline import live, source_audio
 from utils.batch_pipeline.artifacts import ArtifactStore, ProtectionContext
 from utils.other import audio_frame_table, audio_opus, raw_audio_read, storage
 from utils.other.audio_frame_table import FRAME_SCHEMA
+from utils.other.gcs_read_reuse import ReadMemo
 from utils.other.audio_outbox import commit_capture, commit_pcm_window
 from utils.other.raw_audio import CapturePack, _get_opuslib
 from utils.batch_pipeline import record_orphan_repair as repair
@@ -533,3 +534,39 @@ def test_gapped_manifest_can_use_versioned_listing_without_skipping_payload_proo
     else:
         loaded.reload.assert_not_called()
         assert conditions == [fast]
+
+
+@pytest.mark.parametrize('mode', ['on', 'list_off', 'memo_off', 'stale_key'])
+def test_operation_reuses_verified_pack_and_manifest_with_live_proof(remote, monkeypatch, native_opus, mode):
+    wire(remote, monkeypatch)
+    monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', remote.name)
+    receipt, _, _, packets = build_pack(remote, gapped_frames())
+    pack, manifest = remote.blob(receipt.path), remote.blob(receipt.manifest_path)
+    pack.metageneration = manifest.metageneration = 1
+    manifest_reload = manifest.reload
+
+    def conditional_reload(**kwargs):
+        if kwargs.get('if_metageneration_match', manifest.metageneration) != manifest.metageneration:
+            raise PreconditionFailed('manifest metadata changed')
+        manifest_reload(**kwargs)
+
+    manifest.reload = Mock(side_effect=conditional_reload)
+    manifest.download_as_bytes = Mock(wraps=manifest.download_as_bytes)
+    pack.reload = Mock(wraps=pack.reload)
+    pack.download_as_bytes = Mock(wraps=pack.download_as_bytes)
+    remote.list_blobs = Mock(wraps=remote.list_blobs)
+    if mode == 'list_off':
+        monkeypatch.setenv('PRIVATE_SYNC_KNOWN_KEY_LIST_REUSE_ENABLED', 'false')
+    if mode == 'memo_off':
+        monkeypatch.setenv('PRIVATE_SYNC_REQUEST_READ_MEMO_ENABLED', 'false')
+    memo = ReadMemo()
+    assert len(raw_audio_read.list_packs(remote, UID, CID, memo=memo)) == 2
+    expected = decode_packets(packets)
+    assert raw_audio_read.read_pack(remote, receipt.path, UID, memo=memo) == expected
+    if mode == 'stale_key':
+        manifest.metageneration = 2
+    assert raw_audio_read.read_pack(remote, receipt.path, UID, memo=memo) == expected
+    assert pack.reload.call_count == 2
+    assert pack.download_as_bytes.call_count == (2 if mode == 'memo_off' else 1)
+    assert manifest.download_as_bytes.call_count == (3 if mode == 'memo_off' else 2 if mode == 'stale_key' else 1)
+    assert remote.list_blobs.call_count == (4 if mode == 'list_off' else 3 if mode == 'stale_key' else 2)
