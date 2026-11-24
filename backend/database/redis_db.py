@@ -22,8 +22,17 @@ from database.redis_connection import (
     redis_connection_kwargs as _redis_connection_kwargs,
     create_bounded_redis_client as create_bounded_redis_client,
 )
+from utils.other.request_deadline import request_deadline_remaining_seconds
 
 r: Any = redis.Redis(**_redis_connection_kwargs())
+# Deadline-bound request dependencies use bounded connect/read waits so an
+# abandoned executor future cannot strand a worker on Redis.
+_REQUEST_DEADLINE_REDIS_CLIENT: Any = create_bounded_redis_client(1.0)
+
+
+def request_deadline_redis_client() -> Any:
+    """Return a bounded Redis client only while a request deadline is active."""
+    return r if request_deadline_remaining_seconds() is None else _REQUEST_DEADLINE_REDIS_CLIENT
 
 
 # Longer than the 10-minute max approval TTL (contract §5) plus clock-skew
@@ -1139,7 +1148,14 @@ return remaining
 _RATE_LIMIT_RELEASE_LUA = r.register_script(_RATE_LIMIT_RELEASE_LUA_SOURCE)
 
 
-def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
+def check_rate_limit(
+    key: str,
+    policy: str,
+    max_requests: int,
+    window: int,
+    *,
+    redis_client: Any = None,
+) -> tuple[bool, int, int]:
     """Check per-key rate limit using a single atomic Lua call.
 
     Args:
@@ -1152,11 +1168,25 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
         (allowed, remaining, retry_after_seconds)
     """
     redis_key = f'rl:{policy}:{key}'
-    current, ttl = _RATE_LIMIT_LUA(keys=[redis_key], args=[window])
+    if redis_client is None:
+        current, ttl = _RATE_LIMIT_LUA(keys=[redis_key], args=[window])
+    else:
+        current, ttl = _RATE_LIMIT_LUA(keys=[redis_key], args=[window], client=redis_client)
     remaining = max(0, max_requests - current)
     allowed = current <= max_requests
     retry_after = max(0, ttl) if not allowed else 0
     return allowed, remaining, retry_after
+
+
+def check_rate_limit_bounded(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
+    """Check the limiter with bounded Redis socket waits for deadline-bound routes."""
+    return check_rate_limit(
+        key,
+        policy,
+        max_requests,
+        window,
+        redis_client=_REQUEST_DEADLINE_REDIS_CLIENT,
+    )
 
 
 def reserve_rate_limit(
@@ -1294,7 +1324,9 @@ def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
 def try_acquire_client_device_write_lock(uid: str, client_device_id: str, ttl: int = 600) -> bool:
     """Throttle client_devices registry upserts to once per (uid, device) every `ttl` seconds."""
     try:
-        result = r.set(f'users:{uid}:client_device_write:{client_device_id}', '1', ex=ttl, nx=True)
+        result = request_deadline_redis_client().set(
+            f'users:{uid}:client_device_write:{client_device_id}', '1', ex=ttl, nx=True
+        )
         return result is not None
     except Exception:
         return True
@@ -1307,7 +1339,7 @@ def try_acquire_user_platform_write_lock(uid: str, platform: str, ttl: int = 600
     change immediately.
     """
     try:
-        result = r.set(f'users:{uid}:platform_write:{platform}', '1', ex=ttl, nx=True)
+        result = request_deadline_redis_client().set(f'users:{uid}:platform_write:{platform}', '1', ex=ttl, nx=True)
         return result is not None
     except Exception:
         # Fail-open: if Redis is down, let the caller write through. Firestore
@@ -1477,7 +1509,11 @@ end
 
 def release_token_lock(key: str, token: str) -> None:
     """Release a shared Redis lease only while the caller's token owns it."""
-    _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[key], args=[token])
+    client = request_deadline_redis_client()
+    if client is r:
+        _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[key], args=[token])
+    else:
+        _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[key], args=[token], client=client)
 
 
 def try_acquire_notifications_job_run_lock(token: str, ttl: int = 55 * 60) -> bool:
@@ -1506,7 +1542,7 @@ def set_credits_invalidation_signal(uid: str, ttl: int = 120) -> None:
     TTL is 2 min — long enough for all streams to see it on their next 60s tick.
     Uses GET (not GETDEL) so multiple concurrent streams all see the signal.
     """
-    r.set(f'credits_invalidated:{uid}', '1', ex=ttl)
+    request_deadline_redis_client().set(f'credits_invalidated:{uid}', '1', ex=ttl)
 
 
 @try_catch_decorator

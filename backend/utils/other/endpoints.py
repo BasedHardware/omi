@@ -16,7 +16,7 @@ from config import directory_routing
 from config.rollout_cohorts import load_rollout_cohorts
 import redis as redis_pkg
 
-from database.redis_db import check_rate_limit, try_acquire_listen_lock
+from database.redis_db import check_rate_limit, check_rate_limit_bounded, try_acquire_listen_lock
 from database import users as users_db
 from database.firestore_tier_context import bind_request_owner
 from database.account_deletion_policy import ACCOUNT_DELETION_GRACE_STATUS, account_deletion_blocks_access
@@ -40,8 +40,10 @@ from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effect
 from utils.other.raise_site import tag_raise_site
 from utils.other.request_deadline import (
     RequestDeadlineExceeded,
+    await_within_request_deadline,
     call_within_request_deadline,
     request_deadline_exceeded,
+    request_deadline_remaining_seconds,
 )
 from database.fsr_read_cache import request_read_scope
 
@@ -368,10 +370,12 @@ def _resolve_current_user_uid(
         validate_byok_request(uid)
         return uid
 
+    _enforce_auth_deadline()
     try:
         record_user_platform(uid, x_app_platform)
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_user_platform swallowed error for uid=%s: %s", uid, e)
+    _enforce_auth_deadline()
 
     try:
         device_ctx = resolve_client_device(
@@ -379,19 +383,27 @@ def _resolve_current_user_uid(
             x_device_id_hash=x_device_id_hash,
             x_app_version=x_app_version,
         )
-        record_client_device(
-            uid,
-            client_device_id=device_ctx.client_device_id,
-            platform=device_ctx.platform,
-            app_version=device_ctx.app_version,
-        )
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)
+    else:
+        _enforce_auth_deadline()
+        try:
+            record_client_device(
+                uid,
+                client_device_id=device_ctx.client_device_id,
+                platform=device_ctx.platform,
+                app_version=device_ctx.app_version,
+            )
+        except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
+            logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)
+    _enforce_auth_deadline()
 
     # BYOK enrollment is cached; requests without BYOK headers do no work.
     validate_byok_request(uid)
+    _enforce_auth_deadline()
 
     _recover_locked_content_if_request(uid, request)
+    _enforce_auth_deadline()
 
     load_rollout_cohorts(uid)
     _enforce_auth_deadline()
@@ -740,14 +752,21 @@ def rate_limit_dependency(
     return rate_limit
 
 
-def _enforce_rate_limit(key: str, policy_name: str, *, fail_closed: bool = False) -> None:
+def _enforce_rate_limit(
+    key: str,
+    policy_name: str,
+    *,
+    fail_closed: bool = False,
+    bounded_redis: bool = False,
+) -> None:
     """Shared rate limit enforcement. Raises HTTPException(429) or logs in shadow mode.
 
     One Redis round-trip per call (Lua script). Fail-open on Redis errors.
     """
     max_requests, window = get_effective_limit(policy_name)
     try:
-        allowed, _remaining, retry_after = check_rate_limit(key, policy_name, max_requests, window)
+        check = check_rate_limit_bounded if bounded_redis else check_rate_limit
+        allowed, _remaining, retry_after = check(key, policy_name, max_requests, window)
     except redis_pkg.exceptions.RedisError as e:  # type: ignore[reportAttributeAccessIssue]  # redis pkg exposes exceptions at runtime
         logger.error(f"Rate limit Redis error policy={policy_name} key={key}: {e}")
         if fail_closed:
@@ -817,9 +836,21 @@ def with_rate_limit(
 
     async def dependency(uid: str = Depends(auth_dependency)) -> str:
         try:
-            await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name, fail_closed=fail_closed)
+            deadline_active = request_deadline_remaining_seconds() is not None
+            await await_within_request_deadline(
+                lambda: run_blocking(
+                    critical_executor,
+                    _enforce_rate_limit,
+                    uid,
+                    policy_name,
+                    fail_closed=fail_closed,
+                    bounded_redis=deadline_active,
+                )
+            )
         except ExecutorSaturatedError as error:
             raise _executor_saturated_http_exception(error) from error
+        except RequestDeadlineExceeded as error:
+            raise _auth_deadline_exceeded_exception() from error
         return uid
 
     return dependency

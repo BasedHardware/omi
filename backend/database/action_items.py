@@ -1145,7 +1145,7 @@ def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> B
     return FirestoreActionItems(uid, firestore_client=db).sync_update_documents(updates)
 
 
-def unlock_all_action_items(uid: str, *, limit: Optional[int] = None) -> int:
+def unlock_all_action_items(uid: str, *, limit: Optional[int] = None, timeout: float | None = None) -> int:
     """Unlock all locked rows, or one bounded page when limit is supplied."""
     action_items_ref = db.collection('users').document(uid).collection(action_items_collection)
     locked_items_query = action_items_ref.where(filter=FieldFilter('is_locked', '==', True))
@@ -1159,6 +1159,7 @@ def unlock_all_action_items(uid: str, *, limit: Optional[int] = None) -> int:
             locked_items_query,
             {'is_locked': False, 'updated_at': datetime.now(timezone.utc)},
             limit=limit,
+            timeout=timeout,
         )
         # An empty locked query is a duplicate unlock. Bumping would only
         # invalidate the list cache; no row was rewritten.

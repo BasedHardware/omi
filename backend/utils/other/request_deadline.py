@@ -15,10 +15,11 @@ the same deadline instead of restarting a fresh budget.
 
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import time
 from concurrent.futures import TimeoutError as FuturesTimeoutError
-from typing import AsyncIterator, Callable, TypeVar
+from typing import AsyncIterator, Awaitable, Callable, TypeVar
 
 # The client's own HTTP pool gives up at 30 s per attempt; answering a retryable
 # error before that is what makes the retry useful. Leave headroom for response
@@ -66,6 +67,31 @@ def request_deadline_exceeded() -> bool:
     return remaining is not None and remaining <= 0.0
 
 
+async def await_within_request_deadline(awaitable_factory: Callable[[], Awaitable[T]]) -> T:
+    """Await an async dependency for at most the remaining request budget.
+
+    A factory avoids creating an un-awaited coroutine when the budget is
+    already spent. Cancellation stops the wait; any synchronous work already
+    running in an executor remains subject to that operation's own timeout.
+    """
+    remaining = request_deadline_remaining_seconds()
+    if remaining is None:
+        return await awaitable_factory()
+    if remaining <= 0.0:
+        raise RequestDeadlineExceeded('request budget spent before the async call started')
+
+    task = asyncio.create_task(awaitable_factory())
+    done, _pending = await asyncio.wait((task,), timeout=remaining)
+    if not done:
+        task.cancel()
+        raise RequestDeadlineExceeded('request budget spent while awaiting the async call')
+
+    result = task.result()
+    if request_deadline_exceeded():
+        raise RequestDeadlineExceeded('request budget spent before the async call returned')
+    return result
+
+
 def capped_deadline_seconds(deadline_seconds: float) -> float:
     """Cap *deadline_seconds* to the request budget; unchanged when unset."""
     remaining = request_deadline_remaining_seconds()
@@ -102,6 +128,10 @@ def call_within_request_deadline(fn: Callable[..., T], *args: object, **kwargs: 
     try:
         return future.result(timeout=remaining)
     except FuturesTimeoutError as error:
+        # concurrent.futures re-raises a TimeoutError raised by the function
+        # with the same type used for its own wait timeout.
+        if future.done() and isinstance(future.exception(), FuturesTimeoutError):
+            raise
         future.cancel()
         raise RequestDeadlineExceeded('request budget spent while the call was in flight') from error
 
