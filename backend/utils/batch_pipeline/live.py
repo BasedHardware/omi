@@ -369,6 +369,34 @@ def retained_record_units(
         yield start, end - start, references
 
 
+_FAST_FINISH_TASKS: set = set()
+
+
+def _start_fast_finish(uid, conversation_id, current, units, client, key) -> None:
+    """Hand a manually finished recording's staged units to the first-transcript pass, without waiting.
+
+    Admission continues at once: the batch job stays the owner of the canonical transcript.
+    """
+    from utils.conversations.v3 import fast_finish
+
+    try:
+        if not fast_finish.enabled(uid) or not fast_finish.eligible(current):
+            return
+        allowed = {private_cloud_sync_bucket, derived_audio_bucket()}
+
+        def read(ref):
+            return read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True)
+
+        task = asyncio.ensure_future(
+            run_blocking(storage_executor, fast_finish.run, uid, conversation_id, current, list(units), read)
+        )
+        # The loop holds tasks weakly; keep this one until it settles.
+        _FAST_FINISH_TASKS.add(task)
+        task.add_done_callback(_FAST_FINISH_TASKS.discard)
+    except Exception as error:
+        logger.warning('event=v3_fast_finish outcome=start_error exception_type=%s', type(error).__name__)
+
+
 async def admit_recording(store, pending, *, now=None, provider_outbox_factory=None):
     from config.batch_pipeline import require_record_protocol_ready
 
@@ -443,6 +471,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
     # from the durable upload. The pending obligation has no TTL.
     validate_record_tail(units, row.get('finished_at'))
     validate_record_tail(units, current.get('finished_at'))
+    _start_fast_finish(uid, conversation_id, current, units, client, artifacts.key_for_owner(uid))
     from utils.batch_pipeline.language_receipt import auto_language_cohort
 
     receipt_enabled = auto_language_cohort(

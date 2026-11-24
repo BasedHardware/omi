@@ -44,6 +44,11 @@ v3 recording (server-batch capture, no transcript yet) stores `v3_manual_end` in
 terminal transaction, so the window is cut when its batch transcript lands. Set it to
 `off` on `backend` to restore the silence and lock timers for later finishes.
 
+`CONVERSATIONS_V3_FAST_FINISH` defaults to `off`. With `on` or a `uid:` member list, a manually
+finished v3 recording of up to 20 minutes is transcribed once through the prerecorded provider
+when record admission stages its sealed audio, and written as a provisional transcript that the
+batch record projection later replaces.
+
 `CONVERSATIONS_V3_LIVE_TITLE=on` is the default for v3 builder runtimes.
 Set it to `off` to stop new automatic title previews. An open, untitled derived
 row becomes eligible after 180 seconds of transcribed speech, with overlapping

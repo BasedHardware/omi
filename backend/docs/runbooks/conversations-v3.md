@@ -119,6 +119,15 @@ window is cut and locked when the batch transcript lands. `omi_conversations_v3_
 counts these by whether the transcript had already landed. Set `CONVERSATIONS_V3_BATCH_MANUAL_END=off`
 on the service that runs the finalization worker (`backend`) to stop storing the marker for later
 finishes; those windows then wait out the silence and lock timers again. Stored markers remain.
+`CONVERSATIONS_V3_FAST_FINISH` (default `off`; `on`, or a `uid:` member list) adds a first
+transcript for a manually finished recording. When batch record admission stages the sealed audio,
+`utils/conversations/v3/fast_finish.py` transcribes it once through the prerecorded provider for the
+recording's language and writes the result with `update_conversation_segments`. That write marks the
+recording pending and wakes reconcile, and the stored manual end cuts the window, so notes start
+without waiting for the batch merge and delivery. The batch record projection later replaces the
+provisional segments; once `record_projection_revision` is set the fast write is refused. Recordings
+over 20 minutes, partial records, custom STT, locked rows and private rows are skipped. Read
+`omi_conversations_v3_fast_finish_total{outcome}` and `omi_conversations_v3_fast_finish_seconds{stage}`.
 Five minutes of placed-speech silence is a hard window boundary. An outline's
 `resumes_previous` may undo a topic split within that interval, never rejoin
 windows across the silence boundary, even with the same people. Short socket
