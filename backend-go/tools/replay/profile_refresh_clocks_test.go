@@ -18,7 +18,7 @@ func TestProfileRefreshRequiresOneBackendStampWithinEachWindow(t *testing.T) {
 	}
 	for _, field := range []string{"", "different_payload", "different_stamps", "before_capture", "after_last_write", "second_write", "missing_trace", "stored_stamp_drift"} {
 		py, candidate := makeRun(time.Second), makeRun(2*time.Second)
-		profile := objectField(candidate.Derived["users/u"], "ai_user_profile").(map[string]any)
+		profile := mustMap(objectField(candidate.Derived["users/u"], "ai_user_profile"))
 		switch field {
 		case "":
 		case "different_payload":

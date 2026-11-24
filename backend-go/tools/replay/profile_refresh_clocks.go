@@ -27,7 +27,10 @@ func reviewProfileRefreshClocks(diffs []difference, python, goRun *observation) 
 			return nil
 		}
 		write := run.ProfileWrites[0]
-		profile, _ := objectField(run.Derived[user], "ai_user_profile").(map[string]any)
+		profile, ok := objectField(run.Derived[user], "ai_user_profile").(map[string]any)
+		if !ok {
+			return nil
+		}
 		stamp, ok := profile["generated_at"].(string)
 		if !ok || profile["refreshed_at"] != stamp || profile["source"] != "backend" ||
 			stamp != write.Generated || stamp != write.Refreshed {

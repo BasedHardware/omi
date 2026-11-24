@@ -13,8 +13,9 @@ func TestUnreadableTerminalConsequencesSurviveValueFreeReport(t *testing.T) {
 	goRun.GoEvidence = map[string]any{
 		"job": map[string]any{"state": "dead_letter", "cause": "conversation_unreadable"},
 	}
+	caseData := replayCase{Name: unreadableReplayCase, Python: python, Go: goRun}
 	entry := caseReport{
-		replayCase: replayCase{Name: unreadableReplayCase, Python: python, Go: goRun},
+		replayCase: caseData,
 		Differences: []difference{
 			{Path: "/go/admitted", Kind: "invalid_binding"},
 			{Path: "/go/admitted/other", Kind: "invalid_binding"},

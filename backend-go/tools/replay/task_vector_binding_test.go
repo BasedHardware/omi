@@ -32,9 +32,9 @@ func TestOnlySameAuthorizedTaskAndVectorMayPair(t *testing.T) {
 	for _, change := range []string{"", "orphan", "vector points to different task", "wrong owner", "clock", "payload", "provenance", "embedding", "embedding input", "extra task", "second task write", "extra vector", "missing vector"} {
 		py, goRun := taskProofRun(a), taskProofRun(b)
 		taskPath := "users/" + goRun.OwnerID + "/action_items/" + b
-		task := goRun.Derived[taskPath].(map[string]any)
-		vec := singleObject(goRun.Effects["other_vectors"])["record"].(map[string]any)
-		meta := vec["metadata"].(map[string]any)
+		task := mustMap(goRun.Derived[taskPath])
+		vec := mustMap(singleObject(goRun.Effects["other_vectors"])["record"])
+		meta := mustMap(vec["metadata"])
 		switch change {
 		case "orphan":
 			meta["action_item_id"] = a
@@ -59,7 +59,7 @@ func TestOnlySameAuthorizedTaskAndVectorMayPair(t *testing.T) {
 		case "second task write":
 			goRun.TaskWrites = append(goRun.TaskWrites, taskPath)
 		case "extra vector":
-			goRun.Effects["other_vectors"] = append(goRun.Effects["other_vectors"].([]any), vec)
+			goRun.Effects["other_vectors"] = append(mustSlice(goRun.Effects["other_vectors"]), vec)
 		case "missing vector":
 			delete(goRun.Effects, "other_vectors")
 		}

@@ -239,7 +239,9 @@ func compare(cases []replayCase) (report, error) {
 			entry.GoStatus = c.Go.Status
 			entry.Cost.Go = c.Go.Cost
 			entry.GoEvidence = c.Go.GoEvidence
-			entry.GoCiphertextKept, _ = c.Go.GoEvidence["ciphertext_kept"].(bool)
+			if ciphertextKept, ok := c.Go.GoEvidence["ciphertext_kept"].(bool); ok {
+				entry.GoCiphertextKept = ciphertextKept
+			}
 			if c.Go.HomeDirtyReceiptTrace != nil {
 				if entry.HomeDirtyReceiptTrace == nil {
 					entry.HomeDirtyReceiptTrace = make(map[string]map[string]int)

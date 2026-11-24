@@ -1,7 +1,6 @@
 package main
 
 import (
-	"reflect"
 	"strings"
 )
 
@@ -12,12 +11,16 @@ func markUnreadableTerminalConsequences(entry *caseReport, python, goRun *observ
 		len(python.ProviderCalls) != 0 || len(goRun.ProviderCalls) != 0 {
 		return
 	}
-	job, _ := goRun.GoEvidence["job"].(map[string]any)
+	job, ok := goRun.GoEvidence["job"].(map[string]any)
+	if !ok {
+		return
+	}
 	const cause = "conversation_unreadable"
-	ciphertext := documentField(python, "transcript_segments")
+	pythonCiphertext, pythonCiphertextOK := documentField(python, "transcript_segments").(string)
+	goCiphertext, goCiphertextOK := documentField(goRun, "transcript_segments").(string)
 	if job["state"] != "dead_letter" || job["cause"] != cause ||
 		documentField(goRun, "finalization_status") != "dead_letter" ||
-		ciphertext == nil || ciphertext == "" || !reflect.DeepEqual(ciphertext, documentField(goRun, "transcript_segments")) {
+		!pythonCiphertextOK || !goCiphertextOK || pythonCiphertext == "" || pythonCiphertext != goCiphertext {
 		return
 	}
 	terminalPaths := map[string]string{
@@ -25,7 +28,10 @@ func markUnreadableTerminalConsequences(entry *caseReport, python, goRun *observ
 		"/go/admitted":                      "invalid_binding",
 	}
 	for path, value := range python.Derived {
-		row, _ := value.(map[string]any)
+		row, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
 		if strings.HasPrefix(path, "sync_reprocess_outbox/") && row["uid"] == goRun.OwnerID &&
 			row["conversation_id"] == goRun.ConversationID && row["age_gate_parked"] == true {
 			terminalPaths["/derived_documents/"+escapePointer(path)] = "missing_in_go"
@@ -33,7 +39,10 @@ func markUnreadableTerminalConsequences(entry *caseReport, python, goRun *observ
 	}
 	attention := "users/" + goRun.OwnerID + "/processing_attention_items/conv-summary:" + goRun.ConversationID + ":"
 	for path, value := range goRun.Derived {
-		row, _ := value.(map[string]any)
+		row, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
 		if strings.HasPrefix(path, attention) && row["failure_code"] == cause {
 			terminalPaths["/derived_documents/"+escapePointer(path)] = "missing_in_python"
 		}

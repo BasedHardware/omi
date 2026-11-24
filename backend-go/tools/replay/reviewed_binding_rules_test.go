@@ -27,26 +27,26 @@ func TestGoOnlyReceiptsRequireBoundGoEvidenceAndNoPythonCopies(t *testing.T) {
 		}
 	}
 
-	goRun.Document.(map[string]any)["finalization_owner_epoch"] = json.Number("4")
+	mustMap(goRun.Document)["finalization_owner_epoch"] = json.Number("4")
 	diffs = compareObservations(py, goRun)
 	if !hasUnexplained(diffs) || !hasKindPath(diffs, "invalid_binding", "/go/conversation/finalization_engine") {
 		t.Fatalf("wrong owner epoch was excused: %+v", diffs)
 	}
 
-	goRun.Document.(map[string]any)["finalization_owner_epoch"] = json.Number("3")
-	goRun.Document.(map[string]any)["go_sync_minimum_revision"] = json.Number("5")
+	mustMap(goRun.Document)["finalization_owner_epoch"] = json.Number("3")
+	mustMap(goRun.Document)["go_sync_minimum_revision"] = json.Number("5")
 	diffs = compareObservations(py, goRun)
 	if !hasUnexplained(diffs) || !hasKindPath(diffs, "invalid_binding", "/go/conversation/go_sync_minimum_revision") {
 		t.Fatalf("minimum receipt bound to another revision was excused: %+v", diffs)
 	}
 
-	goRun.Document.(map[string]any)["go_sync_minimum_revision"] = json.Number("4")
-	goRun.Document.(map[string]any)["finalization_job_id"] = "wrong-job"
+	mustMap(goRun.Document)["go_sync_minimum_revision"] = json.Number("4")
+	mustMap(goRun.Document)["finalization_job_id"] = "wrong-job"
 	diffs = compareObservations(py, goRun)
 	if !hasUnexplained(diffs) || !hasKindPath(diffs, "invalid_binding", "/go/conversation/finalization_job_id") {
 		t.Fatalf("Go job ID not bound to admitted job was excused: %+v", diffs)
 	}
-	goRun.Document.(map[string]any)["finalization_job_id"] = "job-go"
+	mustMap(goRun.Document)["finalization_job_id"] = "job-go"
 	py.Document = map[string]any{"finalization_engine": "python"}
 	diffs = compareObservations(py, goRun)
 	if !hasKindPath(diffs, "invalid_binding", "/python/conversation/finalization_engine") {
@@ -90,7 +90,7 @@ func TestGoCoordinationStampRuleMatchesOnlyExactGoFieldNames(t *testing.T) {
 		}
 	}
 
-	goRun.Document.(map[string]any)["go_sync_inline_fanout_epochs"] = json.Number("2")
+	mustMap(goRun.Document)["go_sync_inline_fanout_epochs"] = json.Number("2")
 	diffs = compareObservations(python, goRun)
 	if !hasUnexplainedAt(diffs, "/conversation/go_sync_inline_fanout_epochs") {
 		t.Fatalf("near-match Go field was approved: %+v", diffs)

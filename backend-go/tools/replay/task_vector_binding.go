@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -23,15 +22,24 @@ func singleObject(value any) map[string]any {
 	if !ok || len(rows) != 1 {
 		return nil
 	}
-	row, _ := rows[0].(map[string]any)
+	row, ok := rows[0].(map[string]any)
+	if !ok {
+		return nil
+	}
 	return row
 }
 
 func taskClock(run *observation, value any) (time.Time, bool) {
 	fields, ok := value.(map[string]any)
-	text, _ := fields["$timestamp"].(string)
+	if !ok {
+		return time.Time{}, false
+	}
+	text, ok := fields["$timestamp"].(string)
+	if !ok {
+		return time.Time{}, false
+	}
 	t, err := time.Parse(time.RFC3339Nano, text)
-	return t, ok && len(fields) == 1 && err == nil && !run.Started.IsZero() && !t.Before(run.Started) && !t.After(run.Finished)
+	return t, len(fields) == 1 && err == nil && !run.Started.IsZero() && !t.Before(run.Started) && !t.After(run.Finished)
 }
 
 func singleTaskBinding(run *observation) (taskBinding, bool) {
@@ -54,30 +62,54 @@ func singleTaskBinding(run *observation) (taskBinding, bool) {
 			return b, false
 		}
 		b.path = path
-		b.task, _ = raw.(map[string]any)
+		var ok bool
+		b.task, ok = raw.(map[string]any)
+		if !ok {
+			return b, false
+		}
 	}
 	id := strings.TrimPrefix(b.path, prefix)
 	b.item = singleObject(objectField(documentField(run, "structured"), "action_items"))
+	if b.item == nil || b.task == nil {
+		return b, false
+	}
 	provenance := singleObject(b.task["provenance"])
-	segments, _ := b.item["source_segment_ids"].([]any)
-	description, _ := b.item["description"].(string)
+	segments, segmentsOK := b.item["source_segment_ids"].([]any)
+	description, descriptionOK := b.item["description"].(string)
 	if id == "" || run.TaskWrites[0] != b.path || b.task["source"] != "conversation" || b.task["owner"] != "user" || b.task["conversation_id"] != run.ConversationID ||
-		b.item["capture_owner"] != "user" || description != "Send the meeting notes" || b.task["description"] != description ||
+		!segmentsOK || !descriptionOK || b.item["capture_owner"] != "user" || description != "Send the meeting notes" || b.task["description"] != description ||
 		provenance["scope"] != "canonical" || provenance["kind"] != "conversation" || provenance["id"] != run.ConversationID ||
-		len(segments) != 1 || segments[0] != "segment-1" || !reflect.DeepEqual(provenance["transcript_segment_ids"], segments) {
+		len(segments) != 1 || segments[0] != "segment-1" || !equalReplayValue(provenance["transcript_segment_ids"], segments) {
 		return b, false
 	}
 	created, ok := taskClock(run, b.task["created_at"])
 	updated, updatedOK := taskClock(run, b.task["updated_at"])
-	if !ok || !updatedOK || updated.Before(created) || !reflect.DeepEqual(b.task["created_at"], b.item["created_at"]) {
+	itemCreated, itemCreatedOK := taskClock(run, b.item["created_at"])
+	if !ok || !updatedOK || !itemCreatedOK || updated.Before(created) || !itemCreated.Equal(created) {
 		return b, false
 	}
 	entry := singleObject(run.Effects["other_vectors"])
-	b.vector, _ = entry["record"].(map[string]any)
-	b.metadata, _ = b.vector["metadata"].(map[string]any)
-	stamp, _ := b.metadata["created_at"].(json.Number)
+	if entry == nil {
+		return b, false
+	}
+	var vectorOK, metadataOK bool
+	b.vector, vectorOK = entry["record"].(map[string]any)
+	if !vectorOK {
+		return b, false
+	}
+	b.metadata, metadataOK = b.vector["metadata"].(map[string]any)
+	if !metadataOK {
+		return b, false
+	}
+	stamp, stampOK := b.metadata["created_at"].(json.Number)
+	if !stampOK {
+		return b, false
+	}
 	seconds, err := stamp.Int64()
-	embedding, _ := b.vector["values"].([]any)
+	embedding, embeddingOK := b.vector["values"].([]any)
+	if !embeddingOK {
+		return b, false
+	}
 	vectorID := run.OwnerID + "-ai-" + id
 	inputs := run.TaskEmbeddingInputs[vectorID]
 	if len(run.TaskEmbeddingInputs) != 1 || len(inputs) != 1 || inputs[0] != fmt.Sprintf("%x", sha256.Sum256([]byte(description))) ||
@@ -119,7 +151,8 @@ func reviewSingleTaskBinding(diffs []difference, python, goRun *observation) boo
 	pyPath, goPath := py.path, goTask.path
 	py.path = ""
 	goTask.path = ""
-	if !reflect.DeepEqual(py, goTask) {
+	if !equalReplayValue(py.item, goTask.item) || !equalReplayValue(py.task, goTask.task) ||
+		!equalReplayValue(py.vector, goTask.vector) || !equalReplayValue(py.metadata, goTask.metadata) {
 		return false
 	}
 	docPath := func(path string) string { return "/derived_documents/" + strings.ReplaceAll(path, "/", "~1") }
