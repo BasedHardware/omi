@@ -25,25 +25,34 @@ type providerTokenCall struct {
 	Embedding bool   `json:"embedding"`
 }
 
+type operationSource struct {
+	Writes  int64 `json:"writes"`
+	Deletes int64 `json:"deletes"`
+}
+
 type observation struct {
-	OwnerID            string               `json:"owner_id"`
-	ConversationID     string               `json:"conversation_id"`
-	ProviderTokenCalls *[]providerTokenCall `json:"provider_token_calls,omitempty"`
-	QueueFanout        string               `json:"queue_fanout_key"`
-	UpdatedAtChanged   bool                 `json:"updated_at_changed"`
-	Admitted           *admission           `json:"admitted"`
-	Started            time.Time            `json:"started_at"`
-	Finished           time.Time            `json:"finished_at"`
-	ProviderCalls      []string             `json:"provider_calls"`
-	Effects            map[string]any       `json:"effects"`
-	Status             string               `json:"status"`
-	Document           any                  `json:"conversation"`
-	Home               map[string]any       `json:"home,omitempty"`
-	NotesPromptHashes  []string             `json:"notes_prompt_sha256,omitempty"`
-	Derived            map[string]any       `json:"derived_documents"`
-	Webhooks           []any                `json:"webhooks"`
-	Cost               replayCost           `json:"cost"`
-	GoEvidence         map[string]any       `json:"go_evidence,omitempty"`
+	OwnerID                   string                     `json:"owner_id"`
+	ConversationID            string                     `json:"conversation_id"`
+	ProviderTokenCalls        *[]providerTokenCall       `json:"provider_token_calls,omitempty"`
+	QueueFanout               string                     `json:"queue_fanout_key"`
+	UpdatedAtChanged          bool                       `json:"updated_at_changed"`
+	Admitted                  *admission                 `json:"admitted"`
+	Started                   time.Time                  `json:"started_at"`
+	Finished                  time.Time                  `json:"finished_at"`
+	ProfileWrites             []profileWrite             `json:"profile_writes,omitempty"`
+	TaskWrites                []string                   `json:"task_writes,omitempty"`
+	TaskEmbeddingInputs       map[string][]string        `json:"task_embedding_inputs,omitempty"`
+	FirestoreOperationSources map[string]operationSource `json:"firestore_operation_sources,omitempty"`
+	ProviderCalls             []string                   `json:"provider_calls"`
+	Effects                   map[string]any             `json:"effects"`
+	Status                    string                     `json:"status"`
+	Document                  any                        `json:"conversation"`
+	Home                      map[string]any             `json:"home,omitempty"`
+	NotesPromptHashes         []string                   `json:"notes_prompt_sha256,omitempty"`
+	Derived                   map[string]any             `json:"derived_documents"`
+	Webhooks                  []any                      `json:"webhooks"`
+	Cost                      replayCost                 `json:"cost"`
+	GoEvidence                map[string]any             `json:"go_evidence,omitempty"`
 }
 
 type tokenUsage struct {
