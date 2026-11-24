@@ -685,3 +685,47 @@ def test_scheduled_go_compose_fences_deletion_after_planning(claim, monkeypatch,
         marker.delete()
         tombstone.delete()
         target.delete()
+
+
+@pytest.mark.parametrize('task_failure', [False, True])
+def test_kept_minimum_waits_for_task_settlement(claim, monkeypatch, task_failure):
+    from utils.conversations import process_conversation as processor
+    from utils.conversations.minimum_derived import is_server_minimum
+
+    client, row, job, req = claim
+    timestamp = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    row.update(
+        {
+            'created_at': timestamp,
+            'started_at': timestamp,
+            'finished_at': timestamp,
+            'go_sync_minimum_revision': req.sync_revision,
+            'go_sync_minimum_discarded': False,
+            'structured': {'title': 'Short recording', 'title_provenance': 'server_minimum'},
+            'relevance_decision': {'verdict': 'keep', 'decided_by': 'rule', 'reason': 'content_below_floor'},
+        }
+    )
+    calls = []
+
+    def settle(owner, conversation, *, include_vector):
+        assert owner == req.owner and is_server_minimum(conversation)
+        assert not include_vector and conversation.structured.action_items == []
+        assert reference.DERIVED_EFFECTS_TRANSCRIPT_FIELD not in row.get().to_dict()
+        calls.append(owner)
+        if task_failure:
+            raise RuntimeError('task reconciliation failed')
+
+    monkeypatch.setattr(processor, 'apply_settled_enrichment', settle)
+    if task_failure:
+        with pytest.raises(RuntimeError, match='task reconciliation failed'):
+            reference._adapt(client, req)
+        assert reference.DERIVED_EFFECTS_TRANSCRIPT_FIELD not in row.get().to_dict()
+        assert job.get().to_dict()[reference.RECEIPTS][req.operation] == 'reserved'
+        assert reference._adapt(client, req).status_code == 409
+    else:
+        assert reference._adapt(client, req) == {}
+        assert row.get().to_dict()[
+            reference.DERIVED_EFFECTS_TRANSCRIPT_FIELD
+        ] == reference.derived_effects_transcript_digest([])
+        assert reference._adapt(client, req) == {}
+    assert calls == [req.owner]

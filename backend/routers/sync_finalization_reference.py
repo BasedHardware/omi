@@ -24,6 +24,7 @@ from database import episode_write_fence
 from database._client import get_firestore_client
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.cloud_tasks import verify_configured_cloud_tasks_oidc
+from utils.conversations.minimum_derived import intentional_short_clip_minimum
 from utils.conversations.reprocess_contract import DERIVED_EFFECTS_TRANSCRIPT_FIELD, derived_effects_transcript_digest
 from utils.llm.known_spellings import spelling_context_run
 
@@ -270,7 +271,13 @@ def _read_or_reserve(
         ):
             return 'ownership_changed', None
         if req.step in {'effects', 'effects-episode', 'targets'} and (
-            row.get('discarded') or row.get('terminal_no_derived_effects')
+            row.get('discarded')
+            or row.get('terminal_no_derived_effects')
+            or (
+                req.step in {'effects', 'effects-episode'}
+                and row.get('go_sync_minimum_revision') == req.sync_revision
+                and (not intentional_short_clip_minimum(row) or row.get('go_sync_minimum_discarded') is not False)
+            )
         ):
             return 'unsupported_row', None
         if not reserve:
@@ -369,7 +376,16 @@ def _effect_fields(row: dict, before: dict, patch: dict) -> dict:
         else {}
     )
     digest = DERIVED_EFFECTS_TRANSCRIPT_FIELD
-    if digest in patch and row.get(digest) == before.get(digest):
+    # Corrections can change the effective transcript without changing its stored blob.
+    same_input = all(
+        row.get(key) == before.get(key) for key in ('has_transcript_corrections', 'transcript_correction_overlay')
+    )
+    if before.get('go_sync_minimum_revision') is not None:
+        same_input = same_input and all(
+            row.get(key) == before.get(key)
+            for key in ('go_sync_minimum_revision', 'go_sync_minimum_discarded', 'structured', 'relevance_decision')
+        )
+    if digest in patch and row.get(digest) == before.get(digest) and same_input:
         fields[digest] = patch[digest]
     return fields
 
@@ -717,16 +733,22 @@ def _adapt(client, req: ReferenceRequest):
         return {'wait': member_notes.waits(req.owner, row, ProcessingTrigger.SYNC_UPDATE)}
     effects_write = None
     if req.step in {'effects', 'effects-episode'}:
-        from utils.conversations.process_conversation import apply_eager_sync_enrichment
+        from utils.conversations.process_conversation import apply_eager_sync_enrichment, apply_settled_enrichment
 
-        conversation = deserialize_conversation(row)
+        conversation = deserialize_conversation({**row, 'id': req.conversation})
         digest = derived_effects_transcript_digest(conversation.transcript_segments)
-        apply_eager_sync_enrichment(req.owner, conversation)
-        outputs = {
-            'apps_results': [result.model_dump() for result in conversation.apps_results],
-            'suggested_summarization_apps': conversation.suggested_summarization_apps,
-            DERIVED_EFFECTS_TRANSCRIPT_FIELD: digest,
-        }
+        outputs: dict[str, Any] = {DERIVED_EFFECTS_TRANSCRIPT_FIELD: digest}
+        if stored.get('go_sync_minimum_revision') == req.sync_revision:
+            # The minimum extracts no new actions. Let the ordinary task writer
+            # reconcile any previous refresh obligations before stamping it.
+            conversation.structured.action_items = []
+            apply_settled_enrichment(req.owner, conversation, include_vector=False)
+        else:
+            apply_eager_sync_enrichment(req.owner, conversation)
+            outputs.update(
+                apps_results=[result.model_dump() for result in conversation.apps_results],
+                suggested_summarization_apps=conversation.suggested_summarization_apps,
+            )
         changed = {key: value for key, value in outputs.items() if stored.get(key) != value}
         if changed:
             patch = encode_conversation_for_write(req.owner, changed, stored.get('data_protection_level', 'standard'))

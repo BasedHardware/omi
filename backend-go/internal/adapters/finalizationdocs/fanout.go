@@ -47,7 +47,7 @@ func claimFanout(tx *docstore.Tx, ref docstore.Ref, job document, claim finaliza
 
 // ApplyAndClaimFanout stages finalization and its fanout intent under the
 // same lease and source checks.
-func (s Store) ApplyAndClaimFanout(ctx context.Context, g queue.Guarded, claim finalization.Claim, inline, minimum bool,
+func (s Store) ApplyAndClaimFanout(ctx context.Context, g queue.Guarded, claim finalization.Claim, inline, suppressEffects bool,
 	apply func(*docstore.Tx, map[string]any) error,
 ) (finalization.Fanout, error) {
 	if !s.SyncOnly {
@@ -63,7 +63,7 @@ func (s Store) ApplyAndClaimFanout(ctx context.Context, g queue.Guarded, claim f
 			return err
 		}
 		snapshot := fanoutSnapshot(row)
-		snapshot.NoDerivedEffects = snapshot.NoDerivedEffects || minimum
+		snapshot.NoDerivedEffects = snapshot.NoDerivedEffects || suppressEffects
 		if inline {
 			fanout = finalization.Fanout{
 				State: finalization.FanoutAcquired, Key: fanoutKey(job, claim), Conversation: snapshot,
@@ -103,13 +103,21 @@ func ownsSyncMinimum(row document) bool {
 		field[int64](row, finalization.SyncMinimumRevisionField) == revision
 }
 
+func suppressMinimumEffects(row document) bool {
+	if !ownsSyncMinimum(row) {
+		return false
+	}
+	decision := field[map[string]any](row, "relevance_decision")
+	return field[bool](row, finalization.SyncMinimumDiscardedField) || field[string](decision, "reason") != "content_below_floor"
+}
+
 func fanoutSnapshot(row document) finalization.Conversation {
 	structured := field[map[string]any](row, "structured")
 	return finalization.Conversation{
 		Status: rules.Completed, JobID: field[string](row, "finalization_job_id"),
 		Revision: field[int64](row, "finalization_revision"), SyncRevision: field[int64](row, "sync_content_revision"),
 		AppPlatform: field[string](row, "client_platform"), RecordingLayer: field[bool](row, "recording") || field[bool](row, "v3_derived"),
-		NoDerivedEffects: field[bool](row, "terminal_no_derived_effects") || ownsSyncMinimum(row),
+		NoDerivedEffects: field[bool](row, "terminal_no_derived_effects") || suppressMinimumEffects(row),
 		UntrustedCapture: field[string](row, "capture_time_trust") == "untrusted",
 		Notes:            finalization.Notes{Title: field[string](structured, "title"), Overview: field[string](structured, "overview")},
 	}

@@ -134,12 +134,15 @@ func (f finalizationDocuments) ApplyAndClaimFanout(ctx context.Context, g queue.
 		return finalization.Fanout{}, err
 	}
 	patch.InlineFanoutEpoch = claim.Epoch
-	return f.commitFanout(ctx, g, claim, revision, patch, true, notes != nil && notes.Minimum != nil)
+	// A kept below-floor minimum still reconciles task ownership before
+	// receipting the transcript. Other minimums suppress derived work.
+	suppress := notes != nil && notes.Minimum != nil && (notes.Minimum.Discarded || notes.Minimum.Reason != "content_below_floor")
+	return f.commitFanout(ctx, g, claim, revision, patch, true, suppress)
 }
 
-func (f finalizationDocuments) commitFanout(ctx context.Context, g queue.Guarded, claim finalization.Claim, revision conversations.Revision, patch conversations.Finalization, inline, minimum bool) (finalization.Fanout, error) {
+func (f finalizationDocuments) commitFanout(ctx context.Context, g queue.Guarded, claim finalization.Claim, revision conversations.Revision, patch conversations.Finalization, inline, suppressEffects bool) (finalization.Fanout, error) {
 	ref := conversations.Ref{Owner: claim.Intent.Ref.Owner, ID: claim.Intent.Ref.ID}
-	fanout, err := f.jobs.ApplyAndClaimFanout(ctx, g, claim, inline, minimum, func(tx *docstore.Tx, row map[string]any) error {
+	fanout, err := f.jobs.ApplyAndClaimFanout(ctx, g, claim, inline, suppressEffects, func(tx *docstore.Tx, row map[string]any) error {
 		refused, stageErr := f.store.StageFinalization(tx, ref, revision, row, patch)
 		if stageErr == nil && refused {
 			return conversations.ErrLifecycleRefused
