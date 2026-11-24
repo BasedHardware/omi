@@ -140,6 +140,26 @@ def has_audio(capture: Mapping) -> bool:
     )
 
 
+def live_audio_uncommitted(capture: Mapping) -> bool:
+    """A live capture holding audio whose first archive window has not committed yet.
+
+    The listen session marks ``server_batch_audio_received`` at the first frame and writes
+    ``has_content`` only when a 60-second archive window commits. Until then the audio lives in the
+    session, which commits it when it sees the row leave ``in_progress``.
+    """
+    return bool(
+        owned(capture)
+        and capture.get('server_batch_audio_received') is True
+        and capture.get('server_batch_audio_closed') is not True
+        and not has_audio(capture)
+    )
+
+
+def user_finish_admits(capture: Mapping) -> bool:
+    """A user finish inside the first archive window is a real finish, not an empty recording."""
+    return manual_end_marker_enabled() and live_audio_uncommitted(capture)
+
+
 def proven_empty(capture: Mapping) -> bool:
     """A closed, received-empty server archive owes no recording obligation."""
     return (
