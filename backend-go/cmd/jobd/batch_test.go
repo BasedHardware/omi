@@ -11,6 +11,7 @@ import (
 	"github.com/BasedHardware/omi/backend-go/internal/conformance/kitstore"
 	wire "github.com/BasedHardware/omi/backend-go/internal/conformance/stubapi"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
+	"github.com/BasedHardware/omi/backend-go/internal/queue"
 	"github.com/BasedHardware/omi/backend-go/internal/queue/queuetest"
 )
 
@@ -29,7 +30,7 @@ func TestBatchValidatesFundingAuthorityAndCustodyAtIntake(t *testing.T) {
 	accounts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var a wire.Account
 		switch r.URL.Path {
-		case "/accounts/unversioned-exhausted":
+		case "/accounts/unversioned-exhausted", "/accounts/prior-hold":
 			a.AllowanceExhausted = true
 		case "/accounts/held":
 			a.EntitlementGeneration = 1
@@ -52,6 +53,9 @@ func TestBatchValidatesFundingAuthorityAndCustodyAtIntake(t *testing.T) {
 	t.Cleanup(client.Close)
 	units := &batchunit.Service{Queue: h.Store, Accounts: wire.BatchAccounts{Client: client}, Keys: wire.BatchKey, Observer: wire.BatchObserver{Client: client}}
 	api := (&api{store: h.Store, kit: kit, units: units}).routes()
+	if err = h.Store.HoldCondition(ctx, "prior-hold", queue.Entitlement, 3); err != nil {
+		t.Fatal(err)
+	}
 	const base = `{"input":"fixture","order_at":"2026-01-01T00:00:00Z","unit_id":"`
 	const duration = `,"duration_seconds":2`
 	const deadline = `,"custody_deadline":"2099-01-01T00:00:00Z"`
@@ -60,7 +64,8 @@ func TestBatchValidatesFundingAuthorityAndCustodyAtIntake(t *testing.T) {
 		status            int
 		code              string
 	}{
-		{"unversioned-exhausted", "invalid-source", duration + deadline, 503, "temporarily_unavailable"},
+		{"unversioned-exhausted", "legacy-exhausted", "", 202, ""},
+		{"prior-hold", "existing-hold", duration + deadline, 202, ""},
 		{"legacy", "unversioned-funded", "", 202, ""},
 		{"held", "no-deadline", duration, 422, "held_unit_requires_custody_deadline_and_positive_duration"},
 		{"held", "no-duration", deadline, 422, "held_unit_requires_custody_deadline_and_positive_duration"},
@@ -81,7 +86,7 @@ func TestBatchValidatesFundingAuthorityAndCustodyAtIntake(t *testing.T) {
 		}
 	}
 	stats, err := h.Store.Stats(ctx)
-	if err != nil || stats.WaitingOnCustomer.Units != 1 {
-		t.Fatalf("expected one versioned held unit: %+v, %v", stats, err)
+	if err != nil || stats.WaitingOnCustomer.Units != 2 {
+		t.Fatalf("expected one new and one previously stored owner hold: %+v, %v", stats, err)
 	}
 }

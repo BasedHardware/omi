@@ -89,8 +89,7 @@ func (a BatchAccounts) check(ctx context.Context, owner string, hold bool) (queu
 		return queue.EntitlementSnapshot{}, &Fault{Result: Yielded, Cause: CauseAccountDeleting, Delay: holdDelay, HoldTenant: hold}
 	case fault != nil:
 		return queue.EntitlementSnapshot{}, fault
-	case account.EntitlementGeneration < 0 || account.AllowanceExhausted && account.EntitlementGeneration == 0:
-		// The source must supply a fence that a later funded generation can advance.
+	case account.EntitlementGeneration < 0:
 		return queue.EntitlementSnapshot{}, &Fault{Result: Transient, Cause: CauseVendorUnavailable}
 	}
 	return queue.EntitlementSnapshot{ChangedAt: account.EntitlementChangedAt, Generation: account.EntitlementGeneration, Exhausted: account.AllowanceExhausted}, nil

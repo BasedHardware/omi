@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
@@ -36,7 +37,7 @@ func (s *Service) Admit(ctx context.Context, owner string, unit Unit) (queue.Job
 		if admitErr != nil {
 			return fmt.Errorf("admit unit: %w", admitErr)
 		}
-		if fact.Generation != 0 || fact.Exhausted {
+		if fact.Generation != 0 {
 			if observeErr := sc.ObserveEntitlement(ctx, fact); observeErr != nil {
 				return observeErr
 			}
@@ -72,6 +73,11 @@ func (s *Service) Work(ctx context.Context, r *queue.Run) queue.Outcome {
 		}
 		if fundErr := r.AuthorizeTimedFunding(ctx, fact); fundErr != nil {
 			return fundErr
+		}
+		// An unversioned account cannot create a durable owner hold, but its
+		// exhaustion still prevents a platform charge at the speech boundary.
+		if fact.Generation == 0 && fact.Exhausted && !input.BYOK && !input.AlreadyPaid {
+			return queue.Classify(queue.ErrDeferred, queue.Yield(queue.CauseAllowanceExhausted, 5*time.Minute))
 		}
 		req := request(g, job, input)
 		transcribe := s.Speech.Transcribe

@@ -1,7 +1,10 @@
 package queue
 
 import (
+	"errors"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/pgtest"
@@ -33,6 +36,7 @@ func TestEntitlementMigrationFromPopulated003(t *testing.T) {
  SELECT k,'owner','demo',1,k,'{}','2026-01-01',0,k,state,'start','2026-01-01',lane,due::timestamptz,result
  FROM (VALUES
  ('held','waiting',NULL,'2099-01-01',NULL),
+ ('parked','parked',NULL,NULL,'failure'),
  ('ordered','ready','lane','2026-01-01',NULL),
  ('completed','completed',NULL,NULL,'success')) AS seed(k,state,lane,due,result)`)
 	if err != nil {
@@ -56,6 +60,23 @@ func TestEntitlementMigrationFromPopulated003(t *testing.T) {
 	}
 	if err = s.Migrate(ctx); err != nil {
 		t.Fatal(err)
+	}
+	if err = s.pool.QueryRow(ctx, snapshot).Scan(&after); err != nil || after != before {
+		t.Fatalf("upgrade through 005 changed existing queue data: %v", err)
+	}
+	// Exercise the new 004 and 005 CHECKs against rows from 003.
+	for _, change := range []string{
+		`UPDATE queue_jobs SET custody_deadline=now() WHERE job_key='ordered'`,
+		`UPDATE queue_jobs SET outcome='expired_unfunded' WHERE job_key='parked'`,
+		`UPDATE queue_jobs SET timed_generation=1 WHERE job_key='held'`,
+	} {
+		_, updateErr := s.pool.Exec(ctx, change)
+		if db, ok := errors.AsType[*pgconn.PgError](updateErr); !ok || db.Code != "23514" {
+			t.Fatalf("expected check violation for %q, got %v", change, updateErr)
+		}
+	}
+	if _, err = s.pool.Exec(ctx, `UPDATE queue_jobs SET outcome='expired_unfunded' WHERE job_key='completed'`); err != nil {
+		t.Fatalf("004 should allow expired_unfunded on a completed job: %v", err)
 	}
 	if err = s.Ready(ctx); err != nil {
 		t.Fatal(err)

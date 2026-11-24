@@ -27,7 +27,7 @@ func loadConfig() (config, error) {
 		replayListen: os.Getenv("JOBD_REPLAY_LISTEN") == "1",
 		stub:         os.Getenv("STUB_URL"), secret: os.Getenv("ENCRYPTION_SECRET"),
 	}
-	conditionEnabled := false
+	conditionEnabled := true
 	if raw, ok := os.LookupEnv("GO_BATCH_ENTITLEMENT_CONDITION_HOLD"); ok {
 		enabled, err := strconv.ParseBool(raw)
 		if err != nil {
