@@ -757,14 +757,15 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
-  /// Server switch on and no live paid plan: offer "Have a code?" for a prepaid code (no card).
-  /// Never for a Google Play purchaser or before Android knows its billing provider: the Play build
-  /// shows no purchase path outside Play.
+  /// The server offers it (its switch, or any Google Play build) and no live paid plan: "Have a code?"
+  /// redeems a prepaid code with no card. On a Play build it only redeems a code the reader already has,
+  /// and never shows to a paid reader (Play or Stripe) or before Android knows its billing provider.
   bool get canRedeemPrepaidCode {
     final response = subscription;
     if (response == null || !response.prepaidCodeRedeem) return false;
-    if (playBilledPurchaser || billingProviderUnknown) return false;
+    if (billingProviderUnknown) return false;
     final sub = response.subscription;
+    if (buysThroughPlay && sub.plan.isPaid) return false;
     return !(sub.plan.isPaid && sub.status == SubscriptionStatus.active);
   }
 

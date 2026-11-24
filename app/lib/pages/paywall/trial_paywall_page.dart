@@ -246,8 +246,8 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
         ),
       const SizedBox(height: 4),
       // Shopify buyers with an included year land here, not on the plans sheet with
-      // its code field; their code goes in Stripe Checkout's promotion code box (not on Google Play).
-      // Server switch on: redeem a prepaid code right here, no card. Never for a Play-billed reader.
+      // its code field; their code goes in Stripe Checkout's promotion code box.
+      // Server switch on, or a Google Play build: redeem a prepaid code right here, no card.
       if (canRedeemCode)
         PrepaidCodeEntry(
           center: true,

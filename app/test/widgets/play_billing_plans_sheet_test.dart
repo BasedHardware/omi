@@ -123,6 +123,30 @@ class _HarnessState extends State<_Harness> with TickerProviderStateMixin {
       );
 }
 
+class _StorefrontHarness extends StatefulWidget {
+  @override
+  State<_StorefrontHarness> createState() => _StorefrontHarnessState();
+}
+
+class _StorefrontHarnessState extends State<_StorefrontHarness> with TickerProviderStateMixin {
+  late final AnimationController _animation = AnimationController(vsync: this);
+
+  @override
+  void dispose() {
+    _animation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => PlansSheet(
+        waveController: _animation,
+        notesController: _animation,
+        arrowController: _animation,
+        arrowAnimation: _animation,
+        readStorefrontGate: () async => true,
+      );
+}
+
 class _World {
   _World(this.responses, {FakePlayPlatform? platform}) : platform = platform ?? FakePlayPlatform();
 
@@ -1094,21 +1118,196 @@ void main() {
 
   // ---- prepaid code entry (switch on) -----------------------------------------------------------------
 
-  testWidgets('switch on: a Play-billed reader sees no code entry on the plans sheet, trial or outline paywall',
-      (tester) async {
-    final world = await _pump(tester, [_response(prepaidCodeRedeem: true)]);
-    expect(world.usage.playBilledPurchaser, isTrue);
-    expect(world.usage.canRedeemPrepaidCode, isFalse);
-    expect(find.byType(PlayPlansContent), findsOneWidget);
-    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+  // ---- "Have a code?" on a Google Play build (the server offers it to every Play build) ---------------
 
-    await _pump(tester, [_response(prepaidCodeRedeem: true)],
-        child: TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 23)));
+  for (final scale in [1.0, 3.2]) {
+    testWidgets('Play build, free reader: "Have a code?" sits under Subscribe and Restore (text x$scale)',
+        (tester) async {
+      final world = await _pump(tester, [_response(prepaidCodeRedeem: true)], textScale: scale);
+      expect(tester.takeException(), isNull);
+      expect(world.usage.playBilledPurchaser, isTrue);
+      expect(world.usage.canRedeemPrepaidCode, isTrue);
+      expect(find.byType(PlayPlansContent), findsOneWidget);
+      final entry = find.byKey(const ValueKey('prepaid_code_entry'));
+      await tester.scrollUntilVisible(entry, 200, scrollable: find.byType(Scrollable).first);
+      expect(entry, findsOneWidget);
+      expect(find.text('Have a code?'), findsOneWidget);
+      // Same component and text style as the Stripe sheet's entry.
+      final style = tester.widget<Text>(find.text('Have a code?')).style!;
+      expect(style.fontSize, OmiType.subhead.fontSize);
+      expect(style.color, OmiColors.textSecondary);
+      final below = tester.getTopLeft(entry).dy;
+      expect(below, greaterThan(tester.getBottomLeft(find.byKey(const Key('play_subscribe'))).dy));
+      expect(below, greaterThan(tester.getBottomLeft(find.byKey(const Key('play_restore'))).dy));
+      // Nothing else: no promo field, link, price or mention of buying elsewhere.
+      expect(find.byType(TextField), findsNothing);
+      expect(find.textContaining('omi.me'), findsNothing);
+      await writeSurfaceRender(tester, 'play-plans-sheet-code-entry-${scale == 1 ? 'default' : 'xxxl'}');
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('Play build, free reader: the trial paywall shows the code entry (text x$scale)', (tester) async {
+      await _pump(tester, [_response(prepaidCodeRedeem: true)],
+          child: TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 23)), textScale: scale);
+      // The test font overflows the paywall's existing timeline row at the largest scale (not this entry,
+      // and the same on main); drain it, as prepaid_code_sheet_test does.
+      if (scale > 1) tester.takeException();
+      expect(tester.takeException(), isNull);
+      final entry = find.byKey(const ValueKey('prepaid_code_entry'));
+      await tester.scrollUntilVisible(entry, 200, scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
+      if (scale > 1) tester.takeException();
+      expect(entry, findsOneWidget);
+      expect(find.byKey(const Key('trial_paywall_code_hint')), findsNothing); // the Stripe checkout hint stays off
+      await writeSurfaceRender(tester, 'trial-paywall-play-code-entry-${scale == 1 ? 'default' : 'xxxl'}');
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      if (scale > 1) tester.takeException();
+      expect(find.byKey(const ValueKey('prepaid_code_field')), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('Play build: a Play or Stripe subscriber never sees the code entry (text x$scale)', (tester) async {
+      for (final paid in [
+        _response(plan: PlanType.unlimitedV2, provider: 'play', prepaidCodeRedeem: true),
+        _response(plan: PlanType.unlimitedV2, stripeId: 'sub_1', prepaidCodeRedeem: true),
+      ]) {
+        final world = await _pump(tester, [paid], textScale: scale);
+        expect(world.usage.canRedeemPrepaidCode, isFalse);
+        expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+        await _pump(tester, [paid],
+            child: TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 23)), textScale: scale);
+        if (scale > 1) tester.takeException(); // the paywall's existing timeline overflow, as above
+        expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+      }
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  }
+
+  testWidgets('Play build: a paid plan whose status is not active still sees no code entry', (tester) async {
+    final world = await _pump(tester, [
+      UserSubscriptionResponse(
+        subscription: Subscription(
+            plan: PlanType.unlimitedV2, status: SubscriptionStatus.inactive, provider: 'play', currentPeriodEnd: 1),
+        transcriptionSecondsUsed: 0,
+        transcriptionSecondsLimit: 0,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+        playBilling: playConfig,
+        prepaidCodeRedeem: true,
+      )
+    ]);
+    expect(world.usage.canRedeemPrepaidCode, isFalse);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('Play build: the server not offering it shows no entry anywhere', (tester) async {
+    final world = await _pump(tester, [_response()]);
+    expect(world.usage.canRedeemPrepaidCode, isFalse);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+    await _pump(tester, [_response()], child: TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 23)));
     expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
     expect(find.byKey(const Key('trial_paywall_code_hint')), findsNothing);
-
-    await _pump(tester, [_response(prepaidCodeRedeem: true)], child: const OutlinePaywallPage(source: 'test'));
+    await _pump(tester, [_response()], child: const OutlinePaywallPage(source: 'test'));
     expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('Play build: a redeemed code shows the plan end date and no Play purchase, then Play again at term end',
+      (tester) async {
+    final prepaidPlan = _response(
+        plan: PlanType.unlimitedV2,
+        stripeId: 'sub_prepaid',
+        cancelAtPeriodEnd: true,
+        prepaid: true,
+        prepaidCodeRedeem: true);
+    final world = await _pump(tester, [_response(prepaidCodeRedeem: true)]);
+    prepaidCodeRedeemer = (code) async {
+      // The server now holds the prepaid plan.
+      world.responses
+        ..clear()
+        ..add(prepaidPlan);
+      return ApiSuccess(PrepaidCodeRedemption(plan: 'Omi Pro', endsAt: DateTime(2027, 11, 23), months: 12));
+    };
+    addTearDown(() => prepaidCodeRedeemer = redeemPrepaidCode);
+    final entry = find.byKey(const ValueKey('prepaid_code_entry'));
+    await tester.scrollUntilVisible(entry, 200, scrollable: find.byType(Scrollable).first);
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('prepaid_code_field')), 'OMI-TRYBE-ABCD1234');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('prepaid_code_redeem')));
+    await tester.pumpAndSettle();
+    final success = find.byKey(const ValueKey('prepaid_code_success'));
+    expect(success, findsOneWidget);
+    expect(find.descendant(of: success, matching: find.textContaining('Your Omi Pro plan ends')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('prepaid_code_done')));
+    await tester.pump(const Duration(seconds: 5)); // the second read after the webhook
+    await tester.pumpAndSettle();
+    expect(world.usage.canRedeemPrepaidCode, isFalse);
+    expect(find.byKey(const ValueKey('plans_sheet_prepaid_ends')), findsOneWidget);
+    expect(find.textContaining('Your Omi Pro plan ends'), findsOneWidget);
+    expect(find.byType(PlayPlansContent), findsNothing);
+    expect(find.byKey(const Key('play_subscribe')), findsNothing);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+    expect(find.byKey(const ValueKey('plans_sheet_upgrade_button')), findsNothing);
+
+    // The term ended: the plan is Free again and the Play plans come back.
+    world.responses
+      ..clear()
+      ..add(_response(prepaidCodeRedeem: true));
+    await world.usage.fetchSubscription(fresh: true);
+    await tester.pumpAndSettle();
+    expect(find.byType(PlayPlansContent), findsOneWidget);
+    expect(find.byKey(const Key('play_subscribe')), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('Play build: a prepaid plan never gets the Stripe storefront', (tester) async {
+    final world = _World(
+        [_response(plan: PlanType.unlimitedV2, stripeId: 'sub_prepaid', cancelAtPeriodEnd: true, prepaid: true)]);
+    addTearDown(world.billing.dispose);
+    addTearDown(world.usage.dispose);
+    await world.usage.fetchSubscription();
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+      value: world.usage,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: Scaffold(body: _StorefrontHarness()),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('plans_sheet_prepaid_ends')), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  for (final refusal in [
+    ('has_plan', 'You already have a plan. Your code was not used. Redeem it after your plan ends.'),
+    ('code_used', 'This code has already been used.'),
+    ('try_again', 'Something went wrong. Please try again.'),
+  ]) {
+    testWidgets('Play build: a refused code reads "${refusal.$2}"', (tester) async {
+      await _pump(tester, [_response(prepaidCodeRedeem: true)]);
+      prepaidCodeRedeemer = (code) async => ApiFailure(
+          ApiProblem(ApiProblemKind.rejected, statusCode: refusal.$1 == 'try_again' ? 503 : 409, detail: refusal.$1));
+      addTearDown(() => prepaidCodeRedeemer = redeemPrepaidCode);
+      final entry = find.byKey(const ValueKey('prepaid_code_entry'));
+      await tester.scrollUntilVisible(entry, 200, scrollable: find.byType(Scrollable).first);
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('prepaid_code_field')), 'OMI-1');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('prepaid_code_redeem')));
+      await tester.pumpAndSettle();
+      expect(find.text(refusal.$2), findsOneWidget);
+      expect(find.byKey(const ValueKey('prepaid_code_success')), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  }
+
+  testWidgets('off a Play build nothing changes: the Stripe sheet keeps its own entry', (tester) async {
+    final world = await _pump(tester, [_response(play: null, prepaidCodeRedeem: true)]);
+    expect(find.byType(PlayPlansContent), findsNothing);
+    expect(world.usage.canRedeemPrepaidCode, isTrue);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsOneWidget);
+    // Server not offering it off Play: no entry.
+    final off = await _pump(tester, [_response(play: null)]);
+    expect(off.usage.canRedeemPrepaidCode, isFalse);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('switch on: Android before the billing provider is known shows no code entry', (tester) async {
