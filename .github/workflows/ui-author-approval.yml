@@ -36,6 +36,9 @@ jobs:
     concurrency:
       group: ui-author-approval-${{ needs.resolve.outputs.sha }}
       cancel-in-progress: false
+      # A newer event can otherwise evict a pending evaluation of the same
+      # head and leave its PR check cancelled before the guard runs.
+      queue: max
     if: github.event_name == 'pull_request_target' || github.event.issue.pull_request
     runs-on: ubuntu-latest
     timeout-minutes: 5
