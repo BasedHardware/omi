@@ -165,7 +165,7 @@ async def execute_chat_completion(
     ):
         available_ms = min(budget_ms, background_flex_budget_ms, BACKGROUND_FLEX_MAX_BUDGET_MS)
         reserve_ms = BACKGROUND_FLEX_STANDARD_RESERVE_MS.get(serving_route.lane_id, 45_000)
-        if available_ms - reserve_ms >= BACKGROUND_FLEX_MIN_ATTEMPT_MS:
+        if available_ms >= reserve_ms:
             budget_ms = available_ms
             flex_deadline = monotonic() + (budget_ms - reserve_ms) / 1000.0
     deadline_monotonic = monotonic() + budget_ms / 1000.0
@@ -573,7 +573,7 @@ OUTLINE_FLEX_SWITCH = 'LLM_GATEWAY_BACKGROUND_OUTLINE_FLEX'
 
 
 def _enabled(name: str) -> bool:
-    return os.getenv(name, 'true').strip().lower() not in {'', 'off', 'none', 'false', '0', 'no'}
+    return os.getenv(name, 'true').strip().lower() not in {'off', 'false', '0', 'no'}
 
 
 def _background_flex_applies(resolved, route, credentials, max_attempts):

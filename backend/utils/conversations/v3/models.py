@@ -148,14 +148,20 @@ async def background_outline(uid, messages, *, budget_ms):
             feature_auto_lane_id(feature), options={'request_timeout': 115, 'max_retries': 0}, feature=feature
         )
         messages, options = _outline_cache_request(messages)
-        async with asyncio.timeout(budget_ms / 1000 + 3):
-            response = await model.ainvoke(
-                messages,
-                reasoning_effort='none',
-                response_format={'type': 'json_object'},
-                extra_headers={background_flex.BUDGET_HEADER: str(budget_ms)},
-                **options,
-            )
+        deadline = asyncio.timeout(budget_ms / 1000 + 3)
+        try:
+            async with deadline:
+                response = await model.ainvoke(
+                    messages,
+                    reasoning_effort='none',
+                    response_format={'type': 'json_object'},
+                    extra_headers={background_flex.BUDGET_HEADER: str(budget_ms)},
+                    **options,
+                )
+        except TimeoutError:
+            if not deadline.expired():
+                raise
+            return ''
         if not isinstance(response.content, str) or response.response_metadata.get('finish_reason') != 'stop':
             return ''
         return response.content

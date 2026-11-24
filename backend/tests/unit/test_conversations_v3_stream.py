@@ -1055,3 +1055,43 @@ async def test_background_outline_sends_same_lane_and_explicit_cache_prefix(monk
         monkeypatch.setattr(models, 'get_or_create_omi_gateway_llm', lambda *a, **kw: model)
         messages = [('system', outline.OUTLINE_CACHE_PREFIX), ('human', 'Synthetic speech')]
         assert await models.background_outline('u', messages, budget_ms=83_000) == '{}'
+
+
+def test_outline_only_budgets_finished_automatic_stretches_with_publication_headroom():
+    from time import monotonic
+
+    now = datetime.now(timezone.utc)
+    group = {'finished': True, 'manual_end': False, 'end': now - timedelta(minutes=5)}
+    budget_deadline = monotonic() + 100
+    assert 99_000 < service._outline_flex_budget(group, budget_deadline) <= 100_000
+    assert service._outline_flex_budget(group, None) == 0
+    assert service._outline_flex_budget({**group, 'finished': False}, budget_deadline) == 0
+    assert service._outline_flex_budget({**group, 'manual_end': True}, budget_deadline) == 0
+    assert service._outline_flex_budget({**group, 'end': now - timedelta(hours=2)}, budget_deadline) < 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('foreground', [False, True])
+async def test_summary_model_marks_only_the_background_attempt_preemptible(monkeypatch, foreground):
+    from utils import executors
+    from utils.conversations.v3 import models
+    from utils.llm import background_flex
+
+    marks = []
+
+    async def blocking(_pool, fn, *args):
+        return fn(*args)
+
+    monkeypatch.setattr(executors, 'run_blocking', blocking)
+    monkeypatch.setattr(leases, 'mark_llm_preemptible', lambda *_args: marks.append(_args))
+    now = datetime.now(timezone.utc)
+    with models.notes_mode('u', foreground=foreground, background_lease=('c', 'token', now)):
+        async with models.summary_model_attempt():
+            if foreground:
+                assert marks == []
+                assert background_flex.budget_ms('conversation_v3_summary') == 0
+            else:
+                assert marks == [('u', 'summary-c', 'token', True)]
+                assert background_flex.budget_ms('conversation_v3_summary') > 54_000
+    assert marks == ([] if foreground else [('u', 'summary-c', 'token', True), ('u', 'summary-c', 'token', False)])
+    assert background_flex.budget_ms('conversation_v3_summary') == 0

@@ -1337,8 +1337,8 @@ async def test_background_flex_preserves_standard_after_timeout_or_long_retry_af
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('budget', [0, 45_000])
-async def test_scoped_memory_flex_needs_background_intent_and_standard_reserve(monkeypatch, budget):
+@pytest.mark.parametrize('budget,standard_ms', [(0, 120_000), (45_000, 45_000), (50, 120_000)])
+async def test_scoped_flex_needs_background_intent_and_standard_reserve(monkeypatch, budget, standard_ms):
     lane = 'omi:auto:conv-structure'
     resolved = resolve_chat_completion_route(
         gateway_config(), {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
@@ -1349,3 +1349,18 @@ async def test_scoped_memory_flex_needs_background_intent_and_standard_reserve(m
         resolved, omi_credentials(), ProviderRegistry({'openai': provider}), background_flex_budget_ms=budget
     )
     assert [call.request.get('service_tier') for call in provider.calls] == [None]
+    assert provider.calls[0].timeout_ms == pytest.approx(standard_ms, abs=1)
+
+
+@pytest.mark.asyncio
+async def test_background_flex_gateway_switch_restores_legacy_for_zero_budget(monkeypatch):
+    monkeypatch.setenv(executor.BACKGROUND_FLEX_SWITCH, 'off')
+    resolved = resolve_chat_completion_route(
+        gateway_config(),
+        {'model': 'omi:auto:conv-structure', 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]},
+    )
+    provider = FakeChatCompletionProvider([fake_success_response(resolved.active_route.primary)])
+    await execute_chat_completion(
+        resolved, omi_credentials(), ProviderRegistry({'openai': provider}), background_flex_budget_ms=0
+    )
+    assert provider.calls[0].request['service_tier'] == 'flex'

@@ -1,12 +1,14 @@
 # Conversation Flex and outline cache replay
 
-SCA-4247 uses the existing Luna lanes. The finalization worker opts in for
-CAPTURE_END structure and L1 fanout using the recording close time; each phase
-has at most 57 seconds of gateway time. Standard reserves are 40 seconds for
-structure, 24 for L1, and 42 for V3 summary. Summary opts in only during the
-existing background model call. Interactive and catch-up callers pass no
-background budget; tool turns, streaming requests, BYOK, and caller-selected
-tiers do not qualify. The shared gateway retries one Flex 429 if the provider
+SCA-4247 uses the existing Luna lanes.
+Cloud Tasks CAPTURE_END structure and L1 fanout opt in using the recording
+close time. An admitted phase has at most 57 seconds of gateway time, with
+Standard reserves of 40 seconds for structure, 24 for L1, and 42 for V3 summary.
+A phase with less than its full Standard reserve uses its existing realtime
+deadline. Summary opts in only during the existing background model call.
+Interactive, catch-up, and pusher socket finalization use Standard with their
+existing transport deadlines. Tool turns, streaming requests, BYOK, and
+caller-selected tiers are excluded. The shared gateway retries one Flex 429 if the provider
 delay and another useful attempt fit. Timeouts go directly to Standard because
 the first provider attempt may have charged.
 
@@ -46,7 +48,7 @@ with no prompt or response text. Provide:
   first line), `title_ok`, and `foreground_ms` in foreground cases.
 - Attach provider `usage.prompt_tokens` and
   `usage.prompt_tokens_details.{cached_tokens,cache_write_tokens}` for each arm.
-  Sum usage across attempts when measuring cost, including Fallback and retries.
+  Sum usage across attempts when measuring cost, including fallback and retries.
   Record a zero only when the corresponding usage field is known to be zero.
 
 Run `python backend/scripts/evaluate-conversation-flex.py <lane> <receipts.jsonl>`.
