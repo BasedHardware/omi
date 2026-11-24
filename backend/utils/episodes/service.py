@@ -449,7 +449,7 @@ def _close(
         expected_conversation_ids=episode.get('conversation_ids') if split_after is not None else None,
         split_after=split_after,
         firestore_client=c.firestore_client,
-        finalizing_conversation_id=c.finalizing_conversation_id,
+        finalizing_conversation_id=c.finalizing_conversation_id or None,
         retained_member_window=retained_member_window,
         synced_f=synced_f,
     )
