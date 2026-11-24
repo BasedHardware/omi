@@ -149,7 +149,7 @@ func replayCause(reason *queue.Cause) queue.Cause {
 		}
 	}
 	switch *reason {
-	case queue.CauseNone, queue.CauseLeaseExpired, queue.CauseHandlerPanic, queue.CauseReconcileExhausted, queue.CauseUnknown:
+	case queue.CauseAllowanceExhausted, queue.CauseNone, queue.CauseLeaseExpired, queue.CauseHandlerPanic, queue.CauseReconcileExhausted, queue.CauseUnknown:
 		return *reason
 	default:
 		return queue.CauseUnknown
