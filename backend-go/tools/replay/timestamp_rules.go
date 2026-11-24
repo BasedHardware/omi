@@ -9,7 +9,7 @@ import (
 )
 
 const postFinishWriteGrace = 5 * time.Second
-const memoryItemTTL = 30 * 24 * time.Hour
+const memoryItemTTL = 48 * time.Hour
 
 type timestampKind int
 
@@ -194,7 +194,7 @@ func approvedTimestampDifference(path string, python, goRun *observation) string
 		pyDoc, pyOK := python.Derived[docPath].(map[string]any)
 		goDoc, goOK := goRun.Derived[docPath].(map[string]any)
 		if pyOK && goOK && validMemoryItemExpiry(pyDoc) && validMemoryItemExpiry(goDoc) {
-			return "both memory expiries follow their write and match the 30-day TTL within five seconds"
+			return "replay_clock"
 		}
 		return ""
 	}
@@ -289,8 +289,7 @@ func validMemoryItemExpiry(doc map[string]any) bool {
 	if err != nil || !expiresAt.After(updatedAt) {
 		return false
 	}
-	delta := expiresAt.Sub(createdAt.Add(memoryItemTTL))
-	return delta >= -postFinishWriteGrace && delta <= postFinishWriteGrace
+	return expiresAt.Equal(createdAt.Add(memoryItemTTL))
 }
 
 func memoryItemExpiryFailureReason(doc map[string]any) string {
@@ -312,7 +311,7 @@ func memoryItemExpiryFailureReason(doc map[string]any) string {
 	if expiresErr != nil || updatedErr != nil || !expiresAt.After(updatedAt) {
 		return "expiry_not_after_write"
 	}
-	return "outside_30_day_ttl_grace"
+	return "outside_48_hour_ttl"
 }
 
 func validateNestedTimestampFields(diffs *[]difference, side string, run *observation, docPath string, root, current map[string]any, prefix string) {

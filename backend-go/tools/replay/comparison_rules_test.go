@@ -57,6 +57,15 @@ func hasReason(diffs []difference, fragment string) bool {
 	return false
 }
 
+func hasExactPathReason(diffs []difference, pathFragment, reason string) bool {
+	for _, diff := range diffs {
+		if strings.Contains(diff.Path, pathFragment) && diff.Reason == reason {
+			return true
+		}
+	}
+	return false
+}
+
 func TestApprovedTimestampRulesRequireSideLocalTypeAndWindow(t *testing.T) {
 	tests := []struct {
 		name, path, field string

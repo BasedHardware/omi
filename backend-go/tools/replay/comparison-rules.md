@@ -59,7 +59,7 @@ five-second grace; TTLs are checked against their write anchor instead of the re
 | `memory_state/apply_control.updated_at` | Firestore timestamp; own replay window. |
 | `memory_state/head.updated_at`, `memory_outbox/{id}.available_at`, `memory_commits/{id}.updated_at`, `memory_operations/{id}.created_at` and `.updated_at` | Firestore timestamp; own replay window. |
 | `memory_items/{id}.captured_at`, `.updated_at`, `.valid_from` | Firestore timestamp; own replay window. |
-| `memory_items/{id}.expires_at` | TTL timestamp after the item's write and within five seconds of `captured_at + 30 days`; it is not constrained to the replay window. |
+| `memory_items/{id}.expires_at` | Exact 48-hour source TTL from that side's own `captured_at`, with zero tolerance, and after the item's write. When both sides satisfy their own TTL, differences in absolute expiry timestamps receive `by_design:replay_clock`. |
 | `memory_source_replacements/{id}.committed_at`, `.control_state.updated_at` | Firestore timestamp; own replay window. |
 | `episode_links/{id}.updated_at` | Firestore timestamp; up to 5 seconds after finish for the scheduled link write. |
 | `episode_segment_receipts/{id}.updated_at`, `conversations/{id}/analytics_markers/{marker}.created_at` | Firestore timestamp; own replay window. |
