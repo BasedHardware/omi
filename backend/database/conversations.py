@@ -385,6 +385,7 @@ def _prepare_conversation_for_write(
     conversation_id: Optional[str] = None,
     conversation_state: Optional[Mapping[str, Any]] = None,
     allow_offload: bool = True,
+    home_list_context: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
     data.pop(home_visibility_index.FIELD, None)
@@ -440,9 +441,14 @@ def _prepare_conversation_for_write(
 
         # Private rows are inline. Avoid duplicating content that can be
         # independently removed or crypto-shredded in the transcript lake.
+        home_row = data if home_list_context is None else home_list_context
         compact = (
-            list_transcript.stamp(uid, data['transcript_segments'], preview_needed=list_transcript.shows_preview(data))
-            if data.get('visibility') == 'private' and data.get('status') == 'completed' and not data.get('is_locked')
+            list_transcript.stamp(
+                uid, data['transcript_segments'], preview_needed=list_transcript.shows_preview(home_row)
+            )
+            if home_row.get('visibility') == 'private'
+            and home_row.get('status') == 'completed'
+            and not home_row.get('is_locked')
             else None
         )
         data['transcript_segments'] = transcript_pointer.offload_or_inline(
@@ -912,6 +918,10 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
         write_data['data_protection_level'] = level
     if 'transcript_segments' not in write_data:
         return
+    # Any replacement must either certify the final segments or clear the
+    # previous receipt. The commit hook binds only receipts in this write.
+    write_data.pop(list_transcript.FIELD, None)
+    write_data.pop(list_transcript.SOURCE_VERSION, None)
     if existing.get('has_transcript_corrections'):
         # A reprocessor owns generated output, not captured speech or its legacy
         # anchors. Keep the exact committed blob and encoding across snapshots.
@@ -950,7 +960,14 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
         payload[owner_diagnostics.FIELD] = write_data.pop(owner_diagnostics.FIELD)
         _merge_owner_diagnostics(payload, existing)
     write_data.update(
-        _prepare_conversation_for_write(payload, uid, level, conversation_id=write_data.get('id'), allow_offload=False)
+        _prepare_conversation_for_write(
+            payload,
+            uid,
+            level,
+            conversation_id=write_data.get('id'),
+            allow_offload=False,
+            home_list_context=write_data,
+        )
     )
     write_data['data_protection_level'] = level
 
@@ -2658,6 +2675,17 @@ def get_conversations_without_photos(
     if hydrate_fields is None:
         return collect(conversations_ref, None)
 
+    def full_page_fallback(reason: str):
+        record_fallback(
+            component='firestore_read',
+            from_mode='projected',
+            to_mode='full',
+            reason=reason,
+            outcome='degraded',
+            log=logger,
+        )
+        return collect(conversations_ref, None)
+
     rows = collect(conversations_ref.select(hydrate_fields), hydrate_fields)
     compact = [None if is_completed_rule_discard(row) else list_transcript.evidence(uid, row) for row in rows]
     missing = [row for row, value in zip(rows, compact) if value is None]
@@ -2665,13 +2693,13 @@ def get_conversations_without_photos(
         # Older and unsupported rows use the legacy reader. For a mixed page,
         # fetch only those documents and require the revision we paged over.
         if len(missing) == len(rows):
-            return collect(conversations_ref, None)
+            return full_page_fallback('input_missing')
         try:
             snapshots = budgeted_get_all(
                 db, [collection.document(row['_home_list_snapshot_id']) for row in missing], budget
             )
-        except ListReadBudgetExhausted:
-            return collect(conversations_ref, None)
+        except ListReadBudgetExhausted as exc:
+            return full_page_fallback('timeout' if exc.reason == 'deadline' else 'capacity_full')
         full_rows = {doc.id: document_data_with_revision(doc) for doc in snapshots}
         visible = _visibility(
             include_discarded=include_discarded,
@@ -2683,13 +2711,12 @@ def get_conversations_without_photos(
         )
         for row in missing:
             full = full_rows.get(row['_home_list_snapshot_id'])
-            if (
-                not full
-                or not row.get('updated_at')
-                or full.get('updated_at') != row['updated_at']
-                or not visible(full)
-            ):
-                return collect(conversations_ref, None)
+            if not full or not row.get('updated_at'):
+                return full_page_fallback('input_missing')
+            if full.get('updated_at') != row['updated_at']:
+                return full_page_fallback('revision_changed')
+            if not visible(full):
+                return full_page_fallback('policy')
             row.clear()
             row.update(full)
     for row, value in zip(rows, compact):

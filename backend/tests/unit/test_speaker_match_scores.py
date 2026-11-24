@@ -548,6 +548,44 @@ def test_malformed_score_mutation_does_not_abort_model_serialization():
     assert scores.FIELD not in conv.model_dump(mode='json')
 
 
+@pytest.mark.parametrize('has_corrections', [False, True])
+def test_processing_rebinds_home_transcript_evidence_to_current_speaker_receipt(has_corrections):
+    import database.conversations as db
+    from utils.home_feed import list_transcript
+    from utils.home_feed.projection import reveal_display
+
+    update = db.encode_conversation_for_write(
+        'u',
+        {
+            'visibility': 'private',
+            'status': 'completed',
+            'processing_deferred': True,
+            'transcript_segments': [
+                {'id': 's', 'text': 'Owner spoke.', 'speaker_id': 4, 'start': 0, 'end': 4, 'is_user': False}
+            ],
+        },
+        'standard',
+    )
+    before = reveal_display('u', update[list_transcript.FIELD])
+    assert before is not None and before['has_owner_speech'] is False
+    current = {
+        **update,
+        'has_transcript_corrections': has_corrections,
+        'manual_speaker_assignments': {'speakers': {'4': {'is_user': True, 'generation': 1}}},
+    }
+
+    db._reapply_current_manual_assignments('u', update, current)
+
+    if has_corrections:
+        assert list_transcript.FIELD not in update
+        assert update['transcript_segments'] == current['transcript_segments']
+    else:
+        after = reveal_display('u', update[list_transcript.FIELD])
+        assert after == {**before, 'has_owner_speech': True}
+        stored = db.prepare_conversation_for_read(update, 'u')
+        assert stored['transcript_segments'][0]['is_user'] is True
+
+
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
 def test_processing_scores_keep_concurrent_rows_and_replace_resolution(level):
     import database.conversations as db

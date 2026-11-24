@@ -530,7 +530,20 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
     assert "structured.action_items" not in transcript_fields
 
 
-def test_home_list_evidence_only_replaces_transcripts_for_compatible_pages(conversations_db, monkeypatch):
+@pytest.mark.parametrize(
+    'failure,reason',
+    [
+        (None, None),
+        ('deadline', 'timeout'),
+        ('documents', 'capacity_full'),
+        ('missing', 'input_missing'),
+        ('revision', 'revision_changed'),
+        ('hidden', 'policy'),
+    ],
+)
+def test_home_list_evidence_only_replaces_transcripts_for_compatible_pages(
+    conversations_db, monkeypatch, failure, reason
+):
     from utils.home_feed import list_transcript
 
     module, _pages_module, firestore = conversations_db
@@ -611,8 +624,40 @@ def test_home_list_evidence_only_replaces_transcripts_for_compatible_pages(conve
     assert slim[1]['home_list_transcript_evidence']['preview_prefix'] == 'Owner spoke here.'
     assert not firestore.bulk_reads
 
+    fallback = MagicMock()
+    monkeypatch.setattr(module, 'record_fallback', fallback)
+
+    if failure is not None:
+
+        def hydrate(*args, **kwargs):
+            if failure in {'deadline', 'documents'}:
+                raise list_budget_real.ListReadBudgetExhausted(failure)
+            if failure == 'missing':
+                return []
+            older = dict(firestore.rows[-1])
+            if failure == 'revision':
+                older['updated_at'] = at + timedelta(seconds=1)
+            if failure == 'hidden':
+                older['deleted'] = True
+            return [_Snapshot(older)]
+
+        monkeypatch.setattr(module, 'budgeted_get_all', hydrate)
+
     second = module.get_conversations_without_photos(list_fields_only=True, offset=2, cursor_page=page, **request)
     assert [r['id'] for r in second] == ['deferred', 'older']
+    assert page['storage_rows'] == 2
+    if reason is not None:
+        assert all(r['transcript_segments'] == segments for r in second)
+        fallback.assert_called_once_with(
+            component='firestore_read',
+            from_mode='projected',
+            to_mode='full',
+            reason=reason,
+            outcome='degraded',
+            log=module.logger,
+        )
+        return
+    fallback.assert_not_called()
     assert second[0]['home_list_transcript_evidence']['preview_prefix'] == 'Owner spoke here.'
     assert 'transcript_segments' not in second[0]
     assert 'home_list_transcript_evidence' not in second[1]
