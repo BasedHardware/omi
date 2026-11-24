@@ -140,6 +140,15 @@ void main() {
     expect(requests.last.queryParameters['cursor'], 'k2', reason: 'paging continues where it was');
   });
 
+  test('with a filter active the recent-rows refresh falls back to the full read', () async {
+    final requests = <Uri>[];
+    final provider = providerFor(threePages, requests);
+    provider.showStarredOnly = true;
+    await provider.refreshRecentConversations(newest.subtract(const Duration(minutes: 10)));
+    expect(requests.single.queryParameters.containsKey('start_date'), isFalse);
+    expect(requests.single.queryParameters['starred'], 'true');
+  });
+
   test('a bounded refresh on a fresh provider does not become the paging position', () async {
     final requests = <Uri>[];
     final provider = providerFor((uri) async {

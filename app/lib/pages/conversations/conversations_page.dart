@@ -356,8 +356,15 @@ class _ConversationsPageState extends State<ConversationsPage>
       !p.hasActiveHomeFilter &&
       !p.showShortConversations &&
       !p.showDiscardedConversations;
-  void _prefetchCards() {
+
+  /// Follow-up pages asked for without a new scroll since the reader last moved; see
+  /// [_requestMoreIfNeeded].
+  int _autoLoadMorePages = 0;
+  static const _maxAutoLoadMorePages = 4;
+
+  void _prefetchCards({bool fromScroll = true}) {
     if (!_scrollController.hasClients) return;
+    if (fromScroll) _autoLoadMorePages = 0;
     final source = context.read<ConversationProvider>();
     _feed?.continuePreparation();
     if (!_usesCards(source)) {
@@ -488,7 +495,8 @@ class _ConversationsPageState extends State<ConversationsPage>
     _v3LiveId = liveId;
     _v3LiveCreatedAt = liveCreatedAt;
     if (previousLive != null && previousLive != liveId && v3.finishRow == null) {
-      // The closed conversation was created when it opened, possibly hours ago: start there.
+      // The closed conversation was created when it opened, possibly hours ago: start there
+      // (at most a day back; a longer one is picked up by the next full read).
       unawaited(_refreshRecentV3Rows(touched: [if (previousLiveCreatedAt != null) previousLiveCreatedAt]));
     }
   }
@@ -776,10 +784,12 @@ class _ConversationsPageState extends State<ConversationsPage>
             _lastLoadMoreRequestKey = null;
           }
           // A page can come back short (hidden rows) or add nothing new. With the reader still
-          // near the end, ask for the next one now instead of waiting for another scroll.
-          if (mounted && succeeded) {
+          // near the end, ask for the next one now instead of waiting for another scroll. Bounded:
+          // each page through a hidden run costs hundreds of reads, so one scroll buys a few pages.
+          if (mounted && succeeded && _autoLoadMorePages < _maxAutoLoadMorePages) {
+            _autoLoadMorePages++;
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _prefetchCards();
+              if (mounted) _prefetchCards(fromScroll: false);
             });
           }
         }),

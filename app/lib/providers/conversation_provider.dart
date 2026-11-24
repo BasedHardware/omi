@@ -228,9 +228,10 @@ class ConversationProvider extends ChangeNotifier {
   bool _conversationPagedDeeper = false;
 
   /// The older-page request in flight, if any. A newest-page read under the same filters waits for
-  /// it (briefly) instead of superseding it, so a refresh never throws a loaded page away.
+  /// it to settle instead of superseding it, so a refresh never throws a loaded page away. The wait
+  /// outlasts the server's 30 s request cutoff, so it only ends early on a request that never returns.
   Future<void>? _loadMoreFlight;
-  static const Duration _loadMoreSettleWait = Duration(seconds: 8);
+  static const Duration _loadMoreSettleWait = Duration(seconds: 35);
 
   String _homePagingKey() =>
       '$showDiscardedConversations|$selectedFolderId|$showStarredOnly|$selectedStartDate|$selectedEndDate';
