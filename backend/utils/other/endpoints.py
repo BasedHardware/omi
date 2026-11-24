@@ -41,9 +41,9 @@ from utils.other.raise_site import tag_raise_site
 from utils.other.request_deadline import (
     RequestDeadlineExceeded,
     await_within_request_deadline,
-    call_within_request_deadline,
     request_deadline_exceeded,
 )
+from utils.other.request_deadline_workers import call_within_request_deadline
 from database.fsr_read_cache import request_read_scope
 
 logger = logging.getLogger(__name__)

@@ -94,8 +94,8 @@ from utils.other.request_deadline import (
     RequestDeadlineExceeded,
     from_segments_request_deadline,
     request_deadline_absolute,
-    wait_for_from_segments_processing,
 )
+from utils.other.request_deadline_workers import call_within_request_deadline, wait_for_from_segments_processing
 from utils.llm.gateway_error_contract import retryable_processing_response
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.observability.external_lists import (
@@ -135,7 +135,7 @@ from utils.conversations.meeting_receipt import (
     projected_meeting_treatment_eligible,
     record_finalized_meeting_receipt,
 )
-from utils.executors import ExecutorSaturatedError, postprocess_executor
+from utils.executors import ExecutorSaturatedError, db_executor, postprocess_executor
 from utils.external_read_contract import ignore_unknown_query, pagination_headers, utc_window
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
@@ -2127,13 +2127,81 @@ def _ingest_conversation_from_segments(
         'bounded_processing': bounded_processing,
     }
     if not bounded_processing:
+        replay = _replay_from_segments(uid, request, bounded_processing=False)
+        if replay is not None:
+            return replay
         return _process_validated_segments(*args, **kwargs)
     try:
+        # A retry can resolve a persisted result even when all processing slots
+        # are busy. Only a lookup miss can reach processing admission.
+        replay = call_within_request_deadline(
+            _replay_from_segments, uid, request, bounded_processing=True, executor=db_executor
+        )
+        if replay is not None:
+            return replay
         return wait_for_from_segments_processing(_process_validated_segments, *args, **kwargs)
     except RequestDeadlineExceeded as error:
         raise retryable_processing_response('request_budget_exhausted') from error
     except ExecutorSaturatedError as error:
         raise retryable_processing_response('from_segments_processing_capacity') from error
+
+
+def _replay_from_segments(
+    uid: str,
+    request: CreateConversationFromTranscriptRequest,
+    *,
+    bounded_processing: bool,
+) -> Optional[ConversationResponse]:
+    session_id = request.client_session_id
+    if not session_id:
+        return None
+    conversation_id = _from_segments_conversation_id(uid, session_id)
+    # One point read suppresses retries even when a prior delete failed during cleanup.
+    # Residual race: a create already past this read can overlap a delete commit;
+    # this guard deliberately does not transact across the two collections.
+    # A live conversation deleted elsewhere is tombstoned under its raw
+    # client session id (the ws doc id), not this derived uuid5 — check both.
+    if conversation_tombstones.is_deleted(uid, conversation_id) or conversation_tombstones.is_deleted(uid, session_id):
+        logger.info(
+            "from_segments_tombstoned_reject uid=%s client_session_id=%s conversation_id=%s",
+            uid,
+            sanitize(session_id),
+            conversation_id,
+        )
+        return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
+    existing_conversation = read_product_conversation(
+        conversations_db.get_conversation,
+        uid,
+        conversation_id,
+        read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY,
+    )
+    if existing_conversation:
+        if _is_stale_from_segments_claim(existing_conversation, session_id, datetime.now(timezone.utc)):
+            logger.warning(
+                "from-segments idempotency stale claim for uid=%s client_session_id=%s conversation_id=%s; retrying",
+                uid,
+                session_id,
+                conversation_id,
+            )
+            conversations_db.delete_conversation(uid, conversation_id)
+        else:
+            logger.info(
+                "from-segments idempotency hit for uid=%s client_session_id=%s conversation_id=%s",
+                uid,
+                session_id,
+                conversation_id,
+            )
+            if bounded_processing and existing_conversation.get('status') == ConversationStatus.processing:
+                raise retryable_processing_response('from_segments_processing_in_flight')
+            existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
+            existing_conversation = _apply_late_from_segments_context(uid, existing_conversation, request)
+            receipt = record_finalized_meeting_receipt(uid, existing_conversation)
+            if receipt is not None:
+                existing_conversation['meeting_treatment_eligible'] = bool(
+                    receipt.get('meeting_treatment_eligible')
+                )
+            return _conversation_response_from_data(existing_conversation)
+    return None
 
 
 def _process_validated_segments(
@@ -2159,58 +2227,9 @@ def _process_validated_segments(
     # the transcript path (CreateConversation has no text_source field).
     source = request.source or ConversationSource.phone
 
-    conversation_id = None
-    if request.client_session_id:
-        conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
-        # One point read suppresses retries even when a prior delete failed during cleanup.
-        # Residual race: a create already past this read can overlap a delete commit;
-        # this guard deliberately does not transact across the two collections.
-        # A live conversation deleted elsewhere is tombstoned under its raw
-        # client session id (the ws doc id), not this derived uuid5 — check both.
-        if conversation_tombstones.is_deleted(uid, conversation_id) or conversation_tombstones.is_deleted(
-            uid, request.client_session_id
-        ):
-            logger.info(
-                "from_segments_tombstoned_reject uid=%s client_session_id=%s conversation_id=%s",
-                uid,
-                sanitize(request.client_session_id),
-                conversation_id,
-            )
-            return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
-        existing_conversation = read_product_conversation(
-            conversations_db.get_conversation,
-            uid,
-            conversation_id,
-            read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY,
-        )
-        if existing_conversation:
-            if _is_stale_from_segments_claim(
-                existing_conversation, request.client_session_id, datetime.now(timezone.utc)
-            ):
-                logger.warning(
-                    "from-segments idempotency stale claim for uid=%s client_session_id=%s conversation_id=%s; retrying",
-                    uid,
-                    request.client_session_id,
-                    conversation_id,
-                )
-                conversations_db.delete_conversation(uid, conversation_id)
-            else:
-                logger.info(
-                    "from-segments idempotency hit for uid=%s client_session_id=%s conversation_id=%s",
-                    uid,
-                    request.client_session_id,
-                    conversation_id,
-                )
-                if bounded_processing and existing_conversation.get('status') == ConversationStatus.processing:
-                    raise retryable_processing_response('from_segments_processing_in_flight')
-                existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
-                existing_conversation = _apply_late_from_segments_context(uid, existing_conversation, request)
-                receipt = record_finalized_meeting_receipt(uid, existing_conversation)
-                if receipt is not None:
-                    existing_conversation['meeting_treatment_eligible'] = bool(
-                        receipt.get('meeting_treatment_eligible')
-                    )
-                return _conversation_response_from_data(existing_conversation)
+    conversation_id = (
+        _from_segments_conversation_id(uid, request.client_session_id) if request.client_session_id else None
+    )
 
     resolved_client_device_id = client_device_id or request.client_device_id
     resolved_client_platform = client_platform or request.client_platform

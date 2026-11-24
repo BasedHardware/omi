@@ -11,6 +11,8 @@ import database.conversations as conversations_db
 from database.firestore_read_metrics import FirestoreReadSite
 import routers.developer as developer
 import utils.conversations.meeting_receipt as meeting_receipt
+from utils.executors import ExecutorSaturatedError
+from utils.other import request_deadline_workers
 from utils.other.raise_site import raise_site_of
 from utils.other.request_deadline import request_deadline_absolute, reset_request_deadline, set_request_deadline
 from models.conversation import Conversation, CreateConversation
@@ -637,7 +639,7 @@ def test_client_session_id_stale_claim_is_deleted_and_reprocessed(monkeypatch):
     process.assert_called_once()
 
 
-def test_budget_cut_keeps_claim_and_retry_reads_completed_result(monkeypatch):
+def test_budget_cut_keeps_claim_and_retries_bypass_full_processing_pool(monkeypatch):
     row = {}
     processing_started = Event()
     finish_processing = Event()
@@ -667,10 +669,10 @@ def test_budget_cut_keeps_claim_and_retry_reads_completed_result(monkeypatch):
     monkeypatch.setattr(developer, 'process_conversation', processor)
     request = _request(client_session_id='local-session-1')
 
-    def submit(budget):
+    def submit(budget, upload=request):
         token = set_request_deadline(budget)
         try:
-            return developer._create_conversation_from_segments('uid1', request)
+            return developer._create_conversation_from_segments('uid1', upload)
         finally:
             reset_request_deadline(token)
 
@@ -682,6 +684,9 @@ def test_budget_cut_keeps_claim_and_retry_reads_completed_result(monkeypatch):
         assert processing_started.is_set()
         assert row['status'] == ConversationStatus.processing
 
+        full_pool = MagicMock()
+        full_pool.submit.side_effect = ExecutorSaturatedError('processing pool full')
+        monkeypatch.setattr(request_deadline_workers, 'from_segments_executor', full_pool)
         with pytest.raises(HTTPException) as active:
             submit(5)
         assert active.value.status_code == 503
@@ -695,6 +700,14 @@ def test_budget_cut_keeps_claim_and_retry_reads_completed_result(monkeypatch):
     assert result.id == row['id']
     processor.assert_called_once()
     delete.assert_not_called()
+    full_pool.submit.assert_not_called()
+
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *_args, **_kwargs: None)
+    with pytest.raises(HTTPException) as unavailable:
+        submit(5, _request(client_session_id='another-session'))
+    assert unavailable.value.status_code == 503
+    assert raise_site_of(unavailable.value) == 'from_segments_processing_capacity'
+    full_pool.submit.assert_called_once()
 
 
 def test_client_session_id_claim_is_released_when_processing_fails(monkeypatch):

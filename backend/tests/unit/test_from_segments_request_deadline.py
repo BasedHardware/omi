@@ -24,7 +24,6 @@ from utils.other.request_deadline import (
     FROM_SEGMENTS_REQUEST_BUDGET_SECONDS,
     MINIMUM_DEADLINE_SECONDS,
     RequestDeadlineExceeded,
-    call_within_request_deadline,
     capped_deadline_seconds,
     from_segments_request_deadline,
     request_deadline_absolute,
@@ -33,6 +32,7 @@ from utils.other.request_deadline import (
     reset_request_deadline,
     set_request_deadline,
 )
+from utils.other.request_deadline_workers import call_within_request_deadline
 
 
 @pytest.fixture
