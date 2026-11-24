@@ -24,6 +24,7 @@ func compareObservations(python, goRun *observation) []difference {
 	}
 	compareObject(&diffs, "/provider_calls", countProviderCalls(python.ProviderCalls), countProviderCalls(goRun.ProviderCalls))
 	compareObject(&diffs, "/webhooks", webhookGroups(python), webhookGroups(goRun))
+	reviewProfileRefreshClocks(diffs, python, goRun)
 	for i := range diffs {
 		diff := &diffs[i]
 		switch diff.Kind {

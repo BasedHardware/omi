@@ -26,6 +26,8 @@ type providerTokenCall struct {
 }
 
 type observation struct {
+	OwnerID            string               `json:"owner_id"`
+	ConversationID     string               `json:"conversation_id"`
 	ProviderTokenCalls *[]providerTokenCall `json:"provider_token_calls,omitempty"`
 	QueueFanout        string               `json:"queue_fanout_key"`
 	UpdatedAtChanged   bool                 `json:"updated_at_changed"`
