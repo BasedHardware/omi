@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from config.policy.kill_switches import kill_switch
-from database.outbox_provider_stt import FirestoreProviderSttOutbox
 
 STATE = 'allowance_held'
 OWNERS = 'allowance_holds'
@@ -71,37 +70,12 @@ def park(tx, job: dict, now: float, *, at_intake: bool = False) -> bool:
         }
     if not eligible(job) or job.get('token') or job.get('lease_until', 0) > now:
         return False
-    _park(tx, job, now)
+    record_park(tx, job, now)
     return True
 
 
-def park_provider(tx, job: dict, claim, refusal: IntakeRefusal, now: float) -> bool:
-    if (
-        not provider_enabled()
-        or job.get('state') != 'provider_pending'
-        or not is_provider(job)
-        or job['stt_route'].get('provider_reason') == 'byok'
-        or claim.row_id != job['segment_id']
-        or claim.owner_id != job['owner_id']
-        or job.get('token')
-        or job.get('lease_until', 0) > now
-        or job.get('result')
-        or job.get('provider_attempts')
-        or 'provider_intent' in job
-        or tx.get_existing('results', claim.row_id) is not None
-        or not refusal.current(tx.get(OWNERS, job['owner_key']), now)
-        or not FirestoreProviderSttOutbox.park_in_transaction(tx, claim, now)
-    ):
-        return False
-    job.update(
-        compute_decision={'outcome': 'held', 'reason': EXHAUSTED, 'at': now},
-        last_policy_hold={'reason': EXHAUSTED, 'at': now},
-    )
-    _park(tx, job, now)
-    return True
-
-
-def _park(tx, job: dict, now: float) -> None:
+def record_park(tx, job: dict, now: float) -> None:
+    """Record a caller-validated allowance hold and its owner index entry."""
     key = job['owner_key']
     owner = tx.get(OWNERS, key)
     if not owner:

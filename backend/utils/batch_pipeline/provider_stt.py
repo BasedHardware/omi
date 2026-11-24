@@ -276,7 +276,28 @@ class ProviderSttStore:
     def park_allowance(self, claim: Claim, refusal: allowance_hold.IntakeRefusal, now: float) -> bool:
         def commit(tx):
             job, _ = self.fence.checked(tx, claim.row_id)
-            return allowance_hold.park_provider(tx, job, claim, refusal, now)
+            if (
+                not allowance_hold.provider_enabled()
+                or job.get('state') != PENDING
+                or not allowance_hold.is_provider(job)
+                or job['stt_route'].get('provider_reason') == 'byok'
+                or claim.owner_id != job['owner_id']
+                or job.get('token')
+                or job.get('lease_until', 0) > now
+                or job.get('result')
+                or job.get(ATTEMPTS_FIELD)
+                or 'provider_intent' in job
+                or tx.get_existing('results', claim.row_id) is not None
+                or not refusal.current(tx.get(allowance_hold.OWNERS, job['owner_key']), now)
+                or not FirestoreProviderSttOutbox.park_in_transaction(tx, claim, now)
+            ):
+                return False
+            job.update(
+                compute_decision={'outcome': 'held', 'reason': allowance_hold.EXHAUSTED, 'at': now},
+                last_policy_hold={'reason': allowance_hold.EXHAUSTED, 'at': now},
+            )
+            allowance_hold.record_park(tx, job, now)
+            return True
 
         return self.store.run(commit)
 
