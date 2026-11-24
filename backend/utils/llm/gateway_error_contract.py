@@ -397,7 +397,7 @@ def retryable_provider_failure_http_exception(error: BaseException, *, route: st
             headers={'Retry-After': RETRYABLE_CONVERSATION_PROCESSING_RETRY_AFTER_SECONDS},
         ),
         (
-            'notes_deadline_exceeded'
+            'request_budget_exhausted'
             if isinstance(error, RequestDeadlineExceeded)
             else 'conversation_processing_retryable'
         ),
