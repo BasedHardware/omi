@@ -22,8 +22,13 @@ from typing import Any
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+from database.privacy_check_metrics import BatchPrivacyPath, with_batch_privacy_path
 from database._client import get_firestore_client
-from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.batch_pipeline_privacy import (
+    BatchPrivacyBlocked,
+    assert_batch_write_allowed,
+    skip_content_free_status_gate,
+)
 from database.sync_ledger import (
     is_valid_completed_sync_content_result,
     is_valid_held_sync_content_result,
@@ -41,6 +46,7 @@ from utils.sync.deleted_conversation import (
 logger = logging.getLogger(__name__)
 
 
+@with_batch_privacy_path(BatchPrivacyPath.SYNC_STATUS)
 def get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | None) -> dict[str, Any] | None:
     # No Firestore client or lookup on the dark path, including TTL misses.
     if os.getenv('SYNC_DURABLE_STATUS_RECONCILIATION', 'false').strip().lower() != 'true':
@@ -103,8 +109,7 @@ def get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | Non
         )
         if not isinstance(result, dict) or not (completed or held):
             return None
-        # Preserve the batch status route's privacy boundary, including empty
-        # completions, deleted accounts and redirected/deleted result targets.
+        # Result targets are content-bearing and require live privacy checks.
         ids = []
         for key in ('new_memories', 'updated_memories'):
             values = result.get(key, [])
@@ -124,6 +129,10 @@ def get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | Non
             'failed_segments': 0,
             'result': result,
         }
+        # Validation above requires an empty error list. Without result IDs
+        # the response contains only counts and custody/job state.
+        if not ids and skip_content_free_status_gate(uid):
+            return status
         try:
             assert_batch_write_allowed(client, transaction, uid, conversation_ids=ids)
         except BatchPrivacyBlocked as error:

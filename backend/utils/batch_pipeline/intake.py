@@ -37,8 +37,10 @@ from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORT
 from database import batch_pipeline_allowance_hold as allowance_hold
 from database import record_wal_duplicate as wal_duplicate
 from database import record_wal_handoff as wal_receipts
+from database.privacy_check_metrics import BatchPrivacyPath, with_batch_privacy_path
+from database.batch_pipeline_artifact_missing import artifact_missing
 from database.batch_pipeline_intake import admit, cache_completed
-from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, skip_content_free_status_gate
 from database.batch_pipeline_recovery_fence import RecoveryFence
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
@@ -255,11 +257,49 @@ def _only_deleted_total(tx, uid: str, content_id: str) -> int | None:
     return result['total_segments']
 
 
+def _skip_metadata_status_gate(uid: str, ledger: dict, jobs: list[dict]) -> bool:
+    # Every receipt with result data keeps the gate, even if malformed or
+    # omitted by the response builder. Any dead job can enter poll redrive.
+    if ledger.get('result') is not None or any(job.get('state') == 'dead' for job in jobs):
+        return False
+    return skip_content_free_status_gate(uid)
+
+
+def _check_durable_status_privacy(tx, uid, ledger, intake, job_id, jobs):
+    sources = {
+        value
+        for job in jobs
+        for value in (job.get('conversation_id'), job.get('capture_source_conversation_id'))
+        if value
+    }
+    result_ids = ledger.get('result') or {}
+    sources.update(result_ids.get('new_memories') or [])
+    sources.update(result_ids.get('updated_memories') or [])
+    try:
+        tx.check_privacy(uid, sources, jobs[0].get('privacy_generation') if jobs else None)
+    except BatchPrivacyBlocked as error:
+        # Completed content whose conversation the user deleted is final:
+        # ACK without IDs so the phone stops re-uploading deleted audio.
+        # Unfinished work and every other denial keep the 409.
+        terminal = (
+            _deleted_conversation_status(ledger, intake, job_id)
+            if is_conversation_deleted(error) and not any(artifact_missing(job) for job in jobs)
+            else None
+        )
+        if terminal is None:
+            raise
+        generation = jobs[0].get('privacy_generation') if jobs else None
+        confirm_only_user_deletions(lambda one: tx.check_privacy(uid, one, generation), sources)
+        logger.info('event=batch_intake_status outcome=conversation_deleted_terminal')
+        return terminal
+    return None
+
+
 def durable_status(store, uid: str, job_id: str) -> dict | None:
     if job_id.startswith(wal_receipts.JOB_PREFIX):
         authority_store = getattr(store, 'store', store)
         return wal_receipts.read_status(authority_store.client, authority_store.namespace, uid, job_id)
-    from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE
+    from database.batch_pipeline_artifact_missing import REASON_CODE
     from utils.batch_pipeline.upload_coalescing import member_status
 
     spent_redrives: list[str] = []
@@ -275,32 +315,10 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             return {'_coalescing_intake': intake}
         ledger = tx.get('content', f"{uid}/{intake['content_id']}")
         jobs = [tx.get('jobs', segment) for segment in intake['segment_ids']]
-        sources = {
-            value
-            for job in jobs
-            for value in (job.get('conversation_id'), job.get('capture_source_conversation_id'))
-            if value
-        }
-        result_ids = ledger.get('result') or {}
-        sources.update(result_ids.get('new_memories') or [])
-        sources.update(result_ids.get('updated_memories') or [])
-        try:
-            tx.check_privacy(uid, sources, jobs[0].get('privacy_generation') if jobs else None)
-        except BatchPrivacyBlocked as error:
-            # Completed content whose conversation the user deleted is final:
-            # ACK without IDs so the phone stops re-uploading deleted audio.
-            # Unfinished work and every other denial keep the 409.
-            terminal = (
-                _deleted_conversation_status(ledger, intake, job_id)
-                if is_conversation_deleted(error) and not any(artifact_missing(job) for job in jobs)
-                else None
-            )
-            if terminal is None:
-                raise
-            generation = jobs[0].get('privacy_generation') if jobs else None
-            confirm_only_user_deletions(lambda one: tx.check_privacy(uid, one, generation), sources)
-            logger.info('event=batch_intake_status outcome=conversation_deleted_terminal')
-            return terminal
+        if not _skip_metadata_status_gate(uid, ledger, jobs):
+            terminal = _check_durable_status_privacy(tx, uid, ledger, intake, job_id, jobs)
+            if terminal is not None:
+                return terminal
         result = ledger.get('result')
         from utils.batch_pipeline.input_retention import input_expiring
 
@@ -546,6 +564,7 @@ async def _probe_upload_allowance(
         return None
 
 
+@with_batch_privacy_path(BatchPrivacyPath.SYNC_UPLOAD)
 async def accept_upload(
     *,
     uid: str,
@@ -1487,6 +1506,7 @@ def _wal_receipt_status(uid: str, job_id: str) -> dict | None:
     return durable_status(FirestoreStore(f'batch_pipeline_{current_stage()}'), uid, job_id)
 
 
+@with_batch_privacy_path(BatchPrivacyPath.SYNC_STATUS)
 def get_durable_job_status(job_id: str, uid: str, *, artifact_retry: bool = False) -> dict | None:
     if not job_id.startswith(JOB_PREFIX):
         return None

@@ -56,6 +56,7 @@ KNOWN_LEVERS = frozenset(
         'episode_members_cache',  # Home member projections may be stale for <= 60s; absent = 0/off
         'conversation_list_cursor',  # conversations:_collect_visible_conversation_page
         'finjob_candidate_queries',  # conversation_finalization_jobs:{scan_in_progress,get_abandoned_byok,get_stale_processing}
+        'bpp_content_free_status_skip',  # status-only phase; 0 serves the existing privacy gate
         'bpp_decision_cache',  # batch privacy: token-validated generation reuse across attempts, <= 60s
         'bpp_owner_memo',  # ship-on: batch privacy owner-level decision reuse, same per-use token certification; 0 restores id-set keying
         'bpp_owner_memo_enforce',  # explicit admission after shadow qualification; absent/invalid = off
