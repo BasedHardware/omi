@@ -57,13 +57,13 @@ from __future__ import annotations
 
 import atexit
 import datetime as dt
-import inspect
 import json
 import logging
 import math
 import os
 import re
 import secrets
+import sys
 import threading
 import time
 from typing import Any, Callable
@@ -77,6 +77,9 @@ from database.privacy_check_metrics import current_read_caller as current_privac
 from utils.observability.firestore_request_reads import trace_request_reads
 
 logger = logging.getLogger(__name__)
+
+# CPython can return the caller directly, without materializing this frame.
+_getframe = getattr(sys, '_getframe')
 
 __all__ = [
     'FIRESTORE_BILLED_READS',
@@ -553,12 +556,12 @@ def call_site(
     Skips this probe, Firestore plumbing wrappers, and runtime frames so the
     label names the function that requested the operation.
     """
+    frame = None
     try:
         privacy_caller = current_privacy_read_caller() if use_privacy_caller else None
         if privacy_caller is not None:
             return bound_caller(privacy_caller)
-        frame = inspect.currentframe()
-        frame = frame.f_back if frame is not None else None
+        frame = _getframe(1)
         while frame is not None:
             module = frame.f_globals.get('__name__') or ''
             name = frame.f_code.co_name
@@ -573,6 +576,8 @@ def call_site(
             return bound_caller(f'{module}:{name}', extra_overflow=extra_overflow)
     except Exception:
         return _OTHER
+    finally:
+        del frame
     return _OTHER
 
 

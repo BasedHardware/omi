@@ -32,6 +32,7 @@ BatchWrite counts only writes
 with an OK status. A Commit that fails with DeadlineExceeded or Unavailable
 may still have applied; its writes go to the ambiguous counter. Collection patterns
 reuse the read probe's allowlist and callers share its per-process limit of 1536.
+The BulkWriter attribution hooks install when the first writer is constructed.
 BulkWriter captures caller and origin as each operation is queued, including
 operations flushed from another thread or retried by the SDK. Companion writes
 appended by Omi's commit wrappers use the submitting caller and origin when the
