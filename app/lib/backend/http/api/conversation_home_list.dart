@@ -13,6 +13,9 @@ Future<ApiResult<List<ServerConversation>>> _listHomeConversations(
   bool? starred,
   required Map<String, List<ServerConversation>> heldHomeEpisodes,
   void Function(int)? onStorageCount,
+  void Function(ConversationPageHeaders)? onPageHeaders,
+  String? cursor,
+  String? homeMode,
 }) async {
   final held = <String, ServerConversation>{};
   final pairs = <String>[];
@@ -35,9 +38,14 @@ Future<ApiResult<List<ServerConversation>>> _listHomeConversations(
           startDate: startDate,
           endDate: endDate,
           folderId: folderId,
-          starred: starred),
+          starred: starred,
+          cursor: cursor),
       method: 'GET',
-      headers: {'X-Omi-Home-Ownership': '1', if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')},
+      headers: {
+        'X-Omi-Home-Ownership': '1',
+        if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(','),
+        if (homeMode != null) ConversationPageHeaders.homeModeHeader: homeMode,
+      },
     ),
     send: api._send,
     onResponseHeaders: (value) => headers = value,
@@ -50,6 +58,7 @@ Future<ApiResult<List<ServerConversation>>> _listHomeConversations(
   final rows = decoded as ApiSuccess<List<ServerConversation>>;
   onStorageCount
       ?.call(int.tryParse(headers['x-omi-conversation-page-size'] ?? '') ?? rows.data.length + rows.rejectedRows);
+  onPageHeaders?.call(ConversationPageHeaders.parse(headers));
   return ConversationApi._rows(
     retainSuppressedHomeMembers(rows.data, held, (headers['x-omi-home-suppressed-ids'] ?? '').split(',')),
     rows.rejectedRows,

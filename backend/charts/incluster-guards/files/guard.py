@@ -733,7 +733,7 @@ def apply_floor_schedule(client, hpa, deployment, state, reading, schedule, now,
     log('floor_schedule', result='applied', hour=hour, target=target, floor=current)
 
 
-def run(client, dry_run, now=None):
+def run(client, dry_run, now=None, *, parakeet_suspended=False):
     now = time.time() if now is None else now
     cm = client.kube(client.path('state'))
     state = json.loads(cm.get('data', {}).get('state', '{}'))
@@ -744,26 +744,29 @@ def run(client, dry_run, now=None):
     hpa = None
     values = {}
     schedule = None
-    try:
-        hpa = client.kube(client.path('hpa'))
-        values = client.sample(queries(client.namespace))
-        schedule = load_floor_schedule()
-        # With a schedule installed, even a parked (non-workload) HPA runs the
-        # full decide pass so the arming clock advances and the scheduled change
-        # is evaluated against an armed guard; without one, the historical
-        # minimal NOOP path (no deployment/events reads) is preserved.
-        if workload_only(hpa['spec']) or schedule is not None:
-            deployment = client.kube(client.path('deployment'))
-            events = client.kube(client.path('events'))['items']
-            verdict, state, reading = decide(hpa, deployment, events, values, state, now)
-        else:
-            # Preserve the loaded state: the rolled-back clock must survive
-            # parked readings, not reset on every one of them.
-            verdict, reading = 'NOOP', evaluate(values)
-    except Exception as exc:
-        # No exact observed spec => no rollback; failed Job still alerts.
-        log('parakeet_read_error', error=type(exc).__name__)
-        verdict, reading = 'BLIND', {'trips': [], 'blind': ['kubernetes_read_unavailable']}
+    if parakeet_suspended:
+        verdict, reading = 'SKIPPED', {'reason': 'parakeet_retired'}
+    else:
+        try:
+            hpa = client.kube(client.path('hpa'))
+            values = client.sample(queries(client.namespace))
+            schedule = load_floor_schedule()
+            # With a schedule installed, even a parked (non-workload) HPA runs the
+            # full decide pass so the arming clock advances and the scheduled change
+            # is evaluated against an armed guard; without one, the historical
+            # minimal NOOP path (no deployment/events reads) is preserved.
+            if workload_only(hpa['spec']) or schedule is not None:
+                deployment = client.kube(client.path('deployment'))
+                events = client.kube(client.path('events'))['items']
+                verdict, state, reading = decide(hpa, deployment, events, values, state, now)
+            else:
+                # Preserve the loaded state: the rolled-back clock must survive
+                # parked readings, not reset on every one of them.
+                verdict, reading = 'NOOP', evaluate(values)
+        except Exception as exc:
+            # No exact observed spec => no rollback; failed Job still alerts.
+            log('parakeet_read_error', error=type(exc).__name__)
+            verdict, reading = 'BLIND', {'trips': [], 'blind': ['kubernetes_read_unavailable']}
     log(
         'parakeet_guard',
         verdict=verdict,
@@ -846,7 +849,11 @@ def main():
         os.environ['PROMETHEUS_URL'], os.environ['NAMESPACE'], os.environ['HPA_NAME'], os.environ['STATE_NAME']
     )
     try:
-        return run(client, os.environ.get('DRY_RUN', 'false').lower() == 'true')
+        return run(
+            client,
+            os.environ.get('DRY_RUN', 'false').lower() == 'true',
+            parakeet_suspended=os.environ.get('PARAKEET_SUSPENDED', 'false').strip().lower() == 'true',
+        )
     except Exception as exc:
         log(
             'guard_error', error=type(exc).__name__, drift=str(exc) if isinstance(exc, AssertionError) else None

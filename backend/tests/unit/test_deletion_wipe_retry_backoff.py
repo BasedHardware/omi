@@ -132,6 +132,10 @@ def test_record_without_a_failure_timestamp_stays_actionable(monkeypatch):
 
 
 def test_marking_a_wipe_failed_counts_the_attempt(monkeypatch):
+    # This fixture verifies the update payload without emulating Firestore.
+    # The default-on transaction and increment also run in the writer matrix.
+    monkeypatch.setenv('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'false')
+    monkeypatch.setattr(users, 'account_deletion_firestore_client', lambda: MagicMock())
     doc_ref = MagicMock()
     _patch_db(monkeypatch, doc_ref=doc_ref)
 

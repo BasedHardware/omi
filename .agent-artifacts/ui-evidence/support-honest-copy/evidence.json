@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-delete-uploaded-phone-copy.png",
+      "platform": "mobile-ios",
+      "description": "Offline Sync: swiping an uploaded, still-processing recording says Omi is processing it, deleting removes the phone copy, and a failed job cannot be retried from this phone",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-delete-not-uploaded-warning.png",
+      "platform": "mobile-ios",
+      "description": "Offline Sync: swiping a recording not yet uploaded keeps the Delete Recording / This cannot be undone warning",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-firmware-cv1-not-installed.png",
+      "platform": "mobile-ios",
+      "description": "Firmware Update failed on a CV1 pendant (not_installed): says the pendant still works on its current firmware and to contact support rather than retrying",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

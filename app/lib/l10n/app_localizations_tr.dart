@@ -561,11 +561,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get hardwareSection => 'Donanım';
 
   @override
-  String get v2Undetected => 'V2 algılanamadı';
+  String get v2Undetected => 'Çevrimdışı Senkronizasyon Kullanılamıyor';
 
   @override
   String get v2UndetectedMessage =>
-      'V1 cihazınız olduğunu veya cihazınızın bağlı olmadığını görüyoruz. SD Kart işlevi yalnızca V2 cihazlar için mevcuttur.';
+      'Çevrimdışı Senkronizasyon için SD kart depolamasına sahip bağlı bir Omi cihazı gerekir. Mevcut cihazınız bunu desteklemiyor.';
 
   @override
   String get endConversation => 'Konuşmayı Sonlandır';
@@ -1124,6 +1124,11 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get nameUpdatedSuccessfully => 'İsim başarıyla güncellendi!';
+
+  @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Seçili takvimleri oku. Yeni etkinlikler $calendar takvimini kullanır.';
+  }
 
   @override
   String get calendarSettings => 'Takvim ayarları';
@@ -7061,6 +7066,26 @@ class AppLocalizationsTr extends AppLocalizations {
   String get authUnexpectedError => 'Giriş yaparken beklenmeyen hata, lütfen tekrar deneyin';
 
   @override
+  String get accountSignInMethods => 'Oturum açma yöntemleri';
+
+  @override
+  String get accountAddSignInMethod => 'Oturum açma yöntemi ekle';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Bu Omi hesabına giriş yapmak için bir yöntem ekleyin. Planınız, kayıtlarınız ve entegrasyonlarınız bu hesapta kalır.';
+
+  @override
+  String get accountSignInConflictTitle => 'Bu oturum açma yöntemi başka bir hesaba ait';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Bu hesapta oturumunuz açık kalır. Her Omi hesabı kendi planını, kayıtlarını ve entegrasyonlarını korur.';
+
+  @override
+  String get accountSignInMethodAdded => 'Oturum açma yöntemi eklendi';
+
+  @override
   String get authFailedToLinkGoogle => 'Google ile bağlantı kurulamadı, lütfen tekrar deneyin.';
 
   @override
@@ -9089,7 +9114,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Bu kayıt yüklendi ancak Omi hâlâ konuşmayı oluşturuyor. Şimdi silerseniz ve işleme başarısız olursa kurtarılamaz. Yine de silinsin mi?';
+      'Bu kayıt zaten yüklendi ve Omi onu işliyor. Burada silmek telefondaki kopyayı kaldırır. İşleme başarısız olursa Omi bu telefondan yeniden deneyemez.';
 
   @override
   String get syncCardAllBackedUp => 'Tüm kayıtlar eşitlendi';
@@ -12237,7 +12262,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Eşleştirmeden beri: $drops kopma, $failed başarısız bağlantı.';
+    return 'Eşleştirmeden beri: $drops yeniden bağlantı, $failed başarısız bağlantı.';
   }
 
   @override
@@ -13477,16 +13502,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount konuşmalara dönüştürülüyor';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total tamamlandı · bu ekrandan çıkabilirsiniz';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount senkronize edilmeye hazır';
   }
@@ -13510,7 +13525,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Bu telefonda bekliyor';
 
   @override
-  String get syncDetailsTranscribing => 'Omi\'de yazıya dökülüyor';
+  String get syncDetailsTranscribing => 'Yüklendi, sunucu bekleniyor';
 
   @override
   String get syncDetailsAudioFiles => 'Ses dosyaları';
@@ -13968,6 +13983,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get summaryBusyBody => 'Omi bu konuşma üzerinde zaten çalışıyor. Özet tamamlandığında burada görünecek.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Henüz yazıya dökülmedi';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Özet, döküm hazır olduğunda görünecek.';
+
+  @override
   String get summaryCheckAgain => 'Tekrar kontrol et';
 
   @override
@@ -14371,6 +14392,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get processingProgress => 'Bekleyen kayıtlarınız işleniyor…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Kullanılabilir deşifre kotası bekleniyor';
+
+  @override
   String get processingDeferred => 'İşlenmeyi bekliyor';
 
   @override
@@ -14499,14 +14523,6 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done/$total dk';
-  }
-
-  @override
-  String get deviceRecently => 'Son zamanlarda';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration bağlantı kesildi';
   }
 
   @override
@@ -15331,9 +15347,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get stopThese => 'Bunları Durdur';
 
   @override
-  String get meetingActionItemsTitle => 'Eylem öğeleri';
-
-  @override
   String get addToTasks => 'Görevlere Ekle';
 
   @override
@@ -15445,6 +15458,11 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Güncelleme yüklenmedi. Kolyeniz mevcut yazılımıyla ($version) çalışmaya devam ediyor. Güncellemeyi yeniden denemek yerine lütfen destekle iletişime geçin.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15486,7 +15504,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15567,4 +15585,261 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Özetiniz yazılıyor…';
+
+  @override
+  String get onTheWayServerWork => 'Sunucunun bildirdiği işler';
+
+  @override
+  String get finishNothingToProcess => 'Henüz işlenecek bir şey yok.';
+
+  @override
+  String get finishStillProcessing => 'Hâlâ işleniyor. Ana sayfada görünecek.';
+
+  @override
+  String get finishBackToHome => 'Ana Sayfaya Dön';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Bu konuşma bittiğinde özet';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Sunucuda bekleyen yüklemeler';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Sesiniz cihazınızda veya telefonunuzda güvende';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time itibariyle özet';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Son transkript';
+
+  @override
+  String get finishAlreadySaved => 'Zaten kaydedildi. Ana sayfada.';
+
+  @override
+  String get finishAudioNotReceived => 'Ses henüz yolda.';
+
+  @override
+  String get finishFailedOffline => 'İşlem gerçekleştirilemedi. Sesiniz güvende.';
+
+  @override
+  String get finishFailed => 'İşlem gerçekleştirilemedi. Sesiniz güvende.';
+
+  @override
+  String get micBlockedCannotRecord => 'Kayıt için mikrofona izin verin.';
+
+  @override
+  String get couldNotStartRecording => 'Kayıt başlatılamadı.';
+
+  @override
+  String get restorePurchasesFailed => 'Planınız kontrol edilemedi.';
+
+  @override
+  String get firmwareCheckFailed => 'Güncellemeler kontrol edilemedi.';
+
+  @override
+  String get conversationStillPublic => 'Hâlâ bağlantıyla paylaşılıyor.';
+
+  @override
+  String get goalSaveFailed => 'Hedefiniz kaydedilemedi.';
+
+  @override
+  String get goalDeleteFailed => 'Silinemedi. Hedef geri getirildi.';
+
+  @override
+  String get goalsLoadFailed => 'Hedefleriniz yüklenemedi.';
+
+  @override
+  String get missingTargetEndedRecording => 'O kayıt sona erdi.';
+
+  @override
+  String get missingTargetMemory => 'O anı artık yok.';
+
+  @override
+  String get missingTargetTask => 'O görev artık yok.';
+
+  @override
+  String get missingTargetConversation => 'Bu konuşma açılamadı.';
+
+  @override
+  String get couldNotRefreshConversations => 'Yenilenemedi.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Eşitlemek için Omi cihazınızı bağlayın.';
+
+  @override
+  String get useDifferentAccountMessage => 'Oturumunuz kapatılacak ve bu telefonun Omi ayarları sıfırlanacak.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Gözlük bulunamadı. Açık mı?';
+
+  @override
+  String get couldNotMoveTask => 'Görev taşınamadı.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Silindi. $count kilitli görev korundu.',
+      one: 'Silindi. 1 kilitli görev korundu.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Bu değişiklik kaydedilemedi.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Ayarlarınız yüklenemedi.';
+
+  @override
+  String get waitForOmiToFinish => 'Omi\'nin bitmesini bekleyin.';
+
+  @override
+  String get voiceNoteTooShort => 'Çok kısa. Kaydetmek için basılı tutun.';
+
+  @override
+  String get submitAppMissingFields => 'Göndermek için ad, açıklama, görsel, kategori ve yetenek ekleyin.';
+
+  @override
+  String get appSetupNotFinished => 'Kurulum henüz tamamlanmadı.';
+
+  @override
+  String get finishNothingKeptTitle => 'Saklanacak Bir Şey Yok';
+
+  @override
+  String get submitAppFinishDetails => 'Göndermek için yukarıdaki yetenek ve fiyatlandırma bilgilerini tamamlayın.';
+
+  @override
+  String get finishNothingNew => 'Henüz yeni bir şey yok.';
+
+  @override
+  String get takingLongerThanUsual => 'Her zamankinden uzun sürüyor. Kısa süre içinde ana sayfada olacak.';
+
+  @override
+  String get couldNotCheckOnIt => 'Kontrol edilemedi. Tekrar deneyin.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Bunu açmak için yükseltme yapın.';
+
+  @override
+  String get missingTargetConversationGone => 'O konuşma silindi.';
+
+  @override
+  String get cantConnectRightNow => 'Şu anda bağlanılamıyor.';
+
+  @override
+  String get loadOlderFailed => 'Eskiler yüklenemedi. Tekrar denemek için dokunun.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Dinliyor · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Değiştirmek için bitmesini bekleyin.';
+
+  @override
+  String get finishedSummaryReady => 'Özet hazır';
+
+  @override
+  String get writingSummaryStatus => 'Özet yazılıyor…';
+
+  @override
+  String get stillWorkingOnIt => 'Hâlâ üzerinde çalışılıyor.';
+
+  @override
+  String get deviceReadyToUse => 'Kullanıma hazır';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Cihazınızın donanım yazılımı bu güncelleme için çok eski. Cihazınızı güncelleme konusunda yardım almak için destek ekibiyle iletişime geçin.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Bu donanım yazılımı güncellemesi için Omi uygulamasının daha yeni bir sürümü gerekiyor. Uygulamayı uygulama mağazanızdan güncelleyin, ardından yeniden kontrol edin.';
+
+  @override
+  String get quietPayerTitle => '5 gündür kayıt yok';
+
+  @override
+  String get quietPayerMessage => 'Omi\'ni kontrol et.';
+
+  @override
+  String get quietPayerCheck => 'Kontrol Et';
+
+  @override
+  String get playManageSubscription => 'Aboneliği yönet';
+
+  @override
+  String get playBilledByGoogle => 'Google Play üzerinden faturalandırılır';
+
+  @override
+  String get playPurchasePending => 'Ödemeniz beklemede. Google Play onayladığında Omi Pro başlar.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Bu Google Play satın alımı başka bir Omi hesabına ait.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Satın alımınızı henüz doğrulayamadık. Otomatik olarak yeniden deneyeceğiz.';
+
+  @override
+  String get playRenewalTerms =>
+      'İptal edene kadar gösterilen fiyattan otomatik olarak yenilenir. Google Play\'den istediğiniz zaman yönetin veya iptal edin.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android\'de kullanılamaz';
+
+  @override
+  String get pageNotAvailableInApp => 'Bu sayfa uygulamada kullanılamıyor.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Sipariş verildi. Onay için e-postanızı kontrol edin.';
+
+  @override
+  String get prepaidCodeEntry => 'Kodunuz var mı?';
+
+  @override
+  String get prepaidCodeTitle => 'Kod kullan';
+
+  @override
+  String get prepaidCodeFieldHint => 'Kodunuzu girin';
+
+  @override
+  String get prepaidCodeRedeem => 'Kullan';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kod kullanıldı';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Bu kod geçerli değil. Kontrol edip tekrar deneyin.',
+        'used': 'Bu kod zaten kullanılmış.',
+        'expired': 'Bu kodun süresi dolmuş.',
+        'hasPlan': 'Zaten bir planınız var. Kodunuz kullanılmadı. Planınız bittikten sonra kullanın.',
+        'notPrepaid': 'Bu kod burada kullanılamaz. Bir plan seçerken kullanın.',
+        'notEligible': 'Bu kod bu hesapta kullanılamaz.',
+        'rateLimited': 'Çok fazla deneme. Daha sonra tekrar deneyin.',
+        'other': 'Bir sorun oluştu. Lütfen tekrar deneyin.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me üzerinden faturalandırılır. İstediğin zaman buradan iptal et.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me üzerinden faturalandırılır.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return '$plan planın duraklatıldı.';
+  }
 }

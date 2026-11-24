@@ -3,8 +3,10 @@
 import asyncio
 import hashlib
 import uuid
-from collections.abc import Awaitable, Callable
+from collections import deque
+from collections.abc import Awaitable, Callable, Iterator
 
+from config.refactor_modes import serving_for
 from config.audio_archive import admitted
 from config.audio_outbox import enabled as audio_outbox_enabled
 from config.audio_custody import framed_pack
@@ -12,6 +14,7 @@ from config.batch_pipeline_projection_rebuild import enabled as projection_debt_
 from database import record_projection_rebuild
 from utils.other.audio_frame_table import FRAME_SCHEMA
 from database.server_batch_audio import note_server_batch_audio, note_server_batch_audio_received
+from models.capture_coverage import CaptureCommittedEvent
 from models.message_event import AudioCustodyEvent
 from utils.executors import db_executor, run_blocking, storage_executor
 from utils.other.raw_audio import CapturePack
@@ -39,6 +42,9 @@ class LiveAudioArchive:
         # cumulative for its conversation and waits for the accepted-frame
         # checkpoint, including earlier failed/out-of-order commits.
         self.pending_acks: dict[str, list[tuple[dict[int, int], Callable[[], Awaitable[None]]]]] = {}
+        # Recent immutable pack receipts for optional transcript bindings.
+        # The standalone ACK covers each pack as it commits.
+        self._custody_windows: deque[AudioCustodyEvent] = deque(maxlen=4)
         # Session-stable admission: this per-packet path must not re-query the
         # TTL cache. An expiry window would schedule a refresh but miss until
         # it completes, silently dropping archive packets once per TTL. Listen
@@ -46,6 +52,9 @@ class LiveAudioArchive:
         # the resolved decision for the connection lifetime.
         self._admitted_snapshot: dict[str, bool] = {}
         self._server_audio_marked: set[str] = set()
+        # Retired recording -> successor. A frame still addressed to a retired recording
+        # (bound before the switch, appended after) joins the successor, never the sealed row.
+        self.retargets: dict[str, str] = {}
 
     def _admitted(self, uid: str, phase: str) -> bool:
         if phase not in self._admitted_snapshot:
@@ -71,7 +80,17 @@ class LiveAudioArchive:
         async with self.lock:
             await self._append(raw, conversation_id, timestamp, samples, channel, decoded, source_frame)
 
+    async def retarget(self, retired: str, successor: str) -> None:
+        """After this returns, no frame can join `retired`; its packs can be finished and sealed."""
+        async with self.lock:
+            self.retargets[retired] = successor
+            for key in [key for key, value in self.retargets.items() if value == retired]:
+                self.retargets[key] = successor
+            while len(self.retargets) > 64:
+                self.retargets.pop(next(iter(self.retargets)))
+
     async def _append(self, raw, conversation_id, timestamp, samples, channel, decoded, source_frame):
+        conversation_id = self.retargets.get(conversation_id, conversation_id)
         request = self.host.request
         # Consent is read before admission: with LIVE default-on, a host that
         # does not carry the consent attribute (older hosts, test doubles)
@@ -261,6 +280,30 @@ class LiveAudioArchive:
                     self.pending_acks.pop(key)
                 await publish()
 
+    def coverage_custody(self, event: CaptureCommittedEvent) -> Iterator[dict]:
+        """Yield only pinned manifest frames that intersect the named transcript range."""
+        if event.channel != 'mono':
+            return
+        for window in self._custody_windows:
+            if (
+                window.receipt['conversation_id'] != event.conversation_id
+                or window.recording_session_id != event.recording_session_id
+            ):
+                continue
+            frames = []
+            for row in window.frames:
+                source = row['source']
+                if (
+                    source is not None
+                    and row['samples'] > 0
+                    and source['capture_root'] == event.capture_root
+                    and str(source['clock_epoch']) == event.clock_epoch
+                    and event.source_start <= source['source_frame'] < event.source_end
+                ):
+                    frames.append(row)
+            if frames:
+                yield window.model_copy(update={'frames': frames}).to_json()
+
     async def _write(self, pack: CapturePack, channel: int):
         request = self.host.request
         context = request.client_device_context
@@ -340,15 +383,26 @@ class LiveAudioArchive:
             # receipt loss is safe because the immutable media remains indexed.
             query = getattr(request.websocket, 'query_params', {})
             if query.get('audio_custody') == '1' and hasattr(self.host, 'send_event'):
-                self.host.send_event(
-                    AudioCustodyEvent(
-                        event_type='audio_custody',
-                        receipt=receipt.to_dict(),
-                        capture_root=self.capture_session_id,
-                        channel=str(channel),
-                        frames=frames,
-                    )
+                event = AudioCustodyEvent(
+                    event_type='audio_custody',
+                    client_session_id=getattr(self.host, 'client_conversation_id', None),
+                    recording_session_id=getattr(self.host, 'recording_session_ids_by_conversation', {}).get(
+                        pack.conversation_id
+                    ),
+                    receipt=receipt.to_dict(),
+                    capture_root=self.capture_session_id,
+                    channel=str(channel),
+                    frames=frames,
                 )
+                if (
+                    channel == 0
+                    and getattr(self.host, 'is_multi_channel', None) is False
+                    and serving_for('CAPTURE_COVERAGE_MODE', request.uid)
+                ):
+                    mapped = [row for row in event.frames if row['source'] is not None and row['samples'] > 0]
+                    if mapped:
+                        self._custody_windows.append(event.model_copy(update={'frames': mapped}))
+                self.host.send_event(event)
             return
         await run_blocking(
             storage_executor,

@@ -112,7 +112,7 @@ void main() {
       final updated = [...provider.processingConversations, ...provider.conversations].single;
       expect(updated.homeStep, isNull);
       expect(updated.status, status);
-      expect(isFailedHomeConversation(updated), isFalse);
+      expect(isFailedConversation(updated), isFalse);
       expect(
           failedActivityConversations(pending: [], conversations: [
             ...provider.searchedConversations,

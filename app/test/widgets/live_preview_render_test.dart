@@ -22,6 +22,7 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -118,8 +119,13 @@ class _Wal implements IWalService {
 /// A real CaptureProvider recording from the pendant, with the admission and
 /// the preview model injected (the socket path is covered by the routing tests).
 class _Capture extends CaptureProvider {
-  _Capture({this.preview, this.admitted = false, int inFlightSeconds = 0})
-      : super(
+  _Capture({
+    this.preview,
+    this.admitted = false,
+    this.source = 'omi',
+    this.verified = true,
+    int inFlightSeconds = 0,
+  }) : super(
           walService: _Wal(_Syncs()..phone.inFlightSeconds = inFlightSeconds),
           connectivity: CaptureConnectivityBoundary(
               initiallyConnected: true, changes: const Stream.empty(), isConnected: () => true),
@@ -130,6 +136,9 @@ class _Capture extends CaptureProvider {
 
   final LivePreviewController? preview;
   final bool admitted;
+  final String source;
+  final bool verified;
+  late final BtDevice _omi = BtDevice(id: 'omi', name: 'Omi', type: DeviceType.omi, rssi: -40);
 
   @override
   LivePreviewController? get livePreview => preview;
@@ -138,15 +147,17 @@ class _Capture extends CaptureProvider {
   @override
   DateTime? get liveTranscriptStartedAt => DateTime.utc(2026, 10, 27);
   @override
-  String? get liveCaptureSource => 'omi';
+  String? get liveCaptureSource => source;
   @override
-  bool get pendantCaptureVerified => true;
+  bool get pendantCaptureVerified => verified;
   @override
   bool get transcriptServiceReady => true;
   @override
   RecordingState get recordingState => RecordingState.deviceRecord;
   @override
   bool get havingRecordingDevice => true;
+  @override
+  BtDevice? get recordingDevice => source == 'omi' ? _omi : null;
 }
 
 enum _State { streaming, starting, listening, noEngine, hybrid, cloud, notes, notesUnavailable }
@@ -213,8 +224,14 @@ void main() {
     return (preview, engine);
   }
 
-  _Capture captureFor(_State state, LivePreviewController? preview, {int inFlightSeconds = 0}) {
-    final capture = _Capture(preview: preview, admitted: state != _State.cloud, inFlightSeconds: inFlightSeconds);
+  _Capture captureFor(_State state, LivePreviewController? preview,
+      {int inFlightSeconds = 0, String source = 'omi', bool verified = true}) {
+    final capture = _Capture(
+        preview: preview,
+        admitted: state != _State.cloud,
+        source: source,
+        verified: verified,
+        inFlightSeconds: inFlightSeconds);
     if (state == _State.cloud || state == _State.hybrid) {
       capture.segments = [
         TranscriptSegment(
@@ -328,6 +345,7 @@ void main() {
     'transcript-catching-up': 12,
     'home-unspaced-preview': 13,
     'summary-continues-hit-area': 14,
+    'home-placeholder-preview': 15,
   };
   String? name(String slug, bool light) {
     if (android) return null;
@@ -717,6 +735,18 @@ void main() {
           ),
         );
 
+    Widget placeholderRow() => Builder(
+          builder: (context) => Scaffold(
+            backgroundColor: OmiColors.surface0,
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: OmiSpacing.md),
+                child: ListView(children: const [V3LivePlaceholderRow()]),
+              ),
+            ),
+          ),
+        );
+
     for (final (slug, title, state, textScale) in [
       ('home-title-preview', 'Meeting Prep', _State.streaming, 1.0),
       ('home-before-title', '', _State.streaming, 1.0),
@@ -747,6 +777,31 @@ void main() {
         // The row keeps its size: the tile never outgrows it.
         if (textScale == 1) {
           expect(tester.getSize(find.byKey(const Key('home_live_episode_row'))).height, lessThan(80));
+        }
+      });
+    }
+
+    for (final (slug, state, source, verified, showsPreview) in [
+      ('admitted verified pendant', _State.streaming, 'omi', true, true),
+      ('unverified pendant', _State.streaming, 'omi', false, false),
+      ('phone capture', _State.streaming, 'phone', true, false),
+      ('canonical text already present', _State.hybrid, 'omi', true, false),
+      ('no local admission', _State.cloud, 'omi', true, false),
+    ]) {
+      testWidgets('Home v3 placeholder preview requires $slug ($theme)', (tester) async {
+        android = onAndroid;
+        final (preview, _) = await tester.runAsync(() => previewIn(state)) ?? (null, null);
+        final capture = captureFor(state, preview, source: source, verified: verified);
+        addTearDown(capture.dispose);
+        await shoot(tester, name('home-placeholder-preview', light),
+            light: light, home: placeholderRow(), capture: capture);
+
+        final subtitle = tester.widget<Text>(find.byKey(const Key('v3_live_placeholder_preview')));
+        if (showsPreview) {
+          expect(subtitle.data, contains('overnight run looks clean'));
+        } else {
+          expect(subtitle.data, en.live, reason: 'ineligible or canonical sessions stay status-only');
+          expect(find.textContaining('overnight run looks clean', findRichText: true), findsNothing);
         }
       });
     }

@@ -8,6 +8,8 @@ import os
 from collections.abc import Mapping
 from typing import Any
 
+from config.historical_tier import STAND_IN_TITLE_PROVENANCES
+
 
 def enabled() -> bool:
     return os.getenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
@@ -33,7 +35,7 @@ def already_processed(row: Mapping[str, Any]) -> bool:
         isinstance(structured, Mapping)
         and structured.get('title')
         and not (
-            structured.get('title_provenance') == 'server_minimum'
+            structured.get('title_provenance') in STAND_IN_TITLE_PROVENANCES
             or row.get('summary_title_provenance') == 'server_minimum'
         )
     ):

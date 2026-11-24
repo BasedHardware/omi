@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-admission-marker-skipped-by-sibling-writer",
+  "family": "duplicated-implementation",
+  "violated_contract": "A per-owner admission decision that changes how a new row is stored (for example the conversations v3 recording marker) must be applied by every writer that can create that row from new input. When the decision lives in one writer's wrapper instead of the shared write primitive, a sibling writer that calls the primitive directly creates rows in the old shape for admitted owners, and both shapes coexist for the same captured speech.",
+  "canonical_prevention": "Apply the admission at the same call boundary in every writer that can create rows, and keep a static contract test that lists every caller of the shared write primitive and fails when one that can create rows from new input does not apply the admission.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_projection_v3_admission.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/batch_pipeline/projection.py",
+    "backend/utils/conversations/lifecycle.py",
+    "backend/utils/conversations/v3/triggers.py"
+  ],
+  "status": "open"
+}

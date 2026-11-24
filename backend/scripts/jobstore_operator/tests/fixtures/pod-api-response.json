@@ -44,7 +44,7 @@
     },
     "containers": [{
       "name": "readiness",
-      "image": "gcr.io/based-hardware/jobstore-reconcile-operator@sha256:a79982bb85f0d612c256041493339c147d50869d6734f0862e4082d184e82d99",
+      "image": "gcr.io/based-hardware/jobstore-reconcile-operator@sha256:f713574047679618ecea32ff29b939f20fa3d63cfea33ba9cdf6643577d2c145",
       "imagePullPolicy": "IfNotPresent",
       "terminationMessagePath": "/dev/termination-log",
       "terminationMessagePolicy": "File",
@@ -83,7 +83,7 @@
     "phase": "Succeeded",
     "containerStatuses": [{
       "name": "readiness",
-      "imageID": "gcr.io/based-hardware/jobstore-reconcile-operator@sha256:a79982bb85f0d612c256041493339c147d50869d6734f0862e4082d184e82d99",
+      "imageID": "gcr.io/based-hardware/jobstore-reconcile-operator@sha256:f713574047679618ecea32ff29b939f20fa3d63cfea33ba9cdf6643577d2c145",
       "restartCount": 0,
       "state": {"terminated": {"exitCode": 0}}
     }]

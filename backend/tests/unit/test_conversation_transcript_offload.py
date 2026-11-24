@@ -796,6 +796,7 @@ def test_level_migration_keeps_lake_envelope_without_fetch(lake_world, monkeypat
     monkeypatch.setattr(StrictFirestoreDocument, 'collection', collection)
     monkeypatch.setattr(db, 'db', lake_world.store)
     monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *args: None)
+    monkeypatch.setattr(db.conversations_v3_backfill_runs, '_live_run_ids', lambda *a, **kw: [])
     db.migrate_conversations_level_batch(UID, [CID], 'enhanced')
     assert lake_world.store.rows[PATH]['transcript_segments'] == doc['transcript_segments']
     assert lake_world.store.rows[PATH]['data_protection_level'] == 'enhanced'

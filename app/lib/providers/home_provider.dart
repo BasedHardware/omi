@@ -196,6 +196,16 @@ class HomeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set by Home: scrolls its list to the newest row.
+  VoidCallback? onShowNewest;
+
+  /// Home's list at its newest row. A finished capture uses it, so the row it made is on screen when
+  /// the reader goes back, not somewhere below (C13).
+  void showNewestOnHome() {
+    setIndex(homeTab);
+    onShowNewest?.call();
+  }
+
   void setIndex(int index) {
     selectedIndex = index;
     onSelectedIndexChanged?.call(index);
@@ -367,6 +377,7 @@ class HomeProvider extends ChangeNotifier {
     appsSearchFieldFocusNode.dispose();
     convoSearchFieldFocusNode.dispose();
     onSelectedIndexChanged = null;
+    onShowNewest = null;
     super.dispose();
   }
 }

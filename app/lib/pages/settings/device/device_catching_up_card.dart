@@ -2,8 +2,8 @@ import 'dart:math';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/pending_work.dart';
-import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/wal_derived_views.dart';
 import 'package:omi/utils/sync/offline_sync_amounts.dart';
 
 /// One snapshot shared by the device stats and the Catching up tile. Read the WAL inventory once,
@@ -32,16 +32,18 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now, bool alrea
   // Exactly the rows On the Way lists, so the card can never open an empty page:
   // terminal recordings belong to the bell, a lagging device twin is hidden, and
   // a drain's copied pieces fold into their source.
-  final uploaded = wals.where((w) => w.status == WalStatus.uploaded).toList(growable: false);
-  final rows = alreadyCollapsed ? wals : [...uploaded, ...SyncPendingWork.syncingOf(wals)];
+  final rows = alreadyCollapsed ? wals : pendingWorkRows(wals, nowSeconds: nowSeconds);
   var onDeviceSeconds = 0;
   var onPhoneSeconds = 0;
   var pendingSeconds = 0;
   final spans = <(DateTime, DateTime)>[];
   final ids = <String>{};
   int? expiresAt;
+  var hasPending = false, hasUploaded = false;
   for (final w in rows) {
     if (!w.countsAsPendingWork(nowSeconds: nowSeconds)) continue;
+    hasPending = true;
+    hasUploaded |= w.status == WalStatus.uploaded;
     final expires = w.pendingWorkExpiresAt;
     if (expires != null) expiresAt = expiresAt == null ? expires : min(expiresAt, expires);
     if (w.conversationId case final id? when id.isNotEmpty) ids.add(id);
@@ -79,8 +81,8 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now, bool alrea
     onDeviceSeconds: onDeviceSeconds,
     onPhoneSeconds: onPhoneSeconds,
     pendingSeconds: pendingSeconds,
-    hasPending: rows.isNotEmpty,
-    hasUploaded: uploaded.isNotEmpty,
+    hasPending: hasPending,
+    hasUploaded: hasUploaded,
     start: start,
     end: end,
     targetIds: targets.join('\n'),
@@ -131,19 +133,19 @@ class DeviceCatchUpSummary {
       if (local.start != null && local.end != null) (local.start!, local.end!),
     ];
     final ids = {if (local.targetIds.isNotEmpty) ...local.targetIds.split('\n')};
-    // The same audio On the Way totals: a processing conversation whose recordings are still
-    // listed locally is counted once, by its recordings, and a server sync job the phone is
-    // running itself is already covered by them.
+    // Prefer the shared WAL amount whenever local work exists. Server rows
+    // without WAL identities can overlap it and must never inflate that total.
+    // A server-only tile still opens the separately labelled server section.
     var seconds = local.pendingSeconds;
     final processingIds = {for (final c in processing) c.id};
     for (final conversation in processing) {
-      if (!ids.contains(conversation.id)) seconds += max(0, conversation.getDurationInSeconds());
+      if (!local.hasPending && !ids.contains(conversation.id)) seconds += max(0, conversation.getDurationInSeconds());
     }
     final phoneSyncing = local.hasPending || serverProcessing;
     for (final work in pending) {
       if (work.conversationIds.any(processingIds.contains)) continue;
       if (work.kind == 'sync_job' && phoneSyncing) continue;
-      seconds += max(0, work.durationSeconds ?? 0);
+      if (!local.hasPending) seconds += max(0, work.durationSeconds ?? 0);
     }
     void include(DateTime? from, int seconds, String id) {
       if (from == null || seconds <= 0) return;

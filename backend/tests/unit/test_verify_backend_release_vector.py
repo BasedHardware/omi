@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.util
 import json
 import re
@@ -468,7 +469,10 @@ def test_static_backend_deploys_only_check_the_serving_firestore_schema() -> Non
         assert 'service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com' in text
         assert 'workloadIdentityPools/omi-gha-deploy-' in text
         assert 'GCP_FIRESTORE_READONLY_CREDENTIALS' not in text
-        assert 'needs: firestore_readiness' in text
+        assert re.search(
+            r"(?m)^    needs: (?:firestore_readiness|\[[^\]\n]*\bfirestore_readiness\b[^\]\n]*\])$",
+            text,
+        )
 
 
 def test_dev_firestore_readiness_requires_read_only_credentials_for_the_runtime_project() -> None:
@@ -1077,6 +1081,17 @@ def test_collect_documents_fails_closed_when_a_query_stalls(monkeypatch) -> None
         verifier.collect_documents({'cloud_run/backend': ['gcloud', 'run', 'services', 'describe', 'backend']})
 
 
+@pytest.mark.parametrize(('resource', 'check'), [('services', 'cloud_run'), ('revisions', 'cloud_run_revision')])
+def test_collect_documents_reports_only_the_check_and_exit_status(monkeypatch, resource, check) -> None:
+    result = SimpleNamespace(returncode=17, stdout='private stdout', stderr='private stderr')
+    monkeypatch.setattr(verifier.subprocess, 'run', lambda *args, **kwargs: result)
+
+    with pytest.raises(RuntimeError) as error:
+        verifier.collect_documents({f'{check}/backend-sync-backfill': ['gcloud', 'run', resource, 'describe']})
+
+    assert str(error.value) == f'{check}/backend-sync-backfill query failed: exit status 17'
+
+
 def test_latest_ready_poll_refreshes_only_lagging_services_until_convergence() -> None:
     expectation = _expectation()
     converged = _documents(expectation)
@@ -1268,6 +1283,178 @@ def test_candidate_verification_never_polls_the_latest_ready_pointer(tmp_path, m
     assert rc == 0
     assert len(calls) == 1
     assert 'latest_ready_lag_poll' not in report
+
+
+@pytest.mark.parametrize(
+    ('name', 'entries'),
+    [
+        (None, None),
+        ('SYNC_TASKS_HANDLER_URL', [{'value': 'https://sibling.invalid/v2/sync-jobs/run'}]),
+        ('SYNC_TASKS_OIDC_AUDIENCE', []),
+        ('SYNC_TASKS_QUEUE', [{'value': 'sync-backfill'}]),
+        ('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', [{'value': 'true'}]),
+        ('BATCH_PROJECTION_OUTBOX', [{'value': False}]),
+        ('BATCH_PROJECTION_OUTBOX', [{'value': 'false'}, {'value': 'false'}]),
+        ('BATCH_PROJECTION_OUTBOX', [{'valueFrom': {'secretKeyRef': {'name': 'flag'}}}]),
+    ],
+)
+@pytest.mark.parametrize('candidate_state', ['ready', 'not-ready', 'missing-traffic'])
+def test_prod_backfill_candidate_gate_checks_literal_revision_env(
+    tmp_path, monkeypatch, name, entries, candidate_state
+) -> None:
+    service = 'backend-sync-backfill'
+    expectation = verifier.build_expectation(
+        commit_sha='d' * 40,
+        deploy_run_id='123',
+        deploy_run_attempt='1',
+        project='based-hardware',
+        region='us-central1',
+        environment='prod',
+        cloud_run_service=service,
+    )
+    revision = expectation.revisions[service]
+    documents = _documents(expectation)
+    documents[f'cloud_run/{service}']['status']['traffic'] = [{'revisionName': f'{service}-old', 'percent': 100}]
+    endpoint = 'https://backfill.invalid/v2/sync-jobs/run'
+    bindings = {
+        'SYNC_TASKS_HANDLER_URL': endpoint,
+        'SYNC_TASKS_OIDC_AUDIENCE': endpoint,
+        'SYNC_TASKS_QUEUE': 'sync-backfill-fresh',
+        'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED': 'false',
+        'BATCH_PROJECTION_OUTBOX': 'false',
+    }
+    env = [{'name': key, 'value': value} for key, value in bindings.items() if key != name]
+    if entries is not None:
+        env.extend({'name': name, **entry} for entry in entries)
+    candidate = documents[f'cloud_run_revision/{service}']
+    candidate['metadata'] = {'name': revision, 'labels': {'serving.knative.dev/service': service}}
+    candidate['spec']['containers'][0].update({'name': 'backend-1', 'env': env})
+    if candidate_state == 'not-ready':
+        candidate['status']['conditions'][0]['status'] = 'False'
+    elif candidate_state == 'missing-traffic':
+        del documents[f'cloud_run/{service}']['status']['traffic']
+
+    rc, report, _ = _run_main(
+        monkeypatch,
+        expectation,
+        [documents],
+        tmp_path,
+        [
+            '--candidate',
+            '--cloud-run-only',
+            '--cloud-run-service',
+            service,
+            '--backfill-binding-sha256',
+            hashlib.sha256(endpoint.encode()).hexdigest(),
+        ],
+    )
+
+    errors = report['errors']
+    expected_errors = {
+        'ready': [],
+        'not-ready': [f'cloud_run/{service}: expected revision is not Ready'],
+        'missing-traffic': [f'cloud_run/{service}: serving traffic status is unavailable'],
+    }[candidate_state]
+    if name is not None:
+        expected_errors.append(f'cloud_run/{service}: {name}')
+    assert rc == int(bool(expected_errors))
+    assert len(errors) == len(expected_errors)
+    assert all(actual.startswith(expected) for actual, expected in zip(errors, expected_errors))
+    assert all(endpoint not in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ('status', 'message'),
+    [
+        ({}, 'serving traffic status is unavailable'),
+        ({'traffic': []}, 'serving traffic status is unavailable'),
+        ({'traffic': {}}, 'serving traffic status is unavailable'),
+        ({'traffic': ['invalid']}, 'serving traffic target is ambiguous'),
+        ({'traffic': [{'latestRevision': True, 'percent': 100}]}, 'serving traffic target is ambiguous'),
+        ({'traffic': [{'revisionName': 'old', 'percent': '100'}]}, 'serving traffic target is ambiguous'),
+        ({'traffic': [{'revisionName': 'old', 'percent': True}]}, 'serving traffic target is ambiguous'),
+        (
+            {'traffic': [{'revisionName': 'old', 'latestRevision': 'true', 'percent': 100}]},
+            'serving traffic target is ambiguous',
+        ),
+        ({'traffic': [{'revisionName': 'old', 'percent': 90}]}, 'serving traffic allocation is incomplete'),
+        (
+            {'traffic': [{'revisionName': 'old', 'percent': 99}, {'revisionName': 'candidate', 'percent': 1}]},
+            'expected revision carries traffic before promotion',
+        ),
+        (
+            {
+                'traffic': [{'revisionName': 'old', 'latestRevision': True, 'percent': 100}],
+                'latestReadyRevisionName': 'candidate',
+            },
+            'serving traffic target is ambiguous',
+        ),
+        (
+            {'traffic': [{'latestRevision': True, 'percent': 100}], 'latestReadyRevisionName': 'candidate'},
+            'expected revision carries traffic before promotion',
+        ),
+        (
+            {'traffic': [{'latestRevision': True, 'percent': 100}], 'latestReadyRevisionName': 'old'},
+            None,
+        ),
+        (
+            {'traffic': [{'revisionName': 'old', 'percent': 100}, {'revisionName': 'candidate', 'tag': 'verify'}]},
+            None,
+        ),
+        (
+            {
+                'traffic': [
+                    {'revisionName': 'old', 'percent': 100},
+                    {'revisionName': 'candidate', 'tag': 'verify', 'percent': 0},
+                ],
+            },
+            None,
+        ),
+    ],
+)
+def test_backfill_candidate_requires_resolved_zero_traffic(status, message) -> None:
+    errors = verifier.evaluate_candidate_zero_traffic('backend-sync-backfill', 'candidate', status)
+    assert errors == ([] if message is None else [f'cloud_run/backend-sync-backfill: {message}'])
+
+
+@pytest.mark.parametrize(
+    ('configured', 'message'),
+    [
+        ([{'revisionName': 'old', 'percent': 100}], None),
+        ([{'latestRevision': True, 'percent': 100}], 'configured and serving candidate traffic disagree'),
+        ([{'revisionName': 'candidate', 'percent': 100}], 'configured and serving candidate traffic disagree'),
+        ([{'revisionName': 'old', 'latestRevision': True, 'percent': 100}], 'configured traffic target is ambiguous'),
+    ],
+)
+def test_backfill_candidate_cross_checks_configured_traffic(configured, message) -> None:
+    service = 'backend-sync-backfill'
+    document = _cloud_run_document(revision='candidate', image='expected-image', environment='prod')
+    document['status']['traffic'] = [{'revisionName': 'old', 'percent': 100}]
+    document['spec']['traffic'] = configured
+
+    errors = verifier.evaluate_cloud_run_service(
+        service,
+        'candidate',
+        'expected-image',
+        document,
+        expected_environment='prod',
+        require_serving_traffic=False,
+        expected_revision_document=_cloud_run_revision_document(image='expected-image'),
+        require_resolved_candidate_traffic=True,
+    )
+    assert errors == ([] if message is None else [f'cloud_run/{service}: {message}'])
+
+
+def test_candidate_action_passes_the_pinned_backfill_digest_only_in_production_scope() -> None:
+    action = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
+    candidate = action.split('id: verify-cloud-run-candidate', 1)[1].split('\n    - name:', 1)[0]
+    pin_lines = [line.strip() for line in candidate.splitlines() if '--backfill-binding-sha256' in line]
+    assert pin_lines == [
+        "${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && "
+        "(inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync-backfill') && "
+        "'--backfill-binding-sha256 3a180b6e241438dbc43a7292b07de3866e95a35af1bb08210be1d05e80017ceb' || '' }} \\"
+    ]
+    assert action.count('--backfill-binding-sha256') == 1
 
 
 def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence(tmp_path) -> None:
@@ -1620,11 +1807,8 @@ def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_sna
             assert fragment in restore_step
         if workflow_name == 'gcp_backend.yml':
             serving_smoke = text.index('Smoke promoted production serving API')
-            development_smoke = text.index('Smoke What Matters Now datastore query')
             assert serving_vector < serving_smoke < restore
-            assert serving_vector < development_smoke < restore
             assert "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in restore_step
-            assert "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'" in restore_step
         else:
             assert "inputs.deploy_profile == 'auto-dev'" in restore_step
         assert 'cancelled()' in restore_step
@@ -1652,10 +1836,8 @@ def test_production_cloud_run_only_boundary_smokes_serving_after_promotion():
     traffic = workflow.index('Shift Cloud Run traffic to validated revisions')
     verify = workflow.index('Verify serving backend release vector')
     smoke = workflow.index('Smoke promoted production serving API')
-    development_smoke = workflow.index('Smoke What Matters Now datastore query')
     restore = workflow.index('Restore Cloud Run traffic snapshot after failed promotion')
     assert snapshot < traffic < verify < smoke < restore
-    assert snapshot < traffic < verify < development_smoke < restore
     assert '--tag={0}' in workflow
     assert "default: 'cloud-run-only'" in workflow
     assert 'environment=prod, deploy_targets=all is unsupported' in workflow
@@ -1665,7 +1847,6 @@ def test_production_cloud_run_only_boundary_smokes_serving_after_promotion():
     assert '--data \'{"tag":"v0.0.0+1-macos"}\'' in workflow
     assert "--data '{}')" not in workflow
     assert "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in workflow
-    assert "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'" in workflow
     assert 'CLOUD_RUN_ONLY="--cloud-run-only"' in workflow
     assert 'probe-transcription-candidate-from-cloud-run.sh' not in workflow
 

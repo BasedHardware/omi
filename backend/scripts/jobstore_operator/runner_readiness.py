@@ -21,7 +21,7 @@ TARGET = ('jobstore_prod', 'batch-pipeline-worker@based-hardware.iam', '172.25.2
 INDEXES = ['jobs_due_leased_c', 'jobs_due_result_c', 'jobs_due_retry_c']
 READINESS_SECONDS = 50
 HEAD_SECONDS = 5
-STATUS_SECONDS = 15
+STATUS_SECONDS = 30
 FAILURE_CLASSES = frozenset(
     {
         'TimeoutExpired',

@@ -3,6 +3,8 @@
 import math
 import os
 
+from config.batch_pipeline_coalescing_protocol import MAX_COMPLETION_MEMBERS
+
 HOLD_SECONDS = 60.0
 MAX_GROUPS = 64
 MAX_OWNER_GROUPS = 2
@@ -13,6 +15,20 @@ MAX_GROUP_BYTES = 8 * 1024 * 1024
 MAX_AUDIO_SECONDS = 300.0
 DRAIN_PAGE = 8
 LEASE_SECONDS = 120.0
+EXTENDED_MAX_MEMBERS = MAX_COMPLETION_MEMBERS
+EXTENDED_MAX_AUDIO_SECONDS = 600.0
+
+
+def window_seconds(entitlement_class: str, *, backlog: bool) -> float:
+    """Only positively free owners may trade latency for packing. Unset is legacy."""
+    if entitlement_class != 'free':
+        return HOLD_SECONDS
+    name = 'BACKLOG' if backlog else 'FREE'
+    try:
+        value = float(os.getenv(f'BATCH_PIPELINE_COALESCING_{name}_WINDOW_SECONDS', '60'))
+    except ValueError:
+        return HOLD_SECONDS
+    return min(900.0, value) if math.isfinite(value) and value >= HOLD_SECONDS else HOLD_SECONDS
 
 
 def enabled() -> bool:

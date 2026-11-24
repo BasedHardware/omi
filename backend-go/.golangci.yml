@@ -1,0 +1,177 @@
+# Lint contract for backend-go. Every rule here exists to keep a property that agents
+# cannot hold in memory between sessions; docs/patterns.md says which rule guards what.
+# Suppressions are not available: `//nolint` is rejected by tools/archcheck.
+#
+# What is NOT here: which package may import which. That follows from a package's path and
+# is checked by tools/archcheck, so a new family needs no entry in this file.
+version: "2"
+run:
+  timeout: 10m
+  tests: true
+formatters:
+  enable: [gofmt, goimports]
+  settings:
+    goimports:
+      local-prefixes: [github.com/BasedHardware/omi/backend-go]
+linters:
+  default: none
+  enable:
+    # correctness
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - contextcheck
+    - containedctx
+    - copyloopvar
+    - durationcheck
+    - errorlint
+    - errname
+    - fatcontext
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - noctx
+    - reassign
+    - recvcheck
+    - rowserrcheck
+    - sqlclosecheck
+    - musttag
+    - gosec
+    - unqueryvet
+    # closed types
+    - exhaustive
+    - gochecksumtype
+    # explicit side effects
+    - depguard
+    - forbidigo
+    - gochecknoglobals
+    - gochecknoinits
+    # size and shape: one measure each of length, of branching and of interface width.
+    # Overlapping measures (cyclomatic complexity, nesting depth, line length) are left
+    # out: they fired together and pushed splits that hid a transaction or a state machine.
+    - funlen
+    - gocognit
+    - interfacebloat
+    - nakedret
+    # hygiene
+    - gocritic
+    - misspell
+    - modernize
+    - predeclared
+    - revive
+    - thelper
+    - tparallel
+    - unparam
+    - usestdlibvars
+  settings:
+    exhaustive:
+      check: [switch, mapliteral, typeswitch]
+      default-signifies-exhaustive: false
+    govet:
+      enable-all: true
+      disable: [fieldalignment]
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    funlen:
+      lines: 80
+      statements: 50
+    gocognit:
+      min-complexity: 20
+    interfacebloat:
+      max: 6
+    revive:
+      rules:
+        - name: context-as-argument
+          arguments:
+            - allowTypesBefore: "*testing.T"
+        - name: exported
+        - name: package-comments
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: receiver-naming
+        - name: var-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: blank-imports
+        - name: dot-imports
+        - name: increment-decrement
+        - name: range
+        - name: time-naming
+        - name: errorf
+        - name: empty-block
+        - name: redefines-builtin-id
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^time\.(Now|Since|Until|After|Sleep|Tick|NewTimer|NewTicker|AfterFunc)$
+          msg: "take a clock.Clock; only internal/platform/clock and cmd may read the wall clock"
+        - pattern: ^os\.(Getenv|LookupEnv|Environ|Setenv|Exit)$
+          msg: "configuration is read once in cmd/*/config.go and passed in as a typed value"
+        - pattern: ^(fmt\.Print.*|print|println)$
+          msg: "use the injected *slog.Logger"
+        - pattern: ^log\.
+          msg: "use the injected *slog.Logger"
+        - pattern: ^http\.(DefaultClient|DefaultTransport|Get|Post|Head|PostForm)$
+          msg: "use the injected client so timeouts, retries and faults are typed"
+        - pattern: ^context\.(Background|TODO)$
+          msg: "accept a context from the caller; only cmd and tests create a root context"
+        - pattern: ^panic$
+          msg: "return an error; a panic crosses function boundaries invisibly"
+    depguard:
+      rules:
+        banned-everywhere:
+          deny:
+            - pkg: database/sql
+              desc: "use pgx directly with plain SQL and typed rows"
+            - pkg: gorm.io
+              desc: "no ORM: plain SQL with typed rows"
+            - pkg: entgo.io
+              desc: "no ORM: plain SQL with typed rows"
+            - pkg: github.com/uptrace/bun
+              desc: "no ORM: plain SQL with typed rows"
+            - pkg: github.com/jmoiron/sqlx
+              desc: "use pgx directly with plain SQL and typed rows"
+            - pkg: log$
+              desc: "use log/slog through the injected logger"
+            - pkg: io/ioutil
+              desc: "deprecated: use io and os"
+            - pkg: math/rand$
+              desc: "use math/rand/v2 for jitter or crypto/rand for identifiers"
+            - pkg: unsafe
+              desc: "no unsafe"
+            - pkg: reflect
+              desc: "reflection hides control flow; write the types out"
+            - pkg: github.com/stretchr/testify
+              desc: "use the standard testing package and pgregory.net/rapid"
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [funlen, gocognit, gochecknoglobals, gosec, containedctx, interfacebloat, contextcheck]
+      - path: _test\.go
+        text: "context\\.(Background|TODO)|time\\.(Now|Since|Until|After|Sleep|NewTimer|NewTicker)|os\\.(Getenv|LookupEnv)|panic"
+        linters: [forbidigo]
+      # Binaries and tools are where the environment is read and the process ends.
+      - path: (^|/)(cmd|tools)/
+        linters: [forbidigo, gochecknoglobals]
+      # archcheck reads the tree it is pointed at; that is its job.
+      - path: (^|/)tools/
+        linters: [gosec, funlen, gocognit]
+      - path: internal/platform/clock/
+        linters: [forbidigo]
+      # Test-helper packages set up a test: they read its environment and own its deadline.
+      - path: (^|/)internal/(platform/pgtest|platform/docstore/docstoretest|queue/queuetest)/
+        linters: [forbidigo, contextcheck]
+      # The conformance port keeps the correctness linters and drops the shape and
+      # documentation ones: it is replaced by the real family, not grown. See README.md.
+      - path: (^|/)(internal/conformance|cmd/jobd)/
+        linters: [funlen, gocognit, revive, containedctx, errname, gocritic, unparam, interfacebloat]
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

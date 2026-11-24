@@ -765,6 +765,15 @@ def update_action_item_tool(
 
         return result
 
+    except chat_edits.UnsupportedChatEditField as e:
+        # The fence refused a field the chat editor cannot write. Name it so the
+        # model can retry with a supported argument instead of the user's edit
+        # failing opaquely.
+        logger.warning(f"⚠️ update_action_item_tool - refused unsupported field(s): {', '.join(e.fields)}")
+        return (
+            f"Error: the chat editor cannot change {', '.join(e.fields)}. "
+            "Retry with completed, description, due_at, clear_due_date, or delete."
+        )
     except Exception as e:
         logger.error(f"❌ Error updating action item: {e}", exc_info=True)
         return "Error updating action item. Please try again."

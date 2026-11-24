@@ -73,6 +73,44 @@ def test_summary_commit_preserves_record_lane_owner(writer, record_owner):
     assert writer.commits[0]['summary_completed_at']
 
 
+@pytest.mark.parametrize(
+    'owner_items', [[{'description': 'Owner revision', 'completed': True}], []], ids=['edit', 'delete']
+)
+def test_repair_notes_keep_the_latest_embedded_owner_items(writer, owner_items):
+    writer.document.update(
+        {
+            'v3_rederive_live_run': 'repair',
+            db.ACTION_ITEMS_EDIT_REVISION: 'edit',
+            'structured': {'action_items': owner_items},
+        }
+    )
+    notes = payload()
+    notes['structured']['action_items'] = [{'description': 'Generated', 'completed': False}]
+
+    assert db.persist_processing_result_with_lifecycle('u', notes)
+
+    assert writer.commits[0]['structured']['action_items'] == owner_items
+    assert writer.commits[0]['structured']['overview'] == notes['structured']['overview']
+
+
+@pytest.mark.parametrize(
+    'created,marked', [(True, True), (False, True), (True, False)], ids=['confirmed', 'cleared', 'legacy-confirmed']
+)
+def test_repair_notes_keep_the_latest_calendar_confirmation(writer, created, marked):
+    start = datetime(2026, 11, 20, tzinfo=timezone.utc)
+    owner_events = [{'title': 'Original event', 'start': start, 'created': created}]
+    writer.document.update(v3_rederive_live_run='repair', structured={'events': owner_events})
+    if marked:
+        writer.document[db.EVENTS_EDIT_REVISION] = 'edit'
+    notes = payload()
+    notes['structured']['events'] = [{'title': 'Generated event', 'start': start, 'created': False}]
+
+    assert db.persist_processing_result_with_lifecycle('u', notes)
+
+    assert writer.commits[0]['structured']['events'] == owner_events
+    assert writer.commits[0]['structured']['overview'] == notes['structured']['overview']
+
+
 @pytest.mark.parametrize('sections_only', [False, True])
 def test_long_notes_use_the_lifecycle_summary_ledger_writer(writer, sections_only):
     notes = payload()
@@ -104,10 +142,50 @@ def test_record_owner_does_not_bypass_summary_processing_fence(writer):
 def test_empty_model_result_cannot_commit_or_emit(writer, monkeypatch):
     emit = Mock()
     monkeypatch.setattr(delivery, 'emit', emit)
+    token = delivery.PROCESS_CONTEXT.set({'owner': 'worker', 'claimed': False})
+    try:
+        with pytest.raises(delivery.SummaryOutputUnavailable):
+            db.persist_processing_result_with_lifecycle('u', payload(''))
+    finally:
+        delivery.PROCESS_CONTEXT.reset(token)
+    assert not writer.commits
+    emit.assert_not_called()
+
+
+def test_empty_model_result_from_a_finalization_owned_row_keeps_the_job_retryable(writer, monkeypatch):
+    """The finalizer's job is the only repair owner: the raise must survive so it retries."""
+    writer.document['finalization_job_id'] = 'job-1'
+    emit = Mock()
+    monkeypatch.setattr(delivery, 'emit', emit)
     with pytest.raises(delivery.SummaryOutputUnavailable):
         db.persist_processing_result_with_lifecycle('u', payload(''))
     assert not writer.commits
     emit.assert_not_called()
+
+
+def test_empty_model_result_from_a_request_path_commits_with_debt(writer, monkeypatch):
+    """from-segments and finalize have no consumer to catch the fence: commit, keep the debt."""
+    emit = Mock()
+    monkeypatch.setattr(delivery, 'emit', emit)
+    assert db.persist_processing_result_with_lifecycle('u', payload(''))
+    assert len(writer.commits) == 1
+    written = writer.commits[0]
+    assert written['summary_due_at'] == 220
+    assert not written.get('summary_completed_at')
+    assert not written.get('summary_output_present')
+    emit.assert_called_once()
+    assert emit.call_args[0][0]['reason'] == 'empty_output'
+
+
+def test_from_segments_import_with_an_empty_merge_returns_a_recorded_outcome(writer, monkeypatch):
+    """The import request must not 500 on a merge result that carries no summary."""
+    emit = Mock()
+    monkeypatch.setattr(delivery, 'emit', emit)
+    assert lifecycle.persist_processed_conversation('u', payload(''))
+    assert len(writer.commits) == 1
+    assert writer.commits[0]['summary_due_at'] == 220
+    assert not writer.commits[0].get('summary_completed_at')
+    assert emit.call_args[0][0]['reason'] == 'empty_output'
 
 
 def test_empty_model_result_without_open_obligation_commits(writer, monkeypatch):

@@ -24,7 +24,7 @@ from database.jobstore.dual_store import DualStore
 
 SEAMS = [
     ('diarizer.batch_pipeline_runtime', 'main'),
-    ('utils.batch_pipeline.serving', 'serving_for_stage'),
+    ('utils.batch_pipeline.serving', '_serving_for_stage'),
     ('utils.batch_pipeline.live', 'register_recording'),
     ('utils.batch_pipeline.intake', 'accept_upload'),
 ]
@@ -128,6 +128,25 @@ def test_secondary_writer_stores_are_the_shadow_seam(module_name, function):
         if isinstance(node, ast.Call) and getattr(node.func, 'id', None) == 'FirestoreStore'
     ]
     parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    if function == 'get_durable_job_status':
+        # Exact WAL replay reads plain Firestore. Only the wrapped store can
+        # reach the legacy status helper that can redrive work.
+        assert len(calls) == 1
+        assignment = parents[calls[0]]
+        assert isinstance(assignment, ast.Assign) and len(assignment.targets) == 1
+        target = assignment.targets[0]
+        assert isinstance(target, ast.Name)
+        uses = [
+            parents[node]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Name) and node.id == target.id and isinstance(node.ctx, ast.Load)
+        ]
+        consumers = {ast.unparse(call.func): call for call in uses if isinstance(call, ast.Call)}
+        assert len(uses) == len(consumers) == 2
+        assert consumers.keys() == {'wal_duplicate.terminal_status', 'shadow_from_env'}
+        legacy = parents[consumers['shadow_from_env']]
+        assert isinstance(legacy, ast.Call) and ast.unparse(legacy.func) == 'durable_status'
+        return
     assert len(calls) == 1 and getattr(parents[calls[0]].func, 'id', None) == 'shadow_from_env'
 
 

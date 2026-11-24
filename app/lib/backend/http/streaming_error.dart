@@ -13,10 +13,11 @@ enum ChatStreamFailureClass {
 }
 
 class ChatStreamException implements Exception {
-  const ChatStreamException(this.kind, {this.statusCode});
+  const ChatStreamException(this.kind, {this.statusCode, this.detail});
 
   final ChatStreamFailureClass kind;
   final int? statusCode;
+  final String? detail;
 
   @override
   String toString() => 'ChatStreamException($kind, statusCode: $statusCode)';

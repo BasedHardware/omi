@@ -54,6 +54,7 @@ def index_from_env(mirror: Any) -> Any:
             and selected_queries() == queries
             and (not production_policy_applies(mirror.namespace) or jobstore_production_mirror_configured()),
             observe=mirror.observe_discovery,
+            recovery_policy=lambda: os.getenv('JOBSTORE_INDEX_RECOVERY_POLICY', ''),
         )
         _INDEXED[mirror.namespace] = (mirror, queries, store)
         return store

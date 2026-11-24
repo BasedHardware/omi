@@ -21,6 +21,7 @@ from models.conversation import AudioTimelineProvenance, Conversation
 from models.structured import Structured
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from utils.conversations import speaker_resolution as stage
+from utils.conversations import final_pass_batch  # noqa: F401 - initialize the final-pass SDK graph before call timing
 from utils.conversations.audio_placement import prepare_audio_coverage
 from utils.conversations.smart_merge_policy import rebase_donor_segments
 from utils.metrics import OMI_AUDIO_PLACEMENT_TOTAL, OMI_CONVERSATION_SPEAKER_RESOLUTION_REASONS_TOTAL

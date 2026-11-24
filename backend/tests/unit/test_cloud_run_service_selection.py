@@ -32,6 +32,12 @@ def render(script):
         'inputs.integration_canary': 'false',
         'inputs.deploy_profile': 'manual',
         'inputs.environment': 'prod',
+        'inputs.deploy_targets': 'cloud-run-only',
+        'inputs.deploy_gateway': 'false',
+        'inputs.service': 'backend',
+        'inputs.integration_only': 'false',
+        'inputs.post_wrap_guard': 'internal',
+        'inputs.integration_image': '',
         'steps.capture-backend-revision.outputs.revision': 'backend-new',
         'steps.capture-backend-sync-revision.outputs.revision': 'backend-sync-new',
         'steps.sync-backfill.outputs.revision': 'backend-sync-backfill-new',
@@ -123,6 +129,8 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
             CALLS=str(log),
             DEPLOY_CONTROL_SCRIPTS='/controls',
             SELECTED_CLOUD_RUN_SERVICES=' '.join(selected(service)),
+            CLOUD_RUN_SERVICE=service,
+            ROLLBACK_REVISION=f'{service}-old',
             GMP_CANDIDATE_TAG='',
             RUNNER_TEMP=str(tmp_path),
         ),
@@ -144,6 +152,12 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
         ):
             seen.add(match[1])
     assert seen == expected, (calls, expected)
+    if name == 'Capture Cloud Run pre-promotion traffic snapshot':
+        assert len(calls) == 1
+        if service == 'all':
+            assert '--expected-serving-revision' not in calls[0]
+        else:
+            assert f'--expected-serving-revision {service}-old' in calls[0]
     if name == 'Shift Cloud Run traffic to validated revisions':
         assert len(calls) == len(expected)
         assert all('--to-revisions=' + s + '-new=100' in c for s, c in zip(selected(service), calls))
@@ -202,9 +216,21 @@ def test_step_census_refuses_an_unclassified_new_step():
     # A new step requires updating this census with a target-scope disposition.
     # Added routing composition is local-only, sync-scoped, and exercised by the
     # actual-shell test below; it never invokes a production transport.
+    # 2026-11-20 `Resolve live integration maxScale`: read-only (services list and
+    # revisions describe), integration-scoped with the integration deploy's exact `if`;
+    # its shell is exercised in test_cloud_run_live_caps.py.
+    # `Resolve production backend memory` reads local ops config and writes only
+    # step outputs. It runs for the production backend/sync deploy paths.
+    # SCA-3681 removes the manual development datastore smoke from the census.
+    memory = step('Resolve production backend memory')
+    assert memory['if'] == (
+        "${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && "
+        "(inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend' || "
+        "inputs.cloud_run_service == 'backend-sync') }}"
+    )
     assert (
         hashlib.sha256(json.dumps([s['name'] for s in STEPS]).encode()).hexdigest()
-        == "d063de4eca0ba68df4fb289aade700b662aa7fa8330fdb0a385f17c524f14ccd"
+        == "5e6374a62dc5795f042318f5f355a5ec8b27d99d535d292097f960557f05853b"
     )
 
 
@@ -273,6 +299,7 @@ def test_selected_workflow_refuses_lock_or_source_bypass_before_side_effects(tmp
         SERVICE_IMAGES='',
         REQUESTED_BY='fixture',
         RELEASE_SHA='a' * 40,
+        SELECTED_ROLLBACK_REVISION='backend-sync-old',
         SKIP_ELIGIBILITY='false',
         BREAK_GLASS_LOCK='false',
         GITHUB_OUTPUT=str(output),
@@ -281,6 +308,63 @@ def test_selected_workflow_refuses_lock_or_source_bypass_before_side_effects(tmp
     result = subprocess.run(['bash', '-c', script], env=env, text=True, capture_output=True, timeout=10)
     assert result.returncode != 0
     assert not output.exists()
+
+
+@pytest.mark.parametrize('service', SERVICES)
+@pytest.mark.parametrize('inverse_kind', ['missing', 'wrong_service', 'admitted'])
+def test_selected_workflow_binds_admitted_inverse(tmp_path, service, inverse_kind):
+    inverse = dict(missing='', wrong_service='other-service-old', admitted=f'{service}-old')[inverse_kind]
+    workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend.yml').read_text())
+    jobs = workflow['jobs']
+    script = jobs['validate-production-boundary']['steps'][0]['run']
+    script = script.replace("${{ github.event.inputs.deploy_gateway }}", 'false')
+    output = tmp_path / 'outputs'
+    result = subprocess.run(
+        ['bash', '-c', script],
+        env=dict(
+            os.environ,
+            DEPLOY_ENVIRONMENT='prod',
+            DEPLOY_TARGETS='cloud-run-only',
+            WORKFLOW_MODE='deploy',
+            CLOUD_RUN_SERVICE=service,
+            SERVICE_IMAGES='',
+            REQUESTED_BY='selection:fixture',
+            RELEASE_SHA='a' * 40,
+            SKIP_ELIGIBILITY='false',
+            BREAK_GLASS_LOCK='false',
+            SELECTED_ROLLBACK_REVISION=inverse,
+            GITHUB_OUTPUT=str(output),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert (result.returncode == 0) == (inverse_kind == 'admitted'), result.stderr
+    if result.returncode == 0:
+        emitted = dict(line.split('=', 1) for line in output.read_text().splitlines())
+        assert emitted['rollback_revision'] == inverse
+        assert 'inputs.selected_rollback_revision' in workflow['run-name']
+        assert (
+            'needs.validate-production-boundary.outputs.rollback_revision'
+            in jobs['deploy']['steps'][1]['with']['rollback_revision']
+        )
+        boundary = subprocess.run(
+            ['bash', '-c', render(step('Validate deploy profile boundary')['run'])],
+            env=dict(
+                os.environ,
+                CLOUD_RUN_SERVICE=service,
+                SERVICE_IMAGES='',
+                ROLLBACK_REVISION=emitted['rollback_revision'],
+                GITHUB_WORKSPACE=str(ROOT),
+                GITHUB_ENV=str(tmp_path / 'runner-env'),
+            ),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert boundary.returncode == 0, boundary.stderr
+    else:
+        assert not output.exists()
 
 
 @pytest.mark.parametrize('routing_enabled', [True, False])

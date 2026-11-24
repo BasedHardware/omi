@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-poll-requires-transient-state",
+  "family": "other",
   "violated_contract": "An asynchronous observer must recognize a durable safe successor of its target condition when background work can advance past the target before the observer polls. Requiring a transient intermediate state can time out after the intended condition has already been satisfied.",
   "canonical_prevention": "Define the observation by its required safety properties and accept later states that preserve those properties. Keep unsafe or terminal states excluded. Exercise the real producer transition before invoking the observer, so regression coverage does not depend on winning a scheduling race.",
   "canonical_prevention_artifact": [

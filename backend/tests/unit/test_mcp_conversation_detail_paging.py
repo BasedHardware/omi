@@ -53,7 +53,26 @@ def registry_and_budget():
     return {flag['key']: flag for flag in registry}, budget
 
 
-def test_walk_1200_segments_once_with_one_existing_read_per_page(stored):
+@pytest.fixture(scope='module')
+def output_validators():
+    """Check immutable tool schemas once; validate every returned page as before."""
+    validators = {}
+    for name in ('get_conversation_by_id', 'get_conversations_by_ids'):
+        schema = TOOLS_BY_NAME[name].output_schema
+        validator_class = jsonschema.validators.validator_for(schema)
+        validator_class.check_schema(schema)
+        validators[name] = validator_class(schema)
+    return validators
+
+
+def test_output_validator_rejects_a_page_without_conversation(output_validators):
+    with pytest.raises(jsonschema.ValidationError):
+        output_validators['get_conversation_by_id'].validate(
+            {'total_segments': 1200, 'truncated': False, 'next_cursor': None}
+        )
+
+
+def test_walk_1200_segments_once_with_one_existing_read_per_page(stored, output_validators):
     row, fetch = stored
     pages = []
     cursor = None
@@ -62,7 +81,7 @@ def test_walk_1200_segments_once_with_one_existing_read_per_page(stored):
         pages.append(page)
         assert page['total_segments'] == 1200
         assert page['truncated'] == (page['next_cursor'] is not None)
-        jsonschema.validate(page, TOOLS_BY_NAME['get_conversation_by_id'].output_schema)
+        output_validators['get_conversation_by_id'].validate(page)
         cursor = page['next_cursor']
         if cursor is None:
             break
@@ -217,9 +236,9 @@ def test_request_time_default_and_advertised_schema_follow_env(stored, monkeypat
     assert len(read(max_segments=2)['conversation']['transcript_segments']) == 2
 
 
-def test_batch_item_cursor_resumes_with_detail_tool_without_extra_reads(stored):
+def test_batch_item_cursor_resumes_with_detail_tool_without_extra_reads(stored, output_validators):
     batch = mcp_sse.execute_tool(OWNER, 'get_conversations_by_ids', {'conversation_ids': [CID], 'max_segments': 100})
-    jsonschema.validate(batch, TOOLS_BY_NAME['get_conversations_by_ids'].output_schema)
+    output_validators['get_conversations_by_ids'].validate(batch)
     item = batch['conversations'][0]
     assert item['total_segments'] == 1200 and item['truncated']
     assert 'next_cursor' not in batch

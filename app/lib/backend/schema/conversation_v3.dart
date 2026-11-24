@@ -5,6 +5,7 @@
 library;
 
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
+import 'package:omi/backend/schema/structured.dart';
 
 /// Where a conversation is in the pipeline; drives the Home tile.
 enum ConversationTileState {
@@ -71,7 +72,9 @@ class ConversationV3Fields {
     this.tileState,
     this.titleLocked = false,
     this.recordingPieces = const [],
+    this.recordingIds = const [],
     this.summaryCoversThrough,
+    this.liveSummary,
     this.recording = false,
   });
 
@@ -84,8 +87,14 @@ class ConversationV3Fields {
   final bool titleLocked;
   final List<RecordingPiece> recordingPieces;
 
+  /// Source IDs carried by the authenticated live-window read and hydrated detail.
+  final List<String> recordingIds;
+
   /// Last speech the stored summary covers; null when no summary is stored.
   final DateTime? summaryCoversThrough;
+
+  /// The owner-scoped live preview from detail. It does not enter the cached or final summary.
+  final ({Structured structured, DateTime coversThrough})? liveSummary;
 
   /// A pendant capture's storage document. The server never lists one, but the capture socket still
   /// delivers them by recording id for released builds; a v3 Home never shows one as a row.
@@ -97,7 +106,9 @@ class ConversationV3Fields {
     'tile_state',
     'title_locked',
     'recording_pieces',
+    'v3_recording_ids',
     'summary_covers_through',
+    'live_summary',
     'recording',
   ];
 
@@ -105,6 +116,7 @@ class ConversationV3Fields {
   static ConversationV3Fields? fromJson(Map<String, dynamic> json) {
     if (!_keys.any(json.containsKey)) return null;
     final pieces = json['recording_pieces'];
+    final recordingIds = json['v3_recording_ids'];
     final covers = json['summary_covers_through'];
     return ConversationV3Fields(
       kind: json['kind'] is String ? json['kind'] as String : null,
@@ -113,9 +125,27 @@ class ConversationV3Fields {
       titleLocked: json['title_locked'] == true,
       recordingPieces:
           pieces is List ? pieces.map(RecordingPiece.fromJson).whereType<RecordingPiece>().toList() : const [],
+      recordingIds: recordingIds is List
+          ? recordingIds.whereType<String>().where((id) => id.isNotEmpty && !id.contains('/')).toList(growable: false)
+          : const [],
       summaryCoversThrough: covers is String ? DateTime.tryParse(covers) : null,
+      liveSummary: _readLiveSummary(json['live_summary']),
       recording: json['recording'] == true,
     );
+  }
+
+  static ({Structured structured, DateTime coversThrough})? _readLiveSummary(Object? value) {
+    if (value is! Map<String, dynamic>) return null;
+    final structured = value['structured'];
+    final timestamp = value['summary_covers_through'];
+    if (structured is! Map<String, dynamic> || timestamp is! String) return null;
+    final through = DateTime.tryParse(timestamp);
+    if (through == null) return null;
+    try {
+      return (structured: Structured.fromJson(structured), coversThrough: through);
+    } catch (_) {
+      return null;
+    }
   }
 
   Map<String, dynamic> toJson() => {
@@ -124,6 +154,7 @@ class ConversationV3Fields {
         if (tileState != null) 'tile_state': tileState!.name,
         'title_locked': titleLocked,
         'recording_pieces': recordingPieces.map((p) => p.toJson()).toList(),
+        if (recordingIds.isNotEmpty) 'v3_recording_ids': recordingIds,
         if (summaryCoversThrough != null) 'summary_covers_through': summaryCoversThrough!.toUtc().toIso8601String(),
         if (recording) 'recording': true,
       };

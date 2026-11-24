@@ -392,6 +392,28 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('support bundle preserves an unknown anchor while counting unrecovered drops', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    mockBleHostApi(
+      'getExtendedDeviceDiagnostics',
+      jsonEncode({
+        'disconnect_history_v2': [
+          {'timestamp': now - 1000, 'eventType': 'disconnect', 'timeToReconnectMs': 0},
+        ],
+      }),
+    );
+    await pumpPage(tester);
+    await openSupportDialog(tester);
+
+    final bundle = jsonDecode(tester.widget<SelectableText>(find.byType(SelectableText)).data!) as Map<String, dynamic>;
+    expect(bundle['counters_since'], {'reconnection_count': null, 'fail_to_connect_count': null});
+    expect(bundle['reconnection_count_window'], 1);
+    expect(bundle['reconnection_count'], 3);
+    expect(_CannedUpload.requests, 0);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('cancelling the review dialog tracks dialog_cancelled', (tester) async {
     await pumpPage(tester);
     await openSupportDialog(tester);

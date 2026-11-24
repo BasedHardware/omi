@@ -191,10 +191,11 @@ def test_outline_title_read_is_owner_scoped_bounded_and_hides_capture_rows(monke
 
 
 @pytest.mark.asyncio
-async def test_context_change_alone_never_schedules_summary_rewrite(builder, monkeypatch):
+@pytest.mark.parametrize('text', ['greenhouse plan ' * 160, '温室計画' * 80], ids=['latin', 'cjk'])
+async def test_context_change_alone_never_schedules_summary_rewrite(builder, monkeypatch, text):
     committed, calls = builder
     existing, cache = {}, []
-    recording = source(transcript_segments=[{'text': 'greenhouse plan ' * 160, 'start': 0, 'end': 10}])
+    recording = source(transcript_segments=[{'text': text, 'start': 0, 'end': 10}])
     monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': recording}, existing, cache))
     await service.reconcile('u')
     row = committed[-1][4][0]
@@ -212,7 +213,15 @@ async def test_context_change_alone_never_schedules_summary_rewrite(builder, mon
 
 
 @pytest.mark.asyncio
-async def test_late_speech_rewrite_drops_old_summary_coverage(builder, monkeypatch):
+@pytest.mark.parametrize(
+    ('original', 'addition'),
+    [
+        ('greenhouse plan ' * 160, 'late detail ' * 80),
+        (' '.join(['温室計画' * 4] * 20), '補充說明' * 30),
+    ],
+    ids=['latin', 'cjk'],
+)
+async def test_late_speech_rewrite_drops_old_summary_coverage(builder, monkeypatch, original, addition):
     from datetime import datetime
 
     committed, _calls = builder
@@ -224,7 +233,7 @@ async def test_late_speech_rewrite_drops_old_summary_coverage(builder, monkeypat
 
     monkeypatch.setattr(service, 'datetime', Clock)
     existing, cache = {}, []
-    recording = source(transcript_segments=[{'text': 'greenhouse plan ' * 160, 'start': 0, 'end': 10}])
+    recording = source(transcript_segments=[{'text': original, 'start': 0, 'end': 10}])
     monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': recording}, existing, cache))
     await service.reconcile('u')
     row = committed[-1][4][0]
@@ -234,7 +243,7 @@ async def test_late_speech_rewrite_drops_old_summary_coverage(builder, monkeypat
     existing[row['id']] = row
     cache[:] = committed[-1][5]
     # Late transcription adds well over 10% more words inside the summarized window.
-    recording['transcript_segments'].append({'text': 'late detail ' * 80, 'start': 4, 'end': 8})
+    recording['transcript_segments'].append({'text': addition, 'start': 4, 'end': 8})
     await service.reconcile('u')
     rebuilt = committed[-1][4][0]
     assert rebuilt['v3_rewrites'] == 1 and rebuilt['v3_process_pending'] is True
@@ -268,3 +277,52 @@ async def test_late_audio_metadata_gives_a_finished_conversation_its_pieces(buil
     rebuilt = committed[-1][4][0]
     assert rebuilt['id'] == row['id']
     assert rebuilt['recording_pieces'] == [{'recording_id': 'r', 'audio_file_id': 'f', 'start': 0.0, 'end': 10.0}]
+
+
+def test_short_tasks_requests_no_response_format_and_parses_fenced_json(monkeypatch):
+    # 2026-11-18: the conv_action_items gateway lane rejects response_format json_object (400
+    # capability_not_supported), which failed every short v3 tile.
+    from types import SimpleNamespace
+
+    from utils.conversations.v3 import models as v3_models
+
+    bound = {}
+
+    class Model:
+        def bind(self, **kwargs):
+            bound.update(kwargs)
+            return self
+
+        def invoke(self, messages):
+            return SimpleNamespace(content='```json\n{"action_items": [{"description": "Send the deck to Sam"}]}\n```')
+
+    monkeypatch.setattr(v3_models, 'require_current_generated_compute', lambda *a, **kw: None)
+    monkeypatch.setattr(v3_models, 'get_or_create_omi_gateway_llm', lambda *a, **kw: Model())
+    short = conversation().model_copy(update={'transcript_segments': conversation().transcript_segments[:1]})
+    structured = v3_models.short_tasks('u', short)
+    assert bound == {'reasoning_effort': 'low'}
+    assert [item.description for item in structured.action_items] == ['Send the deck to Sam']
+
+
+@pytest.mark.parametrize(
+    'reply, expected',
+    [
+        ('{"action_items": [{"description": "a"}]}\nNote: use {curly} braces', [{'description': 'a'}]),
+        ('Sure {see below}: {"action_items": []}', []),
+        ('[{"description": "a"}]', [{'description': 'a'}]),
+    ],
+)
+def test_short_tasks_action_items_parse(reply, expected):
+    from utils.conversations.v3 import models as v3_models
+
+    assert v3_models._action_items(reply) == expected
+
+
+@pytest.mark.parametrize(
+    'reply', ['no json here', '{"items": []}', '{"action_items": "later"}', '{"action_items": {}}']
+)
+def test_short_tasks_action_items_reject_retries(reply):
+    from utils.conversations.v3 import models as v3_models
+
+    with pytest.raises(ValueError):
+        v3_models._action_items(reply)

@@ -246,6 +246,7 @@ COMPOSE_OUTCOMES = frozenset(
         'live',
         'empty',
         'no_episode',
+        'skipped_deleted',
         'superseded',
         'kept_pending',
         'stale',

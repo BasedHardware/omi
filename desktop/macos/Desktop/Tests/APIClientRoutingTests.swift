@@ -691,7 +691,7 @@ final class APIClientRoutingTests: XCTestCase {
 
   func testDeleteConversationRoutesToPython() async {
     let client = await makeTestClient()
-    try? await client.deleteConversation(id: "conv-456")
+    _ = try? await client.deleteConversation(id: "conv-456")
     assertRoutes(
       URLCapture.capturedRequests, host: "python-test", port: 9001,
       pathContains: "v1/conversations/conv-456?cascade=true", method: "DELETE",

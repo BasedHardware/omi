@@ -15,7 +15,11 @@ import 'package:omi/utils/l10n_extensions.dart';
 class AuthComponent extends StatefulWidget {
   final VoidCallback onSignIn;
 
-  const AuthComponent({super.key, required this.onSignIn});
+  /// Host tests cannot set [Platform.isIOS]; this renders the Apple button there.
+  @visibleForTesting
+  final bool? debugShowAppleSignIn;
+
+  const AuthComponent({super.key, required this.onSignIn, this.debugShowAppleSignIn});
 
   @override
   State<AuthComponent> createState() => _AuthComponentState();
@@ -66,6 +70,9 @@ class _AuthComponentState extends State<AuthComponent> {
               // Title text
               Text(
                 context.l10n.speakTranscribeSummarize,
+                // A 32 pt headline past 1.5x breaks "Transcribe." mid-word; the buttons below carry
+                // the text size instead.
+                textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.5),
                 style: TextStyle(
                   color: OmiColors.textPrimary,
                   fontSize: 32,
@@ -77,127 +84,155 @@ class _AuthComponentState extends State<AuthComponent> {
               ),
 
               const SizedBox(height: 32),
+            ],
+            // The buttons stay pinned under the scrolling title at every text size. Their labels stop
+            // growing at 2x so both buttons and the legal line fit on a small phone.
+            footer: [
+              MediaQuery.withClampedTextScaling(
+                maxScaleFactor: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Where the sign-in buttons start; toasts float above it.
+                    SizedBox(key: _buttonsTop, width: double.infinity),
 
-              // Where the sign-in buttons start; toasts float above it.
-              SizedBox(key: _buttonsTop, width: double.infinity),
-
-              // Sign in buttons
-              if (!provider.isLocalDevProfile && (Platform.isIOS || Platform.isAndroid)) ...[
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      OmiHaptics.selection();
-                      provider.onAppleSignIn(widget.onSignIn);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: OmiColors.accent,
-                      foregroundColor: OmiColors.onAccent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const FaIcon(FontAwesomeIcons.apple, size: 24),
-                        const SizedBox(width: 8),
-                        Text(
-                          context.l10n.signInWithApple,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'Manrope',
+                    // Sign in buttons
+                    if (!provider.isLocalDevProfile &&
+                        (widget.debugShowAppleSignIn ?? (Platform.isIOS || Platform.isAndroid))) ...[
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: double.infinity, minHeight: 56),
+                        child: ElevatedButton(
+                          onPressed: () {
+                            OmiHaptics.selection();
+                            provider.onAppleSignIn(widget.onSignIn);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: OmiColors.accent,
+                            foregroundColor: OmiColors.onAccent,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                          ),
+                          child: Padding(
+                            // Wrapped labels keep space above and below; one line still fits in 56 pt.
+                            padding: const EdgeInsets.symmetric(vertical: OmiSpacing.sm),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const FaIcon(FontAwesomeIcons.apple, size: 24),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    context.l10n.signInWithApple,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                      fontFamily: 'Manrope',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
+                      ),
+                      const SizedBox(height: 16),
+                    ],
 
-              // Google sign in button
-              if (!provider.isLocalDevProfile)
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      OmiHaptics.selection();
-                      provider.onGoogleSignIn(widget.onSignIn);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: OmiColors.accent,
-                      foregroundColor: OmiColors.onAccent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const FaIcon(FontAwesomeIcons.google, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          context.l10n.signInWithGoogle,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                    // Google sign in button
+                    if (!provider.isLocalDevProfile)
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: double.infinity, minHeight: 56),
+                        child: ElevatedButton(
+                          onPressed: () {
+                            OmiHaptics.selection();
+                            provider.onGoogleSignIn(widget.onSignIn);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: OmiColors.accent,
+                            foregroundColor: OmiColors.onAccent,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                          ),
+                          child: Padding(
+                            // Wrapped labels keep space above and below; one line still fits in 56 pt.
+                            padding: const EdgeInsets.symmetric(vertical: OmiSpacing.sm),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const FaIcon(FontAwesomeIcons.google, size: 20),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    context.l10n.signInWithGoogle,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                        fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
+                      ),
 
-              // Local development sign-in. Only rendered for a local_dev
-              // build: community builds cannot complete a real OAuth flow,
-              // because provider OAuth clients are bound to the official
-              // bundle id and a community build is signed with a suffixed
-              // one. Never shown in a production-family build.
-              if (provider.isLocalDevProfile) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: OutlinedButton(
-                    onPressed: () {
-                      OmiHaptics.selection();
-                      provider.onLocalDevSignIn(widget.onSignIn);
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: OmiColors.textPrimary,
-                      side: BorderSide(color: OmiColors.textPrimary.withValues(alpha: 0.4)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                    ),
-                    child: const Text(
-                      'Sign in (local dev)',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                    ),
-                  ),
-                ),
-              ],
+                    // Local development sign-in. Only rendered for a local_dev
+                    // build: community builds cannot complete a real OAuth flow,
+                    // because provider OAuth clients are bound to the official
+                    // bundle id and a community build is signed with a suffixed
+                    // one. Never shown in a production-family build.
+                    if (provider.isLocalDevProfile) ...[
+                      const SizedBox(height: 12),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: double.infinity, minHeight: 56),
+                        child: OutlinedButton(
+                          onPressed: () {
+                            OmiHaptics.selection();
+                            provider.onLocalDevSignIn(widget.onSignIn);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: OmiColors.textPrimary,
+                            side: BorderSide(color: OmiColors.textPrimary.withValues(alpha: 0.4)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(vertical: OmiSpacing.sm),
+                            child: Text(
+                              'Sign in (local dev)',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
 
-              const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-              // Privacy policy text (same as welcome page)
-              RichText(
-                textAlign: TextAlign.center,
-                text: TextSpan(
-                  style: TextStyle(
-                    color: OmiColors.textPrimary.withValues(alpha: 0.6),
-                    fontSize: 11,
-                    fontFamily: 'Manrope',
-                  ),
-                  children: [
-                    TextSpan(text: context.l10n.byContinuingAgree),
-                    TextSpan(
-                      text: context.l10n.privacyPolicy,
-                      style: const TextStyle(decoration: TextDecoration.underline),
-                      recognizer: TapGestureRecognizer()..onTap = provider.openPrivacyPolicy,
+                    // Privacy policy text (same as welcome page)
+                    RichText(
+                      textAlign: TextAlign.center,
+                      text: TextSpan(
+                        style: TextStyle(
+                          color: OmiColors.textPrimary.withValues(alpha: 0.6),
+                          fontSize: 11,
+                          fontFamily: 'Manrope',
+                        ),
+                        children: [
+                          TextSpan(text: context.l10n.byContinuingAgree),
+                          TextSpan(
+                            text: context.l10n.privacyPolicy,
+                            style: const TextStyle(decoration: TextDecoration.underline),
+                            recognizer: TapGestureRecognizer()..onTap = provider.openPrivacyPolicy,
+                          ),
+                          const TextSpan(text: ' & '),
+                          TextSpan(
+                            text: context.l10n.termsOfUse,
+                            style: const TextStyle(decoration: TextDecoration.underline),
+                            recognizer: TapGestureRecognizer()..onTap = provider.openTermsOfService,
+                          ),
+                          const TextSpan(text: '.'),
+                        ],
+                      ),
                     ),
-                    const TextSpan(text: ' & '),
-                    TextSpan(
-                      text: context.l10n.termsOfUse,
-                      style: const TextStyle(decoration: TextDecoration.underline),
-                      recognizer: TapGestureRecognizer()..onTap = provider.openTermsOfService,
-                    ),
-                    const TextSpan(text: '.'),
                   ],
                 ),
               ),

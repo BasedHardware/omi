@@ -325,6 +325,7 @@ async def auth_authorize(
     state: Optional[str] = None,
     code_challenge: Optional[str] = None,
     code_challenge_method: Optional[str] = None,
+    select_account: bool = False,
 ):
     """
     User authentication authorization endpoint for the main Omi app
@@ -418,7 +419,7 @@ async def auth_authorize(
 
     # Redirect to provider OAuth
     if provider == 'google':
-        response = await _google_auth_redirect(session_id)
+        response = await _google_auth_redirect(session_id, select_account=select_account)
     else:
         # provider == 'apple' — only 'google'/'apple' reach here (validated above).
         response = await _apple_auth_redirect(session_id)
@@ -824,7 +825,7 @@ async def auth_token(
         raise HTTPException(status_code=400, detail="Invalid OAuth credentials")
 
 
-async def _google_auth_redirect(session_id: str):
+async def _google_auth_redirect(session_id: str, *, select_account: bool = False):
     """
     Redirect to Google OAuth for authentication
     """
@@ -847,6 +848,8 @@ async def _google_auth_redirect(session_id: str):
         f"state={quote(session_id)}"
     )
 
+    if select_account:
+        google_auth_url += "&prompt=select_account"
     return RedirectResponse(url=google_auth_url)
 
 

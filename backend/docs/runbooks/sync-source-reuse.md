@@ -58,6 +58,73 @@ workers can process normal source-key jobs; an image rollback must retain new
 projection readers and the fallback-aware ordered merger to drain accepted protocol-2 work. Releasing an old image
 is not a safe way to make accepted aliases into ordinary paid work.
 
+The ordered merger also runs in the GPU pump (`batch-pipeline-worker`, its own
+deploy). A pump image older than source reuse copies `protocol_version=2` onto
+the result row without the marker. The projector admits such a row on the
+immutable job's marker (`source_reader_marked`), so the owner's chain is not
+stopped behind it; a row with a present but wrong marker stays refused. Missing marker copies are a permanent, counted compatibility path. An upgraded
+worker cannot establish that every live replica implements a protocol.
+
+The shared registry `utils/batch_pipeline/result_protocol.py` declares the
+job-authoritative source markers. New jobs carry `required_result_markers`;
+normal merges and accepted-alias fallback slot replacements refuse unknown
+requirements before any result/owner write, leaving the job `result_ready` for
+a capable merger. A pre-registry projector's alias-to-own-audio transition may
+preserve its unknown requirements map. The suspended same-segment log slot
+licenses only the known alias-to-reuse marker transition; unsupported versions
+and requirements remain refused without repairing the job.
+`omi_batch_result_protocol_refused_total` counts attempts,
+including transaction retries. `BATCH_RESULT_PROTOCOL_GUARD_ENABLED` defaults
+on; false restores legacy copying without removing projection recovery or
+source ownership/privacy fences.
+
+Deploy projection readers first for a new semantic protocol, then intake and
+the separately deployed GKE worker (`gcp_diarizer.yml` / `coherent_deploy.py`).
+An old GPU metadata copier is safe for registered source markers because the
+reader uses the immutable job when copies are absent. A present conflicting
+marker remains a corruption refusal. Do not promote compute-dependent fields
+into this registry: it only covers metadata recoverable from the job.
+There is no fleet capability inference or automatic claim that all replicas
+have upgraded. A legacy intake retry can add a known marker without changing
+its unknown requirements map; only matching registered requirements are
+accepted, and every known job marker remains authoritative. Unknown requirements
+are retained and refused. With an explicit supported job map, a null result
+copy counts as missing; a non-null conflicting version still refuses.
+
+
+## Refused-merge operator response
+
+A refused job has no automatic expiry or destructive disposition. It retains
+its ready result and audio until a capable merger commits it. Do not accept an
+unattended silent hold: investigate on the first observed refusal, and assign
+an operator to watch this signal during an intake/worker rollout. This change
+does not arm a new pager or assume an existing dwell page is live; recording
+outcome alert ownership remains with #25617.
+
+Diagnostic query (transaction attempts, not unique blocked jobs):
+
+```promql
+sum(increase(omi_batch_result_protocol_refused_total[5m]))
+```
+
+For separately authorized `ro-prod` metadata-only diagnosis, use the existing
+`FirestoreStore.ready_owners(after_owner_key, limit)` and
+`ready_pending(owner_key, limit, after=...)` queries. Use `first_pending` to
+identify the owner's actual ordering head rather than assuming every ready
+row is the head. Set a document budget and retain the pagination cursor; an
+exhausted sample is UNKNOWN, not proof that the remainder is healthy. Aggregate
+`state`, protocol versions, requirement versions and `supported(job)` outcomes;
+do not print owner IDs, transcript content or result objects. These are existing
+query drivers and require no new index or collection.
+
+If intake is introducing an unsupported requirement, stop new source admission
+with its existing kill switch and deploy a capable merger while retaining the
+required projection readers. A corrupt requirement needs a separately reviewed,
+fenced recovery; do not patch its map/protocol, rewrite a result, requeue paid
+work or discard audio to clear the counter. Turning the merge guard off cannot
+make an unknown protocol safe. Verify a fresh refusal-rate sample and that the
+same ready work commits and the owner's log/projection advances after recovery.
+
 ## Custody and privacy
 
 Source equivalence is transcription authority only. It produces no covered
@@ -163,3 +230,8 @@ Proposed operator dry run, not an automatically enabled reprocessor:
 No historical reprocessor is run by this change. A packet containing only
 source/time associations and no exact source proofs yields zero proved
 historical exclusions, regardless of its overlap opportunity estimate.
+
+Compatibility: job-marker inheritance is permanent for these registered,
+job-authoritative fields. Do not remove it after a quiet measurement window;
+workers deploy and roll back independently. Each recovery increments
+`omi_fallback_total{component="sync_dispatch",from_mode="row_source_marker",to_mode="job_source_marker"}`.

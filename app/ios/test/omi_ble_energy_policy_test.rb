@@ -445,3 +445,151 @@ class OmiBleEnergyPolicyTest < Minitest::Test
     end
   end
 end
+
+
+# Ring-read metadata shares this gate and its existing path trigger.
+class RingReadDiagnosticsTest < Minitest::Test
+  def test_disconnect_snapshot_and_plist_round_trip
+    Dir.mktmpdir('ring-read-diagnostics') do |directory|
+      harness = File.join(directory, 'main.swift')
+      binary = File.join(directory, 'test')
+      File.write(harness, <<~SWIFT)
+        import Foundation
+        @main struct Test {
+            static func main() throws {
+                let state = OmiRingReadDiagnostics()
+                let characteristic = OmiRingReadDiagnostics.characteristic
+                let read = Data([0x11] + Array(repeating: 0, count: 8))
+                let begin = Data([0x05] + Array(repeating: 0, count: 12))
+                let done = Data([0x04] + Array(repeating: 0, count: 9))
+                precondition(state.disconnected("restored", now: 0).isEmpty)
+                state.connected("a")
+                state.requested("a", characteristic: characteristic, data: read)
+                precondition(state.disconnected("a", now: 2)["ring_read_active"] as? Bool == false)
+                state.connected("a")
+                state.requested("a", characteristic: characteristic, data: Data([0x11] + Array(repeating: 0, count: 5)))
+                state.received("a", characteristic: characteristic, data: Data([0x05] + Array(repeating: 0, count: 82)), now: 1)
+                state.received("a", characteristic: characteristic, data: begin, now: 1)
+                precondition(state.disconnected("a", now: 2)["ring_read_active"] as? Bool == false)
+                state.connected("a")
+                state.received("a", characteristic: "other", data: begin, now: 1)
+                state.received("a", characteristic: characteristic, data: Data([0x05]), now: 1)
+                precondition(state.disconnected("a", now: 2)["ring_read_active"] as? Bool == false)
+                state.connected("a")
+                state.requested("a", characteristic: characteristic, data: read)
+                state.rejected("a", characteristic: characteristic, data: read)
+                state.received("a", characteristic: characteristic, data: begin, now: 1)
+                precondition(state.disconnected("a", now: 2)["ring_read_active"] as? Bool == false)
+                state.connected("a")
+                state.requested("a", characteristic: characteristic, data: read)
+                var mismatch = begin
+                mismatch[8] = 1
+                state.received("a", characteristic: characteristic, data: mismatch, now: 1)
+                precondition(state.disconnected("a", now: 2)["ring_read_active"] as? Bool == false)
+                state.connected("a")
+                state.connected("b")
+                state.requested("a", characteristic: characteristic, data: read)
+                state.received("a", characteristic: characteristic, data: begin, now: 1)
+                state.received("a", characteristic: characteristic, data: Data([0x04]), now: 2)
+                let snapshot = state.disconnected("a", now: 5.5)
+                precondition(snapshot["ring_read_active"] as? Bool == true)
+                precondition(snapshot["ring_read_age_ms"] as? Int64 == 4500)
+                precondition(state.disconnected("b", now: 5.5)["ring_read_active"] as? Bool == false)
+                precondition(state.disconnected("a", now: 6).isEmpty)
+                state.connected("a")
+                precondition(state.disconnected("a", now: 7)["ring_read_active"] as? Bool == false)
+                for status in [UInt8(0), 1, 2, 6] {
+                    state.requested("a", characteristic: characteristic, data: read)
+                    state.received("a", characteristic: characteristic, data: begin, now: 8)
+                    var terminal = done
+                    terminal[1] = status
+                    state.received("a", characteristic: characteristic, data: terminal, now: 9)
+                    let stopped = state.disconnected("a", now: 10)
+                    precondition(stopped["ring_read_active"] as? Bool == false)
+                    precondition(stopped["ring_read_age_ms"] == nil)
+                }
+                state.requested("a", characteristic: characteristic, data: read)
+                state.received("a", characteristic: characteristic, data: begin, now: 1)
+                state.requested("a", characteristic: characteristic, data: read)
+                state.received("a", characteristic: characteristic, data: begin, now: 3)
+                precondition(state.disconnected("a", now: 5)["ring_read_age_ms"] as? Int64 == 2000)
+                precondition(OmiRingReadDiagnostics().disconnected("a", now: 5).isEmpty)
+                let bytes = try PropertyListSerialization.data(fromPropertyList: snapshot, format: .binary, options: 0)
+                let stored = try PropertyListSerialization.propertyList(from: bytes, options: [], format: nil) as! [String: Any]
+                precondition(stored["ring_read_active"] as? Bool == true)
+                precondition(stored["ring_read_age_ms"] as? Int64 == 4500)
+            }
+        }
+      SWIFT
+      source = File.expand_path('../Runner/Ble/OmiBleEnergyPolicy.swift', __dir__)
+      stdout, stderr, compile = Open3.capture3('swiftc', '-parse-as-library', source, harness, '-o', binary)
+      assert compile.success?, "#{stdout}\n#{stderr}"
+      stdout, stderr, run = Open3.capture3(binary)
+      assert run.success?, "#{stdout}\n#{stderr}"
+    end
+  end
+end
+
+class RingReadRecoveryWindowTest < Minitest::Test
+  def test_production_notification_guards_observe_ring_during_capture_cancel
+    manager = File.read(File.expand_path('../Runner/Ble/OmiBleManager.swift', __dir__))
+    start = manager.index('        // Handle notification')
+    finish = manager.index('        let wasTransferring', start)
+    guards = manager[start...finish].gsub('OmiRingReadDiagnostics.now()', 'testNow')
+    Dir.mktmpdir('ring-recovery-window') do |directory|
+      harness = File.join(directory, 'main.swift')
+      binary = File.join(directory, 'test')
+      File.write(harness, <<~SWIFT)
+        import Foundation
+        enum State { case connected, disconnected }
+        final class Peripheral { var state = State.connected }
+        struct Characteristic { let value: Data? }
+        struct Recovery { let disconnected: Bool }
+        @main struct Test {
+            static func main() {
+                let uuid = "a"
+                let charUuid = OmiRingReadDiagnostics.characteristic
+                let peripheral = Peripheral()
+                var peripherals = [uuid: peripheral]
+                let captureReconnects = [uuid: Recovery(disconnected: false)]
+                let ringReadDiagnostics = OmiRingReadDiagnostics()
+                var testNow = 1.0
+                let read = Data([0x11] + Array(repeating: 0, count: 8))
+                let begin = Data([0x05] + Array(repeating: 0, count: 12))
+                let done = Data([0x04] + Array(repeating: 0, count: 9))
+                func deliver(_ data: Data, error: Error? = nil) {
+                    let characteristic = Characteristic(value: data)
+        #{guards}
+                }
+                ringReadDiagnostics.connected(uuid)
+                ringReadDiagnostics.requested(uuid, characteristic: charUuid, data: read)
+                deliver(begin)
+                let active = ringReadDiagnostics.disconnected(uuid, now: 5.5)
+                precondition(active["ring_read_active"] as? Bool == true)
+                precondition(active["ring_read_age_ms"] as? Int64 == 4500)
+                ringReadDiagnostics.connected(uuid)
+                ringReadDiagnostics.requested(uuid, characteristic: charUuid, data: read)
+                deliver(begin)
+                testNow = 2
+                deliver(done)
+                precondition(ringReadDiagnostics.disconnected(uuid, now: 3)["ring_read_active"] as? Bool == false)
+                ringReadDiagnostics.connected(uuid)
+                ringReadDiagnostics.requested(uuid, characteristic: charUuid, data: read)
+                deliver(begin, error: NSError(domain: "test", code: 1))
+                precondition(ringReadDiagnostics.disconnected(uuid, now: 3)["ring_read_active"] as? Bool == false)
+                ringReadDiagnostics.connected(uuid)
+                ringReadDiagnostics.requested(uuid, characteristic: charUuid, data: read)
+                peripherals[uuid] = Peripheral()
+                deliver(begin)
+                precondition(ringReadDiagnostics.disconnected(uuid, now: 3)["ring_read_active"] as? Bool == false)
+            }
+        }
+      SWIFT
+      source = File.expand_path('../Runner/Ble/OmiBleEnergyPolicy.swift', __dir__)
+      stdout, stderr, compile = Open3.capture3('swiftc', '-parse-as-library', source, harness, '-o', binary)
+      assert compile.success?, "#{stdout}\n#{stderr}"
+      stdout, stderr, run = Open3.capture3(binary)
+      assert run.success?, "#{stdout}\n#{stderr}"
+    end
+  end
+end

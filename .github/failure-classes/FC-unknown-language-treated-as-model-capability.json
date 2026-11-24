@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-unknown-language-treated-as-model-capability",
+  "family": "vendor-platform-behavior",
   "violated_contract": "Unknown or multilingual speech is not evidence that a fixed-language recognizer supports the audio. A nonempty recognizer response may be wrong-script phonetics and must not be accepted as language correctness.",
   "canonical_prevention": "Keep a shared language-capability guard at prerecorded selection and batch intake/worker boundaries. Require independent confident audio-language detection before unknown speech may use Parakeet; route unsupported or uncertain audio to a multilingual provider, retain custody for pre-admitted unsafe units, and gate rollout on route coverage and zero unqualified Parakeet decisions independently of speech-loss metrics.",
   "canonical_prevention_artifact": [

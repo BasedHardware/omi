@@ -7,10 +7,10 @@ from datetime import datetime, timezone
 import pytest
 from google.cloud.firestore_v1 import _helpers
 
-from database import conversations as db
+from database import conversations as db, recurring_voice_privacy
 from models.conversation_enums import ConversationStatus as Status
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from utils.conversations import lifecycle
+from utils.conversations import lifecycle, terminal_relevance
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.relevance import RelevanceDecision
 from utils.conversations.relevance_rules import RULES_VERSION
@@ -52,8 +52,6 @@ def store(monkeypatch):
         monkeypatch.setattr(db, name, lambda *a, **k: None)
     monkeypatch.setattr(db, '_stage_notes_identity', lambda *a, **k: None)
     monkeypatch.setattr(db, '_reapply_current_manual_assignments', lambda *a, **k: None)
-    from database import recurring_voice_privacy
-
     monkeypatch.setattr(recurring_voice_privacy, 'filter_processing_write', lambda *a: None)
     monkeypatch.setattr(db.summary_delivery, 'merge_result', lambda *a: None)
     monkeypatch.setattr(db.summary_delivery, 'emit_result', lambda *a: None)
@@ -132,8 +130,6 @@ def test_core_does_not_mutate_inputs_or_run_hooks(store, monkeypatch):
     def forbidden(*a, **k):
         pytest.fail('pure core called an IO/metric/quiet hook')
 
-    from utils.conversations import terminal_relevance
-
     monkeypatch.setattr(terminal_relevance, 'stamp_terminal_decision', forbidden)
     monkeypatch.setattr(db, 'restore_quiet_check_in_transaction', forbidden)
     current, extra = copy.deepcopy(store.rows[PATH]), {'language': 'en'}
@@ -200,6 +196,29 @@ def test_persist_flips_content_and_status_in_one_write(store):
     assert patch['title'] == 'new content' and patch['status'] == 'completed'
     assert patch['terminal_family'] == 'success'
     assert observed == [True]
+
+
+@pytest.mark.parametrize('mode', ['off', 'on'])
+@pytest.mark.parametrize(
+    'existing, patch, visible',
+    [
+        ({'recording': True, 'home_hidden': True}, {'recording': False}, False),
+        ({'recording': False, 'home_hidden': True}, {'home_hidden': False}, True),
+    ],
+)
+def test_persist_writes_home_visibility_with_its_source_flags(store, monkeypatch, mode, existing, patch, visible):
+    monkeypatch.setenv('CONVERSATION_TERMINAL_FAMILY_MODE', mode)
+    store.rows[PATH].update(existing)
+    tx = store.transaction()
+    monkeypatch.setattr(store, 'transaction', lambda: tx)
+    if mode == 'off':
+        monkeypatch.setattr(tx, 'set', lambda ref, data, *, merge: tx.sets.append((ref.path, data)))
+
+    assert persist(patch)
+    [(path, payload)] = tx.sets + tx.updates
+    assert path == PATH
+    assert {key: payload[key] for key in patch} == patch
+    assert payload['home_list_visible'] is visible
 
 
 @pytest.mark.parametrize(

@@ -216,6 +216,21 @@ below may be used only after that separate decision approves its values.
    `allowlist_only`, list size 1, rate 60, reach 0. Do not manually reset tokens
    or create an open v1 gate. A previously spent hour waits until the next hour.
 
+   **Approved activation (2026-11-18).** The release owner approved a four-owner
+   `allowlist_only` cohort at 60/hour (BasedHardware/omi#25688). For that
+   activation the expected list size is **4**, not 1, and step 5 applies to each
+   of the four owners separately; the hourly budget is shared across them. Any
+   other cohort or rate remains a separate approval.
+
+   **Widened (2026-11-20).** David approved three more support owners held on the
+   same provider backlog, at the same shared 60/hour budget (the rate is one
+   gate-wide token budget, not per owner). The expected list size is now **7**.
+
+   **Ship closed (2026-11-20, SCA-2283 / SCA-2015).** The train omits the six
+   heartbeat bindings. The writer defaults to disabled, the gate state defaults
+   to closed, and the legacy provider switch stays off. A future activation
+   requires a separate scoped order and verification of every committer.
+
 5. **Verify delivery, not just grants.** Take the aggregate readbacks below
    before and after. Verify the one owner's `result_ready` count falls and its
    projection completion count rises using count-only queries, without printing

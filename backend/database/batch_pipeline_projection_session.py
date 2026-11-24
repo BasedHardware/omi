@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from time import monotonic
 from typing import TYPE_CHECKING, Any
 
 from google.cloud import firestore
@@ -25,12 +27,15 @@ from database.batch_pipeline_projection_protocol import (
     ProjectionPredecessorPending,
     ProjectionReplay,
     normalized_binding,
+    source_reader_marked,
 )
 from database.batch_pipeline_projection_finish import projection_finish_state_fields
+from database.privacy_ttl_cache import ttl_seconds
 
 from database.sync_ledger import sync_content_ledger_ref, LEDGER_RETENTION_DAYS
 from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
 from utils.batch_pipeline.contracts import ProjectionBinding
+from utils.batch_pipeline.projection_delivery import assert_delivery_claim
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.capture import chunk_identity
 
@@ -44,7 +49,73 @@ SOURCE_DELETED_JOBS = Counter(
 )
 
 
+@dataclass(frozen=True)
+class FollowupPrivacyProof:
+    version: tuple
+    ids: frozenset[str]
+    client: Any
+    expires_at: float
+
+
+def _input_privacy_ids(binding, job, *, detach_source_alias=False):
+    ids = [
+        chunk_identity(
+            binding.owner_id,
+            binding.source,
+            binding.client_device_id,
+            binding.is_locked,
+            job['capture_at'],
+        )
+    ]
+    if binding.target_conversation_id:
+        ids.append(binding.target_conversation_id)
+    if job.get('conversation_id'):
+        ids.append(job['conversation_id'])
+    if job.get('capture_source_conversation_id'):
+        ids.append(job['capture_source_conversation_id'])
+    if not detach_source_alias:
+        ids.extend(job.get('source_conversation_ids') or [])
+    return ids
+
+
+def ready_followup_privacy_ids(segment, binding, job, entry):
+    """Limit read-only coalescing to ordinary ready receipts with bound hints."""
+    receipt = entry.get('projection') or {}
+    if (
+        entry.get('protocol_version') != 1
+        or len(binding.segment_ids) < 2
+        or segment not in binding.segment_ids
+        or entry.get('projection_state') not in {'ready', 'completed'}
+        or entry.get('segment_id') != segment
+        or entry.get('owner_key') != owner_key(binding.owner_id)
+        or job.get('owner_id') != binding.owner_id
+        or job.get('privacy_generation') != binding.privacy_generation
+        or not job.get('projection_binding')
+        or normalized_binding(job['projection_binding']) != binding
+        or entry.get('capture_at') != job.get('capture_at')
+        or entry.get('result') != job.get('result')
+        or 'previous_segment_id' not in entry
+        or job.get('shadow')
+        or job.get('source_reuse_key')
+        or entry.get('projection_redriven_at')
+        or entry.get('projection_privacy_refusal')
+        or receipt.get('state') != 'ready'
+        or any(
+            part.get('state') != 'ready'
+            or part.get('privacy_reason')
+            or part.get('disposition') == 'source_deleted'
+            or part.get('privacy_control_only')
+            for part in (receipt, *(entry.get('projection_parts') or {}).values())
+        )
+        or (job.get('policy_parts') or {}).get('projection', {}).get('async_projection') is not True
+    ):
+        return None
+    return frozenset((*_input_privacy_ids(binding, job), *(job.get('conversation_ids') or ())))
+
+
 class ProjectionSession:
+    capture_followup_privacy = False
+
     def __init__(
         self,
         store: ProjectionStore,
@@ -79,6 +150,8 @@ class ProjectionSession:
         self._privacy_refusal_transaction = None
         self._privacy_replay_transaction = None
         self._privacy_fence_ids: set[str] | None = None
+        self.followup_privacy_proof: FollowupPrivacyProof | None = None
+        self._followup_privacy_failed = False
 
     def receipt(self) -> dict:
         parts = self.entry.get('projection_parts') or {}
@@ -146,21 +219,42 @@ class ProjectionSession:
         checked: set[str] = set()
         if self.job.get('capture_source_conversation_id'):
             conversation_ids = (*conversation_ids, self.job['capture_source_conversation_id'])
+        versions = [] if self.capture_followup_privacy and not self._followup_privacy_failed else None
+        expires_at = monotonic() + ttl_seconds() if versions is not None else 0.0
         try:
-            return assert_batch_write_allowed(
+            generation = assert_batch_write_allowed(
                 self.client,
                 transaction,
                 self.binding.owner_id,
                 conversation_ids=conversation_ids,
                 expected_generation=self.binding.privacy_generation,
                 verified_out=checked,
+                live_version_out=versions,
             )
         except BatchPrivacyBlocked as error:
             if error.conversation_id:
                 # A tombstone refuses before any row is read; the refusing id
                 # (possibly a redirect survivor) still counts against the budget.
                 checked.add(error.conversation_id)
+            if versions is not None:
+                self._followup_privacy_failed = True
+                self.followup_privacy_proof = None
             raise
+        else:
+            if versions is not None:
+                previous = self.followup_privacy_proof
+                if not versions or (previous and previous.version != versions[0]):
+                    self._followup_privacy_failed = True
+                    self.followup_privacy_proof = None
+                else:
+                    ids = frozenset(conversation_ids)
+                    self.followup_privacy_proof = FollowupPrivacyProof(
+                        versions[0],
+                        ids | previous.ids if previous else ids,
+                        self.client,
+                        previous.expires_at if previous else expires_at,
+                    )
+            return generation
         finally:
             # Input/output checks have separate refusal semantics, but share
             # the same distinct-document ceiling during prepare. Later plan
@@ -174,23 +268,9 @@ class ProjectionSession:
                     raise BatchPrivacyBlocked('conversation_fence_budget')
 
     def _prepare_privacy(self, transaction, *, privacy_deleted=False):
-        ids = [
-            chunk_identity(
-                self.binding.owner_id,
-                self.binding.source,
-                self.binding.client_device_id,
-                self.binding.is_locked,
-                self.job['capture_at'],
-            )
-        ]
-        if self.binding.target_conversation_id:
-            ids.append(self.binding.target_conversation_id)
-        if self.job.get('conversation_id'):
-            ids.append(self.job['conversation_id'])
-        if self.job.get('capture_source_conversation_id'):
-            ids.append(self.job['capture_source_conversation_id'])
-        if not getattr(self, 'detach_source_alias', False):
-            ids.extend(self.job.get('source_conversation_ids') or [])
+        ids = _input_privacy_ids(
+            self.binding, self.job, detach_source_alias=getattr(self, 'detach_source_alias', False)
+        )
         # Assigned destinations are outputs, not proof that another part's
         # original input was deleted. They get independent fences below.
         outputs = set(self.job.get('conversation_ids') or []) - set(ids)
@@ -285,8 +365,11 @@ class ProjectionSession:
         self._source_deletion_transaction = None
         self._source_deleted = False
         self._privacy_fence_ids = set()
+        self.followup_privacy_proof = None
+        self._followup_privacy_failed = False
         self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
         self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
+        assert_delivery_claim(self.segment_id, self.entry)
         owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
         self.ledger = self.ledger_ref.get(transaction=transaction).to_dict() or {}
         if (
@@ -298,8 +381,7 @@ class ProjectionSession:
             or not (
                 self.entry.get('protocol_version') == 1
                 or self.entry.get('protocol_version') == 2
-                and (self.entry.get('source_reuse_version') == 1 or self.entry.get('source_alias_version') == 1)
-                and bool(self.job.get('source_reuse_key'))
+                and source_reader_marked(self.entry, self.job)
                 or self.entry.get('protocol_version') == 2
                 and self.entry.get('projection_release_version') == 1
                 or self.entry.get('protocol_version') == 2

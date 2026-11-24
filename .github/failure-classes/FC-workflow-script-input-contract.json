@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-workflow-script-input-contract",
+  "family": "cross-boundary-contract",
   "violated_contract": "Every workflow invocation of a repository deployment script must use its declared argument grammar and provide each required workflow input.",
   "canonical_prevention": "Exercise rendered workflow callers against deterministic script seams and statically require every deployment-script caller to bind its required environment inputs before expensive deployment work begins.",
   "canonical_prevention_artifact": [

@@ -6,7 +6,7 @@ class DeviceHealthStoreTest < Minitest::Test
     Dir.mktmpdir('device-health-store') do |dir|
       root = File.expand_path('..', __dir__)
       binary = File.join(dir, 'test')
-      output, status = Open3.capture2e('swiftc', File.join(root, 'Runner/SafeFoundationSinks.swift'), File.join(root, 'Runner/Ble/OmiDeviceHealthStore.swift'), File.join(__dir__, 'device_health_store_test.swift'), '-o', binary)
+      output, status = Open3.capture2e('swiftc', File.join(root, 'Runner/SafeFoundationSinks.swift'), File.join(root, 'Runner/Ble/OmiDeviceHealthStore.swift'), File.join(root, 'Runner/Ble/OmiBleEnergyPolicy.swift'), File.join(__dir__, 'device_health_store_test.swift'), '-o', binary)
       assert status.success?, output
       output, status = Open3.capture2e(binary)
       assert status.success?, output

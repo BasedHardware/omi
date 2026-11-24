@@ -29,6 +29,9 @@ REGISTRY_PATH = Path(__file__).resolve().parents[1] / "runtime_images.json"
 # Today all four Cloud Run services ship the one fat image built for the base service.
 CLOUD_RUN_SERVICES = ("backend", "backend-sync", "backend-sync-backfill", "backend-integration")
 SERVICES = (*CLOUD_RUN_SERVICES, "backend-listen", "llm-gateway")
+# SCA-3120: the dedicated projection pump ships the same fat image and never takes a
+# role-image opt-in; it is selectable only on its own (deploy-projection-pump).
+PROJECTION_PUMP = "backend-projection-pump"
 
 Inspector = Callable[[str], dict[str, Any]]
 
@@ -88,6 +91,8 @@ def resolve(
 
     scope = selected(cloud_run_service)
     pairs = parse_pairs(raw)
+    if cloud_run_service == PROJECTION_PUMP and pairs:
+        raise ServiceImageError("backend-projection-pump ships the admitted fat image; service_images must be empty")
     if cloud_run_service != "all" and (deploy_targets != "cloud-run-only" or deploy_gateway or set(pairs) - set(scope)):
         raise ServiceImageError("selected-service image scope mismatch")
     if "backend-listen" in pairs and deploy_targets != "all":
@@ -112,6 +117,8 @@ def resolve(
     outputs: dict[str, str] = {}
     for service in CLOUD_RUN_SERVICES:
         outputs[service.replace("-", "_")] = pairs.get(service, f"{fat}:{short_sha}")
+    if cloud_run_service == PROJECTION_PUMP:
+        outputs[PROJECTION_PUMP.replace("-", "_")] = f"{fat}:{short_sha}"
     listen = pairs.get("backend-listen")
     outputs["backend_listen"] = listen or f"{fat}:{short_sha}"
     # The chart renders repository@digest when image.digest is set, else repository:tag;
@@ -140,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--deploy-targets", required=True)
     parser.add_argument("--deploy-gateway", required=True, choices=("true", "false"))
     parser.add_argument("--base-service", default="backend")
-    parser.add_argument("--cloud-run-service", choices=("all", *CLOUD_RUN_SERVICES), default="all")
+    parser.add_argument("--cloud-run-service", choices=("all", *CLOUD_RUN_SERVICES, PROJECTION_PUMP), default="all")
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args(argv)
     try:

@@ -10,7 +10,9 @@ from utils.episodes.batch_close import attach_closed_batch_capture
 
 
 async def resumable_after_drop(host: Any, conversation_id: str, row: dict | None, *, quiet_owned: bool) -> bool:
-    """A phone socket drop is not a stop: the app reconnects to the same recording.
+    """With the reconnect protocol on, a phone socket drop is not a stop: the app reconnects.
+
+    The caller only consults this when LISTEN_BATCH_RECONNECT_ENABLED is on.
 
     With a quiet check owning the capture, commit this socket's audio tail without
     the close barrier and keep it open. Otherwise the caller finalizes as before.

@@ -1,5 +1,7 @@
 """Home policy: positive wearer evidence may hide background; uncertainty may not."""
 
+from utils.conversations.v3.word_floor import MIN_HOME_WORDS
+
 
 def hydrate_recognition(uid, recordings, windows):
     from utils.speakers.evidence import get_evidence, project_labels
@@ -18,7 +20,7 @@ def hydrate_recognition(uid, recordings, windows):
         row['_v3_wearer_recognized'] = recognized
 
 
-def project(kind, recordings, recording_ids, *, words, finished, manual_end):
+def project(kind, recordings, recording_ids, *, words, finished, manual_end, manual_end_home_visible=True):
     uncertain = kind == 'background' and not any(
         recordings[rid].get('_v3_wearer_recognized')
         or any(s.get('is_user') is True for s in recordings[rid].get('transcript_segments') or [])
@@ -26,10 +28,9 @@ def project(kind, recordings, recording_ids, *, words, finished, manual_end):
     )
     if uncertain:
         kind = 'conversation'
-    if kind == 'media':
-        return kind, True, 'media'
-    if kind == 'background':
-        return kind, True, 'background_wearer_recognized'
-    if finished and not manual_end and words < 300:
+    if kind in {'media', 'background'}:
+        reason = 'media' if kind == 'media' else 'background_wearer_recognized'
+        return kind, not (manual_end and manual_end_home_visible), reason
+    if finished and not manual_end and words < MIN_HOME_WORDS:
         return kind, True, 'below_word_minimum'
     return kind, False, 'wearer_recognition_uncertain' if uncertain else 'manual_end' if manual_end else 'conversation'

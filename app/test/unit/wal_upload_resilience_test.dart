@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/capture/capture_end.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/recording_wait_deferrals.dart';
 import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
@@ -49,6 +50,9 @@ class _MockListener implements IWalSyncListener {
 
 class _UploadGateSpy implements SyncUploadGate {
   int calls = 0;
+
+  @override
+  bool isRecordingWaiting({String? recordingGroup, String? filePath}) => false;
 
   @override
   dynamic noSuchMethod(Invocation invocation) {
@@ -977,6 +981,81 @@ void main() {
       expect(result?.newConversationIds, ['recovered']);
       expect(wal.status, WalStatus.synced);
     });
+  });
+
+  test('after restart a shared conversation uploads one session while the other waits for custody', () async {
+    var now = DateTime.utc(2026, 11, 20);
+    const owner = 'record-wait-owner';
+    await SharedPreferencesUtil().saveString('uid', owner);
+    var canAccept = false;
+
+    LocalWalSyncImpl createLedger() => LocalWalSyncImpl(
+          listener,
+          now: () => now,
+          uploadGate: SyncUploadGate(
+            limiter: SyncRateLimiter.instance,
+            recordingWaits: RecordingWaitDeferrals(() => now, persist: true),
+            fairUseStatusLoader: () async => null,
+            uploader: (files,
+                {onUploadProgress,
+                conversationId,
+                captureEvidence,
+                recordingSessionId,
+                audioStartSeconds,
+                audioEndSeconds,
+                claimLiveCapture = false,
+                geolocation}) async {
+              uploadAttempts.add(files.map((file) => file.uri.pathSegments.last).toList());
+              if (recordingSessionId == 'waiting-session' && !canAccept) {
+                throw const SyncUploadHttpException(503, 'Custody pending',
+                    reasonCode: 'record_capture_pending', recordingWaitSeconds: 30);
+              }
+              return UploadFilesResult.queued('accepted-$recordingSessionId');
+            },
+          ),
+        );
+
+    final start = now.millisecondsSinceEpoch ~/ 1000 - 100;
+    final waiting = _makeWal(timerStart: start, filePath: 'waiting.bin')
+      ..conversationId = 'shared-conversation'
+      ..recordingSessionId = 'waiting-session';
+    final other = _makeWal(timerStart: start + 1, filePath: 'other.bin')
+      ..conversationId = 'shared-conversation'
+      ..recordingSessionId = 'other-session';
+    for (final wal in [waiting, other]) {
+      await File('${tempDir.path}/${wal.filePath}').writeAsBytes([1, 0, 0, 0, 42]);
+    }
+    final first = createLedger()..testWals = [waiting, other];
+    await expectLater(first.syncWal(wal: waiting), throwsA(isA<SyncUploadHttpException>()));
+    expect(waiting.status, WalStatus.miss);
+
+    final restarted = createLedger()..testWals = await WalFileManager.loadWals();
+    final restored = restarted.testWals.singleWhere((wal) => wal.recordingSessionId == 'waiting-session');
+    final retainedFile = File('${tempDir.path}/${restored.filePath}');
+    final deferred = await restarted.syncAll();
+    await expectLater(restarted.syncWal(wal: restored), throwsA(isA<SyncRecordingWaitException>()));
+    expect(uploadAttempts, [
+      ['waiting.bin'],
+      ['other.bin'],
+    ]);
+    expect(deferred?.localUploadFailures, 0);
+    final accepted = restarted.testWals.singleWhere((wal) => wal.recordingSessionId == 'other-session');
+    expect(accepted.status, WalStatus.uploaded);
+    expect(accepted.jobId, 'accepted-other-session');
+    expect(restored.status, WalStatus.miss);
+    expect(restored.retryCount, 0);
+    expect(restored.jobId, isNull);
+    expect(await retainedFile.readAsBytes(), [1, 0, 0, 0, 42]);
+
+    canAccept = true;
+    now = now.add(const Duration(seconds: 37));
+    await restarted.syncAll();
+
+    expect(uploadAttempts.last, ['waiting.bin']);
+    expect(uploadAttempts, hasLength(3));
+    expect(restored.status, WalStatus.uploaded);
+    expect(restored.jobId, 'accepted-waiting-session');
+    expect(retainedFile.existsSync(), isTrue);
   });
 
   group('syncAll: server-unavailable pacing', () {

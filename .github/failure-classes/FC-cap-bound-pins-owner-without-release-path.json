@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-cap-bound-pins-owner-without-release-path",
+  "family": "work-bounded-resumable",
+  "violated_contract": "A cap that bounds concurrent state must not be able to become a permanent block. When the only path that releases an entry is a later admission attempt, and admission is refused once the cap is reached, the cap converts a bounded resource into a deadlock: the owner can never admit again and the entries can never be released. The bound must be reachable from a path that does not itself require admission.",
+  "canonical_prevention": "Release the entry on the terminal outcome that makes it unnecessary, before the destructive step that would otherwise erase the only retry handle, and let a full ledger run the existing settlement pass once before refusing admission. Reproduce a ledger at the bound and prove it can release and admit again.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_cap_hold_batch_debit.py",
+    "backend/tests/unit/test_cap_hold_batch_admission.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/sync/cap_hold_reservations.py",
+    "backend/utils/sync/cap_hold_recovery.py",
+    "backend/utils/processing_backlog_worker.py"
+  ],
+  "status": "open"
+}

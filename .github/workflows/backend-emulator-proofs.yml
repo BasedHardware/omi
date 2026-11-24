@@ -39,6 +39,8 @@ on:
       - 'backend/testing/lifecycle_properties/**'
       - 'backend/testing/lifecycle_sim/**'
       - 'backend/scripts/run-emulator-proofs.sh'
+      - 'backend/llm_gateway/**'
+      - 'backend/tests/integration/test_llm_gateway_idempotency_firestore.py'
       - 'backend/tests/integration/test_summary_task_promotion_emulator.py'
       - 'backend/tests/integration/test_candidate_accept_expiry_emulator.py'
       - 'backend/testing/replay_harness/**'
@@ -78,6 +80,8 @@ on:
       - 'backend/testing/lifecycle_properties/**'
       - 'backend/testing/lifecycle_sim/**'
       - 'backend/scripts/run-emulator-proofs.sh'
+      - 'backend/llm_gateway/**'
+      - 'backend/tests/integration/test_llm_gateway_idempotency_firestore.py'
       - 'backend/tests/integration/test_summary_task_promotion_emulator.py'
       - 'backend/tests/integration/test_candidate_accept_expiry_emulator.py'
       - 'backend/testing/replay_harness/**'
@@ -152,13 +156,44 @@ jobs:
           uv pip sync pylock.toml --python .venv/bin/python
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      - name: Install lifecycle local services
-        timeout-minutes: 5
-        env:
-          DEBIAN_FRONTEND: noninteractive
+      - name: Refresh lifecycle package indexes
+        timeout-minutes: 2
+        # Run 44575827290 stalled downloading FFmpeg dependencies from the
+        # runner's regional EC2 mirror. Use the signed Ubuntu HTTPS archives,
+        # as in Backend Unit Tests, without changing the runner's sources.
         run: |
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y redis-server ffmpeg libopus0
+          . /etc/os-release
+          cat > "$RUNNER_TEMP/lifecycle-ubuntu.sources" <<EOF
+          Types: deb
+          URIs: https://archive.ubuntu.com/ubuntu
+          Suites: ${VERSION_CODENAME:?} ${VERSION_CODENAME}-updates
+          Components: main universe
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+          Types: deb
+          URIs: https://security.ubuntu.com/ubuntu
+          Suites: ${VERSION_CODENAME}-security
+          Components: main universe
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
+          cat > "$RUNNER_TEMP/lifecycle-apt.conf" <<EOF
+          Dir::Etc::sourcelist "$RUNNER_TEMP/lifecycle-ubuntu.sources";
+          Dir::Etc::sourceparts "-";
+          APT::Install-Recommends "false";
+          EOF
+          cat "$RUNNER_TEMP/lifecycle-ubuntu.sources"
+          sudo apt-get -c "$RUNNER_TEMP/lifecycle-apt.conf" -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o APT::Update::Error-Mode=any update
+
+      - name: Download lifecycle packages
+        timeout-minutes: 4
+        run: |
+          sudo apt-get -c "$RUNNER_TEMP/lifecycle-apt.conf" -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install --download-only -y redis-server ffmpeg libopus0
+
+      - name: Install lifecycle local services
+        timeout-minutes: 2
+        run: |
+          sudo env DEBIAN_FRONTEND=noninteractive \
+            apt-get -c "$RUNNER_TEMP/lifecycle-apt.conf" -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install --no-download -y redis-server ffmpeg libopus0
 
       - name: Install firebase-tools
         run: npm install -g firebase-tools@15

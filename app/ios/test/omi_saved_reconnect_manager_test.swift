@@ -64,6 +64,8 @@ enum OmiBleDiscoveryNaming {
 struct TestDeliveryError: Error { let code = "test" }
 final class TestFlutterApi {
     var disconnectReasons: [String?] = []
+    func onBluetoothStateChanged(state: String, completion: (Bool) -> Void) { completion(true) }
+    func onStateRestored(peripheralUuids: [String], completion: (Bool) -> Void) { completion(true) }
     func onPeripheralDiscovered(peripheral: BlePeripheral, completion: (Bool) -> Void) { completion(true) }
     func onPeripheralDisconnected(peripheralUuid: String, error: String?, completion: (Result<Void, TestDeliveryError>) -> Void) {
         disconnectReasons.append(error)
@@ -95,9 +97,16 @@ enum OmiBatchAudioWriter {
     static let shared = TestWriter()
     final class TestWriter { func stop(_ reason: String) {} }
 }
-enum LimitlessFlashDrainEngine {
-    static let shared = TestEngine()
-    final class TestEngine { func onDeviceDisconnected(_ uuid: String) {} }
+final class LimitlessFlashDrainEngine {
+    static let shared = LimitlessFlashDrainEngine()
+    func onDeviceDisconnected(_ uuid: String) {}
+    // Production flash admission is inserted here by the Ruby runner.
+}
+enum OmiBluetoothLaunchDiagnostics { static func record(_ event: String) {} }
+struct TestApplication {
+    enum State { case active, background }
+    static let shared = TestApplication()
+    let applicationState = State.background
 }
 enum OmiBlePairingPolicy { static func isPairingLost(_ error: Error?) -> Bool { false } }
 
@@ -105,11 +114,16 @@ final class ManagerHarness {
     let queue = TestQueue()
     let centralManager = TestCentral()
     var flutterApi: TestFlutterApi? = TestFlutterApi()
+    var dartConnectionTargets: Set<String> = []
+    var headlessRetiringLinks: Set<String> = []
+    var reconnectDefaults: UserDefaults { UserDefaults(suiteName: defaultsSuite)! }
+    var pendingScan: (timeout: Int, serviceUuids: [String])?
     var reconnectIntent: OmiSavedReconnectIntent
     var savedReconnect: Set<String> { reconnectIntent.saved }
     var peripherals: [String: TestPeripheral] = [:]
     var manuallyDisconnected: Set<String> = []
     var everConnected: Set<String> = []
+    lazy var healthStore = OmiDeviceHealthStore(defaults: UserDefaults(suiteName: defaultsSuite)!)
     var pairingRecoveryInFlight: Set<String> = []
     var pairingLostBlocked: Set<String> = []
     var captureReconnects: [String: OmiCaptureReconnect] = [:]
@@ -147,12 +161,21 @@ final class ManagerHarness {
     func finishReadyRequest(uuid: String) { readyRequests.remove(uuid) }
     func peripheralUuidString(_ peripheral: TestPeripheral) -> String { peripheral.identifier.uuidString }
     func fullUuidString(_ uuid: CBUUID) -> String { uuid.uuidString }
-    func cleanupPeripheral(_ uuid: String) { failedReadyRequests.remove(uuid) }
+    func cleanupPeripheral(_ uuid: String) {
+        headlessRetiringLinks.remove(uuid)
+        failedReadyRequests.remove(uuid)
+    }
     func markPairingLost(uuid: String) { manuallyDisconnected.insert(uuid) }
     func persistDisconnectEvent(uuid: String, reason: String, reasonCode: Int, isManual: Bool, eventType: String) {}
     func incrementFailToConnectCount(uuid: String) {}
     static func bleReasonString(from: Error?) -> String { "test" }
     func getBluetoothState() -> String { "on" }
+    func appendLifecycleEvent(_ event: String) {}
+    func markBackgroundTelemetryStart() {}
+    func startScan(timeout: Int, serviceUuids: [String]) {}
+    func completedBleServices(for peripheral: TestPeripheral) -> [Int]? { nil }
+    func completeDeviceReady(_ peripheral: TestPeripheral, uuid: String, bleServices: [Int], source: String) {}
+    func discoverServices(for peripheral: TestPeripheral, uuid: String) {}
     func captureSession(_ uuid: String) -> TestCaptureSession { TestCaptureSession() }
     // Production methods are inserted here by the Ruby runner.
 }
@@ -163,10 +186,75 @@ final class ManagerHarness {
         let peripheral = TestPeripheral()
         let uuid = peripheral.identifier.uuidString
         manager.peripherals[uuid] = peripheral
+        manager.dartConnectionTargets.insert(uuid)
         manager.reconnectIntent.configure(uuid, enabled: true)
         return (manager, peripheral, uuid)
     }
+    static func testColdRelaunchCustody() {
+        let (manager, peripheral, uuid) = fixture()
+        let defaults = manager.reconnectDefaults
+        let batchKey = "flutter.batchModeEnabled"
+        let configKey = "flutter.nativeBleStreamConfig"
+        manager.dartConnectionTargets.removeAll()
+        manager.flutterApi = nil
+        let central = manager.centralManager
+        manager.centralManagerDidUpdateState(central)
+        precondition(central.connects == 0 && !central.scanning, "legacy target connected on headless adapter-on")
+
+        let restoration = [CBCentralManagerRestoredStatePeripheralsKey: [peripheral]]
+        for state: CBPeripheralState in [.connecting, .connected] {
+            peripheral.state = state
+            central.state = .unknown
+            let cancelled = central.disconnects
+            manager.centralManager(central, willRestoreState: restoration)
+            precondition(central.disconnects == cancelled, "cancellation must wait for the adapter")
+            central.state = .poweredOn
+            manager.centralManagerDidUpdateState(central)
+            precondition(central.disconnects == cancelled + 1, "legacy connection survived headless restoration")
+            peripheral.state = .disconnected
+            manager.centralManager(central, didDisconnectPeripheral: peripheral, error: nil)
+            precondition(central.connects == 0, "headless restoration reissued a legacy connection")
+        }
+
+        defaults.set(true, forKey: batchKey)
+        func configureFlash(target: String, characteristic: String) {
+            let route = [
+                "deviceType": "limitless", "deviceId": target,
+                "serviceUuid": "632de001-604c-446b-a80f-7963e950f3fb",
+                "characteristicUuid": characteristic,
+            ]
+            defaults.set(String(decoding: try! JSONSerialization.data(withJSONObject: route), as: UTF8.self), forKey: configKey)
+        }
+        let rx = "632de003-604c-446b-a80f-7963e950f3fb"
+        configureFlash(target: UUID().uuidString, characteristic: rx)
+        manager.centralManagerDidUpdateState(central)
+        configureFlash(target: uuid, characteristic: "wrong")
+        manager.centralManagerDidUpdateState(central)
+        precondition(central.connects == 0, "unverified batch route authorized a headless connect")
+
+        peripheral.name = "Limitless"
+        configureFlash(target: uuid.lowercased(), characteristic: rx)
+        peripheral.state = .connected
+        manager.centralManager(central, willRestoreState: restoration)
+        precondition(central.disconnects == 3 && central.connects == 0, "an inherited link could still be in live mode")
+        peripheral.state = .disconnected
+        manager.centralManager(central, didDisconnectPeripheral: peripheral, error: nil)
+        precondition(central.connects == 1, "native flash drain could not reconnect headlessly")
+
+        defaults.removeObject(forKey: batchKey)
+        manager.dartConnectionTargets.insert(uuid)
+        manager.centralManagerDidUpdateState(central)
+        precondition(central.connects == 2, "Dart ownership did not release the cold launch fence")
+    }
+
     static func main() {
+        testColdRelaunchCustody()
+        let restored = ManagerHarness()
+        restored.healthStore.setPolicy(enabled: true, epoch: 1, retire: true)
+        restored.healthStore.recordConnected("restored")
+        precondition(restored.everConnected.isEmpty)
+        precondition(restored.hasEverConnected("restored"))
+
         // A terminal service-discovery failure must retire an OS-connected but
         // unusable saved link, then leave the reconnect delay with CoreBluetooth.
         do {

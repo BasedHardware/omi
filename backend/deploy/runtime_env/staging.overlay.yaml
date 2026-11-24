@@ -5,7 +5,8 @@
 # (service names, identity, secrets, network). It is rendered on demand by
 # backend/deploy/staging/deploy.sh and never written into deploy/runtime_env.yaml.
 #
-# Every difference from prod must fall in STAGING_DIFF_ALLOWLIST
+# Every difference from prod must fall in STAGING_DIFF_ALLOWLIST or the exact
+# retained privacy-map values (all other JSON fields retain strict prod parity)
 # (backend/scripts/cross_service_checks/staging.py, invariant `staging-mirrors-prod`), and the
 # composed env must pass utils/staging_fence.py (no prod project, bucket, URL, Redis, index).
 environment: staging
@@ -130,6 +131,7 @@ cloud_run:
     enrichment-fresh: staging-enrichment-fresh
     provider-stt: staging-provider-stt
     conversations-v3: staging-conversations-v3
+    conversations-v3-backfill: staging-conversations-v3-backfill
     conversation-finalization: staging-conversation-finalization
     audio-merge: staging-audio-merge
     account-deletion: staging-account-deletion
@@ -190,6 +192,10 @@ overlay:
     services:
       backend:
         env:
+          # Retain staging's prior privacy scope; all other JSON fields must still mirror prod.
+          FIRESTORE_READ_LEVERS:
+            category: rollout
+            value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}'
           BUCKET_OBJECT_LAKE: {category: storage_retention, value: ''}
           OBJECT_LAKE_KMS_KEY: {category: storage_retention, value: ''}
           OBJECT_LAKE_WRITE_ENABLED: {category: rollout, value: 'false'}
@@ -201,8 +207,17 @@ overlay:
           HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_DIARIZATION_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          # Google Play Billing push and reconcile are prod-only: empty keeps staging's routes closed (403).
+          PLAY_RTDN_OIDC_AUDIENCE: {category: service_discovery, value: ''}
+          PLAY_RTDN_PUSH_SA: {category: service_discovery, value: ''}
+          PLAY_RECONCILE_OIDC_AUDIENCE: {category: service_discovery, value: ''}
+          PLAY_RECONCILE_INVOKER_SA: {category: service_discovery, value: ''}
       backend-sync:
         env:
+          # Retain staging's prior privacy scope; all other JSON fields must still mirror prod.
+          FIRESTORE_READ_LEVERS:
+            category: rollout
+            value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}'
           BUCKET_OBJECT_LAKE: {category: storage_retention, value: ''}
           OBJECT_LAKE_KMS_KEY: {category: storage_retention, value: ''}
           OBJECT_LAKE_WRITE_ENABLED: {category: rollout, value: 'false'}
@@ -217,6 +232,10 @@ overlay:
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
       backend-sync-backfill:
         env:
+          # Retain staging's prior privacy scope; all other JSON fields must still mirror prod.
+          FIRESTORE_READ_LEVERS:
+            category: rollout
+            value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":0,"bpp_owner_memo_enforce":0}'
           SYNC_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
@@ -225,6 +244,17 @@ overlay:
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
       backend-integration:
         env:
+          # Margin-40 O1 inverse: full deploys must retain the admitted 200/10/class16 cadence.
+          BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
+          BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
+          BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
+          # Staging has no projection pump (STAGING_EXCLUDED_SERVICES), so integration keeps the serving
+          # sweep; prod turns it off only because the pump owns it there (SCA-3318 step 3).
+          BATCH_PIPELINE_SERVING_PROJECTION_SWEEP: {value: 'true', category: ops_kill}
+          # Retain staging's prior privacy scope; all other JSON fields must still mirror prod.
+          FIRESTORE_READ_LEVERS:
+            category: rollout
+            value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}'
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}

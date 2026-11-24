@@ -176,6 +176,19 @@ class ResultLog:
     def run(self, operation, **_):
         return operation(Tx(self))
 
+    def note_head_blocked(self, sid, now, block_type):
+        row = self.results.get(sid)
+        if row is None:
+            return False
+        if row.get('projection_blocked_since') is not None or row.get('projection_state') not in (
+            'pending',
+            'persisted',
+            'ready',
+        ):
+            return False
+        row.update({'projection_blocked_since': now, 'projection_block_type': block_type})
+        return True
+
     def read(self, sid):
         if sid not in self.results:
             raise ProjectionBlocked('committed result and durable intake binding required')
@@ -189,7 +202,7 @@ class ResultLog:
 
         class Session:
             policy = SimpleNamespace(projection_contention=False, projection_timing=False)
-            # Mirrors ProjectionSession.now for the finish-backoff fields.
+            # Mirrors ProjectionSession.now for the shared finish clock.
             session_now = now
 
             def prepare(self, transaction, **_):
@@ -251,19 +264,6 @@ class ResultLog:
             self.results[sid]['projection_finish_due_at'] = -1.0
             return True
         return False
-
-    def defer_finish(self, sid, state, now):
-        """Mirrors ProjectionStore.defer_finish: fence on the row's own state."""
-        from config.batch_pipeline import projection_finish_backoff_delay
-
-        row = self.results[sid]
-        if row.get('projection_state') != state:
-            return False
-        step = row.get('projection_finish_backoff_step')
-        step = min(step + 1, 2) if isinstance(step, int) and step >= 0 else 0
-        row.update(projection_finish_due_at=now + projection_finish_backoff_delay(step))
-        row['projection_finish_backoff_step'] = step
-        return True
 
     def check(self, session):
         row = self.results[session.segment_id]

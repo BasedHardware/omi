@@ -141,7 +141,7 @@ void main() {
       ]
     });
     final result = await captureRecordingInventory(documents: dir.path, phoneSeconds: now, memoryBuckets: {});
-    expect(result['invalid_minimum_schema_rows'], 1);
+    expect(result['invalid_minimum_schema_rows'], 2);
     expect(result['rows_without_file_reference'], 1);
     expect(result['orphan_census_complete'], false);
     expect(jsonEncode(result), isNot(contains('private')));

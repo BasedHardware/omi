@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from typing import Any, Callable
 from utils import external_polling_cache as polling_cache
 from utils.conversations import transcribing_hold
+from utils.conversations.structured_defaults import project_structured_defaults
 
 
 def read_conversation_item(
@@ -59,6 +60,7 @@ def read_conversation_item(
         conversation['transcript_included'] = include_transcript
 
         conversation = transcribing_hold.project(conversation)
+        conversation = project_structured_defaults(conversation)
 
         # Remove transcript_segments if not requested
         if not include_transcript:

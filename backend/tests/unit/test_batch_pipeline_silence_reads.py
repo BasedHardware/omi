@@ -3,23 +3,31 @@
 from copy import deepcopy
 from dataclasses import asdict, replace
 from datetime import datetime, timezone
+from pathlib import Path
+import re
 from types import SimpleNamespace
 
 import pytest
+import yaml
+from prometheus_client import REGISTRY
 
 from config.batch_pipeline import silence_read_skip_enabled
 from config.policy import ProjectionPolicy
+from database import pipeline_ledger
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionReplay
 from database.sync_ledger import sync_content_ledger_ref
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
-from utils.batch_pipeline.projection import Projector
+from utils.batch_pipeline.projection import Projector, WalkHint
 from utils import fair_use  # Import the legacy metering dependency during collection, outside the call CPU budget.
 from utils.stt import allowance_batch
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.capture import chunk_identity
+
+SKIP_METRIC = 'omi_batch_pipeline_silent_read_skips_total'
+AVOIDED_METRIC = 'omi_batch_pipeline_silent_read_skip_reads_avoided_total'
 
 
 @pytest.fixture
@@ -87,6 +95,134 @@ def assign(lane, sid, *, fast=True):
 
 def complete(lane, accounting=None):
     return lane.store.complete('b', lane.binding, 10000, accounting, policy=lane.policy)
+
+
+def silent_read_samples():
+    return {
+        (sample.name, tuple(sorted(sample.labels.items()))): sample.value
+        for metric in REGISTRY.collect()
+        for sample in metric.samples
+        if sample.name in {SKIP_METRIC, AVOIDED_METRIC}
+    }
+
+
+def assert_silent_read_deltas(before, stages, outcome, *, avoided=0):
+    deltas = {
+        key: value - before.get(key, 0) for key, value in silent_read_samples().items() if value != before.get(key, 0)
+    }
+    expected = {(SKIP_METRIC, (('outcome', outcome), ('stage', stage))): 1 for stage in stages}
+    if avoided:
+        expected[(AVOIDED_METRIC, (('stage', 'completion_snapshot'),))] = avoided
+    assert deltas == expected
+
+
+@pytest.mark.parametrize('profile', ['sidecar', 'sync', 'projection_pump'])
+def test_silent_read_metrics_survive_cloud_run_scrape(profile):
+    config = Path(__file__).resolve().parents[2] / 'deploy' / f'cloud_run_gmp_{profile}.yaml'
+    rules = yaml.safe_load(config.read_text())['spec']['endpoints'][0]['metricRelabeling']
+    (keep,) = [rule for rule in rules if rule['action'] == 'keep']
+    assert keep['sourceLabels'] == ['__name__']
+    for metric in (SKIP_METRIC, AVOIDED_METRIC):
+        assert re.fullmatch(keep['regex'], metric)
+        for rule in rules:
+            if rule['action'] == 'drop':
+                # These counters have no component label. A new match key needs an explicit test value.
+                assert set(rule['sourceLabels']) <= {'__name__', 'component'}
+                labels = {'__name__': metric}
+                value = ';'.join(labels.get(label, '') for label in rule['sourceLabels'])
+                assert not re.fullmatch(rule['regex'], value)
+
+
+@pytest.mark.parametrize(
+    'enabled,result_outcome,successor,expected',
+    [
+        ('true', 'silence', False, 'skipped'),
+        ('false', 'silence', False, 'disabled'),
+        ('true', 'success', False, 'not_silent'),
+        ('true', 'silence', True, 'skipped'),
+    ],
+)
+def test_assignment_silent_read_counters(lane, monkeypatch, enabled, result_outcome, successor, expected):
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', enabled)
+    for table in ('jobs', 'results'):
+        lane.client.rows[lane.store.ref(table, 'a').path]['result']['outcome'] = result_outcome
+    projector = Projector.__new__(Projector)
+    projector.store, projector.clock = lane.store, lambda: 10000
+    projector.assign_parts = lambda *args, **kwargs: None  # Speech assignment is outside the read-skip gate.
+    job, entry, binding = lane.store.read('a')
+    before = silent_read_samples()
+    projector._assign('a', job, entry, binding, hint=WalkHint(successor=successor))
+    stages = ['projection_ready']
+    if not successor:
+        stages.append('projection_session_prepare')
+    assert_silent_read_deltas(before, stages, expected)
+    if result_outcome == 'silence':
+        receipt = lane.store.ref('results', 'a').get().to_dict()['projection']
+        assert receipt['state'] == ('ready' if enabled == 'true' else 'persisted')
+
+
+@pytest.mark.parametrize(
+    'enabled,speech_unit,refused,expected',
+    [
+        ('true', None, False, 'skipped'),
+        ('false', None, False, 'disabled'),
+        ('true', 'b', False, 'not_silent'),
+        ('true', 'a', False, 'not_silent'),  # The completing unit is silent but its sibling is not.
+        ('true', None, True, 'not_silent'),  # A speculative completion may fall back after the scan.
+    ],
+)
+def test_completion_silent_read_counters(lane, monkeypatch, enabled, speech_unit, refused, expected):
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', enabled)
+    for sid in lane.binding.segment_ids:
+        assign(lane, sid)
+    if speech_unit:
+        for table in ('jobs', 'results'):
+            lane.client.rows[lane.store.ref(table, speech_unit).path]['result']['outcome'] = 'success'
+    if refused:
+        complete_content = lane.store.complete
+        monkeypatch.setattr(
+            lane.store,
+            'complete',
+            lambda segment, binding, now, accounting, **kwargs: (
+                None if accounting is None else complete_content(segment, binding, now, accounting, **kwargs)
+            ),
+        )
+    projector = Projector.__new__(Projector)
+    projector.store, projector.clock = lane.store, lambda: 10000
+    projector.publish_completion = lambda binding, result, **kw: result
+    transaction_reads = []
+    original_get = StrictFirestoreDocument.get
+
+    def counted_get(document, transaction=None, **kwargs):
+        if transaction is not None:
+            transaction_reads.append(document.path)
+        return original_get(document, transaction=transaction, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', counted_get)
+    before = silent_read_samples()
+    assert projector.complete_content('b', lane.binding, policy=lane.policy, silence=speech_unit != 'b') is not None
+    # Both paths fence every sibling. The fast commit reuses the completing unit's
+    # job and result and skips the separate, upload-sized speech-seconds recheck.
+    assert transaction_reads.count(lane.store.ref('jobs', 'a').path) == 1
+    assert transaction_reads.count(lane.store.ref('jobs', 'b').path) == (1 if expected == 'skipped' else 2)
+    assert transaction_reads.count(lane.store.ref('results', 'b').path) == (1 if expected == 'skipped' else 3)
+    assert_silent_read_deltas(
+        before,
+        ['prepare_accounting', 'completion_snapshot', 'privacy_read'],
+        expected,
+        avoided=2 if expected == 'skipped' else 0,
+    )
+
+
+@pytest.mark.parametrize('enabled,expected', [('true', 'not_silent'), ('false', 'disabled')])
+def test_unready_upload_only_records_accounting(lane, monkeypatch, enabled, expected):
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', enabled)
+    assign(lane, 'a')
+    projector = Projector.__new__(Projector)
+    projector.store, projector.clock = lane.store, lambda: 10000
+    before = silent_read_samples()
+    assert projector.complete_content('a', lane.binding, policy=lane.policy, silence=True) is None
+    assert_silent_read_deltas(before, ['prepare_accounting'], expected)
 
 
 def test_ready_silence_preserves_custody_and_completes_once(lane):
@@ -231,8 +367,6 @@ def test_silence_completion_rechecks_privacy_after_assignment(lane, fence):
 
 
 def test_silent_completion_keeps_zero_usage_observers_and_replay_generation(lane, monkeypatch):
-    from database import pipeline_ledger
-
     lane.binding = replace(lane.binding, target_conversation_id='capture')
     lane.user.collection('conversations').document('capture').create({'id': 'capture'})
     for sid in lane.binding.segment_ids:

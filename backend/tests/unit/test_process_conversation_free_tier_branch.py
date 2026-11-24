@@ -735,6 +735,7 @@ def test_flag_off_fresh_create_persists_no_processing_state_key(monkeypatch, pc)
 
 
 def test_flag_off_legacy_deferred_store_persists_no_processing_state_key(monkeypatch, pc) -> None:
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', 'off')
     spies = _spy_managed_effects(monkeypatch, pc)  # should_defer returns True
     payloads = _capture_all_persists(monkeypatch, pc)
 
@@ -819,6 +820,7 @@ def test_paid_reprocess_clears_a_dead_letter_summary_retryable_marker(monkeypatc
 
 @pytest.mark.parametrize('persisted, expected_event', [(True, 'stored'), (False, 'fenced')])
 def test_legacy_deferral_records_lazy_store_lifecycle(monkeypatch, pc, persisted: bool, expected_event: str) -> None:
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', 'off')
     spies = _spy_managed_effects(monkeypatch, pc)
     recorded: list[str] = []
     monkeypatch.setattr(pc, 'record_lazy_desktop_deferral', lambda *, event: recorded.append(event))
@@ -1026,6 +1028,36 @@ def test_silent_backfill_persists_summary_and_never_schedules_derived_work(monke
     )
     assert payloads and payloads[-1][pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is True
     assert not bundle
+    assert disposition[-1] is pc.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
+    for key in ['extract_memories', 'extract_memories_inner', 'trigger_apps', 'assign_folder']:
+        spies[key].assert_not_called()
+    submitted.assert_not_called()
+
+
+def test_v3_backfilled_window_takes_the_live_notes_trigger_but_no_derived_effects(monkeypatch, pc):
+    """A v3 backfill window is processed like live capture (same trigger into notes) yet stays silent."""
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda *_: False)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    spies['get_structured'].return_value = (Structured(title='Derived', overview='Synthetic complete summary'), False)
+    _stub_completed_for_normal_path(monkeypatch, pc)
+    payloads = _capture_all_persists(monkeypatch, pc)
+    disposition = []
+    submitted = MagicMock(side_effect=AssertionError('historical work must stay silent'))
+    monkeypatch.setattr(pc, 'submit_with_context', submitted)
+    # As inside service._process: the v3 summary writer fence is held by the drain.
+    monkeypatch.setattr(pc.v3_service.fence, 'current', lambda: True)
+    window = _existing_desktop().model_copy(
+        update={'source': ConversationSource.omi, 'v3_derived': True, 'backfilled': True}
+    )
+    pc.process_conversation(
+        'uid',
+        'en',
+        window,
+        trigger=pc.ProcessingTrigger.CAPTURE_END,
+        derived_effects_disposition_observer=disposition.append,
+    )
+    assert spies['get_structured'].call_args.kwargs['trigger'] is pc.ProcessingTrigger.CAPTURE_END
+    assert payloads and payloads[-1][pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is True
     assert disposition[-1] is pc.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
     for key in ['extract_memories', 'extract_memories_inner', 'trigger_apps', 'assign_folder']:
         spies[key].assert_not_called()

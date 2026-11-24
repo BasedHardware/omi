@@ -61,7 +61,7 @@ from utils.llm.gateway_error_contract import (
 )
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_intake_outcome
-from utils.other.storage import delete_conversation_audio_files
+from utils.other.storage import count_retained_raw_conversation_objects
 from utils.journey_metrics_contract import bounded_client_kind
 from utils.observability.journeys import record_client_journey_accepted, record_journey_accepted
 from utils.conversation_shape import observe_completed_conversation_shape
@@ -196,7 +196,7 @@ def create_processing_conversation(uid: str, conversation_data: dict[str, Any], 
 
 
 def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
-    """Create a fully processed conversation without granting processors recreate authority."""
+    """Create a terminal intake or processing result without granting processors recreate authority."""
     _require_status(conversation_data, ConversationStatus.completed)
     stamp_terminal_decision(
         conversation_data, path='import' if conversation_data.get('imported') else 'lifecycle_terminal'
@@ -206,7 +206,7 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
     else:
         conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
         created = True
-    if created:
+    if created and not conversation_data.get('deferred'):
         observe_completed_conversation_shape(uid, conversation_data)
     return created
 
@@ -266,7 +266,8 @@ def persist_processed_conversation(
     stamp_terminal_decision(conversation_data, path='lifecycle_terminal')
 
     def _observe_first_completion() -> None:
-        observe_completed_conversation_shape(uid, conversation_data)
+        if not conversation_data.get('deferred'):
+            observe_completed_conversation_shape(uid, conversation_data)
 
     kwargs: dict[str, Any] = {
         'on_first_completion': _observe_first_completion,
@@ -629,24 +630,26 @@ def fail_and_discard_processing(uid: str, conversation_id: str) -> bool:
     return claimed
 
 
-def reacquire_deferred_processing(uid: str, conversation_id: str) -> bool:
+def reacquire_deferred_processing(uid: str, conversation_id: str, admitted_at: datetime | None = None) -> bool:
     """Atomically claim deferred ownership and renew the admission lease.
 
     ``deferred=True`` is also the ownership fence, so two concurrent first
     opens cannot both launch enrichment. A completed deferred row is an
     explicit failed-attempt terminal and may be reopened for retry.
     """
-    return jobs_db.reacquire_deferred_processing(uid, conversation_id)
+    return jobs_db.reacquire_deferred_processing(uid, conversation_id, admitted_at=admitted_at)
 
 
-def recover_deferred_processing_failure(uid: str, conversation_id: str) -> bool:
+def recover_deferred_processing_failure(
+    uid: str, conversation_id: str, *, expected_admitted_at: datetime | None = None
+) -> bool:
     """Atomically re-arm deferred enrichment and expose a non-spinning terminal.
 
     The paired status/flag mutation belongs here rather than in a router so a
     partial recovery write cannot strand a row in ``processing`` while the
     stale sweep intentionally excludes deferred conversations.
     """
-    return jobs_db.recover_deferred_processing_failure(uid, conversation_id)
+    return jobs_db.recover_deferred_processing_failure(uid, conversation_id, expected_admitted_at=expected_admitted_at)
 
 
 def begin_merge(uid: str, conversation_id: str) -> bool:
@@ -672,7 +675,7 @@ def rule_discard_outcome(
     *,
     expected_sync_content_revision: Optional[int] = None,
 ) -> str:
-    """``discarded`` on a write, ``already_discarded`` for a stored hide, else ``refused``."""
+    """Report whether the rule discard wrote, was already stored, or was refused."""
     return conversations_db.rule_discard_outcome(
         uid,
         conversation_id,
@@ -953,7 +956,6 @@ def delete_empty_recording_conversation(
     transaction_guard: Any = None,
 ) -> bool:
     """Delete only a still-empty listen generation and tombstone it atomically."""
-    deleted_conversation: dict[str, Any] = {}
     recovery_guards: dict[str, Any] = {}
     if require_expired_recording_lease:
         recovery_guards = dict(recovery_cutoff=recovery_cutoff, require_expired_recording_lease=True)
@@ -967,11 +969,10 @@ def delete_empty_recording_conversation(
         uid,
         conversation_id,
         recording_session_id,
-        deleted_conversation=deleted_conversation,
         **recovery_guards,
     )
     if deleted:
-        # Remove the search projection before photo/audio cleanup: a later
+        # Remove the search projection before photo cleanup: a later
         # cleanup failure must not leave the deleted conversation indexed.
         # This path deletes the Firestore row in its own transaction inside
         # recording_sessions_db, so conversations_db.delete_conversation's
@@ -985,54 +986,26 @@ def delete_empty_recording_conversation(
         # Parent deletion is transactionally fenced with content writes; photos
         # are a subcollection and need their physical cleanup afterwards.
         conversations_db.delete_conversation_photos(uid, conversation_id)
-        _discard_unreferenced_audio(uid, conversation_id, deleted_conversation)
+        _log_retained_empty_recording_audio(uid, conversation_id)
     return deleted
 
 
-def _discard_unreferenced_audio(
-    uid: str,
-    conversation_id: str,
-    deleted_conversation: Mapping[str, Any],
-) -> None:
-    """Reclaim private-cloud bytes the deleted row was the last owner of.
-
-    Emptiness here means no transcript segments, no photos and no ``has_content``
-    — it never consults ``audio_files``. A generation whose STT produced nothing
-    because the provider was failing is therefore deleted with real audio still
-    registered on it, and those bytes are the only surviving copy of that
-    recording, so they stay: the row is gone either way, and retained chunks can
-    still be reprocessed or restored. Only a generation that never registered any
-    audio can be leaving chunks nothing will ever reference again (#11742).
-    """
-    if server_batch.owned(deleted_conversation):
-        # Empty/zero-sample captures can still have immutable original receipts.
-        # Removing the display row must never sweep their only retained bytes.
-        return
-    if deleted_conversation.get('audio_files'):
-        logger.info(
-            'Retained registered audio for empty conversation uid=%s conversation_id=%s',
-            uid,
-            conversation_id,
-        )
-        return
+def _log_retained_empty_recording_audio(uid: str, conversation_id: str) -> None:
+    """System-initiated teardown preserves audio independently of row contents."""
+    count: int | str = 'unknown'
+    count_error = 'none'
     try:
-        delete_conversation_audio_files(uid, conversation_id)
-    except Exception:
-        # The row is already gone, so there is nothing left to keep consistent
-        # with; a failed sweep just leaves the orphan this call meant to reclaim.
-        logger.exception(
-            'Failed to reclaim unreferenced audio uid=%s conversation_id=%s',
-            uid,
-            conversation_id,
-        )
-        record_fallback(
-            component='other',
-            from_mode='private_cloud_sync',
-            to_mode='drop',
-            reason='other',
-            outcome='exhausted',
-            log=logger,
-        )
+        count = count_retained_raw_conversation_objects(uid, conversation_id)
+    except Exception as error:
+        # The row is already gone. A failed inventory cannot change that outcome.
+        count_error = type(error).__name__
+    logger.info(
+        'Retained audio for empty conversation uid=%s conversation_id=%s retained_raw_objects=%s count_error=%s',
+        uid,
+        conversation_id,
+        count,
+        count_error,
+    )
 
 
 def open_live_recording_session(
@@ -1459,10 +1432,21 @@ def close_no_speech_capture(
     return committed
 
 
-def commit_v3_projection(uid, token, recordings, existing, rows, cache, *, clear_pending=True):
+def commit_v3_projection(
+    uid, token, recordings, existing, rows, cache, *, clear_pending=True, remove=(), retire=None, key='builder'
+):
     """The lifecycle owner delegates the atomic derived-row/claim transaction."""
     from database import conversations_v3
 
     return conversations_v3.commit_projection(
-        uid, token, recordings, existing, rows, cache, clear_pending=clear_pending
+        uid,
+        token,
+        recordings,
+        existing,
+        rows,
+        cache,
+        clear_pending=clear_pending,
+        remove=remove,
+        retire=retire,
+        key=key,
     )
