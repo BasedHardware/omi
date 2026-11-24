@@ -50,5 +50,5 @@ test-public: build
 
 # PL-745: the serving Python callback and the Go worker both retain unreadable ciphertext.
 test-transcript-parity:
-	cd ../backend && PYTEST_ADDOPTS="-k test_wrong_key_transcript_keeps_ciphertext_and_retries" bash test.sh tests/unit/test_enrichment_route.py
+	cd ../backend && bash test.sh tests/unit/test_enrichment_route.py::test_wrong_key_transcript_keeps_ciphertext_and_retries
 	TEST_FIRESTORE_REQUIRED=1 ./scripts/with-postgres.sh ./scripts/with-firestore.sh $(GO) test -race -count=1 ./cmd/workerd

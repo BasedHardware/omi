@@ -208,7 +208,7 @@ func TestF32TombstoneBeforeNotesFencesGatewayDispatch(t *testing.T) {
 	}
 }
 
-// Exercise the worker with a Python-generated row, matching the legacy callback guard.
+// Exercise the worker with Python-generated ciphertext, matching the legacy callback guard.
 func TestPL745WrongKeyTranscriptPreservesCiphertext(t *testing.T) {
 	t.Parallel()
 	h, runtime, job, bench := gatewayTestJob(t)
@@ -253,11 +253,9 @@ func TestPL745WrongKeyTranscriptPreservesCiphertext(t *testing.T) {
 	t.Cleanup(server.Close)
 	bindGatewayFixture(t, runtime, server.URL, clk)
 
-	workers := h.Start(workerdHandlers(runtime.family))
-	outcome := h.Until(job.Key, "a finalization disposition", func(j queue.Job) bool {
-		return j.Reason != nil || j.Outcome != nil
-	})
-	workers.Stop()
+	// Include retry exhaustion so the terminal write must preserve custody too.
+	h.Start(workerdHandlers(runtime.family))
+	outcome := h.Settled(job.Key)
 	if outcome.Reason == nil || *outcome.Reason != conversations.CauseUnreadable {
 		t.Fatalf("expected an unreadable-transcript disposition, got %+v", outcome)
 	}
