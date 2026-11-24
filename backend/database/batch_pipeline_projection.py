@@ -242,7 +242,9 @@ class ProjectionStore:
     def check(self, session):
         @firestore.transactional
         def read(transaction):
-            session.prepare(transaction)
+            # This callback writes no state. Assignment, receipt and output
+            # transactions invoke prepare separately with live certification.
+            session.prepare(transaction, tokenless_precheck=True)
 
         self.run(read, policy=session.policy)
 

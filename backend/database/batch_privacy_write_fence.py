@@ -37,6 +37,8 @@ from database.batch_account_authority_schema import (
     PRIVACY_COLLECTION,
     USER_POLICY_FIELDS,
 )
+from database.batch_privacy_owner_cache import invalidate_tokenless
+from utils.executors import db_executor, run_blocking
 from database.home_feed_writer import augment_home_writes, affects_home, bulk_erasure_scope
 from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS, TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
 
@@ -235,11 +237,13 @@ def token_write(path: str) -> Write:
     )
 
 
-def augment_commit(request: Any) -> tuple[Any, int]:
+def augment_commit(request: Any, *, invalidations: set[str] | None = None) -> tuple[Any, int]:
     writes = (request.get('writes') if isinstance(request, dict) else request.writes) or ()
     count = len(writes)
     home_writes = augment_home_writes(writes)
     tokens = authority_tokens(writes)
+    if invalidations is not None:
+        invalidations.update(tokens)
     if not tokens and len(home_writes) == count:
         return request, count
     prepared = CommitRequest(request)
@@ -266,8 +270,9 @@ def _wrap_commit(original: Any) -> Any:
         if request is not None and any(value is not None for value in fields.values()):
             raise ValueError('request and flattened commit fields cannot both be supplied')
         source = request if request is not None else fields
-        prepared, count = augment_commit(source)
-        return prepared, count, source
+        invalidations: set[str] = set()
+        prepared, count = augment_commit(source, invalidations=invalidations)
+        return prepared, count, source, invalidations
 
     def response(value, count):
         if len(value.write_results) == count:
@@ -280,8 +285,10 @@ def _wrap_commit(original: Any) -> Any:
 
         @functools.wraps(original)
         async def async_wrapped(client, request=None, **kwargs):
-            prepared, count, source = prepare(request, kwargs)
+            prepared, count, source, invalidations = prepare(request, kwargs)
             result = await original(client, request=prepared, **kwargs)
+            if invalidations and getattr(result, "commit_time", None):
+                await run_blocking(db_executor, invalidate_tokenless, invalidations, result.commit_time)
             _observe_account_writes(source)
             return response(result, count)
 
@@ -291,8 +298,10 @@ def _wrap_commit(original: Any) -> Any:
 
         @functools.wraps(original)
         def sync_wrapped(client, request=None, **kwargs):
-            prepared, count, source = prepare(request, kwargs)
+            prepared, count, source, invalidations = prepare(request, kwargs)
             result = original(client, request=prepared, **kwargs)
+            if invalidations and getattr(result, "commit_time", None):
+                invalidate_tokenless(invalidations, result.commit_time)
             _observe_account_writes(source)
             return response(result, count)
 

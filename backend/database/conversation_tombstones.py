@@ -7,6 +7,7 @@ from typing import Any, Iterator, List, Optional, Tuple
 
 from google.api_core.exceptions import AlreadyExists, NotFound
 
+from config.firestore_read_levers import lever_enabled
 from config.parked_conversations import parked_terminal_status_enabled
 from database._client import db
 from database.fsr_read_cache import cache_writer
@@ -176,18 +177,28 @@ def record_deletion(uid: str, conversation_id: str) -> None:
     deferred = _DEFERRED_BATCH_PURGES.get()
     deferred = deferred if deferred is not None and deferred[0] == uid else None
     if deferred is not None:
-        from database.conversation_batch_purge_jobs import arm_fields, job_ref
+        from database.conversation_batch_purge_jobs import arm_fields, job_ref, post_window_job
 
-        # The obligation commits with the intent, before any fallible cleanup.
-        obligation = (job_ref(db, uid, conversation_id), arm_fields(uid, conversation_id))
+        # Both obligations commit with the user intent. A successful first
+        # pass cannot clear the independent delayed discovery pass.
+        immediate = (job_ref(db, uid, conversation_id), arm_fields(uid, conversation_id))
+        delayed = post_window_job(db, uid, conversation_id) if lever_enabled('bpp_tokenless_owner_cache', uid) else None
+
+        def arm_jobs(batch):
+            batch.set(*immediate, merge=True)
+            if delayed is not None:
+                batch.set(*delayed, merge=True)
+
         try:
             batch = db.batch()
             batch.create(tombstone_ref, tombstone)
-            batch.set(*obligation, merge=True)
+            arm_jobs(batch)
             batch.commit()
         except AlreadyExists:
-            # A retried delete keeps the original tombstone and re-arms the obligation.
-            obligation[0].set(obligation[1], merge=True)
+            # A retried delete keeps the original tombstone and re-arms both passes.
+            batch = db.batch()
+            arm_jobs(batch)
+            batch.commit()
         if conversation_id not in deferred[1]:
             deferred[1].append(conversation_id)
     else:

@@ -31,7 +31,7 @@ from uuid import uuid4
 
 from google.cloud import firestore
 
-from database.privacy_check_metrics import PURGE_COMPLETED
+from database.privacy_check_metrics import POST_WINDOW_SWEEPS, PURGE_COMPLETED
 from database._client import get_firestore_client
 from database import rpc_deadline
 from database import legal_holds
@@ -65,6 +65,7 @@ GATE_KIND = 'explicit_memory_deletion'
 # An accepted delete's erasure lost the account gate to a same-account erasure: retry soon.
 BUSY_RETRY_SECONDS = 30
 ARTIFACT_RETRY_SECONDS = 240
+POST_WINDOW_DELAY = timedelta(minutes=10)
 
 
 class RunSuperseded(Exception):
@@ -118,9 +119,32 @@ def arm_fields(uid: str, conversation_id: str, now: datetime | None = None) -> d
     }
 
 
+def post_window_job(client: Any, uid: str, conversation_id: str) -> tuple[Any, dict[str, Any]]:
+    """A separate obligation survives completion or rollback of the first pass."""
+    current = _now()
+    fields = arm_fields(uid, conversation_id, current)
+    fields.update(
+        post_window=True,
+        due_at=current + POST_WINDOW_DELAY,
+        # Old coalescers only enroll jobs without progress, and do not check
+        # due_at when adding siblings. Keep the delayed job out of those scans.
+        progress={'ns': 0},
+        post_window_started_at=firestore.SERVER_TIMESTAMP,
+    )
+    job = hashlib.sha256(f'post-window\x00{uid}\x00{conversation_id}'.encode()).hexdigest()[:40]
+    return client.collection(COLLECTION).document(job), fields
+
+
 def _arm(row: dict[str, Any]) -> dict[str, Any]:
     # armed_at also detects re-arms from producers predating arm_revision.
     return {'armed_at': row.get('armed_at'), 'arm_revision': row.get('arm_revision')}
+
+
+def _post_window_due(row: dict) -> datetime | None:
+    started = row.get('post_window_started_at')
+    if row.get('post_window') is True and isinstance(started, datetime):
+        return started + POST_WINDOW_DELAY
+    return None
 
 
 def _in_transaction(client: Any, body: Callable[[Any], Any]) -> Any:
@@ -186,6 +210,10 @@ def claim_dispatch(
             return None
         row = snapshot.to_dict() or {}
         due = row.get('due_at')
+        post_window_due = _post_window_due(row)
+        if post_window_due is not None and post_window_due > current:
+            transaction.update(ref, {'due_at': post_window_due})
+            return None
         lease_until = row.get('lease_until')
         if due is None or due > current or (lease_until is not None and lease_until > current):
             return None
@@ -254,6 +282,9 @@ def begin_run(
         row = snapshot.to_dict() or {}
         if int(row.get('generation') or 0) != generation:
             return 'superseded', row, None
+        post_window_due = _post_window_due(row)
+        if post_window_due is not None and post_window_due > current:
+            return 'superseded', row, None
         lease_until = row.get('lease_until')
         if lease_until is not None and lease_until > current:
             return 'in_progress', row, None
@@ -318,7 +349,7 @@ def finish_run(
                     'run_token': None,
                     'lease_generation': None,
                     'lease_until': None,
-                    'due_at': current,
+                    'due_at': max(current, _post_window_due(row) or current),
                     'attempts': 0,
                     'last_outcome': 'rearmed',
                 },
@@ -490,6 +521,7 @@ def run_job(
         if claim != 'run' or row is None or token is None:
             return claim
         uid, conversation_id = str(row['uid']), str(row['conversation_id'])
+        post_window = row.get('post_window') is True
         progress = RunProgress(
             client,
             job,
@@ -514,7 +546,10 @@ def run_job(
                 return 'no_tombstone' if finish('completed') else 'superseded'
             # Cheap preflight so a held obligation does not rescan; every unit re-checks under the gate.
             assert_account_deletion_permitted(uid)
-            purge_conversation(uid, conversation_id, progress, clock=clock)
+            if post_window:
+                purge_conversation(uid, conversation_id, progress, clock=clock, post_window=True)
+            else:
+                purge_conversation(uid, conversation_id, progress, clock=clock)
             if _owes_segments(client, job):
                 raise RuntimeError('batch purge finished with segment erasure still recorded')
         except RunSuperseded:
@@ -542,7 +577,10 @@ def run_job(
             raise
         if not finish('completed'):
             return 'superseded'
-        PURGE_COMPLETED.labels('conversation_job').inc()
+        if post_window:
+            POST_WINDOW_SWEEPS.labels('conversation_deleted').inc()
+        else:
+            PURGE_COMPLETED.labels('conversation_job').inc()
         return 'purged'
 
 
@@ -631,6 +669,7 @@ __all__ = [
     'job_id',
     'job_ref',
     'lease_held',
+    'post_window_job',
     'run_erasure_job',
     'run_job',
     'segment_records',

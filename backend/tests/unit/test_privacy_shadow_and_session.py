@@ -1,7 +1,7 @@
 """Decision comparisons and durable-token validation across real cache helpers."""
 
 from contextlib import nullcontext
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import json
 import re
@@ -637,3 +637,52 @@ def test_owner_candidate_can_exhaust_shared_artifact_deadline_after_live_allow(w
     assert TOKEN in live_reads and SOURCE in live_reads
     assert reads == live_reads  # Failed candidate budget checks issue no SDK reads.
     assert counter._value.get() == before + 1
+
+
+def test_tokenless_invalidation_fences_out_a_concurrent_fill(monkeypatch):
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setenv('REDIS_DB_HOST', 'synthetic-test-only')
+    monkeypatch.setattr(shared_cache, '_redis', lambda: redis)
+    client = SimpleNamespace(_database_string='projects/demo-batch/databases/(default)')
+    owner = privacy.privacy_owner_key(UID)
+    ids = frozenset({'source'})
+    read_time = datetime.now(timezone.utc)
+    version = ('a' * 32, read_time.isoformat(), read_time.microsecond * 1000)
+    snapshot = SimpleNamespace(read_time=read_time)
+    initial = shared_cache.read_tokenless(client, owner, ids, 7)
+    assert initial is not None and initial.decision is None
+    shared_cache.store_tokenless(initial, ids, snapshot, version, 7, read_time.timestamp())
+    cached = shared_cache.read_tokenless(client, owner, ids, 7)
+    assert cached is not None and cached.decision is not None
+
+    path = f'{client._database_string}/documents/batch_pipeline_privacy/{owner}'
+    changed_at = read_time + timedelta(milliseconds=1)
+    shared_cache.invalidate_tokenless({path}, changed_at)
+    # A late old response cannot erase the newest invalidation watermark.
+    shared_cache.invalidate_tokenless({path}, read_time)
+    shared_cache.store_tokenless(cached, ids, snapshot, version, 7, read_time.timestamp())
+    after = shared_cache.read_tokenless(client, owner, ids, 7)
+    assert after is not None and after.decision is None
+    assert after.changed > shared_cache._revision(read_time)
+    # A transaction that began before the write also cannot refill after
+    # reading the newly invalidated Redis cell.
+    shared_cache.store_tokenless(after, ids, snapshot, version, 7, read_time.timestamp())
+    assert shared_cache.read_tokenless(client, owner, ids, 7) == after
+
+
+def test_tokenless_shadow_separates_fresh_and_outside_window_mismatches(monkeypatch):
+    read_time = datetime.now(timezone.utc)
+    version = ('a' * 32, read_time.isoformat(), 0)
+    decision = shared_cache.Decision(read_time.timestamp(), version, 7)
+    snapshot = SimpleNamespace(update_time=read_time + timedelta(seconds=1))
+    within = shared_cache.TOKENLESS_SHADOW.labels('changed_within_window')
+    outside = shared_cache.TOKENLESS_SHADOW.labels('mismatch_outside_window')
+    before = within._value.get(), outside._value.get()
+
+    monkeypatch.setattr(shared_cache, 'time', SimpleNamespace(time=lambda: read_time.timestamp() + 5))
+    shared_cache.compare_tokenless(decision, snapshot, None, None)
+    assert within._value.get() == before[0] + 1
+
+    monkeypatch.setattr(shared_cache, 'time', SimpleNamespace(time=lambda: read_time.timestamp() + 300))
+    shared_cache.compare_tokenless(decision, snapshot, None, None)
+    assert outside._value.get() == before[1] + 1

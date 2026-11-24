@@ -57,6 +57,16 @@ PURGE_ROWS = Counter(
     'Rows handled by completed batch owner privacy sweeps',
     ['scope'],
 )
+POST_WINDOW_SWEEPS = Counter(
+    'omi_batch_pipeline_privacy_post_window_sweeps_total',
+    'Delayed privacy sweeps that durably completed',
+    ['reason'],
+)
+POST_WINDOW_OPERATIONS = Counter(
+    'omi_batch_pipeline_privacy_post_window_operations_total',
+    'Delayed sweep erasure or reconciliation operations, including retry work',
+    ['reason', 'sink'],
+)
 ACCOUNT_AUTHORITY_WRITES = Counter(
     'omi_batch_pipeline_account_privacy_writes_total',
     'Committed account authority writes observed by the Firestore interceptor',

@@ -829,3 +829,35 @@ def test_unanswered_delete_is_not_settled_by_a_retry_503_real_transport(monkeypa
         server.shutdown()
         server.server_close()
         client.close()
+
+
+def test_post_window_sweep_erases_a_late_commit_and_keeps_unrelated_rows(plane, route, monkeypatch):
+    from database import conversation_batch_purge_jobs as jobs
+    from database import privacy_check_metrics
+
+    cid = 'synthetic-after-first-sweep'
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
+    _delete(plane, route, cid)
+    [(immediate, generation)] = _reconcile(monkeypatch)
+    assert _quick(immediate, generation) == 'purged'
+    assert not plane.client.collection(jobs.COLLECTION).document(immediate).get().exists
+
+    # A write from an earlier in-flight attempt becomes visible after the
+    # first sweep has already removed its job. The delayed job is independent.
+    _seed_batch(plane, cid, mine=1, others=1)
+    assert _results_left(plane, cid) == 1
+    delayed, _ = jobs.post_window_job(plane.client, plane.uid, cid)
+    row = delayed.get().to_dict()
+    assert row['post_window'] is True
+    assert _reconcile(monkeypatch) == []
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_owner_cache":0}')
+    monkeypatch.setattr(jobs, '_now', lambda: row['post_window_started_at'] + jobs.POST_WINDOW_DELAY)
+    [(job, generation)] = _reconcile(monkeypatch)
+    assert job == delayed.id
+    completed = privacy_check_metrics.POST_WINDOW_SWEEPS.labels('conversation_deleted')
+    before = completed._value.get()
+    assert _quick(job, generation) == 'purged'
+    assert _results_left(plane, cid) == 0
+    assert _results_left(plane, 'other-1') == 1
+    assert completed._value.get() == before + 1
+    assert _quick(job, generation) == 'missing'

@@ -211,7 +211,7 @@ class ProjectionSession:
         transaction.update(self.result_ref, changes)
         return False
 
-    def guard(self, transaction, conversation_ids=()):
+    def guard(self, transaction, conversation_ids=(), *, tokenless_precheck=False):
         # Decision-only: the fence budget counts the distinct documents this
         # prepare actually verified, including every redirect hop the walk read
         # (plus any refusing id below). No full-row export, so a certified memo
@@ -231,6 +231,7 @@ class ProjectionSession:
                 verified_out=checked,
                 live_version_out=versions,
                 shared_owner_cache=True,
+                tokenless_precheck=tokenless_precheck,
             )
         except BatchPrivacyBlocked as error:
             if error.conversation_id:
@@ -268,7 +269,7 @@ class ProjectionSession:
                 if len(self._privacy_fence_ids) > 256:
                     raise BatchPrivacyBlocked('conversation_fence_budget')
 
-    def _prepare_privacy(self, transaction, *, privacy_deleted=False):
+    def _prepare_privacy(self, transaction, *, privacy_deleted=False, tokenless_precheck=False):
         ids = _input_privacy_ids(
             self.binding, self.job, detach_source_alias=getattr(self, 'detach_source_alias', False)
         )
@@ -322,7 +323,10 @@ class ProjectionSession:
             return True
 
         try:
-            self.guard(transaction, ids)
+            if tokenless_precheck and not settling_deletion and not self.receipt():
+                self.guard(transaction, ids, tokenless_precheck=True)
+            else:
+                self.guard(transaction, ids)
         except BatchPrivacyBlocked as error:
             if error.reason != BatchPrivacyReason.CONVERSATION_DELETED or not settling_deletion:
                 raise
@@ -358,7 +362,16 @@ class ProjectionSession:
                 # it. Reconcile its receipt, while later input parts still owe
                 # their own assignments. Never authorize input deletion here.
 
-    def prepare(self, transaction, *, replay=True, privacy_deleted=False, privacy_refusal=None, privacy_replay=False):
+    def prepare(
+        self,
+        transaction,
+        *,
+        replay=True,
+        privacy_deleted=False,
+        privacy_refusal=None,
+        privacy_replay=False,
+        tokenless_precheck=False,
+    ):
         if privacy_deleted and privacy_refusal is not None:
             raise ProjectionBlocked('privacy dispositions must be distinct')
         self._privacy_refusal_transaction = None
@@ -404,7 +417,7 @@ class ProjectionSession:
         ):
             raise ProjectionBlocked('immutable result binding mismatch')
         try:
-            self._prepare_privacy(transaction, privacy_deleted=privacy_deleted)
+            self._prepare_privacy(transaction, privacy_deleted=privacy_deleted, tokenless_precheck=tokenless_precheck)
         except BatchPrivacyBlocked as error:
             if privacy_refusal != error.reason or error.reason not in HOLD_REASONS:
                 raise

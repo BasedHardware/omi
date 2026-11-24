@@ -30,6 +30,7 @@ from typing import Any, Callable, ContextManager, Iterable, Mapping, Protocol
 from google.cloud import firestore
 
 from database import rpc_deadline
+from database.privacy_check_metrics import POST_WINDOW_OPERATIONS
 from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
 from database import record_wal_capacity
@@ -175,6 +176,7 @@ def purge_conversation(
     firestore_client: Any = None,
     delete_uri: Callable[[str, str], None] | None = None,
     clock: Callable[[], float] = time.monotonic,
+    post_window: bool = False,
 ) -> int:
     """Erase one conversation using the same traversal as a sealed owner group."""
     return purge_conversations(
@@ -184,6 +186,7 @@ def purge_conversation(
         firestore_client=firestore_client,
         delete_uri=delete_uri,
         clock=clock,
+        post_window=post_window,
     )
 
 
@@ -196,6 +199,7 @@ def purge_conversations(
     delete_uri: Callable[[str, str], None] | None = None,
     clock: Callable[[], float] = time.monotonic,
     check_tombstones: bool = True,
+    post_window: bool = False,
 ) -> int:
     """One owner traversal for sealed, independently authorized members.
 
@@ -243,6 +247,11 @@ def purge_conversations(
     start_ns = int(start.get('ns') or 0)
     erased = 0
 
+    def count_firestore(count: int) -> int:
+        if post_window:
+            POST_WINDOW_OPERATIONS.labels('conversation_deleted', 'firestore').inc(count)
+        return count
+
     def mark(position: dict[str, Any], **kwargs: Any) -> None:
         progress.checkpoint(position, **kwargs)
         if progress.expired():
@@ -252,6 +261,8 @@ def purge_conversations(
         # Every object delete holds the gate until its outcome is known (UnitAuthority.remote).
         def delete(owner: str, uri: str) -> None:
             authority.remote(lambda: delete_uri(owner, uri), target=uri)
+            if post_window:
+                POST_WINDOW_OPERATIONS.labels('conversation_deleted', 'object_storage').inc()
 
         return delete
 
@@ -363,7 +374,9 @@ def purge_conversations(
                                 or (table == 'intakes' and segments.intersection(data.get('segment_ids') or []))
                             ):
                                 matches.append((snapshot, data))
-                        erased += _in_units(progress, matches, erase_dependent(namespace, table), clock, settle)
+                        erased += count_firestore(
+                            _in_units(progress, matches, erase_dependent(namespace, table), clock, settle)
+                        )
                         mark(position)
                     mark({'ns': ns_index, 'phase': phase, 'table': table_index + 1, 'after': None})
             elif phase == 'parked':
@@ -384,7 +397,9 @@ def purge_conversations(
                             continue  # Already handled in ``dependents``.
                         if belongs(data) or data.get('segment_id') in segments:
                             matches.append((snapshot, data))
-                    erased += _in_units(progress, matches, erase_dependent(namespace, 'artifacts'), clock, settle)
+                    erased += count_firestore(
+                        _in_units(progress, matches, erase_dependent(namespace, 'artifacts'), clock, settle)
+                    )
                     mark({'ns': ns_index, 'phase': phase, 'table': 0, 'after': cursor})
             elif phase == 'segments':
                 while True:
@@ -430,7 +445,7 @@ def purge_conversations(
                                 erase_binding(item, authority)
                             # Records go only after their binding is gone, under the same ownership.
                             progress.segments_done(namespace, done)
-                        erased += len(done)
+                        erased += count_firestore(len(done))
                         if len(done) < len(bindings):
                             break  # Budget hit; re-read pending (the rest stays recorded).
                     mark({'ns': ns_index, 'phase': phase, 'table': 0, 'after': None})
@@ -438,7 +453,9 @@ def purge_conversations(
                 _ensure_budget(progress)
                 settle()
                 with progress.unit():
-                    purge_jobstore_owner(namespace, uid)
+                    reconciled = purge_jobstore_owner(namespace, uid)
+                if post_window:
+                    POST_WINDOW_OPERATIONS.labels('conversation_deleted', 'postgres').inc(reconciled)
             if phase_index + 1 < len(PHASES):
                 mark({'ns': ns_index, 'phase': PHASES[phase_index + 1]})
             else:
