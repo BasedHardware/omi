@@ -1,6 +1,7 @@
 """Admission incident reproductions on real loopback transactions, never fast units."""
 
 import asyncio
+from contextlib import nullcontext
 import os
 from pathlib import Path
 
@@ -8,6 +9,18 @@ import pytest
 
 pytestmark = pytest.mark.integration
 FIXTURES = Path(__file__).resolve().parents[2] / 'testing/replay_harness/fixtures'
+
+
+def _assert_admission_contention_outcome(contention):
+    stage = contention['stages'][0]
+    if contention['verdict'] == 'FAIL':
+        assert stage['exception_type'] == 'FirestoreContentionExhausted', contention
+        assert stage['operation'] in ('read_pending', 'admit'), contention
+        if stage['operation'] == 'admit':
+            assert stage['transaction'] == 'database.batch_pipeline_intake.admit.commit', contention
+    else:
+        assert contention['verdict'] == 'PASS', contention
+        assert stage['details']['pending'] == 0 and stage['details']['admitted'] == stage['details']['rows']
 
 
 def test_admission_seed_cases(tmp_path):
@@ -20,8 +33,7 @@ def test_admission_seed_cases(tmp_path):
     write_report(items, tmp_path)
     print('\n' + table(items))
     by_id = {item['item']: item for item in items}
-    # The contention case is a load-sensitive stress shape: whether retries
-    # exhaust depends on scheduling, so CI accepts exactly two outcomes for it.
+    # Under load, retries can exhaust at the pending read or the intake commit.
     stress = 'admission-drain-contention'
     assert all(item['expectation_met'] for item in items if item['item'] != stress), table(items)
     item = by_id['admission-not-durable']
@@ -34,15 +46,37 @@ def test_admission_seed_cases(tmp_path):
     assert by_id['admission-regional-only']['verdict'] == 'PASS'
     assert 'validate_record_tail' in by_id['admission-partial-inventory']['stop_reason']
     assert 'TimeoutError' in by_id['admission-archive-listing-failure']['stop_reason']
-    contention = by_id[stress]
-    stage = contention['stages'][0]
-    if contention['verdict'] == 'FAIL':
-        assert 'FirestoreContentionExhausted' in contention['stop_reason'], table(items)
-        assert stage['operation'] == 'admit'
-        assert stage['transaction'] == 'database.batch_pipeline_intake.admit.commit'
-    else:
-        assert contention['verdict'] == 'PASS', table(items)
-        assert stage['details']['pending'] == 0 and stage['details']['admitted'] == stage['details']['rows']
+    _assert_admission_contention_outcome(by_id[stress])
+
+
+@pytest.mark.parametrize(
+    ('operation', 'exception_type', 'transaction', 'expectation'),
+    [
+        pytest.param(
+            'read_pending',
+            'FirestoreContentionExhausted',
+            'utils.batch_pipeline.live.drain_recordings.drain_one.lambda',
+            nullcontext(),
+            id='pending-read-exhaustion',
+        ),
+        pytest.param(
+            'admit',
+            'FirestoreContentionExhausted',
+            'database.batch_pipeline_intake.admit.commit',
+            nullcontext(),
+            id='intake-commit-exhaustion',
+        ),
+        pytest.param('verify', None, None, pytest.raises(AssertionError), id='admission-evidence-mismatch'),
+        pytest.param('read_pending', 'TimeoutError', None, pytest.raises(AssertionError), id='pending-read-timeout'),
+        pytest.param(
+            'admit', 'FirestoreContentionExhausted', None, pytest.raises(AssertionError), id='wrong-transaction'
+        ),
+    ],
+)
+def test_admission_contention_failure_contract(operation, exception_type, transaction, expectation):
+    stage = {'operation': operation, 'exception_type': exception_type, 'transaction': transaction}
+    with expectation:
+        _assert_admission_contention_outcome({'verdict': 'FAIL', 'stages': [stage]})
 
 
 def test_environment_refuses_cloud_and_uses_local_leaves():
