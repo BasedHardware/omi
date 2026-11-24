@@ -15,9 +15,11 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/coordinators/provider_capture_external_actions.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/pages/episodes/finished_capture_page.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
+import 'package:omi/pages/home/widgets/home_recording_bar.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
@@ -34,6 +36,7 @@ import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/enums.dart';
 
 // Nik, 2026-11-18 (TestFlight 1.0.593, pendant, v3): Finish on the live page did nothing and went
 // back to the list; the conversation showed up 4 minutes later. A batch pendant's page shows only
@@ -130,6 +133,14 @@ class _Capture extends CaptureProvider {
   CreateConversationResponse? answer;
   final Future<void>? answerDelay;
   var finishes = 0;
+  final finishWindowIds = <String?>[];
+  final receivedSegmentIds = <String>{};
+
+  @override
+  Iterable<String> get locallyReceivedSegmentIds => receivedSegmentIds;
+
+  @override
+  DateTime get liveCaptureStartedAt => DateTime.now().subtract(const Duration(minutes: 1));
   ProcessAbsence failure = ProcessAbsence.transport;
 
   @override
@@ -163,6 +174,7 @@ class _Capture extends CaptureProvider {
   @override
   Future<InProgressProcessOutcome> finishCaptureWithOutcome({String? liveConversationId}) async {
     finishes++;
+    finishWindowIds.add(liveConversationId);
     await answerDelay;
     final reply = answer;
     return InProgressProcessOutcome(response: reply, absence: reply == null ? failure : null);
@@ -295,6 +307,95 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+  });
+
+  test('a closed verified recording cannot own the current live window', () {
+    final capture = _Capture()
+      ..verifiedLiveServerRecordingId = 'closed'
+      ..closedRecordings.add('closed')
+      ..recordingState = RecordingState.record;
+    addTearDown(capture.dispose);
+    ServerConversation window(String source) => _conversation('live', extra: {
+          'kind': 'conversation',
+          'tile_state': 'live',
+          'status': 'in_progress',
+          'v3_recording_ids': [source],
+          'transcript_segments': [
+            {'id': 'fresh', 'text': 'New words.', 'start': 0.0, 'end': 4.0, 'is_user': true},
+          ],
+        });
+
+    expect(LiveConversationEndButton.phoneCaptures(window('next'), capture, currentLiveId: 'live'), isFalse);
+    capture.receivedSegmentIds.add(window('next').transcriptSegments.single.id);
+    expect(LiveConversationEndButton.phoneCaptures(window('closed'), capture, currentLiveId: 'live'), isFalse);
+    expect(LiveConversationEndButton.phoneCaptures(window('next'), capture, currentLiveId: 'live'), isTrue);
+  });
+
+  testWidgets('Home Wrap Up keeps the owned live window id on retry', (tester) async {
+    final live = _conversation('owned-window', extra: {
+      'kind': 'conversation',
+      'tile_state': 'live',
+      'status': 'in_progress',
+      'v3_recording_ids': ['rec-1'],
+    });
+    final v3 = ConversationsV3Provider(
+      uid: () => 'owner',
+      cached: 'owner:1',
+      fetchLive: () async => ApiSuccess(ConversationsLiveRead(v3: true, conversation: live)),
+    );
+    final capture = _Capture()..verifiedLiveServerRecordingId = 'rec-1';
+    addTearDown(v3.dispose);
+    addTearDown(capture.dispose);
+    await v3.refresh();
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+        ChangeNotifierProvider<ConversationsV3Provider>.value(value: v3),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: [Locale('en')],
+        home: Scaffold(body: HomeRecordingBar()),
+      ),
+    ));
+
+    await tester.tap(find.byKey(const ValueKey('home_recording_bar_wrap_up')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(capture.finishWindowIds, ['owned-window']);
+
+    capture.verifiedLiveServerRecordingId = null;
+    await tester.tap(find.text('Try Again'));
+    await tester.pump();
+    expect(capture.finishWindowIds, ['owned-window', 'owned-window']);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a pending v3 Finish returns to default Home from a filtered view', (tester) async {
+    final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
+    addTearDown(v3.dispose);
+    final capture = _Capture()
+      ..verifiedLiveServerRecordingId = 'rec-1'
+      ..failure = ProcessAbsence.notFound;
+    final harness = await _pump(tester, capture, v3: v3, filterStart: DateTime(2026, 11, 1));
+    final conversations = tester.element(find.byType(LiveEpisodePage)).read<ConversationProvider>();
+    conversations
+      ..showStarredOnly = true
+      ..selectedFolderId = 'folder';
+    final row = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'rec-1');
+    v3.startManualFinish(row, 'rec-1');
+    v3.settleManualFinish(row, null, alreadyClosed: true);
+    expect(conversations.showsDefaultHome, isFalse);
+
+    expect(await _finishAndCapturePushed(tester, capture), isNull);
+    await tester.pumpAndSettle();
+    expect(find.text('home'), findsOneWidget);
+    expect(find.byType(LiveEpisodePage), findsNothing);
+    expect(harness.home.selectedIndex, HomeProvider.homeTab);
+    expect(conversations.showsDefaultHome, isTrue);
+    expect(v3.finishRow, same(row));
+    v3.acknowledgeManualFinish(row);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('a batch pendant Finish with only preview lines processes the capture', (tester) async {

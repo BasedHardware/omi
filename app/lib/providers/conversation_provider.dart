@@ -738,6 +738,36 @@ class ConversationProvider extends ChangeNotifier {
     }
   }
 
+  /// Restore the list where Home can show the pending Finish row.
+  void resetToDefaultHome() {
+    if (showsDefaultHome) return;
+
+    showStarredOnly = false;
+    selectedFolderId = null;
+    selectedStartDate = null;
+    selectedEndDate = null;
+    showShortConversations = false;
+    showDiscardedConversations = false;
+    isSelectionModeActive = false;
+    selectedConversationIds.clear();
+    _searchRequestGeneration++;
+    previousQuery = '';
+    selectedSpeakerId = null;
+    searchStartDate = null;
+    searchEndDate = null;
+    searchedConversations = [];
+    currentSearchPage = 0;
+    totalSearchPages = 0;
+    lastSearchResult = null;
+    _isLoadingConversationSearch = false;
+    isFetchingConversations = false;
+    isLoadingConversations = _isLoadingConversationList;
+
+    groupedConversations = {};
+    notifyListeners();
+    unawaited(fetchConversations());
+  }
+
   void toggleStarredFilter() {
     showStarredOnly = !showStarredOnly;
 

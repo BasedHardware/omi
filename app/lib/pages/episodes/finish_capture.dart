@@ -174,6 +174,9 @@ bool presentFinishOutcome(
   final page = homeShowsProcessing ? null : finishedPageFor(outcome);
   final message = finishMessage(context, outcome);
   final stays = outcome is FinishFailed || outcome is FinishNotReceived;
+  if (outcome is FinishAwaitingResult) {
+    context.read<ConversationProvider?>()?.resetToDefaultHome();
+  }
   if (homeShowsProcessing ||
       page != null ||
       outcome is FinishAwaitingResult ||

@@ -7,8 +7,11 @@ import 'package:omi/services/capture/empty_recording_notice.dart';
 sealed class FinishOutcome {
   const FinishOutcome();
 
-  /// The Process Now answer, classified. [heardSomething] is whether the page showed the reader
-  /// anything (transcript, photos, preview lines) when they tapped.
+  /// Classifies the Process Now answer. [heardSomething] means a still-open recording should
+  /// report that audio has yet to arrive. Visible content includes transcript, photos, or preview
+  /// words. A retry resends a failed Finish after the page's content has moved aside, an owned
+  /// live window can be finished before its transcript arrives, and v3 Finish feedback accounts
+  /// for audio that may still be in transit even when the page is empty.
   static FinishOutcome fromProcess(InProgressProcessOutcome outcome, {required bool heardSomething}) {
     final conversation = outcome.response?.conversation;
     if (conversation == null) {
