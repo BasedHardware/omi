@@ -314,6 +314,62 @@ def test_default_safety_net_keeps_two_empty_answers_held(setup, monkeypatch, leg
     artifacts.persist_recovery_result.assert_not_called()
 
 
+def test_two_recognizer_close_switch_settles_two_empty_answers_under_the_safety_net(
+    setup, monkeypatch, legacy_dependencies, caplog
+):
+    caplog.set_level('INFO')
+    client, binding, artifacts, alternate, second, recovery = second_setup(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', 'true')
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    job = row(client)
+    assert job['result']['outcome'] == 'no_recoverable_speech'
+    assert all(r['outcome'] == 'empty' for r in job['recovery']['recognizers'].values())
+    payload = artifacts.persist_recovery_result.call_args.args[1]
+    assert result_outcome(payload) == 'no_recoverable_speech'
+    assert payload['recognition_evidence'] == TWO_PROVIDER_EMPTY_EVIDENCE
+    assert payload['words'] == [] and payload['speech_seconds'] == 5
+    assert set(payload['recognizer_receipts']) == {'modulate', 'soniox'}
+    assert 'reason=no_recoverable_speech' in caplog.text
+    # Still one paid call each, and nothing more on later sweeps.
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    alternate.assert_called_once()
+    second.assert_called_once()
+
+
+@pytest.mark.parametrize('error', [TimeoutError('synthetic'), ('malformed',)])
+def test_two_recognizer_close_switch_needs_a_validated_second_empty_answer(
+    setup, monkeypatch, legacy_dependencies, error
+):
+    soniox = Mock(side_effect=error) if isinstance(error, Exception) else Mock(return_value=error)
+    client, binding, artifacts, _, second, recovery = second_setup(
+        setup, monkeypatch, legacy_dependencies, soniox=soniox
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', 'true')
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    assert not row(client).get('result')
+    artifacts.persist_recovery_result.assert_not_called()
+    second.assert_called_once()
+
+
+def test_two_recognizer_close_switch_leaves_the_language_guard_held(setup, monkeypatch, legacy_dependencies):
+    client, binding, artifacts, _, second, recovery = second_setup(
+        setup, monkeypatch, legacy_dependencies, soniox=Mock(return_value=([], 'vi')), speech=(0, 1)
+    )
+    job = row(client)
+    job.pop('worker_empty_evidence')
+    job['worker_failure'] = {'stage': 'vad_windows', 'reason': 'unsupported_language'}
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', 'true')
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    second.assert_called_once()
+    job = row(client)
+    assert job['recovery']['recognizers']['soniox']['outcome'] == 'empty'
+    assert not job.get('result')
+    artifacts.persist_recovery_result.assert_not_called()
+
+
 @pytest.mark.parametrize('words', [False, True])
 def test_subsecond_worker_speech_hold_uses_second_chance_with_zero_cpu_vad(
     setup, monkeypatch, legacy_dependencies, words

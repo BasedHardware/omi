@@ -155,7 +155,14 @@ def _recover_steps(repository, artifacts, segment, *, stt=None, second_stt=None,
                                 if (
                                     below_silence_threshold(speech)
                                     if language_guarded(job)
-                                    else policy.terminal_empty_disposition and terminal_empty_allowed(empty.spans)
+                                    else policy.terminal_empty_disposition
+                                    and terminal_empty_allowed(
+                                        empty.spans,
+                                        recognizer_receipts={
+                                            name: {'provider': name, 'outcome': 'empty', 'word_count': 0}
+                                            for name in ('modulate', provider)
+                                        },
+                                    )
                                 )
                                 else 'failed_held'
                             )

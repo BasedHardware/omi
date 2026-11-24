@@ -278,7 +278,7 @@ def padded_long_speech(job):
 
 
 def terminal_empty_payload(duration, spans, evidence=EMPTY_EVIDENCE, *, recognizer_receipts=None):
-    if not terminal_empty_allowed(spans):
+    if not terminal_empty_allowed(spans, recognizer_receipts=recognizer_receipts):
         raise MultilingualEmpty(duration, spans)
     payload = {
         'audio_seconds': duration,

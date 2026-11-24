@@ -156,6 +156,10 @@
       "owner": "dazheng (batch record lane / rollout lead)",
       "review_by": "2026-12-14"
     },
+    "BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED": {
+      "owner": "batch record lane",
+      "review_by": "2026-12-22"
+    },
     "BATCH_PIPELINE_ENRICHMENT_FRESH_SWEEP_MAX_AGE_DAYS": {
       "owner": "omi-pipeline",
       "review_by": "2026-11-30"
