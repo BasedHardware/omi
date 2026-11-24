@@ -39,6 +39,11 @@ summary leases, counters, rollout, rollback and deletion criteria.
 to restore classification-based hiding for derived media and recognized background
 on subsequent projections. The manual-end marker and classification remain stored.
 
+`CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800. A transcript line
+starting at or after that elapsed time starts a separate v3 stretch. Set the
+value to `0` or `off` to disable the cap. See the
+[v3 runbook](./runbooks/conversations-v3.md) for bounds and rollout readback.
+
 `CONVERSATIONS_V3_LIVE_TITLE=on` is the default for v3 builder runtimes.
 Set it to `off` to stop new automatic title previews. An open, untitled derived
 row becomes eligible after 180 seconds of transcribed speech, with overlapping

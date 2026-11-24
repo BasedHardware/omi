@@ -256,11 +256,11 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                     # word minimum on its own words; a five-minute stretch is judged whole (#25786).
                     candidate['_stretch_words'] = word_count(part) if sitdown else group['_stretch_words']
                     candidate['_stretch_partition'] = first_result
-                # A model can undo a topic split, never a recorded silence boundary.
+                # A model can undo a topic split within a stretch. Keep a cap boundary even without cohesion.
                 prior = result[-1] if result else None
                 if (
                     prior
-                    and (not cohesion or len(result) > first_result)
+                    and (not (cohesion or group.get('after_window_cap')) or len(result) > first_result)
                     and entry.get('resumes_previous')
                     and not prior.get('manual_end')
                     and prior['kind'] == candidate['kind']

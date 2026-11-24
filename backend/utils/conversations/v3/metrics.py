@@ -16,6 +16,9 @@ CREATED_DELIVERIES = Counter(
     'Conversation-created integration deliveries for derived conversations',
     ['outcome'],
 )
+WINDOW_CAP_CUTS = Counter(
+    'omi_conversations_v3_window_cap_cuts_total', 'Cap boundaries that created a successor in a live projection'
+)
 ADOPTED = Counter('omi_conversations_v3_adopted_total', 'Existing derived rows adopted as a replanned prior')
 PENDING_AGE = Histogram(
     'omi_conversations_v3_pending_age_seconds', 'Pending recording age', buckets=(60, 300, 600, 1800, 3600, 86400)
