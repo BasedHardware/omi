@@ -7,8 +7,7 @@ finalize moves the provider cursor P to (floor(P / 1920) + 1) * 1920 samples
 (120 ms at 16 kHz) and that the <fin> ack reports that position. That law was
 measured on stt-rt-v5 on 2026-10-06. On 2026-11-23 this probe found that
 neither stt-rt-v5 nor stt-rt-v6 pads any more: every ack reported the exact
-sent cursor. Run it again before changing SONIOX_MODEL or enabling
-SONIOX_ORDERED_FINALIZE.
+sent cursor. Run it again before proposing use of the ordered clock.
 
 Each case sends synthetic speech with the production socket config, then
 replays the cursor under two models: "padded" (the 120 ms law) and "exact"

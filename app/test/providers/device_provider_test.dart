@@ -32,12 +32,13 @@ class _RetryInfoDevice extends BtDevice {
   _RetryInfoDevice() : super(id: 'retry-pendant', name: 'Omi', type: DeviceType.omi, rssi: -40);
 
   String resolvedFirmware = '';
+  DeviceType resolvedType = DeviceType.omi;
   int reads = 0;
 
   @override
   Future<BtDevice> getDeviceInfo(DeviceConnection? conn) async {
     reads++;
-    return copyWith(firmwareRevision: resolvedFirmware);
+    return copyWith(firmwareRevision: resolvedFirmware, type: resolvedType);
   }
 }
 
@@ -150,6 +151,21 @@ void main() {
     expect(device.reads, 0);
     expect(provider.pairedDevice!.firmwareRevision, 'Unknown');
     expect(observations, isEmpty);
+  });
+
+  test('Glass capability clears a first-charge check for a device advertised as Omi', () async {
+    final provider = DeviceProvider(deviceInfoConnectionLoader: (_) async => _InfoConnection());
+    addTearDown(provider.dispose);
+    final device = _RetryInfoDevice();
+    provider.connectedDevice = device;
+    provider.batteryLevel = 72;
+    addTearDown(provider.prepareFirstChargeCheck(device.id));
+    expect(provider.settingsBatteryLevel, -1);
+
+    device.resolvedType = DeviceType.openglass;
+    await provider.getDeviceInfo(forceRefresh: true);
+    expect(provider.capabilityNormalizedDevice?.type, DeviceType.openglass);
+    expect(provider.settingsBatteryLevel, 72);
   });
 
   test('reconnect bypasses cached pairing revision and publishes a fresh same-device DIS read', () async {

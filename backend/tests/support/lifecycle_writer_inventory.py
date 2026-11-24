@@ -91,6 +91,26 @@ FIELD_SITES = {
             ),
         ),
     ],
+    # Frozen owner-scoped reply nested in the WAL witness; never writes conversation status.
+    'database/record_wal_duplicate.py': [
+        (
+            '_completed_status',
+            'status',
+            "'completed'",
+            (
+                'failed_segments',
+                'job_id',
+                'lane',
+                'poll_after_ms',
+                'processed_segments',
+                'result',
+                'status',
+                'successful_segments',
+                'total_files',
+                'total_segments',
+            ),
+        ),
+    ],
     # Client polling adapter only; never writes conversation lifecycle status.
     'database/record_wal_handoff.py': [
         (
@@ -4440,6 +4460,7 @@ FIELD_SITES = {
     'utils/processing_backlog.py': [
         ('allowance_increased.limit', 'status', "'active'", ('current_period_end', 'status'))
     ],
+    'utils/prepaid_code_redemption.py': [('_result', 'status', "'redeemed'", ('ends_at', 'months', 'plan', 'status'))],
     'utils/promotion_redemption.py': [
         (
             'redeem_promotion_code',
@@ -4772,6 +4793,8 @@ FIELD_SITES = {
     'utils/workers/retry.py': [('retry_response', 'status', "'retry'", ('reason', 'status'))],
     'utils/conversations/transcribing_hold.py': [
         ('project', 'status', "'completed' if status == 'failed' else status", ('status', 'structured')),
+        # Current same-owner job evidence changes only the list/detail wire copy.
+        ('project', 'status', "'processing'", ('status', 'structured', 'summary_retryable', 'transcription_admission')),
         # API response only; never sent to a lifecycle persistence helper.
         ('retry_wire', 'status', "'processing'", ('home_step', 'status', 'structured', 'summary_retryable')),
     ],

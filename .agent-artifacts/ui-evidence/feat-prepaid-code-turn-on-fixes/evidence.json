@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-plans-single-code-row.png",
+      "platform": "mobile-ios",
+      "description": "Plans sheet, switch on: one code row (Have a code?)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-discount-code-handoff.png",
+      "platform": "mobile-ios",
+      "description": "A discount code typed in Have a code? lands in the promo field for checkout",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-prepaid-plan-ends.png",
+      "platform": "mobile-ios",
+      "description": "Prepaid plan: only the end date, no Resubscribe, Cancel or Manage",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-paywall-redeemed.png",
+      "platform": "mobile-ios",
+      "description": "Redeem on the trial paywall",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-paywall-closed.png",
+      "platform": "mobile-ios",
+      "description": "After Done the paywall closes",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-plans-single-code-row-dark.png",
+      "platform": "mobile-ios",
+      "description": "Plans sheet, one code row, dark",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "007-mobile-ios-discount-code-handoff-dark.png",
+      "platform": "mobile-ios",
+      "description": "Discount code hand-off, dark",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "008-mobile-ios-prepaid-plan-ends-dark.png",
+      "platform": "mobile-ios",
+      "description": "Prepaid plan end date, dark",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "009-mobile-ios-paywall-closed-dark.png",
+      "platform": "mobile-ios",
+      "description": "Paywall closed after redeem, dark",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

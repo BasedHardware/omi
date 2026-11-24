@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "روش‌های ورود",
+    "accountAddSignInMethod": "افزودن روش ورود",
+    "accountAddSignInMethodDetails": "یک روش ورود به این حساب Omi اضافه کنید. طرح، ضبط‌ها و سرویس‌های متصل شما در همین حساب باقی می‌مانند.",
+    "accountSignInConflictTitle": "این روش ورود به حساب دیگری متصل است",
+    "accountSignInConflictDetails": "هنوز وارد همین حساب هستید. هر حساب Omi طرح، ضبط‌ها و سرویس‌های متصل خودش را حفظ می‌کند.",
+    "accountSignInMethodAdded": "روش ورود اضافه شد",
     "authFailedToLinkGoogle": "پیوند با Google ناموفق بود، لطفاً دوباره تلاش کنید.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "جدیدترین ضبط‌ها را ابتدا تا حد سهم باقی‌مانده پردازش می‌کنیم. بقیه در انتظار می‌مانند.",
     "processingAction": "پردازش ضبط‌های منتظر",
     "processingProgress": "در حال پردازش ضبط‌های منتظر شما…",
+    "waitingForTranscriptionAllowance": "در انتظار سهمیهٔ رونویسی صوت",
     "processingDeferred": "در انتظار پردازش",
     "processingCount": "{count, plural, =1{۱ گفتگو در انتظار} other{{count} گفتگو در انتظار}}",
     "playbackPartialAudioSaved": "{saved} از {total} صدا ذخیره شد",
@@ -12293,9 +12300,25 @@
     "finishedSummaryReady": "خلاصه آماده است",
     "writingSummaryStatus": "در حال نوشتن خلاصه…",
     "stillWorkingOnIt": "هنوز روی آن کار می‌کنیم.",
+    "deviceReadyToUse": "آماده برای استفاده",
     "firmwareUpdateFirmwareTooOld": "میان‌افزار دستگاه شما برای این به‌روزرسانی خیلی قدیمی است. برای دریافت کمک در به‌روزرسانی دستگاه با پشتیبانی تماس بگیرید.",
     "firmwareUpdateAppRequired": "این به‌روزرسانی میان‌افزار به نسخه جدیدتری از برنامه Omi نیاز دارد. برنامه را از فروشگاه برنامه خود به‌روزرسانی کنید، سپس دوباره بررسی کنید.",
     "quietPayerTitle": "۵ روز است که ضبطی نیست",
     "quietPayerMessage": "Omi خود را بررسی کنید.",
-    "quietPayerCheck": "بررسی"
+    "quietPayerCheck": "بررسی",
+    "playManageSubscription": "مدیریت اشتراک",
+    "playBilledByGoogle": "صورتحساب از طریق Google Play",
+    "playPurchasePending": "پرداخت شما در انتظار است. Omi Pro پس از تأیید Google Play شروع می‌شود.",
+    "playPurchaseOtherAccount": "این خرید Google Play متعلق به حساب Omi دیگری است.",
+    "playPurchaseNotConfirmed": "هنوز نتوانستیم خرید را تأیید کنیم. دوباره خودکار تلاش می‌کنیم.",
+    "playRenewalTerms": "تا زمانی که لغو نکنید، با قیمت نمایش‌داده‌شده خودکار تمدید می‌شود. هر زمان در Google Play مدیریت یا لغو کنید.",
+    "playPaidAppUnavailable": "در Android در دسترس نیست",
+    "pageNotAvailableInApp": "این صفحه در برنامه در دسترس نیست.",
+    "shopOrderPlacedCheckEmail": "سفارش ثبت شد. ایمیل خود را برای تأییدیه بررسی کنید.",
+    "prepaidCodeEntry": "کد دارید؟",
+    "prepaidCodeTitle": "استفاده از کد",
+    "prepaidCodeFieldHint": "کد خود را وارد کنید",
+    "prepaidCodeRedeem": "استفاده",
+    "prepaidCodeRedeemed": "کد اعمال شد",
+    "prepaidCodeResult": "{reason, select, invalid{این کد معتبر نیست. آن را بررسی کنید و دوباره امتحان کنید.} used{این کد قبلاً استفاده شده است.} expired{این کد منقضی شده است.} hasPlan{شما از قبل یک طرح دارید. کد شما استفاده نشد. پس از پایان طرحتان از آن استفاده کنید.} notPrepaid{این کد اینجا قابل استفاده نیست. هنگام انتخاب طرح از آن استفاده کنید.} notEligible{این کد در این حساب قابل استفاده نیست.} rateLimited{تلاش‌های زیادی انجام شد. بعداً دوباره امتحان کنید.} other{مشکلی پیش آمد. لطفاً دوباره امتحان کنید.}}"
 }

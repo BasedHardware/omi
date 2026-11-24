@@ -35,7 +35,7 @@ from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.socket import STTSocket
 from config.soniox_idle import idle_close_seconds
-from config.audio_timeline import soniox_wire_ledger_enabled, soniox_ordered_finalize_enabled
+from config.audio_timeline import soniox_wire_ledger_enabled
 from utils.stt.soniox_wire_ledger import SonioxProviderClock, OrderedSonioxProviderClock, capture_spans, observed_audio
 from utils.stt.soniox_capture_axis import (
     CaptureAxisDiagnostics,
@@ -217,18 +217,7 @@ class SafeSonioxSocket(STTSocket):
         self._wire_samples = 0
         self._provider_clock: SonioxProviderClock | None = None
         self._wire_provider_origin = 0
-        if (
-            self._wire_ledger_enabled
-            and soniox_ordered_finalize_enabled()
-            and sample_rate == 16000
-            # v5 only. The 2026-11-23 probe (scripts/soniox_finalize_padding_probe.py)
-            # found no finalize padding on stt-rt-v5 or stt-rt-v6, so the ordered
-            # 120 ms law is not extended to v6; on v6 the reported clock is used.
-            and SONIOX_MODEL == 'stt-rt-v5'
-            and SONIOX_WS_URL == 'wss://stt-rt.soniox.com/transcribe-websocket'
-        ):
-            self._provider_clock = OrderedSonioxProviderClock(sample_rate)
-        elif self._wire_ledger_enabled:
+        if self._wire_ledger_enabled:
             self._provider_clock = SonioxProviderClock(sample_rate)
         self._capture_axis: CaptureAxisDiagnostics | None = None
         self._capture_axis_failed = False

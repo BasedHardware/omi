@@ -385,6 +385,7 @@ def _prepare_conversation_for_write(
     allow_offload: bool = True,
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
+    data.pop('transcription_admission', None)  # Current authenticated read evidence, never persisted.
 
     # Partial writes cannot certify an entire legacy row. Explicit prepare
     # reconciles them; full creates/processing results get compact content now.
@@ -717,6 +718,7 @@ def prepare_conversation_for_read(
         return None
 
     data = copy.deepcopy(conversation_data)
+    data.pop('transcription_admission', None)  # Only the current job lookup can supply this wire field.
     # Separate encrypted card data must not leak into hydrated detail or be
     # replayed as stale projection metadata by a logical-state writer.
     for field in DISPLAY_FIELDS:
@@ -1893,6 +1895,22 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     return True
 
 
+def _mark_transcript_decode_status(uid: str, conversation_data: dict) -> None:
+    """Verify the stored blob and pass decoded segments into normal hydration."""
+    try:
+        if 'transcript_segments' in conversation_data:
+            conversation_data['transcript_segments'] = decode_transcript_segments_blob(
+                uid,
+                conversation_data['transcript_segments'],
+                bool(conversation_data.get('transcript_segments_compressed')),
+                require_decryption=True,
+            )
+        conversation_data['_recovery_transcript_decoded'] = True
+    except (TypeError, ValueError, zlib.error):
+        conversation_data['_recovery_transcript_decoded'] = False
+        conversation_data['transcript_segments'] = []
+
+
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversation(
@@ -1911,20 +1929,7 @@ def get_conversation(
         read_site, FirestoreReadOutcome.HIT if conversation_data is not None else FirestoreReadOutcome.MISS
     )
     if conversation_data is not None and include_transcript_decode_status:
-        # Recovery needs evidence from the raw field, before the tolerant read
-        # decoder turns corruption into an empty transcript. Other readers keep
-        # their existing behavior and never receive this server-only marker.
-        try:
-            _decode_transcript_segments_strict(
-                uid,
-                conversation_data.get('transcript_segments', []),
-                bool(conversation_data.get('transcript_segments_compressed')),
-                require_decryption=True,
-            )
-            conversation_data['_recovery_transcript_decoded'] = True
-        except (TypeError, ValueError, zlib.error):
-            conversation_data['_recovery_transcript_decoded'] = False
-            conversation_data['transcript_segments'] = []
+        _mark_transcript_decode_status(uid, conversation_data)
     return conversation_data
 
 
@@ -1976,8 +1981,11 @@ def _hydrate_sync_conversation_snapshot(
     *,
     firestore_client: Any = None,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    include_transcript_decode_status: bool = False,
 ) -> Optional[dict]:
     record_document_read(read_site, FirestoreReadOutcome.HIT)
+    if include_transcript_decode_status:
+        _mark_transcript_decode_status(uid, conversation_data)
     return conversation_data
 
 
@@ -1988,14 +1996,23 @@ def get_sync_redirected_conversation(
     *,
     firestore_client: Any = None,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    include_transcript_decode_status: bool = False,
 ) -> Optional[dict]:
     """Hydrate one checked snapshot; mutations still reread/CAS independently."""
     return read_redirected(
         uid,
         conversation_id,
         client_factory=lambda: firestore_client if firestore_client is not None else get_firestore_client(),
-        hydrate=_hydrate_sync_conversation_snapshot,
-        read_current=get_conversation,
+        hydrate=(
+            partial(_hydrate_sync_conversation_snapshot, include_transcript_decode_status=True)
+            if include_transcript_decode_status
+            else _hydrate_sync_conversation_snapshot
+        ),
+        read_current=(
+            partial(get_conversation, include_transcript_decode_status=True)
+            if include_transcript_decode_status
+            else get_conversation
+        ),
         read_site=read_site,
     )
 

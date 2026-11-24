@@ -6953,6 +6953,24 @@ class AppLocalizationsJa extends AppLocalizations {
   String get authUnexpectedError => 'サインイン中に予期しないエラーが発生しました。もう一度お試しください';
 
   @override
+  String get accountSignInMethods => 'サインイン方法';
+
+  @override
+  String get accountAddSignInMethod => 'サインイン方法を追加';
+
+  @override
+  String get accountAddSignInMethodDetails => 'このOmiアカウントにサインインする方法を追加できます。プラン、録音、連携は引き続きこのアカウントに紐づきます。';
+
+  @override
+  String get accountSignInConflictTitle => 'このサインイン方法は別のアカウントに紐づいています';
+
+  @override
+  String get accountSignInConflictDetails => '現在のアカウントにサインインしたままです。プラン、録音、連携はそれぞれのOmiアカウントに紐づきます。';
+
+  @override
+  String get accountSignInMethodAdded => 'サインイン方法を追加しました';
+
+  @override
   String get authFailedToLinkGoogle => 'Googleとの連携に失敗しました。もう一度お試しください。';
 
   @override
@@ -14154,6 +14172,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get processingProgress => '待機中の録音を処理しています…';
 
   @override
+  String get waitingForTranscriptionAllowance => '文字起こし枠の空きを待っています';
+
+  @override
   String get processingDeferred => '処理待ち';
 
   @override
@@ -15494,6 +15515,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stillWorkingOnIt => 'まだ処理中です。';
 
   @override
+  String get deviceReadyToUse => '使用準備完了';
+
+  @override
   String get firmwareUpdateFirmwareTooOld => 'デバイスのファームウェアが古いため、この更新を適用できません。デバイスの更新についてはサポートにお問い合わせください。';
 
   @override
@@ -15507,4 +15531,64 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get quietPayerCheck => '確認';
+
+  @override
+  String get playManageSubscription => 'サブスクリプションを管理';
+
+  @override
+  String get playBilledByGoogle => 'Google Play で請求されます';
+
+  @override
+  String get playPurchasePending => 'お支払いは保留中です。Google Play で確認され次第 Omi Pro が始まります。';
+
+  @override
+  String get playPurchaseOtherAccount => 'この Google Play の購入は別の Omi アカウントのものです。';
+
+  @override
+  String get playPurchaseNotConfirmed => '購入をまだ確認できませんでした。自動的に再試行します。';
+
+  @override
+  String get playRenewalTerms => '解約するまで表示価格で自動更新されます。Google Play でいつでも管理・解約できます。';
+
+  @override
+  String get playPaidAppUnavailable => 'Android では利用できません';
+
+  @override
+  String get pageNotAvailableInApp => 'このページはアプリでは表示できません。';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ご注文を受け付けました。確認メールをご確認ください。';
+
+  @override
+  String get prepaidCodeEntry => 'コードをお持ちですか？';
+
+  @override
+  String get prepaidCodeTitle => 'コードを使う';
+
+  @override
+  String get prepaidCodeFieldHint => 'コードを入力';
+
+  @override
+  String get prepaidCodeRedeem => '使う';
+
+  @override
+  String get prepaidCodeRedeemed => 'コードを適用しました';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'このコードは無効です。確認してもう一度お試しください。',
+        'used': 'このコードはすでに使用されています。',
+        'expired': 'このコードは有効期限が切れています。',
+        'hasPlan': 'すでにプランをお持ちです。コードは使用されていません。プランの終了後に使ってください。',
+        'notPrepaid': 'このコードはここでは使えません。プランを選ぶときに使ってください。',
+        'notEligible': 'このコードはこのアカウントでは使えません。',
+        'rateLimited': '試行回数が多すぎます。後でもう一度お試しください。',
+        'other': '問題が発生しました。もう一度お試しください。',
+      },
+    );
+    return '$_temp0';
+  }
 }

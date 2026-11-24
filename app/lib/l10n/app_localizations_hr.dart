@@ -7082,6 +7082,26 @@ class AppLocalizationsHr extends AppLocalizations {
   String get authUnexpectedError => 'Neočekivana greška pri prijavi, molim vas pokušajte ponovno';
 
   @override
+  String get accountSignInMethods => 'Načini prijave';
+
+  @override
+  String get accountAddSignInMethod => 'Dodaj način prijave';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Dodajte način prijave na ovaj Omi račun. Vaš paket, snimke i integracije ostaju na ovom računu.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ovaj način prijave povezan je s drugim računom';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'I dalje ste prijavljeni na ovaj račun. Svaki Omi račun zadržava svoj paket, snimke i integracije.';
+
+  @override
+  String get accountSignInMethodAdded => 'Način prijave dodan je';
+
+  @override
   String get authFailedToLinkGoogle => 'Povezivanje s Google-om nije uspjelo, molim vas pokušajte ponovno.';
 
   @override
@@ -14396,6 +14416,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get processingProgress => 'Obrada vaših snimki na čekanju…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Čeka se dostupna kvota za transkripciju';
+
+  @override
   String get processingDeferred => 'Čeka obradu';
 
   @override
@@ -15758,6 +15781,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get stillWorkingOnIt => 'I dalje radimo na tome.';
 
   @override
+  String get deviceReadyToUse => 'Spremno za upotrebu';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmver vašeg uređaja prestar je za ovo ažuriranje. Obratite se podršci za pomoć pri ažuriranju uređaja.';
 
@@ -15773,4 +15799,65 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Provjeri';
+
+  @override
+  String get playManageSubscription => 'Upravljaj pretplatom';
+
+  @override
+  String get playBilledByGoogle => 'Naplaćuje Google Play';
+
+  @override
+  String get playPurchasePending => 'Plaćanje je na čekanju. Omi Pro počinje kad ga Google Play potvrdi.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ova kupnja na Google Playu pripada drugom Omi računu.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Kupnju još nismo mogli potvrditi. Pokušat ćemo ponovno automatski.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automatski se obnavlja po prikazanoj cijeni dok ne otkažete. Upravljajte ili otkažite bilo kada na Google Playu.';
+
+  @override
+  String get playPaidAppUnavailable => 'Nije dostupno na Androidu';
+
+  @override
+  String get pageNotAvailableInApp => 'Ova stranica nije dostupna u aplikaciji.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Narudžba je poslana. Potvrdu potražite u e-pošti.';
+
+  @override
+  String get prepaidCodeEntry => 'Imate kôd?';
+
+  @override
+  String get prepaidCodeTitle => 'Iskoristite kôd';
+
+  @override
+  String get prepaidCodeFieldHint => 'Unesite svoj kôd';
+
+  @override
+  String get prepaidCodeRedeem => 'Iskoristi';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kôd je iskorišten';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Ovaj kôd nije valjan. Provjerite ga i pokušajte ponovno.',
+        'used': 'Ovaj kôd je već iskorišten.',
+        'expired': 'Ovaj kôd je istekao.',
+        'hasPlan': 'Već imate plan. Vaš kôd nije iskorišten. Iskoristite ga kada vam plan istekne.',
+        'notPrepaid': 'Ovaj kôd ne može se iskoristiti ovdje. Iskoristite ga kada odaberete plan.',
+        'notEligible': 'Ovaj kôd ne može se koristiti na ovom računu.',
+        'rateLimited': 'Previše pokušaja. Pokušajte kasnije.',
+        'other': 'Nešto nije u redu. Pokušajte ponovno.',
+      },
+    );
+    return '$_temp0';
+  }
 }

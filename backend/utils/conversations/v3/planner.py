@@ -316,7 +316,7 @@ def is_unlocked(row):
     return row.get('status') == 'in_progress' or bool(row.get('v3_unlocked'))
 
 
-def build(uid, window, recordings, existing=None, *, allocated=None):
+def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_home_visible=True):
     lines = window['lines']
     start, end = lines[0]['start'], max(line['end'] for line in lines)
     if existing and (not is_unlocked(existing) or window.get('_held_provisional')):
@@ -408,6 +408,10 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
     title = (prior.get('user_title') if preview else None) or (
         structured.get('title') if title_locked else window['title']
     )
+    # Carry the title-only preview through new speech until an outline or user title wins.
+    keep_live_title = prior.get(policy.LIVE_TITLE_STATE) == 'published' and not window['finished'] and not title
+    if keep_live_title:
+        title = structured.get('title')
     manual_end = bool(window.get('manual_end') or (existing or {}).get('manual_end'))
     outline_kind = window.get('outline_kind', window['kind'])
     words = window['_stretch_words'] if '_stretch_words' in window else word_count(segments)
@@ -428,6 +432,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         words=words,
         finished=window['finished'] and not window.get('_title_preview'),
         manual_end=manual_end,
+        manual_end_home_visible=manual_end_home_visible,
     )
     row: dict[str, Any] = {
         **(existing or {}),
@@ -483,7 +488,8 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
         'title_locked': bool(
             title_locked
             or (
-                not window.get('_title_preview')
+                not keep_live_title
+                and not window.get('_title_preview')
                 and title
                 and (not hidden or not window['finished'])
                 and kind not in {'media', 'background'}
@@ -501,6 +507,8 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
             'emoji': structured.get('emoji') if title_locked else window.get('emoji', '💬'),
         },
     }
+    if prior.get(policy.LIVE_TITLE_STATE) == 'published' and not keep_live_title:
+        row[policy.LIVE_TITLE_STATE] = 'attempted'
     if not (existing or {}).get('summary_covers_through'):
         row['structured']['sections'] = [
             {'heading': str(s.get('title') or '')[:120], 'body_markdown': ''} for s in window.get('sections') or []

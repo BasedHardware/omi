@@ -36,6 +36,10 @@ def live_recap_enabled(uid: str) -> bool:
     return not any(set(member) & set('*?[]') for member in members) and uid in members
 
 
+def live_title_enabled() -> bool:
+    return os.getenv('CONVERSATIONS_V3_LIVE_TITLE', 'on').strip().lower() == 'on'
+
+
 ROTATION_COHORT = 'v3-recording-rotation'
 ROTATION_DEFAULTS = (180.0, 300.0)
 
@@ -58,6 +62,15 @@ def rotation_seconds() -> tuple[float, float]:
     if not 60 <= age <= cap <= 3600:
         return ROTATION_DEFAULTS
     return age, cap
+
+
+def manual_end_home_visible_enabled() -> bool:
+    return os.getenv('CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE', 'on').strip().lower() not in {
+        'off',
+        'false',
+        '0',
+        'no',
+    }
 
 
 def stretch_cohesion_enabled() -> bool:
