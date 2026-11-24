@@ -872,16 +872,15 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
     }
   }
 
-  /// Google Play buyers cannot be sent to an app's own payment link. Until an Android reader's billing
+  /// No reader on a build that sells through Google Play can be sent to an app's own payment link, Stripe
+  /// subscriber or not. Until an Android reader's billing
   /// provider is known the paid button waits (loading) rather than guessing either way; if that read
   /// failed it shows the unavailable label, never the payment link. Hosts without plan state never
   /// wait. Watched, so the button updates when the first subscription read lands.
   ({bool playBilled, bool unknown}) _paidAppBilling(BuildContext buildContext) {
     try {
-      return buildContext.select<UsageProvider, ({bool playBilled, bool unknown})>((usage) => (
-            playBilled: usage.playBilledPurchaser || usage.billingProviderFailed,
-            unknown: usage.billingProviderPending
-          ));
+      return buildContext.select<UsageProvider, ({bool playBilled, bool unknown})>((usage) =>
+          (playBilled: usage.buysThroughPlay || usage.billingProviderFailed, unknown: usage.billingProviderPending));
     } on ProviderNotFoundException {
       return (playBilled: false, unknown: false);
     }

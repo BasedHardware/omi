@@ -15875,4 +15875,10 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Таксува се чрез omi.me. Управлявайте или отказвайте оттук по всяко време.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Обновете картата си на omi.me в уеб.';
 }

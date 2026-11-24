@@ -15818,4 +15818,10 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me-এর মাধ্যমে বিল করা হয়। যেকোনো সময় এখান থেকে পরিচালনা বা বাতিল করুন।';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'ওয়েবে omi.me-তে আপনার কার্ড আপডেট করুন।';
 }

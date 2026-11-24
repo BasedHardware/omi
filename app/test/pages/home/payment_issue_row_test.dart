@@ -6,24 +6,31 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:omi/backend/http/api/payment.dart' show paymentErrorFromBody;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/home/widgets/monthly_switch_sheet.dart';
 import 'package:omi/pages/home/widgets/payment_issue_row.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/billing/play_billing.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 import '../../spine/c7_registry_test.dart' show RecordingAdapter;
+import '../../support/fake_play_billing.dart';
+import '../../support/surface_render.dart';
 
 UserSubscriptionResponse _response({
   PlanType plan = PlanType.basic,
   PaymentIssue? issue,
   bool showSubscriptionUi = true,
+  PlayBillingConfig? play,
 }) =>
     UserSubscriptionResponse(
       subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
+      playBilling: play,
       transcriptionSecondsUsed: 0,
       transcriptionSecondsLimit: 0,
       wordsTranscribedUsed: 0,
@@ -48,7 +55,7 @@ const _yearlyPastDue = PaymentIssue(
 
 /// The backend answer and the portal are fakes; the row, its opener and the refresh are real.
 class _FakeUsage extends UsageProvider {
-  _FakeUsage(this.backend, {this.portalUrl, this.portalReady})
+  _FakeUsage(this.backend, {this.portalUrl, this.portalReady, super.playBilling})
       : super(subscriptionRequest: () async => backend.current);
 
   final _Backend backend;
@@ -78,7 +85,10 @@ Future<_FakeUsage> _pump(
   MonthlySwitchApplier? applyMonthlySwitch,
   bool inHomeList = false,
 }) async {
-  final usage = _FakeUsage(_Backend(response), portalUrl: portalUrl, portalReady: portalReady);
+  final platform = FakePlayPlatform();
+  final billing = PlayBilling(platform: () => platform, verify: FakePlayServer().call, store: MemoryTokenStore());
+  addTearDown(billing.dispose);
+  final usage = _FakeUsage(_Backend(response), portalUrl: portalUrl, portalReady: portalReady, playBilling: billing);
   addTearDown(usage.dispose);
   await usage.fetchSubscription();
   final row = PaymentIssueRow(
@@ -116,6 +126,7 @@ Future<_FakeUsage> _pump(
 }
 
 void main() {
+  setUpAll(loadSurfaceRenderFonts);
   late RecordingAdapter analytics;
   setUp(() async {
     AnalyticsManager.resetForTesting();
@@ -166,6 +177,47 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('payment_issue_update')));
     await tester.pumpAndSettle();
     expect(find.text('portal https://billing.stripe.com/test'), findsOneWidget);
+  });
+
+  group('a build that sells through Google Play', () {
+    for (final scale in [1.0, 3.2]) {
+      testWidgets('says to update the card on the web and opens nothing (text x$scale)', (tester) async {
+        tester.view.physicalSize = const Size(412, 915);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final usage = await _pump(tester, _response(issue: _yearlyPastDue, play: playConfig),
+            portalUrl: 'https://billing.stripe.com/test', textScale: scale, inHomeList: true);
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Your card was declined'), findsOneWidget);
+        expect(find.text('Update it to get Omi Pro back'), findsOneWidget);
+        expect(find.text('Update your card at omi.me on the web.'), findsOneWidget);
+        expect(find.byKey(const ValueKey('payment_issue_update')), findsNothing);
+        expect(find.byKey(const ValueKey('payment_issue_monthly')), findsNothing);
+        expect(find.byType(OmiButton), findsNothing);
+        await writeSurfaceRender(tester, 'payment-issue-row-play-${scale == 1 ? 'default' : 'xxxl'}');
+
+        await tester.tap(find.byKey(const ValueKey('payment_issue_row')));
+        await tester.pumpAndSettle();
+        expect(usage.portalOpens, 0);
+        expect(find.textContaining('portal'), findsNothing);
+      }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+    }
+
+    testWidgets('iOS ignores the Play setup: Update and Switch to Monthly stay', (tester) async {
+      await _pump(tester, _response(issue: _yearlyPastDue, play: playConfig));
+      expect(find.byKey(const ValueKey('payment_issue_update')), findsOneWidget);
+      expect(find.byKey(const ValueKey('payment_issue_monthly')), findsOneWidget);
+      expect(find.text('Update your card at omi.me on the web.'), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('Android without Play setup keeps Update and Switch to Monthly', (tester) async {
+      await _pump(tester, _response(issue: _yearlyPastDue));
+      expect(find.byKey(const ValueKey('payment_issue_update')), findsOneWidget);
+      expect(find.byKey(const ValueKey('payment_issue_monthly')), findsOneWidget);
+      expect(find.text('Update your card at omi.me on the web.'), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   });
 
   testWidgets('a legacy plan names that plan, not Omi Pro', (tester) async {
@@ -417,6 +469,34 @@ void main() {
       expect(find.byKey(const Key('monthly_switch_confirm')), findsNothing);
       expect(find.byKey(const Key('monthly_switch_cancel')), findsOneWidget);
     });
+
+    for (final (code, body, message) in [
+      (
+        'use_google_play',
+        '{"detail": {"code": "use_google_play", "message": "Subscribe with Google Play in the app."}}',
+        'Subscribe with Google Play in the app.',
+      ),
+      (
+        'play_on_hold',
+        '{"detail": {"code": "play_subscription_on_hold", '
+            '"message": "You have a Google Play subscription on hold. Fix the payment in Google Play."}}',
+        'You have a Google Play subscription on hold. Fix the payment in Google Play.',
+      ),
+    ]) {
+      testWidgets('a $code refusal shows the server sentence, never JSON', (tester) async {
+        await _pump(tester, _response(issue: _yearlyPastDue),
+            applyMonthlySwitch: ({required priceId, required expectedAmount}) async => paymentErrorFromBody(409, body));
+        await tester.tap(find.byKey(const ValueKey('payment_issue_monthly')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('monthly_switch_confirm')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text(message), findsOneWidget);
+        expect(find.textContaining('{'), findsNothing);
+        expect(find.byKey(const Key('monthly_switch_confirm')), findsNothing);
+      });
+    }
 
     testWidgets('no answer reads the plan again before claiming a switch', (tester) async {
       late _FakeUsage usage;

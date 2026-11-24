@@ -15710,4 +15710,10 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'החיוב מתבצע דרך omi.me. אפשר לנהל או לבטל כאן בכל עת.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'עדכנו את הכרטיס ב-omi.me באתר.';
 }

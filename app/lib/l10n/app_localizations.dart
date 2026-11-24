@@ -27770,6 +27770,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{reason, select, invalid{This code isn\'t valid. Check it and try again.} used{This code has already been used.} expired{This code has expired.} hasPlan{You already have a plan. Your code was not used. Redeem it after your plan ends.} notPrepaid{This code can\'t be redeemed here. Use it when you choose a plan.} notEligible{This code can\'t be used on this account.} rateLimited{Too many tries. Try again later.} other{Something went wrong. Please try again.}}'**
   String prepaidCodeResult(String reason);
+
+  /// Plans & Billing on an Android build that sells through Google Play, under the plan of a reader who already pays on omi.me (Stripe). Plain text, no link.
+  ///
+  /// In en, this message translates to:
+  /// **'Billed through omi.me. Manage or cancel here anytime.'**
+  String get playStripeBilledOnWeb;
+
+  /// Home payment-declined row on an Android build that sells through Google Play: the card can only be updated on the omi.me website. Plain text, no link.
+  ///
+  /// In en, this message translates to:
+  /// **'Update your card at omi.me on the web.'**
+  String get playStripeUpdateCardOnWeb;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

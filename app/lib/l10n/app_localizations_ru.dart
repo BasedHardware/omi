@@ -15876,4 +15876,10 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Оплата через omi.me. Управляйте или отменяйте здесь в любое время.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Обновите карту на omi.me в браузере.';
 }

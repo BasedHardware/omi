@@ -15829,4 +15829,10 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Laskutetaan omi.me-palvelun kautta. Hallitse tai peru täällä milloin tahansa.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Päivitä korttisi verkossa osoitteessa omi.me.';
 }

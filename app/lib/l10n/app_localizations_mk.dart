@@ -15889,4 +15889,10 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Се наплаќа преку omi.me. Управувајте или откажете овде во секое време.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Ажурирајте ја картичката на omi.me на веб.';
 }

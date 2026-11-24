@@ -4763,5 +4763,7 @@
     "prepaidCodeFieldHint": "Nhập mã của bạn",
     "prepaidCodeRedeem": "Đổi",
     "prepaidCodeRedeemed": "Đã đổi mã",
-    "prepaidCodeResult": "{reason, select, invalid{Mã này không hợp lệ. Hãy kiểm tra và thử lại.} used{Mã này đã được sử dụng.} expired{Mã này đã hết hạn.} hasPlan{Bạn đã có gói. Mã của bạn chưa được sử dụng. Hãy đổi mã sau khi gói của bạn kết thúc.} notPrepaid{Không thể đổi mã này tại đây. Hãy dùng khi bạn chọn gói.} notEligible{Không thể dùng mã này cho tài khoản này.} rateLimited{Quá nhiều lần thử. Hãy thử lại sau.} other{Đã xảy ra lỗi. Vui lòng thử lại.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Mã này không hợp lệ. Hãy kiểm tra và thử lại.} used{Mã này đã được sử dụng.} expired{Mã này đã hết hạn.} hasPlan{Bạn đã có gói. Mã của bạn chưa được sử dụng. Hãy đổi mã sau khi gói của bạn kết thúc.} notPrepaid{Không thể đổi mã này tại đây. Hãy dùng khi bạn chọn gói.} notEligible{Không thể dùng mã này cho tài khoản này.} rateLimited{Quá nhiều lần thử. Hãy thử lại sau.} other{Đã xảy ra lỗi. Vui lòng thử lại.}}",
+    "playStripeBilledOnWeb": "Thanh toán qua omi.me. Quản lý hoặc hủy tại đây bất cứ lúc nào.",
+    "playStripeUpdateCardOnWeb": "Cập nhật thẻ của bạn tại omi.me trên web."
 }

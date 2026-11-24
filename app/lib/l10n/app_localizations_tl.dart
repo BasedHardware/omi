@@ -15950,4 +15950,10 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Sinisingil sa pamamagitan ng omi.me. Pamahalaan o kanselahin dito anumang oras.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'I-update ang iyong card sa omi.me sa web.';
 }

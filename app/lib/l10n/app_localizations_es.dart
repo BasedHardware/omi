@@ -15870,4 +15870,10 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Se factura a través de omi.me. Gestiónalo o cancélalo aquí cuando quieras.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Actualiza tu tarjeta en omi.me desde la web.';
 }

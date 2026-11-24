@@ -15825,4 +15825,10 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Thanh toán qua omi.me. Quản lý hoặc hủy tại đây bất cứ lúc nào.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Cập nhật thẻ của bạn tại omi.me trên web.';
 }

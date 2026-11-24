@@ -4763,5 +4763,7 @@
     "prepaidCodeFieldHint": "输入你的兑换码",
     "prepaidCodeRedeem": "兑换",
     "prepaidCodeRedeemed": "兑换成功",
-    "prepaidCodeResult": "{reason, select, invalid{此兑换码无效。请检查后重试。} used{此兑换码已被使用。} expired{此兑换码已过期。} hasPlan{你已有套餐。你的兑换码未被使用。请在套餐结束后再兑换。} notPrepaid{此兑换码无法在这里使用。请在选择套餐时使用。} notEligible{此兑换码无法用于此账户。} rateLimited{尝试次数过多。请稍后再试。} other{出了点问题。请重试。}}"
+    "prepaidCodeResult": "{reason, select, invalid{此兑换码无效。请检查后重试。} used{此兑换码已被使用。} expired{此兑换码已过期。} hasPlan{你已有套餐。你的兑换码未被使用。请在套餐结束后再兑换。} notPrepaid{此兑换码无法在这里使用。请在选择套餐时使用。} notEligible{此兑换码无法用于此账户。} rateLimited{尝试次数过多。请稍后再试。} other{出了点问题。请重试。}}",
+    "playStripeBilledOnWeb": "通过 omi.me 计费。可随时在此管理或取消。",
+    "playStripeUpdateCardOnWeb": "请在网页版 omi.me 上更新你的银行卡。"
 }

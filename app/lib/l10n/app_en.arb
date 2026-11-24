@@ -19335,5 +19335,13 @@
                 "type": "String"
             }
         }
+    },
+    "playStripeBilledOnWeb": "Billed through omi.me. Manage or cancel here anytime.",
+    "@playStripeBilledOnWeb": {
+        "description": "Plans & Billing on an Android build that sells through Google Play, under the plan of a reader who already pays on omi.me (Stripe). Plain text, no link."
+    },
+    "playStripeUpdateCardOnWeb": "Update your card at omi.me on the web.",
+    "@playStripeUpdateCardOnWeb": {
+        "description": "Home payment-declined row on an Android build that sells through Google Play: the card can only be updated on the omi.me website. Plain text, no link."
     }
 }

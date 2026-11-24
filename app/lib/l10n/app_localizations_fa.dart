@@ -15816,4 +15816,10 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'صورتحساب از طریق omi.me. هر زمان از اینجا مدیریت یا لغو کنید.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'کارت خود را در وب‌سایت omi.me به‌روزرسانی کنید.';
 }

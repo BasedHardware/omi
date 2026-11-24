@@ -15832,4 +15832,10 @@ class AppLocalizationsSv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Faktureras via omi.me. Hantera eller avsluta här när som helst.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Uppdatera ditt kort på omi.me på webben.';
 }

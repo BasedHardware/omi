@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/backend/http/api/payment.dart' show paymentRefusalMessage;
 import 'package:omi/pages/settings/payment_webview_page.dart';
 import 'package:omi/services/billing/play_billing.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart' show UpgradeBillingProviderStage;
@@ -63,9 +64,10 @@ abstract final class PaywallCheckout {
       if (session != null && session['error'] == true) {
         // Checkout's 409 is an existing subscription, not a pending cancellation.
         report(
-          session['status_code'] == 409
-              ? l10n.checkoutExistingSubscription
-              : session['detail'] as String? ?? l10n.couldNotProcessSubscription,
+          paymentRefusalMessage(session) ??
+              (session['status_code'] == 409
+                  ? l10n.checkoutExistingSubscription
+                  : session['detail'] as String? ?? l10n.couldNotProcessSubscription),
           error: true,
         );
         return PaywallCheckoutOutcome.failed;

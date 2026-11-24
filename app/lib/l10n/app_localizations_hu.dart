@@ -15882,4 +15882,10 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Számlázás az omi.me-n keresztül. Itt bármikor kezelheted vagy lemondhatod.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Frissítsd a kártyádat a weben az omi.me oldalon.';
 }

@@ -15834,4 +15834,10 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me üzerinden faturalandırılır. İstediğin zaman buradan yönet veya iptal et.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Kartını web\'de omi.me üzerinden güncelle.';
 }

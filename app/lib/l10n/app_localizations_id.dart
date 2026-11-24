@@ -15838,4 +15838,10 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Ditagih melalui omi.me. Kelola atau batalkan di sini kapan saja.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Perbarui kartu Anda di omi.me melalui web.';
 }

@@ -140,6 +140,11 @@ class UsageProvider with ChangeNotifier {
   PlayBillingConfig? get playBilling =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android ? _subscription?.playBilling : null;
 
+  /// This client sells through Google Play (the server sent Play setup to this Android build), whatever
+  /// the current plan. A reader who already pays on Stripe keeps their plan and can cancel it, but sees
+  /// no action that starts a new Stripe charge.
+  bool get buysThroughPlay => playBilling != null;
+
   /// Android before the first subscription read: the billing provider is not known yet, so no
   /// purchase surface may show a price (it could be the wrong provider's).
   bool get billingProviderUnknown =>

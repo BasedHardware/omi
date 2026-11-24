@@ -15853,4 +15853,10 @@ class AppLocalizationsPt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Cobrado pelo omi.me. Gerencie ou cancele aqui quando quiser.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Atualize seu cartão em omi.me na web.';
 }

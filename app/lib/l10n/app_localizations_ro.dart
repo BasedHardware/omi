@@ -15889,4 +15889,10 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Facturat prin omi.me. Gestionează sau anulează aici oricând.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Actualizează cardul pe omi.me, pe web.';
 }

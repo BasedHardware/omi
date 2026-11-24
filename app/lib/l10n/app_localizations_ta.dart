@@ -15930,4 +15930,11 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb =>
+      'omi.me மூலம் கட்டணம் வசூலிக்கப்படுகிறது. எப்போது வேண்டுமானாலும் இங்கே நிர்வகிக்கலாம் அல்லது ரத்து செய்யலாம்.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'இணையத்தில் omi.me இல் உங்கள் கார்டைப் புதுப்பிக்கவும்.';
 }

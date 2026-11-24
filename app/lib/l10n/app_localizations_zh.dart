@@ -15567,4 +15567,10 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => '通过 omi.me 计费。可随时在此管理或取消。';
+
+  @override
+  String get playStripeUpdateCardOnWeb => '请在网页版 omi.me 上更新你的银行卡。';
 }

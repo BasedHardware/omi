@@ -15859,4 +15859,10 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Rēķins tiek izrakstīts caur omi.me. Pārvaldiet vai atceliet šeit jebkurā laikā.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Atjauniniet karti omi.me tīmekļa vietnē.';
 }

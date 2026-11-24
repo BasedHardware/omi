@@ -22,6 +22,8 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// Update opens Stripe's billing portal, where the card is changed and the invoice paid; on
 /// return the subscription is fetched again, so a paid invoice removes the row. A declined yearly
 /// renewal also offers Switch to Monthly: the same plan at its monthly price, confirmed in a sheet.
+/// On a build that sells through Google Play neither action shows: the row says to update the card on
+/// omi.me on the web, as plain text, and opens nothing.
 class PaymentIssueRow extends StatefulWidget {
   const PaymentIssueRow({super.key, this.portalPage, this.applyMonthlySwitch});
 
@@ -57,8 +59,11 @@ class _PaymentIssueRowState extends State<PaymentIssueRow> {
       });
     }
     final l10n = context.l10n;
-    final plans = context.read<UsageProvider>().subscription?.availablePlans ?? const <SubscriptionPlan>[];
-    final offer = issue.monthlySwitch;
+    final usage = context.read<UsageProvider>();
+    final plans = usage.subscription?.availablePlans ?? const <SubscriptionPlan>[];
+    // A build that sells through Google Play opens no Stripe page and offers no charged switch.
+    final playBuild = usage.buysThroughPlay;
+    final offer = playBuild ? null : issue.monthlySwitch;
     final planName = planDisplayName(issue.plan, plans, l10n);
     final headlineSize = OmiType.headline.fontSize!;
     final largeText = MediaQuery.textScalerOf(context).scale(headlineSize) > headlineSize * 1.3;
@@ -85,6 +90,12 @@ class _PaymentIssueRowState extends State<PaymentIssueRow> {
                     : l10n.paymentDeclinedMonthlyMessage(planName, formatBillingPrice(offer.amount, offer.currency)),
                 style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
               ),
+              if (playBuild)
+                Text(
+                  l10n.playStripeUpdateCardOnWeb,
+                  key: const ValueKey('payment_issue_update_on_web'),
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                ),
             ],
           ),
         ),
@@ -131,18 +142,20 @@ class _PaymentIssueRowState extends State<PaymentIssueRow> {
       decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.sm, OmiSpacing.sm),
-        child: stackAction
-            ? Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                // With two actions only the text is one node; each button keeps its own.
-                children: [
-                  offer == null ? message : MergeSemantics(child: message),
-                  const SizedBox(height: OmiSpacing.sm),
-                  actions,
-                ],
-              )
-            : Row(children: [Expanded(child: message), const SizedBox(width: OmiSpacing.sm), update]),
+        child: playBuild
+            ? message
+            : stackAction
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    // With two actions only the text is one node; each button keeps its own.
+                    children: [
+                      offer == null ? message : MergeSemantics(child: message),
+                      const SizedBox(height: OmiSpacing.sm),
+                      actions,
+                    ],
+                  )
+                : Row(children: [Expanded(child: message), const SizedBox(width: OmiSpacing.sm), update]),
       ),
     );
     return Padding(

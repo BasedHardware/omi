@@ -15749,4 +15749,10 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'เรียกเก็บเงินผ่าน omi.me จัดการหรือยกเลิกได้ที่นี่ทุกเมื่อ';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'อัปเดตบัตรของคุณที่ omi.me บนเว็บ';
 }

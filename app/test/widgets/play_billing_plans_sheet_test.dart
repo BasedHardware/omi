@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_interface.dart';
@@ -21,6 +22,7 @@ import 'package:omi/pages/settings/payment_webview_page.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
 import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/pages/settings/widgets/yearly_switch.dart';
 import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
 import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/backend/http/api_result.dart';
@@ -35,6 +37,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 import '../support/fake_play_billing.dart';
+import '../support/surface_render.dart';
 
 UserSubscriptionResponse _response({
   PlanType plan = PlanType.basic,
@@ -45,6 +48,7 @@ UserSubscriptionResponse _response({
   PlayBillingConfig? play = playConfig,
   bool prepaidCodeRedeem = false,
   bool prepaid = false,
+  String? priceId,
 }) =>
     UserSubscriptionResponse(
       subscription: Subscription(
@@ -52,6 +56,7 @@ UserSubscriptionResponse _response({
         status: SubscriptionStatus.active,
         provider: provider,
         stripeSubscriptionId: stripeId,
+        currentPriceId: priceId,
         cancelAtPeriodEnd: cancelAtPeriodEnd,
         currentPeriodEnd: plan.isPaid ? 1893456000 : null,
         prepaid: prepaid,
@@ -71,6 +76,7 @@ class _Usage extends UsageProvider {
   _Usage({required super.subscriptionRequest, required super.playBilling, super.usageRequest, super.deviceTimeZone});
 
   int checkoutSessions = 0;
+  Map<String, dynamic>? checkoutAnswer = {'url': 'https://checkout.stripe.com/session'};
 
   @override
   Future<void> loadAvailablePlans() async {}
@@ -82,7 +88,7 @@ class _Usage extends UsageProvider {
     int? trialDays,
   }) async {
     checkoutSessions++;
-    return {'url': 'https://checkout.stripe.com/session'};
+    return checkoutAnswer;
   }
 }
 
@@ -130,6 +136,7 @@ Future<_World> _pump(
   List<UserSubscriptionResponse> responses, {
   Widget? child,
   bool fetchFirst = true,
+  double textScale = 1,
 }) async {
   tester.view.physicalSize = const Size(430, 2400);
   tester.view.devicePixelRatio = 1;
@@ -159,6 +166,10 @@ Future<_World> _pump(
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: const [Locale('en')],
+        builder: (context, app) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: app!,
+        ),
         home: Scaffold(body: child ?? const _Harness()),
       ),
     ),
@@ -168,6 +179,8 @@ Future<_World> _pump(
 }
 
 void main() {
+  setUpAll(loadSurfaceRenderFonts);
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
@@ -279,6 +292,119 @@ void main() {
     expect(world.usage.playBilledPurchaser, isFalse);
     expect(find.byType(PlayPlansContent), findsNothing);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  group('a Stripe subscriber on a build that sells through Google Play', () {
+    const note = 'Billed through omi.me. Manage or cancel here anytime.';
+
+    void expectNoStripePurchase(WidgetTester tester) {
+      expect(find.byType(PlayPlansContent), findsNothing);
+      expect(find.byKey(const ValueKey('plans_sheet_upgrade_button')), findsNothing);
+      expect(find.byType(PlanBillingPeriodToggle), findsNothing);
+      expect(find.byType(YearlySwitchPlansRow), findsNothing);
+      expect(find.byType(TextField), findsNothing);
+      expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+      expect(find.text('Manage Payment Method'), findsNothing);
+      expect(find.textContaining('http'), findsNothing);
+    }
+
+    for (final scale in [1.0, 3.2]) {
+      testWidgets('sees the plan, its renewal date and Cancel, nothing that charges (text x$scale)', (tester) async {
+        final world = await _pump(
+            tester, [_response(plan: PlanType.unlimitedV2, stripeId: 'sub_1', prepaidCodeRedeem: true)],
+            textScale: scale);
+        expect(tester.takeException(), isNull);
+        expect(world.usage.buysThroughPlay, isTrue);
+        expect(world.usage.playBilledPurchaser, isFalse);
+        expect(find.byKey(const ValueKey('plans_sheet_stripe_on_play')), findsOneWidget);
+        expect(find.text('Omi Pro'), findsOneWidget);
+        expect(find.textContaining('Your plan renews on'), findsOneWidget);
+        expect(find.text(note), findsOneWidget);
+        expect(find.byKey(const ValueKey('plans_sheet_cancel_button')), findsOneWidget);
+        expect(find.byKey(const ValueKey('plans_sheet_resubscribe_button')), findsNothing);
+        final cancel = tester.widget<Text>(
+            find.descendant(of: find.byKey(const ValueKey('plans_sheet_cancel_button')), matching: find.byType(Text)));
+        expect(cancel.data, 'Cancel Subscription');
+        expect(tester.renderObject<RenderParagraph>(find.text('Cancel Subscription')).didExceedMaxLines, isFalse);
+        expectNoStripePurchase(tester);
+        await writeSurfaceRender(tester, 'plans-sheet-stripe-on-play-${scale == 1 ? 'default' : 'xxxl'}');
+      }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+    }
+
+    testWidgets('a cancel-pending plan offers Resubscribe at the same price and never opens Checkout', (tester) async {
+      final world = await _pump(tester,
+          [_response(plan: PlanType.unlimitedV2, stripeId: 'sub_1', cancelAtPeriodEnd: true, priceId: 'price_year')]);
+      expect(find.textContaining('plan ends'), findsOneWidget);
+      expect(find.text(note), findsOneWidget);
+      expect(find.byKey(const ValueKey('plans_sheet_cancel_button')), findsNothing);
+      expectNoStripePurchase(tester);
+      await writeSurfaceRender(tester, 'plans-sheet-stripe-on-play-cancel-pending');
+
+      await tester.tap(find.byKey(const ValueKey('plans_sheet_resubscribe_button')));
+      await tester.pumpAndSettle();
+      expect(world.usage.checkoutSessions, 1);
+      expect(find.byType(PaymentWebViewPage), findsNothing);
+      expect(find.text('Could not process subscription. Please try again.'), findsWidgets);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('Resubscribe that reactivates in place confirms the renewal', (tester) async {
+      final world = await _pump(tester,
+          [_response(plan: PlanType.unlimitedV2, stripeId: 'sub_1', cancelAtPeriodEnd: true, priceId: 'price_year')]);
+      world.usage.checkoutAnswer = {'status': 'reactivated', 'message': 'ok', 'next_billing_date': 1893456000};
+      await tester.tap(find.byKey(const ValueKey('plans_sheet_resubscribe_button')));
+      await tester.pumpAndSettle();
+      expect(find.byType(PaymentWebViewPage), findsNothing);
+      expect(find.textContaining('will renew on'), findsWidgets);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('iOS keeps the full Stripe sheet for the same reader', (tester) async {
+      final world = await _pump(tester, [_response(plan: PlanType.unlimitedV2, stripeId: 'sub_1')]);
+      expect(world.usage.buysThroughPlay, isFalse);
+      expect(find.byKey(const ValueKey('plans_sheet_stripe_on_play')), findsNothing);
+      expect(find.text(note), findsNothing);
+      expect(find.text('Manage Payment Method'), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('Android without Play setup keeps the full Stripe sheet', (tester) async {
+      final world = await _pump(tester, [_response(plan: PlanType.unlimitedV2, stripeId: 'sub_1', play: null)]);
+      expect(world.usage.buysThroughPlay, isFalse);
+      expect(find.byKey(const ValueKey('plans_sheet_stripe_on_play')), findsNothing);
+      expect(find.text('Manage Payment Method'), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('a Free reader on the Play build still gets Play prices', (tester) async {
+      final world = await _pump(tester, [_response()]);
+      expect(world.usage.buysThroughPlay, isTrue);
+      expect(find.byType(PlayPlansContent), findsOneWidget);
+      expect(find.byKey(const ValueKey('plans_sheet_stripe_on_play')), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  });
+
+  for (final (code, body, message) in [
+    (
+      'use_google_play',
+      '{"detail": {"code": "use_google_play", "message": "Subscribe with Google Play in the app."}}',
+      'Subscribe with Google Play in the app.',
+    ),
+    (
+      'play_on_hold',
+      '{"detail": {"code": "play_subscription_on_hold", '
+          '"message": "You have a Google Play subscription on hold. Fix the payment in Google Play."}}',
+      'You have a Google Play subscription on hold. Fix the payment in Google Play.',
+    ),
+  ]) {
+    testWidgets('a $code checkout refusal shows the server sentence, never JSON or "already subscribed"',
+        (tester) async {
+      final world = await _pump(tester, [_response(play: null)]);
+      world.usage.checkoutAnswer = paymentErrorFromBody(409, body);
+      await tester.tap(find.byKey(const ValueKey('plans_sheet_upgrade_button')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text(message), findsWidgets);
+      expect(find.textContaining('already have a subscription'), findsNothing);
+      expect(find.textContaining('{'), findsNothing);
+      expect(find.byType(PaymentWebViewPage), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+  }
 
   testWidgets('iOS ignores the Play block entirely and keeps Stripe pricing', (tester) async {
     final world = await _pump(tester, [_response()]);

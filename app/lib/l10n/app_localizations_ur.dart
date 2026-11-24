@@ -15836,4 +15836,10 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me کے ذریعے بل کیا جاتا ہے۔ کسی بھی وقت یہاں سے منظم یا منسوخ کریں۔';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'ویب پر omi.me پر اپنا کارڈ اپ ڈیٹ کریں۔';
 }

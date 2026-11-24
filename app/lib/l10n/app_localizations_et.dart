@@ -15816,4 +15816,10 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Arveldatakse omi.me kaudu. Halda või tühista siin igal ajal.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Uuenda oma kaarti veebis aadressil omi.me.';
 }

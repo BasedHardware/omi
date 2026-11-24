@@ -15865,4 +15865,10 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Gefactureerd via omi.me. Beheer of annuleer hier op elk moment.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Werk je kaart bij op omi.me via het web.';
 }

@@ -15823,4 +15823,10 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Účtováno přes omi.me. Spravovat nebo zrušit můžete kdykoli zde.';
+
+  @override
+  String get playStripeUpdateCardOnWeb => 'Aktualizujte kartu na webu omi.me.';
 }

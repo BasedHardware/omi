@@ -97,7 +97,7 @@ class _MonthlySwitchSheetState extends State<MonthlySwitchSheet> {
     }
     final status = result?['status_code'];
     final declined = status == 402;
-    final refused = status == 409 || status == 400;
+    final refused = status == 409 || status == 400 || status == 403;
     const TypedEvents().emit(SubscriptionPaymentIssueMonthlyFailed(
       reason: declined
           ? SubscriptionPaymentIssueMonthlyFailedReason.declined
@@ -110,9 +110,8 @@ class _MonthlySwitchSheetState extends State<MonthlySwitchSheet> {
       _refused = refused;
       _error = declined
           ? l10n.monthlySwitchDeclined
-          : refused
-              ? l10n.monthlySwitchUnavailable
-              : l10n.somethingWentWrong;
+          : payment_api.paymentRefusalMessage(result) ??
+              (refused ? l10n.monthlySwitchUnavailable : l10n.somethingWentWrong);
     });
   }
 
