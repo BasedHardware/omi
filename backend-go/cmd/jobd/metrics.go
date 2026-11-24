@@ -22,12 +22,19 @@ var timedSteps = map[string]struct{}{
 	"load": {}, "transcript": {}, "discard": {}, "notes": {}, "persist": {}, "claim": {}, "memories": {},
 	"vector": {}, "integrations": {}, "complete": {}, "speech": {},
 }
-var bounds = [...]float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300}
+var stepBounds = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300}
+
+var entitlementReleaseBounds = []float64{1, 5, 15, 30, 60, 120, 300, 600, 1200, 1800, 2700, 3600, 3900, 5400, 7200}
 
 type histogram struct {
-	bins  [len(bounds) + 1]uint64
-	sum   float64
-	count uint64
+	bounds []float64
+	bins   []uint64
+	sum    float64
+	count  uint64
+}
+
+func newHistogram(bounds []float64) histogram {
+	return histogram{bounds: bounds, bins: make([]uint64, len(bounds)+1)}
 }
 
 type metrics struct {
@@ -54,7 +61,7 @@ func kitCauses() map[queue.Cause]bool {
 func (m *metrics) declare(causes []queue.Cause) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.histograms["jobd_entitlement_release_seconds"] = histogram{}
+	m.histograms["jobd_entitlement_release_seconds"] = newHistogram(entitlementReleaseBounds)
 	kit := kitCauses()
 	m.offContract = make(map[queue.Cause]bool, len(causes))
 	for _, c := range causes {
@@ -72,7 +79,7 @@ func (m *metrics) declare(causes []queue.Cause) {
 		}
 		for _, s := range k.Steps {
 			if _, timed := timedSteps[s]; timed {
-				m.histograms[stepKey(k.Name, s)] = histogram{}
+				m.histograms[stepKey(k.Name, s)] = newHistogram(stepBounds)
 			}
 		}
 	}
@@ -143,7 +150,7 @@ func (m *metrics) observe(key string, d time.Duration) {
 		return
 	}
 	value := d.Seconds()
-	idx, _ := slices.BinarySearch(bounds[:], value)
+	idx, _ := slices.BinarySearch(h.bounds, value)
 	h.bins[idx]++
 	h.count++
 	h.sum += value
@@ -227,8 +234,8 @@ func (m *metrics) write(b *strings.Builder) {
 		var sum uint64
 		for i, bin := range h.bins {
 			le := "+Inf"
-			if i < len(bounds) {
-				le = strconv.FormatFloat(bounds[i], 'g', -1, 64)
+			if i < len(h.bounds) {
+				le = strconv.FormatFloat(h.bounds[i], 'g', -1, 64)
 			}
 			sum += bin
 			fmt.Fprintf(b, "%s_bucket{%sle=%q} %d\n", name, bucketLabels, le, sum)
