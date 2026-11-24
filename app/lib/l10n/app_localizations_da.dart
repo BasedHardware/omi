@@ -7042,6 +7042,26 @@ class AppLocalizationsDa extends AppLocalizations {
   String get authUnexpectedError => 'Uventet fejl under login, prøv venligst igen';
 
   @override
+  String get accountSignInMethods => 'Loginmetoder';
+
+  @override
+  String get accountAddSignInMethod => 'Tilføj loginmetode';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Tilføj en måde at logge ind på denne Omi-konto. Dit abonnement, dine optagelser og dine integrationer bliver på denne konto.';
+
+  @override
+  String get accountSignInConflictTitle => 'Denne loginmetode er knyttet til en anden konto';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Du er stadig logget ind på denne konto. Hver Omi-konto beholder sit abonnement, sine optagelser og sine integrationer.';
+
+  @override
+  String get accountSignInMethodAdded => 'Loginmetode tilføjet';
+
+  @override
   String get authFailedToLinkGoogle => 'Kunne ikke forbinde med Google, prøv venligst igen.';
 
   @override
@@ -14349,6 +14369,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get processingProgress => 'Behandler dine ventende optagelser…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Venter på ledig transskriptionskvote';
+
+  @override
   String get processingDeferred => 'Venter på behandling';
 
   @override
@@ -15713,6 +15736,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get stillWorkingOnIt => 'Vi arbejder stadig på det.';
 
   @override
+  String get deviceReadyToUse => 'Klar til brug';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Din enheds firmware er for gammel til denne opdatering. Kontakt support for at få hjælp til at opdatere din enhed.';
 
@@ -15728,4 +15754,65 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Tjek';
+
+  @override
+  String get playManageSubscription => 'Administrer abonnement';
+
+  @override
+  String get playBilledByGoogle => 'Faktureres via Google Play';
+
+  @override
+  String get playPurchasePending => 'Din betaling afventer. Omi Pro starter, når Google Play bekræfter den.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Dette Google Play-køb tilhører en anden Omi-konto.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Vi kunne ikke bekræfte købet endnu. Vi prøver igen automatisk.';
+
+  @override
+  String get playRenewalTerms =>
+      'Fornyes automatisk til den viste pris, indtil du opsiger. Administrer eller opsig når som helst i Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Ikke tilgængelig på Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Denne side er ikke tilgængelig i appen.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Ordren er afgivet. Tjek din e-mail for bekræftelsen.';
+
+  @override
+  String get prepaidCodeEntry => 'Har du en kode?';
+
+  @override
+  String get prepaidCodeTitle => 'Indløs en kode';
+
+  @override
+  String get prepaidCodeFieldHint => 'Indtast din kode';
+
+  @override
+  String get prepaidCodeRedeem => 'Indløs';
+
+  @override
+  String get prepaidCodeRedeemed => 'Koden er indløst';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Denne kode er ikke gyldig. Tjek den og prøv igen.',
+        'used': 'Denne kode er allerede brugt.',
+        'expired': 'Denne kode er udløbet.',
+        'hasPlan': 'Du har allerede en plan. Din kode blev ikke brugt. Indløs den, når din plan slutter.',
+        'notPrepaid': 'Denne kode kan ikke indløses her. Brug den, når du vælger en plan.',
+        'notEligible': 'Denne kode kan ikke bruges på denne konto.',
+        'rateLimited': 'For mange forsøg. Prøv igen senere.',
+        'other': 'Noget gik galt. Prøv igen.',
+      },
+    );
+    return '$_temp0';
+  }
 }

@@ -7081,6 +7081,26 @@ class AppLocalizationsBg extends AppLocalizations {
   String get authUnexpectedError => 'Неочаквана грешка при влизане, моля опитайте отново';
 
   @override
+  String get accountSignInMethods => 'Начини за вход';
+
+  @override
+  String get accountAddSignInMethod => 'Добавяне на начин за вход';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Добавете начин за вход в този акаунт в Omi. Планът, записите и интеграциите ви остават в този акаунт.';
+
+  @override
+  String get accountSignInConflictTitle => 'Този начин за вход е свързан с друг акаунт';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Все още сте влезли в този акаунт. Всеки акаунт в Omi запазва своя план, записи и интеграции.';
+
+  @override
+  String get accountSignInMethodAdded => 'Начинът за вход е добавен';
+
+  @override
   String get authFailedToLinkGoogle => 'Неуспешно свързване с Google, моля опитайте отново.';
 
   @override
@@ -14410,6 +14430,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get processingProgress => 'Обработване на чакащите ви записи…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Изчаква се налична квота за транскрипция';
+
+  @override
   String get processingDeferred => 'Чака обработка';
 
   @override
@@ -15773,6 +15796,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get stillWorkingOnIt => 'Все още работим по него.';
 
   @override
+  String get deviceReadyToUse => 'Готово за използване';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Фърмуерът на устройството ви е твърде стар за тази актуализация. Свържете се с поддръжката за помощ с актуализирането на устройството.';
 
@@ -15788,4 +15814,65 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Провери';
+
+  @override
+  String get playManageSubscription => 'Управление на абонамента';
+
+  @override
+  String get playBilledByGoogle => 'Таксува се чрез Google Play';
+
+  @override
+  String get playPurchasePending => 'Плащането чака. Omi Pro започва, щом Google Play го потвърди.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Тази покупка в Google Play принадлежи на друг акаунт в Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Не успяхме да потвърдим покупката. Ще опитаме отново автоматично.';
+
+  @override
+  String get playRenewalTerms =>
+      'Подновява се автоматично на показаната цена, докато не го откажете. Управлявайте или отказвайте по всяко време в Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Не е налично за Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Тази страница не е достъпна в приложението.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Поръчката е направена. Проверете имейла си за потвърждението.';
+
+  @override
+  String get prepaidCodeEntry => 'Имате код?';
+
+  @override
+  String get prepaidCodeTitle => 'Активиране на код';
+
+  @override
+  String get prepaidCodeFieldHint => 'Въведете вашия код';
+
+  @override
+  String get prepaidCodeRedeem => 'Активирай';
+
+  @override
+  String get prepaidCodeRedeemed => 'Кодът е активиран';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Този код не е валиден. Проверете го и опитайте отново.',
+        'used': 'Този код вече е използван.',
+        'expired': 'Този код е изтекъл.',
+        'hasPlan': 'Вече имате план. Кодът ви не е използван. Активирайте го, след като планът ви приключи.',
+        'notPrepaid': 'Този код не може да се активира тук. Използвайте го, когато изберете план.',
+        'notEligible': 'Този код не може да се използва в този акаунт.',
+        'rateLimited': 'Твърде много опити. Опитайте по-късно.',
+        'other': 'Нещо се обърка. Опитайте отново.',
+      },
+    );
+    return '$_temp0';
+  }
 }

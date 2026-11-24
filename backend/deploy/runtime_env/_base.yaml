@@ -83,6 +83,7 @@ environment_shared:
         BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
         BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
         BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+        BATCH_PARKED_JOB_SWEEPER_ENABLED: {value: 'true', category: ops_kill}
         BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
         BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
         BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0.001', category: ops_kill}
@@ -467,9 +468,6 @@ environment_shared:
         PROACTIVITY_V2_POSTHOG_HOST:
           value: https://us.posthog.com
           category: rollout
-        SONIOX_ORDERED_FINALIZE:
-          value: 'false'
-          category: rollout
         BUCKET_OBJECT_LAKE:
           category: storage_retention
         OBJECT_LAKE_KMS_KEY:
@@ -696,9 +694,6 @@ environment_shared:
           category: rollout
         PROACTIVITY_V2_POSTHOG_HOST:
           value: https://us.posthog.com
-          category: rollout
-        SONIOX_ORDERED_FINALIZE:
-          value: 'false'
           category: rollout
         BUCKET_OBJECT_LAKE:
           category: storage_retention
@@ -998,6 +993,7 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PARKED_JOB_SWEEPER_ENABLED: {value: 'true', category: ops_kill}
           BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'false', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
@@ -1296,9 +1292,6 @@ environment_shared:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
-            category: rollout
           REVIEW_SURFACE_MODE:
             value: 'on'
             category: rollout
@@ -1405,6 +1398,7 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PARKED_JOB_SWEEPER_ENABLED: {value: 'true', category: ops_kill}
           BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'true', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
@@ -1691,9 +1685,6 @@ environment_shared:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
-            category: rollout
           BUCKET_OBJECT_LAKE:
             category: storage_retention
           OBJECT_LAKE_KMS_KEY:
@@ -1788,6 +1779,7 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PARKED_JOB_SWEEPER_ENABLED: {value: 'true', category: ops_kill}
           BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'false', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
@@ -2067,9 +2059,6 @@ environment_shared:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
-            category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
@@ -2146,6 +2135,7 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PARKED_JOB_SWEEPER_ENABLED: {value: 'true', category: ops_kill}
           BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'true', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
@@ -2387,9 +2377,6 @@ environment_shared:
             category: rollout
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
-            category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
             category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'

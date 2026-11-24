@@ -244,6 +244,8 @@ env:
     value: "true"
   - name: BATCH_HELD_DEAD_LETTER_ENABLED
     value: "true"
+  - name: BATCH_PARKED_JOB_SWEEPER_ENABLED
+    value: "true"
   - name: RECORD_INTAKE_AGE_PRIORITY_ENABLED
     value: "true"
   - name: RECORD_SEAL_REPAIR_FRESH_ENABLED
@@ -871,8 +873,6 @@ env:
     value: "true"
   - name: SONIOX_WIRE_LEDGER
     value: "true"
-  - name: SONIOX_ORDERED_FINALIZE
-    value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "true"
   # Fair-use system (PR #5748)
@@ -928,6 +928,11 @@ env:
     value: 'true'
   # Quiet-check empty exit; evaluated on backend-sync (Cloud Tasks handler), pinned here for consistency (lead2 9b4ffd).
   - name: QUIET_EMPTY_EXIT_ENABLED
+    value: 'true'
+  # SCA-4019: hold a mobile server-batch capture across a socket drop for the 120 s reconnect
+  # grace; the producer drain releases the lease and persists a bounded deadline, so a held row
+  # seals at the deadline. Rollback: 'false' here and on backend-sync in one config train.
+  - name: LISTEN_BATCH_RECONNECT_ENABLED
     value: 'true'
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"

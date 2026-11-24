@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-account-sign-in-methods.png",
+      "platform": "mobile-ios",
+      "description": "The Account page shows Apple connected to the current account and Google available to add.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-add-sign-in-confirmation.png",
+      "platform": "mobile-ios",
+      "description": "The confirmation explains that the current account keeps its plan, recordings and integrations.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-cancel-sign-in.png",
+      "platform": "mobile-ios",
+      "description": "The selected method offers cancellation while provider authorization is pending.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-separate-account-notice.png",
+      "platform": "mobile-ios",
+      "description": "An occupied Google sign-in leaves the Apple account signed in and explains that each account keeps its data.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-separate-account-large.png",
+      "platform": "mobile-ios",
+      "description": "The occupied-provider notice is readable at the iOS Accessibility Large Dynamic Type setting.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-method-added.png",
+      "platform": "mobile-ios",
+      "description": "Adding an unclaimed sign-in method updates the same account’s provider list and confirms the action.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -31,6 +31,7 @@ from config.conversations_v3 import (
     HISTORICAL_SITDOWN_TIMING,
     SPEECH_LANDED_FIELD,
     boundary_seconds,
+    live_title_enabled,
     stretch_cohesion_enabled,
 )
 from utils.conversations.v3.triggers import enqueue, changed
@@ -52,7 +53,9 @@ from utils.conversations.v3 import (
 from utils.conversations.v3 import refinement, preview_wakes
 from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
 from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor, storage_executor
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -363,7 +366,12 @@ async def reconcile(
                 if await run_blocking(db_executor, store.outline_attempt, uid, token, fingerprint, **keyed):
                     metrics.MODEL_CALLS.labels('outline').inc()
                     report['outline_calls'] = report.get('outline_calls', 0) + 1
-                    content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
+                    try:
+                        content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
+                    except RuntimeError as error:
+                        if str(error) != 'v3_lease_lifetime_exhausted':
+                            raise
+                        content = ''
                     try:
                         entries = outline.parse(content, group)
                         if preview_key and not group['locked']:
@@ -392,8 +400,7 @@ async def reconcile(
                 else:
                     entries = [{**entry, '_outline_failed': True} for entry in outline.fallback(group)]
             else:
-                # First speech is visible without a paid call. Outline on open
-                # or at the five-minute deadline provides the first real title.
+                # First speech is visible before either the title preview or the outline is ready.
                 entries = [
                     {
                         'first_line': 1,
@@ -734,6 +741,10 @@ async def reconcile(
                 metrics.UNCERTAIN_SHOWN.inc()
             if row['id'] not in existing:
                 metrics.VISIBLE_LATENCY.observe(max(0, (now - row['started_at']).total_seconds()))
+        if not derive and not on_open and live_title_enabled():
+            for row in rows:
+                if policy.live_title_candidate(row) and not row.get(policy.LIVE_TITLE_STATE):
+                    await _maybe_publish_live_title(uid, key, token, row)
         metrics.RECONCILES.labels('committed').inc()
         deferred = preview_wakes(rows, recordings)
     except Conflict as error:
@@ -798,6 +809,22 @@ async def reconcile(
         else:
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
     return 'committed'
+
+
+async def _maybe_publish_live_title(uid, key, token, row):
+    try:
+        revision = row.get('sync_content_revision')
+        segments = row.get('transcript_segments') or []
+        if revision is None or deduplicated_transcribed_speech_seconds(segments) < 180:
+            return
+        args = (uid, token, row['id'], revision)
+        if await run_blocking(db_executor, store.write_live_title_preview, *args):
+            title = await leased_work(uid, key, token, llm_executor, models.live_title, uid, segments)
+            if title and live_title_enabled():
+                await run_blocking(db_executor, store.write_live_title_preview, *args, title=title)
+    except Exception as error:
+        logger.warning('event=v3_live_title exception_type=%s', type(error).__name__)
+        record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
 
 
 def _held_claims(recordings, cid):

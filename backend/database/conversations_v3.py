@@ -15,7 +15,7 @@ from google.api_core.exceptions import DeadlineExceeded, InvalidArgument
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from database._client import get_firestore_client
+from database._client import firestore_failure_reason, get_firestore_client
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from database import conversations, conversations_v3_leases as leases
 from database.conversations_v3_undo_removals import removal_ref
@@ -24,8 +24,10 @@ from database.account_deletion_marker import account_deletion_blocks_user_work, 
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD, python_owns_finalization
 from utils.encryption import encrypt, decrypt
+from utils.home_feed.projection import stamp as stamp_home_display
+from config.record_wal_duplicate import has_retained_custody
 from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
-from utils.conversations.v3 import Conflict, policy, preview_wakes
+from utils.conversations.v3 import Conflict, policy, preview_wakes, request_log_trace_id
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 
 logger = logging.getLogger(__name__)
@@ -577,6 +579,22 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
     return mark(client.transaction())
 
 
+def _projection_snapshots(client, coll, tx, ids, *, batch_reads):
+    if not batch_reads:
+        for cid in ids:
+            yield cid, coll.document(cid).get(transaction=tx)
+        return
+    for start in range(0, len(ids), CLAIM_READ_CHUNK):
+        chunk = ids[start : start + CLAIM_READ_CHUNK]
+        # BatchGet can return snapshots out of order, including missing documents.
+        snapshots = {
+            snapshot.reference.id: snapshot
+            for snapshot in client.get_all([coll.document(cid) for cid in chunk], transaction=tx)
+        }
+        for cid in chunk:
+            yield cid, snapshots[cid]
+
+
 def commit_projection(
     uid,
     token,
@@ -654,6 +672,7 @@ def commit_projection(
                 )
         prepared.append(encoded)
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
+    batch_reads = os.getenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'on').strip().lower() != 'off'
     # What the current transaction attempt writes, kept by reference and sized only after a failure.
     staged = {}
 
@@ -674,8 +693,9 @@ def commit_projection(
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= now:
             raise Conflict('lease_lost')
         # Firestore requires every read before every write, including tombstones.
-        for rid, row in {**recordings, **existing}.items():
-            snapshot = coll.document(rid).get(transaction=tx)
+        inputs = {**recordings, **existing}
+        for rid, snapshot in _projection_snapshots(client, coll, tx, list(inputs), batch_reads=batch_reads):
+            row = inputs[rid]
             current = snapshot.to_dict() or {} if snapshot.exists else None
             if not snapshot.exists or snapshot.update_time != row['_v3_revision']:
                 if rid in existing or rid not in recordings or not speech_moved(row, current):
@@ -683,6 +703,11 @@ def commit_projection(
                 moved.add(rid)
             observed[rid] = current or {}
         absorbed = {cid: row['id'] for row in batch_rows for cid in row.get('_v3_absorbed', ())}
+        touched = {*(row['id'] for row in batch_rows), *absorbed}
+        if final:
+            touched.update((*retire, *remove))
+        if any(has_retained_custody(observed.get(cid)) for cid in touched):
+            raise Conflict('source_changed')
         if absorbed and merge_donors_have_tasks(uid, absorbed, firestore_client=client, transaction=tx):
             raise Conflict('source_changed')
         if retired and merge_donors_have_tasks(uid, retired, firestore_client=client, transaction=tx):
@@ -856,9 +881,18 @@ def commit_projection(
             observed = commit(
                 client.transaction(), [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
             )
-        except InvalidArgument as error:
-            if size_error(error):
+        except Conflict:
+            raise
+        except Exception as error:
+            if isinstance(error, InvalidArgument) and size_error(error):
                 log_largest_write(staged, batch=index, batches=len(batches))
+            logger.warning(
+                'event=v3_reconcile stage=projection_commit outcome=%s trace_id=%s batch=%d batches=%d',
+                firestore_failure_reason(error),
+                request_log_trace_id(),
+                index,
+                len(batches),
+            )
             raise
         from utils.conversations.v3 import metrics
 
@@ -1394,3 +1428,39 @@ def outline_attempt(uid, token, fingerprint, *, key='builder', firestore_client=
         return True
 
     return begin(client.transaction())
+
+
+def write_live_title_preview(uid, token, cid, revision, *, title=None, firestore_client=None):
+    """Claim one provider attempt or publish its result, conditional on the same live row."""
+    client = firestore_client or get_firestore_client()
+    ref = user_conversations(client, uid).document(cid)
+    held = leases.lease_ref(client, uid, 'builder')
+    deletion_ref = account_deletion_document(uid, firestore_client=client)
+
+    @firestore.transactional
+    def write(tx):
+        lease = held.get(transaction=tx).to_dict() or {}
+        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+            return False
+        deletion = deletion_ref.get(transaction=tx)
+        if account_deletion_marker_blocks_access(
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+        ):
+            return False
+        row = ref.get(transaction=tx).to_dict() or {}
+        if row.get('sync_content_revision') != revision or not policy.live_title_candidate(row):
+            return False
+        state = policy.LIVE_TITLE_STATE
+        if title is None and row.get(state) is None:
+            tx.update(ref, {state: 'attempted'})
+            return True
+        if title and row.get(state) == 'attempted':
+            row['structured'] = {**(row.get('structured') or {}), 'title': title}
+            tx.update(
+                ref,
+                {'structured': row['structured'], state: 'published', **stamp_home_display(uid, row, 'conversation')},
+            )
+            return True
+        return False
+
+    return write(client.transaction())

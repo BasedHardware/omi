@@ -76,6 +76,8 @@ def _active_uploader_count(cohort: str) -> int:
 
 for _cohort in _ACTIVE_UID_COUNTS:
     OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS.labels(cohort=_cohort).set_function(partial(_active_uploader_count, _cohort))
+    # Expose zero counts before the first observation so an idle cohort has a scrape baseline.
+    OMI_SYNC_JOB_COMPLETION_TO_FIRST_TERMINAL_READ_SECONDS.labels(cohort=_cohort)
 
 
 def record_first_terminal_read(uid: str | None, status: dict[str, Any]) -> None:

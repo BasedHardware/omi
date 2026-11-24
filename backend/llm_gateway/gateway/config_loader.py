@@ -31,6 +31,7 @@ from utils.llm.model_config import (
 
 # Conversations v3 gateway-only features (never part of the legacy route fingerprint).
 V3_FEATURES = {
+    'conversation_v3_live_title': (LUNA_MODEL, 'openai'),
     'conversation_v3_outline': (LUNA_MODEL, 'openai'),
     'conversation_v3_summary': (LUNA_MODEL, 'openai'),
     'conversation_v3_summary_open': (LUNA_MODEL, 'openai'),
