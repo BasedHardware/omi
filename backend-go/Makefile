@@ -8,7 +8,7 @@ KIT ?=
 IMAGE ?= omi-workerd:local
 PLATFORM ?= linux/amd64
 
-.PHONY: build image fmt vet lint arch test quick check test-public
+.PHONY: build image fmt vet lint arch test quick check test-public test-transcript-parity
 build:
 	$(GO) build -o bin/jobd ./cmd/jobd
 
@@ -47,3 +47,8 @@ check: vet lint arch test
 test-public: build
 	@test -n "$(KIT)" || { echo "set KIT=/path/to/kit" >&2; exit 2; }
 	KIT="$(KIT)" GO="$(GO)" ./scripts/conformance.sh public
+
+# PL-745: the serving Python callback and the Go worker both retain unreadable ciphertext.
+test-transcript-parity:
+	cd ../backend && PYTEST_ADDOPTS="-k test_wrong_key_transcript_keeps_ciphertext_and_retries" bash test.sh tests/unit/test_enrichment_route.py
+	TEST_FIRESTORE_REQUIRED=1 ./scripts/with-postgres.sh ./scripts/with-firestore.sh $(GO) test -race -count=1 ./cmd/workerd
