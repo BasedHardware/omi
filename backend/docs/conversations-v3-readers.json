@@ -455,6 +455,10 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
+  "backend/routers/sync_finalization_reference.py:collection": {
+    "policy": "storage",
+    "reason": "The Go-owned receiver reads one raw conversation by ID inside the claim and output transactions to validate job ownership, revision and lifecycle eligibility before preparing or publishing finalization output."
+  },
   "backend/routers/speaker_tag_prompts.py:get_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."

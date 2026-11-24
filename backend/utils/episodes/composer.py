@@ -88,6 +88,7 @@ from database import episode_write_fence
 from utils.conversations.recorded_time import conversation_span
 from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
 from utils.episodes import compose_wait, composer_context, metrics, policy, transcript_receipts
+from utils.executors import db_executor, run_blocking
 from utils.episodes.composer_detail import detail_budget
 from utils.episodes.state import is_placeholder_heading, trim_text
 from utils.summary_quality import (
@@ -1837,7 +1838,7 @@ async def retry_settled_composes() -> None:
                         outcome='degraded',
                         log=logger,
                     )
-            _schedule_due()
+            await run_blocking(db_executor, _schedule_due)
             await asyncio.sleep(1)
     finally:
         if receipt_work is not None:
