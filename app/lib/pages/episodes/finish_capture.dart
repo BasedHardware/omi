@@ -47,9 +47,7 @@ Future<FinishOutcome> finishLiveCapture(
 }) async {
   final v3Feedback = context.read<ConversationsV3Provider?>()?.finishFeedbackEnabled ?? false;
   final preview = provider.livePreview;
-  final closed = provider.lastServerClose;
-  final recentClose =
-      closed != null && DateTime.now().difference(closed.at) < const Duration(minutes: 5) ? closed : null;
+  final recentClose = _recentServerClose(provider);
   final finished = provider.lastClientFinish;
   final closeIsLatest = recentClose != null && (finished == null || recentClose.at.isAfter(finished.at));
   // Words the preview heard before the last close or Finish were already processed (the preview
@@ -78,12 +76,10 @@ Future<FinishOutcome> finishLiveCapture(
       final answer = await provider.finishCaptureWithOutcome();
       // A retry re-sends what the page held after a failed Finish; a phone page with no line
       // showed nothing, so "nothing to process yet" is the honest answer there (C5).
-      outcome = v3Feedback && answer.absence == ProcessAbsence.notFound
-          ? const FinishFailed(FinishFailure.exception)
-          : FinishOutcome.fromProcess(
-              answer,
-              heardSomething: hadContent || retry || owned || v3Feedback,
-            );
+      final serverClose = v3Feedback && answer.absence == ProcessAbsence.notFound ? _recentServerClose(provider) : null;
+      outcome = serverClose != null && (previousFinish == null || serverClose.at.isAfter(previousFinish.at))
+          ? FinishProcessing(serverClose.id)
+          : FinishOutcome.fromProcess(answer, heardSomething: hadContent || retry || owned || v3Feedback);
     } on FinishMadeNoRequest {
       outcome = const FinishSavedForLater();
     } catch (_) {
@@ -102,6 +98,11 @@ Future<FinishOutcome> finishLiveCapture(
   // The server closed it on its own just before the tap: open that one.
   if (closeIsLatest) return FinishProcessing(recentClose.id);
   return const FinishNothingNew();
+}
+
+({String id, DateTime at, int previewWords, int previewSession})? _recentServerClose(CaptureProvider provider) {
+  final closed = provider.lastServerClose;
+  return closed != null && DateTime.now().difference(closed.at) < const Duration(minutes: 5) ? closed : null;
 }
 
 /// The page a successful Finish opens, or null when the outcome opens nothing.

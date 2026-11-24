@@ -103,9 +103,11 @@ class ConversationsV3Provider extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool settleManualFinish(ServerConversation row, ServerConversation? result) {
+  bool settleManualFinish(ServerConversation row, ServerConversation? result, {bool alreadyClosed = false}) {
     if (!finishFeedbackEnabled || !identical(_finishRow, row)) return false;
-    if (result == null || result.discarded || result.status == ConversationStatus.in_progress) {
+    final accepted =
+        result == null ? alreadyClosed : !result.discarded && result.status != ConversationStatus.in_progress;
+    if (!accepted) {
       _finishFailures++;
       _clearManualFinish();
     } else {
@@ -113,11 +115,13 @@ class ConversationsV3Provider extends ChangeNotifier {
       _finishExpired = false;
       _suppressListening = true;
       _finishExpiry?.cancel();
-      _finishRecordingId = result.id;
-      if (result.v3?.recording != true) {
-        _finishLiveId = result.id;
-      } else if (_live?.v3?.recordingIds.contains(result.id) == true) {
-        _finishLiveId ??= _live!.id;
+      if (result != null) {
+        _finishRecordingId = result.id;
+        if (result.v3?.recording != true) {
+          _finishLiveId = result.id;
+        } else if (_live?.v3?.recordingIds.contains(result.id) == true) {
+          _finishLiveId ??= _live!.id;
+        }
       }
     }
     notifyListeners();

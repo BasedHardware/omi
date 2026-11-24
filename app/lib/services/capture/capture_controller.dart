@@ -4440,7 +4440,7 @@ class CaptureController extends ChangeNotifier
           : _processInProgressConversationOverride != null
               ? _processInProgressConversationOverride!().then((result) =>
                   InProgressProcessOutcome(response: result, absence: result == null ? ProcessAbsence.transport : null))
-              : processInProgressConversationOutcome();
+              : processInProgressConversationOutcome(liveConversationId: liveConversationId);
       requestAdmitted = true;
       if (confirmedProcessing) _lastProcessRequest = request;
       _processInFlight = request.then((_) {}, onError: (_) {});

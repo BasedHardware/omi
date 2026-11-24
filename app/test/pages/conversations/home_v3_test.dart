@@ -1947,7 +1947,7 @@ void main() {
       });
     }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
-    testWidgets('manual finish replaces the live row until its summary is listed', (tester) async {
+    testWidgets('a manual finish 404 keeps Processing until its summary is listed', (tester) async {
       await withClock(Clock.fixed(_now), () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
         final palette = OmiColors.active;
@@ -1968,8 +1968,7 @@ void main() {
         expect(navigator.canPop(), isFalse, reason: 'the placeholder has no result page yet');
         await shoot(tester, '001-mobile-ios-v3-manual-finish-processing');
 
-        final recording = home.conversations.conversations.firstWhere((row) => row.id == 'rec-1');
-        expect(v3.settleManualFinish(pending, recording), isTrue);
+        expect(v3.settleManualFinish(pending, null, alreadyClosed: true), isTrue);
         await tester.pump();
         expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
 
@@ -1981,6 +1980,7 @@ void main() {
         await tester.pump();
         expect(home.conversations.listReads, greaterThan(reads));
         expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        await shoot(tester, '001-mobile-ios-finish-404-processing');
 
         home.conversations.upsertConversation(
           _conversation('live-1', home.liveStart, 'Launch checklist', v3: _done),
