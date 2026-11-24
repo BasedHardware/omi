@@ -1,10 +1,14 @@
 """Real transactions for completed-minimum repair and durable lease/generation fences."""
 
+import json
+import time
+import uuid
 from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from google.api_core.exceptions import DeadlineExceeded
 from services import summary_debt_repair as repair
 from utils.conversations import summary_delivery as delivery
 from utils.sync import reprocess
@@ -1159,8 +1163,6 @@ def test_historical_band_keeps_older_rows_without_finish_proof_in_normal_repair(
 
 
 def test_historical_query_failure_preserves_normal_repair(debt_store, monkeypatch):
-    from google.api_core.exceptions import DeadlineExceeded
-
     client, _, tasks, ref, _ = debt_store
     now = 1_800_000_000.0
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
@@ -1273,10 +1275,6 @@ def test_owner_deferral_continuation_discovers_other_owner_and_retries_all_debt_
 
 def test_historical_mixed_load_progress_and_fresh_five_minute_share(store, monkeypatch):
     """Compare matched emulator runs and count every eligible fresh row in the denominator."""
-    import json
-    import time
-    import uuid
-
     client, _, _ = store
     now = 1_800_000_000.0
     run_id = uuid.uuid4().hex
@@ -1296,6 +1294,12 @@ def test_historical_mixed_load_progress_and_fresh_five_minute_share(store, monke
     for index, owner in enumerate(historical_owners):
         cid = f'historical-{index}'
         candidates[(owner, cid)] = client.collection('users').document(owner).collection('conversations').document(cid)
+    cross_split_owner = historical_owners[0]
+    cross_split_cid = 'recent-finish-old-pending'
+    cross_split_ref = (
+        client.collection('users').document(cross_split_owner).collection('conversations').document(cross_split_cid)
+    )
+    candidates[(cross_split_owner, cross_split_cid)] = cross_split_ref
 
     monkeypatch.setenv('SUMMARY_DEBT_REPAIR_ENABLED', 'true')
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
@@ -1317,7 +1321,8 @@ def test_historical_mixed_load_progress_and_fresh_five_minute_share(store, monke
 
             for (owner, cid), ref in candidates.items():
                 historical = cid.startswith('historical-')
-                pending = now - (7_200 if historical else 120)
+                cross_split_recent_finish = cid == cross_split_cid
+                pending = now - (7_200 if historical else 3_600 if cross_split_recent_finish else 120)
                 ref.set(
                     {
                         'status': 'completed',
@@ -1329,13 +1334,13 @@ def test_historical_mixed_load_progress_and_fresh_five_minute_share(store, monke
                         'summary_lane': 'batch',
                         'sync_content_revision': 3,
                         'data_protection_level': 'standard',
-                        'finished_at': pending,
+                        'finished_at': now - 60 if cross_split_recent_finish else pending,
                     }
                 )
 
             tick_results = []
             historical_progress = []
-            for tick_index in range(5):
+            for tick_index in range(6):
                 tick_now = now + tick_index * repair.REPAIR_INTERVAL_SECONDS
                 task_start = len(generated)
                 started = time.perf_counter()
@@ -1380,12 +1385,15 @@ def test_historical_mixed_load_progress_and_fresh_five_minute_share(store, monke
                 )
 
             if enabled:
-                assert historical_progress == [0, 0, 1, 2, 3], {
+                assert historical_progress == [0, 0, 1, 2, 3, 3], {
                     'historical_progress': historical_progress,
                     'ticks': tick_results,
                 }
             else:
                 assert historical_progress[0] == 0
+
+            cross_split_recovered = bool(cross_split_ref.get().to_dict().get('summary_output_present'))
+            assert cross_split_recovered
 
             fresh_refs = [ref for (owner, cid), ref in candidates.items() if cid.startswith('fresh-')]
             within_five_minutes = 0
@@ -1397,6 +1405,8 @@ def test_historical_mixed_load_progress_and_fresh_five_minute_share(store, monke
             results['enabled' if enabled else 'disabled'] = {
                 'fresh_completed_within_5m': within_five_minutes,
                 'fresh_eligible_denominator': len(fresh_refs),
+                'fresh_misses': len(fresh_refs) - within_five_minutes,
+                'cross_split_recent_finish_recovered': cross_split_recovered,
                 'historical_durable_progress_by_tick': historical_progress,
                 'ticks': tick_results,
             }
@@ -1412,8 +1422,12 @@ def test_historical_mixed_load_progress_and_fresh_five_minute_share(store, monke
     report = {
         'admission_latency_assumption_seconds': 30,
         'global_attempt_cap_per_tick': 8,
-        'scenario': 'matched loopback Firestore load; 16 fresh rows across six owners and three historical rows',
-        'historical_progress_sweep_bound': 5,
+        'scenario': (
+            'matched loopback Firestore load; 16 fresh rows across six owners, three historical rows, '
+            'and one recently finished row with historical pending time'
+        ),
+        'historical_progress_sweep_bound': 6,
         **results,
     }
+    assert results['enabled']['fresh_misses'] == results['disabled']['fresh_misses'] == 0
     print(f'SUMMARY_REPAIR_QUALIFICATION {json.dumps(report, sort_keys=True)}')
