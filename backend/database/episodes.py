@@ -678,7 +678,12 @@ def _reopen(
     expected_version: int,
     updates: Mapping[str, Any],
     link_conversation_ids: Sequence[str],
+    finalizing_conversation_id: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
+    if finalizing_conversation_id is not None:
+        require_not_deleted(
+            transaction, client, uid, finalizing_conversation_id, FirestoreReadSite.EPISODE_FINALIZATION_UPDATE_FENCE
+        )
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
     if timeline_enabled:
@@ -731,6 +736,7 @@ def reopen_episode(
     updates: Optional[Mapping[str, Any]] = None,
     link_conversation_ids: Sequence[str] = (),
     firestore_client: Any = None,
+    finalizing_conversation_id: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """Reopen a closed episode as the current one. Returns the live state, or None.
 
@@ -749,6 +755,7 @@ def reopen_episode(
         expected_version,
         dict(updates or {}),
         list(link_conversation_ids),
+        finalizing_conversation_id,
     )
 
 

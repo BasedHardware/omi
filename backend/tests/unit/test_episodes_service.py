@@ -1704,6 +1704,28 @@ def test_a_late_sync_clip_rejoins_the_gap_closed_episode_and_reopens_it():
     assert episodes_db.get_last_closed_episode(UID, firestore_client=store) is None
 
 
+@pytest.mark.parametrize('marker', [('account_deletions', UID), ('users', UID, 'deleted_conversations', 'c-wal')])
+def test_sync_rejoin_refuses_deletion_after_planning(marker, monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch'})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    _close_on_gap(store)
+    before = dict(store.rows)
+    reopen = episodes_db.reopen_episode
+
+    def reopen_after_deletion(*args, **kwargs):
+        store.rows[marker] = {}
+        return reopen(*args, **kwargs)
+
+    monkeypatch.setattr(episodes_db, 'reopen_episode', reopen_after_deletion)
+    c = _collaborators(model, now=T0 + timedelta(minutes=21), store=store)
+    outcome = service.on_conversation_finalized(
+        UID, 'c-wal', _wal_row(minutes=15), trigger='sync_update', collaborators=c
+    )
+    assert outcome == 'skipped_deleted'
+    assert store.rows == {**before, marker: {}}
+
+
 def test_a_late_sync_clip_starting_within_the_continue_gap_of_the_close_rejoins():
     store = StrictFirestore()
     service.record_moment(

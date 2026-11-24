@@ -59,6 +59,24 @@ def test_completed_identical_sync_has_no_episode_reads_or_writes(lane, monkeypat
     assert before == store.rows
 
 
+@pytest.mark.parametrize('marker', [('account_deletions', 'u'), ('users', 'u', 'deleted_conversations', 'same')])
+def test_recorded_sync_attachment_refuses_deletion_after_memo_miss(lane, monkeypatch, marker):
+    store, c, _ = lane
+    monkeypatch.setattr(service.client_gate, 'client_seen', lambda *_: True)
+    member = seed(store)
+    before = deepcopy(store.rows)
+    attach = episode_timeline.attach_recorded
+
+    def attach_after_deletion(*args, **kwargs):
+        store.rows[marker] = {}
+        return attach(*args, **kwargs)
+
+    monkeypatch.setattr(episode_timeline, 'attach_recorded', attach_after_deletion)
+    outcome = service.on_conversation_finalized('u', 'same', member, trigger='sync_update', collaborators=c)
+    assert outcome == 'skipped_deleted'
+    assert store.rows == {**before, marker: {}}
+
+
 def test_wal_revision_change_conservatively_falls_through(lane):
     store, c, _ = lane
     member = seed(store, sync_content_revision=1)

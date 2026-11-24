@@ -1482,6 +1482,7 @@ def _rejoin_closed_synced(
             ),
             link_conversation_ids=[conversation_id],
             firestore_client=c.firestore_client,
+            finalizing_conversation_id=c.finalizing_conversation_id,
         )
         if reopened is not None:
             metrics.record_boundary('sync_rejoin')
@@ -1755,6 +1756,7 @@ def attach_recorded(
         detach_from=detach_from,
         attach_row=row,
         admission=admission,
+        finalizing_conversation_id=c.finalizing_conversation_id,
     )
     if isinstance(placed, str):
         raise AdmissionClosed()
