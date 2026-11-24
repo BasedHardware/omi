@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -47,6 +48,7 @@ import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
+import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -209,7 +211,8 @@ class _LiveCapture extends CaptureProvider {
 
   @override
   String? activeRecordingId = 'capture-1';
-  void Function(String?)? onManualEnd;
+  ServerConversation Function(String?)? onManualEnd;
+  void Function(ServerConversation)? onDrainFailed;
 
   @override
   String? get topConversationId => 'conv-0-live';
@@ -218,9 +221,10 @@ class _LiveCapture extends CaptureProvider {
   int endCalls = 0;
   String? endedLiveId;
 
-  /// While set, End's drain has not finished: the segments stay, as during a real WAL drain. Completing
-  /// it settles the drain as failed: the capture keeps its segments.
+  /// Keeps the segments and ownership visible until End's local drain settles.
   Completer<void>? drain;
+  // The real controller keeps the verified pendant recording after a successful close.
+  bool keepVerifiedAfterClose = false;
 
   @override
   String? verifiedLiveServerRecordingId;
@@ -229,10 +233,15 @@ class _LiveCapture extends CaptureProvider {
   Future<void> forceProcessingCurrentConversation({bool manualFinish = false, String? liveConversationId}) async {
     endCalls++;
     endedLiveId = liveConversationId;
-    if (manualFinish) onManualEnd?.call(liveConversationId);
-    final held = drain;
-    if (held != null) return held.future;
+    final row = manualFinish ? onManualEnd?.call(liveConversationId) : null;
+    try {
+      await drain?.future;
+    } catch (_) {
+      if (row != null) onDrainFailed?.call(row);
+      rethrow;
+    }
     segments = [];
+    if (!keepVerifiedAfterClose) verifiedLiveServerRecordingId = null;
     notifyListeners();
   }
 }
@@ -276,11 +285,13 @@ final _now = DateTime(2026, 11, 16, 12, 30);
 
 ServerConversation _conversation(String id, DateTime start, String title,
         {ConversationV3Fields? v3,
+        ConversationStatus status = ConversationStatus.completed,
         Duration length = const Duration(minutes: 25),
         DateTime? lastSpeech,
         List<TranscriptSegment> segments = const []}) =>
     ServerConversation(
       id: id,
+      status: status,
       speakerResolution: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [0]),
       createdAt: start,
       startedAt: start,
@@ -427,6 +438,15 @@ class _Home {
       ));
     },
   );
+  void publishManualEnds() {
+    capture.onManualEnd = (id) {
+      final pending = OptimisticProcessingPlaceholder.conversation();
+      conversationsV3.startManualFinish(pending, 'rec-1', liveConversationId: id, captureId: capture.activeRecordingId);
+      return pending;
+    };
+    capture.onDrainFailed = (row) => conversationsV3.settleManualFinish(row, null);
+  }
+
   late final _Conversations conversations = _Conversations()
     ..conversations = [
       // A phone call that started after the conversation in progress: still sorts below it.
@@ -540,11 +560,33 @@ class _Conversations extends ConversationProvider {
   _Conversations() : super(isSignedIn: () => false);
 
   int listReads = 0;
+  int forcedReads = 0;
+  ApiViewState<List<ServerConversation>>? listStatus;
+
+  @override
+  ApiViewState<List<ServerConversation>> get apiViewState => listStatus ?? super.apiViewState;
+
+  @override
+  Future<void> forceRefreshConversations({bool reconcileHeldRecordings = false}) async {
+    forcedReads++;
+    listStatus = null;
+    notifyListeners();
+  }
+
+  /// Where the last recent-rows re-read started; null until one runs.
+  DateTime? recentSince;
 
   @override
   Future<bool> fetchConversations({bool restoreMergeWatches = true}) async {
     listReads++;
     return true;
+  }
+
+  // v3 Home's periodic and capture-event re-reads ask only for recent rows.
+  @override
+  Future<void> refreshRecentConversations(DateTime since) async {
+    listReads++;
+    recentSince = since;
   }
 }
 
@@ -713,6 +755,8 @@ void main() {
       expect(home.conversationsV3.live, isNull);
       expect(home.conversations.listReads, before + 1,
           reason: 'the closed conversation comes back as an ordinary row from the list read');
+      expect(home.conversations.recentSince!.isAfter(home.liveStart), isFalse,
+          reason: 'the bounded re-read reaches back to when the closed conversation opened');
 
       // The pendant is still streaming with no window open: the live row's placeholder stands in, and
       // the pendant capture card does not come back between windows.
@@ -797,12 +841,10 @@ void main() {
       home.detailSegments = [];
       home.capture.segments = [];
       home.capture.verifiedLiveServerRecordingId = 'rec-1';
-      home.capture.onManualEnd = (id) => home.conversationsV3.startManualFinish(
-            OptimisticProcessingPlaceholder.conversation(),
-            'rec-1',
-            liveConversationId: id,
-            captureId: home.capture.activeRecordingId,
-          );
+      home.publishManualEnds();
+      Future<bool> openRoute(String route, {bool Function()? canOpen}) async => false;
+      HomeNavigation.register(openRoute);
+      addTearDown(() => HomeNavigation.unregister(openRoute));
       await tester.tap(find.text('Launch checklist'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
@@ -814,32 +856,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.byType(ConversationDetailPage), findsNothing);
       expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
-      await _dispose(tester, home);
-    });
-  });
-
-  testWidgets('End ends once: taps during the drain do not finalize again; a failed drain frees it', (tester) async {
-    await withClock(Clock.fixed(_now), () async {
-      final home = await _pumpHome(tester, v3: true);
-      final drain = home.capture.drain = Completer<void>();
-      await tester.tap(find.text('Launch checklist'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.tap(find.byKey(const Key('live_conversation_end')));
-      await tester.pump();
-      expect(find.byKey(const Key('live_conversation_end')), findsOneWidget, reason: 'the drain is still running');
-      await tester.tap(find.byKey(const Key('live_conversation_end')));
-      await tester.pump();
-      expect(home.capture.endCalls, 1, reason: 'a second tap would add another processing row and finalize again');
-
-      // The drain failed and the capture kept its segments: End still works.
-      home.capture.drain = null;
-      drain.complete();
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('live_conversation_end')));
-      await tester.pump();
-      expect(home.capture.endCalls, 2, reason: 'End is not left on screen but dead');
       await _dispose(tester, home);
     });
   });
@@ -1111,7 +1127,7 @@ void main() {
       hydrate.complete();
       await settleDetailTab(tester);
       expect(opens, 0);
-      drain?.complete();
+      drain?.completeError(StateError('WAL drain failed'));
       await settleDetailTab(tester);
       expect(opens, 0, reason: 'settling End must never spend');
       await tester.tap(find.text('Transcript'));
@@ -1328,6 +1344,168 @@ void main() {
       );
     }
 
+    testWidgets('a list read failure keeps Try Again beside a manual finish', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        home.conversations.conversations.clear();
+        home.conversations.listStatus = const ApiViewState(
+          phase: ApiViewPhase.error,
+          problem: ApiProblem(ApiProblemKind.server, statusCode: 503),
+        );
+        home.conversations.groupConversationsByDate();
+        home.publishManualEnds();
+        home.capture.onManualEnd!('live-1');
+        await tester.pump();
+
+        expect(find.byKey(const ValueKey('omi.conversations.error')), findsOneWidget);
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        await shoot(tester, '003-mobile-ios-finish-list-retry');
+        await tester.tap(find.text('Try Again'));
+        await tester.pump();
+        expect(home.conversations.forcedReads, 1);
+        expect(find.byKey(const ValueKey('omi.conversations.error')), findsNothing);
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
+
+    testWidgets('End from a deep link stays on detail when a Home filter would hide Processing', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        home.publishManualEnds();
+        final drain = home.capture.drain = Completer<void>();
+        final context = tester.element(find.byType(ConversationsPage));
+        final tabs = context.read<HomeProvider>()..setIndex(HomeProvider.tasksTab);
+        home.conversations.showStarredOnly = true;
+        home.capture
+          ..verifiedLiveServerRecordingId = 'rec-1'
+          ..keepVerifiedAfterClose = true;
+        final navigator = Navigator.of(context);
+        Future<bool> openRoute(String route, {bool Function()? canOpen}) async {
+          unawaited(navigator.push(omiPageRoute(
+            builder: (_) => ConversationDetailPage(conversation: home.conversationsV3.live!),
+          )));
+          return true;
+        }
+
+        HomeNavigation.register(openRoute);
+        addTearDown(() => HomeNavigation.unregister(openRoute));
+        expect(await HomeNavigation.openRoute('/conversation/live-1', navigator: navigator), isTrue);
+        await settleDetailTab(tester);
+        await tester.tap(find.byKey(const Key('live_conversation_end')));
+        await settleDetailTab(tester);
+        drain.complete();
+        await settleDetailTab(tester);
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.byType(ConversationDetailPage), findsOneWidget, reason: 'starred Home cannot show Processing');
+        expect(tabs.selectedIndex, HomeProvider.tasksTab);
+        final calls = home.capture.endCalls;
+        final end = find.byKey(const Key('live_conversation_end'));
+        expect(end, findsOneWidget, reason: 'the verified recording still owns this detail');
+        await tester.tap(end, warnIfMissed: false);
+        await tester.pump();
+        expect(home.capture.endCalls, calls, reason: 'a closed window keeps End latched');
+
+        // The detached server finalize fails: End is released for a retry.
+        expect(home.conversationsV3.settleManualFinish(home.conversationsV3.finishRow!, null), isTrue);
+        await tester.pump();
+        await tester.pump();
+        home.capture.drain = null;
+        await tester.tap(end, warnIfMissed: false);
+        await tester.pump();
+        expect(home.capture.endCalls, calls + 1, reason: 'an unsuccessful settlement releases End');
+        home.conversations.showStarredOnly = false;
+        await _dispose(tester, home);
+      });
+    });
+
+    testWidgets('End from a deep link selects Home after the drain', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        home.publishManualEnds();
+        final drain = home.capture.drain = Completer<void>();
+        final context = tester.element(find.byType(ConversationsPage));
+        final tabs = context.read<HomeProvider>()..setIndex(HomeProvider.tasksTab);
+        final navigator = Navigator.of(context);
+        Future<bool> openRoute(String route, {bool Function()? canOpen}) async {
+          unawaited(navigator.push(omiPageRoute(
+            builder: (_) => ConversationDetailPage(conversation: home.conversationsV3.live!),
+          )));
+          return true;
+        }
+
+        HomeNavigation.register(openRoute);
+        addTearDown(() => HomeNavigation.unregister(openRoute));
+        expect(await HomeNavigation.openRoute('/conversation/live-1', navigator: navigator), isTrue);
+        await settleDetailTab(tester);
+        final end = find.byKey(const Key('live_conversation_end'));
+        await tester.tap(end);
+        await settleDetailTab(tester);
+        expect(end, findsOneWidget, reason: 'End stays until the close succeeds');
+        expect(tabs.selectedIndex, HomeProvider.tasksTab);
+
+        drain.complete();
+        await settleDetailTab(tester);
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(tabs.selectedIndex, HomeProvider.homeTab);
+        expect(find.byType(ConversationDetailPage), findsNothing);
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        await shoot(tester, '004-mobile-ios-end-returns-home');
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
+
+    testWidgets('a failed drain after publishing Processing leaves End available to retry', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        home.publishManualEnds();
+        final drain = home.capture.drain = Completer<void>();
+        await tester.tap(find.text('Launch checklist'));
+        await settleDetailTab(tester);
+        final end = find.byKey(const Key('live_conversation_end'));
+        await tester.tap(end);
+        await settleDetailTab(tester);
+        expect(home.conversationsV3.finishRow, isNotNull);
+        expect(end, findsOneWidget);
+        await tester.tap(end);
+        expect(home.capture.endCalls, 1, reason: 'only one drain can run at a time');
+
+        drain.completeError(StateError('WAL drain failed'));
+        await settleDetailTab(tester);
+        expect(home.conversationsV3.finishRow, isNull);
+        expect(find.byType(ConversationDetailPage), findsOneWidget);
+        expect(end, findsOneWidget);
+        expect(find.byType(SnackBar), findsNothing);
+        await tester.tap(find.text('Summary'));
+        await settleDetailTab(tester);
+        expect(find.text('Recent transcript'), findsOneWidget);
+        await shoot(tester, '005-mobile-ios-end-retry-after-drain');
+
+        home.capture.drain = Completer<void>();
+        await tester.tap(end);
+        expect(home.capture.endCalls, 2);
+        expect(home.conversationsV3.finishRow, isNotNull);
+        home.capture.drain!.completeError(StateError('WAL drain failed again'));
+        await settleDetailTab(tester);
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
+
     testWidgets('manual finish replaces the live row until its summary is listed', (tester) async {
       await withClock(Clock.fixed(_now), () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
@@ -1384,57 +1562,102 @@ void main() {
       });
     });
 
-    testWidgets('a matching failed summary settles the manual finish and stops list polling', (tester) async {
-      await withClock(Clock.fixed(_now), () async {
-        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-        final palette = OmiColors.active;
-        addTearDown(() => OmiColors.active = palette);
-        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
-        final base = theme();
-        final feedbackTheme = base.copyWith(
-          snackBarTheme: base.snackBarTheme.copyWith(
-            contentTextStyle: base.snackBarTheme.contentTextStyle?.copyWith(fontFamily: 'SF Pro Display'),
-          ),
-        );
-        final home =
-            await _pumpHome(tester, v3: true, boundary: boundary, theme: feedbackTheme, size: const Size(393, 852));
-        final v3 = home.conversationsV3;
-        final recording = home.conversations.conversations.firstWhere((row) => row.id == 'rec-1');
-        home.conversations.conversations.removeWhere((row) =>
-            row.v3?.tileState == ConversationTileState.transcribing ||
-            row.v3?.tileState == ConversationTileState.writing);
-        home.conversations.groupConversationsByDate();
-        final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: recording.id);
-        v3.startManualFinish(pending, recording.id, captureId: home.capture.activeRecordingId);
-        expect(v3.settleManualFinish(pending, recording), isTrue);
-        home.liveOpen = false;
-        await v3.refresh();
-        await tester.pump();
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget,
-            reason: 'the unrelated failed conversation must not settle this finish');
+    for (final (caseName, image) in [
+      ('failed summary', '003-mobile-ios-v3-manual-finish-failed'),
+      ('legacy failed projection', null),
+      ('hidden result', '001-mobile-ios-hidden-finish'),
+      ('20-minute deadline', '002-mobile-ios-finish-deadline'),
+      ('20-minute deadline off Home', null),
+      ('20-minute deadline followed by a result', null),
+    ]) {
+      testWidgets('a $caseName settles the manual finish and stops list polling', (tester) async {
+        await withClock(Clock.fixed(_now), () async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+          final palette = OmiColors.active;
+          addTearDown(() => OmiColors.active = palette);
+          OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+          final home =
+              await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+          final v3 = home.conversationsV3;
+          final recording = home.conversations.conversations.firstWhere((row) => row.id == 'rec-1');
+          home.conversations.conversations.removeWhere((row) =>
+              row.v3?.tileState == ConversationTileState.transcribing ||
+              row.v3?.tileState == ConversationTileState.writing);
+          home.conversations.groupConversationsByDate();
+          final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: recording.id);
+          v3.startManualFinish(pending, recording.id, captureId: home.capture.activeRecordingId);
+          expect(v3.settleManualFinish(pending, recording), isTrue);
+          home.liveOpen = false;
+          await v3.refresh();
+          await tester.pump();
+          expect(find.byKey(const Key('home_processing_row')), findsOneWidget,
+              reason: 'the unrelated failed conversation must not settle this finish');
 
-        home.conversations.upsertConversation(
-          _conversation('live-1', home.liveStart, 'Launch checklist',
-              v3: const ConversationV3Fields(
-                  kind: 'conversation', tileState: ConversationTileState.failed, recordingIds: ['rec-1'])),
-        );
-        await tester.pump();
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
-        expect(v3.finishRow, isNull);
-        expect(find.byKey(const Key('home_processing_row')), findsNothing);
-        expect(find.text("Couldn't summarize this conversation"), findsOneWidget);
-        await shoot(tester, '003-mobile-ios-v3-manual-finish-failed');
+          final resultAfterTimeout = caseName == '20-minute deadline followed by a result';
+          int? forcedBefore;
+          if (caseName.startsWith('20-minute deadline')) {
+            await tester.pump(const Duration(minutes: 19, seconds: 59));
+            expect(v3.finishRow, same(pending));
+            forcedBefore = home.conversations.forcedReads;
+            expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+            if (caseName == '20-minute deadline off Home' || resultAfterTimeout) {
+              final tabs = tester.element(find.byType(ConversationsPage)).read<HomeProvider>();
+              tabs.setIndex(HomeProvider.tasksTab);
+              await tester.pump(const Duration(seconds: 1));
+              expect(v3.finishRow, isNull);
+              expect(find.byType(SnackBar), findsNothing);
+              if (resultAfterTimeout) {
+                home.conversations.upsertConversation(
+                  _conversation('live-1', home.liveStart, 'Launch checklist', v3: _done),
+                  preserveHomeStep: false,
+                );
+                await tester.pump();
+              }
+              tabs.setIndex(HomeProvider.homeTab);
+            } else {
+              await tester.pump(const Duration(seconds: 1));
+            }
+          } else if (caseName == 'legacy failed projection') {
+            home.conversations.upsertConversation(
+              _conversation('live-1', home.liveStart, 'Launch checklist', status: ConversationStatus.processing)
+                  .withHomeStep('failed'),
+              preserveHomeStep: false,
+            );
+          } else {
+            home.conversations.upsertConversation(
+              _conversation('live-1', home.liveStart, 'Launch checklist',
+                  v3: ConversationV3Fields(
+                      kind: caseName == 'hidden result' ? 'media' : 'conversation',
+                      homeHidden: caseName == 'hidden result',
+                      tileState:
+                          caseName == 'hidden result' ? ConversationTileState.done : ConversationTileState.failed,
+                      recordingIds: const ['rec-1'])),
+            );
+          }
+          await tester.pump();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(v3.finishRow, isNull);
+          expect(find.byKey(const Key('home_processing_row')), findsNothing);
+          expect(find.byType(SnackBar), findsNothing);
+          expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
+          expect(find.byKey(const Key('conversation_summary_failed_indicator')), findsNothing);
+          expect(find.text('Launch checklist'), resultAfterTimeout ? findsOneWidget : findsNothing);
+          if (forcedBefore != null) {
+            expect(home.conversations.forcedReads, forcedBefore + 1, reason: 'the deadline reconciles the list once');
+          }
+          if (image != null) await shoot(tester, image);
 
-        await tester.pump(const Duration(minutes: 3));
-        final reads = home.conversations.listReads;
-        v3.tick();
-        await tester.pump();
-        expect(home.conversations.listReads, reads);
-        await _dispose(tester, home);
-        debugDefaultTargetPlatformOverride = null;
+          await tester.pump(const Duration(minutes: 3));
+          final reads = home.conversations.listReads;
+          v3.tick();
+          await tester.pump();
+          expect(home.conversations.listReads, reads);
+          await _dispose(tester, home);
+          debugDefaultTargetPlatformOverride = null;
+        });
       });
-    });
+    }
 
     testWidgets('visible Summary opens its first live recap', (tester) async {
       await withClock(Clock.fixed(_now), () async {

@@ -1,13 +1,20 @@
 from collections import Counter
+from functools import partial
 import hashlib
 import json
+from pathlib import Path
+import re
+import runpy
 import struct
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 from google.api_core.exceptions import AlreadyExists
+import prometheus_client
+from prometheus_client.parser import text_string_to_metric_families
 import pytest
+import yaml
 
 from config import record_wal_sample as config
 from database import record_wal_sample as state
@@ -16,6 +23,44 @@ from utils.batch_pipeline import record_wal_sample as sampler
 from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactReadLimit
 from utils.batch_pipeline.record_wal_alignment import CLOCK_RATE, Packet
 from utils.other.raw_audio import WAL_FORMAT
+
+ATTEMPT_COUNTER = 'omi_record_wal_handoff_sample_attempts_total'
+IO_COUNTER = 'omi_record_wal_handoff_sample_io_total'
+IO_UNITS = ('point_reads', 'gcs_requests', 'remote_bytes')
+
+
+@pytest.mark.parametrize(
+    ('service', 'revision', 'expected_available'),
+    [
+        ('backend-sync', 'backend-sync-guard-fixture', True),
+        ('backend-sync', '', False),
+        ('backend-integration', 'backend-integration-guard-fixture', False),
+    ],
+)
+def test_dark_startup_exports_exact_revision_cap_zeros(monkeypatch, service, revision, expected_available):
+    monkeypatch.setenv('K_SERVICE', service)
+    monkeypatch.setenv('K_REVISION', revision)
+    monkeypatch.delenv('RECORD_WAL_SAMPLE_START_EPOCH', raising=False)
+    registry = prometheus_client.CollectorRegistry()
+    monkeypatch.setattr(prometheus_client, 'Counter', partial(prometheus_client.Counter, registry=registry))
+    runpy.run_path(sampler.__file__)
+
+    profile = Path(__file__).resolve().parents[2] / 'deploy/cloud_run_gmp_sync.yaml'
+    rules = yaml.safe_load(profile.read_text())['spec']['endpoints'][0]['metricRelabeling']
+    exported = prometheus_client.generate_latest(registry).decode()
+    samples = {}
+    for family in text_string_to_metric_families(exported):
+        for sample in family.samples:
+            if sample.name not in (ATTEMPT_COUNTER, IO_COUNTER):
+                continue
+            for rule in rules:
+                fields = {**sample.labels, '__name__': sample.name}
+                value = ';'.join(fields.get(label, '') for label in rule['sourceLabels'])
+                assert bool(re.fullmatch(rule['regex'], value)) == (rule['action'] == 'keep')
+            assert sample.labels['revision'] == revision
+            samples[sample.labels.get('outcome') or sample.labels['unit']] = sample.value
+    expected = dict.fromkeys(('claimed_slot', *IO_UNITS), 0) if expected_available else {}
+    assert samples == expected
 
 
 def budget():
@@ -198,8 +243,10 @@ def test_continuation_is_ambiguous_and_never_paginated():
 @pytest.mark.asyncio
 async def test_privacy_race_drops_the_sample_before_any_measurement_publishes(monkeypatch, tmp_path):
     slot = 5001
+    revision = 'backend-sync-privacy-fixture'
     monkeypatch.setattr(sampler, 'slot_at', lambda now: slot)
     monkeypatch.setattr(sampler, '_latest_attempted', -1)
+    monkeypatch.setattr(sampler, '_REVISION', revision)
     monkeypatch.setattr(state, 'claim_slot', Mock(return_value=True))
     monkeypatch.setattr(
         state, 'authority', Mock(side_effect=[(1, {}), BatchPrivacyBlocked('privacy_generation_changed')])
@@ -230,7 +277,7 @@ async def test_privacy_race_drops_the_sample_before_any_measurement_publishes(mo
         has_jobs=True,
     )
     counted.assert_not_called()
-    attempts.labels.assert_any_call('authority_refused')
+    attempts.labels.assert_any_call('authority_refused', revision)
     assert state.authority.call_args.kwargs['expected_generation'] == 1
 
 
@@ -280,8 +327,21 @@ async def test_observe_publishes_counted_duplicate_bytes_under_the_existing_repl
     monkeypatch.setattr(sampler, 'slot_at', lambda now: 5002)
     monkeypatch.setattr(sampler, '_latest_attempted', -1)
     monkeypatch.setattr(state, 'claim_slot', Mock(return_value=True))
-    monkeypatch.setattr(state, 'authority', Mock(return_value=(1, {})))
-    monkeypatch.setattr(sampler, 'read_manifest_inventory', Mock(return_value=([wal], False)))
+    revision = 'backend-sync-active-fixture'
+    monkeypatch.setattr(sampler, '_REVISION', revision)
+
+    def authority(store, uid, cid, source, device, budget, reads, **options):
+        reads.timeout(1)
+        return 1, {}
+
+    def inventory(uid, cid, candidate, budget):
+        budget.begin()
+        budget.reserve(17)
+        budget.received_bytes += 17
+        return [wal], False
+
+    monkeypatch.setattr(state, 'authority', authority)
+    monkeypatch.setattr(sampler, 'read_manifest_inventory', inventory)
     observed = Mock()
     monkeypatch.setattr(sampler, 'totals', observed)
 
@@ -292,6 +352,11 @@ async def test_observe_publishes_counted_duplicate_bytes_under_the_existing_repl
     content = next(
         str(i) for i in range(10000) if int(hashlib.sha256(str(i).encode()).hexdigest()[:12], 16) % 1000 == 0
     )
+    registry = prometheus_client.REGISTRY
+    claimed = {'outcome': 'claimed_slot', 'revision': revision}
+    io_labels = [{'unit': unit, 'revision': revision} for unit in IO_UNITS]
+    previous_claims = registry.get_sample_value(ATTEMPT_COUNTER, claimed) or 0
+    previous_io = [registry.get_sample_value(IO_COUNTER, labels) or 0 for labels in io_labels]
     await sampler.observe(
         store=object(),
         uid='owner',
@@ -309,3 +374,6 @@ async def test_observe_publishes_counted_duplicate_bytes_under_the_existing_repl
         (dispatch, 'duplicate', 'ticks'),
     ]
     assert [call.args for call in observed.labels.return_value.inc.call_args_list] == [(size,), (9600,)]
+    assert registry.get_sample_value(ATTEMPT_COUNTER, claimed) == previous_claims + 1
+    current_io = [registry.get_sample_value(IO_COUNTER, labels) for labels in io_labels]
+    assert current_io == [value + increase for value, increase in zip(previous_io, (2, 1, 17))]

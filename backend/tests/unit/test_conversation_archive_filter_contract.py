@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+from utils.other import request_deadline as request_deadline_real
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
@@ -276,6 +277,7 @@ def conversations_db():
         "utils.other.hume": AutoMockModule("utils.other.hume"),
         "utils.other.list_budget": list_budget_real,
         "utils.other.portability_read": portability_read_real,
+        "utils.other.request_deadline": request_deadline_real,
         "utils.other.storage": AutoMockModule("utils.other.storage"),
     }
 

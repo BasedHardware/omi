@@ -4442,15 +4442,15 @@ class CaptureController extends ChangeNotifier
         _pendingProcessCloses.remove(close);
         if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
         if (conversationId != null) _rememberConversationClose(conversationId);
-        if (showManualFinish) {
-          actions.onManualFinishSettled(placeholder, outcome, showFailure: !confirmedProcessing);
-        }
+        if (showManualFinish) actions.onManualFinishSettled(placeholder, outcome, showFailure: !confirmedProcessing);
         await OptimisticProcessingPlaceholder.applyProcessResult(
           result: outcome.response,
           absence: outcome.absence,
           actions: externalActions,
           onCreated: _processConversationCreated,
-          onNoConversation: _onProcessProducedNoConversation,
+          // A manual v3 finish that reports its own failure owns the user copy; keep analytics here.
+          onNoConversation: (absence) => _onProcessProducedNoConversation(absence,
+              finishOwnsCopy: showManualFinish && !confirmedProcessing && actions.v3FinishFeedbackEnabled),
           removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
         );
         if (close.sessionStartSeconds > 0 && conversationId != null) {
@@ -4480,7 +4480,9 @@ class CaptureController extends ChangeNotifier
     } catch (_) {
       close.bind(null);
       if (showManualFinish) {
-        actions.onManualFinishSettled(placeholder, null, showFailure: !confirmedProcessing);
+        // The detail button is still available to retry a failed local drain.
+        actions.onManualFinishSettled(placeholder, null,
+            showFailure: !confirmedProcessing && liveConversationId == null);
       }
       if (placeholderOwner == _processingPlaceholderOwner) {
         actions.removeProcessingConversation(
@@ -4573,12 +4575,13 @@ class CaptureController extends ChangeNotifier
     return null;
   }
 
-  void _onProcessProducedNoConversation(ProcessAbsence absence) {
+  void _onProcessProducedNoConversation(ProcessAbsence absence, {bool finishOwnsCopy = false}) {
     if (_conversationDeliveredForCurrentCapture) return;
     switch (absence) {
       case ProcessAbsence.emptyBody:
-        _announceNoConversation(EmptyRecordingReason.emptyDeleted);
+        _announceNoConversation(EmptyRecordingReason.emptyDeleted, showUserCopy: !finishOwnsCopy);
       case ProcessAbsence.notFound:
+        if (externalActions.v3FinishFeedbackEnabled) return;
         // POST /v1/conversations returns 404 both when nothing was captured and
         // when the conversation was already finalized. Let the conversation-created
         // path set [_deliveredExplanationGeneration] before treating this as empty.

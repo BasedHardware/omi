@@ -468,6 +468,50 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  test('a late first live read binds to a finish accepted before it', () async {
+    final live = _conversation('live-1', extra: {
+      'kind': 'conversation',
+      'tile_state': 'live',
+      'status': 'in_progress',
+      'v3_recording_ids': ['rec-1'],
+    });
+    final v3 = ConversationsV3Provider(
+      uid: () => 'owner',
+      cached: 'owner:1',
+      fetchLive: () async => ApiSuccess(ConversationsLiveRead(v3: true, conversation: live)),
+    );
+    addTearDown(v3.dispose);
+    final row = OptimisticProcessingPlaceholder.conversation();
+    v3.startManualFinish(row, 'rec-1');
+    expect(v3.settleManualFinish(row, _recordingDoc('rec-1')), isTrue);
+    await v3.refresh();
+    expect(v3.live, isNull, reason: 'the ended window must not show beside Processing');
+    expect(v3.finishRow, same(row));
+    v3.acknowledgeManualFinish(row);
+  });
+
+  test('End keeps its explicit conversation when Home has no live row cached', () {
+    final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
+    addTearDown(v3.dispose);
+    ServerConversation window(String id) => _conversation(id, extra: {
+          'kind': 'conversation',
+          'status': 'completed',
+          'tile_state': 'done',
+          'recording_pieces': [
+            {'recording_id': 'rec-1', 'audio_file_id': 'a1', 'start': 0.0, 'end': 600.0},
+          ],
+        });
+    final row = OptimisticProcessingPlaceholder.conversation();
+    // A deep-linked detail ends before Home loads the live row: only End knows the exact window.
+    v3.startManualFinish(row, 'rec-1', liveConversationId: 'window-b');
+    expect(v3.settleManualFinish(row, _recordingDoc('rec-1')), isTrue);
+
+    expect(v3.finishTerminalMatch([window('window-a')]), isNull,
+        reason: 'an older window of the same recording must not clear Processing');
+    expect(v3.finishTerminalMatch([window('window-a'), window('window-b')])?.id, 'window-b');
+    v3.acknowledgeManualFinish(row);
+  });
+
   testWidgets('v3 Wrap Up returns to the published Home processing row', (tester) async {
     final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
     addTearDown(v3.dispose);
@@ -490,7 +534,6 @@ void main() {
 
   testWidgets('v3 Wrap Up opens the result route when a date filter hides the Home processing row', (tester) async {
     final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
-    addTearDown(v3.dispose);
     final recording = _recordingDoc('rec-1');
     final capture = _Capture(answer: CreateConversationResponse(messages: const [], conversation: recording))
       ..verifiedLiveServerRecordingId = recording.id;
@@ -505,6 +548,7 @@ void main() {
     expect(
         tester.element(find.byType(FinishedCapturePage)).read<ConversationProvider>().selectedStartDate, filterStart);
     await tester.pumpWidget(const SizedBox());
+    v3.dispose();
   });
 
   testWidgets('v3 Wrap Up sends a verified pendant finish with no transcript and explains a 404', (tester) async {
