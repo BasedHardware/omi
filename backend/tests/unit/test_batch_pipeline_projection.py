@@ -1220,3 +1220,78 @@ def test_committed_transcript_signals_episode_before_playback_or_enrichment(bind
     projector.finish_part = lambda *a, **kw: events.append('finish')
     projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding)
     assert events == ['commit', 'signal', 'finish']
+
+
+def test_full_multi_unit_completion_consumes_late_v3_finish_once(monkeypatch):
+    from contextlib import nullcontext
+    from datetime import datetime, timezone
+
+    from config.record_audio import record_identity
+    from database import batch_pipeline_projection as completion
+    from utils.conversations.v3.live import FINISH_WINDOW_FIELD
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
+    monkeypatch.delenv('CONVERSATIONS_V3_BATCH_MANUAL_END', raising=False)
+    monkeypatch.setattr(completion, 'writing', lambda *_: nullcontext())
+    monkeypatch.setattr(completion, 'record_notes_eager_enabled', lambda: False)
+    monkeypatch.setattr(completion.capture_end, 'enabled', lambda: False)
+    enqueue = Mock()
+    monkeypatch.setattr(completion.v3_triggers, 'enqueue_pending', enqueue)
+
+    uid, cid, namespace = 'synthetic-owner', 'capture', 'synthetic'
+    content, first = record_identity(uid, cid)
+    binding = ProjectionBinding(
+        uid,
+        'bp_' + content,
+        content,
+        (first, 'second'),
+        target_conversation_id=cid,
+        record_origin=True,
+        native_record=True,
+    )
+    path = ('users', uid, 'conversations', cid)
+    db = StrictFirestore(
+        {
+            path: {
+                'recording': True,
+                'status': 'completed',
+                'finished_at': datetime.fromtimestamp(1, timezone.utc),
+                'record_projection_revision': 1,
+                'v3_manual_end_requested': True,
+                FINISH_WINDOW_FIELD: 'visible-window',
+            }
+        }
+    )
+    ledger = sync_content_ledger_ref(db, uid, content)
+    db.rows[ledger.path] = {'status': 'processing', 'dispatch_protocol': 'batch_v1', 'job_id': binding.job_id}
+    for sid in binding.segment_ids:
+        db.rows[f'{namespace}_jobs', sid] = {'projection_binding': asdict(binding), 'duration_seconds': 3.0}
+        db.rows[f'{namespace}_results', sid] = {
+            'projection': {'state': 'ready', 'conversation_id': cid, 'created': False, 'speech_seconds': 1.0}
+        }
+    second = db.rows[f'{namespace}_results', 'second']['projection']
+    second['state'] = 'persisted'
+
+    store = _ledger_completion_store(db)
+    session = Mock(job={}, ledger_ref=ledger)
+    session.prepare.side_effect = lambda tx, **_: setattr(session, 'ledger', ledger.get(transaction=tx).to_dict())
+    monkeypatch.setattr(store, 'session', lambda *a, **k: session)
+    monkeypatch.setattr(store, '_observe_transcription', Mock())
+    monkeypatch.setattr(store, '_settle_allowance', Mock())
+    monkeypatch.setattr(store, 'run', lambda operation, **_: operation(db.transaction()))
+    accounting = {'seconds': 2.0, 'updates': {}}
+
+    assert store.complete(first, binding, 2, accounting) is None
+    assert 'v3_manual_end' not in db.rows[path]
+    assert not db.transactions[-1].updates
+    enqueue.assert_not_called()
+
+    second['state'] = 'ready'
+    db.rows[path]['record_projection_revision'] = 2
+    assert store.complete(first, binding, 3, accounting)['outcome'] == 'success'
+    assert db.rows[path]['v3_manual_end'] and db.rows[path]['v3_pending']
+    assert db.rows[ledger.path]['status'] == 'completed'
+    enqueue.assert_called_once_with(uid, manual_end_id=cid)
+    assert store.complete(first, binding, 4, accounting)['outcome'] == 'success'
+    assert not db.transactions[-1].updates
+    enqueue.assert_called_once()

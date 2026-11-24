@@ -18,7 +18,10 @@ from utils.enrichment import outbox as reprocess
 from database.outbox_firestore import FirestoreEnrichmentOutbox
 from config.sync_reprocess import settle_seconds
 from utils.batch_pipeline.held_terminal import OPERATOR_INTENTS, held_without_recovery
-from config.record_audio import require_record_audio_barrier
+from config.record_audio import record_identity, require_record_audio_barrier
+from config.server_batch import manual_end_marker_enabled
+from utils.conversations.v3 import metrics as v3_metrics, triggers as v3_triggers
+from utils.conversations.v3.live import FINISH_WINDOW_FIELD
 from database.batch_pipeline_policy import load_stage_policy
 from database.batch_pipeline_delivered_share import delivery_stamp
 from database.batch_pipeline_shadow_hook import mirror_refresh
@@ -796,10 +799,12 @@ class ProjectionStore:
         coalescing_receipts: list[tuple[str, str]] = []
         notes_wakes = []
         sealed_proofs: list[str] = []
+        manual_cut = None
 
         @firestore.transactional
         def commit(transaction):
-            nonlocal completion_accounting
+            nonlocal completion_accounting, manual_cut
+            manual_cut = None
             coalescing_receipts.clear()
             zero_speech = accounting is None
             notes_wakes.clear()
@@ -1106,6 +1111,46 @@ class ProjectionStore:
                             notes_wakes.append((outbox, row_id, token))
                 for ref, data in writes:
                     transaction.set(ref, data)
+            cid = binding.target_conversation_id
+            if cid and binding.native_record and not binding.partial_record and len(binding.segment_ids) > 1:
+                row = conversation_rows.get(cid) or {}
+                content, _ = record_identity(binding.owner_id, cid)
+                if (
+                    row.get(FINISH_WINDOW_FIELD)
+                    and row.get('v3_manual_end_requested')
+                    and not row.get('v3_manual_end')
+                    and row.get('recording')
+                    and row.get('status') == 'completed'
+                    and row.get('finished_at')
+                    and row.get('record_projection_revision')
+                    and not any(
+                        row.get(k) for k in ('record_audio_partial', 'record_upload_failed', 'discarded', 'is_locked')
+                    )
+                    and not (source_deleted or erased_count or superseded_count or deleted_output_count)
+                    and (
+                        session.job.get('record_input_upload_revision') is None
+                        or session.job['record_input_upload_revision'] == row.get('record_upload_revision')
+                    )
+                    and binding.content_id == content
+                    and binding.job_id == 'bp_' + content
+                    and manual_end_marker_enabled()
+                ):
+                    recording_ref = (
+                        self.client.collection('users')
+                        .document(binding.owner_id)
+                        .collection('conversations')
+                        .document(cid)
+                    )
+                    transaction.update(
+                        recording_ref,
+                        {
+                            'v3_manual_end': True,
+                            'v3_pending': True,
+                            'v3_pending_since': row.get('v3_pending_since')
+                            or datetime.fromtimestamp(now, timezone.utc),
+                        },
+                    )
+                    manual_cut = cid
             if not source_deleted:
                 self._commit_usage(
                     transaction, session.ledger_ref, session.ledger, binding, completion_accounting, seconds, now
@@ -1145,6 +1190,9 @@ class ProjectionStore:
             else writing('usage_month_cache', binding.owner_id)
         ):
             result, changed, seconds = self.run(commit, policy=policy)
+        if manual_cut is not None:
+            v3_metrics.FINISH_NO_POINTER.labels('consumed').inc()
+            v3_triggers.enqueue_pending(binding.owner_id, manual_end_id=manual_cut)
         if changed:
             # Before any notes wake: the woken callback's seal proof reads this stage.
             self._observe_transcription(binding, now, completion_accounting, result)

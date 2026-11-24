@@ -49,6 +49,9 @@ for outcome in (
     'no_live_window',
     'no_recording',
     'batch_disabled',
+    'batch_unavailable',
+    'consumed',
+    'settled',
 ):
     FINISH_NO_POINTER.labels(outcome)
 

@@ -14,10 +14,11 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from config import server_batch
-from config.conversations_v3 import SPEECH_LANDED_FIELD
+from config.record_audio import record_identity
 from database._client import get_firestore_client
 from database.conversations import conversations_collection, prepare_conversation_for_read
-from utils.conversations.v3.live import active
+from database.sync_ledger import sync_content_ledger_ref
+from utils.conversations.v3.live import FINISH_WINDOW_FIELD, active
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,68 @@ def live_window(
     return None
 
 
+def _valid_document_id(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= 256
+        and value.isascii()
+        and value.isprintable()
+        and '/' not in value
+        and value not in {'.', '..'}
+        and not (value.startswith('__') and value.endswith('__'))
+    )
+
+
+def live_window_by_id(
+    uid: str, cid: str, *, now: datetime, firestore_client: Any = None
+) -> Optional[Mapping[str, Any]]:
+    if not _valid_document_id(cid):
+        return None
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection(conversations_collection).document(cid)
+    row = ref.get(field_paths=LIVE_FIELDS).to_dict() or {}
+    if not _is_finishable_window(row, now):
+        return None
+    return prepare_conversation_for_read({**row, 'id': cid}, uid, firestore_client=client)
+
+
+def _is_finishable_window(row: Mapping[str, Any], now: datetime) -> bool:
+    started = row.get('started_at')
+    return bool(
+        isinstance(started, datetime)
+        and started <= now + START_SKEW
+        and isinstance(row.get('finished_at'), datetime)
+        and not row.get('is_locked')
+        and active([row], now)
+    )
+
+
+def _native_projection_state(client, tx, uid, cid):
+    """The native ledger reaches completed only after the whole record projects."""
+    content, _ = record_identity(uid, cid)
+    ledger = sync_content_ledger_ref(client, uid, content).get(transaction=tx).to_dict() or {}
+    if not ledger:
+        return 'pending'  # A closed server-batch recording has a durable admission obligation.
+    if ledger.get('dispatch_protocol') != 'batch_v1' or ledger.get('job_id') != 'bp_' + content:
+        return 'unavailable'
+    if ledger.get('status') == 'processing':
+        return 'pending'
+    result = ledger.get('result') or {}
+    segments = (ledger.get('batch_pipeline') or {}).get('segment_ids') or []
+    if (
+        ledger.get('status') == 'completed'
+        and segments
+        and set(segments) == set(ledger.get('processed_segment_ids') or [])
+        and result.get('outcome') == 'success'
+        and not any(
+            result.get(k) for k in ('reason_code', 'failed_segments', 'superseded_segments', 'deleted_output_segments')
+        )
+        and cid in (result.get('new_memories') or []) + (result.get('updated_memories') or [])
+    ):
+        return 'complete'
+    return 'unavailable'
+
+
 def request_finish(uid: str, window_id: str, *, now: datetime, firestore_client: Any = None) -> Tuple[str, str]:
     """Store a cut on the current tail source, fenced by the live window in the same transaction."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -136,14 +199,13 @@ def request_finish(uid: str, window_id: str, *, now: datetime, firestore_client:
     @firestore.transactional
     def commit(tx):
         window = window_ref.get(transaction=tx).to_dict() or {}
-        end = window.get('finished_at')
-        if not isinstance(end, datetime) or not active([window], now) or window.get('is_locked'):
+        if not _is_finishable_window(window, now):
             return 'no_live_window', ''
         members = window.get('v3_recording_ids') or []
         # The planner appends new contributing recordings in speech order. An
         # unavailable tail must not move the cut back to a previous recording.
         cid = members[-1] if isinstance(members, list) and members else None
-        if not isinstance(cid, str) or not cid or '/' in cid or cid in {'.', '..'}:
+        if not _valid_document_id(cid):
             return 'no_recording', ''
         ref = collection.document(cid)
         row = ref.get(transaction=tx).to_dict() or {}
@@ -152,28 +214,35 @@ def request_finish(uid: str, window_id: str, *, now: datetime, firestore_client:
             or row.get('status') != 'completed'
             or not isinstance(row.get('finished_at'), datetime)
             # An older overlapping source must not cut through already-visible speech.
-            or row['finished_at'] < end
+            or row['finished_at'] < window['finished_at']
             or any(row.get(key) for key in ('deleted', 'discarded', 'is_locked', 'sync_merged_into'))
             or row.get('data_protection_level') == 'private'
         ):
             return 'no_recording', ''
         if row.get('v3_manual_end'):
             return 'already_cut', cid
-        if row.get('v3_manual_end_requested'):
-            return 'already_requested', cid
-        if server_batch.owned(row) and not (row.get(SPEECH_LANDED_FIELD) or row.get('record_projection_revision')):
-            if not server_batch.manual_end_marker_enabled():
-                return 'batch_disabled', ''
-            tx.update(ref, {'v3_manual_end_requested': True})
-            return 'requested', cid
+        if server_batch.owned(row):
+            if row.get('record_audio_partial') or row.get('record_upload_failed'):
+                return 'batch_unavailable', ''
+            state = _native_projection_state(client, tx, uid, cid)
+            if state == 'unavailable':
+                return 'batch_unavailable', ''
+            if state == 'pending':
+                if not server_batch.manual_end_marker_enabled():
+                    return 'batch_disabled', ''
+                if row.get(FINISH_WINDOW_FIELD):
+                    return 'already_requested', cid
+                tx.update(ref, {'v3_manual_end_requested': True, FINISH_WINDOW_FIELD: window_id})
+                return 'requested', cid
         tx.update(
             ref,
             {
                 'v3_manual_end': True,
                 'v3_pending': True,
                 'v3_pending_since': row.get('v3_pending_since') or now,
+                FINISH_WINDOW_FIELD: row.get(FINISH_WINDOW_FIELD) or window_id,
             },
         )
-        return 'cut', cid
+        return ('consumed' if row.get(FINISH_WINDOW_FIELD) else 'cut'), cid
 
     return commit(client.transaction())

@@ -5,6 +5,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 # The v3 window cap: an open conversation idle for longer is not in progress.
 MAX_IDLE = timedelta(hours=2)
+FINISH_WINDOW_FIELD = 'v3_finish_no_pointer_window_id'
 
 
 def _aware(value: Any) -> Optional[datetime]:

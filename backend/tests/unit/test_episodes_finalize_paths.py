@@ -26,11 +26,14 @@ os.environ.setdefault(
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 
 from config import episodes as config
+from config.record_audio import record_identity
+from database.sync_ledger import sync_content_ledger_ref
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.conversations.v3 import finish as v3_finish
+from utils.conversations.v3.live import FINISH_WINDOW_FIELD
 from utils.conversations import finalizer
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.episodes import finalize as episode_finalize
@@ -460,6 +463,7 @@ def test_serving_intake_notifies_workerd_only_for_current_bound_revision(monkeyp
 
 @pytest.fixture
 def v3_finish_route(conv, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
     store = v3_finish.conversations_v3_live
     now = datetime.now(timezone.utc)
     window = {
@@ -478,6 +482,17 @@ def v3_finish_route(conv, monkeypatch):
     recording = {'recording': True, 'status': 'completed', 'finished_at': now}
     db = StrictFirestore({paths['window']: window, paths['older']: dict(recording), paths['latest']: recording})
     monkeypatch.setattr(store, 'get_firestore_client', lambda: db)
+    read_document = StrictFirestoreDocument.get
+
+    def read_finish_fields(ref, *args, field_paths=None, **kwargs):
+        if field_paths == store.LIVE_FIELDS:
+            snapshot = read_document(ref, *args, **kwargs)
+            return type(snapshot)(
+                {key: value for key, value in (snapshot.to_dict() or {}).items() if key in field_paths}
+            )
+        return read_document(ref, *args, field_paths=field_paths, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', read_finish_fields)
     monkeypatch.setattr(store.firestore, 'transactional', lambda body: body)
     monkeypatch.setattr(conv, 'retrieve_in_progress_conversation', lambda uid: None)
     monkeypatch.setattr(v3_finish, 'conversations_v3_enabled', lambda uid: True)
@@ -574,14 +589,65 @@ def test_finish_without_pointer_keeps_404_without_a_live_window(v3_finish_route)
     assert db.transactions == []
 
 
-def test_finish_repeat_leaves_batch_request_deferred_after_partial_speech(v3_finish_route):
+@pytest.mark.parametrize('unit_count', [1, 2])
+def test_finish_waits_for_whole_batch_and_repeat_after_projection_cuts(v3_finish_route, unit_count):
     client, db, paths, enqueued = v3_finish_route
-    db.rows[paths['latest']].update(
-        record_lane_owner='batch_live_v1',
-        server_batch_only=True,
-        v3_manual_end_requested=True,
-        record_projection_revision=1,
+    latest = db.rows[paths['latest']]
+    latest.update(record_lane_owner='batch_live_v1', server_batch_only=True)
+    content, _ = record_identity(_UID, 'latest')
+    ledger_path = sync_content_ledger_ref(db, _UID, content).path
+    segments = [f'segment-{i}' for i in range(unit_count)]
+    db.rows[ledger_path] = {
+        'status': 'processing',
+        'dispatch_protocol': 'batch_v1',
+        'job_id': 'bp_' + content,
+        'batch_pipeline': {'segment_ids': segments},
+    }
+
+    assert client.post('/v1/conversations', json={}).status_code == 200
+    assert latest['v3_manual_end_requested'] is True
+    assert latest[FINISH_WINDOW_FIELD] == 'window'
+    latest['record_projection_revision'] = 1
+    assert client.post('/v1/conversations', json={}).status_code == 200
+    assert not db.transactions[-1].updates and not enqueued
+
+    db.rows[ledger_path].update(
+        status='completed',
+        processed_segment_ids=segments,
+        result={'outcome': 'success', 'updated_memories': ['latest']},
     )
     assert client.post('/v1/conversations', json={}).status_code == 200
-    assert not db.transactions[0].updates
-    assert not enqueued
+    assert latest['v3_manual_end'] and latest['v3_pending']
+    assert client.post('/v1/conversations', json={}).status_code == 200
+    assert not db.transactions[-1].updates
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+
+
+def test_finish_uses_explicit_owned_live_window(v3_finish_route, monkeypatch):
+    client, db, paths, enqueued = v3_finish_route
+    alternate = ('users', _UID, 'conversations', 'second')
+    db.rows[alternate] = {**db.rows[paths['window']], 'id': 'second', 'v3_recording_ids': ['older']}
+    monkeypatch.setattr(
+        v3_finish.conversations_v3_live, 'live_window', lambda *a, **kw: pytest.fail('valid hint used fallback')
+    )
+    result = client.post('/v1/conversations', json={'live_conversation_id': 'second'})
+    assert result.status_code == 200 and result.json()['conversation']['id'] == 'second'
+    assert not db.rows[paths['latest']].get('v3_manual_end')
+    assert db.rows[paths['older']]['v3_manual_end']
+    assert enqueued == [(_UID, {'manual_end_id': 'older'})]
+
+
+@pytest.mark.parametrize('owner,status', [('other-owner', 'in_progress'), (_UID, 'completed')])
+def test_finish_falls_back_when_hint_is_foreign_or_stale(v3_finish_route, owner, status):
+    client, db, paths, _ = v3_finish_route
+    db.rows['users', owner, 'conversations', 'hint'] = {**db.rows[paths['window']], 'status': status}
+    result = client.post('/v1/conversations', json={'live_conversation_id': 'hint'})
+    assert result.status_code == 200 and result.json()['conversation']['id'] == 'window'
+
+
+def test_finish_refuses_known_partial_audio_archive(v3_finish_route):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    latest.update(record_lane_owner='batch_live_v1', server_batch_only=True, record_audio_partial=True)
+    assert client.post('/v1/conversations', json={}).status_code == 404
+    assert not db.transactions[-1].updates and not enqueued

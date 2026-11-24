@@ -10,23 +10,32 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.v3 import live, metrics, triggers
 
 
-def finish_live_window(uid: str) -> CreateConversationResponse | None:
+def finish_live_window(uid: str, window_id: str | None = None) -> CreateConversationResponse | None:
     if not finish_no_pointer_enabled() or not conversations_v3_enabled(uid):
         return None
 
     now = datetime.now(timezone.utc)
+    if window_id:
+        window = conversations_v3_live.live_window_by_id(uid, window_id, now=now)
+        if window is not None:
+            outcome, recording_id = conversations_v3_live.request_finish(uid, window['id'], now=now)
+            if outcome != 'no_live_window':
+                return _acknowledge(uid, window, outcome, recording_id)
     window = conversations_v3_live.live_window(uid, now=now, max_idle=live.MAX_IDLE, pick=live.active)
     if window is None:
         metrics.FINISH_NO_POINTER.labels('no_live_window').inc()
         return None
+    outcome, recording_id = conversations_v3_live.request_finish(uid, window['id'], now=now)
+    return _acknowledge(uid, window, outcome, recording_id)
 
-    conversation = deserialize_conversation(window)
-    outcome, recording_id = conversations_v3_live.request_finish(uid, conversation.id, now=now)
+
+def _acknowledge(uid, window, outcome, recording_id):
     metrics.FINISH_NO_POINTER.labels(outcome).inc()
     if not recording_id:
         return None
-    if outcome == 'cut':
+    if outcome in {'cut', 'consumed'}:
         triggers.enqueue_pending(uid, manual_end_id=recording_id)
+    conversation = deserialize_conversation(window)
     conversation.status = ConversationStatus.processing
     conversation.tile_state = 'transcribing' if outcome in {'requested', 'already_requested'} else 'writing'
     return CreateConversationResponse(conversation=conversation, messages=[])
