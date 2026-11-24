@@ -36,6 +36,14 @@ for outcome in ('visible', 'hidden'):
     for kind in MANUAL_END_KINDS:
         MANUAL_END_HOME.labels(outcome, kind)
 
+BATCH_MANUAL_END = Counter(
+    'omi_conversations_v3_batch_manual_end_total',
+    'Manual-end requests of audio-only v3 recordings at record admission, by what admission did with them',
+    ['outcome'],
+)
+for outcome in ('promoted', 'fast_finish', 'multi_unit_deferred', 'not_promoted', 'error'):
+    BATCH_MANUAL_END.labels(outcome)
+
 SUMMARY_LATENCY = Histogram('omi_conversations_v3_end_to_summary_seconds', 'End to stored summary')
 SUMMARY_WRITES = Counter('omi_conversations_v3_summary_writes_total', 'First writes and late rewrites', ['kind'])
 WORD_FLOOR_COMPLETIONS = Counter(

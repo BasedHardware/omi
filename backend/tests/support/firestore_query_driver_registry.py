@@ -246,7 +246,9 @@ BODY_DIGEST = {
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
     # Re-reviewed: quiet admission uses the shared speech clock; query/read shapes are unchanged.
     # Re-reviewed 2026-11-04: atomic blocked_byok_at metadata only; query ownership is unchanged.
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'f20f3b16e0e8d9421b86c675510cbb0fc9a4d09b3e71f70c68c3254b8209542c',
+    # Re-reviewed: the early user-finish admission judges the snapshot already held; no collection query
+    # (cohort mode adds one cached point read of the owner's rollout_cohorts document).
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'dc815b20539ecf62552bd9de5e3f2c3842ecc53cb7a7df04a2edb87dd9ff2292',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
@@ -1441,6 +1443,7 @@ _add(
             'deadline_floor': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
             'detach_from': (None, 'document gets for the old provisional membership; no query shape effect'),
             'admission': (False, 'member document refusal guard; no query filter or ordering effect'),
+            'finalizing_conversation_id': ('recorded-1', 'transactional deletion document gets only'),
         },
         base={
             'uid': UID,
@@ -1499,6 +1502,23 @@ _add(
         ),
     )
 )
+
+
+def _sync_stage(_fs: Any) -> Any:
+    # Ledger collections are stage-scoped; with no stage there is no ledger and no query.
+    import os
+
+    return unittest.mock.patch.dict(os.environ, {'OMI_ENV_STAGE': 'prod'})
+
+
+for _fn in ('uploads_for_conversations', 'staging_job_ids', 'owed_batch_segments'):
+    _add(
+        DriverEntry(
+            f'database.sync_ledger_sources.{_fn}',
+            base={'uid': UID, 'conversation_ids': ['conv-1']},
+            patchers=(_sync_stage,),
+        )
+    )
 _add(
     DriverEntry(
         'database.recording_speakers.scope_conversation_ids',
