@@ -108,6 +108,15 @@ class ConversationProvider extends ChangeNotifier {
   /// Kept (always false) only for home/page.dart's tab-tap reset until that call site is removed.
   bool get showDailySummaries => false;
   bool hasDailySummaries = false; // whether user has any daily summaries
+  bool get hasActiveHomeFilter => showStarredOnly || selectedFolderId != null || selectedStartDate != null;
+
+  bool get showsDefaultHome =>
+      !hasActiveSearch &&
+      !hasActiveHomeFilter &&
+      !showShortConversations &&
+      !showDiscardedConversations &&
+      !isSelectionModeActive;
+
   DateTime? selectedStartDate;
   DateTime? selectedEndDate;
   String? selectedFolderId;

@@ -256,6 +256,24 @@ def claims_by_row(rows):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('mode,hidden', [(None, False), ('off', True)])
+async def test_manual_end_home_switch_reaches_the_planner_through_reconcile(owner, strict, monkeypatch, mode, hidden):
+    if mode is None:
+        monkeypatch.delenv('CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE', raising=False)
+    else:
+        monkeypatch.setenv('CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE', mode)
+    media = reply({'first_line': 1, 'title': 'A podcast', 'line': 'Playback.', 'kind': 'media'})
+    monkeypatch.setattr(service.models, 'outline', lambda uid, messages: media)
+    sources, rows = lunch()
+    owner(*sources, *rows)
+    outcome, _ = await rederive()
+    assert outcome == 'committed'
+    card = conversations(strict)['c0']
+    assert card['manual_end'] is True and card['kind'] == card['outline_kind'] == 'media'
+    assert card['home_hidden'] is hidden and card['home_hidden_reason'] == 'media'
+
+
+@pytest.mark.asyncio
 async def test_fragmented_lunch_folds_into_one_card_that_keeps_the_earliest_id(owner, strict):
     sources, rows = lunch()
     owner(*sources, *rows)

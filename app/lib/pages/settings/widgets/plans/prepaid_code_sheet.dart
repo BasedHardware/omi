@@ -80,8 +80,8 @@ Future<bool> showPrepaidCodeSheet(
       onRedeemed: () {
         redeemed = true;
         // The Stripe webhook grants Pro a moment after the subscription exists: read now and once more.
-        unawaited(usage.fetchSubscription());
-        Future.delayed(const Duration(seconds: 4), () => unawaited(usage.fetchSubscription()));
+        unawaited(usage.fetchSubscription(fresh: true));
+        Future.delayed(const Duration(seconds: 4), () => unawaited(usage.fetchSubscription(fresh: true)));
       },
       onDiscountCode: onDiscountCode == null
           ? null

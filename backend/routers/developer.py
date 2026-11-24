@@ -89,6 +89,8 @@ from dependencies import (
 from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
+from utils.other.from_segments_503 import FromSegments503Route
+from utils.other.request_deadline import from_segments_request_deadline
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.observability.external_lists import (
     observe_action_items_page,
@@ -144,7 +146,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(route_class=external_lists.ExternalListCacheRoute)
+router = APIRouter(route_class=FromSegments503Route)
 FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
@@ -2394,6 +2396,7 @@ def _ingest_conversation_from_segments(
 def create_conversation_from_segments_user(
     request: CreateConversationFromTranscriptRequest,
     http_request: Request,
+    _deadline: Any = Depends(from_segments_request_deadline),
     uid: str = Depends(with_rate_limit(get_current_user_uid, "conversations:from-segments")),
 ):
     """Create a conversation from already-transcribed segments (Firebase-authed).

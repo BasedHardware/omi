@@ -114,22 +114,68 @@ def test_completed_word_floor_is_observed_once_on_settlement(strict, monkeypatch
     observe.assert_called_once_with(True, False)
 
 
-def test_cloud_run_sync_scrapes_both_word_floor_outcomes():
+@pytest.mark.parametrize(
+    'updates,outcome',
+    [
+        ({}, ('visible', 'conversation')),
+        ({'home_hidden': True}, ('hidden', 'conversation')),
+        ({'kind': 'media'}, ('visible', 'media')),
+        ({'sync_merged_into': 'other'}, ('hidden', 'conversation')),
+        ({'kind': 'unexpected'}, ('visible', 'other')),
+        ({'discarded': True}, None),
+        ({'deleted': True}, None),
+        ({'backfilled': True}, None),
+        ({'status': 'failed'}, None),
+        ({'manual_end': False}, None),
+    ],
+)
+def test_manual_end_visibility_counts_successful_settlements(strict, monkeypatch, updates, outcome):
+    row = derived(manual_end=True, v3_process_pending=True, kind='conversation')
+    strict.rows[C] = {**row, **updates}
+    counter = Mock()
+    monkeypatch.setattr(writers.metrics, 'MANUAL_END_HOME', counter)
+    settle(strict, notes=False)
+    settle(strict, notes=False)  # No additional settlement is owed here.
+    if outcome is None:
+        counter.labels.assert_not_called()
+    else:
+        counter.labels.assert_called_once_with(*outcome)
+        counter.labels.return_value.inc.assert_called_once_with()
+
+
+def test_manual_end_visibility_ignores_late_rewrite_resettlement(strict, monkeypatch):
+    strict.rows[C] = derived(manual_end=True, v3_process_pending=True, kind='conversation')
+    counter = Mock()
+    monkeypatch.setattr(writers.metrics, 'MANUAL_END_HOME', counter)
+    settle(strict, notes=False)
+    # Late transcript re-arms the settled row; its rewrite settlement is not a second manual finish.
+    strict.rows[C].update(v3_process_pending=True, summary_covers_through=None)
+    settle(strict, notes=False)
+    counter.labels.assert_called_once_with('visible', 'conversation')
+    assert strict.rows[C]['v3_manual_end_home_counted'] is True
+
+
+@pytest.mark.parametrize(
+    'counter,label_keys,outcomes',
+    [
+        (
+            writers.metrics.WORD_FLOOR_COMPLETIONS,
+            ('method', 'floor'),
+            {('legacy', 'below'), ('legacy', 'met'), ('script_aware', 'below'), ('script_aware', 'met')},
+        ),
+        (
+            writers.metrics.MANUAL_END_HOME,
+            ('visibility', 'kind'),
+            {(v, k) for v in ('visible', 'hidden') for k in writers.metrics.MANUAL_END_KINDS},
+        ),
+    ],
+)
+def test_cloud_run_sync_scrapes_v3_processing_outcomes(counter, label_keys, outcomes):
     profile = Path(__file__).resolve().parents[2] / 'deploy' / 'cloud_run_gmp_sync.yaml'
     rules = yaml.safe_load(profile.read_text())['spec']['endpoints'][0]['metricRelabeling']
     (rule,) = [r for r in rules if r['action'] == 'keep' and r['sourceLabels'] == ['__name__']]
-    samples = [
-        sample
-        for family in writers.metrics.WORD_FLOOR_COMPLETIONS.collect()
-        for sample in family.samples
-        if sample.name.endswith('_total')
-    ]
-    assert {(s.labels['method'], s.labels['floor']) for s in samples} == {
-        ('legacy', 'below'),
-        ('legacy', 'met'),
-        ('script_aware', 'below'),
-        ('script_aware', 'met'),
-    }
+    samples = [sample for family in counter.collect() for sample in family.samples if sample.name.endswith('_total')]
+    assert {tuple(s.labels[key] for key in label_keys) for s in samples} == outcomes
     assert all(re.fullmatch(rule['regex'], sample.name) for sample in samples)
 
 
@@ -251,7 +297,7 @@ def test_claims_are_bounded_when_delivery_never_completes(strict):
 
 
 def _visible_rebuild(monkeypatch, prior):
-    def build(uid, window, recordings, existing=None, *, allocated=None):
+    def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_home_visible=True):
         return {
             **(existing or prior),
             'home_hidden': False,
