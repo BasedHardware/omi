@@ -14,6 +14,7 @@ Mirrors ``utils.enrichment.outbox.run`` outcome for outcome, with every settleme
 | v3 custody conflict | DEFERRED / DISCARDED v3_custody_conflict | ``defer`` twice, then ``ack`` holds the row |
 | empty first summary | DEFERRED not_due (``empty_output``) | ``defer`` at +``ENRICHMENT_EMPTY_OUTPUT_BACKOFF_SECONDS`` (120s) |
 | callback pending | RETRY callback_pending | ``release``: 409, the queue retry claims again |
+| held (unreadable transcript) | DISCARDED conversation_unreadable | ``ack`` parks the obligation |
 | transient Firestore / gateway fault | RETRY dependency_warming | ``release``: 409, the queue retry claims again |
 
 A consumer-side write leaves nothing for ``run_push`` to settle, so it reports STALE: this delivery no
@@ -35,6 +36,7 @@ from fastapi import HTTPException
 
 from database.outbox import Claim, OutboxKind, Outcome
 from config.sync_reprocess import empty_output_backoff_seconds
+from utils.enrichment.admission import StoredTranscriptUnreadable
 from utils.enrichment.outbox import EMPTY_OUTPUT_DEFER_REASON, LIVE_DEFER_SECONDS, V3_CUSTODY_MAX_DEFERS
 from utils.observability.reasons import ConsumerReason, RetryReason
 from utils.workers.consumer import Result, Role
@@ -211,6 +213,8 @@ class EnrichmentConsumer:
         # A consumer-side write that already moved ownership makes the release refuse, so that settles STALE.
         try:
             return self._deliver(claim, heartbeat)
+        except StoredTranscriptUnreadable:
+            return Result(Outcome.DISCARDED, ConsumerReason.CONVERSATION_UNREADABLE)
         except Exception as error:
             if isinstance(error, SyncAssignmentConflict) and error.subtype == SyncAssignmentConflictReason.V3_CUSTODY:
                 reason = ConsumerReason.V3_CUSTODY_CONFLICT

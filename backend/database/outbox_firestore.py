@@ -411,6 +411,7 @@ class FirestoreEnrichmentOutbox:
         outbox = _outbox()
         version = claim.payload.get('version')
         custody_conflict = reason == outbox.V3_CUSTODY_DEFER_REASON
+        unreadable = reason == outbox.HELD_TRANSCRIPT_UNREADABLE
         observed: dict[str, int] = {}
 
         def finish(old):
@@ -428,6 +429,8 @@ class FirestoreEnrichmentOutbox:
                 old.pop(SUPERSEDE_STREAK_FIELD, None)
             summary_seen = old.get('summary_seen_by') == claim.lease_token
             if old['version'] == version:
+                if unreadable:
+                    return outbox.park_unreadable_transcript(old, now), (True, None)
                 if custody_conflict:
                     # Retain the obligation and its reason without waking it again.
                     old.pop('summary_seen_by', None)
@@ -478,6 +481,8 @@ class FirestoreEnrichmentOutbox:
         _observe_streak(observed, settled)
         if pending is not None:
             self._rearmed(pending)
+        elif settled and unreadable:
+            outbox.TRANSCRIPT_PARKS.inc()
         elif settled and custody_conflict:
             logger.info('event=enrichment_outbox outcome=held reason=%s', reason)
         return settled

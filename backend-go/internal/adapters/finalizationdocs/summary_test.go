@@ -2,6 +2,7 @@ package finalizationdocs
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -66,5 +67,22 @@ func TestF28SummaryRepairBlocksBYOKAndParksExpiredDebt(t *testing.T) {
 	got, err = store.RepairSummary(t.Context(), a, ref, time.Minute)
 	if err != nil || got != rules.SummaryPark || !field[bool](read(t, bench, path), "age_gate_parked") {
 		t.Fatalf("expired work: %v %v", got, err)
+	}
+}
+
+func TestSummaryRepairLeavesUnreadableTranscriptParked(t *testing.T) {
+	t.Parallel()
+	store, bench, ref, path := summaryFixture(t)
+	put(t, bench, path, document{
+		"uid": ref.Owner, "conversation_id": ref.ID, "version": int64(4),
+		"dormant": true, "held_reason": "conversation_unreadable", "due_at": nil, "task_token": "parked",
+	})
+	before := read(t, bench, path)
+	got, err := store.RepairSummary(t.Context(), queue.AdmittingForTest(t, ref.Owner), ref, 0)
+	if err != nil || got != rules.SummarySkip {
+		t.Fatalf("terminal hold became eligible: %v %v", got, err)
+	}
+	if after := read(t, bench, path); !reflect.DeepEqual(after, before) {
+		t.Fatalf("terminal hold changed: %v", after)
 	}
 }

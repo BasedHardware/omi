@@ -18,12 +18,14 @@ TRANSCRIPT_DECODE_FAILURES = cast(
 )
 
 
+class StoredTranscriptUnreadable(RuntimeError):
+    """The stored transcript could not be decoded by the strict reader."""
+
+
 def require_transcript_decoded(row: dict) -> None:
     if row.get('_recovery_transcript_decoded') is False:
-        from utils.enrichment.outbox import FirstSummaryCallbackPending
-
         TRANSCRIPT_DECODE_FAILURES.inc()
-        raise FirstSummaryCallbackPending('transcript_decode_failed')
+        raise StoredTranscriptUnreadable('conversation_unreadable')
 
 
 class SyncConversationPersistenceFenced(RuntimeError):

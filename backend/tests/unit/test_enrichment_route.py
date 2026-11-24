@@ -109,7 +109,8 @@ def wrong_key_conversation(monkeypatch):
     return store, path, conversation
 
 
-def test_wrong_key_transcript_keeps_ciphertext_and_retries(rows, client, monkeypatch, wrong_key_conversation):
+@pytest.mark.parametrize('legacy', [False, True])
+def test_wrong_key_transcript_parks_and_keeps_ciphertext(rows, client, monkeypatch, wrong_key_conversation, legacy):
     store, path, conversation = wrong_key_conversation
     ciphertext = conversation['transcript_segments']
     assert isinstance(ciphertext, str) and ciphertext
@@ -121,19 +122,62 @@ def test_wrong_key_transcript_keeps_ciphertext_and_retries(rows, client, monkeyp
     monkeypatch.setattr(callback.lifecycle_service, 'rule_discard_outcome', discard)
     monkeypatch.setattr(callback, 'occasion_relevance_enabled', lambda: False)
     decode_failures_before = TRANSCRIPT_DECODE_FAILURES._value.get()
+    parks_before = reprocess.TRANSCRIPT_PARKS._value.get()
 
-    token = rows[0][KEY]['task_token']
-    response = client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+    initial, tasks = rows[0][KEY], rows[1]
+    token = initial['task_token']
+    tasks.clear()
+    payload = {'kind': 'enrichment', 'key': KEY, 'task_token': token}
+    if legacy:
+        assert reprocess.run(KEY, token, callback.enrich_conversation, now=10_000) == 'held'
+        assert reprocess.run(KEY, token, callback.enrich_conversation, now=10_001) == 'stale'
+    else:
+        response = client.post('/v2/enrichment/run', json=payload)
+        assert response.status_code == 200
+        assert response.json() == {'status': 'discarded', 'reason': 'conversation_unreadable'}
+        assert client.post('/v2/enrichment/run', json=payload).json()['status'] == 'stale'
 
-    assert response.status_code == 409
-    assert response.json() == {'status': 'retry', 'reason': 'callback_pending'}
-    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+    parked = rows[0][KEY]
+    assert parked['dormant'] and parked['held_reason'] == 'conversation_unreadable'
+    assert parked['due_at'] is None and parked['task_due_at'] is None
+    assert parked['owner'] is None and parked['lease_until'] == 0 and parked['task_token'] != token
+    for field in ('uid', 'conversation_id', 'version', 'first_pending_at'):
+        assert parked[field] == initial[field]
+    assert not tasks
     assert store.rows[path]['transcript_segments'].encode('utf-8') == ciphertext.encode('utf-8')
     assert store.rows[path] == conversation
     assert TRANSCRIPT_DECODE_FAILURES._value.get() == decode_failures_before + 1
+    assert reprocess.TRANSCRIPT_PARKS._value.get() == parks_before + 1
     process.assert_not_called()
     claim_summary.assert_not_called()
     discard.assert_not_called()
+
+    # A new producer mark, for example after transcript repair, can reopen the obligation.
+    reprocess.mark('u', 'c', 'en', now=10_002)
+    pending = rows[0][KEY]
+    assert not pending['dormant'] and not pending.get('held_reason')
+    assert pending['version'] == parked['version'] + 1
+    assert tasks[-1]['task_token'] == pending['task_token']
+
+
+def test_unreadable_claim_cannot_park_a_coalesced_version(rows):
+    from utils.enrichment.admission import StoredTranscriptUnreadable
+
+    initial = rows[0][KEY]
+    parks_before = reprocess.TRANSCRIPT_PARKS._value.get()
+
+    def coalesce_then_fail(*_):
+        reprocess.mark('u', 'c', 'en', now=10_001)
+        raise StoredTranscriptUnreadable('conversation_unreadable')
+
+    _deliver(rows, coalesce_then_fail)
+
+    pending = rows[0][KEY]
+    assert not pending['dormant'] and not pending.get('held_reason')
+    assert pending['version'] == initial['version'] + 1
+    assert pending['task_token'] != initial['task_token']
+    assert rows[1][-1]['task_token'] == pending['task_token']
+    assert reprocess.TRANSCRIPT_PARKS._value.get() == parks_before
 
 
 @pytest.mark.parametrize('reuse_snapshot', ['true', 'false'])

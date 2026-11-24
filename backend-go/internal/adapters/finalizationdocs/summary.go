@@ -140,9 +140,12 @@ func scheduleSummary(tx *docstore.Tx, ref finalization.Ref, row document, now, d
 	if found && field[string](old, "uid") != "" && (field[string](old, "uid") != ref.Owner || field[string](old, "conversation_id") != ref.ID) {
 		return rules.SummarySkip, finalization.ErrInvalid
 	}
+	// Python enrichment retains an unreadable transcript obligation as a terminal hold.
+	parked := field[bool](old, "age_gate_parked") || field[string](old, "deferred_reason") == "age_gate_72h" ||
+		(field[bool](old, "dormant") && field[string](old, "held_reason") == "conversation_unreadable")
 	pending := earliest(seconds(row, "summary_first_pending_at"), seconds(old, "first_pending_at"), due)
 	action := rules.SummaryRepair(now, due, pending, field[time.Time](row, "created_at"), seconds(old, "lease_until"), maxAge, true, false,
-		field[bool](old, "summary_seen"), field[bool](old, "age_gate_parked") || field[string](old, "deferred_reason") == "age_gate_72h")
+		field[bool](old, "summary_seen"), parked)
 	if action != rules.SummaryWake && action != rules.SummaryPark {
 		return action, nil
 	}

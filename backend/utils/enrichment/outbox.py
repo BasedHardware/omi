@@ -46,6 +46,7 @@ from database import record_notes_hold
 from database._client import get_firestore_client
 from database.summary_processing import record_empty_failure, EmptyFailureOutcome
 from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
+from utils.enrichment.admission import StoredTranscriptUnreadable
 
 Row: TypeAlias = dict[str, Any]
 ResultT = TypeVar('ResultT')
@@ -77,6 +78,11 @@ COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into 
 UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
 # A conversation row at Firestore's 1 MiB ceiling refuses every enrichment write (#23341).
 HELD_DOCUMENT_SIZE_LIMIT = 'document_size_limit'
+HELD_TRANSCRIPT_UNREADABLE = ConsumerReason.CONVERSATION_UNREADABLE.value
+TRANSCRIPT_PARKS = Counter(
+    'omi_enrichment_unreadable_transcript_park_total',
+    'Enrichment obligations durably parked because their stored transcript could not be decoded.',
+)
 V3_CUSTODY_DEFER_REASON = ConsumerReason.V3_CUSTODY_CONFLICT.value
 V3_CUSTODY_MAX_DEFERS = 2
 # A kept first-summary run that returned no summary text. The strike is recorded by
@@ -130,6 +136,21 @@ def owns_runtime() -> bool:
 
 def ownership_parked(row: Row) -> bool:
     return bool(row.get('dormant') and row.get('finalization_owner_parked'))
+
+
+def park_unreadable_transcript(row: Row, now: float) -> Row:
+    return {
+        **row,
+        'dormant': True,
+        'held_reason': HELD_TRANSCRIPT_UNREADABLE,
+        'held_at': now,
+        'due_at': None,
+        'task_due_at': None,
+        'task_token': uuid.uuid4().hex,
+        'owner': None,
+        'lease_until': 0,
+        'summary_seen_by': None,
+    }
 
 
 def park_for_ownership(row: Row, now: float) -> Row:
@@ -560,6 +581,9 @@ def mark_update(
         if old and old.get('dormant'):
             row.pop('merge_hold', None)
             row.pop('sync_hold_requested', None)
+            if old.get('held_reason') == HELD_TRANSCRIPT_UNREADABLE:
+                # A producer can mark the conversation again after repairing or replacing the transcript.
+                row.update(held_reason=None, held_at=None)
             if old.get('held_reason') == V3_CUSTODY_DEFER_REASON:
                 # A producer admitted new work. Give it a fresh custody budget.
                 for field in ('held_reason', 'held_at', 'v3_custody_defers', 'deferred_reason', 'deferred_since'):
@@ -767,6 +791,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     superseded = False
     retry_revision = None
     empty_blocked = False
+    unreadable = False
     held_reason: str | None = None
     process_context: Row | None = None
     if row.get('effects_only'):
@@ -826,6 +851,8 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                         raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
         except processing_hold.ProcessingDeferred as error:
             process_context = {'defer_reason': error.reason, 'defer_until': error.available_at}
+        except StoredTranscriptUnreadable:
+            unreadable = True
         except summary_delivery.SummaryRepairSuperseded as error:
             output = None
             superseded = True
@@ -978,6 +1005,9 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             return pending, pending
 
         if old['version'] == row['version']:
+            if unreadable:
+                parked = park_unreadable_transcript(old, current)
+                return parked, parked
             if summary_policy and summary_seen:
                 # Retain only scheduling metadata as the first-summary receipt.
                 # Future revisions keep their trailing-edge coalescing policy.
@@ -1014,7 +1044,12 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
 
     pending = _mutate(document_id, finish)
     if pending is not None:
+        if pending.get('dormant'):
+            TRANSCRIPT_PARKS.inc()
+            return 'held'
         _enqueue(pending)
+    if unreadable:
+        return 'superseded' if pending is not None else 'stale'
     return 'superseded' if superseded else 'processed'
 
 

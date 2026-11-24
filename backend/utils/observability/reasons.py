@@ -395,6 +395,7 @@ class ConsumerReason(StrEnum):
     STALE_TOKEN = 'stale_token'
     LEASE_HELD = 'lease_held'
     EMPTY_OUTPUT_BLOCKED = 'empty_output_blocked'
+    CONVERSATION_UNREADABLE = 'conversation_unreadable'
     V3_CUSTODY_CONFLICT = 'v3_custody_conflict'
 
 

@@ -116,6 +116,30 @@ def test_debt_repair_parks_old_conversation_without_rewaking(state, monkeypatch)
     assert client.rows[('users', 'u', 'conversations', 'c')] == conversation
 
 
+def test_debt_repair_does_not_redrive_unreadable_transcript(rows, monkeypatch):
+    from services import summary_debt_repair as repair
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    now = time.time()
+    parked = outbox.park_unreadable_transcript(rows[0][KEY], now)
+    path = ('sync_reprocess_outbox', KEY)
+    client = StrictFirestore(
+        {
+            ('users', 'u'): {},
+            ('users', 'u', 'conversations', 'c'): {'summary_due_at': now - 100},
+            path: parked,
+        }
+    )
+    monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda *_: False)
+    monkeypatch.setattr(repair, 'assert_batch_write_allowed', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(repair.delivery, 'refusal', lambda *_: None)
+    rows[1].clear()
+
+    assert not repair.redrive(client, 'u', 'c', now=now)
+    assert client.rows[path] == parked
+    assert not rows[1]
+
+
 def test_historical_debt_cannot_hide_fresh_work_behind_the_admission_cap(monkeypatch):
     from types import SimpleNamespace
     from services import summary_debt_repair as repair

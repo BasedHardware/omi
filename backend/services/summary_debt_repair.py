@@ -71,7 +71,7 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
             old: Row | None = prior.to_dict() if prior.exists else None
             from utils.enrichment.age_gate import expired, parked, park_row
 
-            if old and parked(old):
+            if old and (parked(old) or old.get('held_reason') == reprocess.HELD_TRANSCRIPT_UNREADABLE):
                 return {}, True
             if old and reprocess.V3_CUSTODY_DEFER_REASON in (old.get('deferred_reason'), old.get('held_reason')):
                 # The outbox owns the custody backoff and retains the terminal receipt.

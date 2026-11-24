@@ -10,7 +10,7 @@ from __future__ import annotations
 from utils.stt.allowance_session import operation as allowance_operation, current as current_allowance_operation
 from utils.enrichment.admission import SyncConversationPersistenceFenced
 from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
-from utils.enrichment.admission import require_transcript_decoded
+from utils.enrichment.admission import StoredTranscriptUnreadable, require_transcript_decoded
 from utils.enrichment.admission import run_created_webhook as _run_conversation_created_webhook
 
 from utils.conversations.silent_redrive import is_silent_redrive
@@ -2146,7 +2146,7 @@ def _reprocess_merged_conversations(
                     from utils.conversations.demand_processing import promote_conversation_effects
 
                     promote_conversation_effects(uid, conversation_id)
-        except FirstSummaryCallbackPending:
+        except (FirstSummaryCallbackPending, StoredTranscriptUnreadable):
             if coalescing or user_selected:
                 raise
             mark(uid, conversation_id, language, sync_hold=hold)

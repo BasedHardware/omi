@@ -159,6 +159,8 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
             pending.update(dormant=True, due_at=None)
         else:
             pending.update(dormant=False, summary_seen=bool(previous.get('summary_seen')))
+            if previous.get('held_reason') == reprocess.HELD_TRANSCRIPT_UNREADABLE:
+                pending.update(held_reason=None, held_at=None)
         if not reprocess.valid_dispatch_binding(pending.get('dispatch')):
             pending['dispatch'] = donor.get('dispatch')
         if (
