@@ -42,6 +42,44 @@ def test_five_minute_silence_boundary():
     assert len(outline.stretches([row], NOW + timedelta(hours=1))) == 1
 
 
+def test_three_hour_window_cap_is_deterministic_on_the_recorded_clock():
+    def turns(start, stop):
+        return [{'text': str(t), 'start': t, 'end': t + 10} for t in range(start, stop, 60)]
+
+    rows = [
+        recording('a', segments=turns(0, 5400)),
+        recording('b', NOW + timedelta(seconds=5400), segments=turns(0, 5520)),
+    ]
+    now = NOW + timedelta(hours=3, minutes=2)
+    cap = timedelta(hours=3)
+    groups = outline.stretches(rows, now, max_window=cap)
+    assert groups == outline.stretches(rows[::-1], now, max_window=cap)
+    earlier, later = groups
+    assert earlier['finished'] and earlier['outline_ready']
+    assert earlier['window_cap_end'] and not earlier['manual_end']
+    assert len(earlier['lines']) == 180
+    assert later['after_window_cap'] and not later['finished']
+    assert later['lines'][0]['start'] == NOW + cap
+
+    (uncapped,) = outline.stretches(rows, now, max_window=timedelta(0))
+    assert uncapped['key'] == earlier['key']
+    assert uncapped['lines'] == earlier['lines'] + later['lines']
+    assert not uncapped['finished']
+
+
+@pytest.mark.parametrize('cohesion', [False, True])
+def test_resume_does_not_rejoin_the_window_cap(cohesion):
+    # After the existing two-hour card split, the tail and successor fit together
+    # within two hours. Without the cap guard, resumes_previous can join them.
+    row = recording(segments=[{'text': str(t), 'start': t, 'end': t + 10} for t in range(0, 10920, 60)])
+    groups = outline.stretches([row], NOW + timedelta(hours=3, minutes=2), max_window=timedelta(hours=3))
+    windows = planner.windows(
+        groups, [[entry()], [entry(resumes_previous=True)]], cohesion=cohesion, silence_gap=timedelta(minutes=15)
+    )
+    assert [w['lines'][0]['start'] for w in windows] == [NOW, NOW + timedelta(hours=2), NOW + timedelta(hours=3)]
+    assert [w['finished'] for w in windows] == [True, True, False]
+
+
 def test_recorded_clock_and_near_duplicate():
     a = recording('a', segments=[{'text': 'We should meet at the office tomorrow morning.', 'start': 1, 'end': 11}])
     b = recording('b', segments=[{'text': 'we should meet at the office tomorrow morning', 'start': 2, 'end': 12}])

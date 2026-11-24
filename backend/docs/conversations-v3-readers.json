@@ -1070,5 +1070,9 @@
   "backend/utils/task_intelligence/task_source_validation.py:get_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/batch_pipeline/live.py:get_conversation": {
+    "policy": "both",
+    "reason": "Record admission's manual-finish first transcript re-reads one owner-scoped recording, decoded, to decide whether it still has no transcript before any provider call and again before the provisional write; recording-layer access by its capture owner."
   }
 }

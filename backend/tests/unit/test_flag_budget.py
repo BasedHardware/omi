@@ -367,7 +367,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         else:
             striped = name == 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED'
             assert entry['owner'] == ('omi-pipeline' if striped else 'rollout-meetings / occasion architecture')
-            assert entry['review_by'] == ('2026-12-06' if striped else '2026-11-28')
+            assert entry['review_by'] == ('2026-12-06' if striped else '2026-12-05')
         assert flag['kind'] == 'env'
         assert 'backend' in flag['surfaces']
         if name == 'BATCH_PIPELINE_PROTECTED_SHARE_ENABLED':

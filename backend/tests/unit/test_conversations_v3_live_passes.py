@@ -304,6 +304,44 @@ async def test_offline_batches_of_old_speech_do_not_lock_on_arrival(strict, monk
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('gap, lock', [(300, 300), (900, 3600)])
+@pytest.mark.parametrize('switch', [None, 'off'])
+async def test_live_window_cap_settles_prefix_and_preserves_successor(strict, monkeypatch, gap, lock, switch):
+    timing(monkeypatch, gap, lock)
+    key = 'CONVERSATIONS_V3_MAX_WINDOW_SECONDS'
+    if switch is None:
+        monkeypatch.delenv(key, raising=False)
+    else:
+        monkeypatch.setenv(key, switch)
+    cut = T0 + timedelta(hours=3)
+    cuts = service.metrics.WINDOW_CAP_CUTS
+    initial_count = cuts._value.get()
+
+    for count in (360, 362, 366):
+        now = T0 + timedelta(seconds=count * 30)
+        put_recording(strict, speech(count), status='in_progress', landed=now)
+        assert await reconcile_at(strict, monkeypatch, now) == 'committed'
+        rows = derived(strict)
+        (live_row,) = [row for row in rows if row['status'] == 'in_progress']
+        if count == 360:
+            tail_id = live_row['id']
+        elif switch is None:
+            assert live_row['started_at'] == cut
+            tail = next(row for row in rows if row['id'] == tail_id)
+            assert not planner_open(tail)
+            assert tail['v3_process_pending']
+            assert not tail['manual_end']
+            if count == 362:
+                successor_id = live_row['id']
+            else:
+                assert live_row['id'] == successor_id
+        else:
+            assert live_row['id'] == tail_id
+
+    assert cuts._value.get() == initial_count + (switch is None)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('gap, lock', [(300, 300), (900, 900)])
 async def test_cap_cut_survives_the_first_paid_outline(strict, monkeypatch, gap, lock):
     # (c) Two and a half hours of continuous talk crosses the two-hour cap under the initial one-entry
