@@ -8,10 +8,9 @@ from prometheus_client import Counter
 
 from config.firestore_read_levers import lever_percent
 from database import privacy_check_metrics as metrics
-from database.batch_account_authority_schema import PRIVACY_COLLECTION
-from database.batch_pipeline_privacy import BatchPrivacyBlocked, _assert_batch_write_allowed_live, privacy_owner_key
+from database.batch_pipeline_privacy import read_projection_audit_authority
 from database.batch_pipeline_reads import read_snapshot
-from database.batch_privacy_tokenless import CLOCK_MARGIN, EnforcedHit, _timestamp
+from database.batch_privacy_tokenless import CLOCK_MARGIN, EnforcedHit, snapshot_timestamp
 from database.firestore_read_origin import read_origin
 from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactReadLimit
 from utils.executors import read_cache_shadow_executor
@@ -87,36 +86,20 @@ def _audit(store, uid, hit, budget):
 
 def _compare(view, uid, hit, budget):
     point_budget = _PointReadBudget(budget)
-    client, transaction = view.client, view.transaction
-    ref = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
-    snapshot = metrics.read_snapshot('batch', ref, transaction=transaction, read_budget=point_budget)
-    try:
-        _assert_batch_write_allowed_live(
-            client,
-            transaction,
-            uid,
-            conversation_ids=hit.ids,
-            expected_generation=hit.generation,
-            read_budget=point_budget,
-            privacy_snapshot=snapshot,
-            authority_out=[],  # Use the full authority walk, including negative lookups.
-        )
-    except BatchPrivacyBlocked:
-        allowed = False
-    else:
-        allowed = True
-
+    allowed, read_time, revision_time = read_projection_audit_authority(
+        view.client, view.transaction, uid, hit.ids, hit.generation, point_budget
+    )
     # A delayed audit cannot judge a decision using a snapshot from outside
     # its original window. A refusal without a revision cannot date the change.
     now = time.time()
-    stamp = _timestamp(getattr(snapshot, 'read_time', None))
+    stamp = snapshot_timestamp(read_time)
     if stamp is None or abs(stamp - now) > CLOCK_MARGIN or stamp < hit.read_at:
         raise ValueError('uncertain tokenless audit clock')
     if max(stamp, now) >= hit.deadline:
         raise ArtifactReadLimit('tokenless audit window closed')
     if allowed:
         return 'agree'
-    revision = _timestamp(getattr(snapshot, 'update_time', None))
+    revision = snapshot_timestamp(revision_time)
     if revision is None or revision > stamp:
         raise ValueError('uncertain tokenless audit revision')
     return 'disagree_within_window' if hit.read_at < revision else 'disagree_beyond_window'

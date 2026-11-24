@@ -122,6 +122,28 @@ def read_batch_owner_snapshot(
         )
 
 
+def read_projection_audit_authority(client, transaction, uid, ids, generation, read_budget):
+    """Read a fresh audit decision and the authority clock evidence, without exports."""
+    ref = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
+    snapshot = metrics.read_snapshot('batch', ref, transaction=transaction, read_budget=read_budget)
+    try:
+        _assert_batch_write_allowed_live(
+            client,
+            transaction,
+            uid,
+            conversation_ids=ids,
+            expected_generation=generation,
+            read_budget=read_budget,
+            privacy_snapshot=snapshot,
+            authority_out=[],  # Force the full walk, including negative lookups.
+        )
+    except BatchPrivacyBlocked:
+        allowed = False
+    else:
+        allowed = True
+    return allowed, getattr(snapshot, 'read_time', None), getattr(snapshot, 'update_time', None)
+
+
 @metrics.with_batch_plan
 def check_projection_precheck(
     client,

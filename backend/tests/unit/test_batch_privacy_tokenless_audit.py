@@ -10,6 +10,7 @@ import pytest
 
 from database import batch_privacy_tokenless_audit as audit
 from database import batch_pipeline_projection as projection
+from database import batch_pipeline_privacy as privacy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_privacy_tokenless import EnforcedHit
 from database.firestore_read_origin import current_read_origin
@@ -55,7 +56,7 @@ def test_audit_evaluates_only_comparable_live_walks(monkeypatch, allowed, revisi
     if not allowed:
         walk.side_effect = BatchPrivacyBlocked('account_deleted')
     monkeypatch.setattr(audit, 'read_snapshot', read)
-    monkeypatch.setattr(audit, '_assert_batch_write_allowed_live', walk)
+    monkeypatch.setattr(privacy, '_assert_batch_write_allowed_live', walk)
     outcomes = ('agree', 'disagree_within_window', 'disagree_beyond_window')
     before = [count(audit.AUDIT, label) for label in outcomes]
     incomplete = count(audit.INCOMPLETE, 'failed')

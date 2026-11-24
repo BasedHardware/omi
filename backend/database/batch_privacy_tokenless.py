@@ -68,7 +68,7 @@ def _valid_ids(ids, *, allow_empty=False):
     )
 
 
-def _timestamp(value):
+def snapshot_timestamp(value):
     if not isinstance(value, datetime) or value.utcoffset() is None:
         return None
     try:
@@ -98,7 +98,7 @@ class Probe:
     def candidate(self, read_time):
         """Return the evidence timestamp and deadline if this exact scope is usable now."""
         now = time.time()
-        stamp = _timestamp(read_time)
+        stamp = snapshot_timestamp(read_time)
         if stamp is None or abs(stamp - now) > CLOCK_MARGIN:
             CACHE.labels(self.site, 'clock_uncertain').inc()
             return None
@@ -132,7 +132,7 @@ class Probe:
 
     def observe(self, snapshot, candidate, *, allowed, verified, version):
         if candidate is not None:
-            revision = _timestamp(getattr(snapshot, 'update_time', None))
+            revision = snapshot_timestamp(getattr(snapshot, 'update_time', None))
             if allowed:
                 outcome = 'match'
             elif revision is None:
@@ -146,7 +146,7 @@ class Probe:
             return
         if not (allowed and version and (self.raw is None or not self.raw.startswith(b'changed:'))):
             return
-        stamp = _timestamp(getattr(snapshot, 'read_time', None))
+        stamp = snapshot_timestamp(getattr(snapshot, 'read_time', None))
         if stamp is None or abs(stamp - self.started) > CLOCK_MARGIN or not _valid_ids(verified):
             return
         if self.raw:
