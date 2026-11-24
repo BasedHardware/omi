@@ -15249,9 +15249,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get stopThese => 'إيقاف هذه';
 
   @override
-  String get meetingActionItemsTitle => 'بنود العمل';
-
-  @override
   String get addToTasks => 'إضافة إلى المهام';
 
   @override
@@ -15735,5 +15732,16 @@ class AppLocalizationsAr extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'تتم الفوترة عبر omi.me. يمكنك الإلغاء من هنا في أي وقت.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'تتم الفوترة عبر omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'خطة $plan الخاصة بك متوقفة مؤقتًا.';
   }
 }

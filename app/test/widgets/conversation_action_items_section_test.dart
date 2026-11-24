@@ -111,7 +111,7 @@ void main() {
         ActionItem('Send investors an update on the wind-down plan.', captureOwner: 'user'),
         ActionItem('Something with no metadata at all.'),
       ]);
-      expect(find.text('Action items'), findsOneWidget);
+      expect(find.text('Tasks'), findsOneWidget);
       expect(find.text('Eddie Thai'), findsOneWidget);
       expect(find.text('ET'), findsOneWidget);
       expect(find.text('Eddie said they would follow up about Simple Closure.'), findsOneWidget);

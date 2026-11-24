@@ -96,11 +96,15 @@ def enqueue(uid, *, at=None, manual_end_id=None):
 
 def changed(uid, cid, *, manual_end=False):
     if store.mark_pending(uid, cid, manual_end=manual_end):
-        try:
-            enqueue(uid, **({'manual_end_id': cid} if manual_end else {}))
-        except Exception as error:
-            metrics.RECONCILES.labels('dispatch_error').inc()
-            logger.warning('v3 dispatch deferred exception_type=%s', type(error).__name__)
-            record_fallback(
-                component='other', from_mode='dispatch', to_mode='sweeper', reason='enqueue_failed', outcome='degraded'
-            )
+        enqueue_pending(uid, manual_end_id=cid if manual_end else None)
+
+
+def enqueue_pending(uid, *, manual_end_id=None):
+    try:
+        enqueue(uid, **({'manual_end_id': manual_end_id} if manual_end_id else {}))
+    except Exception as error:
+        metrics.RECONCILES.labels('dispatch_error').inc()
+        logger.warning('v3 dispatch deferred exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='other', from_mode='dispatch', to_mode='sweeper', reason='enqueue_failed', outcome='degraded'
+        )

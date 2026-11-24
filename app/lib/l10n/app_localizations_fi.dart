@@ -15341,9 +15341,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get stopThese => 'Lopeta nämä';
 
   @override
-  String get meetingActionItemsTitle => 'Toimenpiteet';
-
-  @override
   String get addToTasks => 'Lisää tehtäviin';
 
   @override
@@ -15828,5 +15825,16 @@ class AppLocalizationsFi extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Laskutetaan omi.me-palvelun kautta. Peru täällä milloin tahansa.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Laskutetaan omi.me-palvelun kautta.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return '$plan-tilauksesi on keskeytetty.';
   }
 }

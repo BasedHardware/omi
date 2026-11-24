@@ -15224,9 +15224,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get stopThese => 'הפסקת אלה';
 
   @override
-  String get meetingActionItemsTitle => 'משימות לביצוע';
-
-  @override
   String get addToTasks => 'הוספה למשימות';
 
   @override
@@ -15709,5 +15706,16 @@ class AppLocalizationsHe extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'החיוב מתבצע דרך omi.me. אפשר לבטל כאן בכל עת.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'החיוב מתבצע דרך omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'התוכנית $plan שלך מושהית.';
   }
 }

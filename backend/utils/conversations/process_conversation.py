@@ -81,6 +81,7 @@ from models.conversation_enums import (
     ConversationStatus,
     ExternalIntegrationConversationSource,
 )
+from config.parked_conversations import parked_terminal_status_enabled
 from config.refactor_modes import serving_for
 from utils.conversations.empty_structure_minimum import (
     apply_empty_structure_minimum,
@@ -2438,11 +2439,12 @@ def _store_deferred_conversation(
     conversation = _get_conversation_obj(uid, structured, conversation)
     _attach_client_projection(conversation, client_projection)
     conversation.deferred = True
-    # `processing` (not completed) is the user-facing "awaiting enrichment" state. Unlike the
-    # `deferred` flag it survives the desktop's local conversation cache, so the client shows a
-    # processing indicator and re-fetches on open to trigger enrichment. The lazy enrich sets it
-    # back to `completed`.
-    conversation.status = ConversationStatus.processing
+    # The recording and transcript are ready. The deferred fence stays in place
+    # until the by-id route claims the optional first-open enrichment.
+    if parked_terminal_status_enabled() and not conversation.record_lane_owner and not conversation.recording:
+        conversation.status = ConversationStatus.completed
+    else:
+        conversation.status = ConversationStatus.processing
     # Generic persist: never write ``client_processing``. A later ingest
     # mutation (or a genuine clear) must not be last-writer-loser to this
     # in-memory snapshot. A None ``processing_state`` is likewise never
@@ -2450,7 +2452,12 @@ def _store_deferred_conversation(
     payload = omit_null_processing_state(strip_client_processing(conversation.dict()))
     apply_relevance(conversation, payload, decision)
     if is_initial_creation:
-        persisted = lifecycle_service.create_processing_conversation(uid, payload, idempotent=True)
+        create = (
+            lifecycle_service.create_completed_conversation
+            if conversation.status == ConversationStatus.completed
+            else lifecycle_service.create_processing_conversation
+        )
+        persisted = create(uid, payload, idempotent=True)
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
     if not persisted:
@@ -2738,6 +2745,7 @@ def process_conversation(
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess = mode.run_now, mode.reprocess
+    settle_manual_deferral = trigger is ProcessingTrigger.USER_REPROCESS and getattr(conversation, 'deferred', False)
     # Snapshot before this call replaces structured or status. Sync intake's
     # completed status is not an observation; see owner_recognition_already_observed.
     already_observed = owner_recognition_already_observed(
@@ -2882,10 +2890,8 @@ def process_conversation(
         deferred = _store_deferred_conversation(
             uid, conversation, client_projection=client_projection, trigger=trigger, user_kept=user_kept
         )
-        # Flag-off legacy deferral reports False even when the write succeeded.
-        # That is deliberate and pre-existing: the conversation is not terminally
-        # processed (status=processing, deferred=True; first-open will reprocess).
-        # Do not change this onto the flag-off path — it must stay byte-identical.
+        # The original capture job owns no enrichment fanout for this row.
+        # Only a successful first-open claim can start that work.
         report_persistence(False)
         return deferred
     # Custom-STT skips managed-STT credits at listen connect. The LLM work that
@@ -3051,6 +3057,8 @@ def process_conversation(
     conversation.status = ConversationStatus.completed
     content_excluded = exclude_from_derived(uid, conversation, consumer='notes')
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
+    if settle_manual_deferral:
+        payload['deferred'] = False
     if user_kept and not conversation.discarded:
         # Commit restore authority before derived work can fail. A discarded row being
         # restored stays hidden here: visibility waits for the router's restore, which
@@ -3100,6 +3108,8 @@ def process_conversation(
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
     else:
         persisted = persist_with_fences(payload)
+    if persisted and settle_manual_deferral:
+        conversation.deferred = False
     if recovery_minimum_fallback or historical or content_excluded or empty_structure_minimum_applied:
         report_persistence(
             persisted,
