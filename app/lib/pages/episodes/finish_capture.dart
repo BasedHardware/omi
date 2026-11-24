@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/finished_capture_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -61,7 +62,9 @@ Future<FinishOutcome> finishLiveCapture(
   final hadContent = provider.segments.isNotEmpty || provider.photos.isNotEmpty || heardSinceClose;
   // The phone's own recording always stops through Process Now (Transcribe Later finalizes its file
   // instead): the server, not the page, knows whether speech arrived that has no line yet.
-  final phoneOwns = provider.liveCaptureSource == ConversationSource.phone.name;
+  // A phone recorder still restoring coordinator ownership has no source yet, but is still this phone's.
+  final phoneOwns = provider.liveCaptureSource == ConversationSource.phone.name ||
+      (provider.liveCaptureSource == null && EpisodePresentation.streamingSource(provider) == 'phone');
   if (hadContent || retry || phoneOwns || (v3Feedback && provider.verifiedLiveServerRecordingId != null)) {
     final previousFinish = provider.lastClientFinish;
     provider.noteClientFinish();

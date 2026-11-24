@@ -919,7 +919,9 @@ void main() {
       await tester.tap(finishButton);
       await settleDetailTab(tester);
       await tester.pump(const Duration(milliseconds: 500));
-      expect(home.capture.phoneStopCalls, 1);
+      // The restoring recorder is this phone's: it finishes through Process Now, not a bare stop.
+      expect(home.capture.finishCalls, 1);
+      expect(home.capture.phoneStopCalls, 0);
       expect(find.byType(LiveEpisodePage), findsNothing);
       await _dispose(tester, home);
     });
