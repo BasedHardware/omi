@@ -11,9 +11,9 @@ import asyncio
 import inspect
 import os
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -410,7 +410,7 @@ def test_group_join_schedules_one_group_recovery(monkeypatch):
 
 
 def test_serving_intake_notifies_workerd_only_for_current_bound_revision(monkeypatch):
-    from datetime import datetime, timezone
+    from datetime import datetime, timedelta, timezone
     from unittest.mock import Mock
 
     import httpx
@@ -660,6 +660,95 @@ def test_silent_whole_batch_resolves_deferred_finish(
         assert response.json()['conversation']['status'] == 'completed'
         assert response.json()['conversation']['tile_state'] == 'done'
         assert not enqueued
+
+
+@pytest.mark.parametrize('marked_window', ['window', 'previous'])
+def test_finish_rearms_resolved_marker_for_pending_batch(v3_finish_route, monkeypatch, marked_window):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    latest.update(
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        v3_manual_end_requested=False,
+        **{FINISH_WINDOW_FIELD: marked_window},
+    )
+    counter = Mock()
+    monkeypatch.setattr(v3_finish.metrics, 'FINISH_NO_POINTER', counter)
+
+    result = client.post('/v1/conversations', json={})
+    assert result.status_code == 200 and result.json()['conversation']['tile_state'] == 'transcribing'
+    assert db.transactions[-1].updates == [
+        (paths['latest'], {'v3_manual_end_requested': True, FINISH_WINDOW_FIELD: 'window'})
+    ]
+    counter.labels.assert_called_once_with('requested')
+    assert not enqueued
+
+
+@pytest.mark.parametrize('marked_window', ['window', 'previous'])
+def test_finish_counts_new_cut_after_empty_marker(v3_finish_route, monkeypatch, marked_window):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    latest.update(
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        record_projection_revision=1,
+        has_content=True,
+        v3_manual_end_requested=False,
+        **{FINISH_WINDOW_FIELD: marked_window},
+    )
+    complete, _, _ = native_finish_completion(monkeypatch, db, _UID, 'latest', 1)
+    assert complete(datetime.now(timezone.utc).timestamp())['outcome'] == 'success'
+    counter = Mock()
+    monkeypatch.setattr(v3_finish.metrics, 'FINISH_NO_POINTER', counter)
+
+    result = client.post('/v1/conversations', json={})
+    assert result.status_code == 200 and result.json()['conversation']['tile_state'] == 'writing'
+    assert latest['v3_manual_end'] and latest[FINISH_WINDOW_FIELD] == 'window'
+    counter.labels.assert_called_once_with('cut')
+    assert client.post('/v1/conversations', json={}).json()['conversation']['tile_state'] == 'writing'
+    assert not db.transactions[-1].updates
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+
+
+@pytest.mark.parametrize('whole_record_complete', [False, True])
+@pytest.mark.parametrize('previous_end_offset', [-1, 0, 1, None])
+def test_finish_only_retargets_pending_request_to_proven_later_tail(
+    v3_finish_route, monkeypatch, whole_record_complete, previous_end_offset
+):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    end = latest['finished_at']
+    claims = [{'conversation_id': 'window', 'end': end}]
+    if previous_end_offset is not None:
+        claims.append({'conversation_id': 'previous', 'end': end + timedelta(seconds=previous_end_offset)})
+    latest.update(
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        claims=claims,
+        v3_manual_end_requested=True,
+        **{FINISH_WINDOW_FIELD: 'previous'},
+    )
+    if whole_record_complete:
+        latest.update(record_projection_revision=1, has_content=True)
+        complete, _, _ = native_finish_completion(monkeypatch, db, _UID, 'latest', 1)
+        assert complete(datetime.now(timezone.utc).timestamp())['outcome'] == 'success'
+    counter = Mock()
+    monkeypatch.setattr(v3_finish.metrics, 'FINISH_NO_POINTER', counter)
+
+    result = client.post('/v1/conversations', json={})
+    if previous_end_offset == -1:
+        assert result.status_code == 200 and latest[FINISH_WINDOW_FIELD] == 'window'
+        if whole_record_complete:
+            assert latest['v3_manual_end'] and enqueued == [(_UID, {'manual_end_id': 'latest'})]
+            counter.labels.assert_called_once_with('cut')
+        else:
+            assert latest['v3_manual_end_requested'] and not enqueued
+            counter.labels.assert_called_once_with('requested')
+    else:
+        assert result.status_code == 404
+        assert not db.transactions[-1].updates and not enqueued
+        assert latest[FINISH_WINDOW_FIELD] == 'previous'
+        counter.labels.assert_called_once_with('request_conflict')
 
 
 def test_batch_manual_end_switch_disables_deferred_finish(v3_finish_route, monkeypatch):

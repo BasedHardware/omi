@@ -198,6 +198,21 @@ def _native_projection_state(client, tx, uid, cid):
     return 'unavailable'
 
 
+def _can_retarget_finish(row: Mapping[str, Any], previous_id: str, window_id: str) -> bool:
+    """A later, unambiguous tail claim can take over a pending request."""
+    ends: dict[str, datetime] = {}
+    for claim in row.get('claims') or ():
+        if not isinstance(claim, dict):
+            return False
+        cid, end = claim.get('conversation_id'), claim.get('end')
+        if not isinstance(cid, str) or not isinstance(end, datetime):
+            return False
+        ends[cid] = max(end, ends.get(cid, end))
+    if previous_id not in ends or window_id not in ends or ends[previous_id] >= ends[window_id]:
+        return False
+    return all(end < ends[window_id] for cid, end in ends.items() if cid != window_id)
+
+
 def request_finish(uid: str, window_id: str, *, now: datetime, firestore_client: Any = None) -> Tuple[str, str]:
     """Store a cut on the current tail source, fenced by the live window in the same transaction."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -227,27 +242,38 @@ def request_finish(uid: str, window_id: str, *, now: datetime, firestore_client:
             or row.get('data_protection_level') == 'private'
         ):
             return 'no_recording', ''
-        if row.get(FINISH_WINDOW_FIELD) == window_id and row.get('v3_manual_end_requested') is False:
-            return 'already_empty', cid
+        marked_window = row.get(FINISH_WINDOW_FIELD)
+        request_pending = row.get('v3_manual_end_requested') is True
+        requested_here = request_pending and marked_window == window_id
+        resolved_here = row.get('v3_manual_end_requested') is False and marked_window == window_id
         if row.get('discarded'):
-            return 'no_recording', ''
+            return ('already_empty', cid) if resolved_here else ('no_recording', '')
         if row.get('v3_manual_end'):
             return 'already_cut', cid
+        if (
+            request_pending
+            and marked_window
+            and not requested_here
+            and not _can_retarget_finish(row, marked_window, window_id)
+        ):
+            return 'request_conflict', ''
         if server_batch.owned(row):
             if row.get('record_audio_partial') or row.get('record_upload_failed'):
                 return 'batch_unavailable', ''
             state = _native_projection_state(client, tx, uid, cid)
-            if state == 'unavailable':
-                return 'batch_unavailable', ''
             if state == 'pending':
                 if not server_batch.manual_end_marker_enabled():
                     return 'batch_disabled', ''
-                if row.get(FINISH_WINDOW_FIELD):
+                if requested_here:
                     return 'already_requested', cid
                 tx.update(ref, {'v3_manual_end_requested': True, FINISH_WINDOW_FIELD: window_id})
                 return 'requested', cid
-            if (state == 'empty' or row.get('has_content') is False) and not has_finish_content(row, window, cid):
-                if row.get('v3_manual_end_requested') and row.get(FINISH_WINDOW_FIELD) == window_id:
+            if state == 'unavailable':
+                return ('already_empty', cid) if resolved_here else ('batch_unavailable', '')
+            if (resolved_here or state == 'empty' or row.get('has_content') is False) and not has_finish_content(
+                row, window, cid
+            ):
+                if requested_here:
                     tx.update(ref, {'v3_manual_end_requested': False})
                     return 'resolved_empty', cid
                 return 'already_empty', cid
@@ -257,9 +283,9 @@ def request_finish(uid: str, window_id: str, *, now: datetime, firestore_client:
                 'v3_manual_end': True,
                 'v3_pending': True,
                 'v3_pending_since': row.get('v3_pending_since') or now,
-                FINISH_WINDOW_FIELD: row.get(FINISH_WINDOW_FIELD) or window_id,
+                FINISH_WINDOW_FIELD: window_id,
             },
         )
-        return ('consumed' if row.get(FINISH_WINDOW_FIELD) else 'cut'), cid
+        return ('consumed' if requested_here else 'cut'), cid
 
     return commit(client.transaction())

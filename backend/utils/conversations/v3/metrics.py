@@ -48,6 +48,7 @@ for outcome in (
     'resolved_empty',
     'requested',
     'already_requested',
+    'request_conflict',
     'no_live_window',
     'no_recording',
     'batch_disabled',
