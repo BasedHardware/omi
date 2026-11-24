@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/home/home_navigation.dart';
-import 'package:omi/pages/episodes/finish_capture.dart';
+import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
@@ -45,33 +45,30 @@ class LiveConversationEndButton extends StatefulWidget {
 }
 
 class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
-  final _finish = LiveFinishLatch();
+  bool _ended = false;
   // Failure count when a successful close latched End; a later unsuccessful settlement releases it.
   int? _latchedFailures;
 
-  bool _owns(ServerConversation conversation, CaptureProvider capture, bool v3Feedback) {
-    final recordingId = v3Feedback ? capture.verifiedLiveServerRecordingId : null;
-    return (recordingId != null && conversation.v3?.recordingIds.contains(recordingId) == true) ||
-        LiveConversationEndButton.ownsCapture(
-          conversation,
-          capture.segments.map((s) => s.id),
-        );
+  bool _owns(ServerConversation conversation, CaptureProvider capture) {
+    if (EpisodePresentation.streamingSource(capture) == null) return false;
+    // The account-wide in-progress pointer and transcript can come from another device.
+    final recordings = conversation.v3?.recordingIds ?? const <String>[];
+    return recordings.contains(capture.activeRecordingId) ||
+        recordings.contains(capture.verifiedLiveServerRecordingId) ||
+        LiveConversationEndButton.ownsCapture(conversation, capture.locallyReceivedSegmentIds);
   }
 
   @override
   Widget build(BuildContext context) {
     final conversation = widget.conversation;
-    final v3Feedback = context.select<ConversationsV3Provider?, bool>(
-      (v3) => v3?.finishFeedbackEnabled ?? false,
-    );
     final mine = context.select<CaptureProvider?, bool>(
-      (capture) => capture != null && _owns(conversation, capture, v3Feedback),
+      (capture) => capture != null && _owns(conversation, capture),
     );
     final failures = context.select<ConversationsV3Provider?, int>((v3) => v3?.finishFailures ?? 0);
-    if (_latchedFailures != null && failures != _latchedFailures) {
+    if (_ended && _latchedFailures != null && failures != _latchedFailures) {
       _latchedFailures = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _finish.release();
+        _ended = false;
         if (mounted) widget.onEndSuppressionChanged?.call(false);
       });
     }
@@ -98,7 +95,8 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
               onTap: () async {
                 final capture = context.read<CaptureProvider>();
                 // Checked again at the tap: the capture may have moved on since the last build.
-                if (!_owns(conversation, capture, v3Feedback) || !_finish.tryStart()) return;
+                if (_ended || !_owns(conversation, capture)) return;
+                _ended = true;
                 HapticFeedback.mediumImpact();
                 final setEndSuppressed = widget.onEndSuppressionChanged;
                 setEndSuppressed?.call(true);
@@ -119,8 +117,8 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                 } finally {
                   // A closed window with a published finish stays latched; only a failed close restores End.
                   if (!(closed && started)) {
-                    _finish.release();
-                    if (_owns(conversation, capture, v3Feedback)) setEndSuppressed?.call(false);
+                    _ended = false;
+                    if (_owns(conversation, capture)) setEndSuppressed?.call(false);
                   } else {
                     _latchedFailures = failuresAtTap;
                   }

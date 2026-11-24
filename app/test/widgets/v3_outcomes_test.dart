@@ -136,7 +136,7 @@ class _Capture extends CaptureProvider {
   String? get liveCaptureSource => 'omi';
 
   @override
-  Future<InProgressProcessOutcome> finishCaptureWithOutcome({String? liveConversationId}) async {
+  Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
     finishes++;
     final reply = answer;
     return InProgressProcessOutcome(response: reply, absence: reply == null ? ProcessAbsence.transport : null);

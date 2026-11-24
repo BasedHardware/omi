@@ -22,12 +22,10 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
-import 'package:omi/pages/conversations/widgets/home_live_finish_button.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
-import 'package:omi/pages/episodes/finish_capture.dart';
 import 'live_episode_visibility.dart';
 import 'home_rows.dart';
 import 'home_card_rows.dart';
@@ -396,41 +394,6 @@ class _ConversationsPageState extends State<ConversationsPage>
   /// Episodes were asked for before the switch answered (and so made no call); ask again once it says
   /// this account is not on v3.
   bool _legacyAfterAnswer = false;
-
-  final _liveFinish = LiveFinishLatch();
-
-  Future<void> _finishLiveFromHome([ServerConversation? row]) async {
-    final capture = context.read<CaptureProvider>();
-    final v3 = _v3;
-    if (v3 == null || !v3.v3 || EpisodePresentation.streamingSource(capture) == null) return;
-    final live = v3.live;
-    final ownsLive = live != null && ownsHomeLiveWindow(live, capture);
-    if (row != null && (row.id != live?.id || !ownsLive || live.v3?.homeHidden == true)) return;
-    if (row == null &&
-        ((live != null && live.v3?.homeHidden != true) || v3.suppressListeningAfterFinish(capture.activeRecordingId))) {
-      return;
-    }
-    if (!_liveFinish.tryStart()) return;
-    final liveId = ownsLive ? live.id : null;
-    OmiHaptics.medium();
-    try {
-      final outcome = await finishLiveCapture(
-        context,
-        capture,
-        episodes: context.read<EpisodeProvider?>(),
-        liveConversationId: liveId,
-      );
-      if (!mounted) return;
-      presentFinishOutcome(
-        context,
-        outcome,
-        entry: FinishEntry.home,
-        onRetry: () => retryFinishFromHome(context, capture, liveConversationId: liveId),
-      );
-    } finally {
-      _liveFinish.release();
-    }
-  }
 
   void _syncV3Watch() {
     final want = mounted && _v3 != null && !_wasBackgrounded && _homeTabActive;
@@ -1368,7 +1331,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         DateListItem(date: DateUtils.dateOnly(clock.now()), isFirst: true),
-                        V3LivePlaceholderRow(onFinish: _finishLiveFromHome),
+                        const V3LivePlaceholderRow(),
                       ],
                     ),
                   ),
@@ -1536,7 +1499,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             if (row.isFirst) DateListItem(date: row.date, isFirst: true),
-                            V3LivePlaceholderRow(onFinish: _finishLiveFromHome),
+                            const V3LivePlaceholderRow(),
                           ],
                         );
                       case _ConversationListRowKind.processing:
@@ -1579,9 +1542,6 @@ class _ConversationsPageState extends State<ConversationsPage>
                           conversation: row.conversation!,
                           conversationIdx: row.conversationIndex,
                           homeCard: cardById[row.conversation!.id],
-                          onFinish: v3LiveShown && row.conversation!.id == v3Live.id
-                              ? () => _finishLiveFromHome(row.conversation!)
-                              : null,
                           date: row.date,
                           fillingSeconds: homeRowFilling(
                             filling,

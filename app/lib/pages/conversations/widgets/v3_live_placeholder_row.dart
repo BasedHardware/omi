@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
-import 'package:omi/pages/conversations/widgets/home_live_finish_button.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -22,9 +21,7 @@ import 'package:omi/utils/other/temp.dart';
 /// for the whole capture instead of the pendant capture card coming back in each gap. It opens the
 /// live transcript, as the capture card did.
 class V3LivePlaceholderRow extends StatelessWidget {
-  const V3LivePlaceholderRow({super.key, this.onFinish});
-
-  final Future<void> Function()? onFinish;
+  const V3LivePlaceholderRow({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -56,37 +53,33 @@ class V3LivePlaceholderRow extends StatelessWidget {
         capture.segments.isEmpty &&
         capture.photos.isEmpty;
     final title = captureStateLabel(l10n, state);
-    void openTranscript() =>
-        routeToPage(context, LiveEpisodePage(topConversationId: context.read<CaptureProvider>().topConversationId));
-
     return Padding(
       padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
-      child: GestureDetector(
-        key: const Key('v3_live_placeholder'),
-        behavior: HitTestBehavior.opaque,
-        excludeFromSemantics: true,
-        onTap: openTranscript,
-        child: Container(
-          width: double.maxFinite,
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
-          padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: ConversationStateTile.extent,
-                height: ConversationStateTile.extent,
-                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                alignment: Alignment.center,
-                child: const OmiBreathingDot(),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Semantics(
-                  button: true,
-                  label: title,
-                  hint: l10n.liveTranscript,
-                  onTap: openTranscript,
-                  excludeSemantics: true,
+      child: Semantics(
+        button: true,
+        label: title,
+        hint: l10n.liveTranscript,
+        excludeSemantics: true,
+        child: GestureDetector(
+          key: const Key('v3_live_placeholder'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => routeToPage(
+              context, LiveEpisodePage(topConversationId: context.read<CaptureProvider>().topConversationId)),
+          child: Container(
+            width: double.maxFinite,
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+            padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: ConversationStateTile.extent,
+                  height: ConversationStateTile.extent,
+                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                  alignment: Alignment.center,
+                  child: const OmiBreathingDot(),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -112,12 +105,8 @@ class V3LivePlaceholderRow extends StatelessWidget {
                     ],
                   ),
                 ),
-              ),
-              if (onFinish case final finish?) ...[
-                const SizedBox(width: OmiSpacing.sm),
-                HomeLiveFinishButton(onPressed: finish),
               ],
-            ],
+            ),
           ),
         ),
       ),

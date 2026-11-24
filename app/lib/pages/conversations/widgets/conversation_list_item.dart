@@ -14,7 +14,7 @@ import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/home_feed.dart';
 import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/pages/episodes/episode_page.dart';
-import 'package:omi/pages/conversations/widgets/home_live_finish_button.dart';
+import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -134,7 +134,6 @@ class ConversationListItem extends StatefulWidget {
 
   /// A filtered server page already proves canonical membership.
   final bool? hasLinkedTasks;
-  final Future<void> Function()? onFinish;
 
   const ConversationListItem({
     super.key,
@@ -151,7 +150,6 @@ class ConversationListItem extends StatefulWidget {
     this.homeCard,
     this.openEpisodeFromSearch = true,
     this.hasLinkedTasks,
-    this.onFinish,
   });
 
   @override
@@ -496,14 +494,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
           final isSelected = rowState.isSelected;
           final isMerging = rowState.isMerging;
           final isEligible = rowState.isEligible;
-          final finish = !isSelectionMode &&
-                  !isMerging &&
-                  widget.onFinish != null &&
-                  context.select<CaptureProvider?, bool>(
-                    (capture) => capture != null && ownsHomeLiveWindow(widget.conversation, capture),
-                  )
-              ? widget.onFinish
-              : null;
 
           Future<void> onTap() async {
             // If in selection mode, toggle selection only if eligible
@@ -540,11 +530,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     child: Semantics(
                       selected: isSelectionMode ? isSelected : null,
                       child: _SwipeDeleteRow(
-                        // Owned live rows keep their swipe shortcut to the same Finish action.
-                        finish: finish,
+                        // The live row this phone is capturing swipes open to Finish instead (no
+                        // button on the row itself); any other live row does not swipe.
+                        finish: !isSelectionMode && _isLive && _phoneOwnsCapture(context)
+                            ? () => _finishFromRow(context)
+                            : null,
                         enabled: !isSelectionMode &&
                             !isMerging &&
-                            (!_isLive || finish != null) &&
+                            (!_isLive || _phoneOwnsCapture(context)) &&
                             widget.homeEpisode == null &&
                             widget.homeCard?.kind != 'episode',
                         // One delete path (D5): confirm unless opted out, then Undo. The confirm
@@ -579,10 +572,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                     ? Border.all(color: OmiColors.border, width: 1)
                                     : null,
                           ),
-                          child: ClipRRect(
-                            borderRadius: OmiRadius.xlAll,
-                            child: _buildCardContent(context, onTap, finish),
-                          ),
+                          child: ClipRRect(borderRadius: OmiRadius.xlAll, child: _buildCardContent(context, onTap)),
                         ),
                       ),
                     ),
@@ -610,10 +600,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   static TextStyle get _metaStyle => TextStyle(color: OmiColors.textTertiary, fontSize: 14);
 
-  Widget _buildCardContent(BuildContext context, Future<void> Function() onTap, Future<void> Function()? finish) {
+  Widget _buildCardContent(BuildContext context, Future<void> Function() onTap) {
     final content = Padding(
       padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
-      child: _buildMobileLayout(context, finish),
+      child: _buildMobileLayout(context),
     );
     // A run frosts its rows together under one action.
     if (!widget.conversation.isLocked || widget.inLockedRun) return content;
@@ -694,7 +684,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
-  Widget _buildMobileLayout(BuildContext context, Future<void> Function()? finish) {
+  Widget _buildMobileLayout(BuildContext context) {
     final discarded = widget.conversation.discarded && !widget.conversation.isFoldedNoise;
     final discardedSnippet = widget.homeCard?.preview ??
         (discarded || widget.conversation.processingDeferred ? conversationSnippet(widget.conversation) : '');
@@ -705,7 +695,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
           children: [
             // Emoji + Title row
             Row(
-              crossAxisAlignment: finish == null ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (!discarded) ConversationStateTile(conversation: widget.conversation),
                 if (!discarded) const SizedBox(width: 12),
@@ -774,7 +764,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     ],
                   ),
                 ),
-                if (finish != null) ...[const SizedBox(width: OmiSpacing.sm), HomeLiveFinishButton(onPressed: finish)],
               ],
             ),
           ],
@@ -805,6 +794,29 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   /// The same length the detail page shows (`OmiDuration.compact`, hub audit #15).
   bool get _isLive => conversationIsLiveIn(context, widget.conversation);
+
+  /// Whether this phone is capturing the live conversation, so it can end it: the conversation holds
+  /// a segment this phone captured (a v3 window copies its recordings' segments, ids included).
+  bool _phoneOwnsCapture(BuildContext context) {
+    final conversation = widget.conversation;
+    return context.select<CaptureProvider?, bool>((capture) {
+      if (capture == null) return false;
+      final captured = {for (final segment in capture.segments) segment.id};
+      return captured.isNotEmpty && conversation.transcriptSegments.any((segment) => captured.contains(segment.id));
+    });
+  }
+
+  /// Swipe → Finish: the live page's Finish path (one typed outcome), then its result opens. A
+  /// failure leaves the row live and says so in a toast.
+  Future<void> _finishFromRow(BuildContext context) async {
+    final capture = context.read<CaptureProvider>();
+    final episodes = context.read<EpisodeProvider?>();
+    HapticFeedback.mediumImpact();
+    final outcome = await finishLiveCapture(context, capture, episodes: episodes);
+    if (!context.mounted) return;
+    presentFinishOutcome(context, outcome,
+        entry: FinishEntry.home, onRetry: () => retryFinishFromHome(context, capture));
+  }
 
   /// A v3 row that is not done shows one quiet line where its time goes: "Listening · 11m",
   /// "Transcribing…" or "Writing summary…". It cross-fades in place as the conversation moves on.
@@ -886,6 +898,7 @@ class _SwipeDeleteRowState extends State<_SwipeDeleteRow> with SingleTickerProvi
   /// Finish carries its word, so its pill is wider than the round delete button.
   static const double _finishWidth = 96;
   double get _open => widget.finish != null ? _finishWidth + 2 * _inset : _deleteOpen;
+  bool _finishing = false;
 
   /// Past this share of the row's width, letting go asks straight away.
   static const double _askAt = 0.4;
@@ -952,9 +965,14 @@ class _SwipeDeleteRowState extends State<_SwipeDeleteRow> with SingleTickerProvi
   /// Finish runs once per tap; the row closes and the outcome says what happened.
   Future<void> _runFinish() async {
     final finish = widget.finish;
-    if (finish == null) return;
+    if (finish == null || _finishing) return;
+    _finishing = true;
     unawaited(_settle(0));
-    await finish();
+    try {
+      await finish();
+    } finally {
+      _finishing = false;
+    }
   }
 
   Future<void> _ask() async {

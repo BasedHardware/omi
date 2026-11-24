@@ -1235,15 +1235,13 @@ class CaptureController extends ChangeNotifier
   Future<void>? _processInFlight;
   Future<InProgressProcessOutcome>? _lastProcessRequest;
   bool _firstCaptureProcess = false;
-  String? _finishLiveConversationId;
 
   /// Finish through the coordinator and return that exact Process Now answer, with why it has no
   /// conversation when it has none (transport, not found, empty). Throws [StateError] when this
   /// finish made no request (a phone Transcribe Later recording).
-  Future<InProgressProcessOutcome> finishCaptureWithOutcome({String? liveConversationId}) async {
+  Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
     _lastProcessRequest = null;
     _firstCaptureProcess = true;
-    _finishLiveConversationId = liveConversationId;
     try {
       await finishCapture();
       final request = _lastProcessRequest;
@@ -1251,7 +1249,6 @@ class CaptureController extends ChangeNotifier
       return await request;
     } finally {
       _firstCaptureProcess = false;
-      _finishLiveConversationId = null;
     }
   }
 
@@ -5076,7 +5073,7 @@ class CaptureController extends ChangeNotifier
         };
 
   Future<void> _processConversationBody() async {
-    await forceProcessingCurrentConversation(liveConversationId: _finishLiveConversationId);
+    await forceProcessingCurrentConversation();
     await _processInFlight;
   }
 }

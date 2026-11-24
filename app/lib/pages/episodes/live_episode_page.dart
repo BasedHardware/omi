@@ -191,6 +191,14 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     }
   }
 
+  // Home can open this page while the phone recorder is active but is still establishing
+  // coordinator ownership, before either the capture source or its transcript is available.
+  static bool _hasCapture(CaptureProvider capture) =>
+      capture.liveCaptureSource != null ||
+      EpisodePresentation.streamingSource(capture) != null ||
+      capture.segments.isNotEmpty ||
+      capture.photos.isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
     final episodes = context.watch<EpisodeProvider?>();
@@ -210,7 +218,7 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
               state: EpisodePresentation.displayState(c),
               bufferingFor: c.customSttBufferingDuration,
               source: c.liveCaptureSource,
-              hasCapture: c.liveCaptureSource != null || c.segments.isNotEmpty || c.photos.isNotEmpty,
+              hasCapture: _hasCapture(c),
               canPause: EpisodePresentation.canPause(c),
             ),
           ),
@@ -224,7 +232,7 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     final (listening, hasCapture, canPause) = context.select<CaptureProvider, (bool, bool, bool)>(
       (c) => (
         EpisodePresentation.isListening(EpisodePresentation.displayState(c)),
-        c.liveCaptureSource != null || c.segments.isNotEmpty || c.photos.isNotEmpty,
+        _hasCapture(c),
         EpisodePresentation.canPause(c),
       ),
     );
