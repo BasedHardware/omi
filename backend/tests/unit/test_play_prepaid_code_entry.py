@@ -368,6 +368,51 @@ def test_play_unreadable_at_the_re_check_releases_the_claim(race, monkeypatch):
     assert race.world.ledger.docs == {} and race.world.stripe.created == []
 
 
+def test_a_storage_failure_at_the_re_check_releases_the_claim_and_asks_to_retry(race, monkeypatch):
+    claim = race.world.ledger.claim
+    read = redemption.users_db.get_existing_user_subscription_and_fields
+
+    def claim_then_storage_down(*args, **kwargs):
+        taken = claim(*args, **kwargs)
+
+        def down(uid, fields):
+            raise RuntimeError('firestore unavailable')
+
+        monkeypatch.setattr(redemption.users_db, 'get_existing_user_subscription_and_fields', down)
+        return taken
+
+    monkeypatch.setattr(redemption.redemptions_db, 'claim', claim_then_storage_down)
+    with pytest.raises(redemption.PrepaidCodeError) as error:
+        redemption.redeem_prepaid_code(UID, CODE['code'])
+    assert (error.value.status_code, error.value.reason) == (503, 'try_again')
+    assert race.world.ledger.docs == {} and race.world.stripe.created == []
+    # The same reader retries once storage is back and gets the plan.
+    monkeypatch.setattr(redemption.users_db, 'get_existing_user_subscription_and_fields', read)
+    monkeypatch.setattr(redemption.redemptions_db, 'claim', claim)
+    assert redemption.redeem_prepaid_code(UID, CODE['code'])['months'] >= 1
+    assert len(race.world.stripe.created) == 1
+
+
+def test_a_failed_release_keeps_the_claim_with_the_reader_instead_of_raising(race, monkeypatch):
+    claim = race.world.ledger.claim
+
+    def claim_then_play(*args, **kwargs):
+        taken = claim(*args, **kwargs)
+        assert _verify_play().status == 'active'
+        return taken
+
+    def broken_release(promotion_code_id):
+        raise RuntimeError('firestore unavailable')
+
+    monkeypatch.setattr(redemption.redemptions_db, 'claim', claim_then_play)
+    monkeypatch.setattr(redemption.redemptions_db, 'release', broken_release)
+    with pytest.raises(redemption.PrepaidCodeError) as error:
+        redemption.redeem_prepaid_code(UID, CODE['code'])
+    assert (error.value.status_code, error.value.reason) == (409, 'has_plan')
+    assert [doc.get('uid') for doc in race.world.ledger.docs.values()] == [UID]
+    assert race.world.stripe.created == []
+
+
 def _overlap_lines(caplog):
     return [r.getMessage() for r in caplog.records if r.getMessage().startswith('prepaid_code_play_overlap ')]
 
