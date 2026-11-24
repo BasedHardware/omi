@@ -19,7 +19,7 @@ import asyncio
 import contextvars
 import time
 from concurrent.futures import TimeoutError as FuturesTimeoutError
-from typing import AsyncIterator, Awaitable, Callable, TypeVar
+from typing import Any, AsyncIterator, Callable, Coroutine, TypeVar
 
 # The client's own HTTP pool gives up at 30 s per attempt; answering a retryable
 # error before that is what makes the retry useful. Leave headroom for response
@@ -67,7 +67,7 @@ def request_deadline_exceeded() -> bool:
     return remaining is not None and remaining <= 0.0
 
 
-async def await_within_request_deadline(awaitable_factory: Callable[[], Awaitable[T]]) -> T:
+async def await_within_request_deadline(awaitable_factory: Callable[[], Coroutine[Any, Any, T]]) -> T:
     """Await an async dependency for at most the remaining request budget.
 
     A factory avoids creating an un-awaited coroutine when the budget is
@@ -81,10 +81,13 @@ async def await_within_request_deadline(awaitable_factory: Callable[[], Awaitabl
         raise RequestDeadlineExceeded('request budget spent before the async call started')
 
     task = asyncio.create_task(awaitable_factory())
-    done, _pending = await asyncio.wait((task,), timeout=remaining)
-    if not done:
-        task.cancel()
-        raise RequestDeadlineExceeded('request budget spent while awaiting the async call')
+    try:
+        done, _pending = await asyncio.wait((task,), timeout=remaining)
+        if not done:
+            raise RequestDeadlineExceeded('request budget spent while awaiting the async call')
+    finally:
+        if not task.done():
+            task.cancel()
 
     result = task.result()
     if request_deadline_exceeded():

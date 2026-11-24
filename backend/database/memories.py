@@ -1798,9 +1798,7 @@ class MemoryUnlockCount(int):
 
 @_account_write_gated
 @_historical_scan_write_without_new_sources
-def unlock_all_memories(
-    uid: str, *, firestore_client: Any = None, limit: Optional[int] = None, timeout: float | None = None
-) -> int:
+def unlock_all_memories(uid: str, *, firestore_client: Any = None, limit: Optional[int] = None) -> int:
     """
     Unlock both released legacy rows and canonical product-memory rows.
 
@@ -1819,14 +1817,12 @@ def unlock_all_memories(
         legacy_ref.where(filter=FieldFilter('is_locked', '==', True)),
         {'is_locked': False},
         limit=limit,
-        timeout=timeout,
     )
     canonical_count = unlock_query_rows(
         database,
         canonical_ref.where(filter=FieldFilter('promotion.is_locked', '==', True)),
         {'promotion.is_locked': False},
         limit=limit,
-        timeout=timeout,
     )
     logger.info(
         "Unlocked all memories for user %s legacy_count=%d canonical_count=%d",

@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+from database import redis_db
 from utils.llm import conversation_processing, notes_agent_policy
 from utils.other import endpoints
 from routers import developer
@@ -226,6 +227,49 @@ def test_auth_chain_still_runs_inline_without_a_budget(monkeypatch):
 # ---------------------------------------------------------------------------
 # Notes: one absolute deadline across the agentic attempt and the fallback.
 # ---------------------------------------------------------------------------
+
+
+def test_rate_limiter_uses_bounded_redis_inside_executor(monkeypatch, budget):
+    bounded_client = object()
+    clients = []
+    monkeypatch.setattr(redis_db, '_REQUEST_DEADLINE_REDIS_CLIENT', bounded_client)
+
+    def _eval_limiter(*, keys, args, client=None):
+        clients.append(client)
+        return 1, args[0]
+
+    monkeypatch.setattr(redis_db, '_RATE_LIMIT_LUA', _eval_limiter)
+    dependency = endpoints.with_rate_limit(lambda: 'test-user', 'dev:conversations_from_segments')
+
+    assert asyncio.run(dependency('test-user')) == 'test-user'
+    assert clients == [bounded_client]
+
+
+def test_stalled_rate_limit_maps_to_tagged_retryable_503(monkeypatch):
+    cancelled = []
+
+    async def _stalled_call(*args, **kwargs):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.append(True)
+
+    monkeypatch.setattr(endpoints, 'run_blocking', _stalled_call)
+    dependency = endpoints.with_rate_limit(lambda: 'test-user', 'dev:conversations_from_segments')
+
+    async def run():
+        token = set_request_deadline(0.05)
+        try:
+            with pytest.raises(HTTPException) as caught:
+                await dependency('test-user')
+            assert caught.value.status_code == 503
+            assert caught.value.headers == {'Retry-After': '1'}
+            assert raise_site_of(caught.value) == 'auth_deadline_exceeded'
+        finally:
+            reset_request_deadline(token)
+
+    asyncio.run(run())
+    assert cancelled == [True]
 
 
 def _notes_prefix(words: int = 6000):

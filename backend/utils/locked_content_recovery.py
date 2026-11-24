@@ -101,21 +101,15 @@ def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
         # A page can expose a parent before all child pages finish.
         try:
             _request_deadline_timeout_kwargs()
-            memory_count = memories.unlock_all_memories(uid, limit=PAGE_SIZE, **_request_deadline_timeout_kwargs())
-            _request_deadline_timeout_kwargs()
+            memory_count = memories.unlock_all_memories(uid, limit=PAGE_SIZE)
             if not eligible():
                 return
             _request_deadline_timeout_kwargs()
-            action_count = action_items.unlock_all_action_items(
-                uid, limit=PAGE_SIZE, **_request_deadline_timeout_kwargs()
-            )
-            _request_deadline_timeout_kwargs()
+            action_count = action_items.unlock_all_action_items(uid, limit=PAGE_SIZE)
             if not eligible():
                 return
             _request_deadline_timeout_kwargs()
-            conversation_count = conversations.unlock_all_conversations(
-                uid, limit=PAGE_SIZE, **_request_deadline_timeout_kwargs()
-            )
+            conversation_count = conversations.unlock_all_conversations(uid, limit=PAGE_SIZE)
         finally:
             # Repair access caches even when a later recheck denies or fails,
             # or a helper raises after an already-committed page.

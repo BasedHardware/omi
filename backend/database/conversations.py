@@ -4814,7 +4814,7 @@ def set_conversation_starred(uid: str, conversation_id: str, starred: bool):
     conversation_ref.update({'starred': starred})
 
 
-def unlock_all_conversations(uid: str, *, limit: Optional[int] = None, timeout: float | None = None) -> int:
+def unlock_all_conversations(uid: str, *, limit: Optional[int] = None) -> int:
     """Unlock all locked rows, or one bounded page when limit is supplied."""
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     locked_conversations_query = conversations_ref.where(filter=FieldFilter('is_locked', '==', True))
@@ -4828,7 +4828,6 @@ def unlock_all_conversations(uid: str, *, limit: Optional[int] = None, timeout: 
             locked_conversations_query,
             {'is_locked': False},
             limit=limit,
-            timeout=timeout,
             on_commit=lambda: invalidate_people_stats_cache(uid),
         )
         logger.info(f"Unlocked all conversations for user {uid}")

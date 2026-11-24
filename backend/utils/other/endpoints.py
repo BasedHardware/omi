@@ -16,7 +16,7 @@ from config import directory_routing
 from config.rollout_cohorts import load_rollout_cohorts
 import redis as redis_pkg
 
-from database.redis_db import check_rate_limit, check_rate_limit_bounded, try_acquire_listen_lock
+from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database import users as users_db
 from database.firestore_tier_context import bind_request_owner
 from database.account_deletion_policy import ACCOUNT_DELETION_GRACE_STATUS, account_deletion_blocks_access
@@ -43,7 +43,6 @@ from utils.other.request_deadline import (
     await_within_request_deadline,
     call_within_request_deadline,
     request_deadline_exceeded,
-    request_deadline_remaining_seconds,
 )
 from database.fsr_read_cache import request_read_scope
 
@@ -752,21 +751,14 @@ def rate_limit_dependency(
     return rate_limit
 
 
-def _enforce_rate_limit(
-    key: str,
-    policy_name: str,
-    *,
-    fail_closed: bool = False,
-    bounded_redis: bool = False,
-) -> None:
+def _enforce_rate_limit(key: str, policy_name: str, *, fail_closed: bool = False) -> None:
     """Shared rate limit enforcement. Raises HTTPException(429) or logs in shadow mode.
 
     One Redis round-trip per call (Lua script). Fail-open on Redis errors.
     """
     max_requests, window = get_effective_limit(policy_name)
     try:
-        check = check_rate_limit_bounded if bounded_redis else check_rate_limit
-        allowed, _remaining, retry_after = check(key, policy_name, max_requests, window)
+        allowed, _remaining, retry_after = check_rate_limit(key, policy_name, max_requests, window)
     except redis_pkg.exceptions.RedisError as e:  # type: ignore[reportAttributeAccessIssue]  # redis pkg exposes exceptions at runtime
         logger.error(f"Rate limit Redis error policy={policy_name} key={key}: {e}")
         if fail_closed:
@@ -836,16 +828,8 @@ def with_rate_limit(
 
     async def dependency(uid: str = Depends(auth_dependency)) -> str:
         try:
-            deadline_active = request_deadline_remaining_seconds() is not None
             await await_within_request_deadline(
-                lambda: run_blocking(
-                    critical_executor,
-                    _enforce_rate_limit,
-                    uid,
-                    policy_name,
-                    fail_closed=fail_closed,
-                    bounded_redis=deadline_active,
-                )
+                lambda: run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name, fail_closed=fail_closed)
             )
         except ExecutorSaturatedError as error:
             raise _executor_saturated_http_exception(error) from error

@@ -1148,14 +1148,7 @@ return remaining
 _RATE_LIMIT_RELEASE_LUA = r.register_script(_RATE_LIMIT_RELEASE_LUA_SOURCE)
 
 
-def check_rate_limit(
-    key: str,
-    policy: str,
-    max_requests: int,
-    window: int,
-    *,
-    redis_client: Any = None,
-) -> tuple[bool, int, int]:
+def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
     """Check per-key rate limit using a single atomic Lua call.
 
     Args:
@@ -1168,7 +1161,8 @@ def check_rate_limit(
         (allowed, remaining, retry_after_seconds)
     """
     redis_key = f'rl:{policy}:{key}'
-    if redis_client is None:
+    redis_client = request_deadline_redis_client()
+    if redis_client is r:
         current, ttl = _RATE_LIMIT_LUA(keys=[redis_key], args=[window])
     else:
         current, ttl = _RATE_LIMIT_LUA(keys=[redis_key], args=[window], client=redis_client)
@@ -1176,17 +1170,6 @@ def check_rate_limit(
     allowed = current <= max_requests
     retry_after = max(0, ttl) if not allowed else 0
     return allowed, remaining, retry_after
-
-
-def check_rate_limit_bounded(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
-    """Check the limiter with bounded Redis socket waits for deadline-bound routes."""
-    return check_rate_limit(
-        key,
-        policy,
-        max_requests,
-        window,
-        redis_client=_REQUEST_DEADLINE_REDIS_CLIENT,
-    )
 
 
 def reserve_rate_limit(
