@@ -6,11 +6,13 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
 import inspect
+from enum import StrEnum
 import logging
 import hashlib
 from dataclasses import dataclass, field
 import threading
 import time
+from typing import Any, Callable, TypeVar, cast
 
 from google.api_core import exceptions as google_errors
 from prometheus_client import Counter, Gauge, Histogram
@@ -100,6 +102,64 @@ NEGATIVE_LOOKUPS = Counter(
     'Token-certified NOT_FOUND lookup cache outcomes',
     ['collection', 'mode', 'result'],
 )
+
+
+class BatchPrivacyPath(StrEnum):
+    SYNC_UPLOAD = 'sync_upload'
+    SYNC_STATUS = 'sync_status'
+    WORKER_AUTHORIZATION = 'worker_authorization'
+    INTEGRATION_SERVING = 'integration_serving'
+    PROJECTION_PREPARE = 'projection_prepare'
+    OTHER = 'other'
+
+
+_F = TypeVar('_F', bound=Callable[..., Any])
+_BATCH_PATH = ContextVar('batch_privacy_path', default=BatchPrivacyPath.OTHER)
+_BATCH_COLLECTIONS = frozenset(
+    {'account_deletions', 'users', 'batch_pipeline_privacy', 'conversations', 'deleted_conversations'}
+)
+BATCH_PATH_READS = Counter(
+    'omi_batch_pipeline_privacy_path_reads_total',
+    'Batch privacy point reads returning a document or NOT_FOUND, by entry point',
+    ['path', 'collection', 'mode'],
+)
+BATCH_PATH_CHECKS = Counter(
+    'omi_batch_pipeline_privacy_path_checks_total',
+    'Batch privacy checks by entry point',
+    ['path', 'mode'],
+)
+
+
+@contextmanager
+def batch_privacy_path(path: BatchPrivacyPath):
+    token = _BATCH_PATH.set(path)
+    try:
+        yield
+    finally:
+        _BATCH_PATH.reset(token)
+
+
+def with_batch_privacy_path(path: BatchPrivacyPath) -> Callable[[_F], _F]:
+    def decorate(function: _F) -> _F:
+        if inspect.iscoroutinefunction(function):
+
+            @wraps(function)
+            async def async_wrapped(*args: Any, **kwargs: Any) -> Any:
+                with batch_privacy_path(path):
+                    return await function(*args, **kwargs)
+
+            return cast(_F, async_wrapped)
+
+        @wraps(function)
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
+            with batch_privacy_path(path):
+                return function(*args, **kwargs)
+
+        return cast(_F, wrapped)
+
+    return decorate
+
+
 TTL_BOUND_SECONDS = 60.0
 MEMO_INELIGIBLE = Counter(
     'privacy_memo_ineligible_total',
@@ -349,6 +409,8 @@ def decision(family, reason='allow', *, uid=None):
 def called(family):
     try:
         CALLS.labels(_family(family), _MODE.get()).inc()
+        if family == 'batch':
+            BATCH_PATH_CHECKS.labels(_BATCH_PATH.get().value, _MODE.get()).inc()
         _count(family, 'checks')
     except Exception:
         pass
@@ -442,6 +504,14 @@ def read_snapshot(family, reference, *, read_budget=None, uid=None, **kwargs):
     finally:
         _READ_CALLER.reset(caller_token)
     _read_result(family, 'hit' if snapshot.exists else 'miss', uid=uid)
+    if family == 'batch':
+        try:
+            collection = reference.parent.id
+            if collection not in _BATCH_COLLECTIONS:
+                collection = 'other'
+            BATCH_PATH_READS.labels(_BATCH_PATH.get().value, collection, _MODE.get()).inc()
+        except Exception:
+            pass
     observe_snapshot(reference, snapshot, family)
     return snapshot
 
