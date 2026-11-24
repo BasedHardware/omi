@@ -64,7 +64,7 @@ IDs may differ only after each side binds them to its own write or queue job.
 | Field | Check |
 | --- | --- |
 | Admitted job and fanout IDs | Validate each side's IDs against its own queue job and stored row. Do not compare IDs across engines; ordinary-sync Python has no Go admission. |
-| `finalization_engine`, `finalization_owner_epoch`, `finalization_revision` | Go values must be present and bind to its admitted job, owner epoch, and revision. The Python row must not contain these Go fence fields. |
+| `finalization_engine`, `finalization_owner_epoch`, `finalization_revision` | When Go ownership metadata is present (or Go admission occurred), Go's fence must bind to its admitted job, owner epoch, and revision. Python must not carry Go's engine or owner-epoch markers. `finalization_revision` is a shared lifecycle counter written by Python too, so compare its value normally unless a valid Go fence makes a missing Python value an approved generated-field difference. |
 | `go_sync_minimum_discarded`, `go_sync_minimum_revision` | Go receipt fields must be present together, use the expected types, and bind to the Go row's sync content revision and discarded outcome. The Python row must not contain them. |
 | Home version fields and `home_feed_control.generation` | Existing UUIDv4 checks require a fresh, seeded-value-free, side-unique token with its same-side Home receipt or preparation link. |
 | `memory_state/released_memory_changes_v1.token` | Require a fresh UUIDv4 value, absent from seeded values, unique on that side, and stored in the matching owner's state document. |

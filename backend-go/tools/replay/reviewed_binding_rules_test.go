@@ -65,6 +65,17 @@ func TestGoOnlyReceiptsRequireBoundGoEvidenceAndNoPythonCopies(t *testing.T) {
 	}
 }
 
+func TestCompletedPythonRevisionIsNotAGoOwnershipFence(t *testing.T) {
+	py, goRun := ruleRun(), ruleRun()
+	py.Document = map[string]any{"status": "completed", "finalization_revision": json.Number("2")}
+	goRun.Document = map[string]any{"status": "completed", "finalization_revision": json.Number("2")}
+
+	diffs := compareObservations(py, goRun)
+	if hasUnexplained(diffs) {
+		t.Fatalf("a shared lifecycle revision without Go ownership metadata was treated as a fence: %+v", diffs)
+	}
+}
+
 func TestHomeTokenFailureReasonNamesBrokenPrecondition(t *testing.T) {
 	fixture := homeFixtures()[0]
 	py, goRun := ruleRun(), ruleRun()

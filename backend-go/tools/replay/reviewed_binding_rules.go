@@ -3,7 +3,7 @@ package main
 import "strings"
 
 var reviewedGoOnlyFields = []string{
-	"finalization_engine", "finalization_owner_epoch", "finalization_revision",
+	"finalization_engine", "finalization_owner_epoch",
 	"go_sync_minimum_discarded", "go_sync_minimum_revision",
 }
 
@@ -11,8 +11,15 @@ func validateReviewedGoOnlyFields(diffs *[]difference, python, goRun *observatio
 	if python == nil || goRun == nil {
 		return
 	}
-	if hasReviewedGoOnlyFields(goRun) {
-		for _, field := range reviewedGoOnlyFields {
+	if hasGoFenceMarker(goRun) {
+		for _, field := range reviewedGoOnlyFields[:2] {
+			if hasDocumentField(python.Document, field) {
+				addDifference(diffs, "/python/conversation/"+field, "invalid_binding")
+			}
+		}
+	}
+	if hasGoMinimumFields(goRun) {
+		for _, field := range reviewedGoOnlyFields[2:] {
 			if hasDocumentField(python.Document, field) {
 				addDifference(diffs, "/python/conversation/"+field, "invalid_binding")
 			}
@@ -27,18 +34,6 @@ func validateReviewedGoOnlyFields(diffs *[]difference, python, goRun *observatio
 	}
 }
 
-func hasReviewedGoOnlyFields(run *observation) bool {
-	if run == nil {
-		return false
-	}
-	for _, field := range reviewedGoOnlyFields {
-		if hasDocumentField(run.Document, field) {
-			return true
-		}
-	}
-	return false
-}
-
 func hasDocumentField(value any, field string) bool {
 	doc, ok := value.(map[string]any)
 	if !ok {
@@ -49,10 +44,10 @@ func hasDocumentField(value any, field string) bool {
 }
 
 func validateGoFenceBinding(diffs *[]difference, side string, run *observation) {
-	if run == nil || (!hasFenceField(run) && (run.Admitted == nil || run.Admitted.Engine != "go")) {
+	if run == nil || (!hasGoFenceMarker(run) && (run.Admitted == nil || run.Admitted.Engine != "go")) {
 		return
 	}
-	if hasFenceField(run) && !goFenceBinds(run) {
+	if hasGoFenceMarker(run) && !goFenceBinds(run) {
 		addDifference(diffs, side+"/conversation/finalization_engine", "invalid_binding")
 	}
 	for _, field := range []string{"finalization_engine", "finalization_owner_epoch", "finalization_revision"} {
@@ -62,10 +57,14 @@ func validateGoFenceBinding(diffs *[]difference, side string, run *observation) 
 	}
 }
 
-func hasFenceField(run *observation) bool {
-	return hasDocumentField(run.Document, "finalization_engine") ||
-		hasDocumentField(run.Document, "finalization_owner_epoch") ||
-		hasDocumentField(run.Document, "finalization_revision")
+func hasGoFenceMarker(run *observation) bool {
+	return run != nil && (documentField(run, "finalization_engine") != nil ||
+		documentField(run, "finalization_owner_epoch") != nil)
+}
+
+func hasGoMinimumFields(run *observation) bool {
+	return run != nil && (hasDocumentField(run.Document, "go_sync_minimum_discarded") ||
+		hasDocumentField(run.Document, "go_sync_minimum_revision"))
 }
 
 func goFenceBinds(run *observation) bool {
@@ -105,7 +104,7 @@ func approvedGoOnlyDifference(path string, python, goRun *observation) string {
 	if field, ok := strings.CutPrefix(path, "/conversation/"); ok {
 		switch field {
 		case "finalization_engine", "finalization_owner_epoch", "finalization_revision":
-			if hasFenceField(goRun) && goFenceBinds(goRun) && !hasDocumentField(python.Document, field) {
+			if (hasGoFenceMarker(goRun) || (goRun.Admitted != nil && goRun.Admitted.Engine == "go")) && goFenceBinds(goRun) && !hasDocumentField(python.Document, field) {
 				return "Go ownership fence fields bind to its admitted job; the Python row carries no Go fence metadata"
 			}
 		case "fanout_key":
