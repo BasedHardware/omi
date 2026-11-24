@@ -4799,6 +4799,7 @@
     "prepaidCodeRedeem": "Tukarkan",
     "prepaidCodeRedeemed": "Kode berhasil ditukarkan",
     "prepaidCodeResult": "{reason, select, invalid{Kode ini tidak valid. Periksa dan coba lagi.} used{Kode ini sudah digunakan.} expired{Kode ini sudah kedaluwarsa.} hasPlan{Anda sudah memiliki paket. Kode Anda tidak digunakan. Tukarkan setelah paket Anda berakhir.} notPrepaid{Kode ini tidak bisa ditukarkan di sini. Gunakan saat memilih paket.} notEligible{Kode ini tidak bisa digunakan di akun ini.} rateLimited{Terlalu banyak percobaan. Coba lagi nanti.} other{Terjadi kesalahan. Silakan coba lagi.}}",
-    "playStripeBilledOnWeb": "Ditagih melalui omi.me. Kelola atau batalkan di sini kapan saja.",
-    "playStripeUpdateCardOnWeb": "Perbarui kartu Anda di omi.me melalui web."
+    "playStripeBilledOnWeb": "Ditagih melalui omi.me. Batalkan di sini kapan saja.",
+    "playStripeBilledOnWebShort": "Ditagih melalui omi.me.",
+    "playStripeUpdateCardToGetPlanBack": "Perbarui kartu Anda di omi.me untuk mendapatkan {plan} kembali."
 }

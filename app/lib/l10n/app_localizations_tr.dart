@@ -15836,8 +15836,13 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'omi.me üzerinden faturalandırılır. İstediğin zaman buradan yönet veya iptal et.';
+  String get playStripeBilledOnWeb => 'omi.me üzerinden faturalandırılır. İstediğin zaman buradan iptal et.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'Kartını web\'de omi.me üzerinden güncelle.';
+  String get playStripeBilledOnWebShort => 'omi.me üzerinden faturalandırılır.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return '$plan planını geri almak için kartını omi.me üzerinden güncelle.';
+  }
 }

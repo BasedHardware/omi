@@ -15818,8 +15818,13 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'صورتحساب از طریق omi.me. هر زمان از اینجا مدیریت یا لغو کنید.';
+  String get playStripeBilledOnWeb => 'صورتحساب از طریق omi.me. هر زمان از اینجا لغو کنید.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'کارت خود را در وب‌سایت omi.me به‌روزرسانی کنید.';
+  String get playStripeBilledOnWebShort => 'صورتحساب از طریق omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'برای بازگرداندن $plan، کارت خود را در omi.me به‌روزرسانی کنید.';
+  }
 }

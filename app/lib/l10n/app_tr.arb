@@ -4799,6 +4799,7 @@
     "prepaidCodeRedeem": "Kullan",
     "prepaidCodeRedeemed": "Kod kullanıldı",
     "prepaidCodeResult": "{reason, select, invalid{Bu kod geçerli değil. Kontrol edip tekrar deneyin.} used{Bu kod zaten kullanılmış.} expired{Bu kodun süresi dolmuş.} hasPlan{Zaten bir planınız var. Kodunuz kullanılmadı. Planınız bittikten sonra kullanın.} notPrepaid{Bu kod burada kullanılamaz. Bir plan seçerken kullanın.} notEligible{Bu kod bu hesapta kullanılamaz.} rateLimited{Çok fazla deneme. Daha sonra tekrar deneyin.} other{Bir sorun oluştu. Lütfen tekrar deneyin.}}",
-    "playStripeBilledOnWeb": "omi.me üzerinden faturalandırılır. İstediğin zaman buradan yönet veya iptal et.",
-    "playStripeUpdateCardOnWeb": "Kartını web'de omi.me üzerinden güncelle."
+    "playStripeBilledOnWeb": "omi.me üzerinden faturalandırılır. İstediğin zaman buradan iptal et.",
+    "playStripeBilledOnWebShort": "omi.me üzerinden faturalandırılır.",
+    "playStripeUpdateCardToGetPlanBack": "{plan} planını geri almak için kartını omi.me üzerinden güncelle."
 }

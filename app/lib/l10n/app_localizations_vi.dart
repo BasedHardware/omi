@@ -15827,8 +15827,13 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'Thanh toán qua omi.me. Quản lý hoặc hủy tại đây bất cứ lúc nào.';
+  String get playStripeBilledOnWeb => 'Thanh toán qua omi.me. Hủy tại đây bất cứ lúc nào.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'Cập nhật thẻ của bạn tại omi.me trên web.';
+  String get playStripeBilledOnWebShort => 'Thanh toán qua omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Cập nhật thẻ tại omi.me để lấy lại $plan.';
+  }
 }

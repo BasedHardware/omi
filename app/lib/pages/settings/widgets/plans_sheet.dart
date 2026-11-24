@@ -688,7 +688,8 @@ class _PlansSheetState extends State<PlansSheet> {
             ),
             const SizedBox(height: OmiSpacing.xs),
             Text(
-              l10n.playStripeBilledOnWeb,
+              // "Cancel here" only where Cancel is the action; next to Resubscribe the plan is already ending.
+              cancelled ? l10n.playStripeBilledOnWebShort : l10n.playStripeBilledOnWeb,
               key: const ValueKey('plans_sheet_stripe_on_play_note'),
               textAlign: TextAlign.center,
               style: secondary,

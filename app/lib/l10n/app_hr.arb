@@ -12321,6 +12321,7 @@
     "prepaidCodeRedeem": "Iskoristi",
     "prepaidCodeRedeemed": "Kôd je iskorišten",
     "prepaidCodeResult": "{reason, select, invalid{Ovaj kôd nije valjan. Provjerite ga i pokušajte ponovno.} used{Ovaj kôd je već iskorišten.} expired{Ovaj kôd je istekao.} hasPlan{Već imate plan. Vaš kôd nije iskorišten. Iskoristite ga kada vam plan istekne.} notPrepaid{Ovaj kôd ne može se iskoristiti ovdje. Iskoristite ga kada odaberete plan.} notEligible{Ovaj kôd ne može se koristiti na ovom računu.} rateLimited{Previše pokušaja. Pokušajte kasnije.} other{Nešto nije u redu. Pokušajte ponovno.}}",
-    "playStripeBilledOnWeb": "Naplaćuje se putem omi.me. Upravljajte ili otkažite ovdje bilo kada.",
-    "playStripeUpdateCardOnWeb": "Ažurirajte karticu na omi.me na webu."
+    "playStripeBilledOnWeb": "Naplaćuje se putem omi.me. Otkažite ovdje bilo kada.",
+    "playStripeBilledOnWebShort": "Naplaćuje se putem omi.me.",
+    "playStripeUpdateCardToGetPlanBack": "Ažurirajte karticu na omi.me da vratite {plan}."
 }

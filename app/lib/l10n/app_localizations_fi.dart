@@ -15831,8 +15831,13 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'Laskutetaan omi.me-palvelun kautta. Hallitse tai peru täällä milloin tahansa.';
+  String get playStripeBilledOnWeb => 'Laskutetaan omi.me-palvelun kautta. Peru täällä milloin tahansa.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'Päivitä korttisi verkossa osoitteessa omi.me.';
+  String get playStripeBilledOnWebShort => 'Laskutetaan omi.me-palvelun kautta.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Päivitä korttisi osoitteessa omi.me saadaksesi $plan takaisin.';
+  }
 }

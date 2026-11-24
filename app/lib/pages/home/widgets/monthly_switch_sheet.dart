@@ -29,6 +29,8 @@ typedef MonthlySwitchApplier = Future<Map<String, dynamic>?> Function({
 /// Opens the confirm sheet; resolves true once the reader is on monthly.
 Future<bool> showMonthlySwitchSheet(BuildContext context,
     {required PaymentIssue issue, MonthlySwitchApplier? apply}) async {
+  // The switch charges Stripe; a build that sells through Google Play never offers it.
+  if (_buysThroughPlay(context)) return false;
   const TypedEvents().emit(const SubscriptionPaymentIssueMonthlyTapped());
   var switched = false;
   await showOmiSheet<void>(
@@ -38,6 +40,8 @@ Future<bool> showMonthlySwitchSheet(BuildContext context,
   );
   return switched;
 }
+
+bool _buysThroughPlay(BuildContext context) => context.read<UsageProvider?>()?.buysThroughPlay == true;
 
 class MonthlySwitchSheet extends StatefulWidget {
   const MonthlySwitchSheet({super.key, required this.issue, this.apply, this.onSwitched});
@@ -60,6 +64,11 @@ class _MonthlySwitchSheetState extends State<MonthlySwitchSheet> {
   Future<void> _switch() async {
     final offer = widget.issue.monthlySwitch;
     if (offer == null || _switching) return;
+    // Play setup arrived while this sheet was open: charge nothing and close it; Home then shows the plain line.
+    if (_buysThroughPlay(context)) {
+      Navigator.of(context).maybePop();
+      return;
+    }
     OmiHaptics.medium();
     setState(() {
       _switching = true;

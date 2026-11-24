@@ -15861,8 +15861,13 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'Rēķins tiek izrakstīts caur omi.me. Pārvaldiet vai atceliet šeit jebkurā laikā.';
+  String get playStripeBilledOnWeb => 'Rēķins tiek izrakstīts caur omi.me. Atceliet šeit jebkurā laikā.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'Atjauniniet karti omi.me tīmekļa vietnē.';
+  String get playStripeBilledOnWebShort => 'Rēķins tiek izrakstīts caur omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Atjauniniet karti omi.me, lai atgūtu $plan.';
+  }
 }

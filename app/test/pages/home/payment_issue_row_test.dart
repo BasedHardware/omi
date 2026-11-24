@@ -191,8 +191,10 @@ void main() {
 
         expect(tester.takeException(), isNull);
         expect(find.text('Your card was declined'), findsOneWidget);
-        expect(find.text('Update it to get Omi Pro back'), findsOneWidget);
-        expect(find.text('Update your card at omi.me on the web.'), findsOneWidget);
+        // One line, no repeat of "Update it".
+        expect(find.text('Update your card at omi.me to get Omi Pro back.'), findsOneWidget);
+        expect(find.text('Update it to get Omi Pro back'), findsNothing);
+        expect(find.textContaining('a month'), findsNothing);
         expect(find.byKey(const ValueKey('payment_issue_update')), findsNothing);
         expect(find.byKey(const ValueKey('payment_issue_monthly')), findsNothing);
         expect(find.byType(OmiButton), findsNothing);
@@ -205,18 +207,72 @@ void main() {
       }, variant: TargetPlatformVariant.only(TargetPlatform.android));
     }
 
+    testWidgets('no Monthly Shown event for a switch that is hidden', (tester) async {
+      await _pump(tester, _response(issue: _yearlyPastDue, play: playConfig));
+      await tester.pump();
+      final names = await events(tester);
+      expect(names, contains('Subscription Payment Issue Shown'));
+      expect(names, isNot(contains('Subscription Payment Issue Monthly Shown')));
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('a refresh that only adds Play setup hides Update and Switch to Monthly', (tester) async {
+      final usage = await _pump(tester, _response(issue: _yearlyPastDue), portalUrl: 'https://billing.stripe.com/x');
+      expect(find.byKey(const ValueKey('payment_issue_update')), findsOneWidget);
+      expect(find.byKey(const ValueKey('payment_issue_monthly')), findsOneWidget);
+      usage.backend.current = _response(issue: _yearlyPastDue, play: playConfig);
+      await usage.fetchSubscription(fresh: true);
+      await tester.pumpAndSettle();
+      expect(usage.buysThroughPlay, isTrue);
+      expect(find.byKey(const ValueKey('payment_issue_update')), findsNothing);
+      expect(find.byKey(const ValueKey('payment_issue_monthly')), findsNothing);
+      expect(find.text('Update your card at omi.me to get Omi Pro back.'), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('an already-open monthly switch sheet charges nothing once Play setup arrives', (tester) async {
+      var charges = 0;
+      final usage = await _pump(tester, _response(issue: _yearlyPastDue),
+          applyMonthlySwitch: ({required priceId, required expectedAmount}) async {
+        charges++;
+        return {'status': 'ok'};
+      });
+      await tester.tap(find.byKey(const ValueKey('payment_issue_monthly')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('monthly_switch_confirm')), findsOneWidget);
+      usage.backend.current = _response(issue: _yearlyPastDue, play: playConfig);
+      await usage.fetchSubscription(fresh: true);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('monthly_switch_confirm')));
+      await tester.pumpAndSettle();
+      expect(charges, 0);
+      expect(find.byKey(const Key('monthly_switch_confirm')), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('a portal link that answers after Play setup arrived is never opened', (tester) async {
+      final ready = Completer<void>();
+      final usage = await _pump(tester, _response(issue: _pastDue),
+          portalUrl: 'https://billing.stripe.com/test', portalReady: ready);
+      await tester.tap(find.byKey(const ValueKey('payment_issue_update')));
+      await tester.pump();
+      usage.backend.current = _response(issue: _pastDue, play: playConfig);
+      await usage.fetchSubscription(fresh: true);
+      ready.complete();
+      await tester.pumpAndSettle();
+      expect(usage.portalOpens, 1);
+      expect(find.textContaining('portal https://'), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
     testWidgets('iOS ignores the Play setup: Update and Switch to Monthly stay', (tester) async {
       await _pump(tester, _response(issue: _yearlyPastDue, play: playConfig));
       expect(find.byKey(const ValueKey('payment_issue_update')), findsOneWidget);
       expect(find.byKey(const ValueKey('payment_issue_monthly')), findsOneWidget);
-      expect(find.text('Update your card at omi.me on the web.'), findsNothing);
+      expect(find.text('Update your card at omi.me to get Omi Pro back.'), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
     testWidgets('Android without Play setup keeps Update and Switch to Monthly', (tester) async {
       await _pump(tester, _response(issue: _yearlyPastDue));
       expect(find.byKey(const ValueKey('payment_issue_update')), findsOneWidget);
       expect(find.byKey(const ValueKey('payment_issue_monthly')), findsOneWidget);
-      expect(find.text('Update your card at omi.me on the web.'), findsNothing);
+      expect(find.text('Update your card at omi.me to get Omi Pro back.'), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   });
 

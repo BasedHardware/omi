@@ -15850,8 +15850,13 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'Mokama per omi.me. Valdykite arba atšaukite čia bet kada.';
+  String get playStripeBilledOnWeb => 'Mokama per omi.me. Atšaukite čia bet kada.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'Atnaujinkite kortelę omi.me svetainėje.';
+  String get playStripeBilledOnWebShort => 'Mokama per omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Atnaujinkite kortelę omi.me, kad susigrąžintumėte $plan.';
+  }
 }

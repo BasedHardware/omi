@@ -4764,6 +4764,7 @@
     "prepaidCodeRedeem": "Активувати",
     "prepaidCodeRedeemed": "Код активовано",
     "prepaidCodeResult": "{reason, select, invalid{Цей код недійсний. Перевірте його та спробуйте ще раз.} used{Цей код уже використано.} expired{Термін дії цього коду минув.} hasPlan{У вас уже є план. Ваш код не використано. Активуйте його після завершення плану.} notPrepaid{Цей код не можна активувати тут. Використайте його під час вибору плану.} notEligible{Цей код не можна використати в цьому акаунті.} rateLimited{Забагато спроб. Спробуйте пізніше.} other{Щось пішло не так. Спробуйте ще раз.}}",
-    "playStripeBilledOnWeb": "Оплата через omi.me. Керуйте або скасовуйте тут будь-коли.",
-    "playStripeUpdateCardOnWeb": "Оновіть картку на omi.me у браузері."
+    "playStripeBilledOnWeb": "Оплата через omi.me. Скасовуйте тут будь-коли.",
+    "playStripeBilledOnWebShort": "Оплата через omi.me.",
+    "playStripeUpdateCardToGetPlanBack": "Оновіть картку на omi.me, щоб повернути {plan}."
 }

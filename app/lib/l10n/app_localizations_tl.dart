@@ -15952,8 +15952,13 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'Sinisingil sa pamamagitan ng omi.me. Pamahalaan o kanselahin dito anumang oras.';
+  String get playStripeBilledOnWeb => 'Sinisingil sa pamamagitan ng omi.me. Kanselahin dito anumang oras.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'I-update ang iyong card sa omi.me sa web.';
+  String get playStripeBilledOnWebShort => 'Sinisingil sa pamamagitan ng omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'I-update ang iyong card sa omi.me para maibalik ang $plan.';
+  }
 }

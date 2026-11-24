@@ -15820,8 +15820,13 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'omi.me-এর মাধ্যমে বিল করা হয়। যেকোনো সময় এখান থেকে পরিচালনা বা বাতিল করুন।';
+  String get playStripeBilledOnWeb => 'omi.me-এর মাধ্যমে বিল করা হয়। যেকোনো সময় এখান থেকে বাতিল করুন।';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'ওয়েবে omi.me-তে আপনার কার্ড আপডেট করুন।';
+  String get playStripeBilledOnWebShort => 'omi.me-এর মাধ্যমে বিল করা হয়।';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return '$plan ফিরে পেতে omi.me-তে আপনার কার্ড আপডেট করুন।';
+  }
 }

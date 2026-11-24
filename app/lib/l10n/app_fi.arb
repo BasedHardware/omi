@@ -4764,6 +4764,7 @@
     "prepaidCodeRedeem": "Lunasta",
     "prepaidCodeRedeemed": "Koodi lunastettu",
     "prepaidCodeResult": "{reason, select, invalid{Tämä koodi ei ole kelvollinen. Tarkista se ja yritä uudelleen.} used{Tämä koodi on jo käytetty.} expired{Tämä koodi on vanhentunut.} hasPlan{Sinulla on jo tilaus. Koodiasi ei käytetty. Lunasta se, kun tilauksesi päättyy.} notPrepaid{Tätä koodia ei voi lunastaa täällä. Käytä sitä, kun valitset tilauksen.} notEligible{Tätä koodia ei voi käyttää tällä tilillä.} rateLimited{Liian monta yritystä. Yritä myöhemmin uudelleen.} other{Jokin meni pieleen. Yritä uudelleen.}}",
-    "playStripeBilledOnWeb": "Laskutetaan omi.me-palvelun kautta. Hallitse tai peru täällä milloin tahansa.",
-    "playStripeUpdateCardOnWeb": "Päivitä korttisi verkossa osoitteessa omi.me."
+    "playStripeBilledOnWeb": "Laskutetaan omi.me-palvelun kautta. Peru täällä milloin tahansa.",
+    "playStripeBilledOnWebShort": "Laskutetaan omi.me-palvelun kautta.",
+    "playStripeUpdateCardToGetPlanBack": "Päivitä korttisi osoitteessa omi.me saadaksesi {plan} takaisin."
 }

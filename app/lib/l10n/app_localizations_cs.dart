@@ -15825,8 +15825,13 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'Účtováno přes omi.me. Spravovat nebo zrušit můžete kdykoli zde.';
+  String get playStripeBilledOnWeb => 'Účtováno přes omi.me. Zrušit můžete kdykoli zde.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'Aktualizujte kartu na webu omi.me.';
+  String get playStripeBilledOnWebShort => 'Účtováno přes omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Aktualizujte kartu na omi.me a získejte $plan zpět.';
+  }
 }

@@ -15834,8 +15834,13 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'Faktureras via omi.me. Hantera eller avsluta här när som helst.';
+  String get playStripeBilledOnWeb => 'Faktureras via omi.me. Avsluta här när som helst.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'Uppdatera ditt kort på omi.me på webben.';
+  String get playStripeBilledOnWebShort => 'Faktureras via omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Uppdatera ditt kort på omi.me för att få tillbaka $plan.';
+  }
 }

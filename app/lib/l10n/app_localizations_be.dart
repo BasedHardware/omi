@@ -15861,8 +15861,13 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'Аплата праз omi.me. Кіруйце або скасуйце тут у любы час.';
+  String get playStripeBilledOnWeb => 'Аплата праз omi.me. Скасуйце тут у любы час.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'Абнавіце картку на omi.me ў вэбе.';
+  String get playStripeBilledOnWebShort => 'Аплата праз omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Абнавіце картку на omi.me, каб вярнуць $plan.';
+  }
 }

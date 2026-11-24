@@ -15593,8 +15593,13 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'omi.me で請求されています。ここでいつでも管理・解約できます。';
+  String get playStripeBilledOnWeb => 'omi.me で請求されています。ここでいつでも解約できます。';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'カードはウェブの omi.me で更新してください。';
+  String get playStripeBilledOnWebShort => 'omi.me で請求されています。';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return '$plan を再開するには omi.me でカードを更新してください。';
+  }
 }

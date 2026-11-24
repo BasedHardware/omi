@@ -15891,8 +15891,13 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'Facturat prin omi.me. Gestionează sau anulează aici oricând.';
+  String get playStripeBilledOnWeb => 'Facturat prin omi.me. Anulează aici oricând.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'Actualizează cardul pe omi.me, pe web.';
+  String get playStripeBilledOnWebShort => 'Facturat prin omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Actualizează cardul pe omi.me ca să recuperezi $plan.';
+  }
 }

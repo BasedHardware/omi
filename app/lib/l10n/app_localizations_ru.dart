@@ -15878,8 +15878,13 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'Оплата через omi.me. Управляйте или отменяйте здесь в любое время.';
+  String get playStripeBilledOnWeb => 'Оплата через omi.me. Отменить можно здесь в любое время.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'Обновите карту на omi.me в браузере.';
+  String get playStripeBilledOnWebShort => 'Оплата через omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Обновите карту на omi.me, чтобы вернуть $plan.';
+  }
 }

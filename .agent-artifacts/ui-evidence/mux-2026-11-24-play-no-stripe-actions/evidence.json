@@ -4,7 +4,7 @@
     {
       "file": "001-mobile-android-plans-stripe-on-play.png",
       "platform": "mobile-android",
-      "description": "Plans & Billing, Stripe subscriber on a Play build: plan, renewal date, omi.me line, Cancel Subscription (widget-test render)",
+      "description": "Plans & Billing, Stripe subscriber on a Play build: plan, renewal date, 'Billed through omi.me. Cancel here anytime.', Cancel Subscription (widget-test render)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
@@ -18,14 +18,14 @@
     {
       "file": "003-mobile-android-plans-stripe-on-play-ending.png",
       "platform": "mobile-android",
-      "description": "Cancel-pending Stripe plan on a Play build: end date and Resubscribe at the same price (widget-test render)",
+      "description": "Cancel-pending Stripe plan on a Play build: end date, 'Billed through omi.me.', Resubscribe at the same price (widget-test render)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "004-mobile-android-payment-row-play.png",
       "platform": "mobile-android",
-      "description": "Home payment-declined row on a Play build: no Update or Switch to Monthly, plain text to update the card on omi.me (widget-test render)",
+      "description": "Home payment-declined row on a Play build: title and one line, 'Update your card at omi.me to get Omi Pro back.', no buttons (widget-test render)",
       "captured_by": "agent",
       "source": "visual-audit"
     },

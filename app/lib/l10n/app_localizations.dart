@@ -27771,17 +27771,23 @@ abstract class AppLocalizations {
   /// **'{reason, select, invalid{This code isn\'t valid. Check it and try again.} used{This code has already been used.} expired{This code has expired.} hasPlan{You already have a plan. Your code was not used. Redeem it after your plan ends.} notPrepaid{This code can\'t be redeemed here. Use it when you choose a plan.} notEligible{This code can\'t be used on this account.} rateLimited{Too many tries. Try again later.} other{Something went wrong. Please try again.}}'**
   String prepaidCodeResult(String reason);
 
-  /// Plans & Billing on an Android build that sells through Google Play, under the plan of a reader who already pays on omi.me (Stripe). Plain text, no link.
+  /// Plans & Billing on an Android build that sells through Google Play, under the renewing plan of a reader who pays on omi.me (Stripe). The only action on the sheet is Cancel. Plain text, no link.
   ///
   /// In en, this message translates to:
-  /// **'Billed through omi.me. Manage or cancel here anytime.'**
+  /// **'Billed through omi.me. Cancel here anytime.'**
   String get playStripeBilledOnWeb;
 
-  /// Home payment-declined row on an Android build that sells through Google Play: the card can only be updated on the omi.me website. Plain text, no link.
+  /// Plans & Billing on an Android build that sells through Google Play, under a cancel-pending plan billed on omi.me (Stripe), next to Resubscribe. Plain text, no link.
   ///
   /// In en, this message translates to:
-  /// **'Update your card at omi.me on the web.'**
-  String get playStripeUpdateCardOnWeb;
+  /// **'Billed through omi.me.'**
+  String get playStripeBilledOnWebShort;
+
+  /// Home row line under 'Your card was declined' on an Android build that sells through Google Play; the card can only be updated on the omi.me website. plan = a product name such as Omi Pro. Plain text, no link.
+  ///
+  /// In en, this message translates to:
+  /// **'Update your card at omi.me to get {plan} back.'**
+  String playStripeUpdateCardToGetPlanBack(String plan);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_interface.dart';
 import 'package:provider/provider.dart';
+import 'package:webview_flutter/webview_flutter.dart' show NavigationDecision;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/play_billing_api.dart';
@@ -76,6 +77,9 @@ class _Usage extends UsageProvider {
   _Usage({required super.subscriptionRequest, required super.playBilling, super.usageRequest, super.deviceTimeZone});
 
   int checkoutSessions = 0;
+
+  /// Runs while the Checkout request is in flight (e.g. a refresh that brings Play setup).
+  Future<void> Function()? whileCheckoutInFlight;
   Map<String, dynamic>? checkoutAnswer = {'url': 'https://checkout.stripe.com/session'};
 
   @override
@@ -88,6 +92,7 @@ class _Usage extends UsageProvider {
     int? trialDays,
   }) async {
     checkoutSessions++;
+    await whileCheckoutInFlight?.call();
     return checkoutAnswer;
   }
 }
@@ -121,7 +126,7 @@ class _HarnessState extends State<_Harness> with TickerProviderStateMixin {
 class _World {
   _World(this.responses, {FakePlayPlatform? platform}) : platform = platform ?? FakePlayPlatform();
 
-  final List<UserSubscriptionResponse> responses;
+  final List<UserSubscriptionResponse?> responses;
   final FakePlayPlatform platform;
   final server = FakePlayServer();
   late final billing = PlayBilling(platform: () => platform, verify: server.call, store: MemoryTokenStore());
@@ -133,7 +138,7 @@ class _World {
 
 Future<_World> _pump(
   WidgetTester tester,
-  List<UserSubscriptionResponse> responses, {
+  List<UserSubscriptionResponse?> responses, {
   Widget? child,
   bool fetchFirst = true,
   double textScale = 1,
@@ -294,7 +299,8 @@ void main() {
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   group('a Stripe subscriber on a build that sells through Google Play', () {
-    const note = 'Billed through omi.me. Manage or cancel here anytime.';
+    const note = 'Billed through omi.me. Cancel here anytime.';
+    const endingNote = 'Billed through omi.me.';
 
     void expectNoStripePurchase(WidgetTester tester) {
       expect(find.byType(PlayPlansContent), findsNothing);
@@ -337,7 +343,9 @@ void main() {
       final world = await _pump(tester,
           [_response(plan: PlanType.unlimitedV2, stripeId: 'sub_1', cancelAtPeriodEnd: true, priceId: 'price_year')]);
       expect(find.textContaining('plan ends'), findsOneWidget);
-      expect(find.text(note), findsOneWidget);
+      // Next to Resubscribe, "Cancel here" would not read right.
+      expect(find.text(endingNote), findsOneWidget);
+      expect(find.text(note), findsNothing);
       expect(find.byKey(const ValueKey('plans_sheet_cancel_button')), findsNothing);
       expectNoStripePurchase(tester);
       await writeSurfaceRender(tester, 'plans-sheet-stripe-on-play-cancel-pending');
@@ -380,6 +388,179 @@ void main() {
       expect(find.byType(PlayPlansContent), findsOneWidget);
       expect(find.byKey(const ValueKey('plans_sheet_stripe_on_play')), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  });
+
+  group('failed refresh keeps the Play gate', () {
+    testWidgets('success, failed refresh, recovery: never a Stripe purchase action, Cancel stays', (tester) async {
+      final paid = _response(plan: PlanType.unlimitedV2, stripeId: 'sub_1');
+      final world = await _pump(tester, <UserSubscriptionResponse?>[paid]);
+      void expectSafe() {
+        expect(world.usage.buysThroughPlay, isTrue);
+        expect(find.byKey(const ValueKey('plans_sheet_stripe_on_play')), findsOneWidget);
+        expect(find.byKey(const ValueKey('plans_sheet_cancel_button')), findsOneWidget);
+        expect(find.byKey(const ValueKey('plans_sheet_upgrade_button')), findsNothing);
+        expect(find.byType(TextField), findsNothing);
+        expect(find.text('Manage Payment Method'), findsNothing);
+        expect(find.byType(YearlySwitchPlansRow), findsNothing);
+      }
+
+      expectSafe();
+      world.responses[0] = null; // The refresh fails.
+      await world.usage.fetchSubscription(fresh: true);
+      await tester.pumpAndSettle();
+      expect(world.usage.billingProviderFailed, isFalse);
+      expectSafe();
+      world.responses[0] = paid; // And recovers.
+      await world.usage.fetchSubscription(fresh: true);
+      await tester.pumpAndSettle();
+      expectSafe();
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('a failed first read is not a Play client and the plans sheet shows Retry, no prices', (tester) async {
+      final world = await _pump(tester, <UserSubscriptionResponse?>[null]);
+      expect(world.usage.buysThroughPlay, isFalse);
+      expect(world.usage.billingProviderFailed, isTrue);
+      expect(find.byKey(const ValueKey('plans_sheet_upgrade_button')), findsNothing);
+      expect(find.textContaining('US\$'), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  });
+
+  group('paywall checkout on a build that sells through Google Play', () {
+    Future<PaywallCheckoutOutcome?> buy(WidgetTester tester, _World world, {String priceId = 'price_year'}) async {
+      PaywallCheckoutOutcome? outcome;
+      await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: world.usage,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async => outcome = await PaywallCheckout.start(context,
+                    priceId: priceId, plan: 'unlimited_v2', interval: 'year', source: 'test'),
+                child: const Text('Buy'),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('Buy'));
+      await tester.pumpAndSettle();
+      return outcome;
+    }
+
+    testWidgets('an open Outline paywall starts no Stripe Checkout once the reader is paid on Stripe with Play',
+        (tester) async {
+      Object? closed = 'open';
+      final world = await _pump(
+        tester,
+        <UserSubscriptionResponse?>[_response(play: null)],
+        child: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async => closed = await Navigator.of(context).push<Object?>(MaterialPageRoute(
+              builder: (_) => const OutlinePaywallPage(
+                source: 'test',
+                offer: PaywallOffer(
+                  tierId: 'unlimited_v2',
+                  monthly: null,
+                  yearly: PaywallPrice(priceId: 'price_year', interval: 'year', amountMinor: 26991, currency: 'usd'),
+                ),
+              ),
+            )),
+            child: const Text('open'),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.byType(OutlinePaywallPage), findsOneWidget);
+      // While the paywall is open, the reader turns out to pay on Stripe and the server sends Play setup.
+      world.responses[0] = _response(plan: PlanType.unlimitedV2, stripeId: 'sub_1');
+      await world.usage.fetchSubscription(fresh: true);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('outline_paywall_cta')));
+      await tester.pumpAndSettle();
+      expect(world.usage.checkoutSessions, 0);
+      expect(find.byType(PaymentWebViewPage), findsNothing);
+      expect(find.byType(OutlinePaywallPage), findsNothing);
+      expect(closed, isFalse);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('a paid Stripe reader with Play gets alreadyPaid and no Checkout request', (tester) async {
+      final world = _World(<UserSubscriptionResponse?>[_response(plan: PlanType.unlimitedV2, stripeId: 'sub_1')]);
+      addTearDown(world.billing.dispose);
+      addTearDown(world.usage.dispose);
+      await world.usage.fetchSubscription();
+      expect(await buy(tester, world), PaywallCheckoutOutcome.alreadyPaid);
+      expect(world.usage.checkoutSessions, 0);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('a Checkout URL that answers after Play setup arrived is dropped, never opened', (tester) async {
+      final world = _World(<UserSubscriptionResponse?>[_response(play: null)]);
+      addTearDown(world.billing.dispose);
+      addTearDown(world.usage.dispose);
+      world.usage.debugSetAvailablePlans({'plans': []});
+      await world.usage.fetchSubscription();
+      world.usage.whileCheckoutInFlight = () async {
+        world.responses[0] = _response(plan: PlanType.unlimitedV2, stripeId: 'sub_1');
+        await world.usage.fetchSubscription(fresh: true);
+      };
+      expect(await buy(tester, world), PaywallCheckoutOutcome.alreadyPaid);
+      expect(world.usage.checkoutSessions, 1);
+      expect(find.byType(PaymentWebViewPage), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('a cancel-pending reader may reactivate the same price: reactivated is accepted, a URL is not',
+        (tester) async {
+      final world = _World(<UserSubscriptionResponse?>[
+        _response(plan: PlanType.unlimitedV2, stripeId: 'sub_1', cancelAtPeriodEnd: true, priceId: 'price_year')
+      ]);
+      addTearDown(world.billing.dispose);
+      addTearDown(world.usage.dispose);
+      await world.usage.fetchSubscription();
+      // Another price is refused before any request (the existing "Resubscribe first" rule).
+      expect(await buy(tester, world, priceId: 'price_month'), PaywallCheckoutOutcome.failed);
+      expect(world.usage.checkoutSessions, 0);
+      // The same price answered with a Checkout URL: dropped.
+      expect(await buy(tester, world), PaywallCheckoutOutcome.alreadyPaid);
+      expect(world.usage.checkoutSessions, 1);
+      expect(find.byType(PaymentWebViewPage), findsNothing);
+      // The same price reactivated in place: accepted.
+      world.usage.checkoutAnswer = {'status': 'reactivated', 'message': 'ok', 'next_billing_date': 1893456000};
+      expect(await buy(tester, world), PaywallCheckoutOutcome.purchased);
+      expect(find.byType(PaymentWebViewPage), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('the hosted paywall closes once Play is known and never builds its web page', (tester) async {
+      Object? closed = 'open';
+      final world = await _pump(
+        tester,
+        <UserSubscriptionResponse?>[_response(plan: PlanType.unlimitedV2, stripeId: 'sub_1')],
+        child: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async => closed = await Navigator.of(context).push<Object?>(MaterialPageRoute(
+                builder: (_) => WebPaywallPage(source: 'test', url: Uri.parse('https://example.invalid/paywall')))),
+            child: const Text('open'),
+          ),
+        ),
+      );
+      expect(world.usage.buysThroughPlay, isTrue);
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(WebPaywallPage), findsNothing);
+      expect(closed, isFalse);
+      expect(world.usage.checkoutSessions, 0);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    test('the hosted paywall loads no page at all once this client sells through Google Play', () {
+      expect(WebPaywallPage.navigationDecision('https://checkout.stripe.com/c/pay', buysThroughPlay: true),
+          NavigationDecision.prevent);
+      expect(WebPaywallPage.navigationDecision('https://checkout.stripe.com/c/pay', buysThroughPlay: false),
+          NavigationDecision.navigate);
+      expect(
+          WebPaywallPage.navigationDecision('http://example.com', buysThroughPlay: false), NavigationDecision.prevent);
+    });
   });
 
   // The backend's refusals (#26232): a top-level sentence and code.

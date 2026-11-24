@@ -15840,8 +15840,13 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'Ditagih melalui omi.me. Kelola atau batalkan di sini kapan saja.';
+  String get playStripeBilledOnWeb => 'Ditagih melalui omi.me. Batalkan di sini kapan saja.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'Perbarui kartu Anda di omi.me melalui web.';
+  String get playStripeBilledOnWebShort => 'Ditagih melalui omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Perbarui kartu Anda di omi.me untuk mendapatkan $plan kembali.';
+  }
 }

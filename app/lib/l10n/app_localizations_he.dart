@@ -15712,8 +15712,13 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'החיוב מתבצע דרך omi.me. אפשר לנהל או לבטל כאן בכל עת.';
+  String get playStripeBilledOnWeb => 'החיוב מתבצע דרך omi.me. אפשר לבטל כאן בכל עת.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'עדכנו את הכרטיס ב-omi.me באתר.';
+  String get playStripeBilledOnWebShort => 'החיוב מתבצע דרך omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'עדכנו את הכרטיס ב-omi.me כדי לקבל בחזרה את $plan.';
+  }
 }

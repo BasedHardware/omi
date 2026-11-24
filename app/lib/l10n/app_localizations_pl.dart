@@ -15871,8 +15871,13 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get playStripeBilledOnWeb => 'Rozliczane przez omi.me. Zarządzaj lub anuluj tutaj w dowolnym momencie.';
+  String get playStripeBilledOnWeb => 'Rozliczane przez omi.me. Anuluj tutaj w dowolnym momencie.';
 
   @override
-  String get playStripeUpdateCardOnWeb => 'Zaktualizuj kartę na omi.me w przeglądarce.';
+  String get playStripeBilledOnWebShort => 'Rozliczane przez omi.me.';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return 'Zaktualizuj kartę na omi.me, aby odzyskać $plan.';
+  }
 }
