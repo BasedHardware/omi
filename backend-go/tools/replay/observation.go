@@ -94,7 +94,7 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 
 func validateGoAttachMemoEvidence(diffs *[]difference, goRun *observation) {
 	if goRun == nil || goRun.EpisodeAttachMemoValid || goRun.EpisodeAttachMemoFailureReason == "missing_transcript" ||
-		goRun.EpisodeAttachMemoFailureReason == "transcript_decode_failed" ||
+		goRun.EpisodeAttachMemoFailureReason == "transcript_decode_failed" || goRun.EpisodeAttachMemoFailureReason == "discarded_without_memo" ||
 		goRun.EpisodeAttachMemoFailureReason == "content_key_unavailable" {
 		return
 	}

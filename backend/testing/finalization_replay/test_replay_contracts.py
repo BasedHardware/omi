@@ -224,6 +224,18 @@ class ReplayContractTests(unittest.TestCase):
             'conversation_owner_mismatch',
         )
 
+    def test_go_discard_needs_no_attach_memo_but_flags_stale_stamps(self):
+        path = 'users/owner/episode_links/conversation'
+        conversation = {'discarded': True, 'episode_id': 'episode', 'transcript_segments': []}
+        link = {'episode_id': 'episode'}
+
+        def check():
+            return episode_attach_go_memo_failure_reason('owner', 'conversation', conversation, {path: link})
+
+        self.assertEqual(check(), 'discarded_without_memo')
+        link['attach_completed'] = 'v2:old'
+        self.assertEqual(check(), 'discarded_with_memo')
+
     def test_python_attach_memo_cache_fallthrough_requires_own_prior_key(self):
         path = 'users/owner/episode_links/conversation'
         conversation = {'episode_id': 'episode'}

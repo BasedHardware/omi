@@ -148,6 +148,13 @@ def episode_attach_go_memo_failure_reason(
     uid, cid, conversation, derived_documents, *, transcript_decoder=None, content_key_fn=None
 ):
     """Require Go's complete attach memo to match the final stored row exactly."""
+    from utils.conversations.fragment_visibility import is_relevance_discarded
+
+    if is_relevance_discarded(conversation):
+        link = derived_documents.get(f'users/{uid}/episode_links/{cid}') or {}
+        if any(link.get(f'attach_{field}') is not None for field in ('revision', 'completed', 'finalized', 'owner_id')):
+            return 'discarded_with_memo'
+        return 'discarded_without_memo'
     return _episode_attach_memo_failure_reason(
         uid,
         cid,
