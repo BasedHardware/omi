@@ -627,10 +627,20 @@ class _Conversations extends ConversationProvider {
     notifyListeners();
   }
 
+  /// Where the last recent-rows re-read started; null until one runs.
+  DateTime? recentSince;
+
   @override
   Future<bool> fetchConversations({bool restoreMergeWatches = true}) async {
     listReads++;
     return true;
+  }
+
+  // v3 Home's periodic and capture-event re-reads ask only for recent rows.
+  @override
+  Future<void> refreshRecentConversations(DateTime since) async {
+    listReads++;
+    recentSince = since;
   }
 }
 
@@ -806,6 +816,8 @@ void main() {
       expect(home.conversationsV3.live, isNull);
       expect(home.conversations.listReads, before + 1,
           reason: 'the closed conversation comes back as an ordinary row from the list read');
+      expect(home.conversations.recentSince!.isAfter(home.liveStart), isFalse,
+          reason: 'the bounded re-read reaches back to when the closed conversation opened');
 
       // The pendant is still streaming with no window open: the live row's placeholder stands in, and
       // the pendant capture card does not come back between windows.
@@ -1873,6 +1885,67 @@ void main() {
         });
       });
     }
+
+    testWidgets('a new live row leads Today while the previous window is processing', (tester) async {
+      final date = DateTime.now();
+      final todayAtNoon = DateTime(date.year, date.month, date.day, 12);
+      await withClock(Clock.fixed(todayAtNoon), () async {
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        // The date label uses the device clock, so seed a finished row on its Today.
+        home.conversations.conversations = [
+          _conversation('today-call', todayAtNoon.subtract(const Duration(minutes: 5)), 'Call from the printer',
+              v3: null),
+        ];
+        home.conversations.groupConversationsByDate();
+        final today = find.text('Today');
+        final listening = find.text('Listening');
+        final processing = find.byKey(const Key('home_processing_row'));
+        final call = find.byKey(const ValueKey('today-call'));
+
+        void expectOrder(List<Finder> rows) {
+          for (final row in rows) {
+            expect(row, findsOneWidget);
+          }
+          for (var i = 1; i < rows.length; i++) {
+            expect(tester.getBottomLeft(rows[i - 1]).dy, lessThanOrEqualTo(tester.getTopLeft(rows[i]).dy));
+          }
+        }
+
+        home.publishManualEnds();
+        final pending = home.capture.onManualEnd!('live-1');
+        await tester.pump();
+        expect(home.conversationsV3.finishRow, same(pending));
+        expect(find.byKey(const ValueKey('live-1')), findsNothing);
+        expect(find.byType(V3LivePlaceholderRow), findsNothing);
+        expectOrder([today, processing, call]);
+        expect(find.descendant(of: processing, matching: find.text('Processing…')), findsOneWidget);
+
+        home.liveOpen = false;
+        await home.conversationsV3.refresh();
+        home.capture.activeRecordingId = 'capture-2';
+        home.capture.ping();
+        await tester.pump();
+        final placeholder = find.byType(V3LivePlaceholderRow);
+        expect(find.descendant(of: placeholder, matching: listening), findsOneWidget);
+        expectOrder([today, placeholder, processing, call]);
+
+        home.liveId = 'live-2';
+        home.liveTitle = '';
+        home.liveOpen = true;
+        await home.conversationsV3.refresh();
+        await tester.pump();
+        final serverLive = find.byKey(const ValueKey('live-2'));
+        expect(home.conversationsV3.finishRow, same(pending));
+        expect(placeholder, findsNothing);
+        expect(find.descendant(of: serverLive, matching: listening), findsOneWidget);
+        expectOrder([today, serverLive, processing, call]);
+        await shoot(tester, '001-mobile-ios-v3-listening-above-processing');
+        await _dispose(tester, home);
+      });
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
     testWidgets('manual finish replaces the live row until its summary is listed', (tester) async {
       await withClock(Clock.fixed(_now), () async {

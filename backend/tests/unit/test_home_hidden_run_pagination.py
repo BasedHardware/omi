@@ -75,7 +75,7 @@ def test_page_after_the_run_is_full_and_advances_past_it(monkeypatch):
     ids, info, _ = page(monkeypatch, data, offset=0)
     assert ids == visible[:PAGE]
     # 30 visible + 150 hidden + 20 visible rows consumed, not the 64-read cap.
-    assert info == {'storage_rows': 200, 'has_more': True}
+    assert info == {'storage_rows': 200, 'has_more': True, 'hidden_rows': 150}
     ids, info, _ = page(monkeypatch, data, offset=200)
     assert ids == visible[PAGE : 2 * PAGE]
     # No re-served rows: the advance is in storage rows, which the offset counts.
@@ -94,7 +94,7 @@ def test_run_longer_than_the_cap_returns_a_short_page_that_still_pages_on(monkey
     data, visible = owner(before=10, hidden=150, after=100)
     ids, info, counts = page(monkeypatch, data, offset=0)
     assert ids == visible[:10]
-    assert info == {'storage_rows': 10 + 64, 'has_more': True}
+    assert info == {'storage_rows': 10 + 64, 'has_more': True, 'hidden_rows': 64}
     assert counts['reads'] == 10 + 64
     seen, _ = released_app_walk(monkeypatch, data)
     assert seen == visible
@@ -113,7 +113,7 @@ def test_end_of_collection_reports_no_more(monkeypatch):
     data, visible = owner(before=5, hidden=20, after=5)
     ids, info, _ = page(monkeypatch, data, offset=0)
     assert ids == visible
-    assert info == {'storage_rows': 30, 'has_more': False}
+    assert info == {'storage_rows': 30, 'has_more': False, 'hidden_rows': 20}
 
 
 def test_budget_cut_keeps_prefix_and_says_more(monkeypatch):
@@ -128,7 +128,7 @@ def test_budget_spent_before_the_first_row_does_not_say_more(monkeypatch):
     ids, info, _ = page(monkeypatch, data, offset=0, budget=budget(0))
     assert ids == []
     # A client honoring has-more would repeat the identical request forever.
-    assert info == {'storage_rows': 0, 'has_more': False}
+    assert info == {'storage_rows': 0, 'has_more': False, 'hidden_rows': 0}
 
 
 def test_discarded_scan_spent_before_a_row_does_not_say_more(monkeypatch):
@@ -144,7 +144,7 @@ def test_offset_charge_that_exhausts_the_budget_ends_the_walk(monkeypatch):
     assert ids == []
     assert counts['reads'] == 0
     # No storage row was read, so there is no position to resume from.
-    assert info == {'storage_rows': 0, 'has_more': False}
+    assert info == {'storage_rows': 0, 'has_more': False, 'hidden_rows': 0}
 
 
 def test_cursor_walk_crosses_the_run(monkeypatch):
@@ -246,3 +246,100 @@ def test_day_view_applies_home_visibility(monkeypatch, routes, filters, hide_hom
     monkeypatch.setattr(routes.conversations_db, 'get_conversations_without_photos', fetch)
     call_route(routes, **filters)
     assert calls[0]['hide_home'] is hide_home
+
+
+# -- Lean refills: a hidden run is scanned by its visibility fields, not downloaded (2026-11-24) --
+
+
+def test_hidden_run_is_scanned_lean_and_only_visible_rows_are_read_in_full(monkeypatch):
+    data, visible = owner()
+    ids, info, counts = page(monkeypatch, data, offset=0)
+    assert ids == visible[:PAGE]
+    # The first window (50 rows: 30 visible, 20 hidden) is a full read, as for an owner with no
+    # hidden rows. Everything after it is scouted: 130 hidden + 20 visible rows by projection.
+    assert counts['lean'] == 150
+    # Only the 20 visible candidates are then read in full.
+    assert counts['hydrated'] == 20
+    assert counts['reads'] == 200 + 20
+    assert info == {'storage_rows': 200, 'has_more': True, 'hidden_rows': 150}
+
+
+def test_owner_with_no_hidden_rows_pays_no_extra_read(monkeypatch):
+    data, visible = owner(before=120, hidden=0, after=0)
+    ids, _, counts = page(monkeypatch, data, offset=0)
+    assert ids == visible[:PAGE]
+    assert counts['reads'] == PAGE and 'lean' not in counts and 'hydrated' not in counts
+
+
+def test_scout_projection_carries_only_visibility_fields(monkeypatch):
+    data, _ = owner()
+    seen = []
+    original = db._Scout.hidden
+    monkeypatch.setattr(db._Scout, 'hidden', lambda self, row: seen.append(set(row)) or original(self, row))
+    page(monkeypatch, data, offset=0)
+    # The first window is a full read (its hidden rows are also shown to the scout, to decide whether
+    # lean refills fit this page); every row after it reaches the scout as a projection.
+    scouted = [fields for fields in seen if 'discarded' not in fields]
+    assert len(scouted) == 150
+    assert all(fields <= {'created_at', 'recording', 'home_hidden', 'deleted'} for fields in scouted)
+
+
+def test_row_only_the_full_predicate_hides_is_dropped_after_the_full_read(monkeypatch):
+    """The scout knows three flags. A dream duplicate passes it and is hidden by the full predicate."""
+    data, visible = owner(before=10, hidden=80, after=100)
+    duplicate = data[95]
+    duplicate['dream_duplicate_of'] = 'x'
+    visible.remove(duplicate['id'])
+    seen, _ = released_app_walk(monkeypatch, data)
+    assert seen == visible
+
+
+def test_budget_cut_mid_refill_never_skips_a_candidate(monkeypatch):
+    """Rows scouted as candidates but not yet read in full are not counted as consumed."""
+    data, visible = owner(before=10, hidden=40, after=200)
+    seen, offset = [], 0
+    for _ in range(200):
+        # 70 documents: the first window (50) and a scout batch cut before its candidates hydrate.
+        ids, info, _ = page(monkeypatch, data, offset=offset, budget=budget(offset + 70))
+        seen.extend(i for i in ids if i not in seen)
+        offset += info['storage_rows']
+        if not info['has_more']:
+            break
+    assert seen == visible
+
+
+def test_kill_switch_restores_full_document_refills(monkeypatch):
+    monkeypatch.setenv('OMI_LIST_LEAN_SKIP_ENABLED', 'false')
+    data, visible = owner()
+    ids, info, counts = page(monkeypatch, data, offset=0)
+    assert ids == visible[:PAGE]
+    assert counts['reads'] == 200 and 'lean' not in counts and 'hydrated' not in counts
+    assert info['storage_rows'] == 200
+
+
+def test_cursor_pages_refill_lean_and_reach_every_row(monkeypatch):
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"conversation_list_cursor":100}')
+    data, visible = owner(before=10, hidden=300, after=120)
+    seen, cursor, lean = [], None, 0
+    for _ in range(50):
+        ids, info, counts = page(monkeypatch, data, cursor=cursor) if cursor else page(monkeypatch, data, offset=0)
+        lean += counts.get('lean', 0)
+        seen.extend(i for i in ids if i not in seen)
+        if not info['has_more']:
+            break
+        cursor = info['next_cursor']
+        assert cursor
+    assert seen == visible
+    assert lean >= 300
+
+
+def test_run_the_scout_cannot_explain_keeps_full_document_refills(monkeypatch):
+    """Rows hidden for a reason only the full predicate sees would each cost a second read if scouted."""
+    data, visible = owner(before=10, hidden=150, after=100, reason='recording')
+    for row in data[10:160]:
+        del row['recording']
+        row['dream_duplicate_of'] = 'x'
+    ids, info, counts = page(monkeypatch, data, offset=0)
+    assert ids == visible[:PAGE]
+    assert 'lean' not in counts and 'hydrated' not in counts
+    assert counts['reads'] == info['storage_rows'] == 200

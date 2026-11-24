@@ -172,6 +172,7 @@ BODY_DIGEST = {
     'database.batch_census_export._scope': '239ed05dc6fef88f4ed8a88b870867f37623329cb96d8b1131278a52a3652dc8',
     'database.batch_pipeline_allowance_migration.candidates': '04c9beae56ec6091544a2ec69a8ba170032dbe3670697b704db2f88d513bc5cb',
     'database.conversation_batch_purge_jobs.RunProgress.pending_segments': '86b3d882fe3c575b3a540bb00d1845c941c5256d99848c4dc89917eb707ff3cc',
+    'database.conversations._PageFill._run_lean': 'b63bc3c4fea800ebe132e510332c4ec503c854a560eb5b380bd7e1d2701cbfe3',
     'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
     'database.conversation_batch_purge_jobs._drop_segment_records': '2db3123e6e11d177d434326668969249a7fd4e0aade9788d045056fbdefe8c9d',
     'database.conversation_batch_purge_jobs._owes_segments': '5945da3db3e539efafe6dbc95560280683ea863b77a8e7e720ee3c2902b59c68',
@@ -245,7 +246,9 @@ BODY_DIGEST = {
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
     # Re-reviewed: quiet admission uses the shared speech clock; query/read shapes are unchanged.
     # Re-reviewed 2026-11-04: atomic blocked_byok_at metadata only; query ownership is unchanged.
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'f20f3b16e0e8d9421b86c675510cbb0fc9a4d09b3e71f70c68c3254b8209542c',
+    # Re-reviewed: the early user-finish admission judges the snapshot already held; no collection query
+    # (cohort mode adds one cached point read of the owner's rollout_cohorts document).
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'dc815b20539ecf62552bd9de5e3f2c3842ecc53cb7a7df04a2edb87dd9ff2292',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
@@ -1353,6 +1356,18 @@ _add(
 )
 _add(
     CoveredByEntry(
+        'database.conversations._PageFill._run_lean',
+        covered_by=(
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations_without_photos',
+        ),
+        reason='lean refill of the same page fill: the consumer query with a field projection and a start_after bookmark, so the same filters, order and index as the full-document refill observed inside both listed consumers; it runs only under a request budget, which the drivers hold neutral',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversations._PageFill._run_lean'],
+    )
+)
+_add(
+    CoveredByEntry(
         'database.conversation_visibility_counts.count_hidden',
         covered_by=('database.conversations.get_conversations_count',),
         reason='tombstone count query invoked by the count driver on every combo',
@@ -1428,6 +1443,7 @@ _add(
             'deadline_floor': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
             'detach_from': (None, 'document gets for the old provisional membership; no query shape effect'),
             'admission': (False, 'member document refusal guard; no query filter or ordering effect'),
+            'finalizing_conversation_id': ('recorded-1', 'transactional deletion document gets only'),
         },
         base={
             'uid': UID,

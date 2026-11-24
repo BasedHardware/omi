@@ -59,6 +59,24 @@ def test_completed_identical_sync_has_no_episode_reads_or_writes(lane, monkeypat
     assert before == store.rows
 
 
+@pytest.mark.parametrize('marker', [('account_deletions', 'u'), ('users', 'u', 'deleted_conversations', 'same')])
+def test_recorded_sync_attachment_refuses_deletion_after_memo_miss(lane, monkeypatch, marker):
+    store, c, _ = lane
+    monkeypatch.setattr(service.client_gate, 'client_seen', lambda *_: True)
+    member = seed(store)
+    before = deepcopy(store.rows)
+    attach = episode_timeline.attach_recorded
+
+    def attach_after_deletion(*args, **kwargs):
+        store.rows[marker] = {}
+        return attach(*args, **kwargs)
+
+    monkeypatch.setattr(episode_timeline, 'attach_recorded', attach_after_deletion)
+    outcome = service.on_conversation_finalized('u', 'same', member, trigger='sync_update', collaborators=c)
+    assert outcome == 'skipped_deleted'
+    assert store.rows == {**before, marker: {}}
+
+
 def test_wal_revision_change_conservatively_falls_through(lane):
     store, c, _ = lane
     member = seed(store, sync_content_revision=1)
@@ -309,6 +327,39 @@ def test_scheduling_gate_runs_before_submit_and_preserves_first_finalize(lane, m
     monkeypatch.setenv('EPISODE_ATTACH_CONTENT_GATE_ENABLED', 'false')
     finalize.schedule_after_finalization('u', 'same', finalize.ProcessingTrigger.SYNC_UPDATE, row=fresh)
     assert submit.call_count == 2
+
+
+@pytest.mark.parametrize('marker', [('account_deletions', 'u'), ('users', 'u', 'deleted_conversations', 'same')])
+def test_finalized_memo_refuses_deletion_after_planning(lane, monkeypatch, marker):
+    store, c, _ = lane
+    member = seed(store)
+    assert service._attach_synced('u', 'same', member, c) == 'recorded'
+    fresh = deepcopy(store.rows[('users', 'u', 'conversations', 'same')])
+    before = deepcopy(store.rows)
+    run = episode_attach_memo.run_preloaded_transactional
+
+    def delete_before_transaction(*args, **kwargs):
+        store.rows[marker] = {}
+        return run(*args, **kwargs)
+
+    monkeypatch.setattr(episode_attach_memo, 'run_preloaded_transactional', delete_before_transaction)
+    episode_attach_memo.complete('u', 'same', fresh, None, finalized=True, firestore_client=store)
+    assert store.rows == {**before, marker: {}}
+
+
+@pytest.mark.parametrize('status', ['cancelled', 'billing_failed'])
+@pytest.mark.parametrize('tombstoned', [False, True])
+def test_restored_account_permits_finalized_memo_unless_conversation_is_tombstoned(lane, status, tombstoned):
+    store, c, _ = lane
+    member = seed(store)
+    assert service._attach_synced('u', 'same', member, c) == 'recorded'
+    fresh = deepcopy(store.rows[('users', 'u', 'conversations', 'same')])
+    store.rows[('account_deletions', 'u')] = {'wipe_status': status}
+    if tombstoned:
+        store.rows[('users', 'u', 'deleted_conversations', 'same')] = {}
+    episode_attach_memo.complete('u', 'same', fresh, None, finalized=True, firestore_client=store)
+    link = store.rows[('users', 'u', 'episode_links', 'same')]
+    assert link.get('attach_finalized') == (None if tombstoned else content_key(fresh))
 
 
 def test_discard_after_intake_same_revision_still_schedules_and_ends_member(lane, monkeypatch):

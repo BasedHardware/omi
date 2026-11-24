@@ -216,6 +216,11 @@ run_proof "Firestore read budget: sync upload, privacy and status polls" \
 run_proof "Firestore read budget: idle projection and pending-work backlog" \
   "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_idle.py
 
+# PL-487/482: durable record settlement and pacing use the real Store on every
+# backend. CI requires sim/emulator; full local qualification requires =all.
+run_proof "record dead-letter and retry conformance (PL-487/482)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/record_dead_letter_emulator_test.py
 
 if (( ${#failures[@]} )); then
   echo
