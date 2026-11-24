@@ -60,6 +60,28 @@ def test_two_recognizer_close_is_default_off_and_needs_two_validated_empty_recei
     assert terminal_empty_payload(2, spans, recognizer_receipts=both)['outcome'] == 'no_recoverable_speech'
 
 
+def test_language_guarded_close_has_its_own_default_off_switch(monkeypatch):
+    from config.batch_pipeline_empty_asr import language_guarded_empty_close_enabled, terminal_empty_allowed
+
+    spans = [{'start': 0, 'end': 1}]
+    empty = lambda name: {'provider': name, 'outcome': 'empty', 'word_count': 0}
+    both = {'modulate': empty('modulate'), 'soniox': empty('soniox')}
+    monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED', raising=False)
+    # The unguarded switch never opens the guarded case, and the reverse.
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', 'true')
+    assert not language_guarded_empty_close_enabled()
+    assert not terminal_empty_allowed(spans, recognizer_receipts=both, language_guarded=True)
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED', 'true')
+    assert terminal_empty_allowed(spans, recognizer_receipts=both, language_guarded=True)
+    assert not terminal_empty_allowed(spans, recognizer_receipts=both)
+    assert not terminal_empty_allowed(spans, recognizer_receipts={'modulate': empty('modulate')}, language_guarded=True)
+    with pytest.raises(Exception):
+        terminal_empty_payload(2, spans, recognizer_receipts=both)
+    payload = terminal_empty_payload(2, spans, recognizer_receipts=both, language_guarded=True)
+    assert payload['outcome'] == 'no_recoverable_speech'
+
+
 def make_worker(*, vad, retry, decode=None, stream=None):
     words = Mock()
     words.transcribe_batch.side_effect = lambda batch: [[] for _ in batch]
