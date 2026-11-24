@@ -6,7 +6,8 @@ import json
 
 import pytest
 
-from database import home_feed
+from database import conversations, home_feed, home_visibility_index
+from tests.unit.test_fsr_wq4_cursor import CountingQuery
 from utils.home_feed.projection import stamp, reveal_display
 from utils.encryption import encrypt
 
@@ -168,6 +169,60 @@ def drain(store):
         if result['ready']:
             return
     pytest.fail('bounded preparation failed to finish')
+
+
+def test_compact_projection_and_indexed_home_list_keep_independent_visibility(store, monkeypatch):
+    prefix = 'users/u/conversations/'
+    cases = {
+        'visible': {},
+        'list-only': {'sync_merged_into': 'visible'},
+        'discarded': {'discarded': True, 'home_hidden': True},
+        'hidden': {'home_hidden': True},
+        'recording': {'recording': True},
+        'duplicate': {'dream_duplicate_of': 'visible'},
+        'in-progress': {'status': 'in_progress'},
+    }
+    for cid, fields in cases.items():
+        row = {**conversation(id=cid, discarded=False, has_photos=False), **fields}
+        store.put(prefix + cid, home_visibility_index.stamp(row))
+    drain(store)
+
+    assert store.docs[prefix + 'list-only']['home_visible'] is False
+    assert store.docs[prefix + 'list-only']['home_list_visible'] is True
+    assert store.docs[prefix + 'discarded']['home_visible'] is False
+    assert store.docs[prefix + 'discarded']['home_list_visible'] is False
+
+    # Recompute the list bit when a writer clears one of the source flags.
+    ref = store.collection('users').document('u').collection('conversations').document('discarded')
+    tx = Tx(store)
+    tx.update(ref, home_visibility_index.stamp({'home_hidden': False}, store.docs[ref.path]))
+    tx.commit()
+    assert store.docs[ref.path]['home_visible'] is False
+    assert store.docs[ref.path]['home_list_visible'] is True
+
+    data = [store.docs[prefix + cid] for cid in cases]
+    statuses = ['processing', 'completed']
+    expected = [
+        row['id']
+        for row in sorted(data, key=lambda row: (row['created_at'], row['id']), reverse=True)
+        if row['status'] in statuses
+        and row['discarded'] is False
+        and conversations.is_visible_conversation(row, hide_home=True)
+    ]
+    assert expected == ['visible', 'list-only']
+    monkeypatch.setattr(conversations, 'db', CountingQuery(data))
+    page = {}
+    first = conversations.get_conversations_without_photos(
+        'u', limit=1, statuses=statuses, hide_home=True, indexed_home=True, cursor_page=page
+    )
+    second = conversations.get_conversations_without_photos(
+        'u', limit=1, statuses=statuses, hide_home=True, indexed_home=True, cursor=page['next_cursor']
+    )
+    assert [row['id'] for row in first + second] == expected
+    compact = home_feed.feed('u', firestore_client=store)
+    compact_ids = {item['detail_id'] for item in compact['items']}
+    assert 'visible' in compact_ids
+    assert not {'discarded', 'list-only'} & compact_ids
 
 
 def test_prepare_preserves_legacy_missing_started_at_and_late_import_order(store):

@@ -4622,7 +4622,6 @@
     "capturePendantDisconnectedShort": "Omi จะเชื่อมต่อใหม่เอง",
     "forYou": "สำหรับคุณ",
     "stopThese": "หยุดรายการแบบนี้",
-    "meetingActionItemsTitle": "รายการที่ต้องทำ",
     "addToTasks": "เพิ่มไปยังงาน",
     "showInTranscript": "แสดงบทถอดเสียง",
     "tentativeTaskDueDate": "กำหนดส่งประมาณ {date}",
@@ -4763,5 +4762,8 @@
     "prepaidCodeFieldHint": "ป้อนโค้ดของคุณ",
     "prepaidCodeRedeem": "แลก",
     "prepaidCodeRedeemed": "แลกโค้ดแล้ว",
-    "prepaidCodeResult": "{reason, select, invalid{โค้ดนี้ไม่ถูกต้อง โปรดตรวจสอบแล้วลองอีกครั้ง} used{โค้ดนี้ถูกใช้ไปแล้ว} expired{โค้ดนี้หมดอายุแล้ว} hasPlan{คุณมีแพ็กเกจอยู่แล้ว โค้ดของคุณยังไม่ถูกใช้ แลกโค้ดนี้ได้หลังแพ็กเกจของคุณสิ้นสุด} notPrepaid{ไม่สามารถแลกโค้ดนี้ที่นี่ได้ ใช้โค้ดนี้เมื่อคุณเลือกแพ็กเกจ} notEligible{ไม่สามารถใช้โค้ดนี้กับบัญชีนี้ได้} rateLimited{ลองหลายครั้งเกินไป โปรดลองใหม่ภายหลัง} other{เกิดข้อผิดพลาด โปรดลองอีกครั้ง}}"
+    "prepaidCodeResult": "{reason, select, invalid{โค้ดนี้ไม่ถูกต้อง โปรดตรวจสอบแล้วลองอีกครั้ง} used{โค้ดนี้ถูกใช้ไปแล้ว} expired{โค้ดนี้หมดอายุแล้ว} hasPlan{คุณมีแพ็กเกจอยู่แล้ว โค้ดของคุณยังไม่ถูกใช้ แลกโค้ดนี้ได้หลังแพ็กเกจของคุณสิ้นสุด} notPrepaid{ไม่สามารถแลกโค้ดนี้ที่นี่ได้ ใช้โค้ดนี้เมื่อคุณเลือกแพ็กเกจ} notEligible{ไม่สามารถใช้โค้ดนี้กับบัญชีนี้ได้} rateLimited{ลองหลายครั้งเกินไป โปรดลองใหม่ภายหลัง} other{เกิดข้อผิดพลาด โปรดลองอีกครั้ง}}",
+    "playStripeBilledOnWeb": "เรียกเก็บเงินผ่าน omi.me ยกเลิกได้ที่นี่ทุกเมื่อ",
+    "playStripeBilledOnWebShort": "เรียกเก็บเงินผ่าน omi.me",
+    "playStripePlanPaused": "แพ็กเกจ {plan} ของคุณหยุดชั่วคราวอยู่"
 }

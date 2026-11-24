@@ -15340,9 +15340,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get stopThese => 'Stopp disse';
 
   @override
-  String get meetingActionItemsTitle => 'Handlingspunkter';
-
-  @override
   String get addToTasks => 'Legg til i Oppgaver';
 
   @override
@@ -15828,5 +15825,16 @@ class AppLocalizationsNo extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Faktureres via omi.me. Avslutt her når som helst.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Faktureres via omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return '$plan-abonnementet ditt er satt på pause.';
   }
 }

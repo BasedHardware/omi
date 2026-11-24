@@ -15329,9 +15329,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get stopThese => 'Peata need';
 
   @override
-  String get meetingActionItemsTitle => 'Tegevusüksused';
-
-  @override
   String get addToTasks => 'Lisa ülesannetesse';
 
   @override
@@ -15815,5 +15812,16 @@ class AppLocalizationsEt extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Arveldatakse omi.me kaudu. Tühista siin igal ajal.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Arveldatakse omi.me kaudu.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Sinu $plan pakett on peatatud.';
   }
 }

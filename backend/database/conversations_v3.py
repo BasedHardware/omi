@@ -15,6 +15,7 @@ from google.api_core.exceptions import DeadlineExceeded, InvalidArgument
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from database import home_visibility_index
 from database._client import firestore_failure_reason, get_firestore_client
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from database import conversations, conversations_v3_leases as leases
@@ -579,6 +580,40 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
     return mark(client.transaction())
 
 
+def promote_manual_end(uid, cid, *, firestore_client=None):
+    """Turn a stored manual-end request into the cut. True when this call wrote it.
+
+    Called once the whole recording will land as one transcript. It does not mark the recording
+    pending when no speech has landed: the transcript write that follows owns that wake, so a
+    recording with no speech costs no reconcile.
+    """
+    client = firestore_client or get_firestore_client()
+    ref = user_conversations(client, uid).document(cid)
+
+    @firestore.transactional
+    def promote(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        if (
+            not row.get('recording')
+            or not row.get('v3_manual_end_requested')
+            # The cut is materialised from finished_at; without it the marker would be inert.
+            or not row.get('finished_at')
+            or row.get('v3_manual_end')
+            or row.get('deleted')
+            or row.get('discarded')
+        ):
+            return False
+        update: dict[str, Any] = {'v3_manual_end': True}
+        if row.get('v3_speech_landed_at') is not None:
+            # Speech already landed, so its reconcile may have run without the cut. Leave the
+            # recording pending: the sweep re-enqueues an owner whose pending is older than ten minutes.
+            update.update(v3_pending=True, v3_pending_since=row.get('v3_pending_since') or datetime.now(timezone.utc))
+        tx.update(ref, update)
+        return True
+
+    return promote(client.transaction())
+
+
 def _projection_snapshots(client, coll, tx, ids, *, batch_reads):
     if not batch_reads:
         for cid in ids:
@@ -670,7 +705,7 @@ def commit_projection(
                         {OPEN_LOOP_EXTRACTIONS_FIELD: retained}, uid, level
                     )
                 )
-        prepared.append(encoded)
+        prepared.append(home_visibility_index.stamp(encoded))
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
     batch_reads = os.getenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'on').strip().lower() != 'off'
     # What the current transaction attempt writes, kept by reference and sized only after a failure.
@@ -750,6 +785,7 @@ def commit_projection(
                     'deleted': True,
                     'discarded': True,
                     'home_hidden': True,
+                    home_visibility_index.FIELD: False,
                     'summary_due_at': None,
                     'sync_merged_into': survivor,
                     'v3_claims_transferred_to': survivor,
@@ -918,7 +954,7 @@ def commit_projection(
                 }
                 if recordings[rid].get('_v3_derive'):
                     # Our own committed conversion, not an external change.
-                    owned |= {'recording', 'v3_backfill_run', 'v3_backfill_prior'}
+                    owned |= {'recording', home_visibility_index.FIELD, 'v3_backfill_run', 'v3_backfill_prior'}
                 changed = sorted(
                     k
                     for k in set(current) | set(observed[rid])
@@ -1092,7 +1128,7 @@ def backfill_conversion(recording):
     patch = {'recording': True, 'backfill_superseded': True, 'v3_backfill_run': recording['_v3_backfill_run']}
     if '_v3_backfill_prior' in recording:
         patch['v3_backfill_prior'] = recording['_v3_backfill_prior']
-    return patch
+    return home_visibility_index.stamp(patch)
 
 
 def _rederive_prior(row):
@@ -1313,7 +1349,7 @@ def restore_backfill_donors(uid, token, ids, *, firestore_client=None):
                 continue
             patch = {k: prior[k] if k in prior else firestore.DELETE_FIELD for k in BACKFILL_TRACKED}
             patch.update(v3_backfill_run=firestore.DELETE_FIELD, v3_backfill_prior=firestore.DELETE_FIELD)
-            tx.update(ref, patch)
+            tx.update(ref, home_visibility_index.stamp(patch, row))
             restored += 1
         return restored, kept
 

@@ -215,12 +215,18 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     assert list(services)[: len(FOUR)] == list(FOUR)
     assert pump['secrets'] == integration['secrets']
     assert pump['flags'] == integration['flags']
-    assert pump['forbidden_env'] == integration['forbidden_env']
+    integration_only_logging = {
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT',
+        'BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED',
+    }
+    assert pump['forbidden_env'] == [*integration['forbidden_env'], *sorted(integration_only_logging)]
     assert pump['service_account'] == integration['service_account']
     train_pins = {'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'BATCH_PROJECTION_OUTBOX'}
     # The dark pump keeps the dark successor's silence-skip value (SCA-3318).
     overridden = (
         set(ACTIVE_OVERRIDES)
+        | integration_only_logging
         | {
             'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED',
             'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED',

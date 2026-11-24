@@ -180,6 +180,8 @@ env:
       configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
   - name: BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED
     value: "false"
+  - name: CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED
+    value: "off"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE

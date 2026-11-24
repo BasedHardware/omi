@@ -154,3 +154,32 @@ and Play Console receipts before graduating the rollout.
 This implementation provides hermetic query/route evidence, not production
 latency or deployment acceptance. No production reads, writes, index creation,
 remote Git operations, or deployment are required for its local verification.
+
+## Default Home for v3 owners (SCA-4102)
+
+The collection index for `discarded`, `status`, `home_list_visible`, and descending
+`created_at` filters out raw recordings and hidden v3 windows before reading
+conversation documents. The API still checks row visibility after the query.
+The rollout is independent of `OMI_INDEXED_LIST_READS_ENABLED`.
+
+1. Deploy the index and the backend writers with `OMI_HOME_VISIBILITY_INDEX_OWNERS`
+   empty. Confirm the index is ready and all conversation writers have rolled.
+2. From `backend/`, use the approved project and owner scope to plan a page:
+   `PYTHONPATH=. python scripts/backfill_home_visibility_index.py --project PROJECT --uid OWNER > plan.json`.
+   The command scans up to 1,000 documents in ID order, with a mask for the
+   candidate bit and its two source flags. Publish the rows scanned, missing and
+   mismatched counts, expected reads and writes, and retry ceiling before applying.
+3. Apply an approved plan by adding `--apply plan.json` to the command and saving
+   the output separately. Each transaction re-reads the current flags. If the
+   page exceeds the reviewed read or write scope, generate a fresh plan. Resume
+   planning with `--after NEXT_AFTER` until `next_after` is null. If interrupted,
+   re-plan the same range before applying again.
+4. Reconcile from the first page in dry-run mode. After every page reports zero
+   missing or mismatched bits, add the owner to the comma-separated
+   `OMI_HOME_VISIBILITY_INDEX_OWNERS` allowlist. Only clients that negotiate
+   `X-Omi-Home-Page-Mode` can use the index. Use an updated mobile build for canary
+   verification.
+5. Compare ordered IDs and page boundaries with the legacy query. Check
+   `conversation_list_read` for `indexed_home=True`, and confirm `docs` is close
+   to `rows` on full 50-row first and cursor pages. Remove the owner from the
+   allowlist to roll back. Indexed continuations then restart on page one.

@@ -128,6 +128,50 @@ void main() {
     expect(provider.lastSearchResult?.isSuccess, isTrue);
   });
 
+  test('resetting filtered Home reloads once and fences an in-flight search', () async {
+    final staleSearch = Completer<ConversationSearchResult>();
+    var listReads = 0;
+    final provider = ConversationProvider(
+      conversationListFetcher: () async {
+        listReads++;
+        return (items: [_conversation('home-row')], ok: true);
+      },
+      conversationSearchResultFetcher:
+          (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) => staleSearch.future,
+      isSignedIn: () => true,
+    )
+      ..showStarredOnly = true
+      ..selectedFolderId = 'folder'
+      ..selectedStartDate = DateTime(2026, 11, 1)
+      ..selectedEndDate = DateTime(2026, 11, 2)
+      ..selectedSpeakerId = 'speaker'
+      ..isSelectionModeActive = true;
+    addTearDown(provider.dispose);
+    provider.setSearchDateRange(provider.selectedStartDate, provider.selectedEndDate);
+    final oldSearch = provider.searchConversations('old');
+    expect(provider.showsDefaultHome, isFalse);
+
+    await provider.resetToDefaultHome();
+
+    expect(provider.showsDefaultHome, isTrue);
+    expect(provider.searchStartDate, isNull);
+    expect(provider.searchEndDate, isNull);
+    expect(provider.selectedEndDate, isNull);
+    expect(listReads, 1);
+    Iterable<String> groupedIds() => provider.groupedConversations.values.expand((rows) => rows).map((row) => row.id);
+    expect(groupedIds(), ['home-row']);
+
+    staleSearch.complete(ConversationSearchResult(
+      items: [_conversation('stale-search-row')],
+      currentPage: 1,
+      totalPages: 1,
+      outcome: ConversationSearchResultOutcome.success,
+    ));
+    expect((await oldSearch).isSuccess, isFalse);
+    expect(provider.lastSearchResult, isNull);
+    expect(groupedIds(), ['home-row']);
+  });
+
   test('a late pagination page cannot append after the query changes', () async {
     final oldPage = Completer<ConversationSearchResult>();
     final provider = ConversationProvider(

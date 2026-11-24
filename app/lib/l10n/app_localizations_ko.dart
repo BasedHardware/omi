@@ -15114,9 +15114,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get stopThese => '이 유형 중지';
 
   @override
-  String get meetingActionItemsTitle => '실행 항목';
-
-  @override
   String get addToTasks => '작업에 추가';
 
   @override
@@ -15596,5 +15593,16 @@ class AppLocalizationsKo extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me를 통해 청구됩니다. 여기에서 언제든 취소할 수 있습니다.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me를 통해 청구됩니다.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return '$plan 플랜이 일시 중지되었습니다.';
   }
 }

@@ -5,6 +5,8 @@ from dataclasses import replace
 
 from utils.batch_pipeline.audio import RATE, audio_unit
 from utils.batch_pipeline.capture_decode import canonical_pcm, validated_frame_count, decode_units
+from utils.sync import future_capture_request
+from utils.sync.future_capture_request import Outcome as FutureCaptureOutcome
 from utils.sync.capture_clock import is_implausible_future_capture_time, is_early_capture_time
 from utils.sync.clock_run import capture_clock_run_from_path
 from utils.sync.content_id import compute_sync_content_id
@@ -23,6 +25,7 @@ def decode_future_units(
     max_seconds=3600,
     coverage_context=None,
     retained_offsets_by_name=None,
+    durable_repair=False,
 ):
     retained = (
         {
@@ -46,6 +49,9 @@ def decode_future_units(
     if not future and not estimated:
         require_future_upload([], received_at=received_at)
     if future:
+        if durable_repair:
+            # A durable repair can still need offsets when new admission is off.
+            future_capture_request.include_receipt_clock_repair()
         yield from _future_units(
             future,
             uid=uid,
@@ -71,6 +77,7 @@ def decode_future_units(
 
 
 def _future_units(paths, *, uid, device_id, received_at, max_seconds, coverage_context, retained):
+    future_capture_request.mark(FutureCaptureOutcome.DECODE_FAILED)
     frames_per_unit = int(max_seconds * RATE)
     if frames_per_unit < 1 or max_seconds > 7200:
         raise ValueError('invalid dedicated capture-unit ceiling')
@@ -83,13 +90,16 @@ def _future_units(paths, *, uid, device_id, received_at, max_seconds, coverage_c
             raise ValueError('sync decode did not preserve every uploaded frame')
         # All full-file anchors and account bounds are checked before yielding
         # even one unit. Coverage derivatives cannot create another offset.
+        spans = [(p, get_timestamp_from_path(p), len(canonical_pcm(p)) / (2 * RATE)) for p in wavs]
+        retained_offsets = {p.replace('.bin', '.wav'): offset for p, offset in retained.items()}
+        future_capture_request.mark(FutureCaptureOutcome.REACHED_OFFSETS)
         offsets = receipt_clock_offsets(
-            [(p, get_timestamp_from_path(p), len(canonical_pcm(p)) / (2 * RATE)) for p in wavs],
+            spans,
             uid=uid,
             device_id=device_id,
             received_at=received_at,
             source_ids=source_ids,
-            retained_offsets={p.replace('.bin', '.wav'): offset for p, offset in retained.items()},
+            retained_offsets=retained_offsets,
         )
         for source in sorted(wavs, key=lambda p: (get_timestamp_from_path(p), os.path.basename(p))):
             pieces, maps, derivatives = prepare(uid, [source], decoded_frames, coverage_context)

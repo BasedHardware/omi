@@ -28035,6 +28035,18 @@
             ],
             "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler so a malformed projection cannot 422 a finished recording. Hash-bound to the persisted transcript. Display only — never an input to intelligence.",
             "title": "Client Processing"
+          },
+          "live_conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional live v3 window to Finish when no active recording is found.",
+            "title": "Live Conversation Id"
           }
         },
         "title": "ProcessConversationRequest",
@@ -71254,7 +71266,7 @@
     },
     "/v1/payments/prepaid-code/redeem": {
       "post": {
-        "description": "Redeem a fully prepaid Omi Pro code with no card. Errors carry a reason code as ``detail``.",
+        "description": "Redeem a fully prepaid Omi Pro code with no card. Errors carry a reason code as ``detail``.\n\nOpen to the switch's readers and to every Google Play build (same helper the subscription response\nuses): a Play build has no other way to activate a code. No payment is taken either way, and the\nlive-plan refusals below cover Stripe and Google Play alike.",
         "operationId": "redeem_prepaid_code_endpoint_v1_payments_prepaid_code_redeem_post",
         "parameters": [
           {

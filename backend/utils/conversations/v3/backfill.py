@@ -17,7 +17,7 @@ import time
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 
-from config.conversations_v3 import HISTORICAL_SITDOWN_TIMING, stretch_cohesion_enabled
+from config.conversations_v3 import HISTORICAL_SITDOWN_TIMING, max_window_seconds, stretch_cohesion_enabled
 from database import conversations as conversations_db
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
@@ -176,7 +176,7 @@ def estimate_partition(uid, partition, run_id, *, rederive=False, now=None):
         uid, since=partition['since'], until=partition['until'], run_id=run_id, rederive=rederive
     )
     eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
-    groups = outline.stretches(eligible, now)
+    groups = outline.stretches(eligible, now, max_window=timedelta(seconds=max_window_seconds()))
     est = {
         'sources': len(eligible),
         'stretches': len(groups),
@@ -620,7 +620,7 @@ def estimate_live_partition(uid, partition, run_id, *, now=None, historical_sitd
             eligible, now, since=partition['since'], until=partition['until'], internal_end=internal_end
         )
     else:
-        groups = outline.stretches(eligible, now)
+        groups = outline.stretches(eligible, now, max_window=timedelta(seconds=max_window_seconds()))
     protected = {cid for cid, row in existing.items() if row.get('_v3_protected')}
     outlines = [outline.fallback(group) for group in groups]
     if historical_sitdown:

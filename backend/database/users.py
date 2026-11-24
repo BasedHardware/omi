@@ -2079,16 +2079,24 @@ def _s4_get_user_subscription_uncached(
 
 def get_existing_user_subscription(uid: str, *, firestore_client: Any | None = None) -> Optional[Subscription]:
     """Gets the user's stored subscription without creating a default record."""
+    return get_existing_user_subscription_and_fields(uid, (), firestore_client=firestore_client)[0]
+
+
+def get_existing_user_subscription_and_fields(
+    uid: str, fields: tuple[str, ...], *, firestore_client: Any | None = None
+) -> tuple[Optional[Subscription], dict]:
+    """The stored subscription plus top-level ``fields`` of the user document, in the same single read."""
     user_ref = (firestore_client or db).collection('users').document(uid)
-    user_doc = user_ref.get(['subscription'])
+    user_doc = user_ref.get(['subscription', *fields])
     if not user_doc.exists:
         observe_subscription(uid, None)
-        return None
+        return None, {}
 
     user_data = user_doc.to_dict()
+    extra = {name: user_data.get(name) for name in fields}
     if 'subscription' not in user_data:
         observe_subscription(uid, None)
-        return None
+        return None, extra
 
     sub_data = user_data['subscription']
 
@@ -2102,7 +2110,7 @@ def get_existing_user_subscription(uid: str, *, firestore_client: Any | None = N
 
     subscription = parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
     observe_subscription(uid, subscription)
-    return subscription
+    return subscription, extra
 
 
 def get_user_training_data_opt_in(uid: str) -> Optional[dict]:
@@ -2715,5 +2723,8 @@ def write_ai_user_profile_if_unchanged(uid: str, expected_text: str, profile: di
 
 
 def delete_ai_user_profile(uid: str) -> None:
-    db.collection('users').document(uid).update({'ai_user_profile': firestore.DELETE_FIELD})
+    # ai_user_profile_v2 was written by the retired Dream state pass (a96ada8922); nothing reads it.
+    db.collection('users').document(uid).update(
+        {'ai_user_profile': firestore.DELETE_FIELD, 'ai_user_profile_v2': firestore.DELETE_FIELD}
+    )
     invalidate(_USER_AI_PROFILE_CACHE, uid)

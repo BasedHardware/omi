@@ -54,6 +54,11 @@ def merge():
     tombstones_stub.is_deleted = MagicMock(return_value=False)
     tombstones_stub.record_deletion = MagicMock()
 
+    # Audio custody is used during merge execution, outside this validation
+    # fixture. Keep its Firestore imports behind the scoped stub boundary.
+    record_audio_stub = ModuleType("database.record_audio")
+    record_audio_stub.fence_record_audio_removal = MagicMock(return_value=False)
+
     vector_db_stub = ModuleType("database.vector_db")
     vector_db_stub.delete_vector = MagicMock()
     vector_db_stub.delete_action_item_vectors_batch = MagicMock()
@@ -136,6 +141,7 @@ def merge():
         "database.conversations": conversations_stub,
         "database.conversation_tombstones": tombstones_stub,
         "database.conversations_v3_backfill_runs": ModuleType("database.conversations_v3_backfill_runs"),
+        "database.record_audio": record_audio_stub,
         "database.vector_db": vector_db_stub,
         "database.redis_db": redis_db_stub,
         "database.record_audio": record_audio_stub,
