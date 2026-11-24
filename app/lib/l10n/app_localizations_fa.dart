@@ -15329,9 +15329,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get stopThese => 'توقف این موارد';
 
   @override
-  String get meetingActionItemsTitle => 'موارد اقدام';
-
-  @override
   String get addToTasks => 'افزودن به وظایف';
 
   @override

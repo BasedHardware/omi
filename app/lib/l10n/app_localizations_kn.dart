@@ -15387,9 +15387,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get stopThese => 'ಇವುಗಳನ್ನು ನಿಲ್ಲಿಸಿ';
 
   @override
-  String get meetingActionItemsTitle => 'ಮಾಡಬೇಕಾದ ಕೆಲಸಗಳು';
-
-  @override
   String get addToTasks => 'ಕಾರ್ಯಗಳಿಗೆ ಸೇರಿಸಿ';
 
   @override

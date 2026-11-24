@@ -15084,9 +15084,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stopThese => '停止此类推荐';
 
   @override
-  String get meetingActionItemsTitle => '行动事项';
-
-  @override
   String get addToTasks => '添加到任务';
 
   @override

@@ -15458,9 +15458,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get stopThese => 'Itigil Ang Mga Ito';
 
   @override
-  String get meetingActionItemsTitle => 'Mga hakbang';
-
-  @override
   String get addToTasks => 'Idagdag sa Mga Gawain';
 
   @override

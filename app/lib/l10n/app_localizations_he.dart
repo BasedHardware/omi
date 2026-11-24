@@ -15224,9 +15224,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get stopThese => 'הפסקת אלה';
 
   @override
-  String get meetingActionItemsTitle => 'משימות לביצוע';
-
-  @override
   String get addToTasks => 'הוספה למשימות';
 
   @override

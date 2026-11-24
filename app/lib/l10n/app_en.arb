@@ -18690,10 +18690,6 @@
     "@stopThese": {
         "description": "Disable the producer of a For You card"
     },
-    "meetingActionItemsTitle": "Action items",
-    "@meetingActionItemsTitle": {
-        "description": "meetingActionItemsTitle"
-    },
     "addToTasks": "Add to Tasks",
     "@addToTasks": {
         "description": "addToTasks"

@@ -15399,9 +15399,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get stopThese => 'వీటిని ఆపండి';
 
   @override
-  String get meetingActionItemsTitle => 'చర్య అంశాలు';
-
-  @override
   String get addToTasks => 'పనులకు జోడించండి';
 
   @override

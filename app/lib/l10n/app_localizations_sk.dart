@@ -15332,9 +15332,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get stopThese => 'Zastaviť tieto';
 
   @override
-  String get meetingActionItemsTitle => 'Akčné položky';
-
-  @override
   String get addToTasks => 'Pridať do úloh';
 
   @override

@@ -15348,9 +15348,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get stopThese => 'یہ روکیں';
 
   @override
-  String get meetingActionItemsTitle => 'عمل کے نکات';
-
-  @override
   String get addToTasks => 'ٹاسکس میں شامل کریں';
 
   @override

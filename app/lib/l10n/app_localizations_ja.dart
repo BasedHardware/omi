@@ -15108,9 +15108,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stopThese => 'この種類を停止';
 
   @override
-  String get meetingActionItemsTitle => 'アクション項目';
-
-  @override
   String get addToTasks => 'タスクに追加';
 
   @override

@@ -15114,9 +15114,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get stopThese => '이 유형 중지';
 
   @override
-  String get meetingActionItemsTitle => '실행 항목';
-
-  @override
   String get addToTasks => '작업에 추가';
 
   @override

@@ -15336,9 +15336,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get stopThese => 'Zastavit tyto';
 
   @override
-  String get meetingActionItemsTitle => 'Akční položky';
-
-  @override
   String get addToTasks => 'Přidat do úkolů';
 
   @override

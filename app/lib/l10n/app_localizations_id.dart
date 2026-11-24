@@ -15351,9 +15351,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get stopThese => 'Hentikan Ini';
 
   @override
-  String get meetingActionItemsTitle => 'Tindakan';
-
-  @override
   String get addToTasks => 'Tambahkan ke Tugas';
 
   @override

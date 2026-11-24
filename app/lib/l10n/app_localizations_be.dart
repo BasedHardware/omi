@@ -15372,9 +15372,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get stopThese => 'Спыніць гэта';
 
   @override
-  String get meetingActionItemsTitle => 'Элементы действий';
-
-  @override
   String get addToTasks => 'Дадаць у задачы';
 
   @override

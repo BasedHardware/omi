@@ -159,6 +159,7 @@ class CaptureController extends ChangeNotifier
   final Future<bool> Function(String deviceId, int level)? _speakerHaptic;
   final Future<CreateConversationResponse?> Function()? _processInProgressConversationOverride;
   final Future<InProgressProcessOutcome> Function()? _processInProgressOutcomeOverride;
+  final InProgressConversationRequestSender? _processRequestSender;
   final _PhoneDiscardState _phoneDiscard;
   final Future<DeviceConnection?> Function(String deviceId)? _deviceConnectionLoader;
   final Future<void> Function(String deviceId)? _pendantReconnectLoader;
@@ -449,6 +450,7 @@ class CaptureController extends ChangeNotifier
     Future<bool?> Function(String deviceId)? deviceMuteReader,
     Future<void> Function(String deviceId, bool muted)? deviceMuteWriter,
     Future<InProgressProcessOutcome> Function()? processInProgressOutcome,
+    @visibleForTesting InProgressConversationRequestSender? processRequestSender,
     Future<bool> Function(String conversationId)? deleteDiscardedConversation,
     List<Duration> discardDeleteRetryDelays = const [Duration(seconds: 5), Duration(seconds: 30), Duration(minutes: 2)],
     Future<DeviceConnection?> Function(String deviceId)? deviceConnectionLoader,
@@ -480,6 +482,7 @@ class CaptureController extends ChangeNotifier
         _sessionOwner = sessionOwner,
         _processInProgressConversationOverride = processInProgressConversation,
         _processInProgressOutcomeOverride = processInProgressOutcome,
+        _processRequestSender = processRequestSender,
         _phoneDiscard = _PhoneDiscardState(
           retryDelays: discardDeleteRetryDelays,
           deleteOverride: deleteDiscardedConversation,
@@ -1243,11 +1246,15 @@ class CaptureController extends ChangeNotifier
   /// Finish through the coordinator and return that exact Process Now answer, with why it has no
   /// conversation when it has none (transport, not found, empty). Throws [StateError] when this
   /// finish made no request (a phone Transcribe Later recording).
-  Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
+  Future<InProgressProcessOutcome> finishCaptureWithOutcome({String? liveConversationId}) async {
     _lastProcessRequest = null;
     _firstCaptureProcess = true;
     try {
-      await finishCapture();
+      if (liveConversationId == null) {
+        await finishCapture();
+      } else {
+        await _requestFinish(FinishRequested(liveConversationId: liveConversationId));
+      }
       final request = _lastProcessRequest;
       if (request == null) throw FinishMadeNoRequest();
       return await request;
@@ -3442,8 +3449,10 @@ class CaptureController extends ChangeNotifier
   /// Finish the live capture: the one stop for the live page and the Home button. A phone
   /// recording is stopped and processed before a pendant it took over from resumes, so the
   /// processing request reaches the phone's conversation, not the pendant's next one.
-  Future<void> finishCapture() async {
-    final outcome = await _capture.dispatch(const FinishRequested());
+  Future<void> finishCapture() => _requestFinish(const FinishRequested());
+
+  Future<void> _requestFinish(FinishRequested event) async {
+    final outcome = await _capture.dispatch(event);
     outcome.throwIfFailed();
   }
 
@@ -4440,7 +4449,8 @@ class CaptureController extends ChangeNotifier
           : _processInProgressConversationOverride != null
               ? _processInProgressConversationOverride!().then((result) =>
                   InProgressProcessOutcome(response: result, absence: result == null ? ProcessAbsence.transport : null))
-              : processInProgressConversationOutcome();
+              : processInProgressConversationOutcome(
+                  liveConversationId: liveConversationId, sendRequest: _processRequestSender);
       requestAdmitted = true;
       if (confirmedProcessing) _lastProcessRequest = request;
       _processInFlight = request.then((_) {}, onError: (_) {});
@@ -5064,7 +5074,7 @@ class CaptureController extends ChangeNotifier
           FlushPhoneFramesStage() => Future.sync(_flushPhoneFrames),
           RecordingMarkStage() => Future.sync(() => updateRecordingState(stage.state)),
           DeviceStopTelemetryStage() => _deviceStopTelemetryBody(cleanDevice: stage.cleanDevice),
-          ProcessConversationStage() => _processConversationBody(),
+          ProcessConversationStage() => _processConversationBody(stage.liveConversationId),
           SocketClosedStage() => _socketClosedBody(stage.closeCode),
           SocketConnectedStage() => _socketConnectedBody(),
           SocketErrorStage() => _socketErrorBody(stage.error),
@@ -5082,8 +5092,8 @@ class CaptureController extends ChangeNotifier
           StartPhoneBatchStage() => _startPhoneMicBatchBody(auto: stage.auto),
         };
 
-  Future<void> _processConversationBody() async {
-    await forceProcessingCurrentConversation();
+  Future<void> _processConversationBody(String? liveConversationId) async {
+    await forceProcessingCurrentConversation(liveConversationId: liveConversationId);
     await _processInFlight;
   }
 }

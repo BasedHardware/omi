@@ -15373,9 +15373,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get stopThese => 'Hentikan Ini';
 
   @override
-  String get meetingActionItemsTitle => 'Perkara tindakan';
-
-  @override
   String get addToTasks => 'Tambah ke Tugasan';
 
   @override

@@ -15345,9 +15345,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get stopThese => 'Stoppa dessa';
 
   @override
-  String get meetingActionItemsTitle => 'Åtgärdspunkter';
-
-  @override
   String get addToTasks => 'Lägg till i Uppgifter';
 
   @override

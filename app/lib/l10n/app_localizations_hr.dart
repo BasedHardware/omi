@@ -15373,9 +15373,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get stopThese => 'Zaustavi ovo';
 
   @override
-  String get meetingActionItemsTitle => 'Stavke za poduzeti';
-
-  @override
   String get addToTasks => 'Dodaj u zadatke';
 
   @override

@@ -15401,9 +15401,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get stopThese => 'Oprește acestea';
 
   @override
-  String get meetingActionItemsTitle => 'Elemente de acțiune';
-
-  @override
   String get addToTasks => 'Adaugă la Sarcini';
 
   @override

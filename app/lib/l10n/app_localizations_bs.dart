@@ -15365,9 +15365,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get stopThese => 'Zaustavi ovo';
 
   @override
-  String get meetingActionItemsTitle => 'Stavke za uraditi';
-
-  @override
   String get addToTasks => 'Dodaj u zadatke';
 
   @override

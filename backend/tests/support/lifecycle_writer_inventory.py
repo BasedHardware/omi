@@ -1,6 +1,11 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Finish projects processing into the HTTP response. Only the v3 builder stores window status.
+    'utils/conversations/v3/finish.py': [
+        ('_acknowledge', 'status', 'ConversationStatus.completed', ('status',)),
+        ('_acknowledge', 'status', 'ConversationStatus.processing', ('status',)),
+    ],
     'database/batch_summary_debt.py': [
         ('arm_projection_summary', 'summary_due_at', "candidate['summary_due_at']", ('summary_due_at',)),
         (
@@ -4817,6 +4822,8 @@ FIELD_SITES = {
 # Unclassified sites remain visible pending the typed-outcome redesign.
 KNOWN_TERMINAL_WRITERS = {
     'conversation': {
+        # A terminal-empty acknowledgement is an HTTP projection, with no conversation status write.
+        ('utils/conversations/v3/finish.py', '_acknowledge'): 'response_only',
         (
             'database/conversations_v3.py',
             'commit_projection.commit',

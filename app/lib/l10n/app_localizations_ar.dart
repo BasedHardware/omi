@@ -15249,9 +15249,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get stopThese => 'إيقاف هذه';
 
   @override
-  String get meetingActionItemsTitle => 'بنود العمل';
-
-  @override
   String get addToTasks => 'إضافة إلى المهام';
 
   @override

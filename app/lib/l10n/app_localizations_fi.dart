@@ -15341,9 +15341,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get stopThese => 'Lopeta nämä';
 
   @override
-  String get meetingActionItemsTitle => 'Toimenpiteet';
-
-  @override
   String get addToTasks => 'Lisää tehtäviin';
 
   @override

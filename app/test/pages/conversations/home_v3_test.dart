@@ -233,6 +233,7 @@ class _LiveCapture extends CaptureProvider {
 
   int finishCalls = 0;
   String? finishedRecordingId;
+  String? finishedLiveId;
   String recordingToProcess = 'rec-1';
   final closedRecordingIds = <String>{};
 
@@ -249,10 +250,11 @@ class _LiveCapture extends CaptureProvider {
   }
 
   @override
-  Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
+  Future<InProgressProcessOutcome> finishCaptureWithOutcome({String? liveConversationId}) async {
     finishCalls++;
     finishedRecordingId = recordingToProcess;
-    onManualEnd?.call(null);
+    finishedLiveId = liveConversationId;
+    onManualEnd?.call(liveConversationId);
     return InProgressProcessOutcome(
       response: CreateConversationResponse(
         messages: const [],
@@ -974,6 +976,7 @@ void main() {
       await settleDetailTab(tester);
       await tester.pump(const Duration(milliseconds: 500));
       expect(home.capture.finishCalls, 1);
+      expect(home.capture.finishedLiveId, isNull);
       expect(find.byType(LiveEpisodePage), findsNothing);
       expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
       await _dispose(tester, home);
@@ -1873,6 +1876,7 @@ void main() {
           if (placeholder) {
             expect(home.capture.finishCalls, 1);
             expect(home.capture.finishedRecordingId, home.capture.activeRecordingId);
+            expect(home.capture.finishedLiveId, 'live-2');
             expect(home.capture.endCalls, 1);
           } else {
             expect(home.capture.endCalls, 2);
@@ -1947,7 +1951,7 @@ void main() {
       });
     }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
-    testWidgets('manual finish replaces the live row until its summary is listed', (tester) async {
+    testWidgets('a manual finish 404 hands Processing off to the placeholder target', (tester) async {
       await withClock(Clock.fixed(_now), () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
         final palette = OmiColors.active;
@@ -1955,8 +1959,9 @@ void main() {
         OmiColors.active = OmiColors.forBrightness(Brightness.dark);
         final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
         final v3 = home.conversationsV3;
-        final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'rec-1');
-        v3.startManualFinish(pending, null, liveConversationId: 'live-1', captureId: home.capture.activeRecordingId);
+        final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'live-1');
+        v3.startManualFinish(pending, null, captureId: home.capture.activeRecordingId);
+        expect(v3.settleManualFinish(pending, null, alreadyClosed: true), isTrue);
         await tester.pump();
         expect(find.text('Launch checklist'), findsNothing);
         expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
@@ -1966,13 +1971,6 @@ void main() {
         await tester.tap(processing);
         await tester.pump();
         expect(navigator.canPop(), isFalse, reason: 'the placeholder has no result page yet');
-        await shoot(tester, '001-mobile-ios-v3-manual-finish-processing');
-
-        final recording = home.conversations.conversations.firstWhere((row) => row.id == 'rec-1');
-        expect(v3.settleManualFinish(pending, recording), isTrue);
-        await tester.pump();
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
-
         home.liveOpen = false;
         await v3.refresh();
         final reads = home.conversations.listReads;
@@ -1981,15 +1979,18 @@ void main() {
         await tester.pump();
         expect(home.conversations.listReads, greaterThan(reads));
         expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        await shoot(tester, '001-mobile-ios-finish-404-processing');
 
         home.conversations.upsertConversation(
-          _conversation('live-1', home.liveStart, 'Launch checklist', v3: _done),
+          _conversation('live-1', home.liveStart, 'Launch checklist',
+              v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.writing)),
           preserveHomeStep: false,
         );
         await tester.pump();
         await tester.pump();
         expect(find.byKey(const Key('home_processing_row')), findsNothing);
         expect(find.text('Launch checklist'), findsOneWidget);
+        expect(v3.finishRow, isNull);
         expect(find.byType(V3LivePlaceholderRow), findsNothing);
         await shoot(tester, '002-mobile-ios-v3-manual-finish-summary');
 

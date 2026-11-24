@@ -26919,12 +26919,6 @@ abstract class AppLocalizations {
   /// **'Stop These'**
   String get stopThese;
 
-  /// meetingActionItemsTitle
-  ///
-  /// In en, this message translates to:
-  /// **'Action items'**
-  String get meetingActionItemsTitle;
-
   /// addToTasks
   ///
   /// In en, this message translates to:

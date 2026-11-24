@@ -15450,9 +15450,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get stopThese => 'Diese stoppen';
 
   @override
-  String get meetingActionItemsTitle => 'Aktionspunkte';
-
-  @override
   String get addToTasks => 'Zu Aufgaben hinzufügen';
 
   @override

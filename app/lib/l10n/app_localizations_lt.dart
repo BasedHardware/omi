@@ -15360,9 +15360,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get stopThese => 'Sustabdyti šiuos';
 
   @override
-  String get meetingActionItemsTitle => 'Veiksmai';
-
-  @override
   String get addToTasks => 'Pridėti prie užduočių';
 
   @override

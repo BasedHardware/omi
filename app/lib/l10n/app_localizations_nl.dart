@@ -15375,9 +15375,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get stopThese => 'Deze stoppen';
 
   @override
-  String get meetingActionItemsTitle => 'Actiepunten';
-
-  @override
   String get addToTasks => 'Toevoegen aan Taken';
 
   @override

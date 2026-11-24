@@ -15329,9 +15329,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get stopThese => 'Peata need';
 
   @override
-  String get meetingActionItemsTitle => 'Tegevusüksused';
-
-  @override
   String get addToTasks => 'Lisa ülesannetesse';
 
   @override

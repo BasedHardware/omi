@@ -15262,9 +15262,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get stopThese => 'หยุดรายการแบบนี้';
 
   @override
-  String get meetingActionItemsTitle => 'รายการที่ต้องทำ';
-
-  @override
   String get addToTasks => 'เพิ่มไปยังงาน';
 
   @override

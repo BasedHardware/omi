@@ -15380,9 +15380,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get stopThese => 'Dejar de recibir esto';
 
   @override
-  String get meetingActionItemsTitle => 'Acciones pendientes';
-
-  @override
   String get addToTasks => 'Añadir a Tareas';
 
   @override
