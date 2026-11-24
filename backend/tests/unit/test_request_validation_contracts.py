@@ -88,7 +88,8 @@ def test_parse_sync_filename_timestamp_rejects_invalid_or_out_of_range_values(fi
         parse_sync_filename_timestamp(filename)
 
 
-def test_parse_sync_filename_timestamp_rejects_future_values():
+def test_parse_sync_filename_timestamp_rejects_future_values_when_recovery_is_off(monkeypatch):
+    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
     future = int(datetime.now(timezone.utc).timestamp()) + 3600
 
     with pytest.raises(ValueError):
@@ -103,6 +104,7 @@ def test_parse_sync_filename_timestamp_accepts_future_values_within_shared_skew_
 
 
 def test_parse_sync_filename_timestamp_tolerance_follows_the_shared_setting(monkeypatch):
+    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
     ahead = int(datetime.now(timezone.utc).timestamp()) + 170
 
     monkeypatch.setenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '60')

@@ -13,6 +13,9 @@ os.environ.setdefault(
 )
 
 from models.users import PlanType  # noqa: E402
+
+# switch() imports this lazily; preload it before per-test call CPU accounting.
+import utils.billing_recovery as _billing_recovery  # noqa: E402,F401
 import utils.monthly_switch as ms  # noqa: E402
 
 NOW = 1_793_000_000
@@ -42,6 +45,16 @@ class _Obj(dict):
 @pytest.fixture(autouse=True)
 def _catalog(monkeypatch):
     monkeypatch.setattr(ms, '_plan_definitions', lambda: DEFINITIONS)
+
+
+@pytest.fixture(scope='module', autouse=True)
+def _switch_dependencies():
+    # switch() lazily imports billing recovery, which imports the subscription
+    # stack. Load that shared dependency in setup so the first operation's CPU
+    # budget measures switching, just like every later switching test.
+    from utils.billing_recovery import payment_issue_from_stripe
+
+    return payment_issue_from_stripe
 
 
 def _sub(price_id=NEO_YEARLY, **over):

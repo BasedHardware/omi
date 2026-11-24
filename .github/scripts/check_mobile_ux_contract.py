@@ -14,6 +14,11 @@ Escape hatch: end the offending line with
     // omi-ux-allow: <rule-id> -- <reason>
 (several ids may be comma-separated). The reason is required; an allow without one is ignored.
 
+Outcome rules (§17) count what happens after a tap: a catch that swallows the failure
+(`silent-catch`, pages and providers only), a generic "Something went wrong" with no next step
+(`generic-error`), a `MaterialPageRoute` push that bypasses omiPageRoute (`material-page-route`),
+and a page that pops before the request that could fail (`pop-before-await`).
+
 Excluded: generated code (lib/gen/, lib/l10n/, *.g.dart, *.gen.dart, *.freezed.dart) and the
 primitives themselves (lib/ui/), which are where the raw widgets are supposed to live.
 
@@ -25,6 +30,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import functools
 import re
 import subprocess
 import sys
@@ -51,6 +57,8 @@ class Rule:
     fix: str
     # Extra test on the match (text, match) -> counts?
     accept: object = None
+    # Path prefixes the rule applies to (None: every contract source).
+    scope: tuple[str, ...] | None = None
 
 
 def _leading_context(text: str, match: re.Match[str]) -> bool:
@@ -63,6 +71,183 @@ def _letter_bearing_literal(text: str, match: re.Match[str]) -> bool:
     literal = match.group("lit")
     body = INTERPOLATION.sub("", literal[1:-1])
     return bool(LETTER.search(body))
+
+
+# --------------------------------------------------------------------------- outcome rules (§17)
+
+_TRIPLE = re.compile(r"""r?'\'\'(?:.|\n)*?'\'\'|r?\"\"\"(?:.|\n)*?\"\"\"""")
+_BLOCK_COMMENT = re.compile(r"/\*(?:.|\n)*?\*/")
+_LINE_COMMENT_OR_STRING = re.compile(r"""//[^\n]*|'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*\"""")
+
+
+def _blank(match: re.Match[str]) -> str:
+    return "".join(ch if ch == "\n" else " " for ch in match.group(0))
+
+
+@functools.lru_cache(maxsize=8)
+def mask_code(text: str) -> str:
+    """[text] with comments and string contents blanked (same length, same newlines), so braces,
+    parentheses and keywords can be matched structurally."""
+    text = _TRIPLE.sub(_blank, text)
+    text = _BLOCK_COMMENT.sub(_blank, text)
+
+    def keep_quotes(m: re.Match[str]) -> str:
+        token = m.group(0)
+        if token.startswith("//"):
+            return " " * len(token)
+        return token[0] + " " * (len(token) - 2) + token[-1]
+
+    return _LINE_COMMENT_OR_STRING.sub(keep_quotes, text)
+
+
+def _matching(masked: str, open_index: int, open_ch: str, close_ch: str) -> int:
+    depth = 0
+    for i in range(open_index, len(masked)):
+        ch = masked[i]
+        if ch == open_ch:
+            depth += 1
+        elif ch == close_ch:
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+# A catch body made only of logging calls swallows the failure as surely as an empty one.
+_LOG_STATEMENT = re.compile(
+    r"^(?:Logger\.\w+|debugPrint|print|log|developer\.log|PlatformManager\.instance\.crashReporter\.\w+)\s*\("
+)
+
+
+def _only_logs(body: str) -> bool:
+    depth = 0
+    statement = ""
+    statements: list[str] = []
+    for ch in body:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == ";" and depth == 0:
+            statements.append(statement.strip())
+            statement = ""
+        else:
+            statement += ch
+    if statement.strip():
+        statements.append(statement.strip())
+    return all(_LOG_STATEMENT.match(" ".join(st.split())) for st in statements if st)
+
+
+def _silent_catch(text: str, match: re.Match[str]) -> bool:
+    masked = mask_code(text)
+    if masked[match.start() : match.end()] != text[match.start() : match.end()]:
+        return False
+    brace = masked.find("{", match.end() - 1)
+    end = _matching(masked, brace, "{", "}")
+    if end == -1:
+        return False
+    return _only_logs(masked[brace + 1 : end])
+
+
+def _enclosing_call(masked: str, index: int) -> tuple[int, int] | None:
+    depth = 0
+    for i in range(index, -1, -1):
+        ch = masked[i]
+        if ch == ")":
+            depth += 1
+        elif ch == "(":
+            if depth == 0:
+                end = _matching(masked, i, "(", ")")
+                return (i, end) if end != -1 else None
+            depth -= 1
+    return None
+
+
+def _in_code(text: str, match: re.Match[str]) -> bool:
+    """The match is code, not a comment (a commented-out route is not a route)."""
+    return not mask_code(text)[match.start()].isspace()
+
+
+# A way forward needs something to run: a feedback action's label together with its callback, or a
+# page state's retry callback. A label alone renders nothing (OmiFeedback shows an action only when
+# both are set).
+_FEEDBACK_ACTION = re.compile(r"\bactionLabel\s*:")
+_FEEDBACK_CALLBACK = re.compile(r"\bonAction\s*:")
+_RETRY_CALLBACK = re.compile(r"\bonRetry\s*:")
+
+
+def _generic_without_action(text: str, match: re.Match[str]) -> bool:
+    masked = mask_code(text)
+    if masked[match.start()].isspace():
+        return False
+    call = _enclosing_call(masked, match.start())
+    if call is None:
+        return True
+    body = masked[call[0] : call[1]]
+    if _FEEDBACK_ACTION.search(body) and _FEEDBACK_CALLBACK.search(body):
+        return False
+    return not _RETRY_CALLBACK.search(body)
+
+
+def _enclosing_block(masked: str, index: int) -> tuple[int, int] | None:
+    depth = 0
+    for i in range(index, -1, -1):
+        ch = masked[i]
+        if ch == "}":
+            depth += 1
+        elif ch == "{":
+            if depth == 0:
+                end = _matching(masked, i, "{", "}")
+                return (i, end) if end != -1 else None
+            depth -= 1
+    return None
+
+
+# An await on another surface (a confirm, a sheet, Settings, a pushed page) is the next step of the
+# same flow, not a request that could fail behind a closed surface.
+_AWAIT = re.compile(r"\bawait\s+(?:[\w.]*\.)?(\w+)")
+_UI_AWAIT = re.compile(
+    r"^(?:show\w*|open\w*|routeToPage|push\w*|pop\w*|maybePop|launch\w*|delayed|endOfFrame|confirmDiscardChanges)$"
+)
+
+
+_CASE_LABEL = re.compile(r"\b(?:case\b|default\s*:)")
+
+
+def _innermost_open(masked: str, index: int) -> int:
+    depth = {")": 0, "]": 0, "}": 0}
+    pairs = {"(": ")", "[": "]", "{": "}"}
+    for i in range(index - 1, -1, -1):
+        ch = masked[i]
+        if ch in depth:
+            depth[ch] += 1
+        elif ch in pairs:
+            if depth[pairs[ch]] == 0:
+                return i
+            depth[pairs[ch]] -= 1
+    return -1
+
+
+def _pop_then_await(text: str, match: re.Match[str]) -> bool:
+    """A pop followed, in the same handler block, by an awaited request: the surface closed before
+    the request that could fail answered. An arrow handler (`() => Navigator.pop(…)`) is the whole
+    handler. When the first await after the pop opens the next surface (a confirm, a sheet, Settings),
+    the flow moved on to that surface and the rule does not count it."""
+    masked = mask_code(text)
+    open_index = _innermost_open(masked, match.start())
+    if open_index == -1 or masked[open_index] != "{":
+        return False
+    statement_start = max(masked.rfind(";", open_index, match.start()), masked.rfind("}", open_index, match.start()))
+    if "=>" in masked[max(statement_start, open_index) + 1 : match.start()]:
+        return False
+    end = _matching(masked, open_index, "{", "}")
+    if end == -1:
+        return False
+    first = _AWAIT.search(masked, match.end(), end)
+    if first is None or _UI_AWAIT.match(first.group(1)):
+        return False
+    # A later `case` of the same switch is another branch, not the same handler.
+    return _CASE_LABEL.search(masked, match.end(), first.start()) is None
 
 
 RULES: tuple[Rule, ...] = (
@@ -107,6 +292,31 @@ RULES: tuple[Rule, ...] = (
         "context.l10n.<key> (scripts/l10n.py add)",
         accept=_letter_bearing_literal,
     ),
+    Rule(
+        "silent-catch",
+        re.compile(r"\bcatch\s*\([^)]*\)\s*\{"),
+        "show the failure where the reader is looking (OmiFeedback.error / OmiErrorState), or retry",
+        accept=_silent_catch,
+        scope=("app/lib/pages/", "app/lib/providers/"),
+    ),
+    Rule(
+        "generic-error",
+        re.compile(r"\bsomethingWentWrong\w*\b"),
+        "name the cause, or offer the way forward: actionLabel: with onAction:, or onRetry:",
+        accept=_generic_without_action,
+    ),
+    Rule(
+        "material-page-route",
+        re.compile(r"\bMaterialPageRoute\s*[(<]"),
+        "routeToPage / omiPageRoute",
+        accept=_in_code,
+    ),
+    Rule(
+        "pop-before-await",
+        re.compile(r"\bNavigator\s*\.\s*(?:of\s*\([^)]*\)\s*\.\s*)?pop\s*[(<]"),
+        "await the request first; pop (or close the sheet) only after it succeeded",
+        accept=_pop_then_await,
+    ),
 )
 
 RULE_IDS: tuple[str, ...] = tuple(dict.fromkeys(rule.id for rule in RULES))
@@ -147,10 +357,13 @@ def _allowed(line: str, rule_id: str) -> bool:
     return rule_id in {part.strip() for part in match.group(1).split(",")}
 
 
-def find_hits(text: str) -> dict[str, list[int]]:
-    """Map rule id -> 1-based line numbers of every counted hit in [text]."""
+def find_hits(text: str, path: str | None = None) -> dict[str, list[int]]:
+    """Map rule id -> 1-based line numbers of every counted hit in [text]. A rule with a scope
+    counts only when [path] is inside it (or no path is given)."""
     hits: dict[str, list[int]] = {rule_id: [] for rule_id in RULE_IDS}
     for rule in RULES:
+        if rule.scope is not None and path is not None and not path.startswith(rule.scope):
+            continue
         for match in rule.pattern.finditer(text):
             start, end = _line_bounds(text, match.start())
             line = text[start:end]
@@ -171,8 +384,8 @@ def find_hits(text: str) -> dict[str, list[int]]:
     return hits
 
 
-def count_hits(text: str) -> dict[str, int]:
-    return {rule_id: len(lines) for rule_id, lines in find_hits(text).items()}
+def count_hits(text: str, path: str | None = None) -> dict[str, int]:
+    return {rule_id: len(lines) for rule_id, lines in find_hits(text, path).items()}
 
 
 def git_show(ref: str, path: str, root: Path) -> str | None:
@@ -190,8 +403,8 @@ def fix_for(rule_id: str) -> str:
 
 def compare(path: str, head_text: str, base_text: str | None) -> list[str]:
     """Regression lines for one file (empty when no rule's count rose)."""
-    head_hits = find_hits(head_text)
-    base_counts = count_hits(base_text) if base_text is not None else {rule_id: 0 for rule_id in RULE_IDS}
+    head_hits = find_hits(head_text, path)
+    base_counts = count_hits(base_text, path) if base_text is not None else {rule_id: 0 for rule_id in RULE_IDS}
     regressions: list[str] = []
     for rule_id in RULE_IDS:
         head_count = len(head_hits[rule_id])
@@ -210,6 +423,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--base", default=None, help="Git ref for the merge-base content.")
     parser.add_argument("--root", default=".", help="Repository root.")
     parser.add_argument("--report", nargs="*", metavar="PATH", help="Print per-rule counts for these files and exit.")
+    parser.add_argument("--totals", action="store_true", help="Print tree-wide per-rule counts under app/lib and exit.")
     return parser.parse_args(argv)
 
 
@@ -217,10 +431,22 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     root = Path(args.root).resolve()
 
+    if args.totals:
+        totals = {rule_id: 0 for rule_id in RULE_IDS}
+        for file in sorted((root / APP_ROOT).rglob("*.dart")):
+            path = file.relative_to(root).as_posix()
+            if not is_contract_source(path):
+                continue
+            for rule_id, n in count_hits(file.read_text(encoding="utf-8", errors="ignore"), path).items():
+                totals[rule_id] += n
+        for rule_id, n in totals.items():
+            print(f"{rule_id}: {n}")
+        return 0
+
     if args.report is not None:
         for path in args.report:
             text = (root / path).read_text(encoding="utf-8", errors="ignore")
-            counts = {k: v for k, v in count_hits(text).items() if v}
+            counts = {k: v for k, v in count_hits(text, path).items() if v}
             print(f"{path}: {counts or 'clean'}")
         return 0
 

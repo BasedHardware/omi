@@ -9,6 +9,12 @@ the returned ACTIVE states before any cohort rollout. This uses Firestore Admin
 index manifest intentionally rejects `ttl=true`, so TTL has a separate manifest.
 No policy has been applied by this change.
 
+`account-privacy-receipt-retention.json` separately declares a 90-day replay
+window for the derived `account_operations` receipts. Preview it with
+`scripts/batch_pipeline_ttl.py --project PROJECT --policy deploy/batch-pipeline/account-privacy-receipt-retention.json`.
+The policy applies to `expires_at` on receipts. The owner row and durable epoch
+head keep their existing lifetime.
+
 Encrypted staged audio/result objects are erased 24 hours after successful
 projection. `expire_completed_segment` arms cleanup only once the projection is
 ready; the maintenance pump drains `cleanup_completed_artifacts`. Receipt TTL is

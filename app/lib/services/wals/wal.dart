@@ -7,6 +7,9 @@
 // decodes as the wrong codec (still HTTP 200), so naming schemes here must
 // stay in sync with backend/utils/sync (CUSTODY.md).
 import 'dart:math';
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 
 import 'package:path_provider/path_provider.dart';
 
@@ -44,6 +47,7 @@ const secondsPerFlashPage = 1.4;
 /// - [uploadRejected] — an upload request was refused (HTTP 400/413, or a
 ///                  historical 403). Retained without user attention; automatic
 ///                  uploads retry daily for seven days, then count as reported.
+///                  Invalid capture clocks continue weekly until accepted.
 enum WalStatus {
   inProgress,
   miss,
@@ -193,7 +197,31 @@ const int walMaxRefusalRetriesPerDrain = 25;
 /// the backend's fresh-lane cutoff, `SYNC_FRESH_MAX_AGE_SECONDS`).
 const int liveCaptureMaxAgeSeconds = 6 * 60 * 60;
 
-bool isLiveCaptureWal(Wal wal, int nowSeconds) => nowSeconds - wal.timerStart <= liveCaptureMaxAgeSeconds;
+/// Build/patch rollback for clock-priority scheduling; never changes stored time.
+const walClockPriorityOff = bool.fromEnvironment('OMI_WAL_CLOCK_PRIORITY_OFF');
+
+/// Restores legacy display totals without changing recording custody.
+const catchUpStaleHandleOff = bool.fromEnvironment('OMI_CATCH_UP_STALE_HANDLE_OFF');
+
+/// Roll back indefinite clock-refusal probes to the ordinary seven-day policy.
+const invalidCaptureTimeRecoveryOff = bool.fromEnvironment('OMI_INVALID_CAPTURE_TIME_RECOVERY_OFF');
+
+enum WalCaptureTimeClass { live, historical, unknown }
+
+WalCaptureTimeClass walCaptureTimeClass(Wal wal, int nowSeconds) {
+  if (!walClockPriorityOff &&
+      (wal.timerStart <= 0 ||
+          wal.timerStart > nowSeconds ||
+          (wal.status == WalStatus.uploadRejected &&
+              wal.uploadRejectionReason == WalUploadRejection.invalidCaptureTime))) {
+    return WalCaptureTimeClass.unknown;
+  }
+  return nowSeconds - wal.timerStart <= liveCaptureMaxAgeSeconds
+      ? WalCaptureTimeClass.live
+      : WalCaptureTimeClass.historical;
+}
+
+bool isLiveCaptureWal(Wal wal, int nowSeconds) => walCaptureTimeClass(wal, nowSeconds) == WalCaptureTimeClass.live;
 
 class WalStats {
   final int totalFiles;
@@ -269,6 +297,7 @@ class Wal {
   set timerStart(int value) {
     if (_timerStart == value) return;
     _timerStart = value;
+    _id = null;
     _changed();
   }
 
@@ -309,6 +338,7 @@ class Wal {
   set device(String value) {
     if (_device == value) return;
     _device = value;
+    _id = null;
     _changed();
   }
 
@@ -346,6 +376,12 @@ class Wal {
   }
 
   /// Explicit Transcribe Later consent: only a manual upload may release this hold.
+  // New orphan rows need a file-specific playback/upload identity: producer
+  // collision and fractional suffixes can share the legacy device/second id.
+  // Existing and released rows keep their original id.
+  final bool recoveredOrphan;
+  String? _orphanIdentityPath, _orphanIdentity;
+
   bool _holdForUser;
   bool get holdForUser => _holdForUser;
   set holdForUser(bool value) {
@@ -600,6 +636,78 @@ class Wal {
 
   int? liveConnectionEpoch;
 
+  // Persisted batch coordinates. Ordinary live epochs remain process-local.
+  String? _batchLiveSession;
+  String? get batchLiveSession => _batchLiveSession;
+  set batchLiveSession(String? value) {
+    if (_batchLiveSession == value) return;
+    _batchLiveSession = value;
+    _changed();
+  }
+
+  String? _liveDeviceId;
+  String? get liveDeviceId => _liveDeviceId;
+  set liveDeviceId(String? value) {
+    if (_liveDeviceId == value) return;
+    _liveDeviceId = value;
+    _changed();
+  }
+
+  /// A replayed journal is recoverable audio, not yet a persisted index row.
+  bool recoveredBatchJournal = false;
+
+  // Ring download coordinates commit atomically with the WAL index. They are
+  // independent of transient BLE epochs and survive a crash before custody save.
+  int? _downloadRingId;
+  int? get downloadRingId => _downloadRingId;
+  set downloadRingId(int? value) {
+    if (_downloadRingId == value) return;
+    _downloadRingId = value;
+    _changed();
+  }
+
+  int? _downloadSeqStart;
+  int? get downloadSeqStart => _downloadSeqStart;
+  set downloadSeqStart(int? value) {
+    if (_downloadSeqStart == value) return;
+    _downloadSeqStart = value;
+    _changed();
+  }
+
+  int? _downloadSeqEnd;
+  int? get downloadSeqEnd => _downloadSeqEnd;
+  set downloadSeqEnd(int? value) {
+    if (_downloadSeqEnd == value) return;
+    _downloadSeqEnd = value;
+    _changed();
+  }
+
+  String? _liveFileWriteId;
+  String? get liveFileWriteId => _liveFileWriteId;
+  set liveFileWriteId(String? value) {
+    if (_liveFileWriteId == value) return;
+    _liveFileWriteId = value;
+    _changed();
+  }
+
+  /// SHA-256 of the immutable fsynced file, using the upload manifest digest.
+  /// Absent on legacy indexes: they cannot supply pendant reclaim authority.
+  String? _fileSha256;
+  String? get fileSha256 => _fileSha256;
+  set fileSha256(String? value) {
+    if (_fileSha256 == value) return;
+    _fileSha256 = value;
+    _changed();
+  }
+
+  int? _downloadFileBytes;
+  int? get downloadFileBytes => _downloadFileBytes;
+  set downloadFileBytes(int? value) {
+    if (_downloadFileBytes == value) return;
+    _downloadFileBytes = value;
+    _changed();
+  }
+
   /// Canonical start-time location snapshot for delayed/offline finalization.
   Geolocation? _geolocation;
   Geolocation? get geolocation => _geolocation;
@@ -722,20 +830,68 @@ class Wal {
     _changed();
   }
 
-  /// Daily recovery is independent of the transient network retry budget.
-  /// Old indexes get a new seven-day window on their first recovery pass.
-  /// Refusals fixed by the bytes themselves (size, part count) never succeed on a resend.
-  bool refusalRetryDue(int nowSeconds) =>
-      status == WalStatus.uploadRejected &&
-      uploadRejectionReason != WalUploadRejection.tooLarge &&
-      uploadRejectionReason != WalUploadRejection.tooManyParts &&
-      (uploadRejectedAt == 0 || nowSeconds < uploadRejectedAt + 7 * 86400) &&
-      (uploadRefusalLastAttemptAt == 0 || nowSeconds >= uploadRefusalLastAttemptAt + 86400);
+  /// Shared clock-class turn budget, checkpointed on waiting unknown-clock
+  /// rows before valid uploads so process restarts cannot erase their turn.
+  int _clockRecoveryValidBatches;
+  int get clockRecoveryValidBatches => _clockRecoveryValidBatches;
+  set clockRecoveryValidBatches(int value) {
+    if (_clockRecoveryValidBatches == value) return;
+    _clockRecoveryValidBatches = value;
+    _changed();
+  }
+
+  /// Recovery is independent of the transient network retry budget. Capture
+  /// clocks can become admissible in a later server rollout: retry daily for
+  /// the first week, then weekly indefinitely, without changing either clock.
+  /// Other refusals keep the seven-day window; byte-determined refusals never resend.
+  bool refusalRetryDue(int nowSeconds) {
+    if (status != WalStatus.uploadRejected ||
+        uploadRejectionReason == WalUploadRejection.tooLarge ||
+        uploadRejectionReason == WalUploadRejection.tooManyParts) {
+      return false;
+    }
+    final pastFirstWeek = uploadRejectedAt > 0 && nowSeconds >= uploadRejectedAt + 7 * 86400;
+    final recoverClock =
+        !invalidCaptureTimeRecoveryOff && uploadRejectionReason == WalUploadRejection.invalidCaptureTime;
+    if (pastFirstWeek && !recoverClock) return false;
+    final intervalSeconds = pastFirstWeek ? 7 * 86400 : 86400;
+    return uploadRefusalLastAttemptAt == 0 || nowSeconds >= uploadRefusalLastAttemptAt + intervalSeconds;
+  }
 
   bool refusalReported(int nowSeconds) =>
       status == WalStatus.uploadRejected && uploadRejectedAt > 0 && nowSeconds >= uploadRejectedAt + 7 * 86400;
 
-  String get id => '${device}_$timerStart';
+  /// Display-only expiry: an old uploaded handle needs a recent server wait.
+  /// Never retires the WAL or authorizes deleting any audio.
+  int? get pendingWorkExpiresAt => status == WalStatus.uploaded && !catchUpStaleHandleOff
+      ? max(uploadedAt + 86401, jobPendingConfirmedAt + 301)
+      : null;
+
+  bool countsAsPendingWork({int? nowSeconds}) {
+    if (status == WalStatus.uploaded) {
+      final expires = pendingWorkExpiresAt;
+      return expires == null || (nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) < expires;
+    }
+    return status == WalStatus.miss &&
+        !onDeviceOnly &&
+        (syncDisplayState == WalSyncDisplayState.waiting ||
+            syncDisplayState == WalSyncDisplayState.retrying ||
+            syncDisplayState == WalSyncDisplayState.syncing);
+  }
+
+  // Cache the regular identity used when scanning large histories. The device
+  // and timerStart setters invalidate it.
+  String? _id;
+
+  String get id {
+    final file = filePath;
+    if (!recoveredOrphan || file == null || file.isEmpty) return _id ??= '${_device}_$_timerStart';
+    if (_orphanIdentityPath != file) {
+      _orphanIdentityPath = file;
+      _orphanIdentity = 'orphan_${sha256.convert(utf8.encode(file))}';
+    }
+    return _orphanIdentity!;
+  }
 
   /// Single source of truth for how this recording's sync state is shown to the
   /// user. The sync page renders an explicit label + icon for every value so a
@@ -836,6 +992,7 @@ class Wal {
     WalStorage storage = WalStorage.mem,
     bool onDeviceOnly = false,
     bool holdForUser = false,
+    this.recoveredOrphan = false,
     DeviceType? deviceType,
     Map<String, dynamic>? onDeviceConversation,
     Map<String, dynamic>? onDevicePreparedUpload,
@@ -860,6 +1017,14 @@ class Wal {
     int? liveRingId,
     int? liveOrdinalStart,
     int? liveOrdinalEnd,
+    String? batchLiveSession,
+    String? liveDeviceId,
+    int? downloadRingId,
+    int? downloadSeqStart,
+    int? downloadSeqEnd,
+    int? downloadFileBytes,
+    String? fileSha256,
+    String? liveFileWriteId,
     Geolocation? geolocation,
     int retryCount = 0,
     int lastRetryAt = 0,
@@ -873,6 +1038,7 @@ class Wal {
     int uploadRejectionStatusCode = 400,
     int uploadRejectedAt = 0,
     int uploadRefusalLastAttemptAt = 0,
+    int clockRecoveryValidBatches = 0,
   })  : _timerStart = timerStart,
         _codec = codec,
         _seconds = seconds,
@@ -905,6 +1071,14 @@ class Wal {
         _liveRingId = liveRingId,
         _liveOrdinalStart = liveOrdinalStart,
         _liveOrdinalEnd = liveOrdinalEnd,
+        _batchLiveSession = batchLiveSession,
+        _liveDeviceId = liveDeviceId,
+        _downloadRingId = downloadRingId,
+        _downloadSeqStart = downloadSeqStart,
+        _downloadSeqEnd = downloadSeqEnd,
+        _downloadFileBytes = downloadFileBytes,
+        _fileSha256 = fileSha256,
+        _liveFileWriteId = liveFileWriteId,
         _geolocation = geolocation,
         _retryCount = retryCount,
         _lastRetryAt = lastRetryAt,
@@ -918,6 +1092,7 @@ class Wal {
         _uploadRejectionStatusCode = uploadRejectionStatusCode,
         _uploadRejectedAt = uploadRejectedAt,
         _uploadRefusalLastAttemptAt = uploadRefusalLastAttemptAt,
+        _clockRecoveryValidBatches = clockRecoveryValidBatches,
         data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
@@ -932,6 +1107,7 @@ class Wal {
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
       onDeviceOnly: json['on_device_only'] == true,
       holdForUser: json['hold_for_user'] == true,
+      recoveredOrphan: json['recovered_orphan'] == true,
       deviceType: DeviceType.values.asNameMap()[json['device_type']],
       onDeviceConversation:
           json['on_device_conversation'] is Map ? Map<String, dynamic>.from(json['on_device_conversation']) : null,
@@ -960,6 +1136,14 @@ class Wal {
       liveRingId: json['live_ring_id'],
       liveOrdinalStart: json['live_ordinal_start'],
       liveOrdinalEnd: json['live_ordinal_end'],
+      batchLiveSession: json['batch_live_session'],
+      liveDeviceId: json['live_device_id'],
+      downloadRingId: json['download_ring_id'],
+      downloadSeqStart: json['download_seq_start'],
+      downloadSeqEnd: json['download_seq_end'],
+      downloadFileBytes: json['download_file_bytes'],
+      fileSha256: json['file_sha256'],
+      liveFileWriteId: json['live_file_write_id'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
           : null,
@@ -977,6 +1161,7 @@ class Wal {
       uploadRejectionStatusCode: json['upload_rejection_status_code'] ?? 400,
       uploadRejectedAt: json['upload_rejected_at'] ?? 0,
       uploadRefusalLastAttemptAt: json['upload_refusal_last_attempt_at'] ?? 0,
+      clockRecoveryValidBatches: json['clock_recovery_valid_batches'] ?? 0,
     )
       ..frameSize = json['frame_size'] ?? mapNameToCodec(json['codec']).getFrameSize()
       ..repairLegacyImportedCustody();
@@ -992,6 +1177,7 @@ class Wal {
       'storage': storage.name,
       'on_device_only': onDeviceOnly,
       'hold_for_user': holdForUser,
+      if (recoveredOrphan) 'recovered_orphan': true,
       if (deviceType != null) 'device_type': deviceType!.name,
       'on_device_conversation': onDeviceConversation,
       if (onDevicePreparedUpload != null) 'on_device_prepared_upload': onDevicePreparedUpload,
@@ -1017,6 +1203,14 @@ class Wal {
       if (liveRingId != null) 'live_ring_id': liveRingId,
       if (liveOrdinalStart != null) 'live_ordinal_start': liveOrdinalStart,
       if (liveOrdinalEnd != null) 'live_ordinal_end': liveOrdinalEnd,
+      if (batchLiveSession != null) 'batch_live_session': batchLiveSession,
+      if (liveDeviceId != null) 'live_device_id': liveDeviceId,
+      if (downloadRingId != null) 'download_ring_id': downloadRingId,
+      if (downloadSeqStart != null) 'download_seq_start': downloadSeqStart,
+      if (downloadSeqEnd != null) 'download_seq_end': downloadSeqEnd,
+      if (downloadFileBytes != null) 'download_file_bytes': downloadFileBytes,
+      if (fileSha256 != null) 'file_sha256': fileSha256,
+      if (liveFileWriteId != null) 'live_file_write_id': liveFileWriteId,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
@@ -1030,6 +1224,7 @@ class Wal {
       'upload_rejection_status_code': uploadRejectionStatusCode,
       'upload_rejected_at': uploadRejectedAt,
       'upload_refusal_last_attempt_at': uploadRefusalLastAttemptAt,
+      if (clockRecoveryValidBatches > 0) 'clock_recovery_valid_batches': clockRecoveryValidBatches,
     };
   }
 
@@ -1052,6 +1247,7 @@ class Wal {
     h = _mixFingerprint(h, storage.index);
     h = _mixFingerprint(h, onDeviceOnly ? 1 : 0);
     h = _mixFingerprint(h, holdForUser ? 1 : 0);
+    h = _mixFingerprint(h, recoveredOrphan ? 1 : 0);
     h = _mixFingerprint(h, deviceType?.index ?? -1);
     h = _mixFingerprint(h, identityHashCode(onDeviceConversation));
     h = _mixFingerprint(h, identityHashCode(onDevicePreparedUpload));
@@ -1077,6 +1273,14 @@ class Wal {
     h = _mixFingerprint(h, liveRingId ?? -1);
     h = _mixFingerprint(h, liveOrdinalStart ?? -1);
     h = _mixFingerprint(h, liveOrdinalEnd ?? -1);
+    h = _mixFingerprint(h, batchLiveSession?.hashCode ?? 0);
+    h = _mixFingerprint(h, liveDeviceId?.hashCode ?? 0);
+    h = _mixFingerprint(h, downloadRingId ?? 0);
+    h = _mixFingerprint(h, downloadSeqStart ?? -1);
+    h = _mixFingerprint(h, downloadSeqEnd ?? -1);
+    h = _mixFingerprint(h, downloadFileBytes ?? -1);
+    h = _mixFingerprint(h, fileSha256?.hashCode ?? 0);
+    h = _mixFingerprint(h, liveFileWriteId?.hashCode ?? 0);
     h = _mixFingerprint(h, identityHashCode(geolocation));
     h = _mixFingerprint(h, retryCount);
     h = _mixFingerprint(h, lastRetryAt);
@@ -1090,6 +1294,7 @@ class Wal {
     h = _mixFingerprint(h, uploadRejectionStatusCode);
     h = _mixFingerprint(h, uploadRejectedAt);
     h = _mixFingerprint(h, uploadRefusalLastAttemptAt);
+    h = _mixFingerprint(h, clockRecoveryValidBatches);
     return h;
   }
 

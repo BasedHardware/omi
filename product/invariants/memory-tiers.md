@@ -21,6 +21,17 @@ rejection and product-grant fences. No other Archive outcome gains default
 access. The guard recognizes only that exact gated reclassification and checks
 that widening its route condition remains an offender.
 
+## Owner-summary background exception
+
+Owner ruling 2026-11-15 authorizes the episode summary agent to search all
+memory tiers inside its own user's account, including Archive. This is an
+explicit owner-summary operation, not a widening of default chat/MCP or
+third-party access. Categories and attribution are provenance information,
+not in-account exclusion rules for this operation. Deleted, user-rejected,
+invalidated and chat-locked memories remain excluded; account ownership,
+authoritative hydration and suppression checks remain mandatory. No memory
+write, promotion or product tier changes.
+
 ## Surfaces
 
 - Backend memory APIs and storage

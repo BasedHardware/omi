@@ -1,6 +1,19 @@
 # Gateway model and reasoning policy. The profile supplies the managed default;
 # these overrides pin gateway dispatch while request-scoped BYOK remains separate.
 generated_route_overrides:
+  - feature: conversation_v3_live_title
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: none}
+    request_timeout_ms: 12000
+  - feature: conversation_v3_outline
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: none}
+  - feature: conversation_v3_summary
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: low}
+  - feature: conversation_v3_summary_open
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: low}
   - feature: app_generator
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: medium}

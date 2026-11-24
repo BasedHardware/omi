@@ -1,6 +1,8 @@
 """Explicit conversation merge moves correction anchors and their Undo receipts atomically."""
 
 from database import transcript_pointer
+from config.record_wal_duplicate import MERGE_PLAN_FIELD
+from database.record_wal_merge import publication
 
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -39,6 +41,7 @@ def transfer(
         ):
             raise store.ReviewConflict('Account deletion fences correction transfer')
         merge_ref = None
+        retention_plan = {}
         if merge_job_id is not None:
             from database import conversation_merge_jobs
 
@@ -48,6 +51,7 @@ def transfer(
                 raise store.ReviewConflict('Merge lease expired before correction transfer')
             if job.get('merge_target_id') != destination_id or job.get('uid') != uid:
                 raise store.ReviewConflict('Merge target does not match admission')
+            retention_plan = job.get(MERGE_PLAN_FIELD) or {}
 
         def seal():
             if merge_ref is not None:
@@ -61,6 +65,7 @@ def transfer(
         )
         combined, journals, sources, placed = [], {}, [], []
         offset = 0
+        source_rows = {}
         for source_index, source_id in enumerate(source_ids):
             source_ref = owner.collection('conversations').document(source_id)
             source = source_ref.get(transaction=tx).to_dict() or {}
@@ -73,6 +78,7 @@ def transfer(
             if source.get('transcript_corrections_moved_to'):
                 raise store.ReviewConflict('Correction anchors already moved by another merge')
             sources.append(source_ref)
+            source_rows[source_id] = source
             captured = decode_transcript_segments_verified(
                 uid, source.get('transcript_segments') or [], bool(source.get('transcript_segments_compressed'))
             )
@@ -106,6 +112,9 @@ def transfer(
             offset += len(captured)
         if sorted(placed) != list(range(len(segments))):
             raise store.ReviewConflict('Merged speech shape changed')
+        retained_updates = publication(tx, owner, source_rows, destination_id, raw_target, retention_plan)
+        for cid, patch in retained_updates.items():
+            tx.update(owner.collection('conversations').document(cid), patch)
         if not combined:
             # Seal every source against a correction arriving between merge
             # finalization and deletion, even when no overlay existed at read time.

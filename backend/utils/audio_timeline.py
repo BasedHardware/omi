@@ -6,14 +6,13 @@ and persisted segment offsets are projections of it. Provider timestamps are
 translated through the *actual accepted provider-send spans*, never by
 subtracting a wall-clock delta or extrapolating from the last callback.
 
-Timeline projections use caller-supplied arrival observations; the optional
-translator reads its mode and reports bounded shadow failures. ``project(sample)``
-is piecewise sample-linear with an
+Timeline projections use caller-supplied arrival observations.
+``project(sample)`` is piecewise sample-linear with an
 arrival-time anchor at the first accepted decoded frame and at each explicitly
 observed inter-arrival hiatus; anchors are never stored as a second playback
 index (stored segment and blob offsets are already projected).
 
-Known shadow-validation limits: an interval beginning exactly at the latest
+Known placement-validation limits: an interval beginning exactly at the latest
 accepted send's end may receive a one-sample tail before a later send reveals
 a capture gap, so its placement can depend on callback order. Speech labels
 come from chunk-level approximations of buffered VAD windows; a window that
@@ -23,9 +22,7 @@ the candidate's exact samples.
 
 from __future__ import annotations
 
-import logging
 import math
-import time
 import uuid
 from dataclasses import dataclass, field
 from collections import deque
@@ -42,9 +39,6 @@ from utils.stt.committed_words import (
     PROVIDER_WORDS_ABSTAIN_KEY,
     project_provider_words,
 )
-
-logger = logging.getLogger(__name__)
-_last_shadow_error_log = float('-inf')
 
 # Measured inter-arrival gap beyond which a new anchor is set. This is a jitter
 # guard, not a semantic silence boundary: a client still sending PCM silence
@@ -606,14 +600,6 @@ class ProviderEpochTranslator:
         self.provider_label = 'unknown'
         self.send_path = 'unknown'
         self.last_send_provider_start = 0
-        self._last_accepted_wall_end: Optional[float] = None
-        # The elapsed Soniox axis is unverified. Shadow computes it without
-        # changing the compact map used for placement or owner resolution.
-        from config.audio_timeline import soniox_elapsed_axis_mode
-
-        self.soniox_elapsed_mode = soniox_elapsed_axis_mode()
-        self._elapsed_send_map = SendMap(provider_sample_rate)
-        self._shadow_elapsed_healthy = True
         self._send_owners: List[Tuple[int, int, Optional[str]]] = []
         self._only_send_owner: Optional[str] = None
         self._send_owner_ambiguous = False
@@ -727,8 +713,6 @@ class ProviderEpochTranslator:
             if length <= 0:
                 continue
             start = provider_start if provider_start is not None else (self.send_map.last_provider_sample or 0)
-            if self.provider_label == 'soniox' and self.soniox_elapsed_mode == 'on':
-                start = self._note_elapsed_span(capture_start, length)
             if first_span:
                 self.last_send_provider_start = start
                 first_span = False
@@ -750,47 +734,6 @@ class ProviderEpochTranslator:
             # generations pathologically often. Evicted ownership is unknown.
             if len(self._send_owners) > MAX_SEND_SPANS:
                 self._send_owners.pop(0)
-            # Shadow is validation-only. Its entire path follows the compact
-            # map and owner update, and a broken candidate map stays disabled.
-            if (
-                self.provider_label == 'soniox'
-                and self.soniox_elapsed_mode == 'shadow'
-                and self._shadow_elapsed_healthy
-            ):
-                try:
-                    self._note_elapsed_span(capture_start, length)
-                except Exception as error:
-                    self._shadow_elapsed_error(error)
-
-    def _note_elapsed_span(self, capture_start: int, length: int) -> int:
-        elapsed_start = self._elapsed_send_map.last_provider_sample or 0
-        wall_start = self.timeline.wall_strict(capture_start)
-        if wall_start is not None and self._last_accepted_wall_end is not None:
-            # Hypothesis only: keepalives/finalize carry no PCM. Reserve
-            # elapsed gap space in this candidate axis without granting a
-            # send span; provider clock semantics remain unproven.
-            elapsed = max(0.0, wall_start - self._last_accepted_wall_end)
-            elapsed_start += round(elapsed * self.provider_sample_rate)
-        wall_end = self.timeline.wall_strict(capture_start + length)
-        self._elapsed_send_map.add_accepted(elapsed_start, capture_start, length)
-        self._last_accepted_wall_end = wall_end
-        return elapsed_start
-
-    def _shadow_elapsed_error(self, error: Exception) -> None:
-        global _last_shadow_error_log
-        self._shadow_elapsed_healthy = False
-        # At most one metric per epoch and one log per minute per process.
-        # Telemetry itself cannot affect sends.
-        try:
-            from utils.metrics import OMI_AUDIO_TIMELINE_ELAPSED_SHADOW_ERRORS_TOTAL
-
-            OMI_AUDIO_TIMELINE_ELAPSED_SHADOW_ERRORS_TOTAL.inc()
-            now = time.monotonic()
-            if now - _last_shadow_error_log >= 60.0:
-                _last_shadow_error_log = now
-                logger.warning('Soniox elapsed shadow disabled after %s', type(error).__name__)
-        except Exception:
-            pass
 
     def owner_for_provider_sample(self, sample: int) -> Optional[str]:
         for first, end, owner in reversed(self._send_owners):
@@ -853,24 +796,16 @@ class ProviderEpochTranslator:
                 else:
                     translated.append(segment)
                 continue
-            if self._on_validation is not None:
-                is_shadow = self.provider_label == 'soniox' and self.soniox_elapsed_mode == 'shadow'
-                validation_map = (
-                    self._elapsed_send_map
-                    if self.provider_label == 'soniox' and self.soniox_elapsed_mode != 'off'
-                    else self.send_map if self.provider_label == 'modulate' else None
-                )
-                if validation_map is not None and (not is_shadow or self._shadow_elapsed_healthy):
-                    try:
-                        candidate = (
-                            validation_map.point_interval(first_sample)
-                            if first_sample == last_sample
-                            else validation_map.map_interval(first_sample, last_sample)
-                        )
-                        self._on_validation(self.provider_label, candidate)
-                    except Exception as error:
-                        if is_shadow:
-                            self._shadow_elapsed_error(error)
+            if self._on_validation is not None and self.provider_label == 'modulate':
+                try:
+                    candidate = (
+                        self.send_map.point_interval(first_sample)
+                        if first_sample == last_sample
+                        else self.send_map.map_interval(first_sample, last_sample)
+                    )
+                    self._on_validation(self.provider_label, candidate)
+                except Exception:
+                    pass
             if self._project_times:
                 segment['_provider_send_owner'] = self.owner_for_provider_sample(first_sample)
             interval: Optional[Tuple[int, int]] = None

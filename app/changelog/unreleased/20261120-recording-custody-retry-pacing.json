@@ -1,0 +1,3 @@
+{
+  "change": "Offline Sync spaces out retries for recordings the server is still preparing, so other recordings can keep syncing."
+}

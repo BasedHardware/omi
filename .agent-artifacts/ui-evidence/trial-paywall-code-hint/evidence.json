@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-trial-paywall-code-hint.png",
+      "platform": "mobile-ios",
+      "description": "Trial paywall bottom: trial terms, Try button, cancel note and the new code hint",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

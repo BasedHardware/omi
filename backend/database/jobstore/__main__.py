@@ -70,8 +70,12 @@ def main(argv: list[str]) -> int:
     command = argv[0] if argv else 'status'
     if command == 'backfill':
         return backfill_main(argv[1:])
+    if command == 'reconcile-page':
+        from database.jobstore.reconcile_operator import reconcile_main
+
+        return reconcile_main(argv[1:])
     if command not in {'migrate', 'status'}:
-        print('usage: python -m database.jobstore migrate|status|backfill', file=sys.stderr)
+        print('usage: python -m database.jobstore migrate|status|backfill|reconcile-page', file=sys.stderr)
         return 2
     conn = iam_connector(*_pg_target())()
     try:

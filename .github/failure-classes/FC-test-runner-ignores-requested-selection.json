@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-test-runner-ignores-requested-selection",
+  "family": "input-tolerance",
+  "violated_contract": "A test runner given an explicit selection on its command line must run exactly that selection or exit nonzero naming the argument it could not use. backend/test.sh never read its positional arguments, so `bash test.sh tests/unit/a.py tests/unit/b.py` silently ran its widest default, the full unit suite (~2,970 files), with one worker per core. On 2026-11-19 ten agent lanes on one 18-core host did this concurrently: 48 pytest processes, load average ~380, and one lane's two-file check still running after 56 minutes. The narrowing knob existed (BACKEND_UNIT_TEST_FILE_LIST), but nothing told a caller that its arguments had been dropped.",
+  "canonical_prevention": "Parse every argument: resolve each test path to one existing file, and reject unresolvable paths, ambiguous bare names, directories, unknown options and conflicting selections with exit 2 before any selector or pytest process starts. A missing or unresolvable selection is never a reason to widen to the full suite. Prove it hermetically by running the real runner in a fixture repository with a recording selector and fake pytest, asserting named files run alone and every rejected argument starts nothing.",
+  "canonical_prevention_artifact": [
+    "backend/test.sh",
+    "backend/tests/unit/test_backend_test_runner_selection.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/test.sh",
+    "backend/scripts/run-unit-ci.sh",
+    "backend/scripts/select_backend_unit_tests.py",
+    "scripts/pre-push"
+  ],
+  "status": "open"
+}

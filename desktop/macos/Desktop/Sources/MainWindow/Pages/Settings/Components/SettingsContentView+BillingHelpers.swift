@@ -789,41 +789,58 @@ extension SettingsContentView {
     }
   }
 
+  func showAIProfile(_ profile: AIUserProfile?) {
+    aiProfileText = profile?.profileText
+    aiProfileGeneratedAt = profile?.generatedAt
+    aiProfileDataSourcesUsed = profile?.dataSourcesUsed ?? 0
+  }
+
   func deleteCurrentAIProfile() {
-    guard let id = aiProfileId else { return }
+    aiProfileError = nil
     Task {
-      let previous = await AIUserProfileService.shared.deleteProfile(id: id)
-      await MainActor.run {
-        if let previous {
-          aiProfileId = previous.id
-          aiProfileText = previous.profileText
-          aiProfileGeneratedAt = previous.generatedAt
-          aiProfileDataSourcesUsed = previous.dataSourcesUsed
-        } else {
-          aiProfileId = nil
-          aiProfileText = nil
-          aiProfileGeneratedAt = nil
-          aiProfileDataSourcesUsed = 0
+      do {
+        try await AIUserProfileService.shared.deleteProfile()
+        await MainActor.run { showAIProfile(nil) }
+      } catch {
+        log("Settings: AI profile delete failed: \(error.localizedDescription)")
+        await MainActor.run { aiProfileError = "Couldn't delete your profile. Try again." }
+      }
+    }
+  }
+
+  func saveAIProfileEdit() {
+    aiProfileError = nil
+    let text = aiProfileEditText
+    Task {
+      do {
+        let saved = try await AIUserProfileService.shared.updateProfileText(text, source: .userEdit)
+        await MainActor.run {
+          showAIProfile(saved)
+          isEditingAIProfile = false
         }
+      } catch {
+        // Leave the editor open with the text intact so the edit survives and can be retried;
+        // closing it would look exactly like a save that worked.
+        log("Settings: AI profile save failed: \(error.localizedDescription)")
+        await MainActor.run { aiProfileError = "Couldn't save your changes. Try again." }
       }
     }
   }
 
   func regenerateAIProfile() {
     isGeneratingAIProfile = true
+    aiProfileError = nil
     Task {
       do {
-        let result = try await AIUserProfileService.shared.generateProfile()
+        let result = try await AIUserProfileService.shared.refresh()
         await MainActor.run {
-          aiProfileId = result.id
-          aiProfileText = result.profileText
-          aiProfileGeneratedAt = result.generatedAt
-          aiProfileDataSourcesUsed = result.dataSourcesUsed
+          if let result { showAIProfile(result) }
           isGeneratingAIProfile = false
         }
       } catch {
-        log("Settings: AI profile generation failed: \(error.localizedDescription)")
+        let message = AIUserProfileRefreshError(error).errorDescription
         await MainActor.run {
+          aiProfileError = message
           isGeneratingAIProfile = false
         }
       }

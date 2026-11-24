@@ -233,7 +233,10 @@ def test_scheduler_records_new_transitions_without_duplicate_completion_count():
     assert queue.complete(result, lease.token, 11)
     assert queue.complete(result, lease.token, 12)
     assert registry.get_sample_value('omi_batch_pipeline_events_total', {'event': 'completed'}) == 1
-    assert registry.get_sample_value('omi_batch_pipeline_owner_wait_seconds_sum', {'relet': 'false'}) == 10
+    assert (
+        registry.get_sample_value('omi_batch_pipeline_owner_wait_seconds_sum', {'relet': 'false', 'priority': 'deep'})
+        == 10
+    )
     merge = OrderedMerge(store, metrics=metrics)
     merge.commit_next('heavy', 13)
     merge.commit_next('heavy', 14)
@@ -526,7 +529,8 @@ def test_incomplete_age_sample_preserves_nan_without_blocking_other_queue_signal
     )
 
 
-def test_allowance_hold_through_an_unevaluated_reevaluation_does_not_flap_the_proxy():
+def test_allowance_hold_through_an_unevaluated_reevaluation_does_not_flap_the_proxy(monkeypatch):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')  # Legacy recovery under rollback.
     # 2026-10-27: the proxy flapped to ~54h when a held job's re-evaluation came
     # back unevaluated: defer pops compute_decision (BLIND, never a false hold)
     # and the job read as a decisionless commitment until the next re-hold.
@@ -547,7 +551,8 @@ def test_allowance_hold_through_an_unevaluated_reevaluation_does_not_flap_the_pr
     assert _deep_oldest_age(registry) == 0
 
 
-def test_lease_that_bypasses_admission_ends_the_parked_hold():
+def test_lease_that_bypasses_admission_ends_the_parked_hold(monkeypatch):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')  # Legacy recovery under rollback.
     # Review (Luna): with offline enforcement off, a unit that does not require
     # compute admission dispatches without authorize(); its lease is a real
     # commitment, so a stale hold marker must not hide it from the proxy.
@@ -853,3 +858,16 @@ def test_timeliness_cohort_includes_provider_running_but_not_provider_pending():
 
     assert 'provider_running' in TIMELINESS_ACTIVE_STATES
     assert 'provider_pending' not in TIMELINESS_UNCOMMITTED_STATES
+
+
+def test_owner_wait_is_split_by_bounded_queue_class():
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    queue = Scheduler(MemoryStore(), metrics=metrics)
+    queue.enqueue(item('fresh-unit', priority=Priority.FRESH), 0)
+    assert queue.pull(4)
+    metrics.record('leased', wait_seconds=7, priority='not-a-class')
+    count = 'omi_batch_pipeline_owner_wait_seconds_count'
+    assert registry.get_sample_value(count, {'relet': 'false', 'priority': 'fresh'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'false', 'priority': 'unknown'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'false', 'priority': 'deep'}) is None

@@ -51,6 +51,16 @@ def align_projection_words(words, payload, segment_id):
     ]
 
 
+def _recovery_part_id(item, index):
+    if item.capture_time_trust != 'untrusted':
+        return item.conversation_id
+    # Source + admitted PCM unit start + VAD part index, independent of bundle
+    # IDs and model word-edge jitter. Disconnected parts and separate units
+    # cannot replace each other's transcripts.
+    first = round(item.capture_at * 16000)
+    return 'receipt-part-' + uuid5(NAMESPACE_URL, f'{item.conversation_id}:{first}:{index}').hex
+
+
 def split_result(item, payload):
     duration = float(payload['audio_seconds'])
     if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > 0.1 + 1 / 16000 + 1e-9:
@@ -66,7 +76,7 @@ def split_result(item, payload):
     if not 1 <= len(groups) <= MAX_PROJECTION_PARTS:
         raise ValueError('bounded projection part count required')
     if len(groups) == 1 and 'speech_spans' not in payload:
-        return [(item, payload)]
+        return [(replace(item, conversation_id=_recovery_part_id(item, 0)), payload)]
     buckets: list[list[dict]] = [[] for _ in groups]
     index = 0
     for word in words:
@@ -83,6 +93,7 @@ def split_result(item, payload):
             segment_id=uuid5(NAMESPACE_URL, f'batch-part:{item.segment_id}:{index}').hex,
             capture_at=item.capture_at + start,
             duration_seconds=end - start,
+            conversation_id=_recovery_part_id(item, index),
         )
         turns = [
             {**turn, 'start': max(start, turn['start']) - start, 'end': min(end, turn['end']) - start}

@@ -30,6 +30,8 @@ def attach(
     end_discarded,
     record_recovered,
 ) -> str:
+    if row.get('capture_time_trust') == 'untrusted':
+        return 'skipped_unknown_date'
     hidden = (
         hidden_member(dict(row))
         if row_visibility_enabled()

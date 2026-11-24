@@ -4,7 +4,8 @@
 **Statement:** In the Flutter app every recurring UI job goes through the one shared primitive named in [`app/docs/ux-contract.md`](../../app/docs/ux-contract.md), and changed files never add a hand-rolled variant.
 
 The jobs: leaving a surface, sheets, confirmations, toasts, copying, dates and durations, speaker
-names, colours, type, radii, spinners and user-facing copy.
+names, colours, type, radii, spinners and user-facing copy; and what the reader sees after a tap
+(§17 Outcomes).
 
 ## MUST NOT
 
@@ -21,6 +22,17 @@ names, colours, type, radii, spinners and user-facing copy.
 - Ship user-facing English in `Text('…')`, or "..." in a string (use "…").
 - Delete something with neither a confirmation nor an Undo, or offer "Don't ask again" on an action
   no Undo backs.
+- Leave an inline editor or a full-page form with unsaved input without asking
+  (`OmiUnsavedChangesGuard`, `confirmDiscardChanges`).
+- Send the reader Home as the answer to a finishing action (Finish, Save, Submit, Import), or hand a
+  caller a bare null for "finish failed": Finish returns a `FinishOutcome` from every entry point.
+- Collapse a failed request into a value ("empty", "up to date", "Free plan", "no change").
+- Clear the transcript, a form, a selection or a sheet before the request that could fail has
+  answered (`pop-before-await`).
+- Roll back a failed write, or catch a failure in a page or provider, without telling the reader
+  (`silent-catch`).
+- Show `somethingWentWrong` with no Try Again when the cause is unknown, or at all when it is
+  known (`generic-error`); push with `MaterialPageRoute` instead of `omiPageRoute` (`material-page-route`).
 
 ## Surfaces
 

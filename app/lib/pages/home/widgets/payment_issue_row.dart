@@ -177,5 +177,5 @@ Future<void> openPaymentIssuePortal(
           PaymentWebViewPage(checkoutUrl: url, title: l10n.managePaymentMethod, onLoaded: onLoaded),
     ),
   );
-  await usage.fetchSubscription();
+  await usage.fetchSubscription(fresh: true);
 }

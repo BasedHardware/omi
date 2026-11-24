@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-nonterminal-status-read-as-live-activity",
+  "family": "temporal-correctness",
+  "violated_contract": "A read that means 'what is happening right now' must prove recent activity, never only a non-terminal status. GET /v1/conversations/live served the newest non-recording in_progress row as the conversation in progress. A capture that never closed keeps that status for days: on 2026-11-18 prod held 604,552 in_progress conversation rows, and 14,638 of a 15,000-row sample were idle for over two hours across 926 owners. The v3 Home then hid its capture card behind that row and filed the row under its start date, so an owner with an old open row saw nothing in progress while recording.",
+  "canonical_prevention": "The live read scans a bounded page of open rows and serves the first one whose last activity (finished, started or created time) is inside the v3 two-hour window cap. A stale open row is skipped, so a fresh open conversation behind it is still served and the client keeps its capture card when none exists. Tests pin a stale-only owner returning no live row, a fresh row behind a stale one, naive stored times and a row with no time.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_conversations_v3_contract.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/conversations.py"
+  ],
+  "status": "open"
+}

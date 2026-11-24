@@ -186,16 +186,40 @@ def failed_plan(source):
     return repair.plan_seals(store, ['pending'], None, artifacts, repair_upload_failed=True)
 
 
-def test_upload_failed_clear_requires_explicit_repair_and_full_proof(source):
+def test_upload_failed_clear_requires_explicit_repair_and_full_proof(source, monkeypatch):
+    monkeypatch.setattr(repair, 'time', SimpleNamespace(time=lambda: 1000))
     store, client, artifacts = source
     plan = failed_plan(source)
     assert plan['entries'][0]['disposition'] == 'eligible'
     assert repair.plan_seals(store, ['pending'], None, artifacts)['entries'][0]['disposition'] == 'upload_failed'
     assert seal_record_audio('synthetic', 'record', firestore_client=client) == 'upload_failed'
+    # StrictFirestore has no update_time; model the newer committed revision
+    # supplied by Firestore for this successful full-proof recovery.
+    ledger = client.rows[('users', 'synthetic', 'pipeline_ledger', 'record')]
+    ledger['revision'] = 2
+    revisions = iter([2, 3])  # Plan/source revision is stale; committed revision is newer.
+    monkeypatch.setattr(repair.pipeline_ledger, 'source_revision', lambda snapshot: next(revisions))
     assert repair.apply_seals(store, plan, plan['plan_sha256']) == {'upload_failed_cleared': 1}
     assert client.rows[PATH]['record_audio_closed']
     assert client.rows[PATH]['record_upload_failed'] is False
-    assert client.transactions[-1].updates == [(PATH, {'record_audio_closed': True, 'record_upload_failed': False})]
+    seal_tx = next(
+        tx
+        for tx in client.transactions
+        if any(path == PATH and patch.get('record_audio_closed') for path, patch in tx.updates)
+    )
+    assert seal_tx.updates == [
+        (
+            PATH,
+            {
+                'record_audio_closed': True,
+                'record_upload_failed': False,
+                'record_admitted_at': client.rows[PATH]['record_admitted_at'],
+                'record_sealed_at': 1000,
+            },
+        )
+    ]
+    assert client.rows[('users', 'synthetic', 'pipeline_ledger', 'record')]['stage'] == 'sealed'
+    assert client.rows[('users', 'synthetic', 'pipeline_ledger', 'record')]['revision'] == 3
 
 
 @pytest.mark.parametrize(

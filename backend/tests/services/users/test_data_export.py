@@ -88,7 +88,9 @@ def test_iter_user_data_export_streams_all_top_level_sections(monkeypatch):
     }
     memory_service.iter_portability_export_memories.assert_called_once_with("uid1", include_archive=True)
     data_export.iter_all_action_items.assert_called_once_with("uid1")
-    data_export.conversations_db.iter_all_conversations.assert_called_once_with("uid1", include_discarded=True)
+    data_export.conversations_db.iter_all_conversations.assert_called_once_with(
+        "uid1", include_discarded=True, include_recordings=True
+    )
     data_export.chat_db.iter_all_messages.assert_called_once_with("uid1")
 
 

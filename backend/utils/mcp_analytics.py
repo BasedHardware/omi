@@ -114,8 +114,10 @@ _RESULT_LIST_KEY_BY_TOOL = {
     "search_memories": "memories",
     "create_memories": "results",
     "get_conversations": "conversations",
+    "get_deleted_conversations": "deleted",
     "get_conversations_by_ids": "conversations",
     "search_conversations": "conversations",
+    "search_transcripts": "matches",
     "search_x_posts": "posts",
     "get_x_posts": "posts",
     "get_action_items": "action_items",
@@ -590,6 +592,11 @@ def _normalize_tool(tool_name: object) -> str:
 def _normalize_operation(tool_name: object) -> str:
     normalized_tool = _normalize_tool(tool_name)
     return _TOOL_OPERATIONS.get(normalized_tool, "other")
+
+
+def mcp_client_family(auth_type: object, client_id: Optional[str]) -> str:
+    """Bounded client family (chatgpt, claude, other_registered, api_key, unknown) for metric labels."""
+    return _normalize_client(auth_type, client_id)
 
 
 def _normalize_client(auth_type: object, client_id: Optional[str]) -> str:

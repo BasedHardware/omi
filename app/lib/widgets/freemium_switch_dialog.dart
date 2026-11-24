@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/models/plan_storefront.dart';
@@ -9,19 +11,30 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/on_device/free_cap_sheet.dart';
 import 'package:omi/pages/on_device/on_device_at_cap_sheet.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/on_device/on_device_settings_page.dart';
 import 'package:omi/pages/on_device/on_device_setup_page.dart';
+import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/capture/free_tier_on_device_stt_flag.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
+import 'package:omi/services/capture/phone_transcription_choice.dart';
+import 'package:omi/services/capture/stt_mode_resolver.dart';
+import 'package:omi/services/experiments/free_tier_on_device_stt_gate.dart';
 import 'package:omi/services/experiments/on_device_overflow_gate.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
+import 'package:omi/utils/other/temp.dart';
 
 /// Prompt id of the plans sheet offered when the Plus meter runs low.
 const String kFreemiumPlansPromptId = 'freemium-plans';
@@ -43,6 +56,7 @@ class FreemiumSwitchHandler {
     final usage = context.read<UsageProvider>();
     if (!usage.showSubscriptionUI) return false;
     if (OnDeviceTranscriptionController.instance.isActive && usage.isOutOfCredits) return true;
+    if (freeCapEligible(usage)) return true;
     return FreemiumThresholdTracker.shouldShowPlusMeterPaywall(
       reached: captureProvider.freemiumThresholdReached,
       requiresUserAction: captureProvider.freemiumRequiresUserAction,
@@ -69,11 +83,92 @@ class FreemiumSwitchHandler {
       show: (promptContext) async {
         if (await _offerOnDevice(promptContext)) return;
         if (!promptContext.mounted) return;
+        if (await _offerFreeCap(promptContext)) return;
+        if (!promptContext.mounted) return;
         if (await PaywallRouter.openVariant(promptContext, source: 'freemium_switch')) return;
         if (!promptContext.mounted) return;
         return showPlansSheetPrompt(promptContext, source: 'freemium_switch');
       },
     );
+  }
+
+  /// A free plan at this month's cloud cap that hasn't chosen the phone yet gets [showFreeCapSheet].
+  static bool freeCapEligible(UsageProvider usage) {
+    final subscription = usage.subscription;
+    if (!usage.showSubscriptionUI || subscription == null) return false;
+    final plan = subscription.subscription.plan;
+    // Spent minutes only: not a blocked plan, a transient lookup failure, or an older server.
+    if (plan.isPaid || plan.isUnknown || !SttModeResolver.wantsOnDevice(subscription.transcriptionAllowance)) {
+      return false;
+    }
+    // Killed: the sheet's phone option is gone, so the ordinary plans offers stay in charge.
+    if (!FreeTierOnDeviceSttFlag.isEnabled() || FreeTierOnDeviceSttGate.lastKnownKilled) return false;
+    // A Custom STT the reader set up answers the sheet's question. The phone choice made automatically
+    // at the cap does not: the sheet still offers Omi Pro, once a month.
+    return !SharedPreferencesUtil().customSttConfig.isEnabled ||
+        PhoneTranscriptionChoice.isPinned(SharedPreferencesUtil());
+  }
+
+  /// The free plan's at-cap sheet: Omi Pro first, this phone second. Returns true when it handled the
+  /// prompt (including deciding to show nothing), false to fall through to the plans sheet.
+  Future<bool> _offerFreeCap(BuildContext context) async {
+    final usage = context.read<UsageProvider>();
+    if (!freeCapEligible(usage)) return false;
+    // Killed since the last read: fall through to the ordinary plans offer.
+    if (await FreeTierOnDeviceSttFlag.killed()) return false;
+    // Once a month per account: the cap sheet replaces the locked-row paywall, so it must not nag.
+    final prefs = SharedPreferencesUtil();
+    final now = DateTime.now().toUtc();
+    final monthKey = 'freeCapSheetShown:${prefs.uid}';
+    final month = '${now.year}-${now.month}';
+    if (prefs.getString(monthKey) == month) return true;
+    if (!context.mounted) return true;
+    // Marked only now, with the sheet about to open in this frame: nothing above can burn the month.
+    unawaited(prefs.saveString(monthKey, month));
+    await _showFreeCapSheet(context, usage, source: 'free_cap');
+    return true;
+  }
+
+  /// The free-cap sheet and what its choice opens, for the at-cap prompt and a held recording's Upgrade.
+  static Future<void> _showFreeCapSheet(BuildContext context, UsageProvider usage, {required String source}) async {
+    final limit = usage.subscription?.transcriptionSecondsLimit ?? 0;
+    PaywallPacing.markShown();
+    PlatformManager.instance.analytics
+        .paywallOpened(source, currentPlan: usage.subscription?.subscription.plan.wireName ?? 'unknown');
+    final choice = await showFreeCapSheet(context, capMinutes: (limit / 60).round());
+    const TypedEvents().emit(FreeCapSheetChoice(
+      choice: switch (choice) {
+        FreeCapChoice.upgrade => FreeCapSheetChoiceChoice.upgrade,
+        FreeCapChoice.transcribeOnPhone => FreeCapSheetChoiceChoice.transcribeOnPhone,
+        null => FreeCapSheetChoiceChoice.dismissed,
+      },
+    ));
+    if (!context.mounted || choice == null) return;
+    switch (choice) {
+      case FreeCapChoice.upgrade:
+        // The sheet already counted this open; the plans it hands off to don't count it again.
+        if (await PaywallRouter.openVariant(context, source: source, trackOpen: false)) return;
+        if (!context.mounted) return;
+        await showPlansSheetPrompt(context, source: source, trackOpen: false);
+      case FreeCapChoice.transcribeOnPhone:
+        await routeToPage(context, const TranscriptionSettingsPage(choosePhone: true));
+    }
+  }
+
+  /// Upgrade on a recording held by the free plan's monthly allowance. The reader asked, so no
+  /// pacing or once-a-month gate: the free-cap sheet where it applies (Omi Pro first, this phone
+  /// second), else the paywall the router picks, else the plans sheet.
+  static Future<void> openHeldRecordingUpgrade(BuildContext context, {required String source}) async {
+    final usage = context.read<UsageProvider>();
+    if (!usage.showSubscriptionUI) return;
+    if (freeCapEligible(usage) && !await FreeTierOnDeviceSttFlag.killed()) {
+      if (context.mounted) await _showFreeCapSheet(context, usage, source: source);
+      return;
+    }
+    if (!context.mounted) return;
+    if (await PaywallRouter.openVariant(context, source: source)) return;
+    if (!context.mounted) return;
+    await showPlansSheetPrompt(context, source: source);
   }
 
   /// With the on-device flag on and this month's usage limit reached, offers transcribing on this phone before
@@ -169,9 +264,9 @@ class FreemiumSwitchHandler {
 
 /// The shipped plans sheet for an opener outside Settings, once [PaywallRouter] has declined (the
 /// control arm, or a reader the trial page can't serve). Emits `Paywall Opened` with [source].
-Future<void> showPlansSheetPrompt(BuildContext context, {required String source}) async {
+Future<void> showPlansSheetPrompt(BuildContext context, {required String source, bool trackOpen = true}) async {
   final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
-  PlatformManager.instance.analytics.paywallOpened(source, currentPlan: plan);
+  if (trackOpen) PlatformManager.instance.analytics.paywallOpened(source, currentPlan: plan);
   final title = await plansSheetTitle(context);
   if (!context.mounted) return;
   return showOmiSheet<void>(

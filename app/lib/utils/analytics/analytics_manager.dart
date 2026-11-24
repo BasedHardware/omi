@@ -829,14 +829,8 @@ class AnalyticsManager {
     const TypedEvents().emit(SignInStarted(provider: value));
   }
 
-  void signInFailed(String provider, {Object? error, bool cancelled = false}) {
-    final value = signInFailedProvider(provider);
-    if (value == null) return;
-    const TypedEvents().emit(SignInFailed(
-      provider: value,
-      errorClass: cancelled || error == null ? SignInFailedErrorClass.cancelled : classifySignInFailure(error),
-    ));
-  }
+  void signInFailed(String provider, {Object? error, bool cancelled = false}) =>
+      signInFailureEvents(provider, error: error, cancelled: cancelled).forEach(const TypedEvents().emit);
 
   void onboardingPermissionResult({
     required OnboardingPermissionResultPermission permission,
@@ -1921,6 +1915,21 @@ class AnalyticsManager {
   }
 
   void upgradeCancelled() => const TypedEvents().emit(const UpgradeCancelled());
+
+  /// Google Play Billing purchase step, emitted next to the existing purchase events (Play path only).
+  void playBillingStage({required UpgradeBillingProviderStage stage, required String billingInterval}) =>
+      const TypedEvents().emit(
+        UpgradeBillingProvider(
+          provider: UpgradeBillingProviderProvider.play,
+          stage: stage,
+          billingInterval: _closedEnum(
+            UpgradeBillingProviderBillingInterval.values,
+            _intervalWire(billingInterval),
+            UpgradeBillingProviderBillingInterval.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
 
   /// Store-update prompt (`upgrade_alert.dart`), not the subscription paywall.
   void upgradeModalDismissed() => const TypedEvents().emit(const UpgradeModalDismissed());

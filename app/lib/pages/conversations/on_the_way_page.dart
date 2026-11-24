@@ -19,7 +19,7 @@ import 'package:omi/utils/sync/offline_sync_amounts.dart';
 
 /// Recordings on their way to becoming conversations, opened from the device's Catching up
 /// tile. A line on how it gets there, then one row per local day with that day's totals and a
-/// quiet status. Failures recover on their own and never appear as rows here.
+/// quiet status. Unconfirmed uploads have a separate details action.
 class OnTheWayPage extends StatefulWidget {
   const OnTheWayPage({super.key, this.syncProvider, this.multiFileSync, this.clock, this.pendingWork});
 
@@ -80,19 +80,22 @@ class _OnTheWayPageState extends State<OnTheWayPage> with _PendingWorkListener {
       builder: (context, sync, child) {
         final p = widget.syncProvider ?? sync;
         final processing = context.watch<ConversationProvider?>()?.processingConversations ?? const [];
-        final work = _PendingWork.collect(p, processing, store.pending, l);
+        final nowSeconds = (widget.clock?.call() ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000;
+        final work = _PendingWork.collect(p, processing, store.pending, l, nowSeconds: nowSeconds);
+        final stalled = p.derivedWals.stalledUploadsAt(nowSeconds: nowSeconds);
         // Recordings that failed or were refused recover without the user; they are not rows
         // here, but they keep the page from claiming everything is synced.
         final quiet = p.needsAttentionWalsCount > 0 || p.terminallyFailedWalsCount > 0;
         final refusals = p.refusalSummary;
 
         final Widget body;
-        if (work.isEmpty && !quiet) {
+        if (work.isEmpty && !quiet && stalled.isEmpty) {
           body = OmiEmptyState(icon: Icons.check_circle_outline, title: l.allRecordingsSynced);
         } else {
           final dates = dateFormat(context, widget.clock);
-          final days = _groupByDay(work.dated);
-          final statuses = _dayStatuses(days, work.undated, l);
+          final days = _groupByDay(work.dated.where((i) => !i.isServer).toList());
+          final serverDays = _groupByDay(work.dated.where((i) => i.isServer).toList());
+          final statuses = _dayStatuses(days, work.undated.where((i) => !i.isServer).toList(), l);
           body = ListView(
             padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xxl),
             children: [
@@ -142,6 +145,40 @@ class _OnTheWayPageState extends State<OnTheWayPage> with _PendingWorkListener {
                       ),
                   ],
                 ),
+              if (stalled.isNotEmpty) ...[
+                const SizedBox(height: OmiSpacing.lg),
+                OmiSettingsGroup(
+                  children: [
+                    OmiSettingsRow(
+                      key: const Key('on_the_way_stalled_details'),
+                      title: l.deviceUploadsWaitingOnServer,
+                      subtitle: l.deviceUploadsWaitingOnServerSubtitle,
+                      onTap: () => openOfflineSyncDetails(context, p, multiFileSync: widget.multiFileSync),
+                    ),
+                  ],
+                ),
+              ],
+              if (serverDays.isNotEmpty || work.serverUndated.isNotEmpty) ...[
+                const SizedBox(height: OmiSpacing.lg),
+                OmiSettingsGroup(
+                  key: const Key('on_the_way_server_work'),
+                  header: l.onTheWayServerWork,
+                  children: [
+                    for (final day in serverDays)
+                      _DayRow(
+                        key: Key('on_the_way_server_day_${_dayKey(day.day)}'),
+                        title: dates.dayHeader(day.day),
+                        subtitle: _totals(day.items, l),
+                        status: _dayStatuses([day], const [], l)[day.day] ?? '',
+                      ),
+                    if (work.serverUndated.isNotEmpty)
+                      _DayRow(
+                          title: l.onTheWayNoDate,
+                          subtitle: _totals(work.serverUndated, l),
+                          status: _dayStatuses(const [], work.serverUndated, l)[null] ?? ''),
+                  ],
+                ),
+              ],
               Padding(
                 padding: const EdgeInsetsDirectional.fromSTEB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
                 child: Text(
@@ -163,17 +200,20 @@ class _OnTheWayPageState extends State<OnTheWayPage> with _PendingWorkListener {
 
   /// Uploads go oldest first (live capture aside), so the oldest day still waiting is Next and
   /// the rest are Queued; a day moving now is Uploading, and a day whose audio has all landed is
-  /// Transcribing. Keyed by local midnight; null is the undated row.
+  /// awaiting the server. Attention and server-reported stages retain their actual labels.
+  /// Keyed by local midnight; null is the undated row.
   static Map<DateTime?, String> _dayStatuses(List<_Day> days, List<_PendingItem> undated, AppLocalizations l) {
     final statuses = <DateTime?, String>{};
     final waiting = <DateTime?>[];
     void classify(DateTime? day, List<_PendingItem> items) {
-      if (items.any((i) => i.moving)) {
+      if (items.any((i) => i.needsAttention)) {
+        statuses[day] = items.firstWhere((i) => i.needsAttention).label;
+      } else if (items.any((i) => i.moving)) {
         statuses[day] = l.onTheWayDayUploading;
       } else if (items.any((i) => i.step == 1)) {
         waiting.add(day);
       } else {
-        statuses[day] = l.transcribing;
+        statuses[day] = items.reduce((a, b) => a.step < b.step ? a : b).label;
       }
     }
 
@@ -198,19 +238,23 @@ class _PendingWork {
   /// lists only work still moving: a failed or refused recording recovers without the user and is
   /// not a row.
   factory _PendingWork.collect(
-    SyncProvider p,
-    List<ServerConversation> processing,
-    List<PendingWorkItem> serverWork,
-    AppLocalizations l,
-  ) {
+      SyncProvider p, List<ServerConversation> processing, List<PendingWorkItem> serverWork, AppLocalizations l,
+      {required int nowSeconds}) {
     final processingIds = {for (final c in processing) c.id};
-    final dated = <_PendingItem>[for (final c in processing) _PendingItem.processing(c, l)];
-    // A live capture's uploaded audio carries the id of the conversation already listed as
-    // processing, so it is not repeated.
-    final inFlight = [
-      for (final w in [...SyncPendingWork.uploaded(p), ...SyncPendingWork.syncing(p)])
-        if (w.conversationId == null || !processingIds.contains(w.conversationId)) w,
+    final walRows = p.derivedWals.pendingWorkAt(nowSeconds: nowSeconds);
+    // Stalled uploads are listed under Needs attention; their still-processing server
+    // conversation must not be listed again as server work.
+    final walConversationIds = {
+      for (final w in [...walRows, ...p.derivedWals.stalledUploadsAt(nowSeconds: nowSeconds)])
+        if (w.conversationId != null) w.conversationId
+    };
+    final dated = <_PendingItem>[
+      for (final c in processing)
+        if (!walConversationIds.contains(c.id)) _PendingItem.processing(c, l),
     ];
+    // WAL amounts use the same inventory as the sheet and card. Server work
+    // has its own section and never changes these local totals.
+    final inFlight = walRows;
     // The lists partition by WAL status, so a fragment never repeats across them; a phone copy
     // and its wearable source can share an id, and dropping one would hide the state the block
     // must show.
@@ -227,7 +271,7 @@ class _PendingWork {
           step: 0,
         );
       } else if (block.wals.every((w) => w.status == WalStatus.uploaded)) {
-        item = _PendingItem.block(block, label: l.transcribing, step: 2);
+        item = _PendingItem.block(block, label: l.syncDetailsTranscribing, step: 2);
       } else {
         item = _PendingItem.block(block, label: _syncingLabel(block, l), step: 1);
       }
@@ -262,7 +306,8 @@ class _PendingWork {
   final List<_PendingItem> undated;
 
   /// Recordings with audio behind them that have no trustworthy day.
-  List<_PendingItem> get undatedRecordings => undated.where((i) => i.isRecording).toList();
+  List<_PendingItem> get undatedRecordings => undated.where((i) => i.isRecording && !i.isServer).toList();
+  List<_PendingItem> get serverUndated => undated.where((i) => i.isRecording && i.isServer).toList();
 
   /// The stage line shown when a sync runs with no recording listed yet.
   _PendingItem? get status => undated.where((i) => !i.isRecording).firstOrNull;
@@ -286,7 +331,8 @@ class _PendingItem {
         step = 3,
         moving = false,
         isRecording = true,
-        recordingCount = 1;
+        recordingCount = 1,
+        isServer = true;
 
   /// A recording block's start, or null when no device clock value in the block
   /// is plausible: a never-set clock shows no time rather than a bogus one.
@@ -302,7 +348,8 @@ class _PendingItem {
         seconds = block.seconds,
         moving = block.state == WalSyncDisplayState.syncing,
         isRecording = true,
-        recordingCount = 1;
+        recordingCount = 1,
+        isServer = false;
 
   /// A stage with no recording to name yet: only the label shows.
   const _PendingItem.status({required this.label, required this.step})
@@ -310,7 +357,8 @@ class _PendingItem {
         seconds = 0,
         moving = false,
         isRecording = false,
-        recordingCount = 0;
+        recordingCount = 0,
+        isServer = false;
 
   /// Server-reported work's start, or null when unreported or before the
   /// plausibility floor (a device clock that was never set).
@@ -329,7 +377,8 @@ class _PendingItem {
         step = work.state == 'summarizing' ? 3 : 2,
         moving = false,
         isRecording = true,
-        recordingCount = work.recordingCount;
+        recordingCount = work.recordingCount,
+        isServer = true;
 
   final DateTime? start;
   final int seconds;
@@ -341,6 +390,7 @@ class _PendingItem {
   /// False only for a bare stage line with no recording behind it.
   final bool isRecording;
   final int recordingCount;
+  final bool isServer;
 
   /// 1: still syncing, 2: transcribing, 3: writing the conversation, 0: failed or refused.
   final int step;
@@ -390,7 +440,8 @@ class _DayRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final stacked = MediaQuery.textScalerOf(context).scale(1) > 1.5;
-    final statusText = Text(status, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary));
+    final statusText =
+        Text(status, textAlign: TextAlign.end, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary));
     final texts = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -408,11 +459,13 @@ class _DayRow extends StatelessWidget {
           padding: const EdgeInsets.all(OmiSpacing.md),
           child: stacked
               ? Align(alignment: AlignmentDirectional.centerStart, child: texts)
-              : Row(children: [
-                  Expanded(child: texts),
-                  const SizedBox(width: OmiSpacing.xs),
-                  statusText,
-                ]),
+              : LayoutBuilder(
+                  builder: (context, constraints) => Row(children: [
+                        Expanded(child: texts),
+                        const SizedBox(width: OmiSpacing.xs),
+                        ConstrainedBox(
+                            constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.6), child: statusText),
+                      ])),
         ),
       ),
     );

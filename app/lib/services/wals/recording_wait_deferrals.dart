@@ -1,41 +1,124 @@
-/// Owns the per-recording wait a `record_capture_pending` 503 asks for.
-///
-/// The server holds one conversation's WALs until its registered record can
-/// prove coverage. This keeps only that conversation's WALs out of the drain
-/// for the server's pacing (the body's `retry_after_seconds`, else its
-/// Retry-After, else [defaultWaitSeconds]), never the account, so every other
-/// recording keeps uploading. In memory only: a restart re-probes at once, and
-/// the WAL itself stays pending with its retry budget untouched.
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:path/path.dart' as path;
+
+/// Paces repeat custody probes for one recording. The WAL ledger owns audio and
+/// acknowledgment. This state only controls when the gate can send another POST.
 class RecordingWaitDeferrals {
-  RecordingWaitDeferrals(this._now);
+  RecordingWaitDeferrals(this._now, {bool persist = false}) : _prefs = persist ? SharedPreferencesUtil() : null;
 
-  /// Upper bound on one server-requested wait, so a bad value cannot strand a WAL.
-  static const int maxWaitSeconds = 300;
-
-  /// Wait used when the server names the code but gives no pacing, so a
-  /// recognized wait is never retried without a delay.
-  static const int defaultWaitSeconds = 30;
+  static const maxWaitSeconds = 300;
+  static const defaultWaitSeconds = 30;
+  static const _maxBaseSeconds = 240; // Leave room for jitter even at the cap.
+  static const _streakRetention = Duration(minutes: 30);
+  static const _prefKey = 'recordingCustodyWaitsV2';
 
   final DateTime Function() _now;
-  final Map<String, DateTime> _until = {};
+  final SharedPreferencesUtil? _prefs;
+  final _random = Random();
+  final Map<String, ({int deadlineMs, int baseSeconds})> _waits = {};
+  String? _owner;
 
-  /// Holds [conversationId] for [seconds] (bounded), or [defaultWaitSeconds]
-  /// when missing or non-positive. Returns false only without a conversation.
-  bool defer(String? conversationId, int? seconds) {
-    if (conversationId == null) return false;
-    final wait = (seconds == null || seconds <= 0) ? defaultWaitSeconds : seconds.clamp(1, maxWaitSeconds);
-    _until[conversationId] = _now().add(Duration(seconds: wait));
-    return true;
+  static String? key({String? recordingGroup, String? filePath}) {
+    if (recordingGroup != null) return 'group:$recordingGroup';
+    // The server can resolve a recording using its audio interval. Keep that
+    // fallback local to the WALs sent in the refusal, without pausing imports.
+    if (filePath != null && filePath.isNotEmpty) return 'wal:${path.basename(filePath)}';
+    return null;
   }
 
-  bool isWaiting(String? conversationId) {
-    if (conversationId == null) return false;
-    final until = _until[conversationId];
-    if (until == null) return false;
-    if (!until.isAfter(_now())) {
-      _until.remove(conversationId);
-      return false;
+  // An upload group can include location. Keep raw group identity out of prefs.
+  static String _storageKey(String key) => sha256.convert(utf8.encode(key)).toString();
+
+  bool isWaiting(String? key) {
+    if (key == null) return false;
+    _loadOwner();
+    if (_waits.isEmpty) return false;
+    final now = _now().millisecondsSinceEpoch;
+    final deadline = _waits[_storageKey(key)]?.deadlineMs ?? 0;
+    return deadline > now && deadline - now <= maxWaitSeconds * 1000;
+  }
+
+  Future<void> defer(Set<String> keys, int? seconds) async {
+    if (keys.isEmpty) return;
+    _loadOwner();
+    final now = _now().millisecondsSinceEpoch;
+    _waits.removeWhere((_, wait) => !_validDeadline(wait.deadlineMs, now));
+    final hint = (seconds == null || seconds <= 0) ? defaultWaitSeconds : min(seconds, maxWaitSeconds);
+    final storageKeys = keys.map(_storageKey).toList();
+    final previousBase = storageKeys.fold(0, (base, key) => max(base, _waits[key]?.baseSeconds ?? 0));
+    final base = max(hint, min(_maxBaseSeconds, previousBase * 2));
+    final jitter = min(maxWaitSeconds - base, max(1, base ~/ 4));
+    final deadline = now + (base + _random.nextInt(jitter + 1)) * 1000;
+    for (final key in storageKeys) {
+      _waits[key] = (deadlineMs: deadline, baseSeconds: base);
     }
-    return true;
+    await _save();
+  }
+
+  Future<void> clear(Set<String> keys) async {
+    _loadOwner();
+    if (_waits.isEmpty) return;
+    var changed = false;
+    for (final key in keys) {
+      if (_waits.remove(_storageKey(key)) != null) changed = true;
+    }
+    if (changed) await _save();
+  }
+
+  bool _validDeadline(int deadline, int now) =>
+      deadline >= now - _streakRetention.inMilliseconds && deadline <= now + maxWaitSeconds * 1000;
+
+  void _loadOwner() {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    final owner = prefs.uid;
+    if (_owner == owner) return;
+    _owner = owner;
+    _waits.clear();
+    if (owner.isEmpty) return;
+    final raw = prefs.getString(_prefKey);
+    if (raw.isEmpty) return;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map || decoded['owner'] != owner) return;
+      final waits = decoded['waits'];
+      if (waits is! Map<String, dynamic>) return;
+      final now = _now().millisecondsSinceEpoch;
+      for (final entry in waits.entries) {
+        final value = entry.value;
+        if (value is List && value.length == 2 && value[0] is int && value[1] is int) {
+          final deadline = value[0] as int;
+          final base = value[1] as int;
+          if (base > 0 && base <= maxWaitSeconds && _validDeadline(deadline, now)) {
+            _waits[entry.key] = (deadlineMs: deadline, baseSeconds: base);
+          }
+        }
+      }
+    } on FormatException {
+      // Corrupt pacing metadata expires independently of the audio ledger.
+    }
+  }
+
+  Future<void> _save() async {
+    final prefs = _prefs;
+    final owner = _owner;
+    if (prefs == null || owner == null || owner.isEmpty) return;
+    try {
+      await prefs.saveString(
+        _prefKey,
+        jsonEncode({
+          'owner': owner,
+          'waits': {
+            for (final entry in _waits.entries) entry.key: [entry.value.deadlineMs, entry.value.baseSeconds]
+          },
+        }),
+      );
+    } catch (_) {
+      // Keep pacing in memory when storage is unavailable.
+    }
   }
 }

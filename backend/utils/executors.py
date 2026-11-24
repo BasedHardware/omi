@@ -303,11 +303,28 @@ record_barrier_executor = MonitoredThreadPoolExecutor(
     wait_on_saturation=True,
     thread_name_prefix="record-barrier",
 )
+gateway_idempotency_executor = MonitoredThreadPoolExecutor(
+    name="gateway_idempotency", max_workers=8, max_queue_size=8, thread_name_prefix="gateway-idempotency"
+)
+GATEWAY_SETTLEMENT_WORKERS = 8
+gateway_settlement_executor = MonitoredThreadPoolExecutor(
+    name="gateway_settlement",
+    max_workers=GATEWAY_SETTLEMENT_WORKERS,
+    max_queue_size=0,
+    thread_name_prefix="gateway-settlement",
+)
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
 # Batch policy HTTP leaves only; coordinators stay in async Pump code.
 admission_executor = MonitoredThreadPoolExecutor(name="admission", max_workers=4, thread_name_prefix="admission")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
+# The from-segments route bounds its auth dependency by the request deadline. A
+# stalled identity/Firestore call cannot be interrupted, so the wait is
+# abandoned at the deadline; this pool holds those abandoned calls apart from
+# the critical pool that gates every other request.
+auth_deadline_executor = MonitoredThreadPoolExecutor(
+    name="auth_deadline", max_workers=16, max_queue_size=64, thread_name_prefix="auth-deadline"
+)
 # Optional per-window LID must not hold the shared sync coordination pool.
 # Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
 record_language_executor = MonitoredThreadPoolExecutor(
@@ -329,6 +346,22 @@ cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, th
 # front of account wipes on cleanup's four workers.
 erasure_executor = MonitoredThreadPoolExecutor(name="erasure", max_workers=20, thread_name_prefix="erasure")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
+# Optional playback discovery cannot consume mandatory custody/readback workers.
+# Its process coordinator admits at most two calls; this pool has no queue.
+playback_metadata_executor = MonitoredThreadPoolExecutor(
+    name="playback_metadata",
+    max_workers=2,
+    max_queue_size=0,
+    wait_on_saturation=True,
+    thread_name_prefix="playback-metadata",
+)
+playback_debt_executor = MonitoredThreadPoolExecutor(
+    name="playback_debt",
+    max_workers=2,
+    max_queue_size=32,
+    wait_on_saturation=True,
+    thread_name_prefix="playback-debt",
+)
 # Prompt-list verification may outlive its caller while a provider finishes.
 # Keep both the clip cut and inline STT away from shared feature pools.
 speaker_tag_verify_executor = MonitoredThreadPoolExecutor(
@@ -360,15 +393,20 @@ _ALL_EXECUTORS = [
     free_allowance_executor,
     read_cache_shadow_executor,
     record_barrier_executor,
+    gateway_idempotency_executor,
+    gateway_settlement_executor,
     llm_executor,
     stripe_executor,
     admission_executor,
     sync_executor,
+    auth_deadline_executor,
     record_language_executor,
     postprocess_executor,
     cleanup_executor,
     erasure_executor,
     storage_executor,
+    playback_metadata_executor,
+    playback_debt_executor,
     speaker_tag_verify_executor,
     cimd_executor,
     open_loops_executor,

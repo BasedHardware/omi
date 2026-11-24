@@ -3,11 +3,42 @@
 from typing import Literal
 import time
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 
 from config import record_seal_rules
-from database._client import get_firestore_client, run_transactional
+from config.record_wal_duplicate import MERGE_TARGET_FIELD, RETAINED_DONORS_FIELD, SETTLED_FIELD
+from database.record_wal_merge import RetainedMergeDeferred
+from database import pipeline_ledger
+from database._client import get_data_plane_firestore_client, get_firestore_client, run_transactional
 from database import record_token_lease_metrics as lease_metrics
+from database.record_seal_wake import prepare_native_wake
+
+
+def fence_record_audio_removal(uid: str, conversation_id: str, *, firestore_client=None) -> bool:
+    """Return whether published merge custody must be retained before cleanup."""
+    client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
+    user = client.collection('users').document(uid)
+    ref = user.collection('conversations').document(conversation_id)
+
+    @firestore.transactional
+    def claim(tx):
+        current = ref.get(transaction=tx)
+        if not current.exists:
+            # A durable tombstone allows idempotent cleanup without restoring the row.
+            if not user.collection('deleted_conversations').document(conversation_id).get(transaction=tx).exists:
+                raise NotFound('merge audio removal has no source or deletion fence')
+            return False
+        row = current.to_dict() or {}
+        if row.get(SETTLED_FIELD) is True and row.get(MERGE_TARGET_FIELD) and row.get('deleted') is True:
+            return True
+        if row.get(SETTLED_FIELD) or row.get(RETAINED_DONORS_FIELD):
+            raise RetainedMergeDeferred('retained merge is not published')
+        if row.get('record_audio_removal_pending') is not True:
+            tx.update(ref, {'record_audio_removal_pending': True})
+        return False
+
+    return run_transactional(client, claim, transient=True)
 
 
 class RecordUploadCapacityExceeded(ValueError):
@@ -26,10 +57,25 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    owner_ref = client.collection('users').document(uid)
+    observed_at = time.time()
+    admitted = False
+    source_revision = 0
+    failed_at = None
 
     @firestore.transactional
     def commit(tx):
-        row = ref.get(transaction=tx).to_dict() or {}
+        nonlocal admitted, source_revision, failed_at
+        # A transactional retry re-runs this body; reset every observation so a
+        # retry that takes an earlier return path cannot write a SEALED row for
+        # a seal that never committed.
+        admitted = False
+        source_revision = 0
+        failed_at = None
+        snapshot = ref.get(transaction=tx)
+        row = snapshot.to_dict() or {}
+        source_revision = pipeline_ledger.source_revision(snapshot)
+        failed_at = row.get('record_upload_failed_at')
         if row.get('deleted') or not row:
             return 'deleted'
         if row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
@@ -44,14 +90,76 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
             # A clean late producer certifies its drain, never an earlier
             # missing tail. Repair refreshes the separate partial barrier.
             return None
+        wake = prepare_native_wake(client, tx, uid, conversation_id, row)
         if not row.get('record_audio_closed') or row.get('record_seal_refused_at') is not None:
-            patch: dict[str, bool | None] = {'record_audio_closed': True}
+            patch: dict[str, bool | float | None] = {'record_audio_closed': True}
+            if not row.get('record_audio_closed'):
+                patch['record_sealed_at'] = time.time()
             if row.get('record_seal_refused_at') is not None:
                 patch['record_seal_refused_at'] = None
+            # Admission is a durable per-capture fact, not a per-seal event. A
+            # reconnect re-opens the row; the next seal must not count a second
+            # admission or reset the ledger deadline.
+            if row.get('record_admitted_at') is None:
+                patch['record_admitted_at'] = time.time()
+                admitted = True
             tx.update(ref, patch)
+        if wake is not None:
+            tx.update(wake, {'available_at': 0, 'record_intake_retry_at': None})
         return None
 
-    return run_transactional(client, commit, transient=True)
+    result = run_transactional(client, commit, transient=True)
+    # The ledger is written after the real seal commits, in its own CAS
+    # transaction. A ledger failure can never fail the seal. Admission is
+    # counted once per capture, not once per partial-seal repair.
+    revision = max(1, source_revision)
+    if result is None and admitted:
+        observe_record_sealed(client, uid, conversation_id, ref, source_revision=revision, admitted=True)
+    elif result == 'upload_failed':
+        # A deleted capture gets no ledger row: erasure must not be followed by
+        # a new durable record. The firing clock is the observed failure, never
+        # last speech or the ledger-write time.
+        pipeline_ledger.advance(
+            uid,
+            conversation_id,
+            pipeline_ledger.failed_stage(result),
+            reason=result,
+            end_type='unknown',
+            end_at=failed_at if failed_at is not None else observed_at,
+            revision=revision,
+            reopen=True,
+            source_ref=ref,
+            owner_ref=owner_ref,
+            firestore_client=client,
+        )
+    return result
+
+
+def observe_record_sealed(client, uid, conversation_id, ref, *, source_revision, admitted, refresh_revision=False):
+    """Shared fail-open, deletion-fenced observation after a real seal commits."""
+    try:
+        if admitted:
+            pipeline_ledger.observe_admission()
+        if refresh_revision:
+            committed = ref.get(timeout=3, retry=None)
+            if not (committed.to_dict() or {}).get('record_audio_closed'):
+                return
+            source_revision = pipeline_ledger.source_revision(committed)
+        pipeline_ledger.advance(
+            uid,
+            conversation_id,
+            pipeline_ledger.SEALED,
+            revision=max(1, source_revision),
+            reopen=True,
+            source_ref=ref,
+            owner_ref=client.collection('users').document(uid),
+            firestore_client=client,
+            **({'preserve_same_stage_clock': True} if not admitted else {}),
+        )
+    except Exception as error:
+        # Observability never changes a committed seal's outcome.
+        pipeline_ledger.observe_seal_failure(error)
+        return False
 
 
 def set_record_upload_pending(
@@ -183,6 +291,7 @@ def mark_record_upload_failed(uid: str, conversation_id: str, *, firestore_clien
             ref,
             {
                 'record_upload_failed': True,
+                'record_upload_failed_at': time.time(),
                 'record_audio_closed': False,
                 'record_upload_revision': int(row.get('record_upload_revision') or 0) + 1,
             },

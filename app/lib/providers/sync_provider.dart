@@ -93,12 +93,17 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   int _derivedLength = -1;
   WalDerivedViews get derivedWals {
     final source = allWals;
-    if (_derived == null || !identical(source, _derivedSource) || source.length != _derivedLength) {
-      _derived?.dispose();
-      _derivedSource = source;
-      _derivedLength = source.length;
-      _derived = WalDerivedViews(source);
+    if (_derived == null) {
+      _derived = WalDerivedViews(source, onPendingWorkExpired: () {
+        if (!_isDisposed) notifyListeners();
+      });
+    } else if (!identical(source, _derivedSource) || source.length != _derivedLength) {
+      // A new inventory snapshot usually differs by a row or two; adopt it
+      // incrementally instead of re-deriving the whole synced history.
+      _derived!.sync(source);
     }
+    _derivedSource = source;
+    _derivedLength = source.length;
     _derived!.refresh();
     return _derived!;
   }
@@ -620,11 +625,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     final eligibleWals = [
       ...missingWals,
       ..._allWals.where((wal) => wal.status == WalStatus.uploadRejected && isAutoUploadEligible(wal)),
-    ]
-        .where((wal) =>
-            (!wal.holdForUser || wal.status == WalStatus.uploadRejected) &&
-            (!liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds)))
-        .toList();
+    ].where((wal) => !wal.holdForUser && (!liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds))).toList();
     final hadEligibleWals = eligibleWals.isNotEmpty;
     if (!hadEligibleWals) return const RecordingTransferDrainResult.skipped();
 
@@ -1380,6 +1381,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       throw Exception('This recording is already on phone');
     }
 
+    _admittedWorkGeneration = generation;
     _updateSyncState(_syncState.toSyncing(), generation);
 
     await _keepAlive.acquire();

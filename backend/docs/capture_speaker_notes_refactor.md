@@ -13,7 +13,7 @@ and the old path is deleted in a follow-up PR after the bake.
 | Episode moment rendering | `utils/episodes/moment_render.py` | L3 | L4 (`utils/episodes/service.py`) |
 
 Mode flags: `CAPTURE_COVERAGE_MODE`, `SPEAKER_EVIDENCE_MODE`, `NOTES_PACKET_V2_MODE`,
-`EPISODE_BOUNDARIES_MODE`, `LIFECYCLE_V2_MODE`. The serve cohort uses
+`LIFECYCLE_V2_MODE`. The serve cohort uses
 `<FLAG>_SERVE_PERCENT` and `<FLAG>_SERVE_UID_SHA256S` (digests only; never a raw uid).
 
 ## Integrated seams

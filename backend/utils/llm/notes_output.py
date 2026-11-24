@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 from models.conversation_emoji import CATEGORY_EMOJI, DEFAULT_EMOJI, NEUTRAL_EMOJI, fallback_emoji
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
+from utils.summary_quality import clean_structured
 from models.structured_extraction import (
     AgentNotesParticipant,
     ExtractedActionItem,
@@ -30,9 +31,23 @@ from models.structured_extraction import (
 __all__ = ['CATEGORY_EMOJI', 'DEFAULT_EMOJI', 'NEUTRAL_EMOJI', 'fallback_emoji']
 
 
+class QualityFlag(BaseModel):
+    field: str = Field(max_length=120, description='Zero-based dot path of an output prose field')
+    kind: Literal['capture_availability']
+    statement: Optional[str] = Field(
+        default=None,
+        max_length=4000,
+        description='Exact availability-only sentence/bullet if this field also contains real notes; omit only when the whole field is availability narration',
+    )
+
+
 class NotesOutput(BaseModel):
     """One schema, independent of the legacy parser's subtype-coercing validators."""
 
+    quality_flags: list[QualityFlag] = Field(
+        default_factory=list,
+        description='Current-capture availability narration in any language; empty for clean output',
+    )
     title: str = ''
     overview: str = ''
     gist: str = Field(default='', description='One line of at most 12 words saying what this conversation was about')
@@ -52,7 +67,7 @@ class NotesOutput(BaseModel):
         """A malformed optional item must not cost every other grounded field."""
         if not isinstance(data, dict):
             return data
-        data = dict(data)
+        data = clean_structured(data)
         for field in ('title', 'overview', 'emoji', 'gist'):
             if data.get(field) is None:
                 data.pop(field, None)

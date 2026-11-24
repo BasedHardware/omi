@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/subscription.dart';
+import 'package:omi/models/transcription_allowance.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/paywall/paywall_pacing.dart';
@@ -17,6 +18,7 @@ import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/experiments/free_tier_on_device_stt_gate.dart';
 import 'package:omi/ui/prompts/prompt_queue.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -399,5 +401,31 @@ void main() {
       await pumpRow(tester, _conversation());
       expect(PromptQueue.instance.pendingIds, isEmpty);
     });
+  });
+
+  test('at the cloud cap the free cap sheet owns the moment, unless the kill switch removed it', () {
+    addTearDown(FreeTierOnDeviceSttGate.debugReset);
+    final atCap = UsageProvider()
+      ..debugSetSubscription(UserSubscriptionResponse(
+        subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.active),
+        transcriptionSecondsUsed: 18000,
+        transcriptionSecondsLimit: 18000,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+        transcriptionAllowance: const TranscriptionAllowanceSnapshot(
+            mode: 'on_device', reason: 'plan_allowance_exhausted', remainingSeconds: 0),
+      ));
+    addTearDown(atCap.dispose);
+    expect(
+        ValueMomentPaywall.offer(PaywallMoment.freeCap,
+            conversation: _conversation(locked: true), usage: atCap, queue: queue, open: open),
+        isFalse);
+    FreeTierOnDeviceSttGate.debugLastKnownKilled = true;
+    expect(
+        ValueMomentPaywall.offer(PaywallMoment.freeCap,
+            conversation: _conversation(locked: true), usage: atCap, queue: queue, open: open),
+        isTrue);
   });
 }

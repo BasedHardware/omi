@@ -1,9 +1,10 @@
 # Held staging input expiry (lead2 9a5190)
 
-Option A preserves the 30-day staging privacy ceiling. The existing held sweep
+Updated 2026-11-16: the retention contract records the extended 60-day staging lifecycle,
+superseding the original 30-day Option A ceiling. The existing held sweep
 retains eligible GPU/assignment jobs as `dead/input_expiring` at current-object
-age 29 days. The existing timeliness exporter gains a staging-scoped age leg
-and a warning above 21 days. Enqueue time proxies staging for legacy objects;
+age 59 days. The existing timeliness exporter gains a staging-scoped age leg
+and a warning above 51 days. Enqueue time proxies staging for legacy objects;
 no GCS metadata or lifecycle change is involved.
 
 The default-on `BATCH_INPUT_EXPIRING_ENABLED` kill controls new transitions;

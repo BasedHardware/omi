@@ -46,13 +46,11 @@ from config.live_stt_replay import (
 from routers.listen.runtime import ListenSessionRuntime
 from tests.unit.test_live_cost_router import MemoryRedis
 from tests.unit.test_live_replay_provider_pairs import Transport
-from tests.unit.test_live_health_reason_reconciliation import serving_leg
 from tests.unit.test_live_session_transcript_outcome import _runtime
-from tests.unit.test_live_stt_resilient_stream import receiver as make_receiver
 from tests.unit.test_parakeet_failover_exhausted import Replacement, setup_chain
 from tests.unit.test_modulate_capacity_failover import dead_receiver
 from utils.stt.soniox import SonioxRateLimitError
-from utils.stt import live_chain, live_health, live_router, recovery_state, replay_delivery, resilient_stream
+from utils.stt import live_chain, live_health, live_router, recovery_state, replay_delivery
 from utils.stt.connect_backoff import ConnectRefusalBackoff
 from utils.stt import soniox as soniox_module
 from utils.stt.live_failure import live_stt_terminal_reason
@@ -986,7 +984,7 @@ async def test_real_dials_each_get_the_full_per_dial_budget(monkeypatch, virtual
 
 @pytest.mark.asyncio
 async def test_wall_dial_cap_cancels_hung_connect_and_walks(monkeypatch, virtual_clock):
-    """A connect that never answers is cancelled at the real dial budget and
+    """Expire the real timeout context once the hung connect is ready;
     the next capable target still serves — two reservations, no exhaustion."""
 
     monkeypatch.setattr(live_router, '_target_circuits', {})
@@ -996,7 +994,6 @@ async def test_wall_dial_cap_cancels_hung_connect_and_walks(monkeypatch, virtual
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
         monkeypatch.setattr(st, f'_{family}_circuit', ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30))
-    monkeypatch.setattr(recovery_state, 'RECOVERY_DIAL_SECONDS', 0.001)
     monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
@@ -1010,6 +1007,21 @@ async def test_wall_dial_cap_cancels_hung_connect_and_walks(monkeypatch, virtual
         ),
     )
     actual, base, previous, legs, capture = await setup_chain(monkeypatch)
+    dial_caps = []
+
+    class DialAsyncio:
+        def __getattr__(self, name):
+            return getattr(asyncio, name)
+
+        def timeout(self, seconds):
+            # Only the chain's dial timer is controlled. Transport/cleanup
+            # tasks retain their own clocks. Expiry is triggered by the hung
+            # connector, so host scheduling cannot consume a healthy dial.
+            cap = asyncio.timeout(None)
+            dial_caps.append((seconds, cap))
+            return cap
+
+    monkeypatch.setattr(live_chain, 'asyncio', DialAsyncio())
     selected = []
     cancelled = []
     dialed = []
@@ -1023,6 +1035,7 @@ async def test_wall_dial_cap_cancels_hung_connect_and_walks(monkeypatch, virtual
             raw = SafeModulateSocket(transport, callback, asyncio.get_running_loop())
             dialed.append(raw)
             try:
+                dial_caps[-1][1].reschedule(asyncio.get_running_loop().time())
                 await asyncio.Event().wait()
             except asyncio.CancelledError:
                 cancelled.append(target.id)
@@ -1039,6 +1052,11 @@ async def test_wall_dial_cap_cancels_hung_connect_and_walks(monkeypatch, virtual
         assert await actual._failover_stt_socket()
         assert cancelled == ['modulate-a']
         assert selected == ['modulate-a', 'modulate-b']
+        assert [seconds for seconds, _ in dial_caps] == [recovery_state.RECOVERY_DIAL_SECONDS] * 2
+        assert dial_caps[0][1].expired() and not dial_caps[1][1].expired()
+        # The ledger also retains the original cheap-source reservation.
+        assert actual.recovery.attempted_targets == {'parakeet-window', 'modulate-a', 'modulate-b'}
+        assert actual.recovery.dial_attempts == 3
         assert not actual.recovery.exhausted
         assert not actual.stt_socket.is_connection_dead
         assert dialed[0]._ws.closed
@@ -1630,62 +1648,6 @@ async def test_abort_replay_socket_falls_back_to_inner_transport_abort(virtual_c
     await until(lambda: raw._send_task.done() and raw._recv_task.done())
 
 
-def _reconnect_receiver(monkeypatch):
-    listener = make_receiver(monkeypatch)
-    old = serving_leg(family='soniox')
-    old.raw.die('soniox_rotation')
-    listener.stt_socket = old
-    listener._resilient_audio.append(b'\x00\x00', 0)
-    listener._stt_rebuild = (lambda: (lambda _: None, lambda _: None, None), 2)
-    return listener, old
-
-
-@pytest.mark.asyncio
-async def test_same_provider_reconnect_hung_dial_cancels_inside_dial_budget(monkeypatch):
-    """A hung connect is cancelled by the episode's dial budget; the failed
-    reconnect reports and returns False so the caller walks on."""
-    listener, old = _reconnect_receiver(monkeypatch)
-    monkeypatch.setattr(recovery_state, 'RECOVERY_DIAL_SECONDS', 0.001)
-
-    async def hang(*args, **kwargs):
-        await asyncio.Event().wait()
-
-    hung = AsyncMock(side_effect=hang)
-    listener._create_stt_socket = hung
-    try:
-        assert not await resilient_stream.reconnect_live_stt_socket(listener)
-        hung.assert_awaited_once()
-    finally:
-        old.finish()
-
-
-@pytest.mark.asyncio
-async def test_same_provider_reconnect_serving_check_shares_dial_budget(monkeypatch, virtual_clock):
-    """The connect and the serving probe draw one episode-bound budget: with
-    the episode nearly spent a hung serving check is refused, and the episode
-    deadline is never reset."""
-    listener, old = _reconnect_receiver(monkeypatch)
-    listener.recovery.begin(old, 'soniox')
-    deadline = listener.recovery.deadline
-    virtual_clock.now = deadline - 0.2
-    assert listener.recovery.dial_budget() == pytest.approx(0.2)
-    new = serving_leg(family='soniox')
-    listener._create_stt_socket = AsyncMock(return_value=new)
-    listener._wrap_legacy_stt_socket = lambda raw, epoch: raw
-
-    async def hang(*args, **kwargs):
-        await asyncio.Event().wait()
-
-    monkeypatch.setattr(resilient_stream, 'fallback_socket_is_serving', hang)
-    try:
-        assert not await resilient_stream.reconnect_live_stt_socket(listener)
-        listener._create_stt_socket.assert_awaited_once()
-        assert listener.recovery.deadline == deadline
-    finally:
-        old.finish()
-        new.finish()
-
-
 def _seam_controller(ticks):
     host = SimpleNamespace(state=SimpleNamespace(active=True, shutdown_event=None), request=None)
     return recovery_state.LiveRecoveryController(host, clock=lambda: ticks[0])
@@ -1962,14 +1924,11 @@ async def test_receiver_returns_false_when_episode_cap_refuses_a_fresh_episode(m
         assert actual.recovery.episode_count == 1
         assert actual.recovery.deadline is None
 
-        reconnect = AsyncMock(return_value=True)
         rebuild = AsyncMock(return_value=True)
-        monkeypatch.setattr(actual, '_reconnect_stt_socket_locked', reconnect)
         monkeypatch.setattr(actual, '_rebuild_stt_socket_locked', rebuild)
         kill_source(actual, 'soniox')
         assert await actual._failover_stt_socket() is False
         assert actual.recovery.state is RecoveryState.exhausted
-        reconnect.assert_not_awaited()
         rebuild.assert_not_awaited()
         await actual._drain_stt_sockets()
         assert_legs_drained(legs, observations)
@@ -1984,13 +1943,10 @@ async def test_departed_receiver_latches_leaving_before_the_episode_cap(monkeypa
     monkeypatch.setattr(recovery_state, 'MAX_RECOVERY_EPISODES', 1)
     actual = dead_receiver()
     actual.host.state.active = False
-    reconnect = AsyncMock(return_value=True)
     rebuild = AsyncMock(return_value=True)
-    monkeypatch.setattr(actual, '_reconnect_stt_socket_locked', reconnect)
     monkeypatch.setattr(actual, '_rebuild_stt_socket_locked', rebuild)
     assert await actual._failover_stt_socket() is False
     assert actual.recovery.state is RecoveryState.client_leaving
-    reconnect.assert_not_awaited()
     rebuild.assert_not_awaited()
 
 

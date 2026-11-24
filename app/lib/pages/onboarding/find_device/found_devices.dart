@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:collection/collection.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -13,6 +14,7 @@ import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/widgets/rayban_meta_setup_sheet.dart';
@@ -51,15 +53,32 @@ class FoundDevices extends StatefulWidget {
   State<FoundDevices> createState() => _FoundDevicesState();
 }
 
-class _FoundDevicesState extends State<FoundDevices> {
+class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
         context.read<DeviceProvider>().initiateConnection('FoundDevices');
       }
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Back from Settings with Bluetooth now allowed: search again without another tap.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(() async {
+      if (!await context.read<OnboardingProvider>().recheckPermissionBlock() || !mounted) return;
+      await widget.onRescan?.call();
+    }());
   }
 
   Future<void> _handleRayBanMetaOnboarding(BtDevice device, OnboardingProvider provider) async {
@@ -91,7 +110,18 @@ class _FoundDevicesState extends State<FoundDevices> {
         final real = provider.deviceList.firstWhereOrNull(
           (d) => d.type == DeviceType.raybanMeta && d.id != RayBanMetaDiscoverer.setupPlaceholderId,
         );
-        if (real == null) return;
+        if (real == null) {
+          // The setup finished but the glasses did not show up: say so, with Try Again (D8).
+          if (mounted) {
+            OmiFeedback.error(
+              context,
+              context.l10n.rayBanMetaNotFoundAfterSetup,
+              actionLabel: context.l10n.tryAgain,
+              onAction: () => ServiceManager.instance().device.discover(timeout: 5),
+            );
+          }
+          return;
+        }
         target = real;
       }
 
@@ -284,9 +314,30 @@ class _FoundDevicesState extends State<FoundDevices> {
 
   @override
   Widget build(BuildContext context) {
+    final (liveDeviceId, liveType, liveBattery, charging) =
+        context.select<DeviceProvider, (String?, DeviceType?, int, bool?)>(
+      (device) {
+        final connected = device.connectedDevice;
+        if (!device.isConnected || connected == null) return (null, null, -1, null);
+        final identity = device.capabilityNormalizedDevice ?? connected;
+        final type = DeviceConnectionFactory.resolveDeviceType(identity);
+        return (
+          connected.id,
+          type,
+          type == DeviceType.openglass ? device.batteryLevel : -1,
+          type == DeviceType.omi ? device.observedChargingStatus : null,
+        );
+      },
+    );
     return Consumer<OnboardingProvider>(
       builder: (context, provider, child) {
         final visibleDevices = provider.visibleDeviceList;
+        final isLiveDevice = liveDeviceId != null && liveDeviceId == provider.deviceId;
+        final pairingType = isLiveDevice ? liveType : provider.deviceType;
+        final showOmiStatus = isLiveDevice && pairingType == DeviceType.omi;
+        final batteryPercentage = provider.isConnected && pairingType != DeviceType.omi
+            ? (isLiveDevice && liveType == DeviceType.openglass ? liveBattery : provider.batteryPercentage)
+            : -1;
         return MessageListener<OnboardingProvider>(
           showError: (error) {
             // The inline card owns connect-failure recovery and its shown event.
@@ -318,7 +369,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                       : context.l10n.devicesFoundNearby(provider.nearbyDeviceCount),
                   style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                 )
-              else
+              else if (!showOmiStatus)
                 Text(context.l10n.pairingSuccessful, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
               if (provider.pairingFailureReason != null && !provider.isConnected)
                 Padding(
@@ -328,6 +379,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                     reason: provider.pairingFailureReason!,
                     onDismiss: provider.dismissPairingFailure,
                     onRetry: widget.onRescan,
+                    onOpenSettings: provider.pairingBlockNeedsSettings ? openAppSettings : null,
                     onGuide: () => ConnectionGuideSheet.show(context),
                   ),
                 ),
@@ -344,23 +396,36 @@ class _FoundDevicesState extends State<FoundDevices> {
                   textAlign: TextAlign.center,
                   style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
                 ),
-              if (provider.isConnected && provider.batteryPercentage > 0)
+              if (provider.isConnected && showOmiStatus)
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    switch (charging) {
+                      true => context.l10n.charging,
+                      false => context.l10n.deviceReadyToUse,
+                      null => context.l10n.connected,
+                    },
+                    textAlign: TextAlign.center,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                  ),
+                ),
+              if (batteryPercentage > 0)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Semantics(
-                    label: context.l10n.batteryLevelSemantics(provider.batteryPercentage),
+                    label: context.l10n.batteryLevelSemantics(batteryPercentage),
                     excludeSemantics: true,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          provider.batteryPercentage <= 25 ? Icons.battery_alert : Icons.battery_std,
+                          batteryPercentage <= 25 ? Icons.battery_alert : Icons.battery_std,
                           size: 20,
-                          color: provider.batteryPercentage <= 25 ? OmiColors.danger : OmiColors.textSecondary,
+                          color: batteryPercentage <= 25 ? OmiColors.danger : OmiColors.textSecondary,
                         ),
                         const SizedBox(width: OmiSpacing.xxs),
                         Text(
-                          '${provider.batteryPercentage}%',
+                          '$batteryPercentage%',
                           style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
                         ),
                       ],

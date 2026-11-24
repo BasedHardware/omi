@@ -3494,7 +3494,7 @@
             "type": "stackdriver",
             "uid": "beuxmaq8oxhq8e"
           },
-          "description": "Current-day recaps generated, and recipient failures by reason and exception class, per 15-minute bucket. Failures are counted per cohort pass, so one persistently failing recipient adds up to four per hour; DailySummaryDeliveryError means the recap was generated but no device accepted the push. Source: Cloud Logging metrics from notifications-job (daily_summary_generated / daily_summary_user_failed log lines) read through the Cloud Monitoring datasource, so this does not depend on the job's Prometheus sidecar.",
+          "description": "Current-day recaps generated, generation failures split by every reason and exception class, and delivery-only failures, per 15-minute bucket. Missing reason or error labels are explicitly named unspecified reason / unlabelled error; they are never discarded. Failures count cohort passes, not distinct recipients. Delivery only means the recap was generated but no device accepted the push; it is excluded from the generation success tile and generation-failure count. Source: Cloud Logging metrics from notifications-job through Cloud Monitoring.",
           "fieldConfig": {
             "defaults": {
               "custom": {
@@ -3568,7 +3568,7 @@
               "queryType": "promQL",
               "refId": "B",
               "promQLQuery": {
-                "expr": "label_replace(sum by (error_type) (increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",reason=\"generation_error\"}[15m])), \"outcome\", \"failed: $1\", \"error_type\", \"(.+)\")",
+                "expr": "label_join(label_replace(label_replace(sum by (reason, error_type) (increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",error_type!=\"DailySummaryDeliveryError\"}[15m])), \"reason\", \"unspecified reason\", \"reason\", \"^$\"), \"error_type\", \"unlabelled error\", \"error_type\", \"^$\"), \"outcome\", \" \u00b7 \", \"reason\", \"error_type\")",
                 "projectName": "based-hardware",
                 "step": "15m"
               },
@@ -3584,7 +3584,7 @@
               "queryType": "promQL",
               "refId": "C",
               "promQLQuery": {
-                "expr": "label_replace(sum(increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",reason=\"user_budget_exceeded\"}[15m])), \"outcome\", \"timed out (user budget)\", \"\", \"\")",
+                "expr": "label_replace(sum(increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",error_type=\"DailySummaryDeliveryError\"}[15m])), \"outcome\", \"delivery only\", \"\", \"\")",
                 "projectName": "based-hardware",
                 "step": "15m"
               },

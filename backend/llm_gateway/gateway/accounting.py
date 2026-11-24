@@ -127,6 +127,7 @@ class AttemptTrace:
     """Ordered attempt trace for one logical gateway invocation."""
 
     attempts: list[ProviderAttempt] = field(default_factory=list)
+    keyed: bool = False
 
     def record(
         self,
@@ -194,6 +195,8 @@ class AccountingContext:
     app_platform: str | None = None
     product_lane: str | None = None
     client_platform: str | None = None
+    idempotency_scope: str | None = None
+    idempotency_environment: str | None = None
 
     @classmethod
     def create(
@@ -371,9 +374,13 @@ class AccountingEvent:
     # Observation-only validity retained from raw provider metadata. Deliberately
     # not added to as_dict(): existing ledger pricing/persistence is unchanged.
     billable_usage_complete: bool = False
+    idempotency_scope: str | None = None
+    idempotency_environment: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
+            **({'idempotency_scope': self.idempotency_scope} if self.idempotency_scope else {}),
+            **({'idempotency_environment': self.idempotency_environment} if self.idempotency_environment else {}),
             'attempt_id': self.attempt_id,
             'invocation_id': self.invocation_id,
             'occurred_at': self.occurred_at,
@@ -697,6 +704,8 @@ def build_accounting_event(
         cost_basis = priced.cost_basis
     return AccountingEvent(
         attempt_id=f'{context.invocation_id}:{attempt.ordinal}',
+        idempotency_scope=context.idempotency_scope,
+        idempotency_environment=context.idempotency_environment,
         invocation_id=context.invocation_id,
         occurred_at=now.isoformat(),
         date=now.date().isoformat(),

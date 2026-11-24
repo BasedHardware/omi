@@ -181,7 +181,9 @@ def test_health_and_readiness_are_distinct_and_shutdown_closes_admission():
         state.stopping = True
         with pytest.raises(urllib.error.HTTPError):
             urllib.request.urlopen(base + '/ready')
-        assert urllib.request.urlopen(base + '/metrics').status == 200
+        with urllib.request.urlopen(base + '/metrics') as response:
+            assert response.status == 200
+            assert b'omi_batch_result_protocol_refused_total' in response.read()
         state.ticked_at -= 61
         with pytest.raises(urllib.error.HTTPError):
             urllib.request.urlopen(base + '/health')
@@ -217,6 +219,34 @@ def test_firestore_probe_is_served_by_every_child_before_parent_merge():
         observed = [s for s in samples if s.name == name and s.labels['collection'] == 'other']
         assert {s.labels['worker_process'] for s in observed} == {'0', '1'}
         assert all(s.value >= 7 for s in observed)
+
+
+def test_packing_probe_origin_is_exposed_once_by_worker_and_default_registry():
+    from prometheus_client import generate_latest
+    from prometheus_client.parser import text_string_to_metric_families
+
+    from database.firestore_document_probe import FIRESTORE_BILLED_READS_BY_ORIGIN
+
+    origin = 'job:batch_packing_counterfactual'
+    labels = {'origin': origin, 'collection': 'other', 'kind': 'query'}
+    server = runtime.health_server(runtime.RuntimeState(), CollectorRegistry(), 0, '127.0.0.1')
+    try:
+        FIRESTORE_BILLED_READS_BY_ORIGIN.labels(**labels).inc()
+        with urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}/metrics', timeout=5) as response:
+            worker_metrics = response.read()
+        for exposition in (worker_metrics, generate_latest()):
+            samples = [
+                sample
+                for family in text_string_to_metric_families(exposition.decode())
+                for sample in family.samples
+                if sample.name == 'omi_firestore_billed_reads_by_origin_total' and sample.labels == labels
+            ]
+            assert len(samples) == 1
+            assert samples[0].value >= 1
+    finally:
+        server.shutdown()
+        server.server_close()
+        FIRESTORE_BILLED_READS_BY_ORIGIN.remove(origin, 'other', 'query')
 
 
 def test_supervision_drains_after_stop_before_readiness_closes():
@@ -535,7 +565,9 @@ def test_a2_parity_collector_failure_keeps_the_worker_metrics(monkeypatch):
     monkeypatch.setattr(builtins, '__import__', refuse)
     from database.batch_pipeline_shadow_hook import shadow_parity_collectors
 
-    assert shadow_parity_collectors() == ()
+    from database.batch_pipeline_recovery_metrics import RECOVERY_COLLECTORS
+
+    assert shadow_parity_collectors() == RECOVERY_COLLECTORS
 
 
 @pytest.mark.parametrize('raw,expected', [(None, 1), ('2', 2), ('1', 1), ('3', 3), ('0', 1), ('4', 1), ('two', 1)])
@@ -699,6 +731,15 @@ def test_pod_probes_need_every_child_and_metrics_carry_each_child_once(monkeypat
         )
         negative.labels('conversations', 'shadow', 'hit').inc(index + 1)
         monkeypatch.setattr(runtime, 'NEGATIVE_LOOKUPS', negative)
+        errors = Counter('privacy_owner_shadow_error_total', 'synthetic', ['shape', 'error_class'], registry=None)
+        errors.labels('attempt', 'timeout').inc(index + 1)
+        monkeypatch.setattr(runtime, 'OWNER_SHADOW_ERRORS', errors)
+        kill = Gauge('privacy_ttl_cache_disabled', 'synthetic', registry=None)
+        kill.set(index)
+        monkeypatch.setattr(runtime, 'TTL_KILL', kill)
+        switch_reads = Counter('privacy_ttl_cache_switch_reads_total', 'synthetic', ['result'], registry=None)
+        switch_reads.labels('disabled' if index else 'clear').inc(index + 1)
+        monkeypatch.setattr(runtime, 'TTL_SWITCH_READS', switch_reads)
         if index == 0:  # Only the sampling child exports queue gauges.
             Gauge('omi_batch_pipeline_ready_units', 'ready', ['priority'], registry=registry).labels('fresh').set(7)
         server = runtime.health_server(state, registry, 0, '127.0.0.1')
@@ -724,6 +765,23 @@ def test_pod_probes_need_every_child_and_metrics_carry_each_child_once(monkeypat
             family.name: family
             for family in text_string_to_metric_families(urllib.request.urlopen(base + '/metrics').read().decode())
         }
+        assert sorted(
+            (s.labels['worker_process'], s.value) for s in families['privacy_ttl_cache_disabled'].samples
+        ) == [
+            ('0', 0.0),
+            ('1', 1.0),
+        ]
+        assert sorted(
+            (s.labels['worker_process'], s.labels['result'], s.value)
+            for s in families['privacy_ttl_cache_switch_reads'].samples
+            if s.name.endswith('_total')
+        ) == [('0', 'clear', 1.0), ('1', 'disabled', 2.0)]
+        errors = families['privacy_owner_shadow_error'].samples
+        assert sorted((s.labels['worker_process'], s.value) for s in errors if s.name.endswith('_total')) == [
+            ('0', 1.0),
+            ('1', 2.0),
+        ]
+        assert all(s.labels['shape'] == 'attempt' and s.labels['error_class'] == 'timeout' for s in errors)
         events = families['omi_batch_pipeline_synthetic_events'].samples
         lookups = families['privacy_negative_lookup'].samples
         assert sorted((s.labels['worker_process'], s.value) for s in lookups if s.name.endswith('_total')) == [

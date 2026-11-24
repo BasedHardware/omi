@@ -214,7 +214,7 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
       widget.onSwitched?.call();
       final usage = context.read<UsageProvider?>();
       if (usage != null) {
-        unawaited(usage.fetchSubscription());
+        unawaited(usage.fetchSubscription(fresh: true));
         unawaited(usage.loadAvailablePlans());
       }
       setState(() {

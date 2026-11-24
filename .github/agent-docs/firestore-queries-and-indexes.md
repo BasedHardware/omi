@@ -40,6 +40,18 @@ The guard is a disclosure ratchet, not semantic analysis: a name assembled from 
 
 ## Respond to a missing-index alert
 
+Historic composite qualification: only the `batch_pipeline_dev_jobs` and
+`batch_pipeline_prod_jobs` COLLECTION signatures with `state ASCENDING,
+enqueued_at ASCENDING` may match the Admin API form with a terminal
+`__name__ ASCENDING`. Both forms retain exact project/database/collection
+resource identity and `ANY_API` scope. Multiple matching resources remain
+ambiguous; CREATING, missing and every other non-READY state still block.
+This compatibility does not extend to new collections, fields, directions or
+query scopes. It is shared by check-only, wait and missing-index qualification;
+it does not change declarations, provision indexes, or establish readiness by
+itself. Workflow controls still qualify the admitted application source rather
+than changing its pin.
+
 The backend provisions a missing-index alert through `.github/scripts/ensure_firestore_missing_index_alert.py`. Follow `backend/docs/runbooks/firestore-missing-index.md`: confirm the actual query and platform suggestion, declare the composite or collection-group field requirement in the registry, regenerate the manifest, and verify the request after readiness. Never copy a suggested index directly into a project.
 
 ## Prebuild additions during PR review

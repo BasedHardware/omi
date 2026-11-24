@@ -12,6 +12,12 @@ from tests.integration.test_sync_reprocess_emulator import store, loopback_only_
 pytestmark = pytest.mark.integration
 
 
+def _discovery_observations(phase, outcomes):
+    return {
+        outcome: delivery.REPAIR_DISCOVERY.labels(phase=phase, outcome=outcome)._value.get() for outcome in outcomes
+    }
+
+
 @pytest.fixture
 def debt_store(store, monkeypatch):
     client, uid, tasks = store
@@ -39,12 +45,13 @@ def debt_store(store, monkeypatch):
 
 def test_worker_death_after_minimum_projection_before_mark_is_repaired(debt_store):
     client, uid, tasks, ref, row = debt_store
+    before = ref.get()
     assert not repair.redrive(client, uid, 'c', now=219)
     assert repair.redrive(client, uid, 'c', now=220)
     obligation = client.collection(reprocess.COLLECTION).document(reprocess.key(uid, 'c')).get().to_dict()
     assert obligation['first_pending_at'] == 100 and obligation['due_at'] == 220
     assert obligation['summary_expected_revision'] == 3 and obligation['summary_lane'] == 'batch'
-    assert ref.get().to_dict() == row  # Repair never manufactures a new conversation generation.
+    assert ref.get().update_time == before.update_time  # Repair never writes a new conversation generation.
 
 
 def test_lost_enqueue_ack_and_expired_lease_preserve_deadline(debt_store, monkeypatch):
@@ -67,6 +74,21 @@ def test_lost_enqueue_ack_and_expired_lease_preserve_deadline(debt_store, monkey
     # The earliest queued wake remains eligible instead of being sent to the tail.
     output = SimpleNamespace(discarded=False, structured={'overview': 'Synthetic summary'})
     assert reprocess.run(outbox.id, first['task_token'], lambda *_: output, now=300) == 'processed'
+
+
+@pytest.mark.parametrize('terminal', [False, True])
+def test_repair_preserves_v3_custody_settlement(debt_store, terminal):
+    client, uid, tasks, _ref, _row = debt_store
+    assert repair.redrive(client, uid, 'c', now=220)
+    outbox = client.collection(reprocess.COLLECTION).document(reprocess.key(uid, 'c'))
+    if terminal:
+        outbox.update({'dormant': True, 'due_at': None, 'held_reason': 'v3_custody_conflict'})
+    else:
+        outbox.update({'due_at': 400, 'deferred_reason': 'v3_custody_conflict'})
+    settled = outbox.get()
+    assert not repair.redrive(client, uid, 'c', now=300)
+    assert outbox.get().update_time == settled.update_time
+    assert len(tasks) == 1
 
 
 @pytest.mark.parametrize(
@@ -168,7 +190,7 @@ def test_tick_transaction_retry_does_not_recount_or_republish_expired_rows(debt_
         'summary_due_at': now - 1,
         'created_at': now - max_age_seconds() - 1,
     }
-    expired_ref.set(expired_row)
+    expired_write = expired_ref.set(expired_row)
     commit = Transaction._commit
     cursor_transactions = []
     commit_attempts = []
@@ -210,7 +232,7 @@ def test_tick_transaction_retry_does_not_recount_or_republish_expired_rows(debt_
         gauge.set.assert_called_once_with(1)
         assert gauge._mock_wraps._value.get() == 1
         assert len(tasks) == 1
-        assert expired_ref.get().to_dict() == expired_row
+        assert expired_ref.get().update_time == expired_write.update_time
         assert not client.collection(reprocess.COLLECTION).document(reprocess.key(uid, expired_ref.id)).get().exists
     finally:
         expired_ref.delete()
@@ -299,9 +321,11 @@ def test_empty_output_budget_atomically_removes_terminal_debt_and_preserves_cont
 
     for attempt in range(3):
         now = time.time() + attempt * 121
+        token = outbox.get().to_dict()['task_token']
         if attempt < 2:
-            with pytest.raises(delivery.SummaryOutputUnavailable):
-                reprocess.run(key, token, empty_process, now=now)
+            # A strike is recorded and the row is re-armed for its bounded retry;
+            # the exception never escapes the request.
+            assert reprocess.run(key, token, empty_process, now=now) == 'deferred'
         else:
             assert reprocess.run(key, token, empty_process, now=now) == 'blocked'
     blocked = ref.get().to_dict()
@@ -349,11 +373,13 @@ def test_empty_failure_from_replaced_owner_or_token_does_not_record_or_block(deb
     token = outbox.get().to_dict()['task_token']
     outbox.update({'owner': 'replacement'})
     before = outbox.get().to_dict()
+    conversation_before = ref.get()
     assert record_empty_failure(client, reprocess.COLLECTION, key, 'old-worker', token) is EmptyFailureOutcome.STALE
     assert (
         record_empty_failure(client, reprocess.COLLECTION, key, 'replacement', 'old-token') is EmptyFailureOutcome.STALE
     )
-    assert outbox.get().to_dict() == before and ref.get().to_dict() == row
+    assert outbox.get().to_dict() == before
+    assert ref.get().update_time == conversation_before.update_time
     outbox.update({'summary_empty_failures': 2})
     before = outbox.get().to_dict()
     ref.update({'summary_processing_owner': 'new-conversation-owner'})
@@ -382,16 +408,20 @@ def test_window_reaches_fresh_debt_behind_expired_history_in_one_tick(debt_store
     created_old = ref.parent.document('created-old')
     created_old_row = {**row, 'summary_first_pending_at': cutoff, 'summary_due_at': now - 5, 'created_at': cutoff - 1}
     fresh = {**row, 'summary_first_pending_at': cutoff, 'summary_due_at': cutoff - 1}
-    ref.set(fresh)  # Deliberately no due >= pending assumption.
-    created_old.set(created_old_row)
+    before = {
+        ref: ref.set(fresh).update_time,  # Deliberately no due >= pending assumption.
+        created_old: created_old.set(created_old_row).update_time,
+    }
     redrive = Mock(return_value=True)
     monkeypatch.setattr(repair, 'redrive', redrive)
     try:
         for start in range(0, len(refs), 400):
             batch = client.batch()
-            for added in refs[start : start + 400]:
+            chunk = refs[start : start + 400]
+            for added in chunk:
                 batch.set(added, expired)
-            batch.commit()
+            for added, write in zip(chunk, batch.commit()):
+                before[added] = write.update_time
         if cursor_kind != 'none':
             cursor = {'due': expired['summary_due_at'], 'path': refs[599].path}
             if cursor_kind == 'expired':
@@ -408,9 +438,7 @@ def test_window_reaches_fresh_debt_behind_expired_history_in_one_tick(debt_store
         assert delivery.DEBT._value.get() == 1
         assert delivery.EXPIRED_SEEN._value.get() == 1
         assert delivery.SAMPLED_AT._value.get() == now
-        assert created_old.get().to_dict() == created_old_row
-        assert ref.get().to_dict() == fresh
-        assert all(snapshot.to_dict() == expired for snapshot in client.get_all(refs))
+        assert {snapshot.reference: snapshot.update_time for snapshot in client.get_all(before)} == before
         assert not list(client.collection(reprocess.COLLECTION).where('uid', '==', uid).stream())
         assert not tasks
     finally:
@@ -502,7 +530,7 @@ def test_disabled_gate_repairs_missing_pending_and_persists_legacy_cursor(
         del candidate['summary_first_pending_at']
     else:
         candidate['summary_first_pending_at'] = None
-    missing.set(candidate)
+    candidate_write = missing.set(candidate)
     cursor = {'due': 218, 'path': ref.path}
     if cursor_kind == 'old_disabled_phase':
         cursor = {'version': 2, 'phases': {'newest': {**cursor, 'phase': 'newest', 'window': 0, 'pending': 100}}}
@@ -512,7 +540,7 @@ def test_disabled_gate_repairs_missing_pending_and_persists_legacy_cursor(
         assert counts == {'scanned': 1, 'admitted': 1, 'near_expiry_admitted': 0, 'errors': 0, 'expired_seen': 0}
         obligation = client.collection(reprocess.COLLECTION).document(reprocess.key(uid, missing.id)).get().to_dict()
         assert obligation['first_pending_at'] == obligation['summary_deadline_at'] == obligation['due_at'] == 219
-        assert missing.get().to_dict() == candidate
+        assert missing.get().update_time == candidate_write.update_time
         progress = client.document(repair.CURSOR).get().to_dict()
         assert progress['path'] == missing.path and progress['due'] == 219 and progress['pending'] is None
         assert progress['phases'] == {}
@@ -663,9 +691,11 @@ def test_tick_repair_counter_matches_returned_counts_and_ignores_unclaimed_ticks
 
     client, uid, tasks, ref, row = debt_store
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    monkeypatch.setattr(repair, 'REPAIR_PER_OWNER_TICK_LIMIT', 4)
     now = 1_800_000_000.0
     cutoff = now - max_age_seconds()
-    refs = [ref.parent.document(name) for name in ('urgent-ok', 'urgent-error', 'newest-ok', 'created-old')]
+    names = ('urgent-ok', 'urgent-error', 'newest-ok', 'created-old', 'newest-refused')
+    refs = [ref.parent.document(name) for name in names]
     ref.update({'summary_due_at': None})
     keys = {
         'scanned': 'scanned',
@@ -675,28 +705,44 @@ def test_tick_repair_counter_matches_returned_counts_and_ignores_unclaimed_ticks
         'near_expiry_admitted': 'near_expiry_admitted',
     }
     before = {outcome: delivery.REPAIR.labels(outcome=outcome)._value.get() for outcome in keys}
+    expected_discovery = {
+        'near_expiry': {'fetched': 2, 'examined': 2, 'attempted': 2, 'admitted': 1, 'redrive_error': 1},
+        'newest': {'fetched': 3, 'examined': 3, 'attempted': 2, 'admitted': 1, 'not_admitted': 1, 'expired': 1},
+    }
+    discovery_before = {
+        phase: _discovery_observations(phase, expected) for phase, expected in expected_discovery.items()
+    }
 
     def redrive(_, owner, conversation_id, *, now):
         if conversation_id == 'urgent-error':
             raise RuntimeError('synthetic admission failure')
-        return True
+        return conversation_id != 'newest-refused'
 
     monkeypatch.setattr(repair, 'redrive', redrive)
     try:
-        for added, pending in zip(refs, (cutoff + 100, cutoff + 101, now - 1, now - 2)):
+        for added, pending in zip(refs, (cutoff + 100, cutoff + 101, now - 1, now - 2, now - 3)):
             candidate = {**row, 'summary_first_pending_at': pending, 'summary_due_at': now - 1}
             if added.id == 'created-old':
                 candidate['created_at'] = cutoff - 1
             added.set(candidate)
         counts = repair.tick(now=now, client=client)
-        assert counts == {'scanned': 4, 'admitted': 2, 'near_expiry_admitted': 1, 'errors': 1, 'expired_seen': 1}
+        assert counts == {'scanned': 5, 'admitted': 2, 'near_expiry_admitted': 1, 'errors': 1, 'expired_seen': 1}
         after = {outcome: delivery.REPAIR.labels(outcome=outcome)._value.get() for outcome in keys}
         assert {outcome: after[outcome] - before[outcome] for outcome in keys} == {
             outcome: counts[key] for outcome, key in keys.items()
         }
         assert {sample.labels['outcome'] for sample in next(iter(delivery.REPAIR.collect())).samples} == set(keys)
+        discovery_after = {}
+        for phase, expected in expected_discovery.items():
+            observed = _discovery_observations(phase, expected)
+            discovery_after[phase] = observed
+            assert {
+                outcome: value - discovery_before[phase][outcome] for outcome, value in observed.items()
+            } == expected
         assert not any(repair.tick(now=now + 1, client=client).values())
         assert {outcome: delivery.REPAIR.labels(outcome=outcome)._value.get() for outcome in keys} == after
+        for phase, observed in discovery_after.items():
+            assert _discovery_observations(phase, observed) == observed
     finally:
         for added in refs:
             added.delete()
@@ -778,6 +824,12 @@ def test_scan_budget_walks_refusals_in_bounded_chunks(debt_store, monkeypatch, m
     admitted = []
     monkeypatch.setattr(repair, 'due_conversations', tracked)
     monkeypatch.setattr(repair, 'redrive', lambda _, owner, cid, **kwargs: admitted.append(cid) or True)
+    expected_discovery = (
+        {'row_refused': 1199, 'owner_deferred': 0, 'admitted': 1}
+        if mode == 'refusals'
+        else {'row_refused': 599, 'owner_deferred': 597, 'admitted': 4}
+    )
+    before = _discovery_observations('newest', expected_discovery)
     try:
         for start in range(0, len(refs), 500):
             batch = client.batch()
@@ -796,7 +848,9 @@ def test_scan_budget_walks_refusals_in_bounded_chunks(debt_store, monkeypatch, m
         assert counts['scanned'] == 1200
         assert counts['admitted'] == (1 if mode == 'refusals' else 4)
         assert admitted == ([refs[1000].id] if mode == 'refusals' else [s.id for s in refs[:3]] + [refs[600].id])
-        assert [limit for phase, limit in calls if phase == 'newest'] == [500, 500, 200]
+        observed = _discovery_observations('newest', expected_discovery)
+        assert {outcome: value - before[outcome] for outcome, value in observed.items()} == expected_discovery
+        assert [limit for phase, limit in calls if phase == 'newest'] == [16, 64, 256, 500, 364]
         assert all(limit <= 500 for _, limit in calls)
         progress = client.document(repair.CURSOR).get().to_dict()['phases']['newest']
         retained = 1199
@@ -845,6 +899,8 @@ def test_scan_stops_before_next_chunk_and_preserves_fetched_tail(debt_store, mon
 
     monkeypatch.setattr(repair, 'due_conversations', tracked)
     monkeypatch.setattr(repair, 'redrive', redrive)
+    outcomes = ('queries', 'fetched', 'examined', 'unexamined', 'attempted')
+    before = _discovery_observations('newest', outcomes)
     try:
         for start in range(0, len(refs), 500):
             batch = client.batch()
@@ -861,9 +917,18 @@ def test_scan_stops_before_next_chunk_and_preserves_fetched_tail(debt_store, mon
             batch.commit()
         counts = repair.tick(now=now, client=client)
         expected = {'admission': 8, 'time': 1, 'fence_time': 0}[stop]
-        assert counts['scanned'] == 500 and counts['admitted'] == expected
+        examined = max(1, expected)
+        assert counts['scanned'] == 16 and counts['admitted'] == expected
         assert admitted == [s.id for s in refs[:expected]]
-        assert [limit for phase, limit in calls if phase == 'newest'] == [500]
+        assert [limit for phase, limit in calls if phase == 'newest'] == [16]
+        observed = _discovery_observations('newest', outcomes)
+        assert {outcome: value - before[outcome] for outcome, value in observed.items()} == {
+            'queries': 1,
+            'fetched': 16,
+            'examined': examined,
+            'unexamined': 16 - examined,
+            'attempted': expected,
+        }
         progress = client.document(repair.CURSOR).get().to_dict()['phases'].get('newest')
         if expected:
             assert progress['path'] == refs[expected - 1].path

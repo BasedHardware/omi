@@ -112,6 +112,7 @@ def event(kind, status, plan=PlanType.plus, sub_id='sub-current', created=NOW):
                 'current_period_start': NOW - 100,
                 'current_period_end': NOW + 100,
                 'cancel_at_period_end': True,
+                'latest_invoice': {'id': 'in-fixture', 'status': 'paid'},
             }
         },
     }
@@ -322,7 +323,16 @@ def test_schedule_write_failure_is_currently_acknowledged(lane):
     'stored_plan,same_id,duplicate',
     [(PlanType.basic, True, False), (PlanType.plus, True, True), (PlanType.plus, False, False)],
 )
-def test_checkout_created_before_completed_and_duplicate_paths(lane, stored_plan, same_id, duplicate):
+def test_checkout_created_before_completed_and_duplicate_paths(lane, monkeypatch, stored_plan, same_id, duplicate):
+    if duplicate:
+
+        def forbidden(*args, **kwargs):
+            pytest.fail('discount-free duplicate added a Stripe dependency')
+
+        monkeypatch.setattr(payment.stripe.Subscription, 'retrieve', forbidden)
+        monkeypatch.setattr(payment.stripe.Subscription, 'modify', forbidden)
+        monkeypatch.setattr(payment.stripe.Subscription, 'cancel', forbidden)
+        monkeypatch.setattr(payment.stripe.PromotionCode, 'retrieve', forbidden)
     lane.current = Subscription(plan=stored_plan, stripe_subscription_id='sub-current' if same_id else 'sub-old')
     lane.stripe_obj = event(EVENTS[1], 'active')['data']['object']
     lane.event = {
@@ -748,3 +758,280 @@ def test_unresolved_checkout_preserves_cache_and_valid_stored_plan_effects(
     assert isinstance(result, payment.RetryableBillingSkip) == ledger_enabled
     if ledger_enabled:
         assert _call_names(lane) == expected
+
+
+# ── Paid-through grace requires a paid period (voided / unpaid renewals) ─────
+
+
+def _stored_paid(plan=PlanType.unlimited_v2, sub_id='sub-current'):
+    return Subscription(
+        plan=plan,
+        status=SubscriptionStatus.active,
+        stripe_subscription_id=sub_id,
+        current_period_start=NOW - 100,
+        current_period_end=NOW + 100,
+        cancel_at_period_end=True,
+        limits=PlanLimits(transcription_seconds=123),
+    )
+
+
+@pytest.mark.parametrize('invoice_status', ['void', 'uncollectible', 'open', 'draft'])
+def test_canceled_with_unpaid_latest_invoice_gets_no_grace(lane, invoice_status):
+    lane.event = event('customer.subscription.deleted', 'canceled', PlanType.unlimited_v2)
+    lane.event['data']['object']['latest_invoice'] = {'id': 'in-renewal', 'status': invoice_status}
+    assert run(lane) == {'status': 'success'}
+    assert lane.current.plan == PlanType.basic
+    assert lane.current.cancel_at_period_end is False
+    assert 'conversations' not in [name for name, _ in lane.calls]
+
+
+def test_canceled_without_latest_invoice_gets_no_grace(lane):
+    lane.event = event('customer.subscription.deleted', 'canceled', PlanType.unlimited_v2)
+    lane.event['data']['object']['latest_invoice'] = None
+    run(lane)
+    assert lane.current.plan == PlanType.basic
+
+
+@pytest.mark.parametrize('invoice_status,keeps_paid', [('paid', True), ('void', False), ('open', False)])
+def test_canceled_latest_invoice_id_is_read_from_stripe(lane, monkeypatch, invoice_status, keeps_paid):
+    reads = []
+
+    def retrieve(invoice_id):
+        reads.append(invoice_id)
+        return stripe.Invoice.construct_from({'id': invoice_id, 'status': invoice_status}, 'fixture')
+
+    monkeypatch.setattr(payment.stripe.Invoice, 'retrieve', retrieve)
+    lane.event = event('customer.subscription.deleted', 'canceled', PlanType.unlimited_v2)
+    lane.event['data']['object']['latest_invoice'] = 'in-renewal'
+    run(lane)
+    assert reads == ['in-renewal']
+    assert lane.current.plan == (PlanType.unlimited_v2 if keeps_paid else PlanType.basic)
+    assert lane.current.cancel_at_period_end is keeps_paid
+
+
+def test_invoice_read_failure_retries_instead_of_guessing(lane, monkeypatch):
+    def retrieve(invoice_id):
+        raise stripe.error.APIConnectionError('fixture outage')
+
+    monkeypatch.setattr(payment.stripe.Invoice, 'retrieve', retrieve)
+    lane.current = _stored_paid()
+    lane.event = event('customer.subscription.deleted', 'canceled', PlanType.unlimited_v2)
+    lane.event['data']['object']['latest_invoice'] = 'in-renewal'
+    with pytest.raises(stripe.error.APIConnectionError):
+        run(lane)
+    assert lane.current == _stored_paid()
+    assert lane.calls == []
+
+
+def test_active_or_expired_period_never_reads_the_invoice(lane, monkeypatch):
+    monkeypatch.setattr(payment.stripe.Invoice, 'retrieve', lambda *_: pytest.fail('no invoice read expected'))
+    lane.event = event('customer.subscription.updated', 'active', PlanType.unlimited_v2)
+    lane.event['data']['object']['latest_invoice'] = 'in-renewal'
+    run(lane)
+    assert lane.current.plan == PlanType.unlimited_v2
+    lane.event = event('customer.subscription.deleted', 'canceled', PlanType.unlimited_v2)
+    lane.event['data']['object']['current_period_end'] = NOW - 1
+    lane.event['data']['object']['latest_invoice'] = 'in-renewal'
+    run(lane)
+    assert lane.current.plan == PlanType.basic
+
+
+def _invoice_event(kind, invoice_id='in-renewal', sub_id='sub-current'):
+    return {'id': 'evt-invoice', 'type': kind, 'data': {'object': {'id': invoice_id, 'subscription': sub_id}}}
+
+
+def _canceled_snapshot(latest_invoice='in-renewal', status='canceled'):
+    obj = event('customer.subscription.deleted', status, PlanType.unlimited_v2)['data']['object']
+    obj['latest_invoice'] = latest_invoice
+    return obj
+
+
+@pytest.mark.parametrize('kind', ['invoice.voided', 'invoice.marked_uncollectible'])
+def test_voided_renewal_ends_an_existing_grace(lane, kind):
+    lane.current = _stored_paid()
+    lane.stripe_obj = _canceled_snapshot()
+    lane.event = _invoice_event(kind)
+    assert run(lane) == {'status': 'success'}
+    assert lane.current.plan == PlanType.basic
+    assert lane.current.stripe_subscription_id == 'sub-current'
+    assert lane.current.cancel_at_period_end is False
+    assert lane.current.limits == PlanLimits(transcription_seconds=7)
+    assert [name for name, _ in lane.calls] == ['write', 'credits']
+
+
+def test_voided_invoice_on_newer_api_shape_ends_grace(lane):
+    lane.current = _stored_paid()
+    lane.stripe_obj = _canceled_snapshot()
+    lane.event = {
+        'id': 'evt-invoice',
+        'type': 'invoice.voided',
+        'data': {'object': {'id': 'in-renewal', 'parent': {'subscription_details': {'subscription': 'sub-current'}}}},
+    }
+    run(lane)
+    assert lane.current.plan == PlanType.basic
+
+
+@pytest.mark.parametrize(
+    'snapshot,stored',
+    [
+        # A live subscription voiding a superseded invoice (monthly switch) keeps its plan.
+        (lambda: _canceled_snapshot(status='active'), _stored_paid),
+        # The voided invoice is not the canceled subscription's latest invoice.
+        (lambda: _canceled_snapshot(latest_invoice='in-newer'), _stored_paid),
+        # The user's stored subscription is a different (replacement) subscription.
+        (_canceled_snapshot, lambda: _stored_paid(sub_id='sub-replacement')),
+        # Already Basic: nothing to end.
+        (_canceled_snapshot, lambda: _stored_paid(plan=PlanType.basic)),
+        # No stored subscription.
+        (_canceled_snapshot, lambda: None),
+    ],
+)
+def test_voided_invoice_without_a_matching_grace_has_no_entitlement_effect(lane, snapshot, stored):
+    lane.current = stored()
+    before = lane.current
+    lane.stripe_obj = snapshot()
+    lane.event = _invoice_event('invoice.voided')
+    assert run(lane) == {'status': 'success'}
+    assert lane.current == before
+    assert lane.calls == []
+
+
+def test_voided_creator_app_invoice_has_no_entitlement_effect(lane):
+    lane.current = _stored_paid()
+    lane.stripe_obj = _canceled_snapshot()
+    lane.stripe_obj['metadata']['app_id'] = 'creator-fixture'
+    lane.event = _invoice_event('invoice.voided')
+    run(lane)
+    assert lane.current == _stored_paid()
+    assert lane.calls == []
+
+
+def test_voided_invoice_respects_pending_account_deletion(lane):
+    lane.current = _stored_paid()
+    lane.stripe_obj = _canceled_snapshot()
+    lane.deletion_blocked = True
+    lane.event = _invoice_event('invoice.voided')
+    run(lane)
+    assert lane.current == _stored_paid()
+    assert 'write' not in [name for name, _ in lane.calls]
+
+
+def test_stored_paid_row_of_the_same_sub_loses_grace_when_renewal_unpaid(lane):
+    lane.current = _stored_paid()
+    lane.event = event('customer.subscription.deleted', 'canceled', PlanType.unlimited_v2)
+    lane.event['data']['object']['latest_invoice'] = {'id': 'in-renewal', 'status': 'open'}
+    run(lane)
+    assert lane.current.plan == PlanType.basic
+    assert lane.current.stripe_subscription_id == 'sub-current'
+
+
+def test_missing_latest_invoice_object_means_unpaid_not_retry(lane, monkeypatch):
+    def retrieve(invoice_id):
+        raise stripe.error.InvalidRequestError('No such invoice', 'id', code='resource_missing')
+
+    monkeypatch.setattr(payment.stripe.Invoice, 'retrieve', retrieve)
+    lane.event = event('customer.subscription.deleted', 'canceled', PlanType.unlimited_v2)
+    lane.event['data']['object']['latest_invoice'] = 'in-gone'
+    assert run(lane) == {'status': 'success'}
+    assert lane.current.plan == PlanType.basic
+
+
+def _stored_basic(sub_id='sub-current'):
+    return Subscription(
+        plan=PlanType.basic,
+        status=SubscriptionStatus.active,
+        stripe_subscription_id=sub_id,
+        current_period_start=NOW - 100,
+        current_period_end=NOW + 100,
+        limits=PlanLimits(transcription_seconds=7),
+    )
+
+
+@pytest.mark.parametrize('kind', ['invoice.paid', 'invoice.payment_succeeded'])
+def test_renewal_paid_after_dunning_cancel_restores_grace(lane, kind):
+    lane.current = _stored_basic()
+    lane.stripe_obj = _canceled_snapshot()
+    lane.event = {
+        'id': 'evt-invoice',
+        'type': kind,
+        'data': {'object': {'id': 'in-renewal', 'subscription': 'sub-current', 'status': 'paid'}},
+    }
+    assert run(lane) == {'status': 'success'}
+    assert lane.current.plan == PlanType.unlimited_v2
+    assert lane.current.cancel_at_period_end is True
+    assert lane.current.current_period_end == NOW + 100
+    assert [name for name, _ in lane.calls] == ['conversations', 'memories', 'actions', 'write', 'credits']
+
+
+def test_cancel_then_late_payment_sequence_ends_on_paid_grace(lane):
+    lane.event = event('customer.subscription.deleted', 'canceled', PlanType.unlimited_v2)
+    lane.event['data']['object']['latest_invoice'] = {'id': 'in-renewal', 'status': 'open'}
+    run(lane)
+    assert lane.current.plan == PlanType.basic
+    lane.stripe_obj = _canceled_snapshot()
+    lane.event = _invoice_event('invoice.paid')
+    run(lane)
+    assert lane.current.plan == PlanType.unlimited_v2
+
+
+@pytest.mark.parametrize(
+    'snapshot,stored',
+    [
+        (lambda: _canceled_snapshot(status='active'), _stored_basic),
+        (lambda: _canceled_snapshot(latest_invoice='in-newer'), _stored_basic),
+        (_canceled_snapshot, lambda: _stored_basic(sub_id='sub-replacement')),
+        (_canceled_snapshot, _stored_paid),
+        (_canceled_snapshot, lambda: None),
+    ],
+)
+def test_late_paid_invoice_without_a_matching_withheld_grace_changes_nothing(lane, snapshot, stored):
+    lane.current = stored()
+    before = lane.current
+    lane.stripe_obj = snapshot()
+    lane.event = _invoice_event('invoice.paid')
+    run(lane)
+    assert lane.current == before
+    assert lane.calls == []
+
+
+def test_late_paid_restore_failure_is_retried(lane):
+    lane.current = _stored_basic()
+    lane.stripe_obj = _canceled_snapshot()
+    lane.error = RuntimeError('fixture write failure')
+    lane.event = _invoice_event('invoice.paid')
+    with pytest.raises(HTTPException) as raised:
+        run(lane)
+    assert raised.value.status_code == 503
+
+
+def test_late_paid_subscription_read_outage_is_retried(lane, monkeypatch):
+    def retrieve(*args):
+        raise stripe.error.APIConnectionError('fixture outage')
+
+    monkeypatch.setattr(payment.stripe.Subscription, 'retrieve', retrieve)
+    lane.current = _stored_basic()
+    lane.event = _invoice_event('invoice.paid')
+    with pytest.raises(HTTPException) as raised:
+        run(lane)
+    assert raised.value.status_code == 503
+    assert lane.current == _stored_basic()
+
+
+def test_late_paid_restore_uses_customer_lookup_and_newer_invoice_shape(lane, monkeypatch):
+    monkeypatch.setattr(payment.users_db, 'get_user_by_stripe_customer_id', lambda customer: {'uid': 'fixture-user'})
+    lane.current = _stored_basic()
+    lane.stripe_obj = _canceled_snapshot()
+    lane.stripe_obj['metadata'] = {}
+    lane.event = {
+        'id': 'evt-invoice',
+        'type': 'invoice.paid',
+        'data': {
+            'object': {
+                'id': 'in-renewal',
+                'status': 'paid',
+                'parent': {'subscription_details': {'subscription': 'sub-current'}},
+            }
+        },
+    }
+    run(lane)
+    assert lane.current.plan == PlanType.unlimited_v2

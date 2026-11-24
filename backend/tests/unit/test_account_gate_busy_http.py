@@ -13,6 +13,7 @@ from utils.other.account_gate_http import (
 )
 from utils.stt.outcomes import is_destructive_operation_in_progress
 import utils.memory.canonical_memory_adapter as canonical_adapter
+from utils.memory import memory_service
 
 
 def test_account_gate_busy_http_exception_is_409_with_short_retry_after():
@@ -61,7 +62,6 @@ def test_canonical_write_maps_destructive_gate_to_account_gate_busy(monkeypatch)
     "error_type", [DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable]
 )
 def test_account_gate_cascade_purge_maps_fence_before_generic_failure(monkeypatch, error_type):
-    from utils.memory import memory_service
 
     fence = error_type("canonical mutation blocked by destructive operation")
 
@@ -81,7 +81,6 @@ def test_account_gate_cascade_purge_maps_fence_before_generic_failure(monkeypatc
 )
 def test_account_gate_deletion_boundary_maps_inner_transaction_fence(monkeypatch, error_type):
     from contextlib import nullcontext
-    from utils.memory import memory_service
 
     fence = error_type("canonical mutation blocked by destructive operation")
     monkeypatch.setattr(memory_service, "destructive_operation_gate", lambda *args, **kwargs: nullcontext("token"))
@@ -129,12 +128,8 @@ def test_adapter_takeover_preserves_marker_without_retry(monkeypatch, loop):
             canonical_adapter._retract_conversation_sourced_memories_under_gate("uid", "conv", db_client=object())
 
 
-def test_conversation_delete_route_maps_takeover_to_409(monkeypatch):
-    from contextlib import nullcontext
-    from unittest.mock import MagicMock
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
+@pytest.fixture
+def conversation_routes():
     # Earlier modules in this session may have replaced firebase_admin with an
     # AutoMock stub that rejects attribute access; routers.conversations imports
     # utils.notifications, which does `from firebase_admin import messaging, auth`.
@@ -172,11 +167,24 @@ def test_conversation_delete_route_maps_takeover_to_409(monkeypatch):
             fb.auth = _types.ModuleType("firebase_admin.auth")
     from routers import conversations as conversation_routes
 
+    return conversation_routes
+
+
+def test_conversation_delete_route_maps_takeover_to_409(monkeypatch, conversation_routes):
+    from contextlib import nullcontext
+    from unittest.mock import MagicMock
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
     service = MagicMock()
     service.retract_conversation_memories.side_effect = DestructiveGateTakeover("peer completed before hold")
     monkeypatch.setattr(conversation_routes, "MemoryService", lambda **kwargs: service)
     monkeypatch.setattr(conversation_routes, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+    monkeypatch.setattr(conversation_routes, '_legal_hold_defers_delete', lambda uid: False)
+    monkeypatch.setattr(conversation_routes.conversation_tombstones, "is_deleted", lambda *args: False)
     monkeypatch.setattr(conversation_routes.conversation_tombstones, "record_deletion", lambda *args: None)
+    # #25610 short-circuits an already-tombstoned delete; this conversation is live.
+    monkeypatch.setattr(conversation_routes.conversation_tombstones, "is_deleted", lambda *args, **kwargs: False)
     monkeypatch.setattr(conversation_routes, "delete_owner_prompt_embedding_cache", lambda *args: None)
     monkeypatch.setattr(conversation_routes, "retraction_can_be_skipped", lambda *args, **kwargs: False)
     app = FastAPI()

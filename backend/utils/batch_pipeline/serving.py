@@ -1,12 +1,15 @@
 """Serving-side lease API. Authentication is at the router; all IO is lazy."""
 
+import random
 import asyncio
 from functools import lru_cache
 from datetime import datetime, timezone
 import logging
 import os
+from threading import Lock
 import time
 
+from config import batch_pipeline_protected_share as protected_share
 from config.batch_pipeline import (
     held_partial_enabled,
     owner_chain_projection_enabled,
@@ -14,6 +17,7 @@ from config.batch_pipeline import (
     recovery_owner_only_enabled,
     recovery_dispatch_interval_seconds,
     projection_hold_recovery_enabled,
+    projection_outbox_enabled,
     serving_metrics_min_refresh_seconds,
     serving_projection_sweep_enabled,
     serving_tick_seconds,
@@ -29,14 +33,18 @@ from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.live import drain_recordings
 from utils.batch_pipeline.projection import HELD_PARTIAL_PAGE, Projector, error_type
-from utils.executors import run_blocking, start_background_task, sync_executor
+from utils.batch_pipeline.projection_outbox import ProjectionOutbox
+from utils.executors import db_executor, run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
+from config.batch_pipeline_leader import UPLOAD_COALESCING_SCAN, UPLOAD_COALESCING_SCAN_TTL
 from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE, LeaderLease
 from utils.batch_pipeline.held_dead_letter import HeldDeadLetter, ProjectionHeldDeadLetter
 from utils.batch_pipeline.ready_discovery import ReadyDiscovery
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from database.batch_pipeline_recovery_discovery import RecoveryCaller
+from utils.batch_pipeline.allowance_hold import AllowanceHolds, entitlement
 from utils.batch_pipeline.retention import cleanup_completed_artifacts
 from utils.sync.stage import current_stage
 from utils.sync import reprocess
@@ -54,6 +62,8 @@ HELD_PARTIAL_TICK_SECONDS = 20.0
 # + the query read; steady replays cost 14).
 HELD_PARTIAL_READS_PER_HOUR = 120_000
 HELD_PARTIAL_READS_PER_UNIT = 16
+# One lookup and one normal CAS read per sweep segment. Charge retries after execution.
+HELD_PARTIAL_CHECKPOINT_READ_RESERVE = 2
 HELD_PARTIAL_WINDOW_SECONDS = 3600.0
 # Re-examine landed targets at most once per minute on the maintenance leader.
 # One page has its own inter-row time budget, so fresh projection resumes.
@@ -74,14 +84,20 @@ class Serving:
         enrichment_sweep=None,
         recovery=None,
         leader=None,
+        outbox=None,
     ):
         self.store = store
         self.metrics = metrics
+        # Bounded process state: retry cursors and small-pull share cadence
+        # must survive queue() calls on the serving/maintenance plane too.
+        self._queues = {pool: Scheduler(store, metrics=metrics, pool=pool) for pool in ('batch', 'live')}
         self.projector = projector
+        self.outbox = outbox
         self.cleanup = cleanup
         self.reap_staging = reap_staging
         self.enrichment_sweep = enrichment_sweep
         self.recovery = recovery
+        self.allowance_hold_due = 0.0
         # Optional single-owner lease for periodic maintenance (see reconcile).
         self.leader = leader
         self.held_dead_letter = HeldDeadLetter(store, metrics=metrics)
@@ -105,7 +121,11 @@ class Serving:
         self.held_pass_segments = 0
 
     def queue(self, pool='batch'):
-        return Scheduler(self.store, metrics=self.metrics, pool=pool)
+        if not protected_share.enabled():
+            return Scheduler(self.store, metrics=self.metrics, pool=pool)
+        if pool not in self._queues:
+            raise ValueError('pool must be batch or live')
+        return self._queues[pool]
 
     def pull(self, limit: int, capacity: PoolCapacity, *, pool: str = 'batch'):
         return self.queue(pool).pull(time.time(), limit, capacity=capacity)
@@ -126,8 +146,11 @@ class Serving:
             self.merge.release_set(recovered) if recovered is not None and recovered_merge_release_enabled() else None
         )
         for _ in range(100):
-            if self.merge.commit_next(owner_id, time.time(), release=release) is None:
+            entry = self.merge.commit_next(owner_id, time.time(), release=release)
+            if entry is None:
                 break
+            if self.outbox is not None:
+                self.outbox.wake(entry)
 
     @with_batch_privacy_attempt
     async def drain_settled_async(self, owner_id: str) -> None:
@@ -203,7 +226,10 @@ class Serving:
                 raise ValueError('owner-only recovery requires an owner and recovered unit')
             return self._reconcile_owner(owner_id, recovered)
         if self._leads(periodic):
-            self._maintain(recover_quarantine=recover_quarantine)
+            self._maintain(
+                recover_quarantine=recover_quarantine,
+                recovery_caller=RecoveryCaller.SERVING if periodic else RecoveryCaller.RECONCILE,
+            )
         elif self.metrics:
             self.metrics.fresh_guard.deactivate()
             self.metrics.delivered_share.deactivate()
@@ -249,7 +275,8 @@ class Serving:
             charged for charged in self.held_partial_reads if now - charged[0] < HELD_PARTIAL_WINDOW_SECONDS
         ]
         spent = sum(reads for _, reads in self.held_partial_reads)
-        return (HELD_PARTIAL_READS_PER_HOUR - spent) // (HELD_PARTIAL_PAGE * HELD_PARTIAL_READS_PER_UNIT)
+        remaining = max(0, HELD_PARTIAL_READS_PER_HOUR - spent - HELD_PARTIAL_CHECKPOINT_READ_RESERVE)
+        return remaining // (HELD_PARTIAL_PAGE * HELD_PARTIAL_READS_PER_UNIT)
 
     def _log_held_partial_segment(self, counts: dict, segment_started: float, budget_pages: int) -> None:
         """One INFO line per sweep segment; a wrapped scan closes the pass with
@@ -282,8 +309,9 @@ class Serving:
         )
         if not counts.get('more'):
             logging.getLogger(__name__).info(
-                'event=batch_held_partial action=pass outcome=completed segments=%d pages=%d units=%d partial=%d '
+                'event=batch_held_partial action=pass outcome=%s segments=%d pages=%d units=%d partial=%d '
                 'waiting=%d error=%d reads=%d pass_seconds=%.1f',
+                'cursor_unconfirmed' if counts.get('wrap_unconfirmed') else 'completed',
                 self.held_pass_segments,
                 self.held_pass_counts['pages'],
                 self.held_pass_counts['units'],
@@ -295,15 +323,25 @@ class Serving:
             )
             self.held_pass_started = None
 
-    def _maintain(self, *, recover_quarantine: bool):
+    def refresh_fresh_guard(self) -> bool:
+        """Use the maintenance lease, including outside the potentially slow pass."""
+        if not self.metrics:
+            return False
+        # Explicit reconcile bypasses the periodic lease; the guard never does.
+        leads = self._leads(True)
+        if leads:
+            self.metrics.fresh_guard.refresh(self.store)
+        else:
+            self.metrics.fresh_guard.deactivate()
+        return leads
+
+    def _maintain(self, *, recover_quarantine: bool, recovery_caller=None):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
+        leads = self.refresh_fresh_guard()
         if self.metrics:
-            # Explicit reconcile bypasses the periodic lease; the guard never does.
-            if self._leads(True):
-                self.metrics.fresh_guard.refresh(self.store)
+            if leads:
                 self.metrics.delivered_share.refresh(self.store)
             else:
-                self.metrics.fresh_guard.deactivate()
                 self.metrics.delivered_share.deactivate()
         if self.cleanup:
             try:
@@ -365,7 +403,10 @@ class Serving:
             logging.getLogger(__name__).error(
                 'event=batch_projection action=redrive_expired outcome=retry exception_type=%s', type(error).__name__
             )
-        self.queue().recover(time.time())
+        self.queue().recover(time.time(), caller=recovery_caller)
+        if time.monotonic() >= self.allowance_hold_due and self._leads(True):
+            self.allowance_hold_due = time.monotonic() + 30
+            AllowanceHolds(self.store, entitlement).tick(time.time())
         page = self.ready_discovery.page()
         if page is not None:
             for _, owner_id in self.ready_discovery.owners(page):
@@ -398,8 +439,17 @@ class Serving:
                     )
 
 
-@lru_cache(maxsize=2)
+_serving_lock = Lock()
+
+
 def serving_for_stage(stage: str) -> Serving:
+    # Serving, the pump, and the outbox can cold-start in different executor workers.
+    with _serving_lock:
+        return _serving_for_stage(stage)
+
+
+@lru_cache(maxsize=2)
+def _serving_for_stage(stage: str) -> Serving:
     if stage != current_stage():
         raise ValueError('worker and serving stages must match')
     store = shadow_from_env(FirestoreStore(f'batch_pipeline_{stage}'))
@@ -417,6 +467,7 @@ def serving_for_stage(stage: str) -> Serving:
         recovery=QuarantineRecovery(store, artifacts),
         metrics=metrics,
         projector=projector,
+        outbox=ProjectionOutbox(store, projector, clock=time.time),
         cleanup=cleanup_completed_artifacts,
         reap_staging=reap,
         enrichment_sweep=reprocess.sweep,
@@ -430,11 +481,52 @@ def _metrics() -> QueueMetrics:
     return QueueMetrics(min_refresh_seconds=serving_metrics_min_refresh_seconds())
 
 
+async def _supervise_backlog_heartbeat(stop):
+    from utils.batch_pipeline.backlog_heartbeat import HeartbeatAuthority, TICK_SECONDS
+
+    authority = None
+    while not stop.is_set():
+        try:
+            if authority is None:
+                service = await run_blocking(db_executor, serving_for_stage, current_stage())
+                authority = HeartbeatAuthority(service.store)
+            await run_blocking(db_executor, authority.tick)
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_backlog_heartbeat outcome=stopped exception_type=%s', type(error).__name__
+            )
+            return  # Fail closed until restart, even for config/ambiguous-commit errors.
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=TICK_SECONDS)
+        except asyncio.TimeoutError:
+            pass
+
+
+async def _supervise_fresh_guard(stop):
+    # General maintenance (and its sync executor) may be occupied for minutes.
+    # Keep the same maintenance leader, but borrow a DB thread only for this
+    # bounded count pair. FreshGuard coalesces overlaps and enforces 60s spacing.
+    while not stop.is_set():
+        try:
+            service = await run_blocking(db_executor, serving_for_stage, current_stage())
+            await run_blocking(db_executor, service.refresh_fresh_guard)
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_fresh_guard outcome=retry exception_type=%s', type(error).__name__
+            )
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=20)
+        except asyncio.TimeoutError:
+            pass
+
+
 def start_serving_from_env():
-    """Separate drain switch stays on when BATCH_PIPELINE_ENABLED rolls back."""
+    """Start projection consumers on the processes that own projection policy."""
     pump_enabled = projection_pump_enabled()
-    if not pump_enabled and os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() != 'true':
+    serving_enabled = os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() == 'true'
+    if not (pump_enabled or serving_enabled):
         return None
+    outbox_enabled = projection_outbox_enabled()
     stop = asyncio.Event()
 
     async def projection_pump():
@@ -493,6 +585,23 @@ def start_serving_from_env():
             except asyncio.TimeoutError:
                 pass
 
+    async def supervise_projection_outbox():
+        while not stop.is_set():
+            try:
+                service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+                outbox = getattr(service, 'outbox', None)
+                if outbox is not None:
+                    await outbox.run(stop)
+                    return
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'event=batch_projection_outbox outcome=supervise_retry exception_type=%s', type(error).__name__
+                )
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=serving_tick_seconds())
+            except TimeoutError:
+                pass
+
     @with_batch_privacy_attempt
     async def drain_tick():
         service = await run_blocking(sync_executor, serving_for_stage, current_stage())
@@ -542,10 +651,18 @@ def start_serving_from_env():
     async def drain_upload_holds():
         from utils.batch_pipeline.upload_coalescing import drain as drain_uploads
 
+        leader = None
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=random.uniform(0, 2))
+        except asyncio.TimeoutError:
+            pass
+
         while not stop.is_set():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                await drain_uploads(service.store)
+                if leader is None:
+                    leader = LeaderLease(service.store, UPLOAD_COALESCING_SCAN, ttl_seconds=UPLOAD_COALESCING_SCAN_TTL)
+                await drain_uploads(service.store, leader=leader)
             except Exception as error:
                 logging.getLogger(__name__).warning(
                     'event=batch_coalescing outcome=scan_retry exception_type=%s', type(error).__name__
@@ -563,15 +680,24 @@ def start_serving_from_env():
         set_recurring_sweep('pump' if pump_enabled else 'serving')
         try:
             if pump_enabled:
-                await asyncio.gather(projection_pump(), drain_upload_holds())
+                loops = (projection_pump(), drain_upload_holds())
             else:
-                await asyncio.gather(supervise(), drain(), dispatch_recovery(), drain_upload_holds())
+                loops = (
+                    supervise(),
+                    drain(),
+                    dispatch_recovery(),
+                    drain_upload_holds(),
+                    _supervise_fresh_guard(stop),
+                    _supervise_backlog_heartbeat(stop),
+                )
+            if outbox_enabled:
+                loops += (supervise_projection_outbox(),)
+            await asyncio.gather(*loops)
         finally:
             set_recurring_sweep(None)
 
-    return stop, start_background_task(
-        run(), name='batch_projection_pump' if pump_enabled else 'batch_pipeline_serving'
-    )
+    supervisor_name = 'batch_projection_pump' if pump_enabled else 'batch_pipeline_serving'
+    return stop, start_background_task(run(), name=supervisor_name)
 
 
 async def stop_serving(runtime):

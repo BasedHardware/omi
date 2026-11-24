@@ -13,6 +13,7 @@ from typing import Callable
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.batch_pipeline.audio import audio_unit, with_context
 from utils.batch_pipeline import leaf_timings, record_seal_profile
 from utils.other.audio_frame_table import FRAME_SCHEMA, gapped_frames
@@ -32,6 +33,14 @@ def batch_timing_store(references: list[dict]) -> str | None:
 
 class InvalidRetainedManifest(ValueError):
     """The stored manifest itself can never materialize; a retry reads the same bytes."""
+
+
+class RetainedPcmDigestChanged(ValueError):
+    """A pinned source's decoded PCM repeatedly disagrees with the manifest digest.
+
+    Raised only after an opted-in confirmation read of the same ref mismatches
+    again, so the disagreement is repeatable rather than one transient read.
+    Carries no reference, URI or bytes."""
 
 
 def decode_source(raw: bytes, ref: dict, owner_key: bytes, *, frames: list[dict] | None = None) -> bytes:
@@ -90,6 +99,7 @@ def validate_reference(ref: dict, uid: str, conversation_id: str, allowed_bucket
         raise InvalidRetainedManifest('retained audio reference is outside admitted source')
 
 
+@object_get_reader(Reader.BATCH_SOURCE)
 def read_reference(
     client,
     ref: dict,
@@ -171,7 +181,13 @@ def _well_formed(ref: dict) -> bool:
     return isinstance(ref.get('pcm_sha256'), str) and isinstance(ref.get('path', ''), str)
 
 
-def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
+def materialize(
+    body: bytes,
+    item,
+    fetch: Callable[[dict], bytes],
+    *,
+    confirm_mismatch: Callable[[dict], bytes] | None = None,
+) -> bytes:
     try:
         manifest = json.loads(body[len(MAGIC) :])
     except ValueError:
@@ -201,7 +217,13 @@ def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
         else:
             source = fetch(ref)
             if hashlib.sha256(source).hexdigest() != ref['pcm_sha256']:
-                raise ValueError('retained PCM digest changed')
+                if confirm_mismatch is None:
+                    raise ValueError('retained PCM digest changed')
+                # One bounded re-read of the same pinned ref; a second mismatch
+                # is a repeatable disagreement, not a transient read.
+                source = confirm_mismatch(ref)
+                if hashlib.sha256(source).hexdigest() != ref['pcm_sha256']:
+                    raise RetainedPcmDigestChanged('retained PCM digest changed')
             previous_key, previous_source = source_key if pinned else None, source
         start, offset, frames = ref.get('start_frame'), ref.get('offset_frame'), ref.get('frames')
         if any(type(v) is not int for v in (start, offset, frames)) or start < previous or offset < 0 or frames <= 0:

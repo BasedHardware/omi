@@ -5,6 +5,7 @@ deliveries answer 200. Rows bound to the legacy ``/v2/sync-jobs/run`` handler an
 same payload and row, so both drain.
 """
 
+from copy import deepcopy
 import json
 import logging
 import threading
@@ -17,13 +18,19 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
+from database import _client as firestore_client
 from database.outbox_firestore import ENRICHMENT_OUTBOX
+from database.summary_processing import EmptyFailureOutcome
+import database.summary_processing as summary_processing
 from routers import enrichment as route
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_reprocess_coalesce import state, sweep_query  # noqa: F401
 from utils.enrichment import callback  # noqa: F401 (heavy import at collection time, not in a test call)
+from utils.enrichment.admission import TRANSCRIPT_DECODE_FAILURES
 from utils.enrichment import consumer as consumer_module
 from utils.enrichment import custody
 from utils.enrichment import outbox as reprocess
+from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
 from utils.workers.consumer import run_push
 
 KEY = reprocess.key('u', 'c')
@@ -76,6 +83,84 @@ def test_callback_pending_is_a_409_retry_that_keeps_the_wake(rows, client, monke
     assert response.status_code == 409
     assert response.json() == {'status': 'retry', 'reason': 'callback_pending'}
     assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token  # the queue retry reclaims
+
+
+@pytest.fixture
+def wrong_key_conversation(monkeypatch):
+    from database import conversations as conversations_db
+
+    store = StrictFirestore()
+    path = ('users', 'u', 'conversations', 'c')
+    conversation = conversations_db.encode_conversation_for_write(
+        'different-encryption-user',
+        {
+            'id': 'c',
+            'status': 'completed',
+            'discarded': False,
+            'sync_relevance': 'review',
+            'has_photos': False,
+            'transcript_segments': [{'text': 'synthetic transcript'}],
+        },
+        'enhanced',
+    )
+    store.rows[path] = deepcopy(conversation)
+    monkeypatch.setattr(conversations_db, 'db', store)
+    monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
+    return store, path, conversation
+
+
+def test_wrong_key_transcript_keeps_ciphertext_and_retries(rows, client, monkeypatch, wrong_key_conversation):
+    store, path, conversation = wrong_key_conversation
+    ciphertext = conversation['transcript_segments']
+    assert isinstance(ciphertext, str) and ciphertext
+    process = Mock()
+    claim_summary = Mock()
+    discard = Mock()
+    monkeypatch.setattr(callback, 'process_conversation', process)
+    monkeypatch.setattr(callback, 'claim_from_snapshot', claim_summary)
+    monkeypatch.setattr(callback.lifecycle_service, 'rule_discard_outcome', discard)
+    monkeypatch.setattr(callback, 'occasion_relevance_enabled', lambda: False)
+    decode_failures_before = TRANSCRIPT_DECODE_FAILURES._value.get()
+
+    token = rows[0][KEY]['task_token']
+    response = client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+
+    assert response.status_code == 409
+    assert response.json() == {'status': 'retry', 'reason': 'callback_pending'}
+    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+    assert store.rows[path]['transcript_segments'].encode('utf-8') == ciphertext.encode('utf-8')
+    assert store.rows[path] == conversation
+    assert TRANSCRIPT_DECODE_FAILURES._value.get() == decode_failures_before + 1
+    process.assert_not_called()
+    claim_summary.assert_not_called()
+    discard.assert_not_called()
+
+
+@pytest.mark.parametrize('reuse_snapshot', ['true', 'false'])
+def test_legacy_direct_redirect_queues_undecodable_transcript(
+    state, monkeypatch, wrong_key_conversation, reuse_snapshot
+):
+    from utils.sync import pipeline
+
+    store, path, conversation = wrong_key_conversation
+    donor_path = ('users', 'u', 'conversations', 'donor')
+    donor = {'id': 'donor', 'deleted': True, 'sync_merged_into': 'c', 'has_photos': False}
+    store.rows[donor_path] = deepcopy(donor)
+    monkeypatch.setenv('SYNC_OPERATION_SNAPSHOT_ENABLED', reuse_snapshot)
+    monkeypatch.setattr(pipeline.processing_hold, 'scheduling_enabled', lambda: False)
+    monkeypatch.setenv('SYNC_REPROCESS_COALESCE_ENABLED', 'false')
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
+    process = Mock()
+    monkeypatch.setattr(pipeline, 'process_conversation', process)
+
+    pipeline._reprocess_merged_conversations('u', {'_merged': {'donor': 'en'}})
+
+    key = reprocess.key('u', 'donor')
+    assert state[0][key]['conversation_id'] == 'donor'
+    assert state[1][-1]['task_token'] == state[0][key]['task_token']
+    assert store.rows[path] == conversation
+    assert store.rows[donor_path] == donor
+    process.assert_not_called()
 
 
 def _pending(*_):
@@ -284,12 +369,75 @@ def test_long_stuck_live_target_polls_hourly_through_the_consumer(rows, monkeypa
     assert state_rows[KEY]['due_at'] == pytest.approx(time.time() + reprocess.STUCK_DEFER_POLL_SECONDS, abs=5)
 
 
-def test_unexpected_errors_stay_5xx_and_keep_the_lease(rows, client, monkeypatch):
-    monkeypatch.setattr(
-        consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(side_effect=RuntimeError('synthetic'))
+def _v3_custody_conflict():
+    return SyncAssignmentConflict(
+        'explicit redirect would strand v3 custody', subtype=SyncAssignmentConflictReason.V3_CUSTODY
     )
+
+
+def test_v3_custody_conflict_defers_then_parks_without_a_5xx(rows, client, monkeypatch):
+    state_rows, tasks = rows
+    state_rows[KEY]['claim_attempts'] = 99  # Other delivery attempts take none of the custody budget.
+    now = 10_000.0
+    clock = SimpleNamespace(time=lambda: now, monotonic=time.monotonic)
+    monkeypatch.setattr(route, 'time', clock)
+    monkeypatch.setattr(consumer_module, 'time', clock)
+    process = Mock(side_effect=_v3_custody_conflict())
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: process)
+
+    def post(token):
+        return client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+
+    for count in (1, 2):
+        token = state_rows[KEY]['task_token']
+        response = post(token)
+        assert response.status_code == 200
+        assert response.json() == {'status': 'deferred', 'reason': 'v3_custody_conflict'}
+        row = state_rows[KEY]
+        assert row['v3_custody_defers'] == count and row['deferred_reason'] == 'v3_custody_conflict'
+        assert row['lease_until'] == 0 and row['task_token'] != token
+        assert row['due_at'] == now + reprocess.LIVE_DEFER_SECONDS
+        assert tasks[-1]['task_token'] == row['task_token']
+        assert post(token).json()['status'] == 'stale'
+        now = row['due_at']
+
+    token = state_rows[KEY]['task_token']
+    response = post(token)
+    assert response.status_code == 200
+    assert response.json() == {'status': 'discarded', 'reason': 'v3_custody_conflict'}
+    row = state_rows[KEY]
+    assert row['dormant'] and row['held_reason'] == 'v3_custody_conflict'
+    assert row['due_at'] is None and row['lease_until'] == 0 and row['owner'] is None
+    assert row['uid'] == 'u' and row['conversation_id'] == 'c'
+    assert post(token).json()['status'] == 'stale'
+    assert process.call_count == 3 and len(tasks) == 3
+
+    reprocess.mark('u', 'c', 'en', now=now + 1)
+    row = state_rows[KEY]
+    assert not row['dormant'] and 'held_reason' not in row and 'v3_custody_defers' not in row
+
+
+def test_v3_custody_terminal_attempt_keeps_a_concurrent_new_version(rows):
+    state_rows, _tasks = rows
+    state_rows[KEY]['v3_custody_defers'] = reprocess.V3_CUSTODY_MAX_DEFERS
+    token = state_rows[KEY]['task_token']
+
+    def append_then_conflict(*args):
+        reprocess.mark(*args, now=10_001.0)
+        raise _v3_custody_conflict()
+
+    _deliver(rows, append_then_conflict)
+    assert state_rows[KEY]['version'] == 2 and not state_rows[KEY]['dormant']
+    assert state_rows[KEY]['lease_until'] == 0 and state_rows[KEY]['task_token'] != token
+    assert _deliver(rows, lambda *_: SUMMARY, now=20_000.0).outcome == 'done'
+    assert state_rows[KEY]['summary_seen'] and 'v3_custody_defers' not in state_rows[KEY]
+
+
+@pytest.mark.parametrize('error', [RuntimeError('synthetic'), SyncAssignmentConflict('synthetic redirect cycle')])
+def test_unexpected_errors_stay_5xx_and_keep_the_lease(rows, client, monkeypatch, error):
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(side_effect=error))
     token = rows[0][KEY]['task_token']
-    with pytest.raises(RuntimeError):
+    with pytest.raises(type(error), match=str(error)):
         client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
     assert rows[0][KEY]['lease_until'] > 0  # the sweep re-wakes after expiry
 
@@ -845,6 +993,33 @@ def test_consumer_retries_a_processing_dependency_failure_and_keeps_the_wake(row
     assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
 
 
+@pytest.mark.asyncio
+async def test_legacy_handler_records_an_empty_first_summary_instead_of_answering_500(rows, monkeypatch):
+    """SCA-2865: an empty kept output is a bounded retry, never an unhandled ``SummaryOutputUnavailable``.
+
+    The consumer path already records the strike (``test_empty_output_twice_records_a_bounded_retry_then_blocks``);
+    the legacy ``sync_handler`` route used to re-raise on the same strike and answer 500.
+    """
+    from routers import batch_pipeline
+
+    monkeypatch.delenv('ENRICHMENT_ROUTE', raising=False)
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(callback, 'enrich_conversation', lambda *_: SimpleNamespace(discarded=False, structured={}))
+
+    async def run(_executor, func, *args):
+        return func(*args)
+
+    monkeypatch.setattr(batch_pipeline, 'run_blocking', run)
+    state_rows, _tasks = rows
+    token = state_rows[KEY]['task_token']
+    response = await batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': token})
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'deferred'}
+    assert state_rows[KEY]['summary_empty_failures'] == 1
+    assert state_rows[KEY]['deferred_reason'] == reprocess.EMPTY_OUTPUT_DEFER_REASON
+    assert state_rows[KEY]['due_at'] is not None and state_rows[KEY]['lease_until'] == 0
+
+
 def _gateway_status(status):
     import httpx
 
@@ -906,6 +1081,25 @@ def test_transient_fault_in_the_empty_output_strike_releases_the_lease(rows, mon
     assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
 
 
+def test_unavailable_empty_output_strike_answers_409_instead_of_500(rows, client, monkeypatch):
+    """SCA-2865: an expired strike transaction is a bounded retry, never an unhandled 500."""
+    import database._client as firestore_client
+    import database.summary_processing as summary_processing
+
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: _empty_output)
+    monkeypatch.setattr(
+        summary_processing,
+        'record_empty_failure',
+        Mock(return_value=summary_processing.EmptyFailureOutcome.UNAVAILABLE),
+    )
+    token = rows[0][KEY]['task_token']
+    response = client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+    assert response.status_code == 409
+    assert response.json() == {'status': 'retry', 'reason': 'dependency_warming'}
+    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+
+
 def test_empty_output_owner_race_defers_without_burning_callback_attempts(rows, monkeypatch):
     import database._client as firestore_client
     import database.summary_processing as summary_processing
@@ -924,6 +1118,138 @@ def test_empty_output_owner_race_defers_without_burning_callback_attempts(rows, 
     assert pending['deferred_reason'] == 'summary_owner_changed'
     assert pending['summary_empty_failures'] == 2
     assert pending['task_token'] != token and pending['lease_until'] == 0
+
+
+def _empty_output(*_):
+    return SimpleNamespace(structured={'title': 'Synthetic'})
+
+
+def _bounded_empty_failure(rows):
+    """The real strike budget, without a Firestore transaction in a unit test."""
+
+    def record(_client, _collection, document_id, _owner, _token, *, expected_version=None):
+        row = rows[0][document_id]
+        if expected_version is not None and row.get('version') != expected_version:
+            return EmptyFailureOutcome.SUPERSEDED
+        row['summary_empty_failures'] = min(3, row.get('summary_empty_failures', 0) + 1)
+        if row['summary_empty_failures'] >= 3:
+            row.update(dormant=True, due_at=None, lease_until=0, summary_blocked_reason='empty_output_exhausted')
+            return EmptyFailureOutcome.BLOCKED
+        return EmptyFailureOutcome.RETRY
+
+    return record
+
+
+def test_empty_output_then_success_delivers_the_summary(rows, monkeypatch):
+    """SCA-3667: the first empty result defers 120s, and the retry after the defer delivers."""
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+    token = rows[0][KEY]['task_token']
+    first = _deliver(rows, _empty_output)
+    assert (first.outcome, first.reason) == ('deferred', 'not_due')
+    pending = rows[0][KEY]
+    assert pending['summary_empty_failures'] == 1
+    assert pending['deferred_reason'] == reprocess.EMPTY_OUTPUT_DEFER_REASON
+    # The settle clock is the last heartbeat, so compare the wait, not the epoch.
+    assert 118 <= pending['due_at'] - time.time() <= 121
+    assert pending['lease_until'] == 0
+    # A 200 DEFERRED leaves a durable wake for the same row under a new token.
+    assert pending['task_token'] != token
+    assert rows[1][-1]['task_token'] == pending['task_token']
+    # The deferred wake runs the callback again; a real summary then delivers.
+    second = _deliver(rows, lambda *_: SUMMARY, now=pending['due_at'])
+    assert second.outcome == 'done'
+    assert rows[0][KEY]['summary_seen']
+
+
+def test_empty_output_twice_records_a_bounded_retry_then_blocks(rows, monkeypatch):
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+    now = 10_000.0
+    for expected in (1, 2):
+        result = _deliver(rows, _empty_output, now=now)
+        assert (result.outcome, result.reason) == ('deferred', 'not_due')
+        assert rows[0][KEY]['summary_empty_failures'] == expected
+        now = rows[0][KEY]['due_at']
+    blocked = _deliver(rows, _empty_output, now=now)
+    assert (blocked.outcome, blocked.reason) == ('stale', 'empty_output_blocked')
+    assert rows[0][KEY]['dormant'] and rows[0][KEY]['summary_blocked_reason'] == 'empty_output_exhausted'
+
+
+def test_empty_output_answers_200_deferred_and_leaves_a_durable_wake(rows, client, monkeypatch):
+    """SCA-3667: the 409 becomes a 200 DEFERRED, and the outbox re-arms the same row."""
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: _empty_output)
+    token = rows[0][KEY]['task_token']
+    response = client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+    assert response.status_code == 200
+    assert response.json() == {'status': 'deferred', 'reason': 'not_due'}
+    pending = rows[0][KEY]
+    assert pending['task_token'] != token
+    assert pending['lease_until'] == 0 and pending['owner'] is None
+    assert pending['due_at'] > time.time()
+    # The re-arm enqueued the same row under the new token: the wake is durable.
+    assert rows[1][-1]['task_token'] == pending['task_token']
+    assert rows[1][-1]['document_id'] == KEY
+
+
+def test_empty_output_defer_starts_after_a_slow_callback(rows, monkeypatch):
+    """P1: a callback that outlives the backoff still gets a full delay before its next wake.
+
+    The defer used to be measured from the delivery's entry clock, so a 200s callback made
+    ``entry + 120`` land 80s in the past and the queue retried at once.
+    """
+    clock = [10_000.0]
+    monkeypatch.setattr(consumer_module, 'time', SimpleNamespace(time=lambda: clock[0], monotonic=time.monotonic))
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+
+    def slow_empty(*_):
+        clock[0] += 200.0  # the callback outlives the 120s delay
+        return SimpleNamespace(structured={'title': 'Synthetic'})
+
+    result = _deliver(rows, slow_empty, now=10_000.0)
+    assert (result.outcome, result.reason) == ('deferred', 'not_due')
+    pending = rows[0][KEY]
+    assert pending['due_at'] == clock[0] + 120
+    assert pending['due_at'] - clock[0] == 120
+    assert pending['task_due_at'] == pending['due_at']
+
+
+def test_empty_output_backoff_zero_restores_the_immediate_409(rows, monkeypatch):
+    """The kill switch: 0 restores the pre-SCA-3667 immediate callback retry."""
+    monkeypatch.setenv('ENRICHMENT_EMPTY_OUTPUT_BACKOFF_SECONDS', '0')
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+    token = rows[0][KEY]['task_token']
+    result = _deliver(rows, _empty_output)
+    assert (result.outcome, result.reason) == ('retry', 'callback_pending')
+    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+
+
+def test_empty_output_on_newer_content_charges_no_strike(rows, monkeypatch):
+    """A sync append bumps ``version`` without rotating the token; the strike is fenced to the claim."""
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+
+    def append_then_empty(*_):
+        rows[0][KEY]['version'] += 1  # an append lands while the callback runs
+        return SimpleNamespace(structured={'title': 'Synthetic'})
+
+    result = _deliver(rows, append_then_empty)
+    assert (result.outcome, result.reason) == ('deferred', 'not_due')
+    pending = rows[0][KEY]
+    assert pending.get('summary_empty_failures', 0) == 0
+    assert pending['deferred_reason'] == 'empty_output_superseded'
+    assert pending['due_at'] <= time.time() + 1
+
+
+def test_empty_output_on_an_already_enriched_row_acks_instead_of_retrying(rows):
+    """A delivered summary is not a delivery failure: an empty reprocess must not retry forever."""
+    rows[0][KEY]['summary_seen'] = True
+    result = _deliver(rows, _empty_output)
+    assert (result.outcome, result.reason) == ('done', 'processed')
 
 
 def test_transient_fault_on_the_effects_only_path_releases_the_lease(rows, monkeypatch):

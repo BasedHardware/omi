@@ -28,6 +28,7 @@ import 'package:omi/ui/ui.dart';
 
 import '../helpers/sfpro_font_fixtures.dart';
 import '../helpers/summary_fixtures.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 
 /// Summary generation redesign, rendered with the real widgets in the dark palette.
 /// `--dart-define=OMI_SUMMARY_UX_EVIDENCE_DIR=<dir>` writes 393×852 @3x PNGs.
@@ -57,6 +58,7 @@ final _results = <String, ReprocessResult>{
   '08-failure-template': const ReprocessFailed(statusCode: 502),
   '09-failure-busy': const ReprocessBusy(),
   '10-failure-limit': const ReprocessRateLimited(),
+  '12-transcription-pending': const ReprocessTranscriptionPending(),
 };
 
 final _cases = <_Case>[
@@ -81,6 +83,7 @@ final _cases = <_Case>[
   _Case('08-failure-template', (p, f) => _fail(p, appId: _paulGraham)),
   _Case('09-failure-busy', (p, f) => _fail(p)),
   _Case('10-failure-limit', (p, f) => _fail(p)),
+  _Case('12-transcription-pending', (p, f) => _fail(p)),
   _Case(
     '11-empty-state-long-title',
     (p, f) async {},
@@ -95,6 +98,7 @@ void main() {
     await SharedPreferencesUtil.init();
     SharedPreferencesUtil().lastUsedSummarizationAppId = _paulGraham;
     SummaryGenerationV2Gate.debugOverride = true;
+    TranscriptionPendingConversations.reset();
   });
   tearDown(() => SummaryGenerationV2Gate.debugOverride = null);
 
@@ -227,6 +231,9 @@ void main() {
           expect(find.text(l10n.summaryBusyTitle), findsOneWidget);
         case '10-failure-limit':
           expect(find.text(l10n.summaryLimitTitle), findsOneWidget);
+        case '12-transcription-pending':
+          expect(find.text(l10n.summaryTranscriptionPendingTitle), findsOneWidget);
+          expect(find.text(l10n.summaryTranscriptionPendingBody), findsOneWidget);
       }
 
       if (_evidence.isNotEmpty) {
@@ -242,6 +249,8 @@ void main() {
       if (!gate.isCompleted) gate.complete(const ReprocessBusy());
       await tester.pump();
       debugDefaultTargetPlatformOverride = null;
+      // The not-transcribed case arms the marker's expiry timer; it must not outlive the test body.
+      TranscriptionPendingConversations.reset();
     });
   }
 }

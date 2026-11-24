@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 
@@ -1066,6 +1067,7 @@ def test_helm_rbac_and_cpu_placement(environment):
     ]
     cron = objs['CronJob']['spec']
     assert cron['schedule'] == '*/5 * * * *' and cron['concurrencyPolicy'] == 'Forbid'
+    assert cron['suspend'] is False
     job = cron['jobTemplate']['spec']
     assert job['activeDeadlineSeconds'] == 240 and job['backoffLimit'] == 0
     pod = job['template']['spec']
@@ -1077,6 +1079,7 @@ def test_helm_rbac_and_cpu_placement(environment):
     assert '@sha256:' in container['image']
     env = {item['name']: item['value'] for item in container['env']}
     assert env['DRY_RUN'] == ('true' if environment == 'dev' else 'false')
+    assert env['PARAKEET_SUSPENDED'] == ('false' if environment == 'dev' else 'true')
     adapter = yaml.safe_load(
         (ROOT / f'backend/charts/monitoring/prometheus-adapter/{environment}_omi_prometheus_adapter.yaml').read_text()
     )
@@ -1248,6 +1251,11 @@ def test_render_packages_exact_entrypoint_and_shared_logging_module():
     objs = [obj for obj in yaml.safe_load_all(output) if obj]
     script = next(obj for obj in objs if obj['metadata']['name'].endswith('-script'))
     assert script['data']['guard.py'] == (CHART / 'files/guard.py').read_text()
+    digest = hashlib.sha256(script['data']['guard.py'].encode()).hexdigest()
+    assert script['metadata']['annotations']['omi.me/guard-script-sha256'] == digest
+    cron = next(obj for obj in objs if obj['kind'] == 'CronJob')
+    template = cron['spec']['jobTemplate']['spec']['template']
+    assert template['metadata']['annotations']['omi.me/guard-script-sha256'] == digest
     assert script['data']['batch_guard.py'] == (CHART / 'files/batch_guard.py').read_text()
     assert script['data']['omi_logging.py'] == (ROOT / 'backend/omi_logging.py').read_text()
 
@@ -1884,3 +1892,54 @@ def test_helm_dedicated_identity_state_only_rbac_and_cpu_placement():
     assert pod['volumes'][1]['configMap']['optional'] is True
     assert pod['containers'][0]['command'] == ['python3', '/guard/guard.py', '--batch']
     assert all(d['kind'] not in {'ClusterRole', 'ClusterRoleBinding', 'Secret'} for d in docs)
+
+
+@pytest.mark.parametrize('dry_run', [False, True])
+@pytest.mark.parametrize('late', [False, True])
+def test_retired_parakeet_keeps_batch_observer_and_state_without_workload_io(dry_run, late, caplog):
+    client = FakeClient()
+    client.state = {'identity': 'retired', 'since': 42, 'rollback': {'since': 40, 'clean_since': 41}}
+    original = deepcopy(client.state)
+    samples, requests = [], []
+    original_kube = client.kube
+
+    def kube(path, patch=None):
+        requests.append(path)
+        assert path == 'state', 'retired Parakeet must not read or write serving workloads'
+        return original_kube(path, patch)
+
+    def sample(expressions):
+        samples.append(expressions)
+        assert expressions == guard.batch_queries(client.namespace)
+        return dict(
+            oldest_age=1801 if late else 0, retry_age=0, age_incomplete=0, retry_incomplete=0, freshness=0, scrape_age=0
+        )
+
+    client.kube, client.sample = kube, sample
+    assert guard.run(client, dry_run, 900, parakeet_suspended=True) == 0
+    assert requests == ['state', 'state'] and len(samples) == 1
+    assert client.state == original
+    data = client.patches[0][1][1]['value']
+    assert data['parakeet-verdict'] == 'SKIPPED'
+    assert data['batch-verdict'] == ('TRIP' if late else 'PARTIAL')
+    assert data['batch-trips'] == ('uncommitted_job_age_over_30m' if late else '')
+    assert data['last-observed-at'] == '900'
+    assert 'batch_safety' in caplog.text and 'parakeet_retired' in caplog.text
+
+
+@pytest.mark.parametrize('setting,expected', [('true', True), ('false', False), (None, False)])
+def test_entrypoint_passes_parakeet_retirement_to_observer(monkeypatch, setting, expected):
+    client = object()
+    calls = []
+    monkeypatch.setattr(guard.sys, 'argv', ['guard.py'])
+    for key in ('PROMETHEUS_URL', 'NAMESPACE', 'HPA_NAME', 'STATE_NAME'):
+        monkeypatch.setenv(key, 'test')
+    if setting is None:
+        monkeypatch.delenv('PARAKEET_SUSPENDED', raising=False)
+    else:
+        monkeypatch.setenv('PARAKEET_SUSPENDED', setting)
+    monkeypatch.setenv('DRY_RUN', 'false')
+    monkeypatch.setattr(guard, 'Client', lambda *args: client)
+    monkeypatch.setattr(guard, 'run', lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
+    assert guard.main() == 0
+    assert calls == [((client, False), {'parakeet_suspended': expected})]

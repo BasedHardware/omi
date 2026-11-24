@@ -447,11 +447,20 @@ async def on_realtime_segments(
                     conversations_db.get_conversation_raw_snapshot,
                     uid,
                     conversation_id,
-                    field_paths=['started_at', 'finished_at', 'last_speech_at', 'source', 'discarded', 'deleted'],
+                    field_paths=[
+                        'started_at',
+                        'finished_at',
+                        'last_speech_at',
+                        'source',
+                        'discarded',
+                        'deleted',
+                        'recording',
+                        'v3_derived',
+                    ],
                 )
                 if row:
                     sessions.remember_origin(uid, conversation_id, row)
-            if not row or row.get('discarded') or row.get('deleted'):
+            if not row or row.get('recording') or row.get('v3_derived') or row.get('discarded') or row.get('deleted'):
                 return
             recorded = recorded_span(row.get('started_at'), segments)
             if recorded is None:

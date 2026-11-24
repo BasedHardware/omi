@@ -32,18 +32,6 @@ class Priority(IntEnum):
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
 
-# Terminal exclusion keeps future nonterminal strings visible; the census gates missing/null state.
-MERGE_POLL_TERMINAL_STATES = tuple(
-    'committed dead quarantined privacy_blocked partial_retired provider_superseded'.split()
-)
-
-
-def held_poll_skip_enabled() -> bool:
-    from config.refactor_modes import default_off
-
-    return default_off('BATCH_HELD_POLL_SKIP_ENABLED')
-
-
 # A full grace window is also given to pre-field rows on first observation.
 HELD_DEAD_LETTER_SECONDS = 7 * 86400
 RECORD_DEAD_LETTER_SECONDS = 14 * 86400
@@ -54,6 +42,10 @@ def batch_held_dead_letter_enabled() -> bool:
     from config.policy.kill_switches import kill_switch
 
     return kill_switch('BATCH_HELD_DEAD_LETTER_ENABLED')
+
+
+def parked_job_sweeper_enabled() -> bool:
+    return kill_switch('BATCH_PARKED_JOB_SWEEPER_ENABLED', log=False)
 
 
 def projection_source_deleted_enabled() -> bool:
@@ -389,6 +381,14 @@ def worker_silence_disposition_enabled() -> bool:
     )
 
 
+def silence_read_skip_enabled() -> bool:
+    """R9: false restores the full silent-unit projection/accounting path."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED',
+        os.getenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', 'true').strip().lower() not in {'false', 'off', '0'},
+    )
+
+
 LONG_SPEECH_HANDOFF_SECONDS = 5.0
 
 
@@ -567,29 +567,6 @@ def projection_striping_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED')
 
 
-PROJECTION_FINISH_BACKOFF_SECONDS = (60.0, 300.0, 900.0)
-
-
-def projection_finish_backoff_enabled() -> bool:
-    """Default off; only ``true`` defers an unchanged persisted/ready finish walk.
-
-    Off keeps the legacy query and disables no-change deferral transactions.
-    Clock writes on state transitions are unconditional on every writer host.
-    On uses the due-clock filter only after the shared backfill marker exists;
-    until then it keeps the legacy page without per-row stamping. Rollback and
-    re-enable are safe because flag-off writers keep maintaining the clock.
-    """
-    from config.policy import kill_switch
-
-    return kill_switch('BATCH_PROJECTION_FINISH_BACKOFF_ENABLED')
-
-
-def projection_finish_backoff_delay(step: int) -> float:
-    """60 s, then 300 s, then 900 s for a repeatedly unchanged row; capped."""
-    index = max(0, min(int(step), len(PROJECTION_FINISH_BACKOFF_SECONDS) - 1))
-    return PROJECTION_FINISH_BACKOFF_SECONDS[index]
-
-
 PROJECTION_DISCOVERY_STRIPES = 4096
 _projection_discovery_stripe_value: int | None = None
 _PROJECTION_DISCOVERY_LOCK = threading.Lock()
@@ -630,6 +607,11 @@ def recovered_merge_release_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED')
+
+
+def provider_backlog_release_closed() -> bool:
+    """Live close-only override for the metered gate; unset never opens a gate."""
+    return os.getenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', '').strip().lower() == 'false'
 
 
 def provider_backlog_release_enabled() -> bool:
@@ -713,6 +695,15 @@ def projection_followup_page_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED')
 
 
+def projection_followup_early_coalesce_enabled() -> bool:
+    return kill_switch('BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED', log=False)
+
+
+def projection_followup_claimed_sibling_skip_enabled() -> bool:
+    """Kill switch: a ready sibling skips its read-only check once a same-page sibling claims completion."""
+    return kill_switch('BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED', log=False)
+
+
 def owner_drain_enabled() -> bool:
     """Kill switch: a per-process owner drain replaces the sweep-shared walk budget."""
     from config.policy import kill_switch
@@ -720,11 +711,35 @@ def owner_drain_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
 
 
+def owner_drain_admission_diagnostics_enabled() -> bool:
+    """Process-local diagnostics only; 0/off/false disable without changing drains."""
+    return os.getenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', '1').strip().lower() not in {
+        '0',
+        'off',
+        'false',
+        'no',
+    }
+
+
+def projection_overlap_diagnostics_enabled() -> bool:
+    """Default-on diagnostics; disable before startup without changing discovery."""
+    return os.getenv('BATCH_PIPELINE_PROJECTION_OVERLAP_DIAGNOSTICS', '1').strip().lower() not in {
+        '0',
+        'off',
+        'false',
+        'no',
+    }
+
+
 def serving_projection_sweep_enabled() -> bool:
     """Only ``off`` disables serving-instance discovery; owner wakes still run."""
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_SERVING_PROJECTION_SWEEP')
+
+
+def projection_outbox_enabled() -> bool:
+    return kill_switch('BATCH_PROJECTION_OUTBOX', log=False)
 
 
 def _pump_bound(raw: str, default: int, maximum: int, minimum: int = 1) -> int:
@@ -1048,6 +1063,16 @@ def merge_head_wait_seconds() -> float:
     return value if value <= MERGE_HEAD_WAIT_MAX else MERGE_HEAD_WAIT_DEFAULT
 
 
+# A head still unready this long after admission is starved stock, not a unit about to finish.
+MERGE_STALE_HEAD_SECONDS = 1800.0
+
+
+def merge_stale_head_skip(owner_id: str) -> bool:
+    """Canary: listed owners skip the head wait behind a stale head. Unset or empty: nobody."""
+    raw = os.getenv('BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST', '')
+    return bool(owner_id) and owner_id in {uid.strip() for uid in raw.split(',') if uid.strip()}
+
+
 MERGE_CATCH_UP_DEPTH_DEFAULT = 16
 MERGE_CATCH_UP_DEPTH_MAX = 1000
 
@@ -1095,3 +1120,20 @@ def recovery_wake_lease_seconds() -> int:
     if value == 0:
         return 0
     return value if 120 <= value <= RECOVERY_WAKE_LEASE_MAX else RECOVERY_WAKE_LEASE_DEFAULT
+
+
+def projection_finish_async_skip_enabled() -> bool:
+    """Ship-on: async receipts belong only to the independent follow-up drain."""
+    return kill_switch('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED')
+
+
+PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT = 8
+
+
+def projection_finish_classify_page_limit() -> int:
+    """Bound legacy clock updates per page/process; zero pauses classification."""
+    try:
+        value = int(os.getenv('BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT', '8'))
+    except ValueError:
+        return PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT
+    return value if 0 <= value <= 16 else PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT

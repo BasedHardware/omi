@@ -96,9 +96,16 @@ class OwnerIndex:
         if not _owner_filter(value, self.uid):
             raise ValueError('Pinecone filter must constrain the authenticated owner')
 
-    def query(self, *, namespace: str, caller: str = 'other', **kwargs: Any) -> Any:
+    def query(
+        self, *, namespace: str, caller: str = 'other', deadline_monotonic: float | None = None, **kwargs: Any
+    ) -> Any:
         self._check_filter(kwargs.get('filter'))
         routed_namespace = self._route(namespace)
+        if deadline_monotonic is not None:
+            remaining = deadline_monotonic - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError('owner routing exceeded query deadline')
+            kwargs['_request_timeout'] = remaining
         response: Any = None
         succeeded = False
         try:

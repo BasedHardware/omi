@@ -40,8 +40,10 @@ served yet; Review surfacing and the mobile UI arrive in PR 3.
   after `REMENTION_COOLDOWN_DAYS` = 14), the two-day re-ask cooldown
   (re-armed by due_soon), snoozes, and the slot ranking (value ≥ 3, due_soon
   first, work first, at most 3).
-- `daily.py` — the daily pass: one structured call per user per local day
-  (feature key `open_loop_daily`, gpt-6-luna, usage-tracked), fail-open and
+- `daily.py` — the daily pass: one structured result per user per local day
+  (feature key `open_loop_daily`, gpt-6-luna, usage-tracked), with one
+  provider-timeout retry on the existing GPT-5 Nano route under the same
+  claim and within the 30-second model budget. The pass fails open and runs
   **off the recap critical path**: the recap worker finishes summary, push,
   backfill and webhook first and only returns a pass request, which the
   coordinator dispatches onto the dedicated `open_loops_executor` under

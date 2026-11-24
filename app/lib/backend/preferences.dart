@@ -736,6 +736,12 @@ class SharedPreferencesUtil {
 
   set paywallOnDeviceSttConfigId(String value) => saveString('paywallOnDeviceSttConfigId', value);
 
+  /// Android "On Wi-Fi later" for the phone's Whisper model: '' none, 'pin' a free plan's phone
+  /// choice to persist pinned once the model lands, 'plain' a paid reader's own choice.
+  String get phoneModelOnWifiPending => getString('phoneModelOnWifiPending');
+
+  set phoneModelOnWifiPending(String value) => saveString('phoneModelOnWifiPending', value);
+
   // Whether offline recordings auto-sync to Omi when the device connects.
   // Defaults to true (auto-sync on) — the feature is opt-out from introduction.
   bool get autoSyncOfflineRecordings => getBool('autoSyncOfflineRecordings', defaultValue: true);

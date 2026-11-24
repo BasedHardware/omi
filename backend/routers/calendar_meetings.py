@@ -3,9 +3,11 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ServiceUnavailable
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 import database.calendar_meetings as calendar_db
+from database.firestore_transaction_retry import FirestoreContentionExhausted, is_expired_transaction
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant, MeetingParticipantSources
 from utils.other import endpoints as auth
 from utils.request_validation import CalendarMeetingsLimit
@@ -74,14 +76,23 @@ def store_calendar_meeting(
     )
     meeting_dict = meeting_context.model_dump()
     meeting_dict['end_time'] = end_utc
-    existing_meeting_id = calendar_db.get_meeting_id_by_calendar_event(
-        uid, request.calendar_event_id, request.calendar_source
-    )
-    if existing_meeting_id:
-        calendar_db.update_meeting(uid, existing_meeting_id, meeting_dict)
-        meeting_id = existing_meeting_id
-    else:
-        meeting_id = calendar_db.create_meeting(uid, meeting_dict)
+    try:
+        existing_meeting_id = calendar_db.get_meeting_id_by_calendar_event(
+            uid, request.calendar_event_id, request.calendar_source
+        )
+        if existing_meeting_id:
+            calendar_db.update_meeting(uid, existing_meeting_id, meeting_dict)
+            meeting_id = existing_meeting_id
+        else:
+            meeting_id = calendar_db.create_meeting(uid, meeting_dict)
+    except (Aborted, DeadlineExceeded, FirestoreContentionExhausted, InvalidArgument, ServiceUnavailable) as exc:
+        if isinstance(exc, InvalidArgument) and not is_expired_transaction(exc):
+            raise
+        raise HTTPException(
+            status_code=503,
+            detail="Calendar meeting storage is temporarily unavailable. Retry with the same event ID and source.",
+            headers={'Retry-After': '1'},
+        ) from exc
     return StoreMeetingResponse(meeting_id=meeting_id, calendar_event_id=request.calendar_event_id)
 
 

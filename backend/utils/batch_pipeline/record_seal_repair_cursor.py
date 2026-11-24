@@ -13,7 +13,7 @@ PURPOSE = b'record-seal-repair-cursor-v1'
 
 
 class RepairCursor:
-    def __init__(self, client, secret, *, jobs=False, urgent=False):
+    def __init__(self, client, secret, *, jobs=False, urgent=False, backlog=False, partition=(0, 1)):
         if len(secret) < 32:
             raise ValueError('cursor key required')
         self.cipher = AESGCM(hmac.digest(secret, PURPOSE, 'sha256'))
@@ -24,6 +24,15 @@ class RepairCursor:
             if urgent
             else 'record_seal_repair_jobs_cursor_v2' if jobs else 'record_seal_repair_cursor_v2'
         )
+        if backlog:
+            if not jobs or urgent:
+                raise ValueError('invalid backlog frontier')
+            name = 'record_seal_repair_backlog_cursor_v1'
+        index, count = partition
+        if not 1 <= count <= 8 or not 0 <= index < count:
+            raise ValueError('invalid frontier partition')
+        if count > 1:
+            name += f'_{count}_{index}'
         self.ref = client.collection('batch_pipeline_prod_maintenance').document(name)
 
     def read(self, budget):

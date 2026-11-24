@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-bounded-discovery-pinned-by-blocked-page",
+  "family": "work-bounded-resumable",
   "violated_contract": "A recurring durable-obligation scanner must eventually discover actionable work beyond a full page of blocked obligations. Repeatedly querying only the oldest page can deadlock the dependencies needed to clear that page.",
   "canonical_prevention": "Advance independent bounded keyset cursors for independent drains, wrap at exhaustion, and retain transaction-level authorization, ordering and idempotency fences. Reproduce a full blocked page plus actionable dependencies beyond it against the real store.",
   "canonical_prevention_artifact": [

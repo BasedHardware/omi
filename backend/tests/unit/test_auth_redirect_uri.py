@@ -26,6 +26,7 @@ import sys
 import types
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -293,6 +294,26 @@ class TestLegacyBrowserSignIn:
         )
         assert response.status_code == 400
         assert response.json() == {"detail": "code_challenge is required"}
+
+    @pytest.mark.parametrize("select_account", [None, "true"])
+    def test_google_account_chooser_is_opt_in(self, client, select_account):
+        params = {
+            "provider": "google",
+            "redirect_uri": "omi://auth/callback",
+            "code_challenge": _PKCE_CHALLENGE,
+            "code_challenge_method": "S256",
+        }
+        if select_account:
+            params["select_account"] = select_account
+        with patch.object(auth_module, "set_auth_session") as session:
+            response = client.get("/v1/auth/authorize", params=params, follow_redirects=False)
+        assert response.status_code == 307
+        redirect = urlsplit(response.headers["location"])
+        assert redirect.hostname == "accounts.google.com"
+        query = parse_qs(redirect.query)
+        assert query.get("prompt") == (["select_account"] if select_account else None)
+        assert query["state"] == [session.call_args.args[0]]
+        assert session.call_args.args[1]["code_challenge"] == _PKCE_CHALLENGE
 
     @pytest.mark.parametrize(
         "overrides",

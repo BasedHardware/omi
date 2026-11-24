@@ -1,10 +1,10 @@
 """GPU-capacity overflow for batch admission (vendor_route_contracts.FLAGS).
 
-The GPU ring is saturated when its oldest admissible fresh unit has waited past an SLO **and** enough
-admissible fresh units are waiting that the age is a real backlog, not a few stuck heads (11-01: 4
+The GPU ring is saturated when its oldest admissible unit of a priority has waited past an SLO **and** enough
+admissible units of that priority are waiting that the age is a real backlog, not a few stuck heads (11-01: 4
 parked owners held 111 fresh units 42 h old while the ring was idle). While saturated:
 
-* inside the vendor-routing cohort, a fresh unit that would start on GPU starts on the table's
+* inside the vendor-routing cohort, a unit in overflow_priorities() that would start on GPU starts on the table's
   next healthy primary vendor (Modulate in practice; Soniox is failover-only and never primary);
 * an owner whose legacy sync is still on keeps a new fresh upload on legacy sync instead of
   queueing it behind the ring (the same intake fallback heavy-owner exclusion uses).
@@ -15,6 +15,7 @@ Read per call, never snapshotted at import. Malformed or out-of-range numbers ke
 import math
 import os
 
+from config.batch_pipeline import Priority
 from config.refactor_switches import default_on as rollout_default_on
 
 ENTER_SECONDS_DEFAULT = 1200.0
@@ -30,6 +31,20 @@ def overflow_enabled() -> bool:
         'BATCH_VENDOR_OVERFLOW_ENABLED',
         os.getenv('BATCH_VENDOR_OVERFLOW_ENABLED', 'true').strip().lower() != 'false',
     )
+
+
+def overflow_priorities() -> frozenset[int]:
+    """Priorities eligible for vendor overflow; malformed lists keep FRESH only.
+
+    FRESH is always included. Read at admission so expanding beyond FRESH requires an explicit config.
+    """
+    default = frozenset({int(Priority.FRESH)})
+    names = {priority.name.lower(): int(priority) for priority in Priority}
+    tokens = os.getenv('BATCH_VENDOR_OVERFLOW_PRIORITIES', '').strip().lower().split(',')
+    tokens = [token.strip() for token in tokens]
+    if any(token not in names for token in tokens):
+        return default
+    return default | frozenset(names[token] for token in tokens)
 
 
 def legacy_capacity_fallback_enabled() -> bool:
@@ -52,14 +67,14 @@ def _number(raw: str | None, default: float, low: float, high: float) -> float:
 
 
 def thresholds() -> tuple[float, float]:
-    """``(enter, exit)`` fresh backlog ages in seconds. Saturation starts at ``enter`` and stops once the
+    """``(enter, exit)`` per-priority backlog ages in seconds. Saturation starts at ``enter`` and stops once the
     age falls below half of it (hysteresis; one tunable keeps the flag budget small)."""
     enter = _number(os.getenv('BATCH_VENDOR_OVERFLOW_ENTER_SECONDS'), ENTER_SECONDS_DEFAULT, SECONDS_MIN, SECONDS_MAX)
     return enter, enter / 2
 
 
 def min_ready_units() -> int:
-    """Admissible fresh units that must be waiting before an old head counts as saturation; it stops
+    """Admissible units of a priority that must be waiting before an old head counts as saturation; it stops
     below half of this."""
     return int(
         _number(os.getenv('BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS'), MIN_READY_UNITS_DEFAULT, 1, MIN_READY_UNITS_MAX)

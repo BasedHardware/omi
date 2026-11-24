@@ -974,12 +974,6 @@ extension APIClient {
     try await get("v1/conversations/\(id)?source=omi&include_discarded=false")
   }
 
-  /// Deletes a conversation by ID
-  func deleteConversation(id: String) async throws {
-    try await delete("v1/conversations/\(id)?cascade=true")
-    invalidateConversationsCountCache()
-  }
-
   /// Updates the starred status of a conversation
   func setConversationStarred(id: String, starred: Bool) async throws -> ServerConversation {
     let url = URL(string: baseURL + "v1/conversations/\(id)/starred?starred=\(starred)")!

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import subprocess
+import sys
+from pathlib import Path
+
+import pytest
 
 from scripts import cloud_run_traffic_snapshot as snapshots
 
@@ -42,6 +46,70 @@ def test_capture_snapshot_is_limited_to_restorable_traffic_metadata() -> None:
     assert 'tag' not in service['spec']['traffic'][0]
     assert 'not-for-artifacts' not in str(snapshot)
     assert 'not-an-artifact.example' not in str(snapshot)
+
+
+@pytest.mark.parametrize('divergence', ['requested_split', 'different_serving', 'malformed_allocation'])
+def test_named_capture_refuses_any_allocation_difference(divergence: str) -> None:
+    service = 'backend-sync'
+    admitted = 'backend-sync-admitted'
+    document = _service_document(revision=admitted)
+    if divergence == 'requested_split':
+        document['spec']['traffic'] = [
+            {'revisionName': admitted, 'percent': 90},
+            {'revisionName': 'backend-sync-other', 'percent': 10},
+        ]
+        reason = 'requested restore traffic differs'
+    elif divergence == 'different_serving':
+        document = _service_document(revision='backend-sync-other')
+        reason = 'observed traffic differs'
+    else:
+        document['status']['traffic'].append({'revisionName': 'backend-sync-other', 'percent': '10'})
+        reason = 'invalid allocation'
+    with pytest.raises(ValueError, match=reason):
+        snapshots.capture_snapshot(
+            project='based-hardware',
+            region='us-central1',
+            services=(service,),
+            expected_serving_revision=admitted,
+            fetcher=lambda **_: document,
+        )
+
+
+def test_named_restore_requires_observed_serving_and_checks_floor() -> None:
+    service = 'backend-integration'
+    admitted = 'backend-integration-admitted'
+    document = _service_document(revision=admitted)
+    document['status']['traffic'].append({'revisionName': 'backend-integration-dark', 'tag': 'dark'})
+    snapshot = snapshots.capture_snapshot(
+        project='based-hardware',
+        region='us-central1',
+        services=(service,),
+        expected_serving_revision=admitted,
+        fetcher=lambda **_: document,
+    )
+    commands = []
+    readback = _service_document(revision=admitted)
+    readback['status']['traffic'][0]['revisionName'] = 'backend-integration-candidate'
+    assert (
+        snapshots.restore_snapshot(
+            snapshot,
+            runner=commands.append,
+            fetcher=lambda **_: readback,
+            release_floor_check=Path('floor.py'),
+        )['result']
+        == 'fail'
+    )
+    readback['status']['traffic'][0]['revisionName'] = admitted
+    evidence = snapshots.restore_snapshot(
+        snapshot,
+        runner=commands.append,
+        fetcher=lambda **_: readback,
+        release_floor_check=Path('floor.py'),
+    )
+    assert commands[0][:4] == [sys.executable, 'floor.py', '--revision', admitted]
+    assert f'--to-revisions={admitted}=100' in commands[1]
+    assert evidence['result'] == 'pass'
+    assert evidence['services'][service]['observed_targets'] == [{'revision': admitted, 'percent': 100}]
 
 
 def test_restore_snapshot_resolves_latest_revision_before_the_new_candidate_exists() -> None:
@@ -264,3 +332,39 @@ def test_restore_deletes_and_observes_services_missing_before_bootstrap() -> Non
     ]
     assert evidence['result'] == 'pass'
     assert evidence['deleted_services']['backend-beta']['result'] == 'deleted'
+
+
+def test_release_floor_rejects_split_restore_before_mutating_traffic() -> None:
+    snapshot = {
+        'project': 'based-hardware',
+        'region': 'us-central1',
+        'services': {
+            'backend-sync': {
+                'spec': {
+                    'traffic': [
+                        {'revisionName': 'backend-sync-new', 'percent': 90},
+                        {'revisionName': 'backend-sync-old', 'percent': 10},
+                    ]
+                },
+            },
+        },
+    }
+    checks = []
+
+    def check(command):
+        checks.append(command)
+        if 'backend-sync-old' in command:
+            raise subprocess.CalledProcessError(1, command)
+
+    evidence = snapshots.restore_snapshot(
+        snapshot,
+        runner=check,
+        release_floor_check=Path('floor.py'),
+    )
+
+    assert checks == [
+        [sys.executable, 'floor.py', '--revision', revision, '--project', 'based-hardware', '--region', 'us-central1']
+        for revision in ('backend-sync-new', 'backend-sync-old')
+    ]
+    assert evidence['failed_services'] == ['backend-sync']
+    assert evidence['services']['backend-sync']['error'] == 'backend release floor rejected backend-sync-old'

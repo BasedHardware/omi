@@ -8,9 +8,13 @@ client loop costs almost nothing. It never pauses the account and never
 releases audio: a hit only repeats a 503 that keeps local audio. Redis errors
 fail open to the full check (a pure cache miss, no mode change).
 
-Coverage waits use a separate hashed (owner, conversation, WAL, record jobs)
-key. Only a completed negative comparison writes it, once per 30-second TTL;
-coverage hits never refresh expiry or affect other WALs.
+Coverage waits use a separate hashed (owner, conversation, WAL identity, record
+jobs) key. Only a completed negative comparison writes it, once per its own
+300-second TTL; coverage hits never refresh expiry or affect other WALs.
+
+Deterministic decode failures use a third key derived from the same upload
+identity. Only a closed set of uploaded-bytes faults writes it, and the answer
+stays the existing retryable 503, so no client-visible behaviour changes.
 """
 
 from typing import Optional
@@ -20,6 +24,17 @@ from utils.observability.fallback import record_fallback
 from database.redis_db import delete_generic_cache, get_generic_cache, set_generic_cache
 
 RECORD_WAIT_CACHE_SECONDS = 30
+# A coverage wait is a property of the uploaded bytes against the record's
+# current units, not of the conversation: it does not expire because the phone
+# came back. The phone's retry cadence is about three minutes, so the old 30 s
+# window (shared with the conversation memo) expired before almost every retry
+# and each one redid the decode and the record-audio fetch.
+COVERAGE_WAIT_CACHE_SECONDS = 300
+# A deterministic decode failure is a property of the same uploaded bytes. It
+# cannot become decodable by retrying, so a repeat inside the window must not
+# pay the decode or the staging again. The answer stays a retryable 503: the
+# phone keeps custody exactly as it does today.
+DECODE_FAILURE_CACHE_SECONDS = 300
 
 
 def _path(uid: str, conversation_id: str) -> str:
@@ -90,12 +105,41 @@ def cached_coverage_wait(key: str) -> bool:
 def remember_coverage_wait(key: str) -> None:
     """Write at most once per TTL, including concurrent checks; never slide expiry."""
     try:
-        _marker_client().set(f'sync:record_coverage_wait:v1:{key}', '1', ex=RECORD_WAIT_CACHE_SECONDS, nx=True)
+        _marker_client().set(f'sync:record_coverage_wait:v1:{key}', '1', ex=COVERAGE_WAIT_CACHE_SECONDS, nx=True)
     except Exception:
         record_fallback(
             component='sync_dispatch',
             from_mode='coverage_wait_memo',
             to_mode='coverage_check',
+            reason='unavailable',
+            outcome='degraded',
+        )
+
+
+def cached_decode_failure(key: str) -> bool:
+    """True while this exact upload is known to be undecodable by this decoder."""
+    try:
+        return _marker_client().get(f'sync:decode_failure:v1:{key}') in (b'1', '1')
+    except Exception:
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='decode_failure_memo',
+            to_mode='decode',
+            reason='unavailable',
+            outcome='degraded',
+        )
+        return False
+
+
+def remember_decode_failure(key: str) -> None:
+    """Write at most once per TTL; a repeat inside the window is a no-op."""
+    try:
+        _marker_client().set(f'sync:decode_failure:v1:{key}', '1', ex=DECODE_FAILURE_CACHE_SECONDS, nx=True)
+    except Exception:
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='decode_failure_memo',
+            to_mode='decode',
             reason='unavailable',
             outcome='degraded',
         )

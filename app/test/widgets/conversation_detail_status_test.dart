@@ -6,7 +6,9 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -15,6 +17,7 @@ import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_activity_strip.dart';
 import 'package:omi/pages/conversation_detail/widgets/transcript_tab.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
 import '../helpers/reprocess_fakes.dart';
@@ -183,6 +186,71 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.byKey(const Key('conversation_activity_strip')), findsNothing);
+    });
+
+    testWidgets('X12: v3 names the step and leaves its reads to the page', (tester) async {
+      final writing = ServerConversation(
+        id: 'detail-status',
+        createdAt: DateTime(2026, 11, 19, 10),
+        structured: Structured('Choosing a Table', '', emoji: '🍽️'),
+        status: ConversationStatus.completed,
+        v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.writing),
+      );
+      var fetches = 0;
+      final detail = _detail(writing, fetch: (_) async {
+        fetches++;
+        return writing;
+      });
+      addTearDown(detail.dispose);
+      final v3 = ConversationsV3Provider(
+          fetchLive: () async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+          uid: () => 'u1',
+          cached: 'u1:1');
+      await tester.pumpWidget(ChangeNotifierProvider<ConversationsV3Provider>.value(
+        value: v3,
+        child: _app(detail, const ConversationActivityStrip(pollInterval: Duration(seconds: 1), maxPolls: 2)),
+      ));
+      expect(find.text('Writing summary…'), findsOneWidget);
+      expect(find.text(_l10n(tester).processingConversationProgress), findsNothing);
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump();
+      }
+      expect(fetches, 0, reason: 'LiveConversationRefresher and LiveSummarySection own v3 reads');
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('X12: when the reads run out it says so with Try Again', (tester) async {
+      final processing = ServerConversation(
+        id: 'detail-status',
+        createdAt: DateTime(2026, 11, 19, 10),
+        structured: Structured('Choosing a Table', '', emoji: '🍽️'),
+        status: ConversationStatus.processing,
+      );
+      var fetches = 0;
+      final detail = _detail(processing, fetch: (_) async {
+        fetches++;
+        return processing;
+      });
+      addTearDown(detail.dispose);
+      await tester
+          .pumpWidget(_app(detail, const ConversationActivityStrip(pollInterval: Duration(seconds: 1), maxPolls: 2)));
+      final waiting = _l10n(tester).processingConversationProgress;
+      expect(find.text(waiting), findsOneWidget);
+
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump();
+      }
+      expect(fetches, 2);
+      expect(find.byKey(const Key('conversation_activity_paused')), findsOneWidget, reason: 'no endless bar');
+      expect(find.text('Still working on it.'), findsOneWidget);
+
+      await tester.tap(find.text('Try Again'));
+      await tester.pump();
+      expect(fetches, 3, reason: 'Try Again reads now');
+      expect(find.text(waiting), findsOneWidget, reason: 'and polls again');
+      await tester.pumpWidget(const SizedBox());
     });
 
     testWidgets('while the server is processing, re-reads the conversation until it is done', (tester) async {

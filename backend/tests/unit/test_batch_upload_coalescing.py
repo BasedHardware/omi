@@ -1,16 +1,25 @@
 """Custody state machine with original receipts; synthetic accounts/audio only."""
 
+import asyncio
 from copy import deepcopy
 from dataclasses import asdict
 import json
 import struct
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from tests.support.batch_coalescing_scan import scanner
+
 from config import batch_pipeline_coalescing as config
 from database import batch_pipeline_coalescing as rows
+from database.batch_pipeline_coalescing_identity import digest
 from database.batch_pipeline_staging import reap_one
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, MemoryTransaction, item
+
+# Load the supervisor once during collection, outside per-test call CPU accounting.
+from utils.batch_pipeline import serving, upload_coalescing
 from utils.batch_pipeline.upload_coalescing import _pack, _unpack, member_status, queued
 
 
@@ -21,15 +30,18 @@ def store():
     return result
 
 
+@pytest.fixture
+def serving_module():
+    # Shared import setup is excluded from the per-test call-phase CPU budget.
+    from utils.batch_pipeline import serving
+
+    return serving
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('pump', ['true', 'false'])
-async def test_supervisor_drains_existing_holds_while_producer_off(monkeypatch, pump):
-    import asyncio
-    from unittest.mock import AsyncMock, Mock
-    from types import SimpleNamespace
-
-    from utils.batch_pipeline import serving, upload_coalescing
-
+async def test_supervisor_drains_existing_holds_while_producer_off(monkeypatch, pump, serving_module):
+    serving = serving_module
     monkeypatch.setenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', pump)
     monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
@@ -42,7 +54,7 @@ async def test_supervisor_drains_existing_holds_while_producer_off(monkeypatch, 
     monkeypatch.setattr(serving, 'drain_recordings', AsyncMock(return_value=0))
     seen = []
 
-    async def drain_existing(target):
+    async def drain_existing(target, *, leader):
         assert target is service.store
         seen.append(target)
         runtime[0].set()
@@ -117,7 +129,7 @@ def test_real_stale_budget_never_guessed_or_reset(deadline, reserve, expected):
 def test_reordered_duplicate_uploads_seal_one_fixed_deadline():
     s = store()
     assert rows.enqueue(s, member('later', 120), 'record-key', 10) == 'bp_later'
-    rows.note_scan(s, 30, producer_enabled=True)
+    rows.note_scan(s, producer_enabled=True, scan=scanner(s, now=30).guard())
     assert rows.enqueue(s, member('earlier', 100), 'record-key', 30) == 'bp_earlier'
     before = deepcopy(s.rows)
     assert rows.enqueue(s, member('later', 120), 'record-key', 50) == 'bp_later'
@@ -153,27 +165,27 @@ def test_missing_or_stalled_drainer_does_not_accept_new_custody():
     assert rows.enqueue(s, member('first'), 'key', 16) is None
     del s.rows['coalesce_quota', 'global']
     assert rows.enqueue(s, member('first'), 'key', 10) is None
-    rows.note_scan(s, 10, producer_enabled=False)
+    rows.note_scan(s, producer_enabled=False, scan=scanner(s, now=10).guard())
     assert ('coalesce_quota', 'global') not in s.rows
-    rows.note_scan(s, 10, producer_enabled=True)
+    rows.note_scan(s, producer_enabled=True, scan=scanner(s, now=10).guard())
     assert rows.enqueue(s, member('first'), 'key', 11) == 'bp_first'
 
 
 def test_scan_cursor_survives_restart_and_rejects_stale_scanners():
     s = store()
-    assert rows.scan_position(s) == (0, None)
+    assert rows.scan_position(s, scan=scanner(s).guard()) == (0, None)
     boundary = {'scan_at': 70.0, 'id': 'synthetic-boundary'}
-    rows.advance_scan(s, 0, boundary)
+    rows.advance_scan(s, 0, boundary, scan=scanner(s).guard())
     restarted = store()
     restarted.rows = deepcopy(s.rows)
-    assert rows.scan_position(restarted) == (1, boundary)
-    rows.advance_scan(restarted, 0, {'scan_at': 20.0, 'id': 'stale'})
-    assert rows.scan_position(restarted) == (1, boundary)
-    rows.advance_scan(restarted, 1, None)
-    assert rows.scan_position(restarted) == (2, None)
+    assert rows.scan_position(restarted, scan=scanner(restarted).guard()) == (1, boundary)
+    rows.advance_scan(restarted, 0, {'scan_at': 20.0, 'id': 'stale'}, scan=scanner(restarted).guard())
+    assert rows.scan_position(restarted, scan=scanner(restarted).guard()) == (1, boundary)
+    rows.advance_scan(restarted, 1, None, scan=scanner(restarted).guard())
+    assert rows.scan_position(restarted, scan=scanner(restarted).guard()) == (2, None)
     empty = MemoryStore()
-    rows.advance_scan(empty, 0, None)
-    assert empty.rows == {}
+    rows.advance_scan(empty, 0, None, scan=scanner(empty).guard())
+    assert ('coalesce_quota', 'global') not in empty.rows
 
 
 def test_off_restart_keeps_individual_mode_even_if_enabled_again():
@@ -191,7 +203,7 @@ def test_off_restart_keeps_individual_mode_even_if_enabled_again():
 def test_off_after_merged_admission_never_splits_immutable_units():
     s = store()
     rows.enqueue(s, member('first'), 'key', 10)
-    merged_id = 'bp_' + rows.digest([group(s)['id'], 'merged'])
+    merged_id = 'bp_' + digest([group(s)['id'], 'merged'])
     s.rows['intakes', merged_id] = {'owner_id': 'owner', 'segment_ids': ['persisted-unit']}
     claimed = rows.claim(s, group(s)['id'], 11, producer_enabled=False)
     assert claimed['mode'] == 'merged'

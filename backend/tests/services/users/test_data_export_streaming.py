@@ -193,7 +193,7 @@ def test_streaming_late_chat_iteration_failure_yields_no_completion_marker(monke
 def test_streaming_iterator_close_closes_underlying_seams(monkeypatch):
     closed = []
 
-    def _conversations(_uid, *, include_discarded=True):
+    def _conversations(_uid, *, include_discarded=True, include_recordings=False):
         try:
             yield {"id": "conv1"}
         finally:

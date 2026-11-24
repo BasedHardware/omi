@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from database.audio_timeline import get_extension_for_path
 from utils import encryption
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.other.raw_audio_read import read_pack, select_raw_pcm
 from utils.other.raw_audio import decode_capture
 from utils.other.audio_frame_table import resampled_samples
@@ -142,6 +143,7 @@ def _span_candidate_offset(chunk: Mapping[str, Any], position: float, sample_rat
     return offset
 
 
+@object_get_reader(Reader.ARCHIVE_RECONCILE)
 def verify_frame_overlaps(
     uid, conversation_id, pcm, frames, sample_rate, *, bucket, list_chunks, bucket_for, receipt=None
 ):
@@ -209,6 +211,7 @@ def frame_overlap_verifier(uid, conversation_id, sample_rate, bucket, list_chunk
     )
 
 
+@object_get_reader(Reader.ARCHIVE_RECONCILE)
 def reconcile_committed_prefix(
     uid: str,
     conversation_id: str,
