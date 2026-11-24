@@ -45,6 +45,14 @@ terminal transaction. Record admission promotes it to `v3_manual_end` for a sing
 recording, or when the fast first transcript covers the whole recording. Set it to `off` on
 `backend` and `backend-integration` to restore the silence and lock timers for later finishes.
 
+`CONVERSATIONS_V3_FINISH_NO_POINTER` defaults to `on`. When the existing in-progress
+recording lookup misses, an authenticated v3 owner's Finish can acknowledge the
+live derived window in the existing processing response. An optional
+`live_conversation_id` selects an owner-visible live window when eligible. A
+transaction rechecks its live state and persists the cut or deferred batch
+request on its recording. A multi-unit batch request can cut only after the full
+native binding has projected. Set the switch to `off` on the API service to restore the lookup-miss 404.
+
 `CONVERSATIONS_V3_FAST_FINISH` defaults to `cohort` (the `v3-fast-finish` rollout cohort, empty
 until a member is added). For a member, or for every v3 owner with `on`, a manually
 finished v3 recording of up to 20 minutes is transcribed once through the prerecorded provider
