@@ -15887,7 +15887,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Számlázás az omi.me-n keresztül.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Frissítsd a kártyádat az omi.me oldalon, hogy visszakapd a(z) $plan csomagot.';
+  String playStripePlanPaused(String plan) {
+    return 'A(z) $plan csomagod szünetel.';
   }
 }

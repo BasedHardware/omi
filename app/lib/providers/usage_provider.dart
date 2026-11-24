@@ -168,6 +168,15 @@ class UsageProvider with ChangeNotifier {
     return !(sub.plan.isPaid && !sub.billedByPlay);
   }
 
+  /// A paid plan not billed by Play on a build that sells through Google Play: an open native paywall has
+  /// nothing to sell this reader and closes. Resubscribe at the same price while a Stripe cancel is pending
+  /// stays (never for a prepaid plan, which ends on its own).
+  bool get paywallClosedForPlay {
+    if (!buysThroughPlay || playBilledPurchaser) return false;
+    final sub = _subscription!.subscription;
+    return sub.prepaid == true || !(sub.cancelAtPeriodEnd && sub.currentPriceId != null);
+  }
+
   /// Play's prices for this Google account; null until loaded or when Play has no product.
   PlayOffers? get playOffers => _playOffers;
   bool get playOffersLoading => _playOffersLoading;

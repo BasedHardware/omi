@@ -15596,7 +15596,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'omi.me で請求されています。';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return '$plan を再開するには omi.me でカードを更新してください。';
+  String playStripePlanPaused(String plan) {
+    return '$plan プランは一時停止中です。';
   }
 }

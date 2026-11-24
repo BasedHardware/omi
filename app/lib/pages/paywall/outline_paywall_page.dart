@@ -138,6 +138,14 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final top = MediaQuery.paddingOf(context).top;
+    // Paid outside Play on a Play build (the plan or Play setup arrived while open): close, nothing bought.
+    if (context.select<UsageProvider, bool>((usage) => usage.paywallClosedForPlay) && !_dismissed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _dismissed) return;
+        _dismissed = true;
+        Navigator.of(context).pop(false);
+      });
+    }
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {

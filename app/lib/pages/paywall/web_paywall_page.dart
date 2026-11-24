@@ -102,7 +102,9 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
     if (context.read<UsageProvider>().buysThroughPlay) return _closeForPlay();
     final usage = context.read<UsageProvider>();
     if (usage.availablePlans == null) await usage.loadAvailablePlans();
-    if (!mounted) return;
+    // Play setup may have arrived during the await: never load a page for a Play build.
+    if (!mounted || _closed) return;
+    if (usage.buysThroughPlay) return _closeForPlay();
     final subscription = usage.subscription?.subscription;
     _offer = PaywallOffer.forUsage(
       usage,
@@ -124,10 +126,10 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
       ..addJavaScriptChannel(WebPaywallPage.channel, onMessageReceived: (message) => _onMessage(message.message))
       ..setNavigationDelegate(
         NavigationDelegate(
-          onNavigationRequest: (request) => WebPaywallPage.navigationDecision(
-            request.url,
-            buysThroughPlay: mounted && context.read<UsageProvider>().buysThroughPlay,
-          ),
+          // A closed or disposed page navigates nowhere, whatever a retained callback asks.
+          onNavigationRequest: (request) => !mounted || _closed
+              ? NavigationDecision.prevent
+              : WebPaywallPage.navigationDecision(request.url, buysThroughPlay: usage.buysThroughPlay),
           onWebResourceError: (error) {
             if (error.isForMainFrame == false) return;
             Logger.debug('Web paywall load error: ${error.description}');

@@ -106,7 +106,9 @@ class _MonthlySwitchSheetState extends State<MonthlySwitchSheet> {
     }
     final status = result?['status_code'];
     final declined = status == 402;
-    final refused = status == 409 || status == 400 || status == 403;
+    // A Play check that could not run is transient: keep Confirm so the reader can try again.
+    final transient = result?['code'] == 'play_check_unavailable';
+    final refused = !transient && (status == 409 || status == 400 || status == 403);
     const TypedEvents().emit(SubscriptionPaymentIssueMonthlyFailed(
       reason: declined
           ? SubscriptionPaymentIssueMonthlyFailedReason.declined

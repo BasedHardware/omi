@@ -224,6 +224,14 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     final l10n = context.l10n;
     final top = MediaQuery.paddingOf(context).top;
     final bottom = MediaQuery.paddingOf(context).bottom;
+    // Paid outside Play on a Play build (the plan or Play setup arrived while open): close, nothing bought.
+    if (context.select<UsageProvider, bool>((usage) => usage.paywallClosedForPlay) && !_dismissed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _dismissed) return;
+        _dismissed = true;
+        Navigator.of(context).pop(false);
+      });
+    }
     final now = widget.now ?? DateTime.now();
     final dateFormat = DateFormat.yMMMd(Localizations.localeOf(context).toString());
     String onDay(int days) => dateFormat.format(now.add(Duration(days: days)));

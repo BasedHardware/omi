@@ -28,6 +28,20 @@
       "description": "Trial paywall at the largest text size: notes scroll with the page, entry under the Play disclosure",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-android-payment-row-plan-paused.png",
+      "platform": "mobile-android",
+      "description": "Home payment row on a Play build: neutral 'Your Omi Pro plan is paused.' (default text)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-android-payment-row-plan-paused-xxxl.png",
+      "platform": "mobile-android",
+      "description": "Same row at the largest text size",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }

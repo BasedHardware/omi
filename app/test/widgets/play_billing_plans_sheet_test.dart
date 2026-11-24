@@ -9,6 +9,10 @@ import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_interface.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart' show NavigationDecision;
+// The pinned webview_flutter plugin provides its public testing interface.
+// ignore: depend_on_referenced_packages
+import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart' as w;
+import 'package:omi/pages/paywall/trial_upsell_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/play_billing_api.dart';
@@ -82,8 +86,11 @@ class _Usage extends UsageProvider {
   Future<void> Function()? whileCheckoutInFlight;
   Map<String, dynamic>? checkoutAnswer = {'url': 'https://checkout.stripe.com/session'};
 
+  /// Holds the catalog read open until completed (the hosted paywall awaits it).
+  Completer<void>? catalogReady;
+
   @override
-  Future<void> loadAvailablePlans() async {}
+  Future<void> loadAvailablePlans() async => await catalogReady?.future;
 
   @override
   Future<Map<String, dynamic>?> createUserCheckoutSession({
@@ -145,6 +152,64 @@ class _StorefrontHarnessState extends State<_StorefrontHarness> with TickerProvi
         arrowAnimation: _animation,
         readStorefrontGate: () async => true,
       );
+}
+
+Widget _openHosted() => Builder(
+      builder: (context) => TextButton(
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => WebPaywallPage(source: 'test', url: Uri.parse('https://example.invalid/p')))),
+        child: const Text('open'),
+      ),
+    );
+
+/// A webview platform that records page loads and keeps the navigation callback the page registered.
+class _FakeWeb extends w.WebViewPlatform {
+  final loaded = <Uri>[];
+  late _FakeNavigation navigation;
+
+  @override
+  w.PlatformWebViewController createPlatformWebViewController(w.PlatformWebViewControllerCreationParams params) =>
+      _FakeWebController(params, loaded);
+
+  @override
+  w.PlatformNavigationDelegate createPlatformNavigationDelegate(w.PlatformNavigationDelegateCreationParams params) =>
+      navigation = _FakeNavigation(params);
+
+  @override
+  w.PlatformWebViewWidget createPlatformWebViewWidget(w.PlatformWebViewWidgetCreationParams params) =>
+      _FakeWebView(params);
+}
+
+class _FakeWebController extends w.PlatformWebViewController {
+  _FakeWebController(super.params, this.loaded) : super.implementation();
+  final List<Uri> loaded;
+  @override
+  Future<void> setJavaScriptMode(w.JavaScriptMode mode) async {}
+  @override
+  Future<void> setBackgroundColor(Color color) async {}
+  @override
+  Future<void> addJavaScriptChannel(w.JavaScriptChannelParams params) async {}
+  @override
+  Future<void> setPlatformNavigationDelegate(w.PlatformNavigationDelegate handler) async {}
+  @override
+  Future<void> loadRequest(w.LoadRequestParams params) async => loaded.add(params.uri);
+}
+
+class _FakeNavigation extends w.PlatformNavigationDelegate {
+  _FakeNavigation(super.params) : super.implementation();
+  late w.NavigationRequestCallback request;
+  @override
+  Future<void> setOnNavigationRequest(w.NavigationRequestCallback callback) async => request = callback;
+  @override
+  Future<void> setOnWebResourceError(w.WebResourceErrorCallback callback) async {}
+  @override
+  Future<void> setOnHttpError(w.HttpResponseErrorCallback callback) async {}
+}
+
+class _FakeWebView extends w.PlatformWebViewWidget {
+  _FakeWebView(super.params) : super.implementation();
+  @override
+  Widget build(BuildContext context) => const SizedBox();
 }
 
 class _World {
@@ -502,12 +567,76 @@ void main() {
       world.responses[0] = _response(plan: PlanType.unlimitedV2, stripeId: 'sub_1');
       await world.usage.fetchSubscription(fresh: true);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('outline_paywall_cta')));
-      await tester.pumpAndSettle();
+      // The page closes as soon as that is known: no Stripe price or CTA stays on screen, nothing is bought.
+      expect(find.byKey(const Key('outline_paywall_cta')), findsNothing);
+      expect(find.textContaining('269.91'), findsNothing);
       expect(world.usage.checkoutSessions, 0);
       expect(find.byType(PaymentWebViewPage), findsNothing);
       expect(find.byType(OutlinePaywallPage), findsNothing);
       expect(closed, isFalse);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    // Round 2: an already-open native paywall (catalog offer, no fixed offer) closes on the refresh.
+    for (final name in ['outline', 'trial', 'upsell']) {
+      testWidgets('an open $name paywall closes with no Stripe price or CTA once paid on Stripe with Play',
+          (tester) async {
+        Object? closed = 'open';
+        final world = await _pump(
+          tester,
+          <UserSubscriptionResponse?>[_response(play: null)],
+          child: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                final offer = PaywallOffer.forUsage(context.read<UsageProvider>())!;
+                closed = await Navigator.of(context).push<Object?>(MaterialPageRoute(
+                  builder: (_) => switch (name) {
+                    'outline' => const OutlinePaywallPage(source: 'test'),
+                    'trial' => TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 24)),
+                    _ => Scaffold(body: TrialUpsellContent(offer: offer, price: offer.yearly!, source: 'test')),
+                  },
+                ));
+              },
+              child: const Text('open'),
+            ),
+          ),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('269.91'), findsWidgets); // the Stripe catalog price while Free, no Play
+        world.responses[0] = _response(plan: PlanType.unlimitedV2, stripeId: 'sub_1');
+        await world.usage.fetchSubscription(fresh: true);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('269.91'), findsNothing);
+        expect(find.byKey(const Key('outline_paywall_cta')), findsNothing);
+        expect(find.byKey(const Key('trial_paywall_cta')), findsNothing);
+        expect(find.byType(TrialUpsellContent), findsNothing);
+        expect(find.byType(CircularProgressIndicator), findsNothing); // no endless skeleton
+        expect(world.usage.checkoutSessions, 0);
+        expect(closed, isFalse);
+      }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+    }
+
+    testWidgets('a cancel-pending Stripe reader on a Play build keeps the same-price Resubscribe paywall',
+        (tester) async {
+      final world = await _pump(tester,
+          [_response(plan: PlanType.unlimitedV2, stripeId: 'sub_1', cancelAtPeriodEnd: true, priceId: 'price_year')]);
+      expect(world.usage.buysThroughPlay, isTrue);
+      expect(world.usage.paywallClosedForPlay, isFalse);
+      // A prepaid plan never gets a resubscribe paywall.
+      final prepaid = await _pump(tester, [
+        _response(
+            plan: PlanType.unlimitedV2,
+            stripeId: 'sub_p',
+            cancelAtPeriodEnd: true,
+            priceId: 'price_year',
+            prepaid: true)
+      ]);
+      expect(prepaid.usage.paywallClosedForPlay, isTrue);
+      await _pump(tester,
+          [_response(plan: PlanType.unlimitedV2, stripeId: 'sub_1', cancelAtPeriodEnd: true, priceId: 'price_year')],
+          child: const OutlinePaywallPage(source: 'test'));
+      expect(find.byType(OutlinePaywallPage), findsOneWidget);
+      expect(find.byKey(const Key('outline_paywall_cta')), findsOneWidget);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
     testWidgets('a paid Stripe reader with Play gets alreadyPaid and no Checkout request', (tester) async {
@@ -577,6 +706,47 @@ void main() {
       expect(world.usage.checkoutSessions, 0);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
+    testWidgets('hosted paywall: Play setup arriving during the catalog wait loads no page', (tester) async {
+      final web = _FakeWeb();
+      w.WebViewPlatform.instance = web;
+      final world = await _pump(tester, [_response(play: null)], child: _openHosted());
+      world.usage.debugSetAvailablePlans(null);
+      final gate = Completer<void>();
+      world.usage.catalogReady = gate;
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 30));
+      expect(web.loaded, isEmpty);
+      world.responses[0] = _response(plan: PlanType.unlimitedV2, stripeId: 'sub_1');
+      await world.usage.fetchSubscription(fresh: true);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(WebPaywallPage), findsNothing);
+      expect(web.loaded, isEmpty);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('hosted paywall: a navigation callback after the page closed navigates nowhere', (tester) async {
+      final web = _FakeWeb();
+      w.WebViewPlatform.instance = web;
+      final world = await _pump(tester, [_response(play: null)], child: _openHosted());
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(web.loaded.length, 1);
+      // While open and not on Play, the page may navigate.
+      expect(
+          await web.navigation.request(const w.NavigationRequest(url: 'https://example.invalid/x', isMainFrame: true)),
+          w.NavigationDecision.navigate);
+      world.responses[0] = _response(plan: PlanType.unlimitedV2, stripeId: 'sub_1');
+      await world.usage.fetchSubscription(fresh: true);
+      await tester.pumpAndSettle();
+      expect(find.byType(WebPaywallPage), findsNothing);
+      expect(
+          await web.navigation
+              .request(const w.NavigationRequest(url: 'https://checkout.stripe.com/c/pay', isMainFrame: true)),
+          w.NavigationDecision.prevent);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
     test('the hosted paywall loads no page at all once this client sells through Google Play', () {
       expect(WebPaywallPage.navigationDecision('https://checkout.stripe.com/c/pay', buysThroughPlay: true),
           NavigationDecision.prevent);
@@ -604,7 +774,7 @@ void main() {
     ),
     (
       'play_check_unavailable',
-      503,
+      400,
       '{"detail": "We could not check your Google Play subscription. Try again in a minute.", '
           '"code": "play_check_unavailable"}',
       'We could not check your Google Play subscription. Try again in a minute.',
