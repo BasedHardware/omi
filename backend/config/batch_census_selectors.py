@@ -388,7 +388,7 @@ EXCEPTIONS: dict[str, SelectorException] = {
         500,
         'provider wake backstop tick',
         'Select only actionable due provider wakes',
-        '6588b6d522fa48ef361b80752381e41491c281501b45d3df586a5c4f67d58176',
+        '470307a3a2b9989cf5bcffcca5f835820dd51284c54830fbb456f6fee5598529',
     ),
     'database.record_seal_worker.pending_page': _legacy(
         'Legacy seal readiness depends on capture barrier checks after page',

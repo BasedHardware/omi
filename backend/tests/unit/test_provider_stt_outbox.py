@@ -202,6 +202,25 @@ def test_sweep_rewakes_only_lost_wakes(box):
     assert box.outbox.ack(claim, 'processed', now=2000.0) is False
 
 
+def test_stale_sweep_snapshot_cannot_rotate_a_fresh_provider_release(box, monkeypatch):
+    enqueue(box)
+    now = 100 + REWAKE_AFTER_SECONDS + 1
+    fresh_token = 'a' * 32
+    mutate = box.outbox._mutate
+
+    def release_after_snapshot(row_id, operation):
+        box.client.write(
+            ('batch_pipeline_test_provider_stt_outbox', row_id),
+            {**row(box), 'task_token': fresh_token, 'due_at': now, 'woken_at': now},
+        )
+        return mutate(row_id, operation)
+
+    monkeypatch.setattr(box.outbox, '_mutate', release_after_snapshot)
+    assert box.outbox.sweep(now=now).rewoken == 0
+    assert row(box)['task_token'] == fresh_token
+    assert len(box.woken) == 1
+
+
 def test_pull_claims_due_unleased_rows(box):
     enqueue(box, available_at=500.0)
     assert box.outbox.claim(4, 1800, now=200.0) == []
