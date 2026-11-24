@@ -419,9 +419,13 @@ def test_second_provider_recovers_held_padded_empty_when_terminal_flag_off(repos
     second.assert_called_once()
 
 
-@pytest.mark.parametrize('safety,expected', [('false', 'empty'), ('true', 'failed_held')])
-def test_shadow_terminal_empty_follows_pinned_recovery_policy(repository, monkeypatch, safety, expected):
+@pytest.mark.parametrize(
+    'safety,two_close,expected',
+    [('false', 'false', 'empty'), ('true', 'false', 'failed_held'), ('true', 'true', 'empty')],
+)
+def test_shadow_terminal_empty_follows_pinned_recovery_policy(repository, monkeypatch, safety, two_close, expected):
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', safety)
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', two_close)
     monkeypatch.setenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'true')
     item = running(repository)
     spans = [{'start': 0.0, 'end': 300.0}]

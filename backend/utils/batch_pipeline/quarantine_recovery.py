@@ -228,27 +228,24 @@ class QuarantineRecovery:
             ):
                 return independent_silence_payload(empty.duration, empty.spans)
             return payload
+        # Both recognizers answered and both answers were validated empty.
+        both_empty = {
+            name: {'provider': name, 'outcome': 'empty', 'word_count': 0, 'vad_speech_seconds': measured}
+            for name in ('modulate', provider)
+        }
         if (
             outcome == 'empty'
             and first_empty
             and bool(empty.spans)
             and policy.terminal_empty_disposition
-            and terminal_empty_allowed(empty.spans)
+            and terminal_empty_allowed(empty.spans, recognizer_receipts=both_empty)
         ):
             evidence = (
                 TWO_PROVIDER_EMPTY_EVIDENCE
                 if (job or {}).get('worker_empty_evidence') == {'padded_retry': 'skipped_long_speech', 'version': 1}
                 else SECOND_CHANCE_EMPTY_EVIDENCE
             )
-            return terminal_empty_payload(
-                empty.duration,
-                empty.spans,
-                evidence,
-                recognizer_receipts={
-                    name: {'provider': name, 'outcome': 'empty', 'word_count': 0, 'vad_speech_seconds': measured}
-                    for name in ('modulate', provider)
-                },
-            )
+            return terminal_empty_payload(empty.duration, empty.spans, evidence, recognizer_receipts=both_empty)
         return payload
 
     def recover(self, segment_id, owner_id):
