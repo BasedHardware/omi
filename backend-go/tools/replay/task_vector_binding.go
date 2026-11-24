@@ -101,26 +101,26 @@ func singleTaskBinding(run *observation) (taskBinding, bool) {
 	return b, true
 }
 
-func reviewSingleTaskBinding(diffs []difference, python, goRun *observation) {
+func reviewSingleTaskBinding(diffs []difference, python, goRun *observation) bool {
 	// This first-create fixture seeds no task or vector. Multiple creations and
 	// refresh/reuse require separate evidence and stay on the literal comparator.
 	if python.OwnerID != "replay-kept-with-effects" || python.ConversationID != "kept-with-effects" ||
 		python.OwnerID != goRun.OwnerID || python.ConversationID != goRun.ConversationID {
-		return
+		return false
 	}
 	py, ok := singleTaskBinding(python)
 	if !ok {
-		return
+		return false
 	}
 	goTask, ok := singleTaskBinding(goRun)
 	if !ok {
-		return
+		return false
 	}
 	pyPath, goPath := py.path, goTask.path
 	py.path = ""
 	goTask.path = ""
 	if !reflect.DeepEqual(py, goTask) {
-		return
+		return false
 	}
 	docPath := func(path string) string { return "/derived_documents/" + strings.ReplaceAll(path, "/", "~1") }
 	for i, d := range diffs {
@@ -139,4 +139,5 @@ func reviewSingleTaskBinding(diffs []difference, python, goRun *observation) {
 			}
 		}
 	}
+	return true
 }

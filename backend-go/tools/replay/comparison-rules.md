@@ -33,6 +33,27 @@ Python memo fields use `by_design:attach_memo_cache_fallthrough`. The harness em
 and value-free failure codes. See `docs/listen_pusher_pipeline/changes/2026-11-04-episode-attach-reads.md`
 for the cache behavior contract.
 
+## Profile refresh clocks
+
+Profile `generated_at` and `refreshed_at` differences are
+`by_design:replay_clock` only when each side wrote the profile exactly once,
+its two stored stamps equal the same stamp in its write evidence, the stamp is
+inside that side's capture-to-last-write window, and the remaining profile
+payloads are byte-equal after removing only those two stamp fields. Missing or
+contradictory write evidence leaves the rows as Go gaps, even if the final
+snapshots otherwise match.
+
+## Generated task and vector identity
+
+The first-create `kept-with-effects` fixture may use
+`by_design:generated_identity` only when each side has exactly one owner-scoped
+task for the extracted commitment and source segment; the task content matches
+after excluding its generated document ID and clock fields; each vector ID and
+metadata bind to that side's task; and embedding inputs and outputs match. No
+other task or vector write may be present in the evidence. Missing or
+contradictory evidence stays a Go gap. Negative checks cover multiple tasks,
+wrong vector-to-task binding, changed embedding input, and a missing vector.
+
 ## Go coordination stamps
 
 The exact fields `go_sync_inline_fanout_epoch`, `go_sync_inline_fanout_revision`,

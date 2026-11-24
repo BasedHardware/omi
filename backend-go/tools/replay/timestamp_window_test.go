@@ -82,29 +82,33 @@ func TestHourlyUsageFrozenBucketPreservesWriteTimestampWindow(t *testing.T) {
 	}
 }
 
-func TestMemoryExpiryUsesThirtyDayTTLAndMustFollowWrite(t *testing.T) {
+func TestMemoryExpiryUsesExact48HourTTLFromEachCapture(t *testing.T) {
 	path := "users/u/memory_items/item"
-	created := ruleStart.Add(20 * time.Minute)
-	updated := created.Add(time.Second)
+	pyCreated := ruleStart.Add(20 * time.Minute)
+	goCreated := pyCreated.Add(time.Minute)
 	py, goRun := ruleRun(), ruleRun()
 	py.Derived[path] = map[string]any{
-		"captured_at": wrappedStamp(created), "updated_at": wrappedStamp(updated),
-		"expires_at": wrappedStamp(created.Add(memoryItemTTL)),
+		"captured_at": wrappedStamp(pyCreated), "updated_at": wrappedStamp(pyCreated.Add(time.Second)),
+		"expires_at": wrappedStamp(pyCreated.Add(memoryItemTTL)),
 	}
 	goRun.Derived[path] = map[string]any{
-		"captured_at": wrappedStamp(created), "updated_at": wrappedStamp(updated),
-		"expires_at": wrappedStamp(created.Add(memoryItemTTL + postFinishWriteGrace)),
+		"captured_at": wrappedStamp(goCreated), "updated_at": wrappedStamp(goCreated.Add(time.Second)),
+		"expires_at": wrappedStamp(goCreated.Add(memoryItemTTL)),
 	}
-	if diffs := compareObservations(py, goRun); hasUnexplained(diffs) || !hasReason(diffs, "expires_at") {
-		t.Fatalf("30-day expiries were constrained to replay time: %+v", diffs)
+	diffs := compareObservations(py, goRun)
+	if hasUnexplained(diffs) || !hasReason(diffs, "expires_at") || !hasExactPathReason(diffs, "/derived_documents/", "replay_clock") {
+		t.Fatalf("side-local 48-hour expiries were not labeled replay_clock: %+v", diffs)
 	}
-	goRun.Derived[path].(map[string]any)["expires_at"] = wrappedStamp(created.Add(memoryItemTTL + postFinishWriteGrace + time.Nanosecond))
-	if diffs := compareObservations(py, goRun); !hasUnexplained(diffs) ||
+	// One nanosecond of cross-side TTL drift must fail the exact source-TTL rule.
+	mustMap(goRun.Derived[path])["expires_at"] = wrappedStamp(goCreated.Add(memoryItemTTL + time.Nanosecond))
+	diffs = compareObservations(py, goRun)
+	if !hasUnexplained(diffs) ||
 		!hasKindPath(diffs, "invalid_ttl", "/go/derived_documents/"+escapePointer(path)+"/expires_at") {
-		t.Fatalf("expiry beyond 30-day TTL grace was excused: %+v", diffs)
+		t.Fatalf("side with a different 48-hour TTL was excused: %+v", diffs)
 	}
-	goRun.Derived[path].(map[string]any)["expires_at"] = wrappedStamp(updated)
-	if diffs := compareObservations(py, goRun); !hasUnexplained(diffs) ||
+	mustMap(goRun.Derived[path])["expires_at"] = wrappedStamp(goCreated.Add(time.Second))
+	diffs = compareObservations(py, goRun)
+	if !hasUnexplained(diffs) ||
 		!hasKindPath(diffs, "invalid_ttl", "/go/derived_documents/"+escapePointer(path)+"/expires_at") {
 		t.Fatalf("expiry equal to the item write time was excused: %+v", diffs)
 	}

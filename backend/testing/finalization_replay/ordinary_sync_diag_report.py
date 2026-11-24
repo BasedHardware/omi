@@ -365,12 +365,17 @@ def enrich(report: dict) -> dict:
                 label = validate_label(difference['label'], difference.get('reason'))
                 if label.startswith('python_bug:'):
                     raise ValueError('python_bug labels require a matching approved case-specific exception')
-            elif difference.get('path') in {
-                '/conversation/go_finalization_notes_input_hash',
-                '/conversation/go_finalization_notes_output_hash',
-                '/conversation/finalization_job_id',
-                '/go/episode_attach_memo',
-            } or difference.get('failure_reason') in {'go_attach_memo_invalid', 'speaker_envelope_unverified'}:
+            elif (
+                difference.get('path')
+                in {
+                    '/conversation/go_finalization_notes_input_hash',
+                    '/conversation/go_finalization_notes_output_hash',
+                    '/conversation/finalization_job_id',
+                    '/go/episode_attach_memo',
+                }
+                or difference.get('failure_reason') == 'go_attach_memo_invalid'
+                or difference.get('failure_reason') in {'profile_refresh_proof_failed', 'task_vector_proof_failed'}
+            ):
                 label = 'go_gap'
             elif is_go_coordination_stamp_difference(difference):
                 label = 'by_design:go_coordination_stamp'

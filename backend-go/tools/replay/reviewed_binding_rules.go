@@ -21,10 +21,15 @@ func validateReviewedGoOnlyFields(diffs *[]difference, python, goRun *observatio
 		}
 	}
 	if hasGoMinimumFields(goRun) {
-		for _, field := range reviewedGoOnlyFields[2:] {
+		for _, field := range reviewedGoOnlyFields[2:4] {
 			if hasDocumentField(python.Document, field) {
 				addDifference(diffs, "/python/conversation/"+field, "invalid_binding")
 			}
+		}
+	}
+	for _, field := range reviewedGoOnlyFields[4:] {
+		if hasDocumentField(python.Document, field) {
+			addDifference(diffs, "/python/conversation/"+field, "invalid_binding")
 		}
 	}
 	if goRun.Admitted != nil && python.Admitted == nil {

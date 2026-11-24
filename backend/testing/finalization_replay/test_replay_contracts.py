@@ -139,6 +139,36 @@ class ReplayContractTests(unittest.TestCase):
             },
         )
 
+    def test_missing_profile_or_task_write_proof_is_counted_as_go_gap(self):
+        report = {
+            'commit_sha': 'fixture',
+            'unexplained_differences': 2,
+            'cases': [
+                {
+                    'name': 'kept-with-effects',
+                    'errors': {},
+                    'differences': [
+                        {
+                            'path': '/go/profile_refresh',
+                            'kind': 'invalid_binding',
+                            'failure_reason': 'profile_refresh_proof_failed',
+                        },
+                        {
+                            'path': '/go/task_vector',
+                            'kind': 'invalid_binding',
+                            'failure_reason': 'task_vector_proof_failed',
+                        },
+                    ],
+                }
+            ],
+            'operation_table': [{'case': 'kept-with-effects', 'difference': 0}],
+        }
+        enriched = enrich_ordinary_sync_report(report)
+        self.assertEqual(
+            [difference['label'] for difference in enriched['cases'][0]['differences']],
+            ['go_gap', 'go_gap'],
+        )
+
     def test_episode_attach_memo_evidence_checks_key_owner_and_completion(self):
         conversation = {'transcript_segments': 'fixture-envelope', 'transcript_segments_compressed': True}
         link_path = 'users/owner/episode_links/conversation'

@@ -25,9 +25,7 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	compareObject(&diffs, "/effects", python.Effects, goRun.Effects)
 	compareObject(&diffs, "/provider_calls", countProviderCalls(python.ProviderCalls), countProviderCalls(goRun.ProviderCalls))
 	compareObject(&diffs, "/webhooks", webhookGroups(python), webhookGroups(goRun))
-	reviewSpeakerDifferences(diffs, python, goRun)
-	reviewProfileRefreshClocks(diffs, python, goRun)
-	reviewSingleTaskBinding(diffs, python, goRun)
+	reviewRuledSyncWrites(&diffs, python, goRun)
 	for i := range diffs {
 		diff := &diffs[i]
 		if diff.Reason == "" {

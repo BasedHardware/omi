@@ -29,7 +29,7 @@ func taskProofRun(id string) *observation {
 
 func TestOnlySameAuthorizedTaskAndVectorMayPair(t *testing.T) {
 	a, b := strings.Repeat("A", 20), strings.Repeat("B", 20)
-	for _, change := range []string{"", "orphan", "wrong owner", "clock", "payload", "provenance", "embedding", "embedding input", "extra task", "second task write", "extra vector", "missing vector"} {
+	for _, change := range []string{"", "orphan", "vector points to different task", "wrong owner", "clock", "payload", "provenance", "embedding", "embedding input", "extra task", "second task write", "extra vector", "missing vector"} {
 		py, goRun := taskProofRun(a), taskProofRun(b)
 		taskPath := "users/" + goRun.OwnerID + "/action_items/" + b
 		task := goRun.Derived[taskPath].(map[string]any)
@@ -38,6 +38,10 @@ func TestOnlySameAuthorizedTaskAndVectorMayPair(t *testing.T) {
 		switch change {
 		case "orphan":
 			meta["action_item_id"] = a
+		case "vector points to different task":
+			otherTask := strings.Repeat("C", 20)
+			vec["id"] = goRun.OwnerID + "-ai-" + otherTask
+			meta["action_item_id"] = otherTask
 		case "wrong owner":
 			meta["uid"] = "other"
 		case "clock":
