@@ -115,24 +115,24 @@ func (a *accounts) is(owner string) bool {
 	return a.deleting[owner]
 }
 
-func (a *accounts) Admissible(_ context.Context, admitting queue.Admitting, owner string) (queue.EntitlementSnapshot, error) {
+func (a *accounts) Admissible(_ context.Context, admitting queue.Admitting, owner string) (batchunit.AccountFunding, error) {
 	if err := admitting.Err(); err != nil {
-		return queue.EntitlementSnapshot{}, err
+		return batchunit.AccountFunding{}, err
 	}
 	if a.is(owner) {
-		return queue.EntitlementSnapshot{}, classified{queue.Hold(causeDeleting, time.Hour)}
+		return batchunit.AccountFunding{}, classified{queue.Hold(causeDeleting, time.Hour)}
 	}
-	return a.fact, nil
+	return batchunit.AccountFunding{Entitlement: a.fact}, nil
 }
 
-func (a *accounts) Runnable(_ context.Context, g queue.Guarded, owner string) (queue.EntitlementSnapshot, error) {
+func (a *accounts) Runnable(_ context.Context, g queue.Guarded, owner string) (batchunit.AccountFunding, error) {
 	if err := g.Err(); err != nil {
-		return queue.EntitlementSnapshot{}, err
+		return batchunit.AccountFunding{}, err
 	}
 	if a.is(owner) {
-		return queue.EntitlementSnapshot{}, classified{queue.Hold(causeDeleting, time.Hour)}
+		return batchunit.AccountFunding{}, classified{queue.Hold(causeDeleting, time.Hour)}
 	}
-	return a.fact, nil
+	return batchunit.AccountFunding{Entitlement: a.fact}, nil
 }
 
 type counts struct {

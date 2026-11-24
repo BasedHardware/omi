@@ -62,16 +62,30 @@ type Results interface {
 	Put(ctx context.Context, g queue.Guarded, req Request, t Transcript) (Receipt, error)
 }
 
+// AccountFunding carries the owner facts from one authoritative account read.
+type AccountFunding struct {
+	Entitlement queue.EntitlementSnapshot
+	OwnKey      bool
+}
+
+// A unit that needs platform funding cannot proceed on unversioned exhaustion.
+// Exempt work still observes valid revisions for the owner's other units.
+func (f AccountFunding) entitlement(exempt bool) (queue.EntitlementSnapshot, error) {
+	fact := f.Entitlement
+	if fact.Generation < 0 || fact.Generation == 0 && fact.Exhausted && !exempt {
+		return queue.EntitlementSnapshot{}, errors.New("batchunit: invalid entitlement generation")
+	}
+	return fact, nil
+}
+
 // Accounts answers whether an owner's work may be admitted or run.
 type Accounts interface {
 	// Admissible checks the account fence and returns the current funding observation.
-	// An exhausted observation requires a positive generation. An invalid source
-	// response returns an error so intake can retry without inventing a fence.
-	Admissible(ctx context.Context, a queue.Admitting, owner string) (queue.EntitlementSnapshot, error)
+	Admissible(ctx context.Context, a queue.Admitting, owner string) (AccountFunding, error)
 	// Runnable returns nil when owner's work may run now. For an owner who is being deleted
 	// it returns a queue.Classified error whose outcome is queue.Hold, so nothing is paid
 	// for and the owner's other units are not tried one by one.
-	Runnable(ctx context.Context, g queue.Guarded, owner string) (queue.EntitlementSnapshot, error)
+	Runnable(ctx context.Context, g queue.Guarded, owner string) (AccountFunding, error)
 }
 
 // Observer receives the kind's events for metrics. It does no I/O and must not block.

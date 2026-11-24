@@ -24,19 +24,36 @@ type Service struct {
 	Keys     Keys
 }
 
+// Entitlement reads the owner-wide funding fact for notifications and safety checks.
+func (s *Service) Entitlement(ctx context.Context, a queue.Admitting, owner string) (queue.EntitlementSnapshot, error) {
+	funding, err := s.Accounts.Admissible(ctx, a, owner)
+	if err != nil {
+		return queue.EntitlementSnapshot{}, err
+	}
+	return funding.entitlement(false)
+}
+
 // Admit enqueues a unit for an owner. Admitting the same unit again returns the first job.
 func (s *Service) Admit(ctx context.Context, owner string, unit Unit) (queue.Job, error) {
-	job, err := NewJob(s.Keys(owner, unit.ID), owner, unit)
-	if err != nil {
+	if err := unit.Validate(); err != nil {
 		return queue.Job{}, err
 	}
 	var admitted queue.Job
-	err = s.Queue.Tenant(ctx, owner, func(sc *queue.Scope) error {
-		fact, admitErr := s.Accounts.Admissible(ctx, sc.Admitting(), owner)
+	err := s.Queue.Tenant(ctx, owner, func(sc *queue.Scope) error {
+		funding, admitErr := s.Accounts.Admissible(ctx, sc.Admitting(), owner)
 		if admitErr != nil {
 			return fmt.Errorf("admit unit: %w", admitErr)
 		}
-		if fact.Generation != 0 || fact.Exhausted {
+		unit.BYOK = unit.BYOK || funding.OwnKey
+		job, err := NewJob(s.Keys(owner, unit.ID), owner, unit)
+		if err != nil {
+			return err
+		}
+		fact, err := funding.entitlement(job.FundingExempt)
+		if err != nil {
+			return err
+		}
+		if fact.Generation > 0 {
 			if observeErr := sc.ObserveEntitlement(ctx, fact); observeErr != nil {
 				return observeErr
 			}
@@ -66,7 +83,11 @@ func (s *Service) Work(ctx context.Context, r *queue.Run) queue.Outcome {
 	}
 	var receipt Receipt
 	err = r.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
-		fact, runErr := s.Accounts.Runnable(ctx, g, job.Tenant)
+		funding, runErr := s.Accounts.Runnable(ctx, g, job.Tenant)
+		if runErr != nil {
+			return runErr
+		}
+		fact, runErr := funding.entitlement(input.BYOK || input.AlreadyPaid)
 		if runErr != nil {
 			return runErr
 		}
