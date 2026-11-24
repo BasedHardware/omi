@@ -148,8 +148,7 @@ def ordinary_sync_attach_memo_failure_reason(uid, cid, conversation, documents, 
     if not owner or owner != link.get('episode_id') or owner != conversation.get('episode_id'):
         return 'owner_binding_mismatch'
     if python_keys is not None:
-        known_keys = {key for key in (*python_keys, final_key) if key}
-        if not isinstance(revision, str) or revision != completed or revision not in known_keys:
+        if not isinstance(revision, str) or not revision or revision != completed or revision not in python_keys:
             return 'completed_key_mismatch'
         if finalized is not None and finalized != revision:
             return 'finalized_binding_mismatch'

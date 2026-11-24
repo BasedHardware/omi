@@ -170,6 +170,8 @@ class ReplayContractTests(unittest.TestCase):
             )
 
         self.assertEqual(check(), '')
+        self.assertEqual(check([]), 'completed_key_mismatch')
+        self.assertEqual(check(['v2:final']), '')
         link['attach_finalized'] = 'v2:old'
         self.assertEqual(check(), 'finalized_binding_mismatch')
         link.update(attach_revision='v2:old', attach_completed='v2:old', attach_finalized=None)
