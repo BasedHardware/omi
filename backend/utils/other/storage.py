@@ -2793,12 +2793,13 @@ def get_canonical_audio_bucket() -> Any:
 
 def delete_privacy_conversation_audio(
     uid: str, conversation_id: str, *, source_ids: List[str] | None = None, strict_staging: bool = False
-) -> None:
+) -> dict[str, int]:
     """Only the explicit privacy endpoint may erase canonical conversation bytes.
 
     ``strict_staging`` (the durable audio obligation) raises ``StagingInFlight``
     after every other step when an upload's staging had to stay because the
-    upload has not completed, so the obligation retries it.
+    upload has not completed, so the obligation retries it. Returns how many
+    staging directories were kept for a live sibling (``shared_live``).
     """
     from database.sync_ledger_sources import StagingInFlight
 
@@ -2818,8 +2819,16 @@ def delete_privacy_conversation_audio(
     blocked: dict[tuple[str, str, int], str] = {}
     unverified = 0
     in_flight: StagingInFlight | None = None
+    shared_live: List[str] = []
     steps: List[Tuple[Callable[..., Any], Any]] = [(delete_conversation_audio_files, cid) for cid in owned]
-    steps.append((lambda owner, ids: delete_conversation_sync_staging(owner, ids, strict=strict_staging), owned))
+    steps.append(
+        (
+            lambda owner, ids: delete_conversation_sync_staging(
+                owner, ids, strict=strict_staging, retained=shared_live
+            ),
+            owned,
+        )
+    )
     for purge, target in steps:
         try:
             purge(uid, target)
@@ -2832,13 +2841,14 @@ def delete_privacy_conversation_audio(
         raise StoragePrefixPurgeBlocked(blocked, unverified=unverified)
     if in_flight is not None:
         raise in_flight
+    return {'shared_live': len(shared_live)}
 
 
 # The durable audio obligation waits this long behind a same-kind audio erasure of the account.
 CONVERSATION_AUDIO_ERASURE_GATE_WAIT_SECONDS = 30.0
 
 
-def erase_conversation_audio(uid: str, conversation_id: str, source_ids: List[str]) -> None:
+def erase_conversation_audio(uid: str, conversation_id: str, source_ids: List[str]) -> dict[str, int]:
     """The durable audio obligation's erasure of one deleted conversation.
 
     Every step (canonical packs, conversation and donor prefixes, sync staging)
@@ -2850,10 +2860,12 @@ def erase_conversation_audio(uid: str, conversation_id: str, source_ids: List[st
     with destructive_operation_gate(
         uid, kind='audio_conversation_deletion', wait_seconds=CONVERSATION_AUDIO_ERASURE_GATE_WAIT_SECONDS
     ):
-        delete_privacy_conversation_audio(uid, conversation_id, source_ids=source_ids, strict_staging=True)
+        return delete_privacy_conversation_audio(uid, conversation_id, source_ids=source_ids, strict_staging=True)
 
 
-def delete_conversation_sync_staging(uid: str, conversation_ids: List[str], *, strict: bool = False) -> int:
+def delete_conversation_sync_staging(
+    uid: str, conversation_ids: List[str], *, strict: bool = False, retained: List[str] | None = None
+) -> int:
     """Purge the raw sync uploads (``syncing/{uid}/{job_id}/``) owed by these deleted conversations.
 
     Staging is keyed by upload job and its bucket has no lifecycle delete, so
@@ -2862,10 +2874,13 @@ def delete_conversation_sync_staging(uid: str, conversation_ids: List[str], *, s
     when every conversation the job fed is tombstoned and the upload completed
     (``staging_plan``); a live sibling keeps it, and its own deletion erases it.
     Held objects stay and raise; ``strict`` also raises for in-flight uploads.
+    Jobs kept for a live sibling are appended to ``retained``.
     """
     from database.sync_ledger_sources import StagingInFlight, staging_plan
 
     plan = staging_plan(uid, conversation_ids)
+    if retained is not None:
+        retained.extend(plan.shared_live)
     if plan.shared_live or plan.in_flight:
         logger.info(
             'event=conversation_sync_staging outcome=retained shared_live=%d in_flight=%d',

@@ -417,7 +417,13 @@ _add(
     DriverEntry(
         'database.conversation_batch_purge_jobs.due_jobs',
         neutrals={'now': _NOW, 'limit': _LIMIT},
-        domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
+        domains={
+            'collection': [
+                'conversation_batch_purge_jobs',
+                'conversation_erasure_jobs',
+                'conversation_audio_erasure_jobs',
+            ]
+        },
     )
 )
 # Play billing reconcile: one single-field ``next_check_at`` range, oldest first.

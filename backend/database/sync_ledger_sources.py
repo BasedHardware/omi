@@ -112,6 +112,12 @@ def _tombstoned(uid: str, conversation_ids: Iterable[str], firestore_client: Any
     return {cid for cid in sorted(set(conversation_ids)) if tombstones.document(cid).get().exists}
 
 
+def _gone(uid: str, conversation_ids: Iterable[str], firestore_client: Any) -> set[str]:
+    """Untombstoned ids whose conversation row is absent too (point reads; errors propagate)."""
+    rows = _client(firestore_client).collection('users').document(uid).collection('conversations')
+    return {cid for cid in sorted(set(conversation_ids)) if not rows.document(cid).get().exists}
+
+
 def uploads_for_conversations(
     uid: str, conversation_ids: Iterable[str | None], *, firestore_client: Any = None
 ) -> list[SyncUpload]:
@@ -136,9 +142,15 @@ def staging_plan(uid: str, conversation_ids: Iterable[str], *, firestore_client:
 
     A directory is keyed by upload job, so every ledger row naming that job is
     read, not only the rows that list these conversations. It is erasable only
-    when each conversation any of those rows fed is tombstoned and every row
-    has completed. Read errors propagate: the durable obligation retries them.
+    when no conversation any of those rows fed is live and every row has
+    completed. A fed conversation is not live when it is tombstoned, when it is
+    one of ``conversation_ids`` (the deletion asking: the conversation and its
+    merge donors, whose audio it owns even before their tombstones land), or
+    when neither its row nor a tombstone exists (tombstones are written before
+    rows are deleted, so that conversation is gone). Read errors propagate: the
+    durable obligation retries them.
     """
+    conversation_ids = [cid for cid in conversation_ids if cid]
     uploads = uploads_for_conversations(uid, conversation_ids, firestore_client=firestore_client)
     job_ids = sorted({upload.job_id for upload in uploads if upload.job_id})
     if not job_ids:
@@ -157,7 +169,8 @@ def staging_plan(uid: str, conversation_ids: Iterable[str], *, firestore_client:
             if row.job_id == job:
                 by_job[job][row.content_id] = row
     fed = {cid for rows in by_job.values() for row in rows.values() for cid in row.conversation_ids}
-    deleted = _tombstoned(uid, fed, firestore_client)
+    deleted = set(conversation_ids) | _tombstoned(uid, fed - set(conversation_ids), firestore_client)
+    deleted |= _gone(uid, fed - deleted, firestore_client)
     erasable, shared_live, in_flight = [], [], []
     for job in job_ids:
         rows = by_job[job].values()

@@ -98,7 +98,12 @@ def reconcile_conversation_batch_purges(limit: int = 50) -> dict[str, int]:
         return {}
     due = purge_jobs.due_jobs(limit=limit)
     erasures = purge_jobs.due_jobs(limit=limit * ERASURE_SCAN_FACTOR, collection=purge_jobs.ERASURE_COLLECTION)
-    audio = purge_jobs.due_jobs(limit=limit * ERASURE_SCAN_FACTOR, collection=purge_jobs.AUDIO_COLLECTION)
+    # Kill switch off: armed audio obligations stay owed, undispatched, and resume when it is back on.
+    audio = (
+        purge_jobs.due_jobs(limit=limit * ERASURE_SCAN_FACTOR, collection=purge_jobs.AUDIO_COLLECTION)
+        if durable_audio_erasure()
+        else []
+    )
     if not due and not erasures and not audio:
         return {}
     ready = conversation_batch_purge_consumer_ready()

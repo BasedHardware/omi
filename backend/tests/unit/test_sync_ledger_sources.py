@@ -10,6 +10,7 @@ from database import sync_ledger_sources as sources
 UID = 'owner'
 LEDGER = f'users/{UID}/sync_content_ledger_dev'
 TOMBSTONES = f'users/{UID}/deleted_conversations'
+CONVERSATIONS = f'users/{UID}/conversations'
 
 
 class _Doc:
@@ -195,6 +196,7 @@ def test_shared_upload_with_a_live_sibling_keeps_its_staging():
             f'{LEDGER}/shared': _row('job-shared', new=['a'], updated=['b']),
             f'{LEDGER}/solo': _row('job-solo', new=['a']),
             f'{TOMBSTONES}/a': {},
+            f'{CONVERSATIONS}/b': {'status': 'completed'},
         }
     )
     plan = sources.staging_plan(UID, ['a'], firestore_client=client)
@@ -220,6 +222,7 @@ def test_sibling_fed_by_another_ledger_row_of_the_same_job_keeps_the_staging():
             f'{LEDGER}/first-file': _row('job-shared', new=['a']),
             f'{LEDGER}/second-file': _row('job-shared', new=['b']),
             f'{TOMBSTONES}/a': {},
+            f'{CONVERSATIONS}/b': {'status': 'completed'},
         }
     )
     assert sources.staging_plan(UID, ['a'], firestore_client=client).shared_live == ('job-shared',)
@@ -237,3 +240,24 @@ def test_ledger_read_failure_propagates_instead_of_erasing_nothing_silently():
     client.fail_reads = True
     with pytest.raises(RuntimeError, match='ledger unavailable'):
         sources.staging_plan(UID, ['a'], firestore_client=client)
+
+
+def test_merge_donor_of_the_deletion_counts_as_deleted_before_its_tombstone_lands():
+    """The obligation can run before the cascade tombstones donors; the deletion owns their audio."""
+    client = _Client(
+        {
+            f'{LEDGER}/donor-upload': _row('job-donor', new=['donor'], updated=['survivor']),
+            f'{CONVERSATIONS}/donor': {'deleted': True},
+            f'{TOMBSTONES}/survivor': {},
+        }
+    )
+    plan = sources.staging_plan(UID, ['survivor', 'donor'], firestore_client=client)
+    assert plan == sources.StagingPlan(erasable=('job-donor',))
+
+
+def test_fed_conversation_with_neither_row_nor_tombstone_is_gone_not_live():
+    client = _Client({f'{LEDGER}/shared': _row('job-shared', new=['a'], updated=['vanished']), f'{TOMBSTONES}/a': {}})
+    assert sources.staging_plan(UID, ['a'], firestore_client=client).erasable == ('job-shared',)
+    # A live row (no tombstone) still keeps it.
+    client.docs[f'{CONVERSATIONS}/vanished'] = {'status': 'completed'}
+    assert sources.staging_plan(UID, ['a'], firestore_client=client).shared_live == ('job-shared',)

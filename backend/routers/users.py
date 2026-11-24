@@ -441,9 +441,14 @@ async def run_conversation_batch_purge(
         run = functools.partial(conversation_batch_purge_jobs.run_erasure_job, erase=erase_accepted_conversation)
     elif kind == 'audio_erasure':
         # A deleted conversation's audio (both cascade modes); retried until erased.
+        from utils.conversations.deletion_batch_purge import durable_audio_erasure
         from utils.other.storage import erase_conversation_audio
 
-        run = functools.partial(conversation_batch_purge_jobs.run_audio_erasure_job, erase=erase_conversation_audio)
+        run = functools.partial(
+            conversation_batch_purge_jobs.run_audio_erasure_job,
+            erase=erase_conversation_audio,
+            enabled=durable_audio_erasure,
+        )
     else:
         run = batch_pipeline_conversation_purge_scans.run_job
     try:

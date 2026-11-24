@@ -10,7 +10,9 @@ that the audio cleanup is durable: failures are retried, not only logged.
 
 - **Sibling-safe staging.** One upload job's staging directory can feed several conversations. The directory is
   erased only when every conversation that job fed has a deletion tombstone and every ledger row naming the job
-  is `completed` (`database/sync_ledger_sources.staging_plan`).
+  is `completed` (`database/sync_ledger_sources.staging_plan`). A fed conversation counts as deleted when it has
+  a tombstone, when it is the deleting conversation or one of its merge donors (whose audio this deletion owns, even
+  before the cascade writes their tombstones), or when neither its row nor a tombstone exists.
   - If a fed conversation is still live, the bytes stay, and that conversation's own deletion removes them.
   - If the upload has not completed, its staging is kept and retried later.
   - Ledger-linked batch rows follow the same all-tombstoned rule, as in #26215. Owed segment ids are now
@@ -24,8 +26,14 @@ that the audio cleanup is durable: failures are retried, not only logged.
   - Every step runs under the account's `audio_conversation_deletion` gate, which refuses an active legal hold.
   - Object holds (`StoragePrefixPurgeBlocked`) are recorded on the obligation (`last_reason=storage_hold`,
     `blocked_objects`) and rechecked hourly.
-  - In-flight staging (`last_reason=staging_in_flight`) is retried for up to 14 days, then reported with
-    `event=conversation_audio_erasure outcome=staging_unsettled`.
+  - In-flight staging (`last_reason=staging_in_flight`) is rechecked hourly for 14 days. After that, the
+    obligation is never discharged while the staging is kept: it stays owed as `last_reason=staging_unsettled`,
+    is logged at error level as `event=conversation_audio_erasure outcome=staging_unsettled` on every pass, and is
+    rechecked daily.
+  - If the conversation row is still visible (the delete failed after arming and answered 503), the runner waits
+    (`last_reason=conversation_row_live`, rechecked after 5 minutes) instead of erasing the audio.
+  - An obligation that completes with staging kept for a live sibling logs
+    `last_reason=staging_kept_for_live_sibling`. That sibling's own deletion owes the staging.
   - Ledger-read and provider failures redrive.
   - Accepted (busy-gate) cascades arm the same obligation, with the donors recorded at acceptance.
 - **Unchanged.** Tombstone-first ordering, the held-account deferral (no erasure while a hold is active), the
@@ -39,6 +47,14 @@ The change ships on, behind the kill switch `CONVERSATION_AUDIO_ERASURE_OBLIGATI
 - `false/off/0/no` restores the best-effort after-response background erasure.
 - The switch only takes effect where conversation obligation dispatch is configured (backend-sync). Dev and local
   keep the background path.
+- **Switch off with obligations armed.** The reconciler stops dispatching audio obligations, and a task already
+  queued holds its obligation (`last_reason=switched_off`) instead of erasing. Nothing is dropped: switching back
+  on resumes them. Deletes made while the switch is off use the best-effort background erasure and arm nothing.
+- **Rollback to an image without `conversation_audio_erasure_jobs`.** An older reconciler never reads that
+  collection, and an older consumer drops `kind: audio_erasure`. Audio owed by deletes made on this image would
+  then wait unserved. Before rolling back backend-sync, keep the new consumer serving until the collection is empty,
+  or record its remaining rows and redeploy a serving consumer afterwards. The rows are never lost: they stay due.
+  Rolling back only the request-serving backend is safe.
 - The sibling-safe staging rule is not switchable.
 - The new collection's read budget is in `.github/firestore-collection-budgets.json`.
 

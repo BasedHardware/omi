@@ -551,8 +551,8 @@ def test_task_handler_routes_audio_erasures_to_the_audio_eraser(monkeypatch):
 
     calls = []
 
-    def run_audio_erasure_job(job, generation, *, erase):
-        calls.append((job, generation, erase))
+    def run_audio_erasure_job(job, generation, *, erase, enabled):
+        calls.append((job, generation, erase, enabled))
         return 'erased'
 
     monkeypatch.setattr(purge_jobs, 'run_audio_erasure_job', run_audio_erasure_job)
@@ -565,4 +565,25 @@ def test_task_handler_routes_audio_erasures_to_the_audio_eraser(monkeypatch):
 
     response = asyncio.run(users_router.run_conversation_batch_purge(_Request(), 0))
     assert response.status_code == 200
-    assert calls == [('j1', 2, erase_conversation_audio)]
+    from utils.conversations.deletion_batch_purge import durable_audio_erasure
+
+    assert calls == [('j1', 2, erase_conversation_audio, durable_audio_erasure)]
+
+
+@pytest.mark.parametrize('token', ['off', 'false', '0', 'no', ' OFF '])
+def test_kill_switch_off_arms_no_audio_obligation_and_erases_after_the_response(monkeypatch, plane, cascade, token):
+    """Dispatch is configured, but the switch is off: the default delete keeps the background erasure."""
+    monkeypatch.setenv(deletion_batch_purge.AUDIO_ERASURE_SWITCH, token)
+    with TestClient(cascade.app) as client:
+        assert client.delete('/v1/conversations/c1').status_code == 204
+    assert not any(path.startswith(f'{purge_jobs.AUDIO_COLLECTION}/') for path in plane.docs)
+    conversations.delete_privacy_conversation_audio.assert_called_once()
+    assert conversations.delete_privacy_conversation_audio.call_args.args[:2] == (UID, 'c1')
+
+
+def test_kill_switch_on_arms_the_audio_obligation_for_a_default_delete(monkeypatch, plane, cascade):
+    monkeypatch.delenv(deletion_batch_purge.AUDIO_ERASURE_SWITCH, raising=False)
+    with TestClient(cascade.app) as client:
+        assert client.delete('/v1/conversations/c1').status_code == 204
+    assert plane.docs[f'{purge_jobs.AUDIO_COLLECTION}/{purge_jobs.audio_job_id(UID, "c1")}']['conversation_id'] == 'c1'
+    conversations.delete_privacy_conversation_audio.assert_not_called()

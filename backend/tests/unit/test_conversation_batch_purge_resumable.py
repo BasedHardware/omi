@@ -752,16 +752,23 @@ def test_reconciler_dispatches_audio_erasures_by_their_own_kind(monkeypatch, tom
     assert counts['audio_erasures_dispatched'] == 1
 
 
-def test_staging_still_in_use_is_retried_then_reported_after_the_window(tombstone_db, audio_job):
+def test_staging_still_in_use_stays_owed_past_the_window_and_is_escalated_not_dropped(tombstone_db, audio_job):
     from database.sync_ledger_sources import StagingInFlight
 
-    erase = MagicMock(side_effect=StagingInFlight(1))
+    erase = MagicMock(side_effect=[StagingInFlight(1), StagingInFlight(1), None])
     generation = _audio_generation(tombstone_db, audio_job)
     assert purge_jobs.run_audio_erasure_job(audio_job, generation, erase=erase) == 'staging_in_flight'
     assert _audio_row(tombstone_db)['last_reason'] == 'staging_in_flight'
     later = purge_jobs._now() + purge_jobs.timedelta(seconds=purge_jobs.AUDIO_STAGING_PENDING_MAX_SECONDS + 1)
     generation = _audio_generation(tombstone_db, audio_job)
     assert purge_jobs.run_audio_erasure_job(audio_job, generation, erase=erase, now=later) == 'staging_unsettled'
+    row = _audio_row(tombstone_db)
+    # Staging is retained and its bucket has no lifecycle delete: the obligation stays, rechecked daily.
+    assert row['last_outcome'] == 'held' and row['last_reason'] == 'staging_unsettled'
+    assert row['due_at'] > purge_jobs._now() + purge_jobs.timedelta(hours=23)
+    # Discharged only once the staging is actually erased.
+    generation = _audio_generation(tombstone_db, audio_job)
+    assert purge_jobs.run_audio_erasure_job(audio_job, generation, erase=erase, now=later) == 'erased'
     assert _audio_row(tombstone_db) is None
 
 
@@ -791,4 +798,117 @@ def test_rearm_during_a_run_is_erased_again_not_completed(tombstone_db, audio_jo
     assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
         'superseded'
     )
-    assert _audio_row(tombstone_db)['audio_source_ids'] == ['donor', 'late-donor']
+    row = _audio_row(tombstone_db)
+    assert row['audio_source_ids'] == ['donor', 'late-donor']
+    assert row['last_outcome'] == 'checkpointed' and row['last_reason'] == 'rearmed'
+
+
+def test_kill_switch_off_holds_armed_audio_obligations_and_they_resume_when_on(monkeypatch, tombstone_db, audio_job):
+    sent = []
+    monkeypatch.setattr(deletion_batch_purge, 'is_conversation_batch_purge_dispatch_configured', lambda: True)
+    monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_consumer_ready', lambda: True)
+    monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_task_pending', lambda *a, **k: False)
+    monkeypatch.setattr(
+        deletion_batch_purge, 'enqueue_conversation_batch_purge', lambda job, gen, **kind: sent.append((job, gen, kind))
+    )
+    from tests.unit.test_conversation_delete_gate_wait import _due
+
+    monkeypatch.setattr(
+        purge_jobs,
+        'due_jobs',
+        lambda **kwargs: _due(kwargs.get('now'), kwargs.get('collection', purge_jobs.COLLECTION), kwargs.get('limit')),
+    )
+    monkeypatch.setenv(deletion_batch_purge.AUDIO_ERASURE_SWITCH, 'off')
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert sent == []  # not dispatched while off
+    # A task already in flight when the switch went off holds the obligation instead of erasing.
+    erase = MagicMock()
+    generation = _audio_generation(tombstone_db, audio_job)
+    outcome = purge_jobs.run_audio_erasure_job(
+        audio_job, generation, erase=erase, enabled=deletion_batch_purge.durable_audio_erasure
+    )
+    assert outcome == 'switched_off'
+    erase.assert_not_called()
+    assert _audio_row(tombstone_db)['last_reason'] == 'switched_off'
+    monkeypatch.setenv(deletion_batch_purge.AUDIO_ERASURE_SWITCH, 'true')
+    _audio_row(tombstone_db)['due_at'] -= purge_jobs.timedelta(days=1)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert [kind for _job, _gen, kind in sent] == [{'audio': True}]
+
+
+def test_visible_conversation_row_waits_instead_of_losing_its_audio(tombstone_db, audio_job):
+    """A delete that failed after arming (503) leaves the row visible: its audio must not go."""
+    tombstone_db.docs[f'users/{UID}/conversations/c1'] = {'status': 'completed'}
+    erase = MagicMock()
+    generation = _audio_generation(tombstone_db, audio_job)
+    assert purge_jobs.run_audio_erasure_job(audio_job, generation, erase=erase) == 'conversation_row_live'
+    erase.assert_not_called()
+    row = _audio_row(tombstone_db)
+    assert row['last_reason'] == 'conversation_row_live'
+    assert row['due_at'] <= purge_jobs._now() + purge_jobs.timedelta(
+        seconds=purge_jobs.AUDIO_ROW_LIVE_RETRY_SECONDS + 5
+    )
+    tombstone_db.docs[f'users/{UID}/conversations/c1'] = {'deleted': True}  # hidden: erasure proceeds
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'erased'
+    )
+
+
+def test_staging_kept_for_a_live_sibling_is_logged_when_the_obligation_completes(tombstone_db, audio_job, caplog):
+    caplog.set_level('INFO', logger=purge_jobs.logger.name)
+    erase = MagicMock(return_value={'shared_live': 1})
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'erased'
+    )
+    assert 'last_reason=staging_kept_for_live_sibling' in caplog.text and 'shared_live=1' in caplog.text
+
+
+def test_obligation_runs_before_donor_tombstones_and_still_erases_the_donor_upload(
+    monkeypatch, tombstone_db, audio_job
+):
+    """F2 race: the reconciler can run the obligation before the cascade tombstones merge donors."""
+    from database import sync_ledger_sources as sources
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    ledger = f'users/{UID}/sync_content_ledger_dev'
+    tombstone_db.docs[f'{ledger}/donor-upload'] = {
+        'job_id': 'job-donor',
+        'status': 'completed',
+        'result': {'new_memories': ['donor'], 'updated_memories': []},
+    }
+    tombstone_db.docs[f'users/{UID}/conversations/donor'] = {'deleted': True}  # absorbed, tombstone not yet written
+
+    class _Query:
+        def __init__(self, path, field, op, value):
+            self.path, self.field, self.op, self.value = path, field, op, value
+
+        def stream(self):
+            for path, row in sorted(tombstone_db.docs.items()):
+                if not path.startswith(self.path + '/') or path.count('/') != self.path.count('/') + 1:
+                    continue
+                value = row
+                for part in self.field.split('.'):
+                    value = (value or {}).get(part) if isinstance(value, dict) else None
+                hit = value == self.value if self.op == '==' else bool(set(value or []) & set(self.value))
+                if hit:
+                    yield SimpleNamespace(id=path.rsplit('/', 1)[-1], to_dict=lambda row=row: dict(row))
+
+    def ledger_ref(uid, client):
+        coll = tombstone_db.collection('users').document(uid).collection('sync_content_ledger_dev')
+        coll.where = lambda *, filter: _Query(ledger, filter.field_path, filter.op_string, filter.value)
+        return coll
+
+    monkeypatch.setattr(sources, '_ledger', ledger_ref)
+    monkeypatch.setattr(sources, '_client', lambda client: tombstone_db)
+    erased = []
+
+    def erase(uid, cid, donors):
+        plan = sources.staging_plan(uid, [cid, *donors])
+        erased.extend(plan.erasable)
+        return {'shared_live': len(plan.shared_live)}
+
+    purge_jobs.arm_audio_erasure(UID, 'c1', ['donor'])
+    assert purge_jobs.run_audio_erasure_job(audio_job, _audio_generation(tombstone_db, audio_job), erase=erase) == (
+        'erased'
+    )
+    assert erased == ['job-donor']

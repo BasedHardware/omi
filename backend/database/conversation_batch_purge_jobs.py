@@ -51,8 +51,12 @@ COLLECTION = 'conversation_batch_purge_jobs'
 ERASURE_COLLECTION = 'conversation_erasure_jobs'
 # Deletes owing their audio erasure (canonical, conversation/donor prefixes, sync staging).
 AUDIO_COLLECTION = 'conversation_audio_erasure_jobs'
-# Staging still read by an unfinished upload is retried this long after the delete; then reported and given up.
+# Staging still read by an unfinished upload is rechecked hourly for this long after the delete; after
+# that it stays owed as ``staging_unsettled`` (escalated on every pass) and is rechecked daily.
 AUDIO_STAGING_PENDING_MAX_SECONDS = 14 * 24 * 60 * 60
+AUDIO_STAGING_UNSETTLED_RECHECK_SECONDS = 24 * 60 * 60
+# A tombstoned conversation whose row is still visible (a delete that failed after arming) is rechecked this soon.
+AUDIO_ROW_LIVE_RETRY_SECONDS = 300
 SEGMENTS = 'segments'
 TOMBSTONES = 'deleted_conversations'
 # Renewed by every checkpoint/unit; a dead or wedged worker loses ownership after this.
@@ -344,12 +348,14 @@ def finish_run(
     collection: str = COLLECTION,
     detail: dict[str, Any] | None = None,
     arm_revision: Any = None,
+    retry_after: float | None = None,
 ) -> bool:
     """Record the owning run's outcome; only ``completed`` removes the obligation. False if not owner.
 
     ``detail`` is recorded on a retained obligation (e.g. why it waits). For an
     audio obligation, ``arm_revision`` is the arm the run erased: a newer arm
-    (a retried delete) is redriven instead of completed.
+    (a retried delete) is redriven instead of completed. ``retry_after``
+    overrides a ``held``/``failed`` obligation's recheck delay.
     """
     if outcome not in {'completed', 'held', 'failed', 'checkpointed', 'busy', 'artifact_pending'}:
         raise ValueError('invalid purge outcome')
@@ -381,9 +387,10 @@ def finish_run(
                 },
             )
             return False
-        result = outcome
+        result, extra = outcome, dict(detail or {})
         if result == 'completed' and collection == AUDIO_COLLECTION and row.get('arm_revision') != arm_revision:
             result = 'checkpointed'  # re-armed while running: erase again for the newer arm
+            extra['last_reason'] = 'rearmed'
         if result == 'completed':
             transaction.delete(ref)
             return True
@@ -392,7 +399,7 @@ def finish_run(
             'lease_generation': None,
             'lease_until': None,
             'last_outcome': result,
-            **(detail or {}),
+            **extra,
         }
         if result == 'checkpointed':
             # Progress was made: hand off at once and restart the lost-task backoff.
@@ -403,6 +410,8 @@ def finish_run(
             transaction.update(ref, {**release, 'due_at': current + timedelta(seconds=wait), 'attempts': 0})
             return False
         wait = HOLD_RECHECK_SECONDS if result == 'held' else REDRIVE_SECONDS
+        if retry_after is not None:
+            wait = retry_after
         transaction.update(ref, {**release, 'due_at': current + timedelta(seconds=wait)})
         return False
 
@@ -688,7 +697,8 @@ def run_audio_erasure_job(
     job: str,
     generation: int,
     *,
-    erase: Callable[[str, str, list[str]], None],
+    erase: Callable[[str, str, list[str]], Any],
+    enabled: Callable[[], bool] = lambda: True,
     firestore_client: Any = None,
     now: datetime | None = None,
 ) -> str:
@@ -696,8 +706,12 @@ def run_audio_erasure_job(
 
     ``erase(uid, conversation_id, audio_source_ids)`` acquires the account's
     audio gate (refusing a legal hold) and erases every copy; it is idempotent,
-    so a duplicate run repeats finished steps. Only the tombstone is required:
-    the primary row may already be gone. Raises on a retryable failure.
+    so a duplicate run repeats finished steps. It may return a mapping with
+    ``shared_live`` (staging kept for a live sibling), which is logged. Only the
+    tombstone is required: the primary row may already be gone, but a row that
+    is still visible (the delete failed after arming) waits. With ``enabled``
+    false (the kill switch) the obligation is held, not run. Raises on a
+    retryable failure.
     """
     from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked
     from database.sync_ledger_sources import StagingInFlight
@@ -709,7 +723,7 @@ def run_audio_erasure_job(
     uid, conversation_id = str(row['uid']), str(row['conversation_id'])
     arm_revision = row.get('arm_revision')
 
-    def finish(outcome: str, **detail: Any) -> bool:
+    def finish(outcome: str, retry_after: float | None = None, **detail: Any) -> bool:
         return finish_run(
             job,
             generation,
@@ -719,16 +733,26 @@ def run_audio_erasure_job(
             collection=AUDIO_COLLECTION,
             detail={'last_reason': detail.pop('reason', outcome), **detail},
             arm_revision=arm_revision,
+            retry_after=retry_after,
         )
 
     try:
-        tombstone = client.collection('users').document(uid).collection(TOMBSTONES).document(conversation_id)
-        if not tombstone.get().exists:
+        if not enabled():
+            # Kill switch off: armed obligations stay owed and resume when it is back on.
+            finish('held', reason='switched_off')
+            return 'switched_off'
+        user = client.collection('users').document(uid)
+        if not user.collection(TOMBSTONES).document(conversation_id).get().exists:
             # Account deletion supersedes: the wipe removed the subtree and every owner storage prefix.
             return 'no_tombstone' if finish('completed') else 'superseded'
+        conversation = user.collection('conversations').document(conversation_id).get()
+        if conversation.exists and not (conversation.to_dict() or {}).get('deleted'):
+            # The delete failed after arming (it answered 503): never erase audio of a visible conversation.
+            finish('held', retry_after=AUDIO_ROW_LIVE_RETRY_SECONDS, reason='conversation_row_live')
+            return 'conversation_row_live'
         assert_account_deletion_permitted(uid)
         try:
-            erase(uid, conversation_id, [str(source) for source in row.get('audio_source_ids') or []])
+            summary = erase(uid, conversation_id, [str(source) for source in row.get('audio_source_ids') or []])
         except LegalHoldActive:
             raise
         except StoragePrefixPurgeBlocked as error:
@@ -746,10 +770,17 @@ def run_audio_erasure_job(
             if armed_at is not None and (now or _now()) - armed_at >= timedelta(
                 seconds=AUDIO_STAGING_PENDING_MAX_SECONDS
             ):
+                # Never discharged while staging is kept (its bucket has no lifecycle delete): escalate, recheck daily.
                 logger.error(
                     'event=conversation_audio_erasure outcome=staging_unsettled job=%s uploads=%d', job, error.count
                 )
-                return 'staging_unsettled' if finish('completed') else 'superseded'
+                finish(
+                    'held',
+                    retry_after=AUDIO_STAGING_UNSETTLED_RECHECK_SECONDS,
+                    reason='staging_unsettled',
+                    in_flight_uploads=error.count,
+                )
+                return 'staging_unsettled'
             logger.info(
                 'event=conversation_audio_erasure outcome=staging_in_flight job=%s uploads=%d', job, error.count
             )
@@ -775,6 +806,15 @@ def run_audio_erasure_job(
         except Exception:
             pass  # The lease expires; the original failure is what the queue must see.
         raise
+    shared_live = int((summary or {}).get('shared_live') or 0) if isinstance(summary, dict) else 0
+    if shared_live:
+        # Discharged with staging kept for a live sibling: that sibling's own deletion owes it.
+        logger.info(
+            'event=conversation_audio_erasure outcome=erased last_reason=staging_kept_for_live_sibling '
+            'job=%s shared_live=%d',
+            job,
+            shared_live,
+        )
     return 'erased' if finish('completed') else 'superseded'
 
 
