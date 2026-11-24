@@ -40,13 +40,18 @@ Before planning and again before applying, confirm the effective age window of
 the production workers that enforce the gate. Pass it as
 `--serving-max-age-hours`, after the serving rollout has reached all relevant
 workers. Use `0` only when the serving gate is disabled. The tool checks each
-row against the supplied window and includes that window and its fixed
-`based-hardware` project in the receipt. Apply sends Cloud Tasks in
+row against the supplied window. With a bounded window, rows with no valid age
+timestamp are refused. A summary block on either the obligation or conversation
+also prevents unpark. The receipt includes the confirmed window and the fixed
+`based-hardware` project. Apply sends Cloud Tasks in
 `based-hardware/us-central1` using each row's persisted handler binding.
 
 Dry-run accepts the `ro-prod` and `prod-operator` tiers. Pass `--next-file` in a
-private directory under `/Volumes/Ephemeral/scratch`. For apply, use the
-`prod-operator` tier and repeat the page inputs with
+pre-existing private directory under `/Volumes/Ephemeral/scratch`. The CLI checks
+the output path before opening Firestore. Input refusals use a short reason
+code where available. Runtime failures include the exception type. For example,
+`FailedPrecondition` during discovery can indicate that the index is still pending.
+For apply, use the `prod-operator` tier and repeat the page inputs with
 `--apply --approve-plan-sha256 <dry-run digest>`. A changed page or window returns
 `plan_changed` with no row write, enqueue or checkpoint update. Run a fresh
 dry-run on the same input before approving again. A concurrent token change

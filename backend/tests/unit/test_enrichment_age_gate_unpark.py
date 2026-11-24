@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+from google.api_core.exceptions import FailedPrecondition
 import pytest
 
 from database import batch_pipeline_privacy
@@ -20,6 +21,7 @@ UID = 'synthetic-owner'
 CID = 'synthetic-conversation'
 KEY = outbox.key(UID, CID)
 ROW_PATH = (outbox.COLLECTION, KEY)
+CONVERSATION_PATH = ('users', UID, 'conversations', CID)
 BINDING = {
     'queue': 'enrichment',
     'handler': 'https://worker.invalid/v2/enrichment/run',
@@ -138,11 +140,16 @@ def test_dry_run_does_not_schedule_privacy_token_mint(source, monkeypatch):
         ({'summary_blocked_reason': 'empty_output_exhausted'}, 'blocked'),
         ({'summary_seen': True}, 'blocked'),
         ({'dispatch': None}, 'unbound'),
+        ({'uid': 'synthetic-other'}, 'identity_changed'),
+        (None, 'identity_changed'),
         ({'first_pending_at': NOW - 73 * 3600}, 'outside_age_window'),
     ],
 )
 def test_unsafe_rows_have_no_write_or_wake_authority(source, change, reason):
-    source.rows[ROW_PATH].update(change)
+    if change is None:
+        del source.rows[ROW_PATH]
+    else:
+        source.rows[ROW_PATH].update(change)
     result = plan(source)
     assert result['entries'][0]['disposition'] == reason
     assert 'task_token' not in result['entries'][0]
@@ -155,6 +162,42 @@ def test_old_conversation_is_refused_even_with_fresh_obligation(source):
     result = plan(source)
     assert result['entries'][0]['disposition'] == 'outside_age_window'
     assert apply(source, result) == {'outside_age_window': 1}
+    assert no_writes(source)
+
+
+def test_conversation_only_summary_block_refuses_dry_run_and_approved_apply(source):
+    approved = plan(source)
+    assert unpark.summary(approved)['dispositions'] == {'eligible': 1}
+    source.rows[CONVERSATION_PATH]['summary_blocked_reason'] = 'local_only'
+    assert unpark.summary(plan(source))['dispositions'] == {'blocked': 1}
+    wake = Mock()
+    assert apply(source, approved, wake) == {'blocked': 1}
+    wake.assert_not_called()
+    assert no_writes(source)
+
+
+def test_unknown_age_is_refused_with_a_bounded_window(source, monkeypatch):
+    approved = plan(source)
+    del source.rows[ROW_PATH]['first_pending_at']
+    del source.rows[CONVERSATION_PATH]['created_at']
+    assert unpark.summary(plan(source))['dispositions'] == {'outside_age_window': 1}
+    wake = Mock()
+    assert apply(source, approved, wake) == {'outside_age_window': 1}
+    wake.assert_not_called()
+    assert no_writes(source)
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
+    assert unpark.summary(plan(source))['dispositions'] == {'eligible': 1}
+
+
+def test_per_row_read_and_write_errors_are_counted_without_waking(source, monkeypatch):
+    approved = plan(source)
+    missing_key = outbox.key(UID, 'missing')
+    monkeypatch.setattr(unpark, 'assert_batch_write_allowed', Mock(side_effect=RuntimeError('synthetic failure')))
+    result = plan(source, [KEY, missing_key])
+    assert unpark.summary(result)['dispositions'] == {'read_error': 1, 'identity_changed': 1}
+    wake = Mock()
+    assert apply(source, approved, wake) == {'write_error': 1}
+    wake.assert_not_called()
     assert no_writes(source)
 
 
@@ -260,11 +303,15 @@ def cli():
 
 
 @pytest.fixture
-def operator_cli(monkeypatch):
+def operator_cli(monkeypatch, tmp_path):
     # Register environment changes that main() makes directly.
     for key in ('OMI_ENV_STAGE', 'ENRICHMENT_MAX_AGE_HOURS'):
         monkeypatch.setenv(key, os.environ.get(key, ''))
-    return cli()
+    module = cli()
+    monkeypatch.setattr(module, 'SCRATCH', tmp_path)
+    monkeypatch.setattr(module, 'time', SimpleNamespace(time=lambda: unpark.time.time()))
+    tmp_path.chmod(0o700)
+    return module
 
 
 @pytest.mark.parametrize(
@@ -285,7 +332,7 @@ def test_cli_tiers_before_client_access(monkeypatch, tier, apply_mode, allowed, 
     reached = Mock(side_effect=RuntimeError('stop before network'))
     module = operator_cli
     monkeypatch.setattr(module.firestore, 'Client', reached)
-    args = ['--next-file', '/unused', '--serving-max-age-hours', '72']
+    args = ['--next-file', str(module.SCRATCH / 'cursor.json'), '--serving-max-age-hours', '72']
     if apply_mode:
         args += ['--apply', '--approve-plan-sha256', 'a' * 64]
     with pytest.raises(RuntimeError if allowed else SystemExit):
@@ -293,7 +340,7 @@ def test_cli_tiers_before_client_access(monkeypatch, tier, apply_mode, allowed, 
     assert reached.called is allowed
 
 
-def test_cli_disabled_apply_never_reads_cursor_or_client(monkeypatch):
+def test_cli_disabled_apply_never_reads_cursor_or_client(monkeypatch, capsys):
     monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
     monkeypatch.setenv('ENRICHMENT_AGE_GATE_UNPARK_ENABLED', 'false')
     monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
@@ -316,11 +363,13 @@ def test_cli_disabled_apply_never_reads_cursor_or_client(monkeypatch):
             ]
         )
     reached.assert_not_called()
+    assert json.loads(capsys.readouterr().out)['reason'] == 'apply_disabled'
 
 
 def test_cli_dry_run_outputs_only_counts_digest_and_checkpoint(source, monkeypatch, capsys, operator_cli):
     module = operator_cli
     monkeypatch.setenv('GCP_AGENT_TIER', 'ro-prod')
+    monkeypatch.setenv('ENRICHMENT_AGE_GATE_UNPARK_ENABLED', 'false')
     monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
     monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
     client = Mock(return_value=source)
@@ -329,7 +378,8 @@ def test_cli_dry_run_outputs_only_counts_digest_and_checkpoint(source, monkeypat
     monkeypatch.setattr(module, 'discover', lambda *args, **kwargs: ([KEY], cursor))
     write = Mock()
     monkeypatch.setattr(module, 'write_cursor', write)
-    module.main(['--next-file', '/private/cursor', '--serving-max-age-hours', '84'])
+    next_file = str(module.SCRATCH / 'cursor.json')
+    module.main(['--next-file', next_file, '--serving-max-age-hours', '84'])
     output = capsys.readouterr()
     report = json.loads(output.out)
     assert report['dispositions'] == {'eligible': 1} and report['apply'] is False
@@ -343,9 +393,9 @@ def test_cli_dry_run_outputs_only_counts_digest_and_checkpoint(source, monkeypat
         'project',
         'serving_max_age_hours',
     }
-    assert all(value not in output.out + output.err for value in (UID, CID, KEY, '/private', 'a' * 32))
+    assert all(value not in output.out + output.err for value in (UID, CID, KEY, next_file, 'a' * 32))
     client.assert_called_once_with(project='based-hardware')
-    write.assert_called_once_with('/private/cursor', cursor)
+    write.assert_called_once_with(next_file, cursor)
     assert no_writes(source)
 
 
@@ -389,7 +439,7 @@ def test_cli_apply_uses_approved_plan_and_persisted_binding(source, monkeypatch,
 
     enqueue = Mock(side_effect=check_task_target)
     monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
-    args = ['--next-file', '/private/cursor', '--serving-max-age-hours', '72']
+    args = ['--next-file', str(module.SCRATCH / 'cursor.json'), '--serving-max-age-hours', '72']
     module.main(args)
     digest = json.loads(capsys.readouterr().out)['plan_sha256']
     assert no_writes(source)
@@ -435,14 +485,63 @@ def test_cli_invalid_arguments_do_not_echo_sensitive_values(capsys):
     assert 'synthetic-private-path' not in output.out + output.err
 
 
+def test_cli_rejects_public_checkpoint_before_client_access(monkeypatch, capsys, operator_cli):
+    monkeypatch.setenv('GCP_AGENT_TIER', 'ro-prod')
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
+    public = operator_cli.SCRATCH / 'public'
+    public.mkdir()
+    public.chmod(0o755)
+    client = Mock()
+    monkeypatch.setattr(operator_cli.firestore, 'Client', client)
+    with pytest.raises(SystemExit) as error:
+        operator_cli.main(['--next-file', str(public / 'cursor.json'), '--serving-max-age-hours', '72'])
+    assert error.value.code == 2
+    assert json.loads(capsys.readouterr().out)['reason'] == 'cursor_path'
+    client.assert_not_called()
+
+
+def test_cli_passes_private_checkpoint_back_to_discovery(monkeypatch, capsys, operator_cli):
+    monkeypatch.setenv('GCP_AGENT_TIER', 'ro-prod')
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
+    client, query = Mock(), Mock()
+    client.collection.return_value = query
+    for method in ('where', 'order_by', 'select', 'limit', 'start_after'):
+        getattr(query, method).return_value = query
+    path = f'{outbox.COLLECTION}/{KEY}'
+    page = Mock(id=KEY, reference=SimpleNamespace(path=path))
+    page.to_dict.return_value = {'deferred_since': NOW}
+    query.stream.side_effect = [[page], []]
+    monkeypatch.setattr(operator_cli.firestore, 'Client', Mock(return_value=client))
+    monkeypatch.setattr(unpark, 'prepare', Mock(return_value=('blocked', None)))
+    first = operator_cli.SCRATCH / 'first.json'
+    second = operator_cli.SCRATCH / 'second.json'
+    args = ['--serving-max-age-hours', '72', '--limit', '1']
+
+    operator_cli.main(args + ['--next-file', str(first)])
+    assert json.loads(capsys.readouterr().out)['count'] == 1
+    assert json.loads(first.read_text()) == {'after': {'deferred_since': NOW, 'path': path}}
+    query.start_after.assert_not_called()
+
+    operator_cli.main(args + ['--after-file', str(first), '--next-file', str(second)])
+    assert json.loads(capsys.readouterr().out)['count'] == 0
+    client.document.assert_called_once_with(path)
+    query.start_after.assert_called_once_with({'deferred_since': NOW, '__name__': client.document.return_value})
+    assert json.loads(second.read_text()) == {'after': None}
+
+
+def test_cli_error_reports_type_without_exception_message(monkeypatch, capsys, operator_cli):
+    monkeypatch.setattr(operator_cli, 'main', Mock(side_effect=FailedPrecondition('sensitive details')))
+    assert operator_cli.run_cli() == 1
+    output = capsys.readouterr()
+    assert json.loads(output.out) == {'operation': unpark.OPERATION, 'outcome': 'error', 'error': 'FailedPrecondition'}
+    assert 'sensitive details' not in output.out + output.err
+
+
 def test_private_cursor_permissions_and_rejects_public_directory(tmp_path, monkeypatch):
     module = cli()
-    real_resolve = Path.resolve
-
-    def resolve(path, *args, **kwargs):
-        return tmp_path if str(path) == '/Volumes/Ephemeral/scratch' else real_resolve(path, *args, **kwargs)
-
-    monkeypatch.setattr(Path, 'resolve', resolve)
+    monkeypatch.setattr(module, 'SCRATCH', tmp_path)
     directory = tmp_path / 'private'
     directory.mkdir(mode=0o700)
     path = directory / 'cursor.json'

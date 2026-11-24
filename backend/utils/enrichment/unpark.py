@@ -69,14 +69,15 @@ def discover(client: Any, *, limit: int = 128, after: dict | None = None) -> tup
     return ids, _cursor({'deferred_since': parked_at, 'path': last.reference.path})
 
 
-def _too_old(row: dict, created_at: object, *, now: float, max_age_seconds: float) -> bool:
+def _outside_age_window(row: dict, created_at: object, *, now: float, max_age_seconds: float) -> bool:
     if max_age_seconds == 0:
         return False
     cutoff = now - max_age_seconds
-    return any(
-        value is not None and value < cutoff
-        for value in (age_gate.timestamp(row.get('first_pending_at')), age_gate.timestamp(created_at))
-    )
+    pending_at = age_gate.timestamp(row.get('first_pending_at'))
+    created_at = age_gate.timestamp(created_at)
+    if pending_at is None and created_at is None:
+        return True
+    return any(value is not None and value < cutoff for value in (pending_at, created_at))
 
 
 def _refusal(row: dict, *, now: float) -> str | None:
@@ -126,8 +127,15 @@ def prepare(
         if reason:
             return reason, None
         conversation_ref = client.collection('users').document(uid).collection('conversations').document(cid)
-        conversation = conversation_ref.get(transaction=transaction, field_paths=['created_at']).to_dict() or {}
-        if _too_old(old, conversation.get('created_at'), now=now, max_age_seconds=max_age_seconds):
+        conversation = (
+            conversation_ref.get(
+                transaction=transaction, field_paths=['created_at', 'summary_blocked_reason']
+            ).to_dict()
+            or {}
+        )
+        if conversation.get('summary_blocked_reason'):
+            return 'blocked', None
+        if _outside_age_window(old, conversation.get('created_at'), now=now, max_age_seconds=max_age_seconds):
             return 'outside_age_window', None
         try:
             assert_batch_write_allowed(client, transaction, uid, conversation_ids=[cid], allow_token_mint=False)

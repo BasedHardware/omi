@@ -30,28 +30,46 @@ from utils.enrichment.unpark import OPERATION, apply_unpark, discover, plan_unpa
 
 PROJECT = 'based-hardware'
 TASKS_LOCATION = 'us-central1'
+SCRATCH = Path('/Volumes/Ephemeral/scratch')
 
 
 class CountsOnlyParser(argparse.ArgumentParser):
     def error(self, message):
-        print(json.dumps({'operation': OPERATION, 'outcome': 'invalid_arguments'}))
+        self.reject()
+
+    def reject(self, reason=None):
+        report = {'operation': OPERATION, 'outcome': 'invalid_arguments'}
+        if reason is not None:
+            report['reason'] = reason
+        print(json.dumps(report))
         raise SystemExit(2)
+
+
+def private_cursor_parent(path):
+    path = Path(path)
+    parent = path.parent.resolve()
+    if (
+        not parent.is_relative_to(SCRATCH.resolve())
+        or not parent.is_dir()
+        or parent.stat().st_mode & 0o777 != 0o700
+        or not os.access(parent, os.W_OK | os.X_OK)
+        or (parent / path.name).is_dir()
+    ):
+        raise ValueError('cursor directory must be private scratch (0700)')
+    return parent
 
 
 def write_cursor(path, after):
     """Atomically checkpoint an opaque page key under private scratch only."""
     path = Path(path)
-    parent = path.parent.resolve()
-    scratch = Path('/Volumes/Ephemeral/scratch').resolve()
-    if not parent.is_relative_to(scratch) or parent.stat().st_mode & 0o077:
-        raise ValueError('cursor directory must be private scratch (0700)')
+    parent = private_cursor_parent(path)
     with tempfile.NamedTemporaryFile(mode='w', dir=parent, delete=False) as handle:
         temporary = Path(handle.name)
         try:
             json.dump({'after': after}, handle)
             handle.flush()
             os.fsync(handle.fileno())
-            os.replace(temporary, path)
+            os.replace(temporary, parent / path.name)
         finally:
             temporary.unlink(missing_ok=True)
 
@@ -75,17 +93,24 @@ def main(argv=None):
         or os.getenv('SERVICE_ACCOUNT_JSON')
         or os.getenv('GCP_AGENT_TIER') not in allowed
     ):
-        parser.error('wrong identity for requested operation')
+        parser.reject('identity')
     if args.apply and not enrichment_config.age_gate_unpark_enabled():
-        parser.error('age-gate unpark is disabled')
-    if not 1 <= args.limit <= 128 or not 0 <= args.pace_seconds <= 60:
-        parser.error('limit must be 1..128 and pace must be 0..60')
+        parser.reject('apply_disabled')
+    if not 1 <= args.limit <= 128:
+        parser.reject('limit')
+    if not 0 <= args.pace_seconds <= 60:
+        parser.reject('pace')
     if args.apply and not re.fullmatch(r'[0-9a-f]{64}', args.approve_plan_sha256 or ''):
-        parser.error('apply requires a valid dry-run plan digest')
+        parser.reject('approval_digest')
     if args.serving_max_age_hours < 0 or not math.isfinite(args.serving_max_age_hours * 3600):
-        parser.error('serving age window must be finite and nonnegative')
-    if args.after_file and Path(args.after_file).resolve() == Path(args.next_file).resolve():
-        parser.error('input and output cursor files must differ')
+        parser.reject('serving_age_window')
+    try:
+        private_cursor_parent(args.next_file)
+        same_cursor = args.after_file and Path(args.after_file).resolve() == Path(args.next_file).resolve()
+    except (OSError, RuntimeError, ValueError):
+        parser.reject('cursor_path')
+    if same_cursor:
+        parser.reject('cursor_conflict')
     os.environ['OMI_ENV_STAGE'] = 'prod'
     os.environ['ENRICHMENT_MAX_AGE_HOURS'] = str(args.serving_max_age_hours)
     after = json.loads(Path(args.after_file).read_text())['after'] if args.after_file else None
@@ -113,9 +138,14 @@ def main(argv=None):
     print(json.dumps(report, sort_keys=True))
 
 
-if __name__ == '__main__':
+def run_cli():
     try:
         main()
-    except Exception:
-        print(json.dumps({'operation': OPERATION, 'outcome': 'error'}))
-        sys.exit(1)
+    except Exception as exc:
+        print(json.dumps({'operation': OPERATION, 'outcome': 'error', 'error': type(exc).__name__}))
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(run_cli())
