@@ -2,7 +2,7 @@
 
 import os
 
-from google.cloud.firestore import DELETE_FIELD
+from google.cloud import firestore
 
 FIELD = 'home_visible'
 FLAGS = ('recording', 'home_hidden')
@@ -15,7 +15,7 @@ def visible(row):
 def stamp(patch, current=None):
     """Set the bit on a replacement or on a patch to a transactionally read row."""
     values = (patch.get(flag, (current or {}).get(flag)) for flag in FLAGS)
-    patch[FIELD] = not any(value is not DELETE_FIELD and value for value in values)
+    patch[FIELD] = not any(value is not firestore.DELETE_FIELD and value for value in values)
     return patch
 
 

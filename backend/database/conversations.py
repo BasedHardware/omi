@@ -1938,7 +1938,8 @@ def persist_processing_result_with_lifecycle(
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
         )
-        home_visibility_index.stamp(write_data, existing)
+        if any(flag in write_data for flag in home_visibility_index.FLAGS):
+            home_visibility_index.stamp(write_data, existing)
         if family_enabled:
             transaction.update(conversation_ref, _processing_result_update_fields(write_data))
         else:
