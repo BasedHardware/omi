@@ -281,6 +281,7 @@ class ProviderSttStore:
                 or job.get('state') != PENDING
                 or not allowance_hold.is_provider(job)
                 or job['stt_route'].get('provider_reason') == 'byok'
+                or claim.row_id != job['segment_id']
                 or claim.owner_id != job['owner_id']
                 or job.get('token')
                 or job.get('lease_until', 0) > now
