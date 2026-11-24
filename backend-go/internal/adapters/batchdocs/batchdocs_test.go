@@ -143,7 +143,9 @@ type anyone struct{}
 func (anyone) Admissible(context.Context, queue.Admitting, string) (queue.EntitlementSnapshot, error) {
 	return queue.EntitlementSnapshot{}, nil
 }
-func (anyone) Runnable(context.Context, queue.Guarded, string) error { return nil }
+func (anyone) Runnable(context.Context, queue.Guarded, string) (queue.EntitlementSnapshot, error) {
+	return queue.EntitlementSnapshot{}, nil
+}
 
 type quiet struct{}
 

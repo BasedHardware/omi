@@ -69,7 +69,7 @@ type Accounts interface {
 	// Runnable returns nil when owner's work may run now. For an owner who is being deleted
 	// it returns a queue.Classified error whose outcome is queue.Hold, so nothing is paid
 	// for and the owner's other units are not tried one by one.
-	Runnable(ctx context.Context, g queue.Guarded, owner string) error
+	Runnable(ctx context.Context, g queue.Guarded, owner string) (queue.EntitlementSnapshot, error)
 }
 
 // Observer receives the kind's events for metrics. It does no I/O and must not block.

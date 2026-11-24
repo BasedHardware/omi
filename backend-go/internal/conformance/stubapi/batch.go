@@ -74,12 +74,11 @@ func (a BatchAccounts) Admissible(ctx context.Context, admitting queue.Admitting
 }
 
 // Runnable holds the whole tenant while its owner is being deleted.
-func (a BatchAccounts) Runnable(ctx context.Context, g queue.Guarded, owner string) error {
+func (a BatchAccounts) Runnable(ctx context.Context, g queue.Guarded, owner string) (queue.EntitlementSnapshot, error) {
 	if err := g.Err(); err != nil {
-		return err
+		return queue.EntitlementSnapshot{}, err
 	}
-	_, err := a.check(ctx, owner, true)
-	return err
+	return a.check(ctx, owner, true)
 }
 
 func (a BatchAccounts) check(ctx context.Context, owner string, hold bool) (queue.EntitlementSnapshot, error) {

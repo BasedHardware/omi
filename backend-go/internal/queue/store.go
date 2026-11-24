@@ -247,7 +247,7 @@ type CustomerWait struct {
 
 const customerWaitSQL = `SELECT count(distinct uid),count(*),coalesce(sum(audio_seconds),0),
 (SELECT expired_unfunded FROM queue_settings)
-FROM queue_jobs WHERE custody_deadline IS NOT NULL`
+FROM queue_jobs WHERE outcome IS NULL AND (custody_deadline IS NOT NULL OR timed_deadline IS NOT NULL)`
 
 // WaitingOnCustomer reports current funding holds and the lifetime count expired.
 func (s *Store) WaitingOnCustomer(ctx context.Context) (CustomerWait, error) {
@@ -269,7 +269,7 @@ func (s *Store) Stats(ctx context.Context) (Stats, error) {
 	rows, err := s.pool.Query(ctx, `WITH owed AS (
  SELECT state,count(*) AS jobs,COALESCE(max(extract(epoch FROM statement_timestamp()-coalesce(owed_since,created_at)))
       FILTER (WHERE outcome IS NULL),0)::float8 AS age
- FROM queue_jobs WHERE custody_deadline IS NULL AND outcome IS DISTINCT FROM 'expired_unfunded' GROUP BY state)
+ FROM queue_jobs WHERE custody_deadline IS NULL AND timed_deadline IS NULL AND outcome IS DISTINCT FROM 'expired_unfunded' GROUP BY state)
  SELECT state,jobs,age,0,0,0::float8,0 FROM owed
  UNION ALL SELECT '',0,0,w.* FROM (`+customerWaitSQL+`) w`)
 	if err != nil {
@@ -313,7 +313,7 @@ func (s *Store) stranded(ctx context.Context, can supported) (int64, float64, er
 	)
 	err := s.pool.QueryRow(ctx, `SELECT count(*),
 COALESCE(max(extract(epoch FROM clock_timestamp()-ready_at)),0)::float8
-FROM queue_jobs WHERE ready_at <= clock_timestamp()
+FROM queue_jobs WHERE ready_at <= clock_timestamp() AND timed_deadline IS NULL
  AND (kind,format) NOT IN (SELECT k,f FROM unnest($1::text[],$2::int[]) AS s(k,f))`,
 		can.kinds, can.formats).Scan(&count, &oldest)
 	if err != nil {

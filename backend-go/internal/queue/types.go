@@ -48,6 +48,8 @@ type Cause string
 
 // The causes the queue itself produces.
 const (
+	// CauseAllowanceExhausted labels the time-only fallback for an unfunded owner.
+	CauseAllowanceExhausted Cause = "allowance_exhausted"
 	// CauseNone marks a plain success.
 	CauseNone Cause = "none"
 	// CauseLeaseExpired means the last allowed attempt died while holding the lease.
@@ -150,8 +152,9 @@ type Job struct {
 	// Ordered is true for a job in an ordered lane.
 	Ordered bool
 	// CaptureAt and LateCapture identify a paid kind's position relative to committed work at claim.
-	CaptureAt   time.Time
-	LateCapture bool
+	CaptureAt       time.Time
+	LateCapture     bool
+	timedGeneration int64
 
 	budgetAllowed   bool
 	intent          *Cause
@@ -209,6 +212,8 @@ type Kind struct {
 
 // Config is the queue's policy. Every duration and limit a rule needs is here.
 type Config struct {
+	// TimeOnlyEntitlementHold selects the legacy tenant-wide timer for verified paid-intake refusals.
+	TimeOnlyEntitlementHold bool
 	// Lease is how long a claim lasts without renewal.
 	Lease time.Duration
 	// Backoff is the base retry delay.

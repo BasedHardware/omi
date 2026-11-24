@@ -25,7 +25,7 @@ type declared struct {
 
 func newRegistry(cfg Config, kinds []Kind) (registry, error) {
 	r := registry{kinds: make(map[string]declared, len(kinds)), causes: make(map[Cause]struct{})}
-	own := []Cause{CauseNone, CauseLeaseExpired, CauseHandlerPanic, CauseReconcileExhausted, CauseUnknown, cfg.GateAbandoned}
+	own := []Cause{CauseAllowanceExhausted, CauseNone, CauseLeaseExpired, CauseHandlerPanic, CauseReconcileExhausted, CauseUnknown, cfg.GateAbandoned}
 	for _, c := range own {
 		r.causes[c] = struct{}{}
 	}

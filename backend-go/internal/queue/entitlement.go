@@ -24,6 +24,21 @@ type EntitlementSnapshot struct {
 	Exhausted  bool
 }
 
+type fundingWait struct {
+	conditionDeadline, timedDeadline *time.Time
+	timedGeneration                  int64
+}
+
+func (cfg Config) fundingWait(n NewJob, generation int64) (fundingWait, error) {
+	if n.CustodyDeadline.IsZero() || n.AudioDuration <= 0 || n.Gated || n.Initializing {
+		return fundingWait{}, fmt.Errorf("%w: held intake requires custody deadline and duration on a plain job", ErrState)
+	}
+	if cfg.TimeOnlyEntitlementHold {
+		return fundingWait{timedDeadline: &n.CustodyDeadline, timedGeneration: generation}, nil
+	}
+	return fundingWait{conditionDeadline: &n.CustodyDeadline}, nil
+}
+
 // enqueuePaid locks the same owner row as an entitlement update, including first admission.
 func (sc *Scope) enqueuePaid(ctx context.Context, n NewJob) (Job, bool, error) {
 	var job Job
@@ -35,10 +50,11 @@ func (sc *Scope) enqueuePaid(ctx context.Context, n NewJob) (Job, bool, error) {
 			return err
 		}
 		var held bool
-		if err := tx.QueryRow(ctx, "SELECT entitlement_check_at IS NOT NULL FROM queue_tenants WHERE uid=$1 FOR UPDATE", tenant).Scan(&held); err != nil {
+		var generation int64
+		if err := tx.QueryRow(ctx, "SELECT entitlement_check_at IS NOT NULL,entitlement_generation FROM queue_tenants WHERE uid=$1 FOR UPDATE", tenant).Scan(&held, &generation); err != nil {
 			return err
 		}
-		var deadline *time.Time
+		var wait fundingWait
 		if held {
 			// An admission replay keeps the first decision, even if this caller has
 			// no custody metadata or a newer owner observation.
@@ -50,13 +66,13 @@ func (sc *Scope) enqueuePaid(ctx context.Context, n NewJob) (Job, bool, error) {
 			if !errors.Is(err, ErrAbsent) {
 				return err
 			}
-			if n.CustodyDeadline.IsZero() || n.AudioDuration <= 0 || n.Gated || n.Initializing {
-				return fmt.Errorf("%w: held intake requires custody deadline and duration on a plain job", ErrState)
+			wait, err = store.cfg.fundingWait(n, generation)
+			if err != nil {
+				return err
 			}
-			deadline = &n.CustodyDeadline
 		}
 		var err error
-		job, inserted, err = store.insert(ctx, tx, n, deadline)
+		job, inserted, err = store.insert(ctx, tx, n, wait)
 		return err
 	})
 	if err == nil && inserted && job.State != StateWaiting {
@@ -130,11 +146,15 @@ type EntitlementReader func(context.Context, Admitting, string) (EntitlementSnap
 // Claiming a check advances its timer before the external read so replicas share the work.
 func (s *Store) CheckEntitlements(ctx context.Context, read EntitlementReader) error {
 	if _, err := s.pool.Exec(ctx, `WITH expired AS (UPDATE queue_jobs SET state='completed',outcome='expired_unfunded',
-custody_deadline=NULL,held_order_key=NULL,updated_at=statement_timestamp()
-WHERE custody_deadline<=statement_timestamp() RETURNING 1),
+custody_deadline=NULL,held_order_key=NULL,timed_deadline=NULL,timed_generation=0,
+ready_at=NULL,lease_until=NULL,lane_head=false,updated_at=statement_timestamp()
+WHERE outcome IS NULL AND (custody_deadline<=statement_timestamp() OR timed_deadline<=statement_timestamp()) RETURNING 1),
 tally AS (SELECT count(*) AS n FROM expired)
 UPDATE queue_settings SET expired_unfunded=expired_unfunded+tally.n FROM tally WHERE tally.n>0`); err != nil {
 		return fmt.Errorf("expire unfunded: %w", err)
+	}
+	if s.cfg.TimeOnlyEntitlementHold {
+		return s.restoreTimedHolds(ctx)
 	}
 	rows, err := s.pool.Query(ctx, `UPDATE queue_tenants SET entitlement_check_at=statement_timestamp()+interval '1 hour'
 WHERE uid IN (SELECT uid FROM queue_tenants WHERE entitlement_check_at<=statement_timestamp()
@@ -161,4 +181,44 @@ ORDER BY entitlement_check_at LIMIT 100 FOR UPDATE SKIP LOCKED) RETURNING uid`)
 		}
 	}
 	return failures
+}
+
+// Convert on every maintenance tick so a rolling switch also catches admissions
+// committed by the last condition-enabled replica. No funding revision is advanced.
+func (s *Store) restoreTimedHolds(ctx context.Context) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE queue_jobs j SET timed_deadline=j.custody_deadline,
+timed_generation=t.entitlement_generation,custody_deadline=NULL,order_key=j.held_order_key,
+held_order_key=NULL,state='ready',ready_at=j.run_at,updated_at=statement_timestamp()
+FROM queue_tenants t WHERE t.uid=j.uid AND j.custody_deadline>statement_timestamp()`)
+	if err != nil {
+		return fmt.Errorf("restore timed funding holds: %w", err)
+	}
+	if tag.RowsAffected() > 0 {
+		s.signal()
+	}
+	return nil
+}
+
+// AuthorizeTimedFunding is called under the guard before the first paid call. Only
+// a newer funded observation can spend. Clearing the refusal before the call keeps
+// its result recoverable if a retry crosses the original custody deadline.
+func (r *Run) AuthorizeTimedFunding(ctx context.Context, fact EntitlementSnapshot) error {
+	if r.job.timedGeneration == 0 {
+		return nil
+	}
+	if fact.Exhausted || fact.Generation <= r.job.timedGeneration {
+		return Classify(ErrDeferred, Hold(CauseAllowanceExhausted, 5*time.Minute))
+	}
+	tag, err := r.store.pool.Exec(ctx, `UPDATE queue_jobs j SET timed_generation=0,timed_deadline=NULL,owed_since=statement_timestamp()
+WHERE job_key=$1 AND lease_token=$2 AND state='leased' AND lease_until>clock_timestamp()
+AND timed_deadline>clock_timestamp() AND NOT EXISTS
+(SELECT 1 FROM queue_tenants t WHERE t.uid=j.uid AND t.entitlement_generation>=$3 AND t.entitlement_check_at IS NOT NULL)`, r.lease.key, r.lease.token, fact.Generation)
+	if err != nil {
+		return fmt.Errorf("clear timed funding hold: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		// The expiry sweep owns terminal accounting. A stale worker cannot spend.
+		return Classify(ErrDeferred, Yield(CauseAllowanceExhausted, time.Minute))
+	}
+	return nil
 }

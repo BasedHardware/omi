@@ -13,7 +13,9 @@ func TestEntitlementOwnerReplay(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	kinds := append(testKinds(), Kind{Name: "paid", Formats: []int{1}, Steps: []string{"start"}, PaidProcessing: true})
-	s := openStore(t, pgtest.New(t), testConfig(), kinds)
+	url := pgtest.New(t)
+	s := openStore(t, url, testConfig(), kinds)
+	old := openStore(t, url, testConfig(), testKinds())
 	setHold := func(owner string, gen int64) {
 		t.Helper()
 		if err := s.HoldCondition(ctx, owner, Entitlement, gen); err != nil {
@@ -36,8 +38,15 @@ func TestEntitlementOwnerReplay(t *testing.T) {
 			t.Fatalf("held claim: %v", err)
 		}
 	}
-	if n, _, err := s.stranded(ctx, supported{}); err != nil || n != 0 {
+	if n, _, err := old.Stranded(ctx); err != nil || n != 0 {
 		t.Fatalf("stranded %d: %v", n, err)
+	}
+	enqueue(t, ctx, s, paid("owed", "funded-owner", now))
+	if n, _, err := old.Stranded(ctx); err != nil || n != 1 {
+		t.Fatalf("want exactly one unsupported, owed unit alongside two held units: %d, %v", n, err)
+	}
+	if err := s.EraseQueue(ctx, "funded-owner"); err != nil {
+		t.Fatal(err)
 	}
 	stats, statsErr := s.Stats(ctx)
 	want := CustomerWait{Owners: 1, Units: 2, AudioSeconds: 10}
@@ -165,5 +174,72 @@ func TestGrantRacesPaidIntakeAndExpiry(t *testing.T) {
 	apply(t, r, Done())
 	if _, err := tryClaim(ctx, s); !errors.Is(err, ErrAbsent) {
 		t.Fatalf("duplicate dispatch: %v", err)
+	}
+}
+
+func TestTimeOnlyRollbackPreservesFundingFenceAndExpiry(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	url := pgtest.New(t)
+	kinds := testKinds()
+	kinds[0].PaidProcessing = true
+	enabled := openStore(t, url, testConfig(), kinds)
+	policy := testConfig()
+	policy.TimeOnlyEntitlementHold = true
+	disabled := openStore(t, url, policy, kinds)
+	if err := enabled.HoldCondition(ctx, "owner", Entitlement, 10); err != nil {
+		t.Fatal(err)
+	}
+	n := demo("before-switch", "owner")
+	n.AudioDuration = time.Minute
+	n.CustodyDeadline = time.Now().Add(time.Hour)
+	enqueue(t, ctx, enabled, n)
+	n.Key = "during-rollback"
+	enqueue(t, ctx, disabled, n)
+	n.Key = "past-deadline"
+	n.CustodyDeadline = time.Now().Add(-time.Minute)
+	enqueue(t, ctx, disabled, n)
+	if err := disabled.CheckEntitlements(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if w, err := disabled.WaitingOnCustomer(ctx); err != nil || w != (CustomerWait{Owners: 1, Units: 2, AudioSeconds: 120, ExpiredUnfunded: 1}) {
+		t.Fatalf("rollback accounting: %+v %v", w, err)
+	}
+	r := claim(t, ctx, disabled)
+	if r.job.timedGeneration != 10 {
+		t.Fatalf("owner fence lost: %+v", r.job)
+	}
+	refusal := r.AuthorizeTimedFunding(ctx, EntitlementSnapshot{Generation: 10, Exhausted: true})
+	if refusal == nil {
+		t.Fatal("unfunded worker authorized")
+	}
+	apply(t, r, FromError(refusal, CauseUnknown))
+	if _, err := tryClaim(ctx, disabled); !errors.Is(err, ErrAbsent) {
+		t.Fatalf("tenant timer did not hold siblings: %v", err)
+	}
+	j, getErr := disabled.Get(ctx, r.job.Key)
+	if getErr != nil || j.Reason == nil || *j.Reason != CauseAllowanceExhausted || j.Attempts != 0 {
+		t.Fatalf("legacy hold did not refund the attempt: %+v %v", j, getErr)
+	}
+	if _, err := disabled.pool.Exec(ctx, "UPDATE queue_tenants SET check_after=statement_timestamp() WHERE uid='owner'"); err != nil {
+		t.Fatal(err)
+	}
+	due(t, ctx, disabled, j.Key)
+	for range 2 {
+		next := claim(t, ctx, disabled)
+		if err := next.AuthorizeTimedFunding(ctx, EntitlementSnapshot{Generation: 9}); err == nil {
+			t.Fatal("stale grant authorized")
+		}
+		if err := next.AuthorizeTimedFunding(ctx, EntitlementSnapshot{Generation: 11}); err != nil {
+			t.Fatal(err)
+		}
+		apply(t, next, Done())
+	}
+	if err := disabled.CheckEntitlements(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	w, err := disabled.WaitingOnCustomer(ctx)
+	if err != nil || w != (CustomerWait{ExpiredUnfunded: 1}) {
+		t.Fatalf("rollback drain: %+v %v", w, err)
 	}
 }

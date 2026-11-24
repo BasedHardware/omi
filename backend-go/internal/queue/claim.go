@@ -266,13 +266,13 @@ lease_token=nextval('queue_lease_token'),lease_until=clock_timestamp()+$2*interv
 ready_at=clock_timestamp()+$2*interval '1 microsecond',
 attempts=$3+1,deterministic_attempts=$4,reason=NULL,updated_at=clock_timestamp(),
 lane_head=(order_key IS NOT NULL),intent=$5,intent_transient=$6
-WHERE job_key=$1 RETURNING lease_token,attempts,order_at,order_sub_us,
+WHERE job_key=$1 RETURNING lease_token,attempts,order_at,order_sub_us,timed_generation,
 $9 AND EXISTS (SELECT 1 FROM queue_jobs c WHERE c.uid=j.uid AND c.kind=j.kind AND c.order_key=j.order_key
 AND c.outcome='success' AND (c.order_at,c.order_sub_us,c.order_sort,c.job_key)>
 (j.order_at,j.order_sub_us,j.order_sort,j.job_key))`,
 		job.Key, s.cfg.Lease.Microseconds(), job.Attempts, job.DeterministicAttempts, intent, transient,
 		job.Tenant, !req.direct(), s.kinds.kinds[job.Kind].paidProcessing,
-	).Scan(&job.Token, &job.Attempts, &job.CaptureAt, &subMicro, &job.LateCapture)
+	).Scan(&job.Token, &job.Attempts, &job.CaptureAt, &subMicro, &job.timedGeneration, &job.LateCapture)
 	if err != nil {
 		return Job{}, fmt.Errorf("lease: %w", err)
 	}

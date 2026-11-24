@@ -66,8 +66,12 @@ func (s *Service) Work(ctx context.Context, r *queue.Run) queue.Outcome {
 	}
 	var receipt Receipt
 	err = r.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
-		if runErr := s.Accounts.Runnable(ctx, g, job.Tenant); runErr != nil {
+		fact, runErr := s.Accounts.Runnable(ctx, g, job.Tenant)
+		if runErr != nil {
 			return runErr
+		}
+		if fundErr := r.AuthorizeTimedFunding(ctx, fact); fundErr != nil {
+			return fundErr
 		}
 		req := request(g, job, input)
 		transcribe := s.Speech.Transcribe

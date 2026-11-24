@@ -39,7 +39,7 @@ func newQueueMetrics(registry *prometheus.Registry, kinds []queue.Kind, gateCaus
 		causes:   make(map[queue.Cause]bool),
 	}
 	for _, cause := range []queue.Cause{
-		queue.CauseNone, queue.CauseLeaseExpired, queue.CauseHandlerPanic,
+		queue.CauseAllowanceExhausted, queue.CauseNone, queue.CauseLeaseExpired, queue.CauseHandlerPanic,
 		queue.CauseReconcileExhausted, queue.CauseUnknown, gateCause,
 	} {
 		m.causes[cause] = true

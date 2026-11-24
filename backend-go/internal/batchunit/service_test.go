@@ -104,6 +104,7 @@ func (s *results) Put(_ context.Context, g queue.Guarded, req batchunit.Request,
 }
 
 type accounts struct {
+	fact     queue.EntitlementSnapshot
 	mu       sync.Mutex
 	deleting map[string]bool
 }
@@ -121,17 +122,17 @@ func (a *accounts) Admissible(_ context.Context, admitting queue.Admitting, owne
 	if a.is(owner) {
 		return queue.EntitlementSnapshot{}, classified{queue.Hold(causeDeleting, time.Hour)}
 	}
-	return queue.EntitlementSnapshot{}, nil
+	return a.fact, nil
 }
 
-func (a *accounts) Runnable(_ context.Context, g queue.Guarded, owner string) error {
+func (a *accounts) Runnable(_ context.Context, g queue.Guarded, owner string) (queue.EntitlementSnapshot, error) {
 	if err := g.Err(); err != nil {
-		return err
+		return queue.EntitlementSnapshot{}, err
 	}
 	if a.is(owner) {
-		return classified{queue.Hold(causeDeleting, time.Hour)}
+		return queue.EntitlementSnapshot{}, classified{queue.Hold(causeDeleting, time.Hour)}
 	}
-	return nil
+	return a.fact, nil
 }
 
 type counts struct {
@@ -170,7 +171,12 @@ type rig struct {
 
 func newRig(t *testing.T) *rig {
 	t.Helper()
-	h := queuetest.Open(t, queuetest.Policy(), batchunit.Declaration(causeVendorDown, causeStoreDown, causeDeleting))
+	return newRigWithPolicy(t, queuetest.Policy())
+}
+
+func newRigWithPolicy(t *testing.T, policy queue.Config) *rig {
+	t.Helper()
+	h := queuetest.Open(t, policy, batchunit.Declaration(causeVendorDown, causeStoreDown, causeDeleting))
 	r := &rig{
 		Harness: h, vendor: &vendor{committed: map[string]string{}}, results: &results{stored: map[string]string{}},
 		accounts: &accounts{deleting: map[string]bool{}},
@@ -389,5 +395,27 @@ func TestPaidResultRecoveryWhileHeldNeverTranscribes(t *testing.T) {
 	charges, calls := r.vendor.ledger()
 	if done.Attempts == 0 || done.Outcome == nil || *done.Outcome != queue.TerminalFailure || charges != 0 || len(calls) != 0 {
 		t.Fatalf("missing paid result: job=%+v charges=%d transcriptions=%d", done, charges, len(calls))
+	}
+}
+
+func TestDisabledConditionHoldDefersPaidSpeech(t *testing.T) {
+	t.Parallel()
+	policy := queuetest.Policy()
+	policy.TimeOnlyEntitlementHold = true
+	r := newRigWithPolicy(t, policy)
+	r.accounts.fact = queue.EntitlementSnapshot{Generation: 1, Exhausted: true}
+	u := unit("unfunded", "audio/unfunded")
+	u.CustodyDeadline = time.Now().Add(time.Hour)
+	u.AudioDuration = time.Minute
+	j := r.admit(t, u)
+	if j.State != queue.StateReady {
+		t.Fatalf("disabled condition parked new intake: %v", j.State)
+	}
+	r.start()
+	r.Until(j.Key, "time-only hold", func(j queue.Job) bool {
+		return j.State == queue.StateWaiting && j.Reason != nil && *j.Reason == queue.CauseAllowanceExhausted && j.Attempts == 0
+	})
+	if charges, calls := r.vendor.ledger(); charges != 0 || len(calls) != 0 {
+		t.Fatalf("unfunded speech: charges=%d calls=%d", charges, len(calls))
 	}
 }
