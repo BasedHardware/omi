@@ -439,6 +439,7 @@ and an explicit empty literal renders as `''`.
 | `CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED` | Refuse cloud embeddings only for local-capable clients lacking catalog cloud_screen_vectors; default on; exact false disables refusal | backend | env | open | true | true | true | — | keep | keep | — | auditfix |
 | `CONVERSATIONS_V3` | Default on; off stops marking NEW pendant recordings, while persisted obligations keep draining | backend | env | open | — | — | — | — | keep | keep | — | lane/conversations-v3 / lead2 |
 | `CONVERSATIONS_V3_BATCH_COMMIT_READS` | Default on; batch the v3 reconcile commit's revision reads into one transactional BatchGet. Off restores the serial per-document reads. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
+| `CONVERSATIONS_V3_BATCH_MANUAL_END` | Default on; a user finish of an audio-only v3 recording stores the manual-end cut, so its window closes when the batch transcript lands | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
 | `CONVERSATIONS_V3_LIVE_TITLE` | Default on; generate one provisional title for an untitled live v3 conversation after 180 seconds of transcribed speech | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
 | `CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE` | Default on; include the derived fragment at an explicit manual cut on Home regardless of media or background classification | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
 | `CONVERSATIONS_V3_STRETCH_COHESION` | Default on; normalize outline speaker labels and fold short topics within each hard-bounded v3 stretch | backend | env | open | — | — | — | — | keep | keep | — | v3-rollout coordinator |
@@ -1281,6 +1282,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATIONS_V3` — Default on; off stops marking NEW pendant recordings, while persisted obligations keep draining (fail: open)
 - `CONVERSATIONS_V3_BACKFILL_QUEUE` — Queue for operator-planned per-owner v3 backfill steps; defaults to conversations-v3-backfill (fail: closed)
 - `CONVERSATIONS_V3_BATCH_COMMIT_READS` — Default on; batch the v3 reconcile commit's revision reads into one transactional BatchGet. Off restores the serial per-document reads. (fail: open)
+- `CONVERSATIONS_V3_BATCH_MANUAL_END` — Default on; a user finish of an audio-only v3 recording stores the manual-end cut, so its window closes when the batch transcript lands (fail: open)
 - `CONVERSATIONS_V3_LIVE_RECAP_COHORT` — Default empty; explicit authenticated UID membership for saved and streamed live recap (fail: closed)
 - `CONVERSATIONS_V3_LIVE_TITLE` — Default on; generate one provisional title for an untitled live v3 conversation after 180 seconds of transcribed speech (fail: open)
 - `CONVERSATIONS_V3_LOCK_SECONDS` — Default 300 seconds, bounded 120–3600; controls the v3 elapsed time before locking and queuing notes (fail: closed)

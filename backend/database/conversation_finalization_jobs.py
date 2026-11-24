@@ -77,6 +77,8 @@ CONVERSATIONS_COLLECTION = 'conversations'
 # without this generation remain durable on the job itself but cannot move the
 # new denominator.  Reading this fixed shard set is safe on every replica.
 FINALIZATION_PROJECTION_COLLECTION = 'conversation_finalization_projection_shards'
+# config.conversations_v3.SPEECH_LANDED_FIELD; that module imports utils and cannot be imported here.
+V3_SPEECH_LANDED_FIELD = 'v3_speech_landed_at'
 FINALIZATION_PROJECTION_GENERATION = 'terminal-outcomes-v1'
 FINALIZATION_PROJECTION_SHARD_COUNT = 16
 
@@ -1116,11 +1118,19 @@ def _complete_server_batch_capture_txn(
     lease_epoch: int,
     now: datetime,
     projection_collection: Any | None = None,
+    *,
+    observed: dict[str, Any] | None = None,
 ) -> str:
     """Commit the raw-capture handoff and its job terminal as one generation.
 
     No external fanout is owed by a zero-preview capture: register_recording
     already reserved its durable batch obligation. All reads precede writes.
+
+    A user finish (``client_finalize``) of a v3 recording also stores ``v3_manual_end`` here. This
+    capture has no transcript yet, so it never reaches the transcript path that calls
+    ``changed(manual_end=True)``; without the marker the batch transcript lands as ordinary speech
+    and the window waits out the silence and lock timers. ``observed['wake_manual_end']`` reports a
+    transcript that landed before this commit, whose reconcile has already run without the cut.
     """
     job_snapshot = job_ref.get(transaction=transaction)
     conversation_snapshot = conversation_ref.get(transaction=transaction)
@@ -1176,6 +1186,15 @@ def _complete_server_batch_capture_txn(
 
     terminal = {**current, 'status': 'completed'}
     stamp_terminal_decision(terminal, path='lifecycle_terminal')
+    manual_end = (
+        current.get('recording') is True
+        and job.get('processing_trigger') == ProcessingTrigger.CLIENT_FINALIZE.value
+        and server_batch.manual_end_marker_enabled()
+    )
+    speech_landed = manual_end and current.get(V3_SPEECH_LANDED_FIELD) is not None
+    manual_end_update: dict[str, Any] = {'v3_manual_end': True} if manual_end else {}
+    if speech_landed:
+        manual_end_update.update(v3_pending=True, v3_pending_since=current.get('v3_pending_since') or now)
     transaction.update(
         conversation_ref,
         {
@@ -1183,8 +1202,12 @@ def _complete_server_batch_capture_txn(
             'relevance_decision': terminal['relevance_decision'],
             'home_transcription_pending_at': now,
             'home_transcription_deadline_at': now + timedelta(seconds=home_transcription_deadline_seconds()),
+            **manual_end_update,
         },
     )
+    if observed is not None:
+        observed['manual_end'] = manual_end
+        observed['wake_manual_end'] = speech_landed
     transaction.update(
         job_ref,
         {
@@ -1206,6 +1229,19 @@ def _complete_server_batch_capture_txn(
     return 'completed'
 
 
+def _observe_batch_manual_end(uid: str, conversation_id: str, *, wake: bool) -> None:
+    """Count the stored manual end; wake reconcile only when the transcript beat this commit. Never raises."""
+    try:
+        from utils.conversations.v3 import metrics as v3_metrics, triggers as v3_triggers
+
+        v3_metrics.BATCH_MANUAL_END.labels('landed' if wake else 'awaiting_transcript').inc()
+        if wake:
+            v3_triggers.enqueue(uid, manual_end_id=conversation_id)
+    except Exception as error:
+        # The marker is committed. A lost wake leaves v3_pending set for the sweep.
+        logging.getLogger(__name__).warning('batch manual end wake failed exception_type=%s', type(error).__name__)
+
+
 def complete_server_batch_capture(
     uid: str,
     conversation_id: str,
@@ -1217,6 +1253,7 @@ def complete_server_batch_capture(
     firestore_client: Any = None,
 ) -> str:
     client = _client(firestore_client)
+    observed: dict[str, Any] = {}
     result = firestore.transactional(_complete_server_batch_capture_txn)(
         client.transaction(),
         _job_ref(client, job_id),
@@ -1228,7 +1265,10 @@ def complete_server_batch_capture(
         lease_epoch,
         _now(),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
+        observed=observed,
     )
+    if result == 'completed' and observed.get('manual_end'):
+        _observe_batch_manual_end(uid, conversation_id, wake=bool(observed.get('wake_manual_end')))
     if result == 'completed':
         # These observers may read and start their own transactions, so they
         # must run after the atomic owner commit (also safe on redelivery).
