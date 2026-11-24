@@ -370,6 +370,107 @@ def test_two_recognizer_close_switch_leaves_the_language_guard_held(setup, monke
     artifacts.persist_recovery_result.assert_not_called()
 
 
+@pytest.fixture
+def settlements(monkeypatch):
+    from prometheus_client import CollectorRegistry, Counter
+    from utils.batch_pipeline import correctness_metrics as metrics
+
+    registry = CollectorRegistry()
+    monkeypatch.setattr(
+        metrics,
+        'RECOGNIZER_OUTCOMES',
+        Counter(
+            'omi_batch_pipeline_recovery_recognizer_outcomes_total',
+            '',
+            ['modulate', 'soniox', 'speech', 'language_guarded', 'result'],
+            registry=registry,
+        ),
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED', 'true')
+
+    def count(**labels):
+        return registry.get_sample_value('omi_batch_pipeline_recovery_recognizer_outcomes_total', labels) or 0
+
+    def total():
+        return sum(
+            sample.value for metric in registry.collect() for sample in metric.samples if sample.name.endswith('_total')
+        )
+
+    return count, total
+
+
+@pytest.mark.parametrize('close', [False, True])
+def test_settlement_counter_names_both_empty_answers_and_measured_speech(
+    setup, monkeypatch, legacy_dependencies, settlements, close
+):
+    count, total = settlements
+    client, binding, _, _, _, recovery = second_setup(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', 'true' if close else 'false')
+    result = 'no_recoverable_speech' if close else 'failed_held'
+    assert recovery.recover('bad', binding.owner_id) == ('recovered' if close else 'failed_held')
+    labels = dict(modulate='empty', soniox='empty', speech='2s_or_more', language_guarded='false', result=result)
+    assert count(**labels) == 1
+    # A later sweep settles nothing, so it reports nothing.
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert total() == 1
+
+
+def test_settlement_counter_separates_a_second_recognizer_that_found_words(
+    setup, monkeypatch, legacy_dependencies, settlements
+):
+    count, total = settlements
+    soniox = Mock(return_value=(WORDS, 'en'))
+    client, binding, _, _, _, recovery = second_setup(setup, monkeypatch, legacy_dependencies, soniox=soniox)
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert count(modulate='empty', soniox='words', speech='2s_or_more', language_guarded='false', result='words') == 1
+    assert total() == 1
+
+
+def test_settlement_counter_marks_the_language_guard_and_short_speech(
+    setup, monkeypatch, legacy_dependencies, settlements
+):
+    count, total = settlements
+    client, binding, _, _, _, recovery = second_setup(
+        setup, monkeypatch, legacy_dependencies, soniox=Mock(return_value=([], 'vi')), speech=(0, 1)
+    )
+    job = row(client)
+    job.pop('worker_empty_evidence')
+    job['worker_failure'] = {'stage': 'vad_windows', 'reason': 'unsupported_language'}
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    labels = dict(modulate='empty', soniox='empty', speech='under_2s', language_guarded='true', result='failed_held')
+    assert count(**labels) == 1
+    assert total() == 1
+
+
+def test_settlement_counter_is_closed_and_off_with_correctness_metrics(monkeypatch, settlements):
+    from utils.batch_pipeline import correctness_metrics as metrics
+
+    count, total = settlements
+    assert [metrics.speech_bucket(v) for v in (None, True, float('nan'), -1, 0, 0.031, 0.032, 1.99, 2, 3600)] == [
+        'unmeasured',
+        'unmeasured',
+        'unmeasured',
+        'unmeasured',
+        'none',
+        'none',
+        'under_2s',
+        'under_2s',
+        '2s_or_more',
+        '2s_or_more',
+    ]
+    # Unknown receipt shapes and results fold into closed tokens and never raise.
+    metrics.record_recovery_settlement({'modulate': {'outcome': 'surprise'}, 'soniox': 'bad'}, None, False, 'new')
+    metrics.record_recovery_settlement(None, 3, True, 'silence')
+    labels = dict(modulate='not_called', soniox='not_called', language_guarded='false', result='other')
+    assert count(speech='unmeasured', **labels) == 1
+    labels = dict(modulate='not_called', soniox='not_called', language_guarded='true', result='silence')
+    assert count(speech='2s_or_more', **labels) == 1
+    monkeypatch.setenv('BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED', 'false')
+    metrics.record_recovery_settlement({}, 3, False, 'words')
+    assert total() == 2
+
+
 @pytest.mark.parametrize('words', [False, True])
 def test_subsecond_worker_speech_hold_uses_second_chance_with_zero_cpu_vad(
     setup, monkeypatch, legacy_dependencies, words
