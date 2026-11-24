@@ -2230,7 +2230,10 @@ def _ingest_conversation_from_segments(
             raise HTTPException(status_code=409, detail="Conversation creation already in progress")
         resumable_conversation.status = ConversationStatus.processing
         create_conversation_obj = resumable_conversation
-        client_projection = resumable_conversation.client_processing
+        # The retry resumes the persisted transcript, so discard any projection
+        # from the changed retry request. The persisted display projection stays
+        # on the row; never read it back into the coordinator's projection input.
+        client_projection = None
         language_code = resumable_conversation.language or 'en'
     elif conversation_id:
         create_conversation_obj = OmiConversation(
