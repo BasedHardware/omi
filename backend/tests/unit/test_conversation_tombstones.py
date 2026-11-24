@@ -87,6 +87,7 @@ def function(path, name, namespace):
         namespace.setdefault('_legal_hold_defers_delete', lambda uid: False)
         namespace.setdefault('durable_audio_erasure', lambda: False)
         namespace.setdefault('arm_audio_erasure', MagicMock())
+        namespace.setdefault('mark_audio_delete_completed', MagicMock())
         function(path, '_delete_privacy_audio_after_response', namespace)
         function(path, '_delete_conversation_under_gate', namespace)
     node = next(
@@ -190,13 +191,52 @@ def test_delete_owes_audio_durably_before_the_primary_row_goes(store):
         'record_product_event': MagicMock(),
         'durable_audio_erasure': lambda: True,
         'arm_audio_erasure': arm,
+        'mark_audio_delete_completed': lambda uid, cid: calls.append(
+            ('completed', f'users/{uid}/conversations/{cid}' in store.rows)
+        ),
     }
     delete = function('routers/conversations.py', 'delete_conversation', namespace)
     background = MagicMock()
     assert delete('c', background, False, None, 'u').status_code == 204
-    assert calls == [('arm', True, ['donor'], True), ('parent', True)]
+    # The same request marks the obligation once the row is gone: the runner may erase.
+    assert calls == [('arm', True, ['donor'], True), ('parent', True), ('completed', False)]
     # The durable runner erases it; no unretried after-response attempt remains.
     background.add_task.assert_not_called()
+
+
+def test_delete_that_fails_after_arming_never_marks_the_audio_obligation_completed(store):
+    class LakeFetchError(Exception):
+        pass
+
+    def hard_delete(uid, cid):
+        raise LakeFetchError('lake unavailable')
+
+    marker = MagicMock()
+    namespace = {
+        'logger': MagicMock(),
+        'conversation_tombstones': tombstones,
+        'conversations_db': MagicMock(get_conversation_raw_snapshot=MagicMock(return_value={})),
+        'delete_owner_prompt_embedding_cache': MagicMock(),
+        'delete_conversation_screen_frames': MagicMock(),
+        'delete_conversation_and_frame_evidence': hard_delete,
+        'object_lake': SimpleNamespace(LakeFetchError=LakeFetchError),
+        'delete_conversation_audio_under_gate': MagicMock(),
+        'delete_vector': MagicMock(),
+        'delete_transcript_chunk_vectors': MagicMock(),
+        'record_product_event': MagicMock(),
+        'durable_audio_erasure': lambda: True,
+        'arm_audio_erasure': MagicMock(),
+        'mark_audio_delete_completed': marker,
+        'HTTPException': HTTPException,
+    }
+    delete = function('routers/conversations.py', 'delete_conversation', namespace)
+    with pytest.raises(HTTPException) as error:
+        delete('c', MagicMock(), False, None, 'u')
+    assert error.value.status_code == 503
+    # Armed, row still visible, no marker: the runner holds it as conversation_row_live.
+    namespace['arm_audio_erasure'].assert_called_once()
+    marker.assert_not_called()
+    assert 'users/u/conversations/c' in store.rows
 
 
 def test_unarmed_audio_obligation_fails_the_delete_before_the_primary_row_goes(store):
@@ -218,6 +258,7 @@ def test_unarmed_audio_obligation_fails_the_delete_before_the_primary_row_goes(s
         'record_product_event': MagicMock(),
         'durable_audio_erasure': lambda: True,
         'arm_audio_erasure': arm,
+        'mark_audio_delete_completed': MagicMock(),
         'HTTPException': HTTPException,
     }
     delete = function('routers/conversations.py', 'delete_conversation', namespace)

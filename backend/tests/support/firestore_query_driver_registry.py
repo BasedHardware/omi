@@ -1558,7 +1558,12 @@ _add(
     DriverEntry(
         'database.sync_ledger_sources.staging_plan',
         base={'uid': UID, 'conversation_ids': ['conv-1']},
-        domains={'recorded': [None, {'job-1': ['conv-1']}], 'settled': [(), ('job-1',)]},
+        domains={
+            'recorded': [None, {'job-1': ['conv-1']}],
+            'settled': [(), ('job-1',)],
+            'known_deleted': [(), ('conv-2',)],
+            'max_checks': [0, 200],
+        },
         setup=_seed_shared_upload,
         patchers=(_sync_stage,),
     )

@@ -12,7 +12,14 @@ that the audio cleanup is durable: failures are retried, not only logged.
   erased only when every conversation that job fed has a deletion tombstone and every ledger row naming the job
   is `completed` (`database/sync_ledger_sources.staging_plan`). A fed conversation counts as deleted when it has
   a tombstone, when it is the deleting conversation or one of its merge donors (whose audio this deletion owns, even
-  before the cascade writes their tombstones), or when neither its row nor a tombstone exists.
+  before the cascade writes their tombstones), when neither its row nor a tombstone exists, or when its row is a
+  deletion marker (`conversations_db.is_soft_deleted`). An absorbed merge donor (a `deleted` row with
+  `sync_merged_into`) counts as its survivor: its redirect chain is resolved with the sync redirect resolver
+  (`sync_conversation_snapshot.resolve_snapshot`), and the donor is deleted only when the chain ends deleted or at
+  the deleting conversation.
+  - Sibling reads are batched (`get_all`) and capped at 200 per pass. Siblings found deleted are recorded on the
+    obligation (`staging_deleted_siblings`) and not read again. A job with unread siblings and no live one waits
+    (`last_reason=staging_siblings_pending`, `unchecked_siblings`) and continues after 60 s.
   - If a fed conversation is still live, the bytes stay, and that conversation's own deletion removes them.
   - If the upload has not completed, its staging is kept and retried later.
   - Ledger-linked batch rows follow the same all-tombstoned rule, as in #26215. Owed segment ids are now
@@ -30,7 +37,11 @@ that the audio cleanup is durable: failures are retried, not only logged.
     obligation is never discharged while the staging is kept: it stays owed as `last_reason=staging_unsettled`,
     is logged at error level as `event=conversation_audio_erasure outcome=staging_unsettled` on every pass, and is
     rechecked daily.
-  - If the conversation row is still visible (the delete failed after arming and answered 503), the runner waits
+  - The arming request writes `delete_completed_at` on the obligation right after it deletes the primary row (an
+    ordinary delete in either cascade mode deletes the row outright; an accepted delete hides it with
+    `deleted=True`). With that marker the runner erases without looking at the row, and the marker makes a run that
+    held for the row due at once. A request that fails after arming never writes it.
+  - Without the marker, if the conversation row is still visible (the delete failed after arming and answered 503), the runner waits
     (`last_reason=conversation_row_live`) instead of erasing the audio. It rechecks after 5 minutes, doubling to
     hourly. After 24 hours (`row_live_since`) it rechecks daily, and those passes count toward the stuck-obligation
     alert.
@@ -48,7 +59,8 @@ that the audio cleanup is durable: failures are retried, not only logged.
     be unknown.
   - The obligation is never discharged while a recorded prefix is kept for a live sibling. It stays held
     (`last_reason=staging_kept_for_live_sibling`, rechecked daily) and erases the prefix once that sibling is
-    deleted.
+    deleted. A settled job whose prefix is already empty in every staging bucket (one `list_blobs(max_results=1)`
+    each) keeps nothing, so it no longer holds the obligation.
   - Contention on the account's audio gate counts as `busy` (30 s retry), not as a failure.
   - A held canonical audio-pack object (`objectUnderActiveHold`, `retentionPolicyNotMet`) is reported like any other
     held object (`storage_hold`), and the other steps still run.
@@ -121,4 +133,5 @@ Verification after serving:
 - [Ledger rule](../../../tests/unit/test_sync_ledger_sources.py),
   [storage steps](../../../tests/unit/test_owner_storage_purge_and_gate.py),
   [obligation runner](../../../tests/unit/test_conversation_batch_purge_resumable.py),
-  [route arming](../../../tests/unit/test_conversation_tombstones.py).
+  [route arming](../../../tests/unit/test_conversation_tombstones.py),
+  [real route on the Firestore emulator](../../../tests/integration/test_conversation_batch_purge_emulator.py).

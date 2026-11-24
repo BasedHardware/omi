@@ -69,11 +69,14 @@ AUDIO_DETAIL_FIELDS = (
     'shared_live',
     'row_live_since',
     'row_live_passes',
+    'unchecked_siblings',
 )
 # A visible row is rechecked after 5 min, doubling to hourly; after a day it is rechecked daily and counts
 # toward the stuck-obligation alert (a delete that failed after arming and was never retried).
 AUDIO_ROW_LIVE_MAX_RETRY_SECONDS = 60 * 60
 AUDIO_ROW_LIVE_ALERT_AFTER_SECONDS = 24 * 60 * 60
+# A pass that could not classify every fed sibling of a shared upload (capped per pass) continues this soon.
+AUDIO_SIBLINGS_PENDING_RETRY_SECONDS = 60
 SEGMENTS = 'segments'
 TOMBSTONES = 'deleted_conversations'
 # Renewed by every checkpoint/unit; a dead or wedged worker loses ownership after this.
@@ -171,6 +174,21 @@ def arm_audio_erasure(
         transaction.set(ref, fields, merge=True)
 
     _in_transaction(client, body)
+
+
+def mark_audio_delete_completed(
+    uid: str, conversation_id: str, *, firestore_client: Any = None, now: datetime | None = None
+) -> None:
+    """Record that the request which armed this obligation finished deleting the conversation.
+
+    Written by the same request right after the primary row is deleted, so a
+    completed delete is told apart from one that failed after arming without
+    relying on what the row looks like. It also redrives the obligation now: a
+    run that held for the still-visible row is not left on its backoff.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    current = now or _now()
+    audio_job_ref(client, uid, conversation_id).set({'delete_completed_at': current, 'due_at': current}, merge=True)
 
 
 def accept_fields(
@@ -443,6 +461,13 @@ def finish_run(
         wait = HOLD_RECHECK_SECONDS if result == 'held' else REDRIVE_SECONDS
         if retry_after is not None:
             wait = retry_after
+        if (
+            result == 'held'
+            and collection == AUDIO_COLLECTION
+            and extra.get('last_reason') == 'conversation_row_live'
+            and row.get('delete_completed_at')
+        ):
+            wait = 0  # the request finished its delete while this run looked at the row
         if result == 'held' and collection == AUDIO_COLLECTION and not count_attempt:
             # A deliberate hold (storage hold, staging waiting, switch off, legal hold) made its
             # decision: it is not a lost task, so it must not trip the stuck-obligation alert.
@@ -729,11 +754,19 @@ def _gate_busy(error: BaseException, uid: str) -> bool:
 
 
 def _record_staging(
-    client: Any, job: str, token: str, sources: dict[str, list[str]], settled: Iterable[str]
+    client: Any,
+    job: str,
+    token: str,
+    sources: dict[str, list[str]],
+    settled: Iterable[str],
+    deleted_siblings: Iterable[str] = (),
 ) -> tuple[dict[str, list[str]], list[str]]:
     """Merge staging jobs, their fed conversations and settled jobs into the record under run ownership.
 
-    Never shrinks: a sibling or settled state once seen stays recorded. Returns the merged record.
+    Never shrinks: a sibling or settled state once seen stays recorded, and so
+    does a fed sibling once classified deleted (tombstoned, gone, or absorbed
+    into a deleted survivor), so a pass capped on sibling reads continues where
+    the last one stopped. Returns the merged record.
     """
     ref = client.collection(AUDIO_COLLECTION).document(job)
 
@@ -746,7 +779,11 @@ def _record_staging(
         for key, ids in sources.items():
             merged[key] = sorted(set(merged.get(key, [])) | set(ids))
         done = sorted(set(row.get('staging_settled') or []) | set(settled))
-        transaction.update(ref, {'staging_sources': merged, 'staging_settled': done, 'staging_recorded_at': _now()})
+        fields: dict[str, Any] = {'staging_sources': merged, 'staging_settled': done, 'staging_recorded_at': _now()}
+        gone = set(deleted_siblings)
+        if gone:
+            fields['staging_deleted_siblings'] = sorted(set(row.get('staging_deleted_siblings') or []) | gone)
+        transaction.update(ref, fields)
         return merged, done
 
     return _in_transaction(client, body)
@@ -828,9 +865,12 @@ def run_audio_erasure_job(
             # Kill switch off: armed obligations stay owed and resume when it is back on.
             finish('held', reason='switched_off')
             return 'switched_off'
-        conversation = user.collection('conversations').document(conversation_id).get()
-        if conversation.exists and not (conversation.to_dict() or {}).get('deleted'):
-            # The delete failed after arming (it answered 503): never erase audio of a visible conversation.
+        # The arming request marks the obligation once it deleted the row; without that marker a
+        # visible row means the delete failed after arming (it answered 503), and its audio waits.
+        conversation = (
+            None if row.get('delete_completed_at') else user.collection('conversations').document(conversation_id).get()
+        )
+        if conversation is not None and conversation.exists and not (conversation.to_dict() or {}).get('deleted'):
             current = now or _now()
             since = row.get('row_live_since') if row.get('last_reason') == 'conversation_row_live' else None
             since = since if isinstance(since, datetime) else current
@@ -852,7 +892,14 @@ def run_audio_erasure_job(
             return 'conversation_row_live'
         assert_account_deletion_permitted(uid)
         try:
-            summary = erase(uid, conversation_id, donors, staging=recorded, settled=settled)
+            summary = erase(
+                uid,
+                conversation_id,
+                donors,
+                staging=recorded,
+                settled=settled,
+                deleted_siblings=list(row.get('staging_deleted_siblings') or []),
+            )
         except LegalHoldActive:
             raise
         except StoragePrefixPurgeBlocked as error:
@@ -908,7 +955,25 @@ def run_audio_erasure_job(
         except Exception:
             pass  # The lease expires; the original failure is what the queue must see.
         raise
-    shared_live = int((summary or {}).get('shared_live') or 0) if isinstance(summary, dict) else 0
+    summary = summary if isinstance(summary, dict) else {}
+    shared_live = int(summary.get('shared_live') or 0)
+    unchecked = int(summary.get('unchecked_siblings') or 0)
+    newly_deleted = [str(cid) for cid in summary.get('deleted_siblings') or []]
+    try:
+        if newly_deleted:
+            _record_staging(client, job, token, {}, (), newly_deleted)
+        if unchecked:
+            # More fed siblings than one pass reads: the classified ones are recorded, the rest next pass.
+            logger.info('event=conversation_audio_erasure outcome=held job=%s unchecked_siblings=%d', job, unchecked)
+            finish(
+                'held',
+                retry_after=AUDIO_SIBLINGS_PENDING_RETRY_SECONDS,
+                reason='staging_siblings_pending',
+                unchecked_siblings=unchecked,
+            )
+            return 'staging_siblings_pending'
+    except RunSuperseded:
+        return 'superseded'
     if shared_live:
         # Never discharged while a recorded prefix is kept for a live sibling (the ledger linking
         # them expires): rechecked daily, erased once that sibling is deleted.
@@ -949,6 +1014,7 @@ __all__ = [
     'job_id',
     'job_ref',
     'lease_held',
+    'mark_audio_delete_completed',
     'run_audio_erasure_job',
     'run_erasure_job',
     'run_job',

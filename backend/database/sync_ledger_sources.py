@@ -32,6 +32,9 @@ CONVERSATION_FIELDS = tuple(
 SETTLED_STATUS = 'completed'
 # Firestore caps array_contains_any at 30 values.
 _ANY_LIMIT = 30
+# Fed siblings classified per pass (at most two batched point reads each, plus redirect hops for an
+# absorbed donor); the durable obligation records the deleted ones and continues on its next pass.
+SIBLING_CHECKS_PER_PASS = 200
 _SAFE_ID = re.compile(r'^[A-Za-z0-9_-]{1,128}$')
 
 
@@ -55,6 +58,12 @@ class StagingPlan:
     shared_live: tuple[str, ...] = ()
     # Every fed conversation is tombstoned, but the upload has not completed: retry later.
     in_flight: tuple[str, ...] = ()
+    # Some fed sibling was not classified this pass (over the per-pass cap): decided on a later pass.
+    unchecked: tuple[str, ...] = ()
+    # Jobs not seen settled (some row not completed, or recorded without rows and never seen completed).
+    unsettled: tuple[str, ...] = ()
+    # Fed siblings (outside the deletion itself) classified deleted, for the obligation to record.
+    deleted_siblings: frozenset[str] = frozenset()
 
 
 class StagingInFlight(RuntimeError):
@@ -112,10 +121,55 @@ def _tombstoned(uid: str, conversation_ids: Iterable[str], firestore_client: Any
     return {cid for cid in sorted(set(conversation_ids)) if tombstones.document(cid).get().exists}
 
 
-def _gone(uid: str, conversation_ids: Iterable[str], firestore_client: Any) -> set[str]:
-    """Untombstoned ids whose conversation row is absent too (point reads; errors propagate)."""
-    rows = _client(firestore_client).collection('users').document(uid).collection('conversations')
-    return {cid for cid in sorted(set(conversation_ids)) if not rows.document(cid).get().exists}
+def _read_all(client: Any, collection: Any, ids: list[str]) -> dict[str, Any]:
+    """Point-read ``ids`` from one collection (one batched ``get_all`` when the client has it)."""
+    if not ids:
+        return {}
+    refs = [collection.document(cid) for cid in ids]
+    get_all = getattr(client, 'get_all', None)
+    if get_all is None:
+        return {cid: ref.get() for cid, ref in zip(ids, refs)}
+    found = {snapshot.id: snapshot for snapshot in get_all(refs)}
+    return {cid: found[cid] for cid in ids if cid in found}
+
+
+def _deleted_siblings(uid: str, ids: Iterable[str], deleting: set[str], firestore_client: Any) -> set[str]:
+    """The ids among ``ids`` whose conversation is deleted; read errors propagate.
+
+    Deleted means: tombstoned; no row (tombstones are written before rows are
+    deleted, so that conversation is gone); a soft-deleted row
+    (``conversations_db.is_soft_deleted``) that redirects nowhere; or an absorbed
+    merge donor (``sync_merged_into``) whose redirect chain, resolved by the
+    sync redirect resolver, ends deleted or at a conversation in ``deleting``.
+    A donor absorbed into a live survivor is live: its upload is the survivor's audio.
+    """
+    from database.conversations import is_soft_deleted
+    from database.sync_conversation_snapshot import resolve_snapshot
+
+    ids = sorted(set(ids))
+    if not ids:
+        return set()
+    client = _client(firestore_client)
+    user = client.collection('users').document(uid)
+    tombstones = _read_all(client, user.collection('deleted_conversations'), ids)
+    deleted = {cid for cid, snapshot in tombstones.items() if snapshot.exists}
+    rows = _read_all(client, user.collection('conversations'), [cid for cid in ids if cid not in deleted])
+    for cid in ids:
+        if cid in deleted:
+            continue
+        snapshot = rows.get(cid)
+        row = (snapshot.to_dict() or {}) if snapshot is not None and snapshot.exists else None
+        if row is None:
+            deleted.add(cid)
+        elif is_soft_deleted(row):
+            successor = row.get('sync_merged_into')
+            if not isinstance(successor, str) or not successor:
+                deleted.add(cid)
+                continue
+            survivor = resolve_snapshot(uid, cid, client_factory=lambda: client)
+            if survivor is None or survivor.conversation_id in deleting:
+                deleted.add(cid)
+    return deleted
 
 
 def uploads_for_conversations(
@@ -202,6 +256,8 @@ def staging_plan(
     *,
     recorded: Mapping[str, Iterable[str]] | None = None,
     settled: Iterable[str] = (),
+    known_deleted: Iterable[str] = (),
+    max_checks: int = SIBLING_CHECKS_PER_PASS,
     firestore_client: Any = None,
 ) -> StagingPlan:
     """Sort the staging directories of the uploads that fed these conversations.
@@ -222,6 +278,12 @@ def staging_plan(
     recorded job is settled only if it is in ``settled`` (a pass saw every row
     completed); otherwise it stays in flight, held rather than erased, because
     a conversation it fed after the record could be unknown.
+
+    A fed sibling is classified by ``_deleted_siblings`` (an absorbed merge
+    donor counts as its survivor). At most ``max_checks`` siblings not already
+    in ``known_deleted`` (deleted siblings an earlier pass recorded) are read
+    per call; a job with an unread sibling and no live one is ``unchecked``.
+    ``deleted_siblings`` returns every sibling known deleted, to record.
     """
     conversation_ids = [cid for cid in conversation_ids if cid]
     recorded = {job: list(ids) for job, ids in (recorded or {}).items() if _SAFE_ID.match(str(job))}
@@ -237,18 +299,33 @@ def staging_plan(
         for job, rows in by_job.items()
     }
     fed = set().union(*fed_by_job.values())
-    deleted = set(conversation_ids) | _tombstoned(uid, fed - set(conversation_ids), firestore_client)
-    deleted |= _gone(uid, fed - deleted, firestore_client)
-    erasable, shared_live, in_flight = [], [], []
+    deleting = set(conversation_ids)
+    known = set(known_deleted) - deleting
+    pending = sorted(fed - deleting - known)
+    checked, unread = set(pending[: max(max_checks, 0)]), set(pending[max(max_checks, 0) :])
+    found = _deleted_siblings(uid, checked, deleting, firestore_client)
+    live = checked - found
+    erasable, shared_live, in_flight, unchecked, unsettled = [], [], [], [], []
     for job in sorted(by_job):
         rows = by_job[job].values()
-        if not fed_by_job[job] <= deleted:
+        if any(row.status != SETTLED_STATUS for row in rows) or (not rows and job not in settled_jobs):
+            unsettled.append(job)
+        if fed_by_job[job] & live:
             shared_live.append(job)
-        elif any(row.status != SETTLED_STATUS for row in rows) or (not rows and job not in settled_jobs):
+        elif fed_by_job[job] & unread:
+            unchecked.append(job)
+        elif job in unsettled:
             in_flight.append(job)
         else:
             erasable.append(job)
-    return StagingPlan(tuple(erasable), tuple(shared_live), tuple(in_flight))
+    return StagingPlan(
+        tuple(erasable),
+        tuple(shared_live),
+        tuple(in_flight),
+        tuple(unchecked),
+        tuple(unsettled),
+        frozenset((known | found) & fed),
+    )
 
 
 def staging_job_ids(uid: str, conversation_ids: Iterable[str], *, firestore_client: Any = None) -> list[str]:

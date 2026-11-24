@@ -137,6 +137,7 @@ from utils.conversations.deletion_batch_purge import (
     arm_audio_erasure,
     deferred_batch_purges,
     durable_audio_erasure,
+    mark_audio_delete_completed,
 )
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
@@ -1968,7 +1969,8 @@ def _delete_conversation_under_gate(
     except Exception as error:
         raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
     source_ids = [source for source in (raw or {}).get('sync_merged_from') or [] if isinstance(source, str)]
-    if durable_audio_erasure():
+    audio_armed = durable_audio_erasure()
+    if audio_armed:
         # Owed before the primary row goes, so a retry answered ``already_deleted`` still
         # leaves it owed; the runner retries holds, in-flight staging and read failures.
         known = [*source_ids, *(source for source in audio_source_ids if source not in source_ids)]
@@ -1996,6 +1998,15 @@ def _delete_conversation_under_gate(
         delete_conversation_and_frame_evidence(uid, conversation_id)
     except object_lake.LakeFetchError as error:
         raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
+    if audio_armed:
+        # The row is gone: the runner may erase the audio. A request that failed before this
+        # point leaves the marker unset, and the runner waits while the row is still visible.
+        try:
+            mark_audio_delete_completed(uid, conversation_id)
+        except Exception as error:  # noqa: BLE001 - the row is deleted; the runner sees it absent
+            logger.warning(
+                'event=conversation_delete action=audio_marker outcome=error exception_type=%s', type(error).__name__
+            )
 
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)

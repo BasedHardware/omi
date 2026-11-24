@@ -79,6 +79,11 @@ def arm_audio_erasure(uid: str, conversation_id: str, source_ids: list[str], *, 
     purge_jobs.arm_audio_erasure(uid, conversation_id, source_ids, sync_sourced=sync_sourced)
 
 
+def mark_audio_delete_completed(uid: str, conversation_id: str) -> None:
+    """Tell the durable runner the arming request deleted the conversation (so its audio may go)."""
+    purge_jobs.mark_audio_delete_completed(uid, conversation_id)
+
+
 @contextmanager
 def deferred_batch_purges(uid: str) -> Iterator[None]:
     """Inside this scope ``record_deletion`` arms an obligation instead of purging inline.

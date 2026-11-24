@@ -72,9 +72,17 @@ class _Collection:
 class _Client:
     def __init__(self, docs):
         self.docs, self.queries, self.job_queries, self.fail_reads = dict(docs), [], [], False
+        self.batches = []
 
     def collection(self, name):
         return _Collection(self, name)
+
+    def get_all(self, refs):
+        refs = list(refs)
+        self.batches.append([ref.path for ref in refs])
+        for ref in refs:
+            row = self.docs.get(ref.path)
+            yield SimpleNamespace(id=ref.id, exists=row is not None, to_dict=lambda row=row: dict(row or {}))
 
 
 @pytest.fixture(autouse=True)
@@ -232,7 +240,7 @@ def test_sibling_fed_by_another_ledger_row_of_the_same_job_keeps_the_staging():
 def test_staging_of_an_unfinished_upload_is_retained_for_retry():
     client = _Client({f'{LEDGER}/running': _row('job-running', new=['a'], status='processing'), f'{TOMBSTONES}/a': {}})
     plan = sources.staging_plan(UID, ['a'], firestore_client=client)
-    assert plan == sources.StagingPlan(in_flight=('job-running',))
+    assert plan == sources.StagingPlan(in_flight=('job-running',), unsettled=('job-running',))
 
 
 def test_ledger_read_failure_propagates_instead_of_erasing_nothing_silently():
@@ -267,7 +275,7 @@ def test_recorded_job_without_ledger_rows_is_settled_only_if_a_pass_saw_it_compl
     client = _Client({f'{TOMBSTONES}/a': {}})
     recorded = {'job-x': ['a']}
     assert sources.staging_plan(UID, ['a'], recorded=recorded, firestore_client=client) == sources.StagingPlan(
-        in_flight=('job-x',)
+        in_flight=('job-x',), unsettled=('job-x',)
     )
     assert sources.staging_plan(UID, ['a'], recorded=recorded, settled=['job-x'], firestore_client=client).erasable == (
         'job-x',
@@ -284,3 +292,88 @@ def test_staging_sources_records_fed_conversations_and_settled_jobs():
     found = sources.staging_sources(UID, ['a'], firestore_client=client)
     assert found.fed == {'job-done': ['a', 'b'], 'job-running': ['a']}
     assert found.settled == frozenset({'job-done'})
+
+
+def _absorbed(into):
+    return {'deleted': True, 'discarded': True, 'sync_merged_into': into}
+
+
+def test_donor_absorbed_into_a_deleted_survivor_counts_as_deleted():
+    """A merge donor keeps a redirect row (deleted, sync_merged_into): its upload is not live forever."""
+    client = _Client(
+        {
+            f'{LEDGER}/shared': _row('job-shared', new=['a'], updated=['donor']),
+            f'{TOMBSTONES}/a': {},
+            f'{CONVERSATIONS}/donor': _absorbed('survivor'),
+            f'{TOMBSTONES}/survivor': {},
+        }
+    )
+    assert sources.staging_plan(UID, ['a'], firestore_client=client).erasable == ('job-shared',)
+
+
+def test_donor_absorbed_into_the_deletion_itself_counts_as_deleted():
+    client = _Client(
+        {
+            f'{LEDGER}/shared': _row('job-shared', new=['a'], updated=['donor']),
+            f'{CONVERSATIONS}/donor': _absorbed('a'),
+            f'{CONVERSATIONS}/a': {'status': 'completed'},
+        }
+    )
+    assert sources.staging_plan(UID, ['a'], firestore_client=client).erasable == ('job-shared',)
+
+
+def test_donor_absorbed_into_a_live_survivor_keeps_the_staging_for_that_survivor():
+    client = _Client(
+        {
+            f'{LEDGER}/shared': _row('job-shared', new=['a'], updated=['donor']),
+            f'{TOMBSTONES}/a': {},
+            f'{CONVERSATIONS}/donor': _absorbed('hop'),
+            f'{CONVERSATIONS}/hop': _absorbed('survivor'),
+            f'{CONVERSATIONS}/survivor': {'status': 'completed'},
+        }
+    )
+    assert sources.staging_plan(UID, ['a'], firestore_client=client).shared_live == ('job-shared',)
+    # The survivor is deleted later: the chain now ends deleted.
+    client.docs[f'{TOMBSTONES}/survivor'] = {}
+    assert sources.staging_plan(UID, ['a'], firestore_client=client).erasable == ('job-shared',)
+
+
+def test_soft_deleted_sibling_without_a_redirect_counts_as_deleted():
+    client = _Client(
+        {
+            f'{LEDGER}/shared': _row('job-shared', new=['a'], updated=['hidden']),
+            f'{TOMBSTONES}/a': {},
+            f'{CONVERSATIONS}/hidden': {'deleted': True},
+        }
+    )
+    assert sources.staging_plan(UID, ['a'], firestore_client=client).erasable == ('job-shared',)
+
+
+def test_sibling_reads_are_batched_and_capped_per_pass_then_continue():
+    siblings = [f's{i}' for i in range(5)]
+    docs = {f'{LEDGER}/shared': _row('job-shared', new=['a'], updated=siblings), f'{TOMBSTONES}/a': {}}
+    docs.update({f'{TOMBSTONES}/{cid}': {} for cid in siblings})
+    client = _Client(docs)
+    first = sources.staging_plan(UID, ['a'], max_checks=3, firestore_client=client)
+    # One batched tombstone read for the capped window; every one was tombstoned, so no row read.
+    assert client.batches == [[f'{TOMBSTONES}/s0', f'{TOMBSTONES}/s1', f'{TOMBSTONES}/s2']]
+    assert first.unchecked == ('job-shared',) and not first.erasable
+    assert first.deleted_siblings == frozenset({'s0', 's1', 's2'})
+    second = sources.staging_plan(
+        UID, ['a'], max_checks=3, known_deleted=first.deleted_siblings, firestore_client=client
+    )
+    assert client.batches[-1] == [f'{TOMBSTONES}/s3', f'{TOMBSTONES}/s4']
+    assert second.erasable == ('job-shared',)
+    assert second.deleted_siblings == frozenset(siblings)
+
+
+def test_a_live_sibling_in_the_window_decides_shared_live_before_the_rest_is_read():
+    client = _Client(
+        {
+            f'{LEDGER}/shared': _row('job-shared', new=['a'], updated=['live', 'z1', 'z2']),
+            f'{TOMBSTONES}/a': {},
+            f'{CONVERSATIONS}/live': {'status': 'completed'},
+        }
+    )
+    plan = sources.staging_plan(UID, ['a'], max_checks=1, firestore_client=client)
+    assert plan.shared_live == ('job-shared',) and not plan.unchecked

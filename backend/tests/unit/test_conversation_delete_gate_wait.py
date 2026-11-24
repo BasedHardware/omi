@@ -967,6 +967,25 @@ def test_task_probe_looks_in_the_erasure_queue_then_the_shared_one(monkeypatch, 
         cloud_tasks.conversation_batch_purge_task_pending('j1', 2)  # unknown is never "gone"
 
 
+def test_audio_erasure_task_name_payload_and_probe_contract(monkeypatch, purge_env):
+    """The consumer routes on ``kind: audio_erasure``; the reconciler probes the same task name it sent."""
+    monkeypatch.setenv('CONVERSATION_ERASURE_TASKS_QUEUE', 'conversation-erasure')
+    enqueue = MagicMock()
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    cloud_tasks.enqueue_conversation_batch_purge('j1', 3, audio=True)
+    queue, url, task_id, payload = enqueue.call_args.args[:4]
+    assert (queue, url) == ('conversation-erasure', purge_env)
+    assert task_id == 'conversation-audio-erasure-j1-g3'
+    assert payload == {'job_id': 'j1', 'generation': 3, 'kind': 'audio_erasure'}
+    probes = []
+    monkeypatch.setattr(cloud_tasks, 'named_task_exists', lambda queue, name: probes.append((queue, name)) or False)
+    assert cloud_tasks.conversation_batch_purge_task_pending('j1', 3, audio=True) is False
+    assert probes == [
+        ('conversation-erasure', 'conversation-audio-erasure-j1-g3'),
+        ('account-deletion', 'conversation-audio-erasure-j1-g3'),
+    ]
+
+
 def test_missing_erasure_queue_keeps_units_on_the_shared_queue(monkeypatch, purge_env):
     from google.api_core.exceptions import NotFound
 
