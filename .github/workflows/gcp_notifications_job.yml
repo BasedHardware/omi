@@ -593,9 +593,22 @@ jobs:
           PyYAML==6.0.1 --hash=sha256:d2b04aac4d386b172d5b9692e2d2da8de7bfb6c387fa4f801fbf6fb2e6ba4673
           REQUIREMENTS
 
+      - name: Checkout immutable Firestore gate controls
+        if: inputs.mode != 'image-only-rollback'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
+
       - name: Verify serving Firestore indexes
         if: inputs.mode != 'image-only-rollback'
-        uses: ./.github/actions/firestore-readiness
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
         with:
           source_sha: ${{ inputs.release_sha }}
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
@@ -646,7 +659,7 @@ jobs:
           labels: org.opencontainers.image.revision=${{ inputs.release_sha }}
 
       - name: Smoke and publish the verified image
-        if: inputs.mode == 'image-only-validate'
+        if: inputs.mode != 'image-only-rollback' && inputs.mode == 'image-only-validate'
         run: |
           set -euo pipefail
           image="$IMAGE_REPOSITORY:$RELEASE_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"

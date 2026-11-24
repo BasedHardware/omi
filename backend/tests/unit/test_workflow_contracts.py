@@ -1182,6 +1182,37 @@ def test_firestore_readiness_gate_covers_every_backend_image_shipment():
     assert policy._yaml_document.cache_info().hits > 0
 
 
+def test_firestore_notifications_forward_gate_cannot_be_bypassed():
+    policy = _workflow_policy()
+    repo = BACKEND_DIR.parent
+    name = 'gcp_notifications_job.yml'
+    text = (repo / '.github/workflows' / name).read_text(encoding='utf-8')
+    dockerfiles = policy._runtime_images(repo)
+    mutations = (
+        (
+            "if: inputs.mode != 'image-only-rollback' && inputs.mode == 'image-only-validate'",
+            "if: inputs.mode == 'image-only-validate'",
+            'lacks an earlier successful Firestore readiness gate',
+        ),
+        (
+            'source_sha: ${{ inputs.release_sha }}',
+            'source_sha: ${{ env.CHECKED_OUT_SHA }}',
+            'notifications image-only readiness must use inputs.release_sha',
+        ),
+        (
+            "if: inputs.mode != 'image-only-rollback'\n        uses: ./.github/firestore-workflow/",
+            'uses: ./.github/firestore-workflow/',
+            'notifications image-only readiness must gate validate and apply while allowing rollback',
+        ),
+    )
+    for original, replacement, expected in mutations:
+        assert original in text
+        violations = policy.workflow_gate_violations(
+            text.replace(original, replacement), name=name, dockerfiles=dockerfiles
+        )
+        assert any(expected in violation for violation in violations), violations
+
+
 def test_firestore_repository_scan_keeps_worker_workflow_in_scope():
     policy = _workflow_policy()
     worker_workflow = (BACKEND_DIR.parent / '.github/workflows/gcp_diarizer.yml').read_text(encoding='utf-8')
@@ -1877,7 +1908,7 @@ def test_firestore_gate_checkouts_are_sparse():
         count = text.count('path: .github/firestore-workflow')
         assert text.count(controls_sparse) == count, path
         gated += count
-    assert gated == len(_LANE_SOURCE_BINDINGS)
+    assert gated == len(_LANE_SOURCE_BINDINGS) + 1  # Notifications also has an image-only gate.
 
     action = (repo / '.github/actions/firestore-readiness/action.yml').read_text(encoding='utf-8')
     assert (
