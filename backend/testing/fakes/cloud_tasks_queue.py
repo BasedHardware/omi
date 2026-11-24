@@ -39,6 +39,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
+from routers import enrichment as enrichment_adapter
+
 
 @dataclass(frozen=True)
 class QueueConfig:
@@ -348,7 +350,6 @@ def enrichment_route_status() -> int:
     fence and the adapter are the only stand-ins."""
     import asyncio
 
-    from routers import enrichment as enrichment_adapter
     from utils.sync import reprocess
 
     def pending(*_args, **_kwargs):

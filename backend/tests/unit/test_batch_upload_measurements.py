@@ -10,7 +10,10 @@ from prometheus_client import CollectorRegistry, generate_latest
 import yaml
 
 from database import batch_pipeline_upload_metrics as upload_metrics
+from diarizer import batch_pipeline_runtime as runtime
+from diarizer.batch_pipeline_runtime import merge_metrics
 from utils.batch_pipeline import upload_entitlement
+from utils.metrics import metrics_response
 from tests.unit.test_batch_pipeline_intake import proposal, submit, cohort  # noqa: F401
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
@@ -92,8 +95,6 @@ def test_completion_latency_counts_originals_not_merged_units_or_replays(monkeyp
 
 
 def test_upload_metrics_forward_through_worker_multiprocess_exposition():
-    from diarizer.batch_pipeline_runtime import merge_metrics
-
     registry = CollectorRegistry()
     for collector in upload_metrics.COLLECTORS:
         registry.register(collector)
@@ -133,8 +134,6 @@ def test_class_metrics_survive_every_cloud_run_relabel_rule(profile, metric):
 
 
 def test_worker_actual_health_registry_exposes_both_collectors():
-    from diarizer import batch_pipeline_runtime as runtime
-
     registry = CollectorRegistry()
     server = runtime.health_server(runtime.RuntimeState(), registry, 0, '127.0.0.1')
     try:
@@ -148,8 +147,6 @@ def test_worker_actual_health_registry_exposes_both_collectors():
 
 
 def test_sync_default_registry_serves_the_created_and_latency_families():
-    from utils.metrics import metrics_response
-
     response = metrics_response()
     assert b'omi_batch_pipeline_created_units_total' in response.body
     assert b'omi_batch_pipeline_upload_to_transcript_seconds_bucket' in response.body

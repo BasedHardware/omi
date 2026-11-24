@@ -17,9 +17,10 @@ import pytest
 from starlette.testclient import TestClient
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse
+from starlette.responses import PlainTextResponse, Response
 from starlette.routing import Route
 
+from config.request_clock import started_at
 from utils.other.timeout import TimeoutMiddleware
 
 
@@ -287,9 +288,6 @@ async def test_dream_v2_outer_timeout_is_dynamic_and_path_scoped(monkeypatch, pa
 
 @pytest.mark.asyncio
 async def test_original_upload_arrival_clock_is_server_owned_and_reset():
-    from config.request_clock import started_at
-    from starlette.responses import Response
-
     middleware = TimeoutMiddleware(Starlette())
     seen = []
 
@@ -309,8 +307,6 @@ async def test_original_upload_arrival_clock_is_server_owned_and_reset():
 
 @pytest.mark.asyncio
 async def test_original_upload_arrival_clock_resets_on_timeout():
-    from config.request_clock import started_at
-
     middleware = TimeoutMiddleware(Starlette(), methods_timeout={"GET": 0.001})
     response = await middleware.dispatch(_make_request(), _never_returns)
     assert response.status_code == 504 and started_at.get() is None
