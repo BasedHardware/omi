@@ -323,6 +323,10 @@ class PlayBilling {
         'pending' => const PlayPurchaseResult(PlayPurchaseOutcome.pending),
         _ => PlayPurchaseResult(PlayPurchaseOutcome.failed, code: result.code),
       };
+    } catch (error) {
+      // A token store error ends as a failed purchase, so the purchase never stays open for the session.
+      Logger.debug('Play token delivery failed: $error');
+      return const PlayPurchaseResult(PlayPurchaseOutcome.failed);
     } finally {
       _delivering.remove(token);
     }

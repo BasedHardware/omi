@@ -163,10 +163,27 @@ void main() {
     expect((await answer(200, 'not json')).retryable, isTrue);
   });
 
+  test('a token store error ends the purchase as failed instead of leaving it open', () async {
+    billing = PlayBilling(platform: () => platform, verify: server.call, store: _BrokenTokenStore());
+    final offers = (await billing.loadOffers(playConfig))!;
+    platform.onLaunch = [playPurchase(PurchaseStatus.purchased)];
+    final result = await billing.purchase(offer: offers.monthly!, withTrial: false, obfuscatedAccountId: 'a');
+    expect(result.outcome, PlayPurchaseOutcome.failed);
+    expect(billing.busy, isFalse);
+  });
+
   test('manage subscription opens Play subscription center for omi_pro', () {
     expect(
       playManageSubscriptionUri('omi_pro').toString(),
       'https://play.google.com/store/account/subscriptions?sku=omi_pro&package=com.friend.ios',
     );
   });
+}
+
+class _BrokenTokenStore implements PlayPendingTokenStore {
+  @override
+  Future<List<Map<String, String>>> read() async => throw StateError('store unavailable');
+
+  @override
+  Future<void> write(List<Map<String, String>> value) async => throw StateError('store unavailable');
 }
