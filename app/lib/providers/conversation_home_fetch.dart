@@ -103,11 +103,14 @@ extension _ConversationHomeFetch on ConversationProvider {
     };
   }
 
-  Future<_HomePage> _getConversationsFromServer() async {
+  /// [since] bounds the read to rows created at or after it (the recent-rows refresh); the
+  /// default reads the newest page.
+  Future<_HomePage> _getConversationsFromServer({DateTime? since}) async {
     final typedApi = _conversationApi;
     var page = const ConversationPageHeaders();
     if (typedApi != null) {
-      final (startDate, endDate) = _getDateFilterRange();
+      var (startDate, endDate) = _getDateFilterRange();
+      startDate = since ?? startDate;
       var storageCount = 0;
       final typed = await typedApi.list(
         heldHomeEpisodes: _homeEpisodeAcknowledgements,
@@ -134,7 +137,8 @@ extension _ConversationHomeFetch on ConversationProvider {
       );
     }
 
-    final (startDate, endDate) = _getDateFilterRange();
+    var (startDate, endDate) = _getDateFilterRange();
+    startDate = since ?? startDate;
 
     var storageCount = 0;
     final result = await getConversationsResult(

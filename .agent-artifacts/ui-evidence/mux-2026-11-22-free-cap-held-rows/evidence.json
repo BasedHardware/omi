@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-activity-held-light-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Activity, free owner past 300 minutes, light. Main: held recordings read Couldn't transcribe / Processing Failed with Try Again. Branch: Not transcribed yet / You've used this month's 300 minutes with Upgrade; the real upload failure keeps Try Again.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-activity-held-dark-before-after.png",
+      "platform": "mobile-ios",
+      "description": "The same Activity rows in dark mode, main vs branch.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-activity-held-xxxl-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Largest accessibility text size. Main: the trailing Try Again squeezes the title to one letter per line. Branch: the action sits under the text and the row reads.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-detail-held-dark-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Conversation detail of a held recording, dark. Main: Couldn't transcribe title, Summary failed, Try Again. Branch: date title, Not transcribed yet, You've used this month's 300 minutes, Upgrade.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-held-row-upgrade-path.png",
+      "platform": "mobile-ios",
+      "description": "Branch: held row Upgrade opens the shipped free-cap sheet; its Upgrade to Omi Pro opens the trial page with the catalog price (7 days free, then US$269.91/year).",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-activity-held-locales.png",
+      "platform": "mobile-ios",
+      "description": "Branch: the held rows in German, Japanese and Arabic (RTL), all existing translated strings.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

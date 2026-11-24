@@ -73,6 +73,11 @@ from config.refactor_modes import serving_for
 from config.open_loops import open_loops_enabled
 from utils.llm.notes_packet import PACKET_RULES, select_notes_packet, _local_started_at_iso
 from utils.llm.notes_output_contract import finish_notes_contract, OUTPUT_RULES
+from utils.other.request_deadline import (
+    RequestDeadlineExceeded,
+    capped_deadline_seconds,
+    request_deadline_exceeded,
+)
 from utils.llm.notes_identity import notes_identity, screen_speaker_bindings
 from utils.llm.notes_output import NotesOutput, OpenLoopNotesOutput
 from utils.llm.notes_observability import current_run, observe_notes
@@ -319,6 +324,11 @@ CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
 # deadline cancelled the viable retry in its final stretch, so the mount sizes
 # at two attempts plus one inter-attempt delay bound (3x).
 NOTES_LOOP_DEADLINE_SECONDS = 3 * CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
+# One route caps this per request: the synchronous from-segments ingest sets a
+# request deadline (utils.other.request_deadline) so a failing notes step answers
+# a retryable 503 inside the client's own 30 s pool deadline instead of holding
+# the request for the full recovery budget. Every other caller keeps the constant
+# above unchanged; the cap is a request-scoped ceiling, not a smaller default.
 # Screen-OCR rows already parsed from the context are a follow-up; this gate counts frames only.
 # The gate counts approved frames available (`screen_frame_count` from the wiring),
 # never the attached-image budget: MAX_NOTES_FRAME_IMAGES caps attached images at
@@ -432,8 +442,22 @@ person. Attribute speech only from the original speaker map or direct evidence.
 Do not infer attendance, absence, or a no-show from either listing.
 """ + '\n\n' + ACTION_ITEM_EXTRACTION_RULES,
         schema=StructuredExtraction,
-        budget=Budget(turns=1, tool_calls=0, deadline_seconds=NOTES_LOOP_DEADLINE_SECONDS),
+        budget=Budget(turns=1, tool_calls=0, deadline_seconds=capped_deadline_seconds(NOTES_LOOP_DEADLINE_SECONDS)),
     )
+
+
+def _bounded_notes_mount(mount: Mount) -> Mount:
+    """Re-derive the notes budget from the one absolute request deadline.
+
+    ``notes_mount()`` snapshots the remaining budget when it is built. The
+    agentic attempt may run for most of it before falling back, so the one-shot
+    path must recompute from the same absolute deadline instead of reusing the
+    snapshot — otherwise the two paths can each spend the full budget.
+    """
+    deadline = capped_deadline_seconds(mount.budget.deadline_seconds)
+    if deadline == mount.budget.deadline_seconds:
+        return mount
+    return replace(mount, budget=replace(mount.budget, deadline_seconds=deadline))
 
 
 def _notes_output_schema(uid: Optional[str], *, agent: bool = False) -> type[Any]:
@@ -567,6 +591,11 @@ def _get_shaped_conversation_notes(
         )
     # An agent may discover screen evidence before falling back. Use the final
     # identity authority for both the prompt and output repair.
+    if request_deadline_exceeded():
+        # The agentic attempt spent the request budget. Starting the one-shot
+        # fallback now would hold the request past the client's own deadline, so
+        # answer the retryable 503 instead of buying a second stalled call.
+        raise RequestDeadlineExceeded('notes fallback started after the request budget was spent')
     one_shot_packet = packet if serving_for('NOTES_PACKET_V2_MODE', uid) else legacy_packet
     one_shot_packet['screen_speaker_bindings'] = screen_speaker_bindings(kwargs['notes_identity'])
     evidence[0]['content'] = json.dumps(one_shot_packet, ensure_ascii=False, default=str)
@@ -597,7 +626,7 @@ def _get_shaped_conversation_notes(
                     content = ''.join(part.get('text', '') if isinstance(part, dict) else str(part) for part in content)
                 return Turn(value=_parse_notes_model_output(extraction_parser, str(content)))
 
-            return await run_loop(mount, evidence, model_turn)
+            return await run_loop(_bounded_notes_mount(mount), evidence, model_turn)
 
     result = asyncio.run(invoke())
     output_schema = _notes_output_schema(uid)

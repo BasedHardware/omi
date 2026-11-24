@@ -10,6 +10,7 @@ from utils.generated_compute import require_generated_compute, generated_compute
 import asyncio
 import hashlib
 import os
+import time
 from contextlib import ExitStack, nullcontext
 
 from fastapi.responses import StreamingResponse
@@ -30,6 +31,8 @@ import database.users as users_db
 from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
 from database import conversation_tombstones
 from database.legal_holds import (
+    DestructiveGateTakeover,
+    DestructiveOperationInProgress,
     LegalHoldActive,
     LegalHoldAuthorityUnavailable,
     assert_account_deletion_permitted,
@@ -37,9 +40,7 @@ from database.legal_holds import (
 )
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
-from utils.list_version_check import ListVersionCheck
 from config import historical_tier
-from config.episodes import home_step_projection_enabled, home_transcription_presentation_gate_enabled
 from utils.conversations import historical_projection, home_step, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
@@ -55,6 +56,7 @@ from utils.other.storage import (
     get_app_thumbnail_url,
 )
 from utils.screen_frames.store import delete_conversation_screen_frames
+from utils.log_sanitizer import sanitize
 from models.calendar_context import CalendarMeetingContext
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -1177,17 +1179,6 @@ def get_conversations(
 
     from utils.episodes import home_membership
 
-    held_request = home_membership.held_for(request)
-    # Reader-enforced expiry changes the body without a writer-version bump.
-    time_dependent = (
-        home_transcription_presentation_gate_enabled()
-        or home_step_projection_enabled()
-        or home_membership.live_suppression_for(uid, request)
-    )
-    version_check = ListVersionCheck.start(None if held_request or time_dependent else request, uid, 'conversations')
-    if version_check.not_modified is not None:
-        return version_check.not_modified
-
     # Request-scoped budget: the server-side offset is charged before the
     # query and the page stream runs under the derived per-RPC timeout, so a
     # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
@@ -1198,6 +1189,7 @@ def get_conversations(
     # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
     # legacy sync piece there would duplicate them.
     show_held = default_home and not conversations_v3_enabled(uid)
+    read_started = time.monotonic()
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
@@ -1222,6 +1214,7 @@ def get_conversations(
         show_held=show_held,
     )
 
+    read_done = time.monotonic()
     conversations = home_membership.project_list(
         uid,
         conversations,
@@ -1234,9 +1227,14 @@ def get_conversations(
     if response is not None:
         list_page_headers.apply(response, page)
     _heal_locked_conversations_if_eligible(uid, conversations)
+    admissions = transcribing_hold.read_admissions(uid, conversations, budget=budget)
     conversations = [
         historical_projection.project(
-            transcribing_hold.project(home_step.project(row, show_held=show_held), home_list=True)
+            transcribing_hold.project(
+                home_step.project(row, show_held=show_held),
+                home_list=True,
+                admission=admissions.get(row.get('id')),
+            )
         )
         for row in conversations
     ]
@@ -1244,12 +1242,20 @@ def get_conversations(
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
-    # Paid lock recovery depends on the current allowance (including rollover)
-    # and must run on every locked-page read, even without a source mutation.
-    version_check.finish(
-        response,
-        truncated=budget.truncated,
-        cacheable=not held_request and not time_dependent and not any(row.get('is_locked') for row in conversations),
+    # Read meter: what one list page cost. Counts and timings only, never the owner or the query.
+    logger.info(
+        'conversation_list_read home=%s paged=%s limit=%d docs=%s storage_rows=%s hidden=%s rows=%d '
+        'truncated=%s read_ms=%d total_ms=%d',
+        default_home,
+        'cursor' if cursor else ('offset' if offset else 'first'),
+        limit,
+        getattr(budget, 'docs_scanned', None),
+        page.get('storage_rows'),
+        page.get('hidden_rows'),
+        len(conversations),
+        budget.truncated,
+        (read_done - read_started) * 1000,
+        (time.monotonic() - read_started) * 1000,
     )
     return conversations
 
@@ -1395,7 +1401,10 @@ def get_conversation_by_id(
     conversation.pop(v3_policy.LIVE_SUMMARY_FIELD, None)
     if preview:
         conversation['live_summary'] = preview
-    return present_generated_note_sections(historical_projection.project(transcribing_hold.project(conversation)))
+    admission = transcribing_hold.read_admissions(uid, [conversation]).get(conversation.get('id'))
+    return present_generated_note_sections(
+        historical_projection.project(transcribing_hold.project(conversation, admission=admission))
+    )
 
 
 @router.patch(
@@ -1837,6 +1846,21 @@ def erase_accepted_conversation(uid: str, conversation_id: str, audio_source_ids
         func(*args, **kwargs)
 
 
+def _delete_privacy_audio_after_response(uid: str, conversation_id: str, *, source_ids: List[str]) -> None:
+    from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked, StoragePrefixPurgeError
+
+    try:
+        delete_privacy_conversation_audio(uid, conversation_id, source_ids=source_ids)
+    except StoragePrefixPurgeError as error:
+        logger.error(
+            'event=conversation_audio_purge uid=%s conversation_id=%s outcome=%s reason=%s',
+            uid,
+            conversation_id,
+            'blocked' if isinstance(error, StoragePrefixPurgeBlocked) else 'failed',
+            sanitize(error),
+        )
+
+
 def _delete_conversation_under_gate(
     conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client, *, record_event=True
 ):
@@ -1906,7 +1930,8 @@ def _delete_conversation_under_gate(
             except Exception as error:
                 raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
             source_ids = (raw or {}).get('sync_merged_from', [])
-        background_tasks.add_task(delete_privacy_conversation_audio, uid, conversation_id, source_ids=source_ids)
+        purge_audio = _delete_privacy_audio_after_response if record_event else delete_privacy_conversation_audio
+        background_tasks.add_task(purge_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation
     # content, not cascade-only derived data, so this runs unconditionally
@@ -2161,6 +2186,10 @@ def _assign_manual_speaker(
             background_tasks=background_tasks,
             **({"time_range": time_range} if time_range is not None else {}),
         )
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as error:
+        # The write fence stays exclusive; while a destructive operation owns the
+        # account gate the edit is retryable, not a server fault (#SCA-4074).
+        raise account_gate_busy_http_exception() from error
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except PermissionError as error:
@@ -3032,7 +3061,9 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
             from utils.executors import start_background_task
 
             work = start_background_task(
-                reconcile(uid, on_open=True, conversation_id=conversation_id), name='v3-reconcile-open'
+                reconcile(uid, on_open=True, conversation_id=conversation_id),
+                name='v3-reconcile-open',
+                bounded_provider_failure=True,
             )
             await asyncio.wait_for(asyncio.shield(work), timeout=8)
         except Exception as exc:

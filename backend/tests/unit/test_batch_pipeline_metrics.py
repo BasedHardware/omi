@@ -233,7 +233,10 @@ def test_scheduler_records_new_transitions_without_duplicate_completion_count():
     assert queue.complete(result, lease.token, 11)
     assert queue.complete(result, lease.token, 12)
     assert registry.get_sample_value('omi_batch_pipeline_events_total', {'event': 'completed'}) == 1
-    assert registry.get_sample_value('omi_batch_pipeline_owner_wait_seconds_sum', {'relet': 'false'}) == 10
+    assert (
+        registry.get_sample_value('omi_batch_pipeline_owner_wait_seconds_sum', {'relet': 'false', 'priority': 'deep'})
+        == 10
+    )
     merge = OrderedMerge(store, metrics=metrics)
     merge.commit_next('heavy', 13)
     merge.commit_next('heavy', 14)
@@ -855,3 +858,16 @@ def test_timeliness_cohort_includes_provider_running_but_not_provider_pending():
 
     assert 'provider_running' in TIMELINESS_ACTIVE_STATES
     assert 'provider_pending' not in TIMELINESS_UNCOMMITTED_STATES
+
+
+def test_owner_wait_is_split_by_bounded_queue_class():
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    queue = Scheduler(MemoryStore(), metrics=metrics)
+    queue.enqueue(item('fresh-unit', priority=Priority.FRESH), 0)
+    assert queue.pull(4)
+    metrics.record('leased', wait_seconds=7, priority='not-a-class')
+    count = 'omi_batch_pipeline_owner_wait_seconds_count'
+    assert registry.get_sample_value(count, {'relet': 'false', 'priority': 'fresh'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'false', 'priority': 'unknown'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'false', 'priority': 'deep'}) is None

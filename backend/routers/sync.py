@@ -172,7 +172,8 @@ from utils.metrics import (
     OMI_SYNC_QUEUE_WAIT_SECONDS,
     OMI_SYNC_RECORDING_AGE_SECONDS,
 )
-from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll, with_poll_hint
+from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll, sync_job_poll_response
+from utils.sync.poll_metrics import record_sync_job_poll_request
 from utils.sync.retired_handle_ack import acknowledge_retired_handle
 from config.repeat_work import playback_on_demand
 from contextlib import nullcontext
@@ -1915,6 +1916,7 @@ def get_sync_job_status(
 ):
     """Poll for the status of an async sync job."""
     OMI_SYNC_JOB_POLL_REQUESTS_TOTAL.inc()
+    record_sync_job_poll_request(uid)
     if not admit_sync_job_poll(uid):
         OMI_SYNC_JOB_POLL_THROTTLED_TOTAL.inc()
         raise HTTPException(
@@ -1931,7 +1933,7 @@ def get_sync_job_status(
     except BatchPrivacyBlocked:
         return privacy_blocked_response()
     if durable is not None:
-        return with_poll_hint(durable, surface_open=surface_open)
+        return sync_job_poll_response(durable, uid, surface_open)
     job = get_sync_job(job_id)
     if job and job['uid'] != uid:
         raise HTTPException(status_code=403, detail="Not authorized to view this sync job")
@@ -1951,11 +1953,11 @@ def get_sync_job_status(
             reason='unavailable',
             outcome='recovered',
         )
-        return with_poll_hint(completed, surface_open=surface_open)
+        return sync_job_poll_response(completed, uid, surface_open)
     if not job:
         retired = acknowledge_retired_handle(job_id, uid)  # custody-held expiry-retired handles
         if retired is not None:
-            return with_poll_hint(retired, surface_open=surface_open)
+            return sync_job_poll_response(retired, uid, surface_open)
         raise HTTPException(status_code=404, detail="Sync job not found or expired")
 
     # A stale state can only be finalized by the holder of the same run lease
@@ -2091,6 +2093,7 @@ def get_sync_job_status(
         'processed_segments': job.get('processed_segments', 0),
         'successful_segments': job.get('successful_segments', 0),
         'failed_segments': job.get('failed_segments', 0),
+        'completed_at': job.get('completed_at'),
         'lane': job.get('lane', SyncLane.FRESH.value),
         'reason_code': job.get('reason_code'),
         'retry_after': job.get('retry_after'),
@@ -2103,7 +2106,7 @@ def get_sync_job_status(
         if job.get('error'):
             resp['error'] = job['error']
 
-    return with_poll_hint(resp, surface_open=surface_open)
+    return sync_job_poll_response(resp, uid, surface_open)
 
 
 async def _maintain_uid_sequencer_lease(

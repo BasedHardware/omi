@@ -279,6 +279,15 @@ class SyncProcessingHoldOutcome(StrEnum):
     LATE_CAP = 'late_cap'
 
 
+class FutureCaptureRecoveryOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    ANCHORED = 'anchored'
+    ANCHOR_PENDING = 'anchor_pending'
+    IDENTITY_REQUIRED = 'identity_required'
+    ANCHOR_ERROR = 'anchor_error'
+    REFUSED = 'refused'
+
+
 class ListenSessionTranscriptOutcome(StrEnum):
     """One listen session's headline transcript outcome (``ListenSessionRuntime._session_transcript_outcome``)."""
 
@@ -834,6 +843,15 @@ class RecoveryFailureReason(StrEnum):
     INVALID_PAYLOAD = 'invalid_payload'
     OPERATION_FAILED = 'operation_failed'
     ABANDONED_RUNNING = 'abandoned_running'
+
+
+class ConvStructureFlexFallbackReason(StrEnum):
+    """Why a conversation structure request fell back from Flex to Standard."""
+
+    UNKNOWN = 'unknown'
+    TIMEOUT = 'timeout'
+    HTTP_429 = 'http_429'
+    OTHER = 'other'
 
 
 class FallbackReason(StrEnum):

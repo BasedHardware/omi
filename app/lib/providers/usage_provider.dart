@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/payment.dart';
@@ -17,6 +17,7 @@ import 'package:omi/services/capture/free_tier_on_device_stt_flag.dart';
 import 'package:omi/services/capture/on_device_stt_preparer.dart';
 import 'package:omi/services/capture/phone_transcription_choice.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
+import 'package:omi/services/billing/play_billing.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -37,7 +38,9 @@ class UsageProvider with ChangeNotifier {
     ProcessingBacklogRequest? processBacklogRequest,
     SubscriptionCodeRequest? redeemCodeRequest,
     DateTime Function()? now,
-  })  : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
+    PlayBilling? playBilling,
+  })  : _playBilling = playBilling,
+        _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
         _usageRequest = usageRequest ?? getUserUsage,
         _subscriptionRequest = subscriptionRequest ?? getUserSubscription,
         _processBacklogRequest = processBacklogRequest ?? processProcessingBacklog,
@@ -50,6 +53,10 @@ class UsageProvider with ChangeNotifier {
   final SubscriptionCodeRequest _redeemCodeRequest;
   final DateTime Function() _now;
   final ProcessingBacklogRequest _processBacklogRequest;
+  final PlayBilling? _playBilling;
+  PlayOffers? _playOffers;
+  bool _playOffersLoading = false;
+  bool _playPendingSent = false;
   String? _backlogIdempotencyKey;
   bool _isProcessingBacklog = false;
   int _backlogMutationGeneration = 0;
@@ -65,6 +72,7 @@ class UsageProvider with ChangeNotifier {
   @override
   void dispose() {
     _backlogRefreshTimer?.cancel();
+    _playManageFollowUp?.cancel();
     unawaited(_wifiWait?.cancel());
     _wifiWait = null;
     _sessionGeneration++;
@@ -125,6 +133,96 @@ class UsageProvider with ChangeNotifier {
   /// Defaults to true when the subscription response hasn't loaded yet, so a
   /// network blip doesn't silently hide paid surfaces from real users.
   bool get showSubscriptionUI => _subscription?.showSubscriptionUi ?? true;
+
+  PlayBilling get playBillingService => _playBilling ?? PlayBilling.instance;
+
+  /// Google Play Billing setup; only on Android, and only when the server sent it for this build.
+  PlayBillingConfig? get playBilling =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android ? _subscription?.playBilling : null;
+
+  /// Android before the first subscription read: the billing provider is not known yet, so no
+  /// purchase surface may show a price (it could be the wrong provider's).
+  bool get billingProviderUnknown =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android && _subscription == null;
+
+  /// The last subscription read failed, so the provider stays unknown until a retry. Only a subscription
+  /// read sets or clears this (not the shared [error], which usage and plans reads also clear).
+  bool get billingProviderFailed => billingProviderUnknown && _subscriptionReadFailed;
+  bool _subscriptionReadFailed = false;
+
+  /// The provider is not known yet and a read is (or will be) in flight: show loading, not an error.
+  bool get billingProviderPending => billingProviderUnknown && !billingProviderFailed;
+
+  /// New purchases go through Google Play. A live Stripe subscriber keeps today's Stripe management.
+  bool get playBilledPurchaser {
+    if (playBilling == null) return false;
+    final sub = _subscription!.subscription;
+    return !(sub.plan.isPaid && !sub.billedByPlay);
+  }
+
+  /// Play's prices for this Google account; null until loaded or when Play has no product.
+  PlayOffers? get playOffers => _playOffers;
+  bool get playOffersLoading => _playOffersLoading;
+
+  void retryPlayOffers() {
+    final config = playBilling;
+    if (config == null || _playOffersLoading) return;
+    _playOffersLoading = true;
+    notifyListeners();
+    unawaited(_loadPlayOffers(config, _sessionGeneration));
+  }
+
+  void _afterSubscriptionLoaded() {
+    final android = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    // A token paid for before the switch or build gate turned this reader off is still delivered.
+    if (android && !_playPendingSent) {
+      _playPendingSent = true;
+      unawaited(_deliverPendingPlayTokens());
+    }
+    final config = playBilling;
+    if (config == null) return;
+    // Play decides trial eligibility per Google account: no trial offer listed, no trial promised.
+    final offers = _playOffers;
+    if (offers != null && !offers.hasTrial && _subscription!.trialEligible) {
+      _subscription = _subscription!.withTrialEligible(false);
+    }
+    if (offers == null && !_playOffersLoading) {
+      _playOffersLoading = true;
+      unawaited(_loadPlayOffers(config, _sessionGeneration));
+    }
+    playBillingService.startListening(obfuscatedAccountId: config.obfuscatedAccountId);
+  }
+
+  Future<void> _loadPlayOffers(PlayBillingConfig config, int generation) async {
+    try {
+      final offers = await playBillingService.loadOffers(config);
+      if (generation != _sessionGeneration) return;
+      _playOffers = offers;
+      if (offers != null && !offers.hasTrial && _subscription?.trialEligible == true) {
+        _subscription = _subscription!.withTrialEligible(false);
+      }
+      notifyListeners();
+    } catch (e) {
+      // No offers: the plans sheet shows its retry state.
+      _playOffers = null;
+      Logger.debug('Failed to load Play offers: $e');
+    } finally {
+      _playOffersLoading = false;
+      if (generation == _sessionGeneration) notifyListeners();
+    }
+  }
+
+  /// A purchase paid for in an earlier session whose server confirmation never arrived.
+  Future<void> _deliverPendingPlayTokens() async {
+    try {
+      if (await playBillingService.deliverPendingTokens()) await fetchSubscription(fresh: true);
+    } catch (e) {
+      // Try again on the next subscription read.
+      _playPendingSent = false;
+      Logger.debug('Failed to deliver pending Play purchases: $e');
+    }
+  }
+
   UsageStats? _todayUsage;
   int? _todayCacheKey;
   UsageStats? get todayUsage => _todayUsage;
@@ -321,6 +419,11 @@ class UsageProvider with ChangeNotifier {
     _backlogIdempotencyKey = null;
     _backlogRefreshTimer?.cancel();
     _backlogRefreshTimer = null;
+    _playManageFollowUp?.cancel();
+    _playManageFollowUp = null;
+    _openedPlayManage = false;
+    _lastResumeRefreshAt = null;
+    _freshFetch = null;
     _isProcessingBacklog = false;
     TranscriptionAllowanceCache.clear();
     _subscription = null;
@@ -342,7 +445,10 @@ class UsageProvider with ChangeNotifier {
     _timeZoneLookupInFlight = null;
     _usageFetchInFlight = null;
     _availablePlans = null;
+    _playOffers = null;
+    _playPendingSent = false;
     _error = null;
+    _subscriptionReadFailed = false;
     _sessionGeneration++;
     _isSubscriptionLoading = false;
     _isUsageLoading = false;
@@ -359,12 +465,62 @@ class UsageProvider with ChangeNotifier {
 
   Future<void>? _subscriptionFetch;
 
+  static const resumeRefreshInterval = Duration(minutes: 2);
+  static const playManageFollowUpDelay = Duration(seconds: 5);
+  DateTime? _lastResumeRefreshAt;
+  bool _openedPlayManage = false;
+  Timer? _playManageFollowUp;
+  Future<void>? _freshFetch;
+
+  /// The reader is leaving for Google Play's subscription page; the next resume reads twice.
+  void markOpenedPlayManage() => _openedPlayManage = true;
+
+  /// Google Play's subscription page did not open, so the next resume is an ordinary one.
+  void clearOpenedPlayManage() => _openedPlayManage = false;
+
+  /// The app came back to the foreground: the plan may have changed in Google Play or the Stripe
+  /// portal. At most one successful read per [resumeRefreshInterval]; none when signed out or while
+  /// a Play purchase is being confirmed (its sheet closing is not a return, and the purchase reads
+  /// on its own). After Play's subscription page, one more read [playManageFollowUpDelay] later,
+  /// because the server learns of the change from Play's notification a few seconds after the
+  /// reader returns.
+  Future<void> refreshOnResume({required bool signedIn}) async {
+    final fromPlay = _openedPlayManage;
+    _openedPlayManage = false;
+    if (!signedIn) return;
+    if (playBilling != null && playBillingService.busy) return;
+    final now = _now();
+    final last = _lastResumeRefreshAt;
+    if (!fromPlay && last != null && now.difference(last) < resumeRefreshInterval) return;
+    final generation = _sessionGeneration;
+    await fetchSubscription();
+    if (generation != _sessionGeneration) return;
+    if (!_subscriptionReadFailed) _lastResumeRefreshAt = now;
+    if (!fromPlay) return;
+    _playManageFollowUp?.cancel();
+    _playManageFollowUp = Timer(playManageFollowUpDelay, () {
+      _playManageFollowUp = null;
+      unawaited(fetchSubscription(fresh: true));
+    });
+  }
+
   /// Fetches the subscription; concurrent callers share the request in flight instead of
   /// returning before it lands (the after-sign-up paywall gate awaits this right after sign-in,
   /// while AppShell's own fetch is usually still running).
-  Future<void> fetchSubscription() {
+  ///
+  /// [fresh]: the server just changed (a purchase, cancel, code, plan switch). A read already in
+  /// flight may have started before that change and carry the old plan, so wait for it and then
+  /// read once more; fresh callers arriving meanwhile share that one later read.
+  Future<void> fetchSubscription({bool fresh = false}) {
     final inflight = _subscriptionFetch;
-    if (inflight != null) return inflight;
+    if (inflight != null) {
+      if (!fresh) return inflight;
+      final generation = _sessionGeneration;
+      return _freshFetch ??= inflight.then((_) async {
+        _freshFetch = null;
+        if (generation == _sessionGeneration) await fetchSubscription();
+      });
+    }
     final completer = Completer<void>();
     _subscriptionFetch = completer.future;
     _fetchSubscription().whenComplete(() {
@@ -376,8 +532,18 @@ class UsageProvider with ChangeNotifier {
 
   /// Restore Purchases: read the plan again. A read that failed is [RestoreOutcome.failed], never
   /// "Free plan" (ux-contract §17.2): a paying reader must not be told they are free.
+  /// Why the last Google Play restore granted nothing (a server refusal code), or null.
+  String? get lastPlayRestoreRefusal => _lastPlayRestoreRefusal;
+  String? _lastPlayRestoreRefusal;
+
   Future<RestoreOutcome> restorePurchases() async {
-    await fetchSubscription();
+    final config = playBilling;
+    _lastPlayRestoreRefusal = null;
+    if (config != null) {
+      final restored = await playBillingService.restore(obfuscatedAccountId: config.obfuscatedAccountId);
+      if (restored.outcome != PlayPurchaseOutcome.purchased) _lastPlayRestoreRefusal = restored.code;
+    }
+    await fetchSubscription(fresh: true);
     final plan = _subscription?.subscription.plan;
     if (_error != null || plan == null) return RestoreOutcome.failed;
     return plan.isPaid ? RestoreOutcome.paid : RestoreOutcome.free;
@@ -389,6 +555,7 @@ class UsageProvider with ChangeNotifier {
     final generation = _sessionGeneration;
     final backlogGeneration = _backlogMutationGeneration;
     _isSubscriptionLoading = true;
+    _subscriptionReadFailed = false;
     _error = null;
     notifyListeners();
 
@@ -396,15 +563,18 @@ class UsageProvider with ChangeNotifier {
       final subscription = await _subscriptionRequest();
       if (generation != _sessionGeneration || backlogGeneration != _backlogMutationGeneration) return;
       if (subscription == null) {
+        _subscriptionReadFailed = true;
         _error = 'Failed to load subscription data. Please try again later.';
         return;
       }
       _subscription = subscription;
+      _afterSubscriptionLoaded();
       TranscriptionAllowanceCache.replace(subscription.transcriptionAllowance);
       unawaited(_prepareOnDeviceNearCap(subscription.transcriptionAllowance));
       PlatformManager.instance.analytics.setSubscriptionTier(subscription.subscription.plan.name);
     } catch (e) {
       if (generation != _sessionGeneration) return;
+      _subscriptionReadFailed = true;
       _error = 'Failed to load subscription data. Please try again later.';
       Logger.debug('Failed to fetch subscription: $e');
     } finally {
@@ -579,6 +749,17 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
+  /// Server switch on and no live paid plan: offer "Have a code?" for a prepaid code (no card).
+  /// Never for a Google Play purchaser or before Android knows its billing provider: the Play build
+  /// shows no purchase path outside Play.
+  bool get canRedeemPrepaidCode {
+    final response = subscription;
+    if (response == null || !response.prepaidCodeRedeem) return false;
+    if (playBilledPurchaser || billingProviderUnknown) return false;
+    final sub = response.subscription;
+    return !(sub.plan.isPaid && sub.status == SubscriptionStatus.active);
+  }
+
   /// The backend maps both Stripe active and trialing to active. Stripe itself
   /// rechecks eligibility on redemption; this snapshot never grants a benefit.
   bool get canRedeemSubscriptionCode {
@@ -604,15 +785,8 @@ class UsageProvider with ChangeNotifier {
         return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
       }
       if (result is ApiSuccess<bool> && result.data) {
-        // Finish any pre-application read before requesting post-application truth.
-        final pending = _subscriptionFetch;
-        if (pending != null) {
-          await pending;
-        }
-        if (generation != _sessionGeneration) {
-          return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
-        }
-        await fetchSubscription(); // also replaces authoritative allowance cache
+        // A pre-application read may be in flight: fresh waits for it, then reads post-application truth.
+        await fetchSubscription(fresh: true); // also replaces authoritative allowance cache
         if (generation != _sessionGeneration) {
           return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
         }
@@ -660,7 +834,7 @@ class UsageProvider with ChangeNotifier {
     try {
       final success = await cancelSubscription(reason: reason, reasonDetails: reasonDetails);
       if (success) {
-        await fetchSubscription();
+        await fetchSubscription(fresh: true);
         await loadAvailablePlans();
       }
       return success;
@@ -684,7 +858,7 @@ class UsageProvider with ChangeNotifier {
     try {
       final result = await upgradeSubscription(priceId: priceId, promotionCode: promotionCode);
       if (result != null && result['error'] != true) {
-        await fetchSubscription();
+        await fetchSubscription(fresh: true);
         await loadAvailablePlans();
       }
       return result;

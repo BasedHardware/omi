@@ -1,0 +1,75 @@
+{
+  "type": "audio_custody",
+  "recording_session_id": "recording",
+  "client_session_id": "client-capture",
+  "capture_root": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "channel": "0",
+  "frames": [
+    {
+      "sequence": 0,
+      "byte_offset": 0,
+      "bytes": 320,
+      "start": 1000.0,
+      "samples": 160,
+      "gap_before": false,
+      "sha256": "662e862b9ac76348d50a94b65bb0dd296fcbedc4db99848728dcd2b139ca4bc3",
+      "source": {
+        "capture_root": "11111111-2222-4333-8444-555555555555",
+        "clock_epoch": 2,
+        "source_frame": 7
+      }
+    },
+    {
+      "sequence": 1,
+      "byte_offset": 320,
+      "bytes": 320,
+      "start": 1000.01,
+      "samples": 160,
+      "gap_before": false,
+      "sha256": "40cf8a766feee07d6280bb0a4c78ea804d70f76d4a48ccd3be183c2b0e863b4f",
+      "source": null
+    },
+    {
+      "sequence": 2,
+      "byte_offset": 640,
+      "bytes": 320,
+      "start": 1000.02,
+      "samples": 160,
+      "gap_before": false,
+      "sha256": "12938045362c2f7fc7163d51e14cbd6f1ddc5a1608fd9ffb433e5eaab7dea1ff",
+      "source": {
+        "capture_root": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        "clock_epoch": 2,
+        "source_frame": 8
+      }
+    },
+    {
+      "sequence": 3,
+      "byte_offset": 960,
+      "bytes": 320,
+      "start": 1000.03,
+      "samples": 160,
+      "gap_before": false,
+      "sha256": "d3e1faddcc34fbdc5927f0f5545976ea9f4853cd4f9b7e71849a3fd75aa6c3a7",
+      "source": {
+        "capture_root": "11111111-2222-4333-8444-555555555555",
+        "clock_epoch": 2,
+        "source_frame": 9
+      }
+    }
+  ],
+  "receipt": {
+    "bucket": "test-audio-outbox",
+    "path": "raw-live/owner/conversation/0/0/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/0/64f8b18c01126bbc4a4e491480896d6c652186fef5f48a1dabee3c212470e113.bin",
+    "generation": "17",
+    "sha256": "64f8b18c01126bbc4a4e491480896d6c652186fef5f48a1dabee3c212470e113",
+    "manifest_path": "audio-outbox/owner/conversation/0/0/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/0/43a5bba56a4c1abd65ffdda2c50e3b36a34f19b7e15e2caff84a46ae7246ae70.bin",
+    "manifest_generation": "17",
+    "manifest_sha256": "43a5bba56a4c1abd65ffdda2c50e3b36a34f19b7e15e2caff84a46ae7246ae70",
+    "pcm_sha256": "64f8b18c01126bbc4a4e491480896d6c652186fef5f48a1dabee3c212470e113",
+    "conversation_id": "conversation",
+    "start": 1000.0,
+    "samples": 640,
+    "sample_rate": 16000
+  }
+}

@@ -1135,11 +1135,17 @@ def test_cap_recovery_quoted_etag_round_trip(tmp_path, monkeypatch, inverse_read
         assert fixture.cap_requests == []
 
 
-def test_claimed_sibling_skip_is_active_on_every_role():
-    """SCA-3544: David activated #25920 on every role on 2026-11-22; the pump derives from integration."""
+def test_claimed_sibling_skip_pins_are_explicit_on_every_role():
+    """SCA-3544: the skip stays on for sync only; backend (SCA-3555) and integration (16:16Z rollback) pin false.
+
+    The pump derives its value from integration. Every role keeps an explicit key because main reads an
+    absent key as ON and Cloud Run merges env.
+    """
     services = _prod_services()
+    false_pins = {'backend': 'false', 'backend-integration': 'false', PROJECTION_PUMP: 'false'}
     for name in ('backend', 'backend-sync', 'backend-integration', PROJECTION_PUMP):
-        assert services[name]['env']['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED']['value'] == 'true', name
+        expected = false_pins.get(name, 'true')
+        assert services[name]['env']['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED']['value'] == expected, name
 
 
 def test_pump_is_dark_again_and_keeps_dark_successor_values():

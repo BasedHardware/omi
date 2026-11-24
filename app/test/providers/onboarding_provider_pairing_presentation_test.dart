@@ -27,6 +27,39 @@ import '../widgets/onboarding_polish_test.dart' as polish;
 typedef Reason = DeviceConnectFailureShownFailureReason;
 
 class DiscoveryDeviceProvider extends AuditDeviceProvider {
+  DiscoveryDeviceProvider({super.device, super.connected, super.battery});
+
+  bool? chargingNow;
+  BtDevice? resolvedDevice;
+  int? liveBattery;
+
+  @override
+  BtDevice? get capabilityNormalizedDevice => resolvedDevice ?? super.capabilityNormalizedDevice;
+
+  @override
+  int get batteryLevel => liveBattery ?? super.batteryLevel;
+
+  @override
+  bool get isCharging => chargingNow ?? false;
+
+  @override
+  bool? get observedChargingStatus => chargingNow;
+
+  void updateCharging(bool value) {
+    chargingNow = value;
+    notifyListeners();
+  }
+
+  void resolveGlass(BtDevice discovered) {
+    resolvedDevice = discovered.copyWith(type: DeviceType.openglass);
+    notifyListeners();
+  }
+
+  void updateBattery(int level) {
+    liveBattery = level;
+    notifyListeners();
+  }
+
   @override
   void stopDiscoveryScanning() {}
 }
@@ -96,6 +129,121 @@ void main() {
     await tester.pump();
     await tester.pump();
   }
+
+  testWidgets('Omi pairing shows one live status and skips the stale percentage', (tester) async {
+    final device = BtDevice(id: 'omi-first-charge', name: 'Omi', type: DeviceType.omi, rssi: -50);
+    final live = DiscoveryDeviceProvider(device: device, connected: true, battery: 3);
+    addTearDown(live.dispose);
+    final render = Platform.environment['FIRST_CHARGE_RENDER'] == '1';
+    if (render) await tester.runAsync(polish.loadFonts);
+    tester.view.physicalSize = const Size(1179, 2556);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const boundary = Key('first-charge-render');
+    await tester.pumpWidget(RepaintBoundary(
+      key: boundary,
+      child: polish.host(polish.connect(provider, device: live)),
+    ));
+    await tester.pump();
+    await tester.pump();
+    provider
+      ..isConnected = true
+      ..deviceId = device.id
+      ..deviceName = device.name
+      ..deviceType = device.type
+      ..batteryPercentage = 3
+      ..setLoading(false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    final l10n = AppLocalizationsEn();
+    Future<void> capture(String filename) async {
+      if (!render) return;
+      await tester.runAsync(() async {
+        for (final element in find.byType(Image).evaluate()) {
+          await precacheImage((element.widget as Image).image, element);
+        }
+      });
+      await tester.pump();
+      await tester.runAsync(() async {
+        final target = tester.renderObject<RenderRepaintBoundary>(find.byKey(boundary));
+        final image = await target.toImage(pixelRatio: 3);
+        final png = await image.toByteData(format: ui.ImageByteFormat.png);
+        image.dispose();
+        File('../.agent-artifacts/ui-evidence/first-charge-mobile/$filename')
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(png!.buffer.asUint8List());
+      });
+    }
+
+    expect(find.text(l10n.connected), findsOneWidget);
+    expect(find.text(l10n.deviceReadyToUse), findsNothing);
+    live.updateCharging(true);
+    await tester.pump();
+    expect(find.text(l10n.charging), findsOneWidget);
+    expect(find.text(l10n.pairingSuccessful), findsNothing);
+    expect(find.text('3%'), findsNothing);
+    await capture('001-mobile-ios-pairing-charging.png');
+    live.updateCharging(false);
+    await tester.pump();
+    expect(find.text(l10n.deviceReadyToUse), findsOneWidget);
+    expect(find.text(l10n.charging), findsNothing);
+    expect(find.text('3%'), findsNothing);
+    await capture('002-mobile-ios-pairing-ready.png');
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('OmiGlass advertised as Omi keeps its battery level after pairing', (tester) async {
+    final device = BtDevice(id: 'glass-discovery', name: 'OmiGlass', type: DeviceType.omi, rssi: -50);
+    final live = DiscoveryDeviceProvider(device: device, connected: true, battery: 72);
+    addTearDown(live.dispose);
+    await tester.pumpWidget(polish.host(polish.connect(provider, device: live)));
+    await tester.pump();
+    await tester.pump();
+    provider
+      ..isConnected = true
+      ..deviceId = device.id
+      ..deviceName = device.name
+      ..deviceType = device.type
+      ..batteryPercentage = live.batteryLevel
+      ..setLoading(false);
+    await tester.pump();
+    final l10n = AppLocalizationsEn();
+    expect(find.text(l10n.pairingSuccessful), findsOneWidget);
+    expect(find.text('72%'), findsOneWidget);
+    expect(find.text(l10n.deviceReadyToUse), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('late Glass capability switches pairing to the live battery without changing the discovered type',
+      (tester) async {
+    final device = BtDevice(id: 'glass-capability', name: 'Omi', type: DeviceType.omi, rssi: -50);
+    final live = DiscoveryDeviceProvider(device: device, connected: true);
+    addTearDown(live.dispose);
+    await tester.pumpWidget(polish.host(polish.connect(provider, device: live)));
+    await tester.pump();
+    provider
+      ..isConnected = true
+      ..deviceId = device.id
+      ..deviceName = device.name
+      ..deviceType = device.type
+      ..batteryPercentage = 3
+      ..setLoading(false);
+    await tester.pump();
+    final l10n = AppLocalizationsEn();
+    expect(find.text(l10n.connected), findsOneWidget);
+    expect(find.text('3%'), findsNothing);
+
+    live.resolveGlass(device);
+    await tester.pump();
+    expect(find.text(l10n.pairingSuccessful), findsOneWidget);
+    expect(find.text('3%'), findsNothing);
+    live.updateBattery(72);
+    await tester.pump();
+    expect(find.text('72%'), findsOneWidget);
+    expect(provider.deviceType, DeviceType.omi);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('real empty-scan timer retains No Omi Found and never shows or emits a connection failure',
       (tester) async {

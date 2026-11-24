@@ -15,6 +15,7 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from models.finalization_owner import python_owns_finalization
 from utils.conversations.v3 import Conflict, policy
 from utils.conversations.summary_delivery import present
+from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.encryption import encrypt, decrypt
 
 _LIVE_INPUT_SCOPE = (
@@ -245,7 +246,7 @@ def settle_processing(
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
             raise Conflict('processing_source_changed')
         if not row or not python_owns_finalization(row):
-            return False, False
+            return False, False, None
         if not skipped and not row.get('deleted') and row.get('sync_content_revision') != revision:
             decoded = store.decode_row(uid, snapshot)
             if not content_hash or processing_hash(decoded) != content_hash:
@@ -254,6 +255,29 @@ def settle_processing(
         armed = written and policy.created_eligible(
             {**row, 'v3_notes_written': True, 'v3_process_failed': False, 'v3_process_pending': False}
         )
+        settled = (
+            not skipped
+            and not row.get('deleted')
+            and row.get('status') == 'completed'
+            and row.get('v3_process_pending') is True
+        )
+        manual_visibility = None
+        if (
+            settled
+            and row.get('v3_derived')
+            and row.get('manual_end')
+            and not row.get('backfilled')
+            and not row.get('discarded')
+            and not row.get('v3_manual_end_home_counted')
+        ):
+            # Same row filters as the Home feed (database/home_feed._visible) for a derived row.
+            visible = (
+                not row.get('sync_merged_into')
+                and not is_relevance_discarded(row)
+                and conversations.is_visible_conversation(row, hide_home=True, presentation=True)
+            )
+            kind = row.get('kind') if row.get('kind') in metrics.MANUAL_END_KINDS else 'other'
+            manual_visibility = ('visible' if visible else 'hidden', kind)
         tx.update(
             ref,
             {
@@ -271,17 +295,15 @@ def settle_processing(
                 ),
                 **({'v3_notes_written': True} if written else {}),
                 **({'v3_created_pending': True} if armed else {}),
+                # First settlement only: a late rewrite re-settles the same row and must not count again.
+                **({'v3_manual_end_home_counted': True} if manual_visibility is not None else {}),
             },
         )
-        settled = (
-            not skipped
-            and not row.get('deleted')
-            and row.get('status') == 'completed'
-            and row.get('v3_process_pending') is True
-        )
-        return armed, settled
+        return armed, settled, manual_visibility
 
-    armed, settled = settle(client.transaction())
+    armed, settled, manual_visibility = settle(client.transaction())
+    if manual_visibility is not None:
+        metrics.MANUAL_END_HOME.labels(*manual_visibility).inc()
     if settled and word_floor_outcomes is not None:
         metrics.observe_word_floor(*word_floor_outcomes)
     return armed

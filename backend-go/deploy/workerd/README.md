@@ -68,6 +68,9 @@ gauges. Leave optional maintenance and serving settings unset. Python owns ordin
   main `release_sha`. Keep the other inputs at their defaults. The normal admission and
   protected prod Environment apply. Record the source and `gcr.io/based-hardware/workerd@sha256:…`
   from the Actions summary. Use its digest as `WORKERD_DIGEST`.
+- The job keys the image by the git tree of `backend-go/` (SCA-3883). The build context, this
+  chart and `values-prod.yaml` all live in that tree. A later admitted SHA with the same tree reuses
+  the published digest (`reused` in the summary) instead of rebuilding.
 - Confirm the production GKE context and `prod-omi-backend` namespace. On the existing
   `prod-jobs` Postgres 16 instance, David provisions a dedicated queue database and
   migrator and runtime roles with the privileges described above. From GKE, the database
@@ -75,6 +78,32 @@ gauges. Leave optional maintenance and serving settings unset. Python owns ordin
   with `DATABASE_URL`, and `prod-omi-workerd-runtime` with the runtime role's `DATABASE_URL` and
   `ENCRYPTION_SECRET`. The production overlay selects the prod registry and
   `FIRESTORE_PROJECT=based-hardware`.
+
+### Release identity and carry-forward
+
+A workerd go-ahead names the object printed by:
+
+```sh
+backend-go/deploy/workerd/release-identity.sh --digest "$WORKERD_DIGEST" --ref <admitted SHA> \
+  --verify-image gcr.io/based-hardware/workerd --check-worktree [-f <Release values file> ...]
+```
+
+The object is `{backend_go_tree, digest, helm_version, rendered_sha256}`. Pass exactly the `-f` files
+that the matching `helm upgrade --install` passes after `values-prod.yaml`. That means none for
+the baseline install below, and the Release values file for the intake activation. Each install
+then has its own identity. `--verify-image` refuses a digest whose `omi.workerd.backend-go-tree`
+label is not `backend_go_tree`. An image published before tree labels passes only when its revision
+label is the exact `--ref` commit. `--check-worktree` refuses unless this checkout's `backend-go/`
+equals the `--ref` tree, because the install commands below use the working-copy chart. Run the
+install from a clean checkout of the admitted SHA.
+
+The go-ahead stays valid while main moves, as long as rerunning the script at install time
+prints the same object. `--ref` is the SHA being installed, and the run uses the same helm
+version and values files. A merge that doesn't touch `backend-go/` keeps the tree, so the
+go-ahead still holds. A change to the tree, the digest, the values or the helm version needs a
+new go-ahead. The script exits nonzero if it can't resolve the ref, read a values file or the
+image label, or render the chart. Treat that as a refusal, never as a match.
+`test-render.sh` covers these cases, and the `workerd-chart-release-identity` check runs it.
 
 ### Migrate, install and verify
 

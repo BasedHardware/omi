@@ -91,6 +91,26 @@ FIELD_SITES = {
             ),
         ),
     ],
+    # Frozen owner-scoped reply nested in the WAL witness; never writes conversation status.
+    'database/record_wal_duplicate.py': [
+        (
+            '_completed_status',
+            'status',
+            "'completed'",
+            (
+                'failed_segments',
+                'job_id',
+                'lane',
+                'poll_after_ms',
+                'processed_segments',
+                'result',
+                'status',
+                'successful_segments',
+                'total_files',
+                'total_segments',
+            ),
+        ),
+    ],
     # Client polling adapter only; never writes conversation lifecycle status.
     'database/record_wal_handoff.py': [
         (
@@ -362,14 +382,22 @@ FIELD_SITES = {
         ('settle_billed.commit', 'status', "'settled'", ('expires_at', 'months', 'status')),
     ],
     'database/batch_pipeline_coalescing_completion.py': [
-        ('write', 'status', "'completed'", ('expires_at', 'result', 'status', 'updated_at')),
+        ('write', 'status', "'completed'", ('completed_at', 'expires_at', 'result', 'status', 'updated_at')),
     ],
     'utils/batch_pipeline/upload_coalescing.py': [
         (
             'member_status',
             'status',
             "'completed'",
-            ('poll_after_ms', 'processed_segments', 'result', 'status', 'successful_segments', 'total_segments'),
+            (
+                'completed_at',
+                'poll_after_ms',
+                'processed_segments',
+                'result',
+                'status',
+                'successful_segments',
+                'total_segments',
+            ),
         ),
         (
             'queued',
@@ -2734,7 +2762,12 @@ FIELD_SITES = {
         ('mark_job_queued_for_retry', 'status', "'queued'", ('attempt', 'last_error', 'status')),
     ],
     'database/sync_ledger.py': [
-        ('_mark_completed_transaction', 'status', "'completed'", ('expires_at', 'result', 'status', 'updated_at')),
+        (
+            '_mark_completed_transaction',
+            'status',
+            "'completed'",
+            ('completed_at', 'expires_at', 'result', 'status', 'updated_at'),
+        ),
         (
             '_processing_claim_updates',
             'status',
@@ -2763,7 +2796,7 @@ FIELD_SITES = {
             'complete_batch_projection_in_transaction',
             'status',
             "'completed'",
-            ('expires_at', 'result', 'status', 'updated_at'),
+            ('completed_at', 'expires_at', 'result', 'status', 'updated_at'),
         ),
     ],
     'database/sync_redrive.py': [
@@ -2970,6 +3003,7 @@ FIELD_SITES = {
             'status',
             "'completed'",
             (
+                'completed_at',
                 'errors',
                 'failed_segments',
                 'job_id',
@@ -3064,6 +3098,7 @@ FIELD_SITES = {
             'status',
             "status; literal aliases=[('status', ('completed', 'failed', 'processing', " "'queued'))]",
             (
+                'completed_at',
                 'errors',
                 'failed_segments',
                 'job_id',
@@ -4425,6 +4460,7 @@ FIELD_SITES = {
     'utils/processing_backlog.py': [
         ('allowance_increased.limit', 'status', "'active'", ('current_period_end', 'status'))
     ],
+    'utils/prepaid_code_redemption.py': [('_result', 'status', "'redeemed'", ('ends_at', 'months', 'plan', 'status'))],
     'utils/promotion_redemption.py': [
         (
             'redeem_promotion_code',
@@ -4564,6 +4600,7 @@ FIELD_SITES = {
             'status',
             "'completed'",
             (
+                'completed_at',
                 'failed_segments',
                 'job_id',
                 'lane',
@@ -4756,6 +4793,8 @@ FIELD_SITES = {
     'utils/workers/retry.py': [('retry_response', 'status', "'retry'", ('reason', 'status'))],
     'utils/conversations/transcribing_hold.py': [
         ('project', 'status', "'completed' if status == 'failed' else status", ('status', 'structured')),
+        # Current same-owner job evidence changes only the list/detail wire copy.
+        ('project', 'status', "'processing'", ('status', 'structured', 'summary_retryable', 'transcription_admission')),
         # API response only; never sent to a lifecycle persistence helper.
         ('retry_wire', 'status', "'processing'", ('home_step', 'status', 'structured', 'summary_retryable')),
     ],

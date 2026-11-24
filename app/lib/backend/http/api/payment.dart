@@ -4,6 +4,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
+import 'package:omi/backend/schema/gen/subscription_usage_wire.g.dart' as subscription_wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -265,6 +266,42 @@ Future<ApiResult<bool>> redeemSubscriptionCode(String code, {ApiSend? send, bool
         throw const FormatException('Expected applied redemption');
       }
       return true;
+    },
+  );
+}
+
+/// A fully prepaid Omi Pro code redeemed with no card. [endsAt] is when the prepaid term ends.
+class PrepaidCodeRedemption {
+  const PrepaidCodeRedemption({required this.plan, required this.endsAt, required this.months});
+  final String plan;
+  final DateTime endsAt;
+  final int months;
+}
+
+/// Redeems a prepaid code for the signed-in user. Failures carry the server's reason code in
+/// `problem.detail` (invalid_code, code_used, code_expired, has_plan, not_prepaid, not_eligible, try_again).
+Future<ApiResult<PrepaidCodeRedemption>> redeemPrepaidCode(String code, {ApiSend? send}) async {
+  final trimmed = code.trim();
+  if (trimmed.isEmpty || trimmed.length > 64) {
+    return const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 400, detail: 'invalid_code'));
+  }
+  return executeApi<PrepaidCodeRedemption>(
+    request: ApiRequest(
+      url: '${Env.apiBaseUrl}v1/payments/prepaid-code/redeem',
+      method: 'POST',
+      body: jsonEncode({'code': trimmed}),
+    ),
+    send: send,
+    decode: (body) {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic>) throw const FormatException('prepaid code response');
+      final response = subscription_wire.GeneratedRedeemPrepaidCodeResponse.fromJson(decoded);
+      if (response.status != 'redeemed') throw const FormatException('Expected redeemed prepaid code');
+      return PrepaidCodeRedemption(
+        plan: response.plan,
+        endsAt: DateTime.fromMillisecondsSinceEpoch(response.endsAt * 1000),
+        months: response.months,
+      );
     },
   );
 }

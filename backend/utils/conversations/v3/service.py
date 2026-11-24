@@ -31,6 +31,9 @@ from config.conversations_v3 import (
     HISTORICAL_SITDOWN_TIMING,
     SPEECH_LANDED_FIELD,
     boundary_seconds,
+    live_title_enabled,
+    manual_end_home_visible_enabled,
+    max_window_seconds,
     stretch_cohesion_enabled,
 )
 from utils.conversations.v3.triggers import enqueue, changed
@@ -52,7 +55,9 @@ from utils.conversations.v3 import (
 from utils.conversations.v3 import refinement, preview_wakes
 from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
 from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor, storage_executor
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +209,14 @@ def historical_stretches(eligible, now, *, since, until, internal_end=False):
             landed = row.get(SPEECH_LANDED_FIELD)
             if not isinstance(landed, datetime) or landed.utcoffset() is None:
                 raise Conflict('rederive_live_landing_unknown')
-    groups = outline.stretches(eligible, now, silence_gap=silence_gap, lock_delay=lock_delay, settle_on_landing=True)
+    groups = outline.stretches(
+        eligible,
+        now,
+        silence_gap=silence_gap,
+        lock_delay=lock_delay,
+        settle_on_landing=True,
+        max_window=timedelta(seconds=max_window_seconds()),
+    )
     # Metadata finished_at can lag a late transcript. Reserve a full silence gap on the left
     # of an internal seam and verify the right side starts at or after it.
     latest = until - silence_gap if internal_end else until
@@ -300,11 +312,22 @@ async def reconcile(
             groups = historical_stretches(eligible, now, since=since, until=until, internal_end=internal_end)
         else:
             groups = outline.stretches(
-                eligible, now, silence_gap=silence_gap, lock_delay=lock_delay, settle_on_landing=custom_timing
+                eligible,
+                now,
+                silence_gap=silence_gap,
+                lock_delay=lock_delay,
+                settle_on_landing=custom_timing,
+                max_window=timedelta(seconds=max_window_seconds()),
             )
-        if live and not all(group['finished'] for group in groups):
+        if live and any(not g['finished'] or (g.get('window_cap_end') and not g['locked']) for g in groups):
             # Speech within five minutes of now is still the live builder's; refuse before any paid call.
             raise Conflict('rederive_live_open')
+        if not derive:
+            for group in groups:
+                if group.get('window_cap_end'):
+                    # Later speech can keep refreshing the same recording's landing clock.
+                    # The forced boundary settles the prefix independently of that clock.
+                    group['locked'] = True
         if on_open and conversation_id:
             target = existing.get(conversation_id)
             if target is None:
@@ -363,7 +386,12 @@ async def reconcile(
                 if await run_blocking(db_executor, store.outline_attempt, uid, token, fingerprint, **keyed):
                     metrics.MODEL_CALLS.labels('outline').inc()
                     report['outline_calls'] = report.get('outline_calls', 0) + 1
-                    content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
+                    try:
+                        content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
+                    except RuntimeError as error:
+                        if str(error) != 'v3_lease_lifetime_exhausted':
+                            raise
+                        content = ''
                     try:
                         entries = outline.parse(content, group)
                         if preview_key and not group['locked']:
@@ -392,8 +420,7 @@ async def reconcile(
                 else:
                     entries = [{**entry, '_outline_failed': True} for entry in outline.fallback(group)]
             else:
-                # First speech is visible without a paid call. Outline on open
-                # or at the five-minute deadline provides the first real title.
+                # First speech is visible before either the title preview or the outline is ready.
                 entries = [
                     {
                         'first_line': 1,
@@ -516,7 +543,14 @@ async def reconcile(
                     deferred_lock = False
                 if deferred_lock:
                     window['_title_preview'] = True
-                row = planner.build(uid, window, recordings, prior, allocated=allocated)
+                row = planner.build(
+                    uid,
+                    window,
+                    recordings,
+                    prior,
+                    allocated=allocated,
+                    manual_end_home_visible=manual_end_home_visible_enabled(),
+                )
                 if opening and prior and planner.is_unlocked(prior):
                     row['v3_open_locked'] = True
                 row.pop('v3_unlocked', None)
@@ -553,8 +587,8 @@ async def reconcile(
                     row['v3_rederive_live_run'] = run_id
                 if prior and prior.get('deleted'):
                     continue
-                before = sum(len(s.get('text', '').split()) for s in (prior or {}).get('transcript_segments') or [])
-                new_words = max(0, sum(len(s.get('text', '').split()) for s in row['transcript_segments']) - before)
+                before = planner.word_count((prior or {}).get('transcript_segments') or [])
+                new_words = max(0, planner.word_count(row['transcript_segments']) - before)
                 ended = window['finished'] and not deferred_lock
                 was_ended = prior and not planner.is_unlocked(prior)
                 promoted = bool(
@@ -701,6 +735,10 @@ async def reconcile(
                 # again. If this cleanup fails too, the partition stays unfinished until resume or undo.
                 await run_blocking(db_executor, rederive_store.drop_unwritten_priors, uid, run_id, priors)
             raise
+        if not derive and not on_open:
+            cap_starts = {group['lines'][0]['start'] for group in groups if group['after_window_cap']}
+            new_cap_starts = {row['started_at'] for row in rows if row['id'] not in existing} & cap_starts
+            metrics.WINDOW_CAP_CUTS.inc(len(new_cap_starts))
         report.update(
             sources=len(eligible),
             windows=len(rows),
@@ -734,6 +772,10 @@ async def reconcile(
                 metrics.UNCERTAIN_SHOWN.inc()
             if row['id'] not in existing:
                 metrics.VISIBLE_LATENCY.observe(max(0, (now - row['started_at']).total_seconds()))
+        if not derive and not on_open and live_title_enabled():
+            for row in rows:
+                if policy.live_title_candidate(row) and not row.get(policy.LIVE_TITLE_STATE):
+                    await _maybe_publish_live_title(uid, key, token, row)
         metrics.RECONCILES.labels('committed').inc()
         deferred = preview_wakes(rows, recordings)
     except Conflict as error:
@@ -798,6 +840,22 @@ async def reconcile(
         else:
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
     return 'committed'
+
+
+async def _maybe_publish_live_title(uid, key, token, row):
+    try:
+        revision = row.get('sync_content_revision')
+        segments = row.get('transcript_segments') or []
+        if revision is None or deduplicated_transcribed_speech_seconds(segments) < 180:
+            return
+        args = (uid, token, row['id'], revision)
+        if await run_blocking(db_executor, store.write_live_title_preview, *args):
+            title = await leased_work(uid, key, token, llm_executor, models.live_title, uid, segments)
+            if title and live_title_enabled():
+                await run_blocking(db_executor, store.write_live_title_preview, *args, title=title)
+    except Exception as error:
+        logger.warning('event=v3_live_title exception_type=%s', type(error).__name__)
+        record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
 
 
 def _held_claims(recordings, cid):

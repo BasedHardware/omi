@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 সনাক্ত হয়নি",
+    "v2Undetected": "অফলাইন সিঙ্ক উপলব্ধ নয়",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "আমরা দেখছি যে আপনার কাছে একটি V1 ডিভাইস রয়েছে বা আপনার ডিভাইস সংযুক্ত নয়। SD কার্ড কার্যকারিতা শুধুমাত্র V2 ডিভাইসের জন্য উপলব্ধ।",
+    "v2UndetectedMessage": "অফলাইন সিঙ্কের জন্য SD কার্ড স্টোরেজ সহ একটি সংযুক্ত Omi ডিভাইস প্রয়োজন। আপনার বর্তমান ডিভাইসটি এটি সমর্থন করে না।",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },
@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "সাইন-ইন পদ্ধতি",
+    "accountAddSignInMethod": "সাইন-ইন পদ্ধতি যোগ করুন",
+    "accountAddSignInMethodDetails": "এই Omi অ্যাকাউন্টে সাইন ইন করার একটি পদ্ধতি যোগ করুন। আপনার প্ল্যান, রেকর্ডিং এবং ইন্টিগ্রেশন এই অ্যাকাউন্টেই থাকবে।",
+    "accountSignInConflictTitle": "এই সাইন-ইন পদ্ধতিটি অন্য একটি অ্যাকাউন্টের সঙ্গে যুক্ত",
+    "accountSignInConflictDetails": "আপনি এখনও এই অ্যাকাউন্টে সাইন ইন আছেন। প্রতিটি Omi অ্যাকাউন্টের প্ল্যান, রেকর্ডিং ও ইন্টিগ্রেশন সেই অ্যাকাউন্টেই থাকে।",
+    "accountSignInMethodAdded": "সাইন-ইন পদ্ধতি যোগ করা হয়েছে",
     "authFailedToLinkGoogle": "Google এর সাথে লিঙ্ক করতে ব্যর্থ, দয়া করে আবার চেষ্টা করুন।",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "আমরা উপলব্ধ সীমার মধ্যে নতুন রেকর্ডিংগুলো আগে প্রক্রিয়া করব। বাকিগুলো অপেক্ষায় থাকবে।",
     "processingAction": "অপেক্ষমাণ রেকর্ডিং প্রক্রিয়া করুন",
     "processingProgress": "আপনার অপেক্ষমাণ রেকর্ডিং প্রক্রিয়া করা হচ্ছে…",
+    "waitingForTranscriptionAllowance": "প্রতিলিপি তৈরির বরাদ্দের অপেক্ষায়",
     "processingDeferred": "প্রক্রিয়াকরণের অপেক্ষায়",
     "processingCount": "{count, plural, =1{১টি কথোপকথন অপেক্ষমাণ} other{{count}টি কথোপকথন অপেক্ষমাণ}}",
     "playbackPartialAudioSaved": "{saved} অডিও সংরক্ষিত, মোট {total}",
@@ -12292,5 +12299,26 @@
     "conversationLiveNoEdits": "পরিবর্তন করতে এটি শেষ হওয়া পর্যন্ত অপেক্ষা করুন।",
     "finishedSummaryReady": "সারসংক্ষেপ প্রস্তুত",
     "writingSummaryStatus": "সারসংক্ষেপ লেখা হচ্ছে…",
-    "stillWorkingOnIt": "এখনও কাজ চলছে।"
+    "stillWorkingOnIt": "এখনও কাজ চলছে।",
+    "deviceReadyToUse": "ব্যবহারের জন্য প্রস্তুত",
+    "firmwareUpdateFirmwareTooOld": "এই আপডেটের জন্য আপনার ডিভাইসের ফার্মওয়্যার অনেক পুরোনো। ডিভাইস আপডেট করতে সাহায্যের জন্য সহায়তা দলের সঙ্গে যোগাযোগ করুন।",
+    "firmwareUpdateAppRequired": "এই ফার্মওয়্যার আপডেটের জন্য Omi অ্যাপের আরও নতুন সংস্করণ প্রয়োজন। আপনার অ্যাপ স্টোর থেকে অ্যাপটি আপডেট করুন, তারপর আবার পরীক্ষা করুন।",
+    "quietPayerTitle": "৫ দিন ধরে কোনো রেকর্ডিং নেই",
+    "quietPayerMessage": "আপনার Omi দেখে নিন।",
+    "quietPayerCheck": "দেখুন",
+    "playManageSubscription": "সাবস্ক্রিপশন পরিচালনা",
+    "playBilledByGoogle": "Google Play-এর মাধ্যমে বিল করা হয়",
+    "playPurchasePending": "আপনার পেমেন্ট অপেক্ষমাণ। Google Play নিশ্চিত করলেই Omi Pro শুরু হবে।",
+    "playPurchaseOtherAccount": "এই Google Play কেনাকাটা অন্য একটি Omi অ্যাকাউন্টের।",
+    "playPurchaseNotConfirmed": "কেনাকাটা এখনও নিশ্চিত করা যায়নি। আমরা নিজে থেকে আবার চেষ্টা করব।",
+    "playRenewalTerms": "বাতিল না করা পর্যন্ত দেখানো দামে স্বয়ংক্রিয়ভাবে নবায়ন হয়। যেকোনো সময় Google Play-এ পরিচালনা বা বাতিল করুন।",
+    "playPaidAppUnavailable": "Android-এ উপলভ্য নয়",
+    "pageNotAvailableInApp": "এই পৃষ্ঠাটি অ্যাপে উপলব্ধ নয়।",
+    "shopOrderPlacedCheckEmail": "অর্ডার দেওয়া হয়েছে। নিশ্চিতকরণের জন্য আপনার ইমেল দেখুন।",
+    "prepaidCodeEntry": "কোড আছে?",
+    "prepaidCodeTitle": "কোড রিডিম করুন",
+    "prepaidCodeFieldHint": "আপনার কোড লিখুন",
+    "prepaidCodeRedeem": "রিডিম",
+    "prepaidCodeRedeemed": "কোড রিডিম হয়েছে",
+    "prepaidCodeResult": "{reason, select, invalid{এই কোডটি বৈধ নয়। যাচাই করে আবার চেষ্টা করুন।} used{এই কোডটি আগেই ব্যবহার করা হয়েছে।} expired{এই কোডের মেয়াদ শেষ হয়ে গেছে।} hasPlan{আপনার ইতিমধ্যে একটি প্ল্যান আছে। আপনার কোড ব্যবহার করা হয়নি। প্ল্যান শেষ হলে এটি রিডিম করুন।} notPrepaid{এই কোডটি এখানে রিডিম করা যাবে না। প্ল্যান বেছে নেওয়ার সময় এটি ব্যবহার করুন।} notEligible{এই কোডটি এই অ্যাকাউন্টে ব্যবহার করা যাবে না।} rateLimited{অনেকবার চেষ্টা করা হয়েছে। পরে আবার চেষ্টা করুন।} other{কিছু ভুল হয়েছে। আবার চেষ্টা করুন।}}"
 }

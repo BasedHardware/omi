@@ -31,6 +31,8 @@ import '../helpers/sfpro_font_fixtures.dart';
 
 bool _offerZip = false;
 void Function()? _onDownload;
+Map<String, dynamic> _lookupBody = const {};
+int _lookupRequests = 0;
 
 class _EnvFields implements EnvFields {
   const _EnvFields();
@@ -104,6 +106,8 @@ void main() {
   setUp(() {
     _offerZip = false;
     _onDownload = null;
+    _lookupBody = const {};
+    _lookupRequests = 0;
   });
 
   Future<void> pumpPage(WidgetTester tester, _DeviceProvider provider,
@@ -242,6 +246,84 @@ void main() {
         rollback: true, firmwareVersion: '3.0.1', expectOffer: false);
     expect(find.text(en.alreadyOnStableFirmware), findsOneWidget);
     await capture(tester, 'ota-already-stable.png');
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  // #25375: an answered lookup whose release can't be used is as inconclusive as no answer, so it gets
+  // the failed-check state with Try Again (#25757), never the green "up to date" status.
+  for (final (name, body) in [
+    ('draft release', <String, dynamic>{'draft': true}),
+    ('missing minimum version', <String, dynamic>{'min_version': null}),
+    ('unparsable latest version', <String, dynamic>{'version': 'not-a-version'}),
+  ]) {
+    testWidgets('$name shows the failed check, not up to date', (tester) async {
+      _lookupBody = body;
+      await pumpPage(tester, _DeviceProvider(batteryLevel: 80), expectOffer: false);
+      expect(find.text(en.yourDeviceIsUpToDate), findsNothing);
+      expect(find.byKey(const Key('firmware_check_failed')), findsOneWidget);
+      expect(find.text(en.firmwareCheckFailed), findsOneWidget);
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
+  // A usable release that can't be offered (device below its minimum, or a newer app needed) is not
+  // "up to date" either.
+  for (final (name, body, message) in [
+    ('below minimum version', <String, dynamic>{'min_version': '2.5.0'}, en.firmwareUpdateFirmwareTooOld),
+    (
+      'newer app required',
+      <String, dynamic>{'min_app_version': '99.0.0', 'min_app_version_code': '999999'},
+      en.firmwareUpdateAppRequired,
+    ),
+  ]) {
+    testWidgets('$name is not reported as up to date', (tester) async {
+      _lookupBody = body;
+      await pumpPage(tester, _DeviceProvider(batteryLevel: 80), expectOffer: false);
+      expect(find.text(en.yourDeviceIsUpToDate), findsNothing);
+      expect(find.byKey(const Key('firmware_update_check_not_confirmed')), findsOneWidget);
+      expect(find.text(message), findsOneWidget);
+      if (name == 'below minimum version') await capture(tester, '001-mobile-ios-firmware-below-minimum.png');
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
+  // A non-empty but unparsable revision (e.g. the 'Unknown' sentinel after a failed BLE read) is a
+  // device-side failure, so the page must say the version is unknown, not report it as up to date.
+  for (final revision in ['', 'Unknown', 'not-a-version']) {
+    testWidgets('unparsable firmware revision "$revision" is reported as unknown version', (tester) async {
+      await pumpPage(tester, _DeviceProvider(batteryLevel: 80), firmwareVersion: revision, expectOffer: false);
+      expect(find.text(en.yourDeviceIsUpToDate), findsNothing);
+      expect(find.text(en.unableToDetermineFirmwareVersion), findsOneWidget);
+      // Re-running the server lookup cannot fix a revision that failed to read over BLE, so the
+      // failed-check state and its Try Again are not shown for this outcome.
+      expect(find.byKey(const Key('firmware_check_failed')), findsNothing);
+      expect(_lookupRequests, 0, reason: 'A server retry cannot repair a failed device revision read');
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
+  testWidgets('firmware at the latest version is still reported as up to date', (tester) async {
+    await pumpPage(tester, _DeviceProvider(batteryLevel: 80), firmwareVersion: '3.0.1', expectOffer: false);
+    expect(find.text(en.yourDeviceIsUpToDate), findsOneWidget);
+    expect(find.byKey(const Key('firmware_update_check_not_confirmed')), findsNothing);
+    expect(find.byKey(const Key('firmware_check_failed')), findsNothing);
+    await capture(tester, '002-mobile-ios-firmware-up-to-date.png');
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('rollback with no usable stable version is not reported as already stable', (tester) async {
+    _lookupBody = <String, dynamic>{'version': null};
+    await pumpPage(tester, _DeviceProvider(batteryLevel: 80), rollback: true, expectOffer: false);
+    expect(find.text(en.alreadyOnStableFirmware), findsNothing);
+    expect(find.text(en.noStableFirmwareFound), findsOneWidget);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('rollback with an unparsable stable version does not offer installation', (tester) async {
+    _lookupBody = <String, dynamic>{'version': 'not-a-version'};
+    await pumpPage(tester, _DeviceProvider(batteryLevel: 80), rollback: true, expectOffer: false);
+    expect(find.text(en.alreadyOnStableFirmware), findsNothing);
+    expect(find.text(en.noStableFirmwareFound), findsOneWidget);
     debugDefaultTargetPlatformOverride = null;
   });
 
@@ -499,6 +581,9 @@ class _FirmwareHttpClient implements HttpClient {
   Future<HttpClientRequest> openUrl(String method, Uri url) async {
     expect(method, 'GET');
     expect(url.path, anyOf('/v2/firmware/latest', '/v2/firmware/stable', '/firmware.zip'));
+    if (url.path.startsWith('/v2/firmware/')) {
+      _lookupRequests++;
+    }
     return _FirmwareRequest(url);
   }
 
@@ -540,6 +625,7 @@ class _FirmwareRequest implements HttpClientRequest {
       'min_version': '2.0.0',
       'draft': false,
       if (_offerZip) 'zip_url': 'http://firmware.test/firmware.zip',
+      ..._lookupBody,
     })));
   }
 

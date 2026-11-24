@@ -23,6 +23,7 @@ class WalService implements IWalService, IWalSyncListener {
     Future<SyncJobFetch> Function(String jobId)? phoneJobStatusFetcher,
     WalCoverageTelemetryEmitter? phoneCoverageTelemetry,
     Future<int?> Function()? phoneFreeDiskBytes,
+    Future<void> Function(List<Wal>)? phonePersistWals,
   }) {
     _syncs = WalSyncs(
       this,
@@ -32,6 +33,7 @@ class WalService implements IWalService, IWalSyncListener {
       phoneJobStatusFetcher: phoneJobStatusFetcher,
       phoneCoverageTelemetry: phoneCoverageTelemetry,
       phoneFreeDiskBytes: phoneFreeDiskBytes,
+      phonePersistWals: phonePersistWals,
     );
   }
 

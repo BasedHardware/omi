@@ -124,6 +124,12 @@ def merge():
     for _name in ["canonical_intake_is_fenced", "historical_source_conversation_ids", "retraction_can_be_skipped"]:
         setattr(retraction_scope_stub, _name, MagicMock())
 
+    # merge_conversations imports the record-audio removal fence at module scope; its real
+    # module pulls the pipeline ledger and Firestore client, which the pure validation
+    # surface never touches.
+    record_audio_stub = ModuleType("database.record_audio")
+    record_audio_stub.fence_record_audio_removal = MagicMock()
+
     fakes: dict[str, ModuleType] = {
         "database": database_pkg,
         "database._client": client_stub,
@@ -132,6 +138,7 @@ def merge():
         "database.conversations_v3_backfill_runs": ModuleType("database.conversations_v3_backfill_runs"),
         "database.vector_db": vector_db_stub,
         "database.redis_db": redis_db_stub,
+        "database.record_audio": record_audio_stub,
         "database.users": users_stub,
         "utils.cloud_tasks": cloud_tasks_stub,
         "utils.conversations.lifecycle": lifecycle_stub,

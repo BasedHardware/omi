@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import ast
-import importlib
 import json
 import logging
-import os
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -19,53 +16,8 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROCESS_CONVERSATION_PATH = BACKEND_DIR / "utils" / "conversations" / "process_conversation.py"
 CONVERSATIONS_ROUTER_PATH = BACKEND_DIR / "routers" / "conversations.py"
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
-
+from tests.support.memory_process_conversation import pc  # noqa: F401 - pytest fixture
 from utils.conversations.owner_attribution import OwnerAttributionEvidence
-
-from tests.unit.memory_import_isolation import (
-    CLIENT_BINDING_DATABASE_MODULES,
-    WS_I_HEAVY_STUB_MODULE_NAMES,
-    drop_client_binding_modules,
-    install_database_client_stub,
-    install_ws_i_heavy_import_stubs,
-    restore_sys_modules,
-    snapshot_sys_modules,
-)
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _memory_replace_import_isolation():
-    saved = snapshot_sys_modules(
-        [
-            "database._client",
-            "utils.conversations.process_conversation",
-            *CLIENT_BINDING_DATABASE_MODULES,
-            *WS_I_HEAVY_STUB_MODULE_NAMES,
-        ]
-    )
-    install_database_client_stub()
-    # Evict anything that already captured a live Firestore handle before stubbing.
-    # Without this the stub install skips those names, _extract_memories_canonical
-    # reaches the real database.notifications.get_user_time_zone, and the test spends
-    # an hour in google.api_core retry backoff instead of 0.36s -- passing either way,
-    # so only the clock shows it.
-    drop_client_binding_modules()
-    install_ws_i_heavy_import_stubs()
-    yield
-    restore_sys_modules(saved)
-
-
-def _load_process_conversation():
-    for name in list(sys.modules):
-        if name == "utils.conversations.process_conversation" or name.startswith(
-            "utils.conversations.process_conversation."
-        ):
-            del sys.modules[name]
-    return importlib.import_module("utils.conversations.process_conversation")
 
 
 def _function_body(source: str, fn_name: str) -> str:
@@ -114,9 +66,8 @@ def test_cascade_delete_cleans_memories_before_conversation_doc():
     assert cascade_idx < action_items_idx < conv_delete_idx
 
 
-def test_universal_reextract_failure_preserves_existing_memories(monkeypatch):
+def test_universal_reextract_failure_preserves_existing_memories(monkeypatch, pc):
     """Strict extraction failure must not submit a source replacement."""
-    pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -148,9 +99,8 @@ def test_universal_reextract_failure_preserves_existing_memories(monkeypatch):
     mock_service.replace_conversation_memories.assert_not_called()
 
 
-def test_universal_reextract_valid_empty_replaces_existing_source_state(monkeypatch):
+def test_universal_reextract_valid_empty_replaces_existing_source_state(monkeypatch, pc):
     """A valid empty extraction is an authoritative source replacement."""
-    pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -180,8 +130,7 @@ def test_universal_reextract_valid_empty_replaces_existing_source_state(monkeypa
     )
 
 
-def test_canonical_capture_preserves_prior_state_when_candidate_has_any_ungrounded_quote(monkeypatch):
-    pc = _load_process_conversation()
+def test_canonical_capture_preserves_prior_state_when_candidate_has_any_ungrounded_quote(monkeypatch, pc):
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -238,10 +187,9 @@ def test_canonical_capture_preserves_prior_state_when_candidate_has_any_unground
     mock_service.replace_conversation_memories.assert_not_called()
 
 
-def test_canonical_capture_persists_candidate_predicate_and_arguments(monkeypatch):
+def test_canonical_capture_persists_candidate_predicate_and_arguments(monkeypatch, pc):
     """Object qualifiers and decision states carried by the extraction
     candidate must reach the persisted Memory, not be silently dropped."""
-    pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -309,7 +257,7 @@ def test_canonical_capture_persists_candidate_predicate_and_arguments(monkeypatc
     assert written[0]["arguments"] == {"decision": "proposed", "object": "Boston"}
 
 
-def test_canonical_capture_preserves_prior_state_when_the_extractor_never_returns_a_batch(monkeypatch):
+def test_canonical_capture_preserves_prior_state_when_the_extractor_never_returns_a_batch(monkeypatch, pc):
     """A provider failure is not a verdict on the source's existing memories.
 
     ``strict=True`` makes the extractor raise instead of returning an empty
@@ -317,7 +265,6 @@ def test_canonical_capture_preserves_prior_state_when_the_extractor_never_return
     protection; propagating the raise additionally aborts the caller's
     finalization.
     """
-    pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -357,12 +304,11 @@ def test_canonical_capture_preserves_prior_state_when_the_extractor_never_return
     mock_service.replace_conversation_memories.assert_not_called()
 
 
-def test_canonical_capture_survives_an_external_text_extractor_failure(monkeypatch):
+def test_canonical_capture_survives_an_external_text_extractor_failure(monkeypatch, pc):
     """External-integration intake has the same extractor-failure boundary."""
     # This asserts the eager extraction seam; the dedupe-on external path
     # (prompt-memories resolution + l1 fingerprint) is covered separately.
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'false')
-    pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -394,9 +340,8 @@ def test_canonical_capture_survives_an_external_text_extractor_failure(monkeypat
     mock_service.replace_conversation_memories.assert_not_called()
 
 
-def test_canonical_capture_drops_only_the_ungrounded_candidate(monkeypatch):
+def test_canonical_capture_drops_only_the_ungrounded_candidate(monkeypatch, pc):
     """One ungrounded candidate must not discard its grounded siblings."""
-    pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -458,7 +403,7 @@ def test_canonical_capture_drops_only_the_ungrounded_candidate(monkeypatch):
     assert replacement_payloads[0]["content"] == "The user works at Acme."
 
 
-def test_canonical_capture_accepts_an_extractor_that_yields_no_candidates(monkeypatch):
+def test_canonical_capture_accepts_an_extractor_that_yields_no_candidates(monkeypatch, pc):
     """An extractor that returns zero candidates is a quiet conversation, not a failed run.
 
     The all-ungrounded guard must key off candidates the loop actually saw. Keying
@@ -466,7 +411,6 @@ def test_canonical_capture_accepts_an_extractor_that_yields_no_candidates(monkey
     (a generator's stand-in, a test double) as "every candidate failed grounding"
     and aborts conversation finalization for a conversation with nothing to learn.
     """
-    pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -517,8 +461,7 @@ def test_canonical_capture_accepts_an_extractor_that_yields_no_candidates(monkey
     ],
     ids=["user-and-identified", "identified-and-unidentified"],
 )
-def test_canonical_capture_requires_every_grounded_segment_to_resolve_to_one_subject(matched_segments):
-    pc = _load_process_conversation()
+def test_canonical_capture_requires_every_grounded_segment_to_resolve_to_one_subject(matched_segments, pc):
 
     subject_id, attribution, subject_kind = pc._l1_subject_from_matched_segments(
         source_id="conv-mixed-subject",
@@ -531,8 +474,7 @@ def test_canonical_capture_requires_every_grounded_segment_to_resolve_to_one_sub
     assert subject_kind == "unknown"
 
 
-def test_canonical_capture_known_non_user_speaker_overrides_model_about_user(monkeypatch):
-    pc = _load_process_conversation()
+def test_canonical_capture_known_non_user_speaker_overrides_model_about_user(monkeypatch, pc):
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -588,8 +530,7 @@ def test_canonical_capture_known_non_user_speaker_overrides_model_about_user(mon
     assert payload["subject_attribution"] == "third_party"
 
 
-def test_canonical_capture_logs_text_free_regime_and_attribution_decision(monkeypatch, caplog):
-    pc = _load_process_conversation()
+def test_canonical_capture_logs_text_free_regime_and_attribution_decision(monkeypatch, caplog, pc):
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -679,8 +620,7 @@ def test_canonical_capture_logs_text_free_regime_and_attribution_decision(monkey
     assert payload["evidence"][0]["attribution"] == "third_party"
 
 
-def test_canonical_capture_rejection_feedback_fetch_is_bounded_to_the_orchestration_boundary(monkeypatch):
-    pc = _load_process_conversation()
+def test_canonical_capture_rejection_feedback_fetch_is_bounded_to_the_orchestration_boundary(monkeypatch, pc):
     fallback = MagicMock()
     monkeypatch.setattr(pc, "record_fallback", fallback)
     monkeypatch.setattr(
@@ -708,8 +648,7 @@ def test_canonical_capture_rejection_feedback_fetch_is_bounded_to_the_orchestrat
     )
 
 
-def test_canonical_capture_maps_rendered_contact_name_back_to_person_id(monkeypatch):
-    pc = _load_process_conversation()
+def test_canonical_capture_maps_rendered_contact_name_back_to_person_id(monkeypatch, pc):
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -769,8 +708,7 @@ def test_canonical_capture_maps_rendered_contact_name_back_to_person_id(monkeypa
     assert payload["evidence"][0]["quote_refs"][0]["speaker_label"] == "SPEAKER_01"
 
 
-def test_canonical_voice_payload_preserves_owner_lineage_and_capture_provenance(monkeypatch):
-    pc = _load_process_conversation()
+def test_canonical_voice_payload_preserves_owner_lineage_and_capture_provenance(monkeypatch, pc):
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -840,8 +778,7 @@ def test_canonical_voice_payload_preserves_owner_lineage_and_capture_provenance(
     assert evidence["captured_at"] == captured_at.isoformat().replace("+00:00", "Z")
 
 
-def test_owner_source_attribution_never_uses_subject_fallback_without_owner_quote():
-    pc = _load_process_conversation()
+def test_owner_source_attribution_never_uses_subject_fallback_without_owner_quote(pc):
     from models.transcript_segment import TranscriptSegment
 
     segments = [
@@ -871,8 +808,7 @@ def test_owner_source_attribution_never_uses_subject_fallback_without_owner_quot
     assert pc._l1_owner_spoken_for_grounded_quotes(["I own this account."], segments)
 
 
-def test_canonical_capture_quote_speaker_overrides_hallucinated_user_label(monkeypatch):
-    pc = _load_process_conversation()
+def test_canonical_capture_quote_speaker_overrides_hallucinated_user_label(monkeypatch, pc):
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -929,8 +865,7 @@ def test_canonical_capture_quote_speaker_overrides_hallucinated_user_label(monke
 
 
 @pytest.mark.parametrize("about", ["the user", "speaker_1"])
-def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speaker(monkeypatch, about):
-    pc = _load_process_conversation()
+def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speaker(monkeypatch, about, pc):
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -1005,8 +940,7 @@ def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speak
     assert payload["evidence"][0]["quote_refs"][0]["speaker_label"] == "SPEAKER_01"
 
 
-def test_canonical_dense_capture_is_bounded_before_atomic_replacement(monkeypatch):
-    pc = _load_process_conversation()
+def test_canonical_dense_capture_is_bounded_before_atomic_replacement(monkeypatch, pc):
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
@@ -1069,8 +1003,7 @@ def test_canonical_dense_capture_is_bounded_before_atomic_replacement(monkeypatc
     ]
 
 
-def test_canonical_capture_deduplicates_unknown_subjects_without_using_quote_authors(monkeypatch):
-    pc = _load_process_conversation()
+def test_canonical_capture_deduplicates_unknown_subjects_without_using_quote_authors(monkeypatch, pc):
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured

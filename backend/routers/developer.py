@@ -37,7 +37,6 @@ import database.daily_summaries as daily_summaries_db
 from database._client import db
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
-from utils.list_version_check import ListVersionCheck
 
 from models.calendar_context import DevCalendarMeetingContext
 from models.folder import Folder
@@ -90,6 +89,8 @@ from dependencies import (
 from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
+from utils.other.from_segments_503 import FromSegments503Route
+from utils.other.request_deadline import from_segments_request_deadline
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.observability.external_lists import (
     observe_action_items_page,
@@ -145,7 +146,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(route_class=external_lists.ExternalListCacheRoute)
+router = APIRouter(route_class=FromSegments503Route)
 FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
@@ -875,16 +876,9 @@ def get_action_items(
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
     observe_action_items_page(limit, offset)
-    version_check = ListVersionCheck.start(request, uid, 'action_items')
-    if version_check.not_modified is not None:
-        return version_check.not_modified
     with read_component(ReadComponent.OTHER):
         budget = list_read_budget_for_request(request, route='developer-action-items', owner_uid=uid, context=auth)
-        cached = (
-            external_lists.cached_external_list(request, response, auth, locals())
-            if not (version_check.active and 'lp1-' in request.headers.get('if-none-match', ''))
-            else None
-        )
+        cached = external_lists.cached_external_list(request, response, auth, locals())
         observe_action_items_shape(
             conversation_id is not None, start_date is not None or end_date is not None, completed, cached is not None
         )
@@ -905,7 +899,6 @@ def get_action_items(
     valid_action_items = external_lists.validate_developer_action_items(action_items, ActionItemResponse, uid, logger)
     observe_action_items_rows('returned', len(valid_action_items))
     finish_list_budget(response, budget)
-    version_check.finish(response, truncated=budget.truncated)
     return valid_action_items
 
 
@@ -2403,6 +2396,7 @@ def _ingest_conversation_from_segments(
 def create_conversation_from_segments_user(
     request: CreateConversationFromTranscriptRequest,
     http_request: Request,
+    _deadline: Any = Depends(from_segments_request_deadline),
     uid: str = Depends(with_rate_limit(get_current_user_uid, "conversations:from-segments")),
 ):
     """Create a conversation from already-transcribed segments (Firebase-authed).

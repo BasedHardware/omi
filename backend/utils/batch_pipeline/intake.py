@@ -35,6 +35,7 @@ from config.prerecorded_language import language_guard_enabled, language_class
 from config.stt_cap_dispatch import offline_enforcement_enabled
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database import batch_pipeline_allowance_hold as allowance_hold
+from database import record_wal_duplicate as wal_duplicate
 from database import record_wal_handoff as wal_receipts
 from database.batch_pipeline_intake import admit, cache_completed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -223,6 +224,7 @@ def _deleted_conversation_status(ledger: dict, intake: dict, job_id: str) -> dic
     return {
         'job_id': job_id,
         'status': 'completed',
+        'completed_at': ledger.get('completed_at'),
         'lane': intake['lane'],
         'total_files': intake['total_files'],
         'total_segments': total,
@@ -433,6 +435,7 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             'failed_segments': failed,
             'errors': ['batch_worker_quarantined'] if failed else [],
             'result': result if completed and not failed else None,
+            'completed_at': ledger.get('completed_at') if completed else None,
             'poll_after_ms': 0 if completed or failed else 3000,
         }
 
@@ -1183,7 +1186,13 @@ async def accept_upload(
             return JSONResponse(status_code=error.status_code, headers=error.headers, content=error.detail)
         # A transaction may have committed even when its reply was lost. Keep
         # the staging outbox for reconciliation; never release/re-route content.
-        deterministic = phase == 'decode' and decode is None and is_deterministic_decode_failure(error)
+        # The sampled path advances the same decoder over the same bytes under
+        # its own phase (`sample_decode`) before anything is staged; its probe
+        # phase classifies already-decoded audio, so a decoder fault can only
+        # surface while the sample itself is being decoded.
+        deterministic = (
+            phase in ('decode', 'sample_decode') and decode is None and is_deterministic_decode_failure(error)
+        )
         if deterministic and decode_failure_memo_enabled():
             # These bytes cannot decode however often they are retried. Remember
             # the proven failure so the next retry answers the same 503 without
@@ -1455,8 +1464,11 @@ def get_durable_job_status(job_id: str, uid: str, *, artifact_retry: bool = Fals
     if job_id.startswith(wal_receipts.JOB_PREFIX):
         status = _wal_receipt_status(uid, job_id)
     else:
+        store = FirestoreStore(f'batch_pipeline_{current_stage()}')
+        witnessed, status = wal_duplicate.terminal_status(store, uid, job_id)
         # A2 seam: durable_status may redrive a dead job (writes jobs/queues/control).
-        status = durable_status(shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}')), uid, job_id)
+        if not witnessed:
+            status = durable_status(shadow_from_env(store), uid, job_id)
     if status is None:
         raise HTTPException(status_code=404, detail='Sync job not found')
     if status.get('reason_code') == 'batch_artifact_missing' and not artifact_retry:

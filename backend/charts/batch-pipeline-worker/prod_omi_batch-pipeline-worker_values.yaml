@@ -21,8 +21,8 @@ secretName: prod-omi-backend-secrets
 # Ceiling 16 (David, 2026-11-16 16:41Z: backlog 25k ready at 8 pods; applied
 # live 16:50Z and persisted here so a worker Helm upgrade keeps it; node pool
 # max is 18). replicaCount and autoscaling.minReplicas are one floor setting;
-# change both. Rollback: floor 4 (both values and the node pool minimum);
-# ceiling rollback maxReplicas 8. OD-first placement stays unchanged.
+# change both with the matching node pool minimum (see the capacity runbook).
+# Routine tuning rollback keeps floor 6. OD-first placement stays unchanged.
 replicaCount: 6
 autoscaling:
   enabled: true

@@ -1371,7 +1371,9 @@ class ConversationDetailProvider extends ChangeNotifier
         if (!_syncConversationId.hasMatch(openedId)) return false;
         _adoptBridgedConversation(openedId, updatedConversation);
       } else {
-        if (updatedConversation.homeStep == null &&
+        if (updatedConversation.isAdmittedForTranscription && updatedConversation.homeStep != 'transcribing') {
+          updatedConversation = updatedConversation.withHomeStep('transcribing');
+        } else if (updatedConversation.homeStep == null &&
             conversation.homeStep == 'failed' &&
             (updatedConversation.status == ConversationStatus.processing ||
                 updatedConversation.status == ConversationStatus.merging)) {

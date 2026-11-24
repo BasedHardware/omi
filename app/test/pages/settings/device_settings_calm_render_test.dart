@@ -40,6 +40,9 @@ const _output = String.fromEnvironment('DEVICE_SETTINGS_RENDER_OUTPUT');
 const _frame = Key('device_settings_frame');
 
 class _Device extends ChangeNotifier implements DeviceProvider {
+  _Device(this.batteryLevel, {required bool firstChargePending})
+      : settingsBatteryLevel = firstChargePending ? -1 : batteryLevel;
+
   final device = BtDevice(id: 'omi-evidence', name: 'Omi', type: DeviceType.omi, rssi: -40);
   @override
   BtDevice? get connectedDevice => device;
@@ -52,7 +55,16 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   bool get isConnecting => false;
   @override
-  int get batteryLevel => 72;
+  int batteryLevel;
+  @override
+  int settingsBatteryLevel;
+
+  void publishBatteryLevel(int level) {
+    batteryLevel = level;
+    settingsBatteryLevel = level;
+    notifyListeners();
+  }
+
   @override
   bool get isCharging => false;
   @override
@@ -200,6 +212,12 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
     if (_output.isEmpty) return;
     await tester.runAsync(() async {
+      for (final element in find.byType(Image).evaluate()) {
+        await precacheImage((element.widget as Image).image, element);
+      }
+    });
+    await tester.pump();
+    await tester.runAsync(() async {
       final render = tester.renderObject<RenderRepaintBoundary>(find.byKey(_frame));
       final image = await render.toImage(pixelRatio: 3);
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -208,7 +226,7 @@ void main() {
     });
   }
 
-  Future<void> pumpDevice(WidgetTester tester) async {
+  Future<_Device> pumpDevice(WidgetTester tester, {int batteryLevel = 72, bool firstChargePending = false}) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -220,7 +238,7 @@ void main() {
       loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
       loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
     );
-    final device = _Device();
+    final device = _Device(batteryLevel, firstChargePending: firstChargePending);
     final capture = _Capture();
     final sync = _Sync([_stalledUpload()]);
     final conversations = ConversationProvider(isSignedIn: () => false);
@@ -259,6 +277,7 @@ void main() {
       ),
     ));
     await tester.pump(const Duration(milliseconds: 120));
+    return device;
   }
 
   testWidgets('Device Settings omits routine disconnects and the stalled upload card', (tester) async {
@@ -276,5 +295,27 @@ void main() {
     await Scrollable.ensureVisible(tester.element(offlineSync), alignment: 0.5);
     await tester.pump();
     expect(tester.widget<OmiSettingsRow>(offlineSync.hitTestable()).onTap, isNotNull);
+  });
+
+  testWidgets('Device Settings shows a dash until the first-charge check returns a reading', (tester) async {
+    final device = await pumpDevice(tester, batteryLevel: 3, firstChargePending: true);
+    final battery = find.byKey(const Key('device_stat_battery'));
+    final dash = find.descendant(of: battery, matching: find.text('—'));
+    final semantics = tester.ensureSemantics();
+    try {
+      expect(dash, findsOneWidget);
+      expect(tester.getSemantics(battery).label, startsWith('Battery, Unknown'));
+      expect(find.text('3%'), findsNothing);
+      expect(find.text('Try Again'), findsNothing);
+      await writeFrame(tester, '003-mobile-ios-battery-checking');
+      device.publishBatteryLevel(0);
+      await tester.pump();
+      expect(dash, findsNothing);
+      expect(find.text('0%'), findsOneWidget);
+      expect(find.text('Try Again'), findsNothing);
+    } finally {
+      semantics.dispose();
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }
