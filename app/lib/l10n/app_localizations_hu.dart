@@ -7091,6 +7091,26 @@ class AppLocalizationsHu extends AppLocalizations {
   String get authUnexpectedError => 'Váratlan hiba a bejelentkezés során, kérjük próbálja újra';
 
   @override
+  String get accountSignInMethods => 'Bejelentkezési módok';
+
+  @override
+  String get accountAddSignInMethod => 'Bejelentkezési mód hozzáadása';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Adj hozzá egy bejelentkezési módot ehhez az Omi-fiókhoz. A csomagod, a felvételeid és az integrációid továbbra is ehhez a fiókhoz tartoznak.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ez a bejelentkezési mód egy másik fiókhoz tartozik';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Továbbra is ebbe a fiókba vagy bejelentkezve. Minden Omi-fiók megőrzi a saját csomagját, felvételeit és integrációit.';
+
+  @override
+  String get accountSignInMethodAdded => 'Bejelentkezési mód hozzáadva';
+
+  @override
   String get authFailedToLinkGoogle => 'Nem sikerült a Google-lel összekapcsolni, kérjük próbálja újra.';
 
   @override
@@ -14418,6 +14438,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get processingProgress => 'A várakozó felvételeid feldolgozása…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Várakozás az elérhető átírási keretre';
+
+  @override
   String get processingDeferred => 'Feldolgozásra vár';
 
   @override
@@ -15826,4 +15849,37 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'A rendelés leadva. A visszaigazolást az e-mailjeidben találod.';
+
+  @override
+  String get prepaidCodeEntry => 'Van kódod?';
+
+  @override
+  String get prepaidCodeTitle => 'Kód beváltása';
+
+  @override
+  String get prepaidCodeFieldHint => 'Add meg a kódodat';
+
+  @override
+  String get prepaidCodeRedeem => 'Beváltás';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kód beváltva';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Ez a kód érvénytelen. Ellenőrizd, és próbáld újra.',
+        'used': 'Ezt a kódot már felhasználták.',
+        'expired': 'Ez a kód lejárt.',
+        'hasPlan': 'Már van csomagod. A kódodat nem használtuk fel. Váltsd be, amikor a csomagod lejár.',
+        'notPrepaid': 'Ez a kód itt nem váltható be. Használd, amikor csomagot választasz.',
+        'notEligible': 'Ez a kód ezen a fiókon nem használható.',
+        'rateLimited': 'Túl sok próbálkozás. Próbáld újra később.',
+        'other': 'Hiba történt. Próbáld újra.',
+      },
+    );
+    return '$_temp0';
+  }
 }

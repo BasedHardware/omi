@@ -471,6 +471,26 @@ class QueueMetrics:
             buckets=(1, 10, 30, 60, 120, 300, 600, 900, 3600, 86400),
             registry=registry,
         )
+        self.gpu_depth_held_age = Histogram(
+            'omi_batch_pipeline_gpu_depth_held_age_seconds',
+            'Age source of GPU rows refused by the projection depth gate at a merge attempt',
+            ['worker_release', 'namespace', 'age_source'],
+            buckets=(60, 600, 3600, 10800, 21600, 43200, 86400, 259200),
+            registry=registry,
+        )
+        self.gpu_aged_releases = Counter(
+            'omi_batch_pipeline_gpu_aged_releases_total',
+            'Aged GPU catch-up rows released through the projection depth gate',
+            ['worker_release', 'namespace'],
+            registry=registry,
+        )
+        self.gpu_aged_release_age = Histogram(
+            'omi_batch_pipeline_gpu_aged_release_age_seconds',
+            'Age of GPU catch-up rows when released through the projection depth gate',
+            ['worker_release', 'namespace', 'age_source'],
+            buckets=(3600, 21600, 43200, 86400, 259200, 604800),
+            registry=registry,
+        )
         self.head_parked = Counter(
             'omi_batch_pipeline_head_parked_total',
             'Owner queue visits parked behind an unleasable head, by bounded reason',

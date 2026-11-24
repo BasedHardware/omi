@@ -7072,6 +7072,26 @@ class AppLocalizationsSl extends AppLocalizations {
   String get authUnexpectedError => 'Nepričakana napaka pri prijavi, prosimo, poskusite ponovno';
 
   @override
+  String get accountSignInMethods => 'Načini prijave';
+
+  @override
+  String get accountAddSignInMethod => 'Dodaj način prijave';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Dodajte način prijave v ta račun Omi. Vaš paket, posnetki in integracije ostanejo v tem računu.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ta način prijave pripada drugemu računu';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Še vedno ste v tem računu. Vsak račun Omi obdrži svoj paket, posnetke in integracije.';
+
+  @override
+  String get accountSignInMethodAdded => 'Način prijave je dodan';
+
+  @override
   String get authFailedToLinkGoogle => 'Povezovanje s Google ni uspelo, prosimo, poskusite ponovno.';
 
   @override
@@ -14387,6 +14407,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get processingProgress => 'Obdelovanje vaših čakajočih posnetkov…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Čakanje na razpoložljivo kvoto za prepis';
+
+  @override
   String get processingDeferred => 'Čaka na obdelavo';
 
   @override
@@ -15796,4 +15819,37 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'Naročilo je oddano. Potrditev boste našli v e-pošti.';
+
+  @override
+  String get prepaidCodeEntry => 'Imate kodo?';
+
+  @override
+  String get prepaidCodeTitle => 'Unovči kodo';
+
+  @override
+  String get prepaidCodeFieldHint => 'Vnesite svojo kodo';
+
+  @override
+  String get prepaidCodeRedeem => 'Unovči';
+
+  @override
+  String get prepaidCodeRedeemed => 'Koda unovčena';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Ta koda ni veljavna. Preverite jo in poskusite znova.',
+        'used': 'Ta koda je že bila uporabljena.',
+        'expired': 'Tej kodi je potekla veljavnost.',
+        'hasPlan': 'Že imate paket. Vaša koda ni bila uporabljena. Unovčite jo, ko se vaš paket konča.',
+        'notPrepaid': 'Te kode ni mogoče unovčiti tukaj. Uporabite jo, ko izberete paket.',
+        'notEligible': 'Te kode ni mogoče uporabiti v tem računu.',
+        'rateLimited': 'Preveč poskusov. Poskusite pozneje.',
+        'other': 'Prišlo je do napake. Poskusite znova.',
+      },
+    );
+    return '$_temp0';
+  }
 }

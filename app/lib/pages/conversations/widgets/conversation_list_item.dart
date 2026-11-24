@@ -50,9 +50,15 @@ import 'package:omi/providers/transcription_pending_conversations.dart';
 /// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
+  if (conversation.isTranscriptionAllowanceHeld &&
+      (conversation.structured.title.trim().isEmpty || TranscriptionPendingConversations.replacesTitle(conversation))) {
+    return l10n.summaryTranscriptionPendingTitle;
+  }
   // A row the server said is not transcribed keeps its own title and the status slot says why,
   // unless the title is only the server's stand-in; then the status is the title.
-  if (conversation.homeStep == 'failed') {
+  if (conversation.homeStep == 'failed' &&
+      !conversation.isAdmittedForTranscription &&
+      !conversation.isTranscriptionAllowanceHeld) {
     if (!TranscriptionPendingConversations.contains(conversation.id)) {
       return l10n.summaryTemplateFailedTitle(l10n.omiAppName);
     }
@@ -718,10 +724,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       ],
                       const SizedBox(height: 3),
                       _buildMetaOrStatus(context),
-                      if (widget.conversation.processingDeferred && widget.conversation.homeStep != 'failed')
+                      if (widget.conversation.processingDeferred &&
+                          widget.conversation.homeStep != 'failed' &&
+                          !widget.conversation.isTranscriptionAllowanceHeld)
                         const ProcessingDeferredMarker(),
                       OnDeviceProvenanceChip(conversationId: widget.conversation.id),
-                      if ((widget.conversation.showsSummaryRetry || isFailedConversation(widget.conversation)) &&
+                      if (!widget.conversation.isTranscriptionAllowanceHeld &&
+                          !widget.conversation.isAdmittedForTranscription &&
+                          (widget.conversation.showsSummaryRetry || isFailedConversation(widget.conversation)) &&
                           !TranscriptionPendingConversations.replacesTitle(widget.conversation)) ...[
                         const SizedBox(height: 8),
                         _buildSummaryRetry(context),
@@ -802,7 +812,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     final capture = context.read<CaptureProvider>();
     final episodes = context.read<EpisodeProvider?>();
     HapticFeedback.mediumImpact();
-    final outcome = await finishLiveCapture(capture, episodes: episodes);
+    final outcome = await finishLiveCapture(context, capture, episodes: episodes);
     if (!context.mounted) return;
     presentFinishOutcome(context, outcome,
         entry: FinishEntry.home, onRetry: () => retryFinishFromHome(context, capture));
@@ -815,6 +825,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
     final state = v3 ? widget.conversation.v3?.tileState : null;
     final l10n = context.l10n;
     final style = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
+    if (widget.conversation.isTranscriptionAllowanceHeld) {
+      return Text(l10n.waitingForTranscriptionAllowance, style: style, maxLines: 1);
+    }
     final Widget child = switch (state) {
       // Speech so far, through the same duration authority as the meta row and the detail page
       // (#25725): counting from the start to now would grow it through silence.

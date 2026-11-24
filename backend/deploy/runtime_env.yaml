@@ -1332,6 +1332,7 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PREPAID_CODE_REDEEM: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -3402,6 +3403,7 @@ environments:
             value: 'true'
             category: ops_kill
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+          LISTEN_BATCH_RECONNECT_ENABLED: {value: 'true', category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
             value: 'true'
             category: ops_kill
@@ -4070,7 +4072,6 @@ environments:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           - DREAM_AGENT_PAID_PERCENT
-          - SYNC_POLL_BACKOFF_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -4184,7 +4185,7 @@ environments:
               env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
               provisional: true
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -4568,6 +4569,7 @@ environments:
             ENRICHMENT_TASKS_OIDC_AUDIENCE:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: service_auth
+            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
             OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS: {value: 'viUv7GtdoHXbK1UBCDlPuTDuPgJ2,kiTPO8XwMlOpFpb4x1diyMg213j2,UZXlf0K6KlNbPmkNwPH73krNwhj1',
               category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
@@ -4679,6 +4681,7 @@ environments:
               value: price_1TuIa81F8wnoWYvw0iX0j5M8
             STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
               value: price_1TuIap1F8wnoWYvwHWq0EvNU
+            PREPAID_CODE_REDEEM: {value: cohort, category: rollout}
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             MCP_OAUTH_CLAUDE_CLIENT_ID:
               env_var: MCP_OAUTH_CLAUDE_CLIENT_ID
@@ -5095,6 +5098,7 @@ environments:
               value: 'true'
               category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+            LISTEN_BATCH_RECONNECT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill

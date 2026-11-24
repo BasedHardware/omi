@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_seams.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
@@ -20,6 +21,23 @@ import '../support/crashlytics_recorder.dart';
 class _RecordingActions extends NoopCaptureExternalActions {
   final processing = <ServerConversation>[];
   final upserted = <ServerConversation>[];
+  ServerConversation? manualFinishRow;
+  bool? manualFinishFailed;
+  ProcessAbsence? manualFinishAbsence;
+
+  @override
+  void onManualFinishStarted(ServerConversation placeholder, String? recordingId,
+      {String? liveConversationId, String? captureId}) {
+    manualFinishRow = placeholder;
+  }
+
+  @override
+  void onManualFinishSettled(ServerConversation placeholder, InProgressProcessOutcome? outcome,
+      {required bool showFailure}) {
+    if (!identical(placeholder, manualFinishRow)) return;
+    manualFinishFailed = outcome?.response?.conversation == null && showFailure;
+    manualFinishAbsence = outcome?.absence;
+  }
 
   @override
   void addProcessingConversation(ServerConversation conversation) {
@@ -196,6 +214,7 @@ void main() {
 
     expect(actions.processing.map((conversation) => conversation.id), ['0']);
     expect(actions.processing.single.status, ConversationStatus.processing);
+    expect(actions.manualFinishRow, isNull, reason: 'a coordinator close must remain silent');
     expect(finalize.isCompleted, isFalse);
     expect(processStarted.isCompleted, isFalse);
 
@@ -218,6 +237,25 @@ void main() {
 
     expect(actions.processing, isEmpty);
     expect(actions.upserted, isEmpty);
+  });
+
+  test('pendant double tap publishes manual finish before the drain and reports an unanswered request', () async {
+    final finalize = Completer<void>();
+    final actions = _RecordingActions();
+    final provider = _provider(actions: actions, finalizeGate: finalize, process: () async => null);
+    addTearDown(provider.dispose);
+    SharedPreferencesUtil().omiButtonActionsEnabled = true;
+    SharedPreferencesUtil().doubleTapAction = 0;
+
+    provider.handleButtonEventForTesting('synthetic-pendant', 2);
+    expect(actions.manualFinishRow, same(actions.processing.single));
+    expect(actions.manualFinishFailed, isNull);
+
+    finalize.complete();
+    await _flushEventQueue();
+    expect(actions.manualFinishFailed, isTrue);
+    expect(actions.manualFinishAbsence, ProcessAbsence.transport);
+    expect(actions.processing, isEmpty);
   });
 
   test('a conversation that changes during the drain removes the skeleton without processing', () async {

@@ -2223,6 +2223,12 @@
     "authFailedToRetrieveToken": "Kon Firebase-token niet ophalen, probeer het opnieuw.",
     "authUnexpectedErrorFirebase": "Onverwachte fout bij aanmelden, Firebase-fout, probeer het opnieuw.",
     "authUnexpectedError": "Onverwachte fout bij aanmelden, probeer het opnieuw",
+    "accountSignInMethods": "Inlogmethoden",
+    "accountAddSignInMethod": "Inlogmethode toevoegen",
+    "accountAddSignInMethodDetails": "Voeg een manier toe om in te loggen op dit Omi-account. Je abonnement, opnamen en koppelingen blijven bij dit account.",
+    "accountSignInConflictTitle": "Deze inlogmethode hoort bij een ander account",
+    "accountSignInConflictDetails": "Je bent nog steeds ingelogd op dit account. Elk Omi-account behoudt zijn eigen abonnement, opnamen en koppelingen.",
+    "accountSignInMethodAdded": "Inlogmethode toegevoegd",
     "authFailedToLinkGoogle": "Koppelen met Google mislukt, probeer het opnieuw.",
     "authFailedToLinkApple": "Koppelen met Apple mislukt, probeer het opnieuw.",
     "onboardingBluetoothRequired": "Bluetooth-toestemming is vereist om verbinding te maken met uw apparaat.",
@@ -4382,6 +4388,7 @@
     "processingNewestFirst": "We verwerken eerst de nieuwste opnamen, tot het beschikbare tegoed op is. De rest blijft wachten.",
     "processingAction": "Wachtende opnamen verwerken",
     "processingProgress": "Je wachtende opnamen worden verwerkt…",
+    "waitingForTranscriptionAllowance": "Wachten op beschikbare transcriptieruimte",
     "processingDeferred": "Wacht op verwerking",
     "processingCount": "{count, plural, =1{1 gesprek wacht} other{{count} gesprekken wachten}}",
     "playbackPartialAudioSaved": "{saved} van {total} audio opgeslagen",
@@ -4750,5 +4757,11 @@
     "playRenewalTerms": "Wordt automatisch verlengd tegen de getoonde prijs tot je opzegt. Beheer of zeg op wanneer je wilt in Google Play.",
     "playPaidAppUnavailable": "Niet beschikbaar op Android",
     "pageNotAvailableInApp": "Deze pagina is niet beschikbaar in de app.",
-    "shopOrderPlacedCheckEmail": "Bestelling geplaatst. Je bevestiging staat in je e-mail."
+    "shopOrderPlacedCheckEmail": "Bestelling geplaatst. Je bevestiging staat in je e-mail.",
+    "prepaidCodeEntry": "Heb je een code?",
+    "prepaidCodeTitle": "Code inwisselen",
+    "prepaidCodeFieldHint": "Voer je code in",
+    "prepaidCodeRedeem": "Inwisselen",
+    "prepaidCodeRedeemed": "Code ingewisseld",
+    "prepaidCodeResult": "{reason, select, invalid{Deze code is ongeldig. Controleer hem en probeer het opnieuw.} used{Deze code is al gebruikt.} expired{Deze code is verlopen.} hasPlan{Je hebt al een abonnement. Je code is niet gebruikt. Wissel hem in als je abonnement afloopt.} notPrepaid{Deze code kan hier niet worden ingewisseld. Gebruik hem wanneer je een abonnement kiest.} notEligible{Deze code kan niet op dit account worden gebruikt.} rateLimited{Te veel pogingen. Probeer het later opnieuw.} other{Er ging iets mis. Probeer het opnieuw.}}"
 }

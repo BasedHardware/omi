@@ -7078,6 +7078,26 @@ class AppLocalizationsRu extends AppLocalizations {
   String get authUnexpectedError => 'Непредвиденная ошибка при входе, пожалуйста, попробуйте снова';
 
   @override
+  String get accountSignInMethods => 'Способы входа';
+
+  @override
+  String get accountAddSignInMethod => 'Добавить способ входа';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Добавьте способ входа в этот аккаунт Omi. Ваш тариф, записи и интеграции останутся в этом аккаунте.';
+
+  @override
+  String get accountSignInConflictTitle => 'Этот способ входа привязан к другому аккаунту';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Вы по-прежнему в этом аккаунте. У каждого аккаунта Omi остаются свои тариф, записи и интеграции.';
+
+  @override
+  String get accountSignInMethodAdded => 'Способ входа добавлен';
+
+  @override
   String get authFailedToLinkGoogle => 'Не удалось связать с Google, пожалуйста, попробуйте снова.';
 
   @override
@@ -14408,6 +14428,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get processingProgress => 'Обработка ожидающих записей…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Ожидание доступной квоты на транскрипцию';
+
+  @override
   String get processingDeferred => 'Ожидает обработки';
 
   @override
@@ -15820,4 +15843,37 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'Заказ оформлен. Подтверждение придёт на вашу почту.';
+
+  @override
+  String get prepaidCodeEntry => 'Есть код?';
+
+  @override
+  String get prepaidCodeTitle => 'Активировать код';
+
+  @override
+  String get prepaidCodeFieldHint => 'Введите ваш код';
+
+  @override
+  String get prepaidCodeRedeem => 'Активировать';
+
+  @override
+  String get prepaidCodeRedeemed => 'Код активирован';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Этот код недействителен. Проверьте его и попробуйте снова.',
+        'used': 'Этот код уже использован.',
+        'expired': 'Срок действия этого кода истёк.',
+        'hasPlan': 'У вас уже есть план. Ваш код не использован. Активируйте его после окончания плана.',
+        'notPrepaid': 'Этот код нельзя активировать здесь. Используйте его при выборе плана.',
+        'notEligible': 'Этот код нельзя использовать в этом аккаунте.',
+        'rateLimited': 'Слишком много попыток. Попробуйте позже.',
+        'other': 'Что-то пошло не так. Попробуйте снова.',
+      },
+    );
+    return '$_temp0';
+  }
 }

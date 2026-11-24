@@ -55,7 +55,9 @@ class CancelPublisher:
                 self.reads.resources[token] = resource(self.state_after_failure)
             raise self.fail
         self.cancelled.append((package_name, token))
-        self.reads.resources[token] = resource('SUBSCRIPTION_STATE_CANCELED', renew=False)
+        self.reads.resources[token] = resource(
+            'SUBSCRIPTION_STATE_CANCELED', renew=False, canceledStateContext={'developerInitiatedCancellation': {}}
+        )
 
 
 @pytest.fixture
@@ -69,7 +71,7 @@ def test_account_deletion_cancels_the_live_play_subscription(subscribed, deletio
     assert play_publisher.cancel_for_account_deletion(UID, publisher) == 1
     assert publisher.cancelled == [('com.friend.ios', TOKEN)]
     doc = subscribed.store.docs[play_db.token_key(TOKEN)]
-    assert doc['account_deletion_cancelled'] is True and doc['auto_renewing'] is False
+    assert doc[play_db.DELETION_CONFIRMED_FIELD] is not None and doc['auto_renewing'] is False
     # Idempotent on retry: no second call.
     assert play_publisher.cancel_for_account_deletion(UID, publisher) == 0
 
@@ -94,7 +96,7 @@ def test_account_deletion_reads_google_first_and_accepts_what_can_no_longer_char
         subscribed.publisher.resources[TOKEN] = resource(google_state, renew=False)
     publisher = CancelPublisher(subscribed.publisher, fail=play_publisher.PublisherHTTPError(400, 'cancel'))
     assert play_publisher.cancel_for_account_deletion(UID, publisher) == 0
-    assert subscribed.store.docs[play_db.token_key(TOKEN)]['account_deletion_cancelled'] is True
+    assert subscribed.store.docs[play_db.token_key(TOKEN)][play_db.DELETION_CONFIRMED_FIELD] is not None
 
 
 def test_a_failed_cancel_is_accepted_when_google_now_shows_no_future_charge(subscribed, deletion_store):
@@ -104,7 +106,7 @@ def test_a_failed_cancel_is_accepted_when_google_now_shows_no_future_charge(subs
         state_after_failure='SUBSCRIPTION_STATE_CANCELED',
     )
     assert play_publisher.cancel_for_account_deletion(UID, publisher) == 0
-    assert subscribed.store.docs[play_db.token_key(TOKEN)]['account_deletion_cancelled'] is True
+    assert subscribed.store.docs[play_db.token_key(TOKEN)][play_db.DELETION_CONFIRMED_FIELD] is not None
 
 
 @pytest.mark.parametrize('status', [400, 403, 503])
@@ -115,7 +117,7 @@ def test_a_cancel_google_refuses_is_retryable_and_never_carries_the_token(subscr
     assert error.value.status_code == status
     assert TOKEN not in str(error.value)
     assert play_db.token_key(TOKEN)[:12] in str(error.value)
-    assert 'account_deletion_cancelled' not in subscribed.store.docs[play_db.token_key(TOKEN)]
+    assert play_db.DELETION_CONFIRMED_FIELD not in subscribed.store.docs[play_db.token_key(TOKEN)]
     # A long outage on the first read is retryable too.
     reading_down = CancelPublisher(subscribed.publisher, read_fail=play_publisher.PublisherHTTPError(503, 'read'))
     with pytest.raises(play_publisher.PlayCancelPending):
@@ -606,7 +608,7 @@ def test_grace_admission_does_not_complete_over_a_failed_play_cancel_and_the_rec
     account_deletion.reconcile_pending_deletion_wipes()
     assert publisher.cancelled == [('com.friend.ios', TOKEN)]
     complete.assert_called_once_with(UID, 'grace-job')
-    assert subscribed.store.docs[play_db.token_key(TOKEN)]['account_deletion_cancelled'] is True
+    assert subscribed.store.docs[play_db.token_key(TOKEN)][play_db.DELETION_CONFIRMED_FIELD] is not None
 
 
 def test_a_transport_error_on_a_notification_never_carries_the_token(subscribed):
@@ -635,7 +637,7 @@ def test_a_failed_cancel_of_a_user_cancelled_subscription_does_not_park_the_wipe
     subscribed.publisher.resources[TOKEN] = resource('SUBSCRIPTION_STATE_CANCELED', renew=False)
     publisher = CancelPublisher(subscribed.publisher, fail=play_publisher.PublisherHTTPError(503, 'cancel'))
     assert play_publisher.cancel_for_account_deletion(UID, publisher) == 0
-    assert subscribed.store.docs[play_db.token_key(TOKEN)]['account_deletion_cancelled'] is True
+    assert subscribed.store.docs[play_db.token_key(TOKEN)][play_db.DELETION_CONFIRMED_FIELD] is not None
 
 
 def test_an_ended_cancelled_subscription_needs_no_cancel(subscribed, deletion_store):
@@ -651,38 +653,97 @@ def test_a_voided_notification_without_googles_order_ids_revokes(subscribed):
     assert _row(subscribed).plan == PlanType.basic
 
 
+class _PurgeClient:
+    """Firestore stand-in for the uid equality queries the purge runs."""
+
+    def __init__(self, purchases, accounts):
+        self.store = {play_db.COLLECTION: purchases, play_db.ACCOUNTS: accounts}
+
+    def collection(self, name):
+        rows = self.store[name]
+
+        def snapshot(key):
+            return SimpleNamespace(
+                id=key,
+                to_dict=lambda: dict(rows[key]),
+                reference=SimpleNamespace(delete=lambda: rows.pop(key)),
+            )
+
+        def where(field, op, value):
+            return SimpleNamespace(stream=lambda: [snapshot(k) for k, v in list(rows.items()) if v.get(field) == value])
+
+        return SimpleNamespace(where=where)
+
+
 def test_the_wipe_drops_play_purchase_records_and_account_map_entries():
-    class Doc:
-        def __init__(self, store, collection, key):
-            self.reference = SimpleNamespace(delete=lambda: store[collection].pop(key))
+    from datetime import datetime, timedelta, timezone
 
-    class Query:
-        def __init__(self, store, collection, uid):
-            self.store, self.collection, self.uid = store, collection, uid
-
-        def stream(self):
-            rows = self.store[self.collection]
-            return [Doc(self.store, self.collection, k) for k, v in list(rows.items()) if v.get('uid') == self.uid]
-
-    class Client:
-        def __init__(self):
-            self.store = {
-                play_db.COLLECTION: {
-                    'a' * 64: {'uid': UID, 'purchase_token': TOKEN},
-                    'b' * 64: {'uid': UID, 'purchase_token': 'older-token'},
-                    'c' * 64: {'uid': OTHER, 'purchase_token': 'other-token'},
-                },
-                play_db.ACCOUNTS: {'issued-id': {'uid': UID}, 'other-id': {'uid': OTHER}},
-            }
-
-        def collection(self, name):
-            store = self.store
-            return SimpleNamespace(where=lambda field, op, value: Query(store, name, value))
-
-    client = Client()
-    assert play_db.purge_account_records(UID, firestore_client=client) == 3
+    since = datetime.now(timezone.utc)
+    confirmed = {play_db.DELETION_CONFIRMED_FIELD: since + timedelta(seconds=1)}
+    client = _PurgeClient(
+        {
+            'a' * 64: {'uid': UID, 'purchase_token': TOKEN, **confirmed},
+            'b' * 64: {'uid': UID, 'purchase_token': 'older-token', **confirmed},
+            'c' * 64: {'uid': OTHER, 'purchase_token': 'other-token'},
+        },
+        {'issued-id': {'uid': UID}, 'other-id': {'uid': OTHER}},
+    )
+    assert play_db.purge_account_records(UID, since, firestore_client=client) == 3
     assert list(client.store[play_db.COLLECTION]) == ['c' * 64]
     assert list(client.store[play_db.ACCOUNTS]) == ['other-id']
+
+
+@pytest.mark.parametrize('confirmed_offset', [None, -1])
+def test_the_purge_refuses_a_purchase_whose_cancel_was_not_confirmed_in_this_wipe(confirmed_offset):
+    from datetime import datetime, timedelta, timezone
+
+    since = datetime.now(timezone.utc)
+    stale = {}
+    if confirmed_offset is not None:  # confirmed by an earlier deletion, before this wipe's billing step
+        stale = {play_db.DELETION_CONFIRMED_FIELD: since + timedelta(seconds=confirmed_offset)}
+    client = _PurgeClient(
+        {
+            'a' * 64: {'uid': UID, 'purchase_token': TOKEN, play_db.DELETION_CONFIRMED_FIELD: since},
+            'b' * 64: {'uid': UID, 'purchase_token': 'older-token', **stale},
+        },
+        {'issued-id': {'uid': UID}},
+    )
+    with pytest.raises(RuntimeError) as error:
+        play_db.purge_account_records(UID, since, firestore_client=client)
+    assert 'older-token' not in str(error.value)
+    # Nothing is deleted: the wipe retries, and its billing step cancels the purchase first.
+    assert len(client.store[play_db.COLLECTION]) == 2 and client.store[play_db.ACCOUNTS]
+
+
+def test_deletion_after_restore_and_resubscribe_cancels_the_same_purchase_again(subscribed, deletion_store):
+    from datetime import datetime, timezone
+
+    publisher = CancelPublisher(subscribed.publisher)
+    # Grace deletion cancels at admission.
+    assert play_publisher.cancel_for_account_deletion(UID, publisher) == 1
+    # Restore, then the user resubscribes the same purchase in Google Play: Google charges it again.
+    subscribed.publisher.resources[TOKEN] = resource()
+    assert _notify(7) == 'active'
+    # The second deletion re-reads Google, never the earlier result, and cancels again.
+    since = datetime.now(timezone.utc)
+    assert play_publisher.cancel_for_account_deletion(UID, publisher) == 1
+    assert publisher.cancelled == [('com.friend.ios', TOKEN)] * 2
+    assert subscribed.store.docs[play_db.token_key(TOKEN)][play_db.DELETION_CONFIRMED_FIELD] >= since
+    assert subscribed.publisher.resources[TOKEN]['subscriptionState'] == 'SUBSCRIPTION_STATE_CANCELED'
+
+
+def test_deletion_cancels_a_purchase_bound_to_the_user_that_no_pointer_names(subscribed, deletion_store):
+    # A second purchase bound to the uid (for example kept on the Stripe-conflict path) with no user pointer.
+    orphan = 'play-token-orphan'
+    subscribed.publisher.resources[orphan] = resource()
+    subscribed.store.docs[play_db.token_key(orphan)] = {'uid': UID, 'purchase_token': orphan}
+    subscribed.store.docs[play_db.token_key('foreign')] = {'uid': OTHER, 'purchase_token': 'foreign'}
+    subscribed.publisher.resources['foreign'] = resource()
+    publisher = CancelPublisher(subscribed.publisher)
+    assert play_publisher.cancel_for_account_deletion(UID, publisher) == 2
+    assert sorted(token for _, token in publisher.cancelled) == sorted([TOKEN, orphan])
+    assert subscribed.store.docs[play_db.token_key(orphan)][play_db.DELETION_CONFIRMED_FIELD] is not None
+    assert play_db.DELETION_CONFIRMED_FIELD not in subscribed.store.docs[play_db.token_key('foreign')]
 
 
 def test_the_account_wipe_purges_play_records_after_billing_and_before_the_user_data(monkeypatch):
@@ -692,5 +753,229 @@ def test_the_account_wipe_purges_play_records_after_billing_and_before_the_user_
 
     source = inspect.getsource(account_deletion.background_wipe_user_data)
     billing = source.index('_cancel_subscription_for_account_deletion(uid)')
-    purge = source.index('play_publisher.purge_account_records(uid)')
+    purge = source.index('play_publisher.purge_account_records(uid, play_cancel_confirmed_since)')
+    assert source.index('play_cancel_confirmed_since = datetime.now(timezone.utc)') < billing
     assert billing < purge < source.index('users_db.delete_user_data(uid)')
+
+
+@pytest.mark.parametrize('past_due', [False, True])
+def test_a_stuck_grace_play_cancel_is_loud_and_never_lets_the_wipe_run(
+    subscribed, deletion_store, monkeypatch, past_due
+):
+    from datetime import datetime, timedelta, timezone
+    from unittest.mock import MagicMock
+
+    from services.users import account_deletion
+
+    publisher = CancelPublisher(subscribed.publisher, fail=play_publisher.PublisherHTTPError(403, 'cancel'))
+    monkeypatch.setattr(play_publisher, '_default', publisher)
+    monkeypatch.setattr(account_deletion.users_db, 'get_existing_user_subscription', lambda uid: None)
+    monkeypatch.setattr(account_deletion.stripe_utils, 'find_billable_app_subscription_ids', lambda uid: [])
+    monkeypatch.setattr(account_deletion.firebase_auth, 'revoke_refresh_tokens', lambda uid: None)
+    complete = MagicMock(return_value=True)
+    monkeypatch.setattr(account_deletion.deletion_grace_db, 'mark_user_deletion_grace_actions_complete', complete)
+    persisted = MagicMock()
+    monkeypatch.setattr(account_deletion.deletion_grace_db, 'record_grace_actions_failure', persisted)
+    telemetry = MagicMock()
+    monkeypatch.setattr(account_deletion, '_emit_deletion_telemetry', telemetry)
+    claim = MagicMock(return_value=UID)
+    monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', claim)
+    enqueue = MagicMock()
+    monkeypatch.setattr(account_deletion, 'enqueue_account_deletion_wipe', enqueue)
+    logged = []
+    monkeypatch.setattr(account_deletion.logger, 'critical', lambda *a, **_k: logged.append(('critical', a)))
+    monkeypatch.setattr(account_deletion.logger, 'error', lambda *a, **_k: logged.append(('error', a)))
+
+    now = datetime.now(timezone.utc)
+    record = {
+        'uid': UID,
+        'wipe_status': 'pending_deletion',
+        'wipe_job_id': 'grace-job',
+        'wipe_intent_at': now - timedelta(days=15),
+        'wipe_due_at': now - timedelta(days=1) if past_due else now + timedelta(days=1),
+        'grace_actions_complete': False,
+        'grace_actions_failed_attempts': 4,
+    }
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda **_kw: [record])
+
+    assert account_deletion.reconcile_pending_deletion_wipes() == {'requeued': 0, 'skipped': 1}
+    complete.assert_not_called()
+    claim.assert_not_called()
+    enqueue.assert_not_called()
+    persisted.assert_called_once_with(UID, 5, past_due)
+    (_uid, event, properties), _ = telemetry.call_args
+    assert event == account_deletion.ACCOUNT_DELETION_WIPE_FAILED
+    assert properties['failed_operations'] == ['grace_immediate_actions']
+    assert properties['retry_count'] == 5 and properties['overdue'] is past_due
+    assert properties['age_seconds'] >= 15 * 86400 and properties['terminal'] is False
+    assert [level for level, _ in logged] == ['critical' if past_due else 'error']
+    assert TOKEN not in repr(logged) and TOKEN not in repr(properties)
+
+
+def test_play_cohort_lookup_fails_closed_without_raising_when_the_read_fails(monkeypatch):
+    from google.api_core.exceptions import DeadlineExceeded
+
+    from config import play_billing as config
+    from utils import rollout_cohorts
+
+    def timed_out(uid):
+        raise DeadlineExceeded('membership read timed out')
+
+    # The real resolver chain the API process binds at startup, over a membership read that times out.
+    monkeypatch.setattr(config.rollout_cohorts, '_membership_resolver', rollout_cohorts._in_rollout_cohort)
+    monkeypatch.setattr(rollout_cohorts, '_cache', rollout_cohorts._TTLReads(timed_out))
+    environ = {
+        'ANDROID_BILLING': 'stripe',
+        'ANDROID_PLAY_BILLING_MIN_BUILD': '1617',
+        'PLAY_ACCOUNT_ID_HMAC_KEY': 'k' * 32,
+    }
+    assert config.client_uses_play('android', '1700', UID, environ=environ) is False
+    # The same path admits a member once the read answers, so the failure above is the lookup failing closed.
+    members = {rollout_cohorts.rollout_environment(): {'android-play-billing': True}}
+    monkeypatch.setattr(rollout_cohorts, '_cache', rollout_cohorts._TTLReads(lambda uid: members))
+    assert config.client_uses_play('android', '1700', UID, environ=environ) is True
+
+
+def test_play_cohort_membership_read_is_bounded_and_never_retried():
+    from database import rollout_cohorts as cohort_db
+
+    seen = {}
+
+    class Doc:
+        def get(self, **kwargs):
+            seen.update(kwargs)
+            return SimpleNamespace(exists=False)
+
+    client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: Doc()))
+    assert cohort_db._read_memberships(UID, client) == {}
+    assert seen['timeout'] <= 1.0 and seen['retry'] is None
+
+
+def test_a_failed_grace_attempt_is_recorded_on_the_deletion_marker(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from database import account_deletion_grace as grace_db
+
+    doc = MagicMock()
+    monkeypatch.setattr(grace_db, 'account_deletion_firestore_client', lambda: object())
+    monkeypatch.setattr(grace_db, 'account_deletion_document', lambda uid, firestore_client: doc)
+    grace_db.record_grace_actions_failure(UID, 3, True)
+    (fields,), _ = doc.update.call_args
+    assert fields['grace_actions_failed_attempts'] == 3 and fields['grace_actions_overdue'] is True
+    assert fields['grace_actions_last_failed_at'] is not None
+
+
+def test_one_unreadable_purchase_never_blocks_the_cancel_of_another(subscribed, deletion_store):
+    # The pointer purchase's Google read keeps failing; a second purchase bound to the user is ACTIVE.
+    other = 'play-token-second'
+    subscribed.publisher.resources[other] = resource()
+    subscribed.store.docs[play_db.token_key(other)] = {'uid': UID, 'purchase_token': other}
+
+    class FirstReadFails(CancelPublisher):
+        def get_subscription(self, package_name, token):
+            if token == TOKEN:
+                raise play_publisher.PublisherHTTPError(503, 'read')
+            return super().get_subscription(package_name, token)
+
+    publisher = FirstReadFails(subscribed.publisher)
+    with pytest.raises(play_publisher.PlayCancelPending) as error:
+        play_publisher.cancel_for_account_deletion(UID, publisher)
+    assert error.value.status_code == 503
+    assert publisher.cancelled == [('com.friend.ios', other)]
+    assert subscribed.publisher.resources[other]['subscriptionState'] == 'SUBSCRIPTION_STATE_CANCELED'
+    assert subscribed.store.docs[play_db.token_key(other)][play_db.DELETION_CONFIRMED_FIELD] is not None
+    # The unconfirmed one is not stamped, so the purge refuses until a retry confirms it.
+    assert play_db.DELETION_CONFIRMED_FIELD not in subscribed.store.docs[play_db.token_key(TOKEN)]
+
+
+def test_a_resubscribe_between_cancel_and_purge_keeps_the_doc_and_the_retry_cancels_again(
+    subscribed, deletion_store, monkeypatch
+):
+    from datetime import datetime, timezone
+
+    purged = []
+    monkeypatch.setattr(
+        deletion_store.store, 'purge_account_records', lambda uid, since: purged.append(uid) or 1, raising=False
+    )
+    publisher = CancelPublisher(subscribed.publisher)
+    since = datetime.now(timezone.utc)
+    assert play_publisher.cancel_for_account_deletion(UID, publisher) == 1
+    # The user resubscribes the same purchase in Google Play before the wipe reaches the purge.
+    subscribed.publisher.resources[TOKEN] = resource()
+    with pytest.raises(play_publisher.PlayCancelPending) as error:
+        play_publisher.purge_account_records(UID, since, publisher)
+    assert TOKEN not in str(error.value)
+    assert purged == [] and play_db.token_key(TOKEN) in subscribed.store.docs
+    # The retried wipe cancels it again, then the purge goes through on one more read.
+    since = datetime.now(timezone.utc)
+    assert play_publisher.cancel_for_account_deletion(UID, publisher) == 1
+    assert play_publisher.purge_account_records(UID, since, publisher) == 1
+    assert purged == [UID]
+    assert publisher.cancelled == [('com.friend.ios', TOKEN)] * 2
+
+
+def test_a_second_deletion_counts_failed_attempts_from_one(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from unittest.mock import MagicMock
+
+    from services.users import account_deletion
+
+    persisted = MagicMock()
+    monkeypatch.setattr(account_deletion.deletion_grace_db, 'record_grace_actions_failure', persisted)
+    monkeypatch.setattr(account_deletion, '_emit_deletion_telemetry', MagicMock())
+    now = datetime.now(timezone.utc)
+    # The marker after a restore and a new intent: the reset values, not the first deletion's.
+    record = {
+        'wipe_intent_at': now,
+        'wipe_due_at': now + timedelta(days=14),
+        'grace_actions_failed_attempts': 0,
+        'grace_actions_overdue': False,
+    }
+    account_deletion._report_grace_actions_failure(UID, record, RuntimeError('down'))
+    persisted.assert_called_once_with(UID, 1, False)
+
+
+def test_purge_proceeds_on_a_user_cancelled_purchase_whose_developer_cancel_google_rejected(
+    subscribed, deletion_store, monkeypatch
+):
+    from datetime import datetime, timezone
+
+    purged = []
+    monkeypatch.setattr(
+        deletion_store.store, 'purge_account_records', lambda uid, since: purged.append(uid) or 1, raising=False
+    )
+    # The user cancelled in Google Play with 20 days of paid time left; Google rejects our developer cancel.
+    subscribed.publisher.resources[TOKEN] = resource('SUBSCRIPTION_STATE_CANCELED', renew=False, expiry=NOW + 20 * DAY)
+    publisher = CancelPublisher(subscribed.publisher, fail=play_publisher.PublisherHTTPError(400, 'cancel'))
+    since = datetime.now(timezone.utc)
+    assert play_publisher.cancel_for_account_deletion(UID, publisher) == 0
+    # It can no longer charge, so the purge goes through instead of waiting out the paid time.
+    assert play_publisher.purge_account_records(UID, since, publisher) == 1
+    assert purged == [UID]
+
+
+@pytest.mark.parametrize('state', ['SUBSCRIPTION_STATE_ACTIVE', 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD'])
+def test_purge_still_refuses_a_purchase_that_can_charge(subscribed, deletion_store, monkeypatch, state):
+    from datetime import datetime, timezone
+
+    purged = []
+    monkeypatch.setattr(
+        deletion_store.store, 'purge_account_records', lambda uid, since: purged.append(uid) or 1, raising=False
+    )
+    subscribed.publisher.resources[TOKEN] = resource(state)
+    with pytest.raises(play_publisher.PlayCancelPending):
+        play_publisher.purge_account_records(UID, datetime.now(timezone.utc), CancelPublisher(subscribed.publisher))
+    assert purged == []
+
+
+def test_purge_still_refuses_when_google_cannot_be_read(subscribed, deletion_store, monkeypatch):
+    from datetime import datetime, timezone
+
+    purged = []
+    monkeypatch.setattr(
+        deletion_store.store, 'purge_account_records', lambda uid, since: purged.append(uid) or 1, raising=False
+    )
+    down = CancelPublisher(subscribed.publisher, read_fail=play_publisher.PublisherHTTPError(503, 'read'))
+    with pytest.raises(play_publisher.PlayCancelPending) as error:
+        play_publisher.purge_account_records(UID, datetime.now(timezone.utc), down)
+    assert error.value.status_code == 503 and purged == []

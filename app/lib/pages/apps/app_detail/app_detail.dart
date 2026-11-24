@@ -205,6 +205,7 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _retryFailedBillingRead();
       // Load details first: a transport-backed app's home URL carries a one-use
       // launch grant that only a fresh details response contains.
       final loaded = await _refreshAppDetails();
@@ -467,7 +468,7 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
                               );
                             }
                           },
-                          action: _buildPrimaryAction(l10n),
+                          action: _buildPrimaryAction(context, l10n),
                         ),
                       ),
                       const SizedBox(width: 20),
@@ -859,19 +860,35 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
     );
   }
 
-  /// Google Play buyers cannot be sent to an app's own payment link, nor can an Android reader whose
-  /// billing provider is not known yet (as the store does). Hosts without plan state never are.
-  bool _playBilledReader() {
+  /// A failed first subscription read leaves a paid app's button on the unavailable label; opening
+  /// the page tries the read once more.
+  void _retryFailedBillingRead() {
+    if (!mounted || !app.isPaid || app.isUserPaid) return;
     try {
       final usage = context.read<UsageProvider>();
-      return usage.playBilledPurchaser || usage.billingProviderUnknown;
+      if (usage.billingProviderFailed) usage.fetchSubscription();
     } on ProviderNotFoundException {
-      return false;
+      // Hosts without plan state have nothing to retry.
+    }
+  }
+
+  /// Google Play buyers cannot be sent to an app's own payment link. Until an Android reader's billing
+  /// provider is known the paid button waits (loading) rather than guessing either way; if that read
+  /// failed it shows the unavailable label, never the payment link. Hosts without plan state never
+  /// wait. Watched, so the button updates when the first subscription read lands.
+  ({bool playBilled, bool unknown}) _paidAppBilling(BuildContext buildContext) {
+    try {
+      return buildContext.select<UsageProvider, ({bool playBilled, bool unknown})>((usage) => (
+            playBilled: usage.playBilledPurchaser || usage.billingProviderFailed,
+            unknown: usage.billingProviderPending
+          ));
+    } on ProviderNotFoundException {
+      return (playBilled: false, unknown: false);
     }
   }
 
   /// Enable (after the data-access question for external apps), Subscribe, or Disable.
-  Widget _buildPrimaryAction(AppLocalizations l10n) {
+  Widget _buildPrimaryAction(BuildContext buildContext, AppLocalizations l10n) {
     if (isLoading) {
       return OmiButton(label: l10n.enable, size: OmiButtonSize.compact, isLoading: true, onPressed: null);
     }
@@ -886,7 +903,17 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
         },
       );
     }
-    if (app.isPaid && !app.isUserPaid && _playBilledReader()) {
+    final billing = app.isPaid && !app.isUserPaid ? _paidAppBilling(buildContext) : (playBilled: false, unknown: false);
+    if (billing.unknown && !billing.playBilled) {
+      return OmiButton(
+        key: const Key('app_detail_paid_pending'),
+        label: l10n.subscribe,
+        size: OmiButtonSize.compact,
+        isLoading: true,
+        onPressed: null,
+      );
+    }
+    if (billing.playBilled) {
       // Its payment link is not Google Play; a Play-billed reader cannot buy it in this app.
       return OmiButton.secondary(
         key: const Key('app_detail_paid_unavailable'),
