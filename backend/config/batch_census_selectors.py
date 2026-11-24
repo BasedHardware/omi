@@ -74,6 +74,14 @@ def _legacy(reason, max_rows, cadence, removal, body_digest, *, owner='batch own
 # Exceptions pin the executable builder and its response bound. A cursor in
 # one page proves neither that a caller advances it nor that it stops at EOF.
 EXCEPTIONS: dict[str, SelectorException] = {
+    'database.audio_silence_census.sample.<locals>.stream': _legacy(
+        'The non-dormant outbox page is a read-only lifecycle census over a bounded 24-hour evidence window, not a due-work selector. Full pages become partial lower bounds; the page is capped at 300 rows and shares the sample read budget and deadline.',
+        300,
+        'at most once every six hours per observer',
+        'Remove when the census is retired or its evidence comes from a metric-owned aggregate.',
+        '14a141a15a37dd8492b95c3b9c3216addb42135a5d48f6bd7334855b13401616',
+        owner='refactor-lead / SCA-1985',
+    ),
     'utils.batch_pipeline.parked_sweep.parked_page': _legacy(
         'SCA-3880 diagnosis includes parked rows even when no decision is due',
         100,
