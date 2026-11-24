@@ -278,9 +278,10 @@ Finished-window copies retain user edits and stable titles. Recordings never
 enter model processing, apps, memories or webhooks. Automatically ended short speech of at least 20
 words uses the existing task extraction rules and memory processing without a
 summary call. Media/background have no derived processing. Summaries reuse the
-existing notes prompt; the v3 background lane is Luna/low, gateway Flex-first,
-then Standard. The on-open lane is Standard. Metering stays in the gateway and
-usage tracker. The section stream uses the chat `data:` / base64 `done:` /
+existing notes prompt; the v3 background lane and the on-open lane are both
+Luna/low on the Standard tier (the background lane left the gateway's Flex-first
+list on 2026-11-24; `LLM_GATEWAY_FLEX_FIRST_LANES` can name it again). Metering
+stays in the gateway and usage tracker. The section stream uses the chat `data:` / base64 `done:` /
 JSON `error:` protocol and stores only a complete revision-fenced result.
 Terminal processing/outline retry exhaustion and affirmative transcription
 failure show tile_state:failed, status:completed and summary_retryable when
