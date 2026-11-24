@@ -97,15 +97,21 @@ context, and pre-notes merge work. Finished notes keep the full path.
 Only new `omi`/`phone` capture/sync creates become recordings. Existing documents
 keep their layer through stage changes. A recording is not a product item;
 `home_hidden` only removes a conversation from unfiltered Home and its count.
-A manually ended window with any speech is Home-visible regardless of length,
-unless media or positively recognized background; no speech creates no window.
-The persisted manual_end follows late rewrites, merges and backfill and requires
-full notes even below 20 words. Background hides only with positive wearer
-recognition somewhere in the contributing recordings: is_user:true or a
-segment-bound wearer label from the authoritative speaker-evidence projection.
-Without it, background becomes conversation and uses the normal 300-word rule
-(or the manual-end override). Media stays hidden. home_hidden_reason records
-this decision and outline_kind retains the original classification.
+The derived fragment reaching an explicit manual cut is Home-visible regardless
+of length or media/background classification. The normal delete, discard and
+failed-summary filters still apply. A capture with no speech creates no window.
+The persisted `manual_end` survives rebuilds and allows conversational notes
+even below 20 words. Naturally ended media is hidden. Background hides only
+with positive wearer recognition somewhere in the contributing recordings:
+`is_user: true` or a segment-bound wearer label from authoritative speaker
+evidence. Without it, background becomes conversation and uses the normal
+300-word rule or the manual-end override. `kind`, `outline_kind` and the
+classification reason remain available for analytics.
+Set `CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE=off` on every service that runs the
+v3 reconcile (`backend` for on-open rebuilds, `backend-sync`, `backend-sync-backfill`)
+to restore classification-based hiding for manually ended media and recognized
+background on subsequent projections. The service reads the switch and passes it to
+the pure planner. Previously written rows keep their stored visibility until rebuilt.
 Five minutes of placed-speech silence is a hard window boundary. An outline's
 `resumes_previous` may undo a topic split within that interval, never rejoin
 windows across the silence boundary, even with the same people. Short socket
