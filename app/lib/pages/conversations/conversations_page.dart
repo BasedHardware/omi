@@ -501,9 +501,9 @@ class _ConversationsPageState extends State<ConversationsPage>
         !source.showShortConversations &&
         !source.showDiscardedConversations);
     if (active && _feed?.preparationReady == true) unawaited(_feed!.refresh());
-    // Re-entering Home releases an outage-era grouping. With nothing held,
-    // a tab switch must not rebuild this page (tab_switch perf budget).
-    if (active && (_fallbackHomeLayout != null || _paintedStandaloneIds.isNotEmpty) && mounted) {
+    // Re-entering Home releases an outage-era grouping.
+    // Skip the rebuild when there is nothing to update (tab_switch perf budget).
+    if (active && mounted && (_fallbackHomeLayout != null || _paintedStandaloneIds.isNotEmpty)) {
       setState(_releaseHomeLayout);
     }
   }
@@ -904,23 +904,24 @@ class _ConversationsPageState extends State<ConversationsPage>
         final hiddenByLive =
             episodeLive && defaultHome ? hiddenLiveConversations(episodes!.liveConversationIds) : const <String>{};
         final v3Home = v3On && defaultHome;
+        final activityOnlyFailures = v3On || _pendingWork.homeProcessingToday;
         final v3Live = v3Home ? v3!.live : null;
         final manualFinish = v3On ? v3!.finishRow : null;
-        final finishFailed = manualFinish != null &&
-            v3!.finishHasFailedMatch(convoProvider.conversations.where(
-              (row) => row.v3?.recording != true && isFailedConversation(row),
-            ));
+        if (v3On && v3!.takeHomeReconcile()) {
+          // An accepted finish reached its deadline: read the list once, wherever the reader is.
+          WidgetsBinding.instance.addPostFrameCallback(
+              (_) => unawaited(convoProvider.forceRefreshConversations().then<void>((_) {}, onError: (Object _) {})));
+        }
+        final terminalFinish = manualFinish == null ? null : v3!.finishTerminalMatch(convoProvider.conversations);
         final finishHandedOff = v3Home &&
             manualFinish != null &&
             v3!.finishHasSuccessor(
                 convoProvider.groupedConversations.values.expand((rows) => rows).where(shownOnV3Home));
-        final showManualFinish = v3Home && manualFinish != null && !finishHandedOff && !finishFailed;
-        if (manualFinish != null && (finishHandedOff || finishFailed)) {
+        final finishSettled = finishHandedOff || terminalFinish != null;
+        final showManualFinish = v3Home && manualFinish != null && !finishSettled;
+        if (manualFinish != null && finishSettled) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            if (v3.acknowledgeManualFinish(manualFinish) && finishFailed) {
-              OmiFeedback.error(context, context.l10n.attentionSummaryFailed);
-            }
+            if (mounted) v3!.acknowledgeManualFinish(manualFinish);
           });
         }
         // A streaming capture with no server window to show (none yet, between windows, or one Home
@@ -933,6 +934,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             });
         final v3LiveShown = v3Live != null &&
             v3Live.v3?.homeHidden != true &&
+            !isFailedConversation(v3Live) &&
             !v3Live.discarded &&
             !convoProvider.memoriesToDelete.containsKey(v3Live.id) &&
             !SharedPreferencesUtil().isConversationDeleteConfirmed(v3Live.id);
@@ -977,8 +979,8 @@ class _ConversationsPageState extends State<ConversationsPage>
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
         // v3: a conversation's tile shows its processing; capture-side processing rows are recordings.
-        final bool hasProcessingConversations =
-            showManualFinish || (!v3Home && snapshot.processingConversations.isNotEmpty);
+        final bool hasProcessingConversations = showManualFinish ||
+            (!v3Home && snapshot.processingConversations.any((c) => !activityOnlyFailures || !isFailedConversation(c)));
         final apiPhase = snapshot.apiViewPhase;
         final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
@@ -999,14 +1001,15 @@ class _ConversationsPageState extends State<ConversationsPage>
                       if (!hiddenByLive.contains(c.id)) c,
                   ],
               };
-        if (!defaultHome && _pendingWork.homeProcessingToday) {
+        if (!defaultHome && activityOnlyFailures) {
           final today = localHomeDay(clock.now());
           conversationsByDate = {
             for (final entry in conversationsByDate.entries)
               entry.key: [
                 for (final c in entry.value)
                   if (!isFailedConversation(c) &&
-                      (!showRecordings ||
+                      (!_pendingWork.homeProcessingToday ||
+                          !showRecordings ||
                           convoProvider.isSelectionModeActive ||
                           localHomeDay(c.startedAt ?? c.createdAt) == today ||
                           !{HomeStep.transcribing, HomeStep.writingNotes}.contains(homeStepOf(c))))
@@ -1100,7 +1103,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             singleProcessingRow: true,
             neutralUnknownSteps: true,
             processingDay: localHomeDay(clock.now()),
-            activityOnlyFailures: _pendingWork.homeProcessingToday,
+            activityOnlyFailures: activityOnlyFailures,
             processingTitle: context.l10n.wrappedProcessingDefault,
             finishingTitle: context.l10n.episodeFinishingUp,
             liveConversationIds: hiddenByLive,
@@ -1193,8 +1196,8 @@ class _ConversationsPageState extends State<ConversationsPage>
                                 !cardById.values
                                     .any((card) => card.kind == 'episode' && card.detailId == c.episodeId))) &&
                         !projectedMemberIds.contains(c.id) &&
-                        (!_pendingWork.homeProcessingToday ||
-                            (!isFailedConversation(c) && localHomeDay(c.startedAt ?? c.createdAt) == localToday)))
+                        (!activityOnlyFailures || !isFailedConversation(c)) &&
+                        (!_pendingWork.homeProcessingToday || localHomeDay(c.startedAt ?? c.createdAt) == localToday))
                       c,
                 ],
                 clock.now())
@@ -1356,6 +1359,8 @@ class _ConversationsPageState extends State<ConversationsPage>
                     child: feed.items.isEmpty && feed.problem != null
                         ? OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: feed.refresh)
                         : OmiPartialNotice(message: context.l10n.somethingWentWrong, onRetry: feed.retry)),
+              if (!cardsOn && showManualFinish && showTypedStatus && apiPhase != ApiViewPhase.empty)
+                SliverToBoxAdapter(child: ConversationApiStatus(provider: convoProvider)),
               if ((_isBootstrapping && (!cardsOn || feed.items.isEmpty)) || _initialOverlayPending)
                 _buildLoadingShimmer()
               else if (cardsOn && feed.items.isEmpty && feed.partial)

@@ -18,7 +18,7 @@
     {
       "file": "003-mobile-ios-v3-manual-finish-failed.png",
       "platform": "mobile-ios",
-      "description": "Home shows a summary failure message and clears the Processing row when the matching conversation fails.",
+      "description": "Home clears the Processing row silently when the matching summary fails.",
       "captured_by": "agent",
       "source": "visual-audit"
     }
