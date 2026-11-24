@@ -60,7 +60,7 @@ class OverlaySource(contract.Source):
 
 
 def _manifest() -> dict:
-    return yaml.safe_load((REPO_ROOT / contract.MANIFEST).read_text(encoding='utf-8'))
+    return contract._load_yaml_path(REPO_ROOT / contract.MANIFEST)
 
 
 def _prod(manifest: dict) -> dict:
@@ -75,7 +75,8 @@ def _manifest_mutation(mutate: Callable[[dict], None]) -> Callable[[], dict[str,
     def overrides() -> dict[str, str]:
         manifest = _manifest()
         mutate(manifest)
-        return {contract.MANIFEST: yaml.safe_dump(manifest, sort_keys=False)}
+        dumper = getattr(yaml, 'CSafeDumper', yaml.SafeDumper)
+        return {contract.MANIFEST: yaml.dump(manifest, Dumper=dumper, sort_keys=False)}
 
     return overrides
 
@@ -216,10 +217,7 @@ HELM_MUTATIONS = {
     'worker_without_independent_recovery',
     'worker_without_independent_recovery_default_off',
 }
-SOURCE_DEFAULT_MUTATIONS = {
-    'worker_without_independent_recovery',
-    'worker_without_independent_recovery_default_off',
-}
+SOURCE_DEFAULT_MUTATIONS = {'worker_without_independent_recovery_default_off'}
 
 
 @dataclass
@@ -417,6 +415,16 @@ def test_constant_named_env_reads_are_resolved(results: Results) -> None:
     )
 
 
+def test_parakeet_stream_allocation_has_a_reader_on_each_deployment(results: Results) -> None:
+    key = 'PARAKEET_STREAM_ALLOCATION_PERCENT'
+    for model in results.baseline.models.values():
+        deployment = model.deployments['gke/parakeet']
+        assert deployment.entrypoint == 'parakeet.main'
+        reader = results.baseline.readers.by_entrypoint[deployment.entrypoint][key]
+        assert 'backend/parakeet/admission.py' in reader.modules
+        assert reader.defaults == {None}
+
+
 @pytest.mark.parametrize(
     'key',
     [
@@ -470,6 +478,14 @@ def test_boolean_wrapper_resolves_constant_env_key(tmp_path: Path, helper: str) 
     reads = contract.scan_env_reads(source, [rel])
     assert set(reads) == {'SYNTHETIC_WRAPPED_SWITCH_ENABLED'}
     assert reads['SYNTHETIC_WRAPPED_SWITCH_ENABLED'].modules == {rel}
+
+
+def test_kill_switch_logger_mapping_read_is_in_inventory() -> None:
+    key = 'BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED'
+    reads = contract.scan_env_reads(contract.Source(), ['backend/config/policy/kill_switches.py'])
+
+    assert key in reads
+    assert 'backend/config/policy/kill_switches.py' in reads[key].modules
 
 
 def test_ops_kill_without_reader_still_fails(results: Results) -> None:

@@ -10,7 +10,8 @@
   "evidence_prs": [],
   "scope_hints": [
     "backend/database/listen_continuations.py",
-    "backend/routers/listen/conversations.py"
+    "backend/routers/listen/conversations.py",
+    "backend/models/conversation_continuity.py"
   ],
   "status": "open"
 }

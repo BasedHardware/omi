@@ -131,6 +131,7 @@ cloud_run:
     enrichment-fresh: staging-enrichment-fresh
     provider-stt: staging-provider-stt
     conversations-v3: staging-conversations-v3
+    conversations-v3-backfill: staging-conversations-v3-backfill
     conversation-finalization: staging-conversation-finalization
     audio-merge: staging-audio-merge
     account-deletion: staging-account-deletion
@@ -206,6 +207,11 @@ overlay:
           HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_DIARIZATION_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          # Google Play Billing push and reconcile are prod-only: empty keeps staging's routes closed (403).
+          PLAY_RTDN_OIDC_AUDIENCE: {category: service_discovery, value: ''}
+          PLAY_RTDN_PUSH_SA: {category: service_discovery, value: ''}
+          PLAY_RECONCILE_OIDC_AUDIENCE: {category: service_discovery, value: ''}
+          PLAY_RECONCILE_INVOKER_SA: {category: service_discovery, value: ''}
       backend-sync:
         env:
           # Retain staging's prior privacy scope; all other JSON fields must still mirror prod.
@@ -242,6 +248,9 @@ overlay:
           BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
           BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
           BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
+          # Staging has no projection pump (STAGING_EXCLUDED_SERVICES), so integration keeps the serving
+          # sweep; prod turns it off only because the pump owns it there (SCA-3318 step 3).
+          BATCH_PIPELINE_SERVING_PROJECTION_SWEEP: {value: 'true', category: ops_kill}
           # Retain staging's prior privacy scope; all other JSON fields must still mirror prod.
           FIRESTORE_READ_LEVERS:
             category: rollout

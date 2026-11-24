@@ -1916,6 +1916,21 @@ class AnalyticsManager {
 
   void upgradeCancelled() => const TypedEvents().emit(const UpgradeCancelled());
 
+  /// Google Play Billing purchase step, emitted next to the existing purchase events (Play path only).
+  void playBillingStage({required UpgradeBillingProviderStage stage, required String billingInterval}) =>
+      const TypedEvents().emit(
+        UpgradeBillingProvider(
+          provider: UpgradeBillingProviderProvider.play,
+          stage: stage,
+          billingInterval: _closedEnum(
+            UpgradeBillingProviderBillingInterval.values,
+            _intervalWire(billingInterval),
+            UpgradeBillingProviderBillingInterval.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
+
   /// Store-update prompt (`upgrade_alert.dart`), not the subscription paywall.
   void upgradeModalDismissed() => const TypedEvents().emit(const UpgradeModalDismissed());
 

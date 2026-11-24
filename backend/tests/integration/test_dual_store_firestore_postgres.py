@@ -102,6 +102,7 @@ READ_CASES = [
     ('control_candidates', (1, 'batch', 10), {'worker_id': 'synthetic', 'fanout': 2}),
     ('fresh_pending', ('owner', 2), {}),
     ('longest_ready_pending', ('owner',), {}),
+    ('packing_candidates', ('owner',), {}),
     ('held_merge_owners', (2,), {}),
     ('held_merge_owners', (2,), {'after': 'owner'}),
     ('projection_pending', (2,), {}),
@@ -276,6 +277,7 @@ def test_complete_census_includes_claims_and_holds_without_claiming_on_pg(dual, 
     [
         ('fresh_pending', ('owner', 2), {}),
         ('longest_ready_pending', ('owner',), {}),
+        ('packing_candidates', ('owner',), {}),
         ('projection_successor', ('owner', None), {}),
         ('projection_page', (1,), {'after': (1.0, '')}),
         ('held_merge_owners', (1,), {'after': 'owner'}),
@@ -293,6 +295,7 @@ def test_null_missing_and_inclusive_cursor_cases(dual, missing, query, args, kwa
         doc.pop('ready_at')
     else:
         doc['ready_at'] = None
+        doc['last_policy_hold'] = None
     ref.set(doc)
     ref = client.collection(f'{store.namespace}_results').document('a')
     doc = ref.get().to_dict()

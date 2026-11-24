@@ -41,7 +41,7 @@ struct ModelQoS {
     static var floatingBar: String { "claude-sonnet-4-6" }
 
     /// ChatLab test queries
-    static var chatLabQuery: String { "claude-sonnet-4-20250514" }
+    static var chatLabQuery: String { chat }
 
     /// ChatLab grading (always cheap)
     static var chatLabGrade: String { "claude-haiku-4-5-20251001" }

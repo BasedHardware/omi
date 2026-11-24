@@ -101,7 +101,7 @@ def _recover_steps(repository, artifacts, segment, *, stt=None, second_stt=None,
     job = repository.start_recovery(segment)
     if job is None:
         return 'held'
-    item = WorkItem(**job['item'])
+    item = WorkItem.from_dict(job['item'])
     policy = RecoveryPolicy.from_dict(job['recovery_policy'])
     speech, vad, outcome, receipts, payload = 0.0, 'unknown', 'error', None, None
     duration = 0.0

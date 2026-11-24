@@ -89,6 +89,38 @@ def test_a_broken_metric_never_breaks_the_tool_call():
     assert response['result']['structuredContent'] == {'goals': []}
 
 
+def test_a_full_bounded_memory_window_without_a_cursor_counts_as_a_discovery_end():
+    tool = 'get_memories'
+    before = tool_metrics.MCP_MEMORY_WINDOW_END_TOTAL.labels(tool)._value.get()
+    _call(
+        tool,
+        result={
+            'memories': [{'id': 'm'}],
+            'has_more': False,
+            'scan_truncated': True,
+            'scanned_count': 100,
+            'source_window_limit': 100,
+        },
+    )
+    assert tool_metrics.MCP_MEMORY_WINDOW_END_TOTAL.labels(tool)._value.get() == before + 1
+
+
+def test_a_short_memory_window_is_not_counted_as_a_discovery_end():
+    tool = 'get_memories'
+    before = tool_metrics.MCP_MEMORY_WINDOW_END_TOTAL.labels(tool)._value.get()
+    _call(
+        tool,
+        result={
+            'memories': [{'id': 'm'}],
+            'has_more': False,
+            'scan_truncated': True,
+            'scanned_count': 3,
+            'source_window_limit': 100,
+        },
+    )
+    assert tool_metrics.MCP_MEMORY_WINDOW_END_TOTAL.labels(tool)._value.get() == before
+
+
 def test_capped_calls_are_counted_without_a_latency_sample_from_a_handler():
     before = calls('get_memories', 'other_registered', 'error', 'capped')
     capped = HTTPException(status_code=429, detail={'error': 'mcp_daily_cap', 'limit': 1})

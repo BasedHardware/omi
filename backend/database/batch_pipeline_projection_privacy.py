@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from google.cloud import firestore
 
 from database.batch_pipeline_privacy import BatchPrivacyReason
+from database.batch_pipeline_projection_outbox import arm as arm_projection
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_DUE_FIELD,
@@ -149,6 +150,7 @@ def resume(store, segment_id, binding, now, *, policy):
             # The last ordinary assignment clears this checkpoint, without
             # ever moving the owner's watermark back to an older result.
             entry['projection_state'] = 'pending'
+        entry.update(arm_projection(entry, now))
         transaction.set(session.result_ref, entry)
         return entry
 

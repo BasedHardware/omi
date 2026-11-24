@@ -9,6 +9,7 @@ after dead_letter), and the recovery metadata persisted on the job.
 
 from __future__ import annotations
 
+import zlib
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -103,6 +104,31 @@ def _recover(conversation_ref: _Ref, *, cutoff=CUTOFF, jobs_collection=None, rec
         recording_sessions_collection=recording_sessions_collection,
     )
     return transaction, intent
+
+
+@pytest.mark.parametrize('closed', [False, True])
+def test_server_batch_audio_files_need_committed_bounds_or_preview(closed):
+    row = _recovery_conversation(
+        {
+            'record_lane_owner': 'batch_live_v1',
+            'server_batch_only': True,
+            'server_batch_audio_received': True,
+            'server_batch_audio_closed': closed,
+            'transcript_segments': zlib.compress(b'[]'),
+            'transcript_segments_compressed': True,
+            'audio_files': [{'id': 'retained-audio'}],
+        }
+    )
+    transaction, intent = _recover(row)
+    assert intent['status'] == 'refused_server_batch_archive_unready'
+    assert transaction.sets == transaction.updates == []
+
+    row.data.update(has_content=True, server_batch_audio_start=1000, server_batch_audio_end=1002)
+    row.data['server_batch_audio_closed'] = True
+    transaction, intent = _recover(row)
+    assert intent['created'] is True
+    assert transaction.sets[0][1]['processing_trigger'] == 'server_recovery'
+    assert transaction.sets[0][1]['selfheal_audio_file_ids'] == ['retained-audio']
 
 
 def test_recovery_admits_stale_content_row_and_stamps_metadata():
@@ -308,6 +334,63 @@ def test_audio_only_row_without_transcript_is_admitted():
     assert job['selfheal_transcript_bytes'] == len(b'[]')
 
 
+# The 2026-11-18 stuck shape: a sealed server-batch stub stamped with the placeholder.
+_PLACEHOLDER_STUB = {
+    'transcript_segments': [],
+    'has_content': True,
+    'audio_files': [{'id': 'clip-1'}],
+    'record_lane_owner': 'batch_live_v1',
+    'record_audio_closed': True,
+    'external_data': {'server_batch_only': True},
+    'structured': {'title': 'Discussion notes', 'overview': '', 'emoji': '🧠', 'category': 'other'},
+}
+
+
+@pytest.mark.parametrize(
+    'overrides,refusal',
+    [
+        ({}, None),
+        ({'user_title': 'Standup'}, 'refused_protected_content'),
+        (
+            {'structured': {**_PLACEHOLDER_STUB['structured'], 'overview': 'Budget approved.'}},
+            'refused_protected_content',
+        ),
+        ({'structured': {**_PLACEHOLDER_STUB['structured'], 'title': 'Pilot budget'}}, 'refused_protected_content'),
+    ],
+)
+def test_placeholder_only_stub_is_admitted_and_real_content_still_refuses(overrides, refusal):
+    transaction, intent = _recover(_recovery_conversation({**_PLACEHOLDER_STUB, **overrides}))
+
+    if refusal is None:
+        assert intent['created'] is True
+        assert transaction.sets[0][1]['selfheal_audio_file_ids'] == ['clip-1']
+    else:
+        assert intent['status'] == refusal
+        assert transaction.sets == []
+
+
+@pytest.mark.parametrize(
+    'title,protected',
+    [
+        ('Discussion notes', False),
+        ('Discussion 3', False),
+        ('Transcribing…', False),
+        ('Transcribing...', False),
+        ('  ', False),
+        # Only the stored fallback labels are placeholders; anything else may be a real title.
+        ('Untitled', True),
+        ('Conversation', True),
+        ('Talking', True),
+        ('In progress', True),
+        ('New moment 3', True),
+        ('Speaker discusses pricing', True),
+        ('Transcript unavailable', True),
+    ],
+)
+def test_only_the_fallback_labels_are_placeholder_titles(title, protected):
+    assert structured_has_protected_content({'title': title}) is protected
+
+
 def test_undecodable_transcript_blob_counts_as_content_and_sized_in_bytes():
     blob = 'gzipped-not-json-###'
     transaction, intent = _recover(_recovery_conversation({'transcript_segments': blob}))
@@ -338,6 +421,7 @@ def test_structured_has_protected_content_boundaries():
     assert structured_has_protected_content({'title': 'A title'}) is True
     assert structured_has_protected_content({'overview': 'notes'}) is True
     assert structured_has_protected_content({'sections': [{'title': 'x'}]}) is True
+    assert structured_has_protected_content({'gist': 'Pilot budget approval'}) is True
     assert structured_has_protected_content({'action_items': [{'description': 'd'}]}) is True
     assert structured_has_protected_content({'events': [{'title': 'e'}]}) is True
     assert structured_has_protected_content({}, user_title='Renamed') is True
@@ -448,6 +532,7 @@ def test_recovery_minimum_structure_raises_before_persist_or_fanout(capsys, monk
                 patch.object(pc, 'is_release_probe_uid', MagicMock(return_value=False)),
                 patch.object(pc, 'should_skip_omi_paid_postprocessing', MagicMock(return_value=False)),
                 patch.object(pc, '_enrich_meeting_context', MagicMock()),
+                patch.object(pc, 'resolve_speakers_for_processing', return_value=False),
                 patch.object(pc, '_get_structured', MagicMock(return_value=(Structured(), False))),
                 patch.object(pc, '_get_conversation_obj', MagicMock(return_value=conversation)),
                 patch.object(pc, '_attach_client_projection', MagicMock()),

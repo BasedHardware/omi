@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
@@ -18,6 +19,7 @@ os.environ.setdefault(
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 
 from config import episodes as config
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.episodes import composer, home_read, metrics, service
 from utils.sync import processing_hold
 
@@ -116,7 +118,7 @@ def _reply(**over):
 
 
 @pytest.fixture
-def store(monkeypatch):
+def store(monkeypatch, request):
     monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, raising=False)
     # This file pins the paid composer path; the one-conversation shortcut has its own file.
@@ -132,8 +134,9 @@ def store(monkeypatch):
     monkeypatch.setattr(composer, '_rerun', set())
     rows = [_row('c1', T0, 180), _row('c2', T0 + timedelta(minutes=181), 8)]
     s = Store(_episode(), rows)
-    monkeypatch.setattr(composer.episodes_db, 'get_episode', s.get_episode)
-    monkeypatch.setattr(composer.episodes_db, 'update_episode', s.update_episode)
+    if getattr(request, 'param', None) != 'transactional':
+        monkeypatch.setattr(composer.episodes_db, 'get_episode', s.get_episode)
+        monkeypatch.setattr(composer.episodes_db, 'update_episode', s.update_episode)
     monkeypatch.setattr(composer.conversations_db, 'get_conversation', s.get_conversation)
     return s
 
@@ -150,6 +153,64 @@ def _c(invoke=None, calls=None):
         people_names=lambda uid, ids: {},
         extras={'compose_invoke': invoke or default, 'compose_context': lambda *a, **kw: ('', '')},
     )
+
+
+@pytest.mark.parametrize('store', ['transactional'], indirect=True)
+@pytest.mark.parametrize(
+    'case,expected_reads',
+    [('read', 0), ('finalized', 4), ('account_deleted', 3), ('conversation_deleted', 4)],
+)
+def test_finalization_compose_deletion_fence_and_read_delta(case, expected_reads, store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, 'false')
+
+    episode_path = ('users', UID, 'episodes', 'ep1')
+    account = ('account_deletions', UID)
+    tombstone = ('users', UID, 'deleted_conversations', 'c1')
+    marker = {'account_deleted': account, 'conversation_deleted': tombstone}.get(case)
+    db = StrictFirestore({episode_path: composer.episodes_db.seal(UID, store.episode)})
+    db.rows[('users', UID, 'episode_links', 'c1')] = {'episode_id': 'ep1'}
+    for cid, row in store.rows.items():
+        row['updated_at'] = T0
+        db.rows[('users', UID, 'conversations', cid)] = deepcopy(row)
+    reads = []
+    get = StrictFirestoreDocument.get
+
+    def count_authority_get(ref, transaction=None, **kwargs):
+        if ref.path in {account, tombstone}:
+            assert transaction is not None
+            reads.append(ref.path)
+        snapshot = get(ref, transaction=transaction, **kwargs)
+        if ref.path[:3] == ('users', UID, 'conversations'):
+            snapshot.update_time = T0
+        return snapshot
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', count_authority_get)
+    before_result = []
+
+    def invoke(uid, messages):
+        assert db.rows[episode_path].get('compose_lease')
+        if marker is not None:
+            db.rows[marker] = {}
+        before_result.append(deepcopy(db.rows))
+        return _reply()
+
+    c = _c(invoke=invoke)
+    c.firestore_client = db
+    if case == 'read':
+        assert composer.compose(UID, 'ep1', collaborators=c, trigger='read') == 'composed'
+    else:
+        c.finalizing_conversation_id = 'c1'
+        outcomes = []
+        monkeypatch.setattr(composer.metrics, 'record_compose', lambda outcome, *_a, **_kw: outcomes.append(outcome))
+        monkeypatch.setattr(composer._executor, 'submit', lambda run: run())
+        assert composer.after_finalized(UID, 'c1', 'finalized', c, row=store.rows['c1']) == 'finalized'
+        assert outcomes == ['skipped_deleted' if marker is not None else 'composed']
+    assert len(before_result) == 1
+    assert len(reads) == expected_reads
+    if marker is not None:
+        assert db.rows == before_result[0]
+    else:
+        assert db.rows[episode_path]['state_version'] == store.episode['state_version'] + 2
 
 
 def test_composes_a_closed_episode_into_summary_and_real_chapters(store):

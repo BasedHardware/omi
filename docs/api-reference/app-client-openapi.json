@@ -6402,6 +6402,67 @@
         "title": "CalendarOnboardingStatusResponse",
         "type": "object"
       },
+      "CalendarSelection": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "calendars": {
+            "items": {
+              "$ref": "#/components/schemas/ReadableCalendar"
+            },
+            "title": "Calendars",
+            "type": "array"
+          },
+          "selected_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Selected Ids",
+            "type": "array"
+          },
+          "write_calendar_id": {
+            "default": "primary",
+            "title": "Write Calendar Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "calendars",
+          "selected_ids"
+        ],
+        "title": "CalendarSelection",
+        "type": "object"
+      },
+      "CalendarSelectionUpdate": {
+        "properties": {
+          "account_id": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Account Id",
+            "type": "string"
+          },
+          "selected_ids": {
+            "items": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 25,
+            "minItems": 1,
+            "title": "Selected Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "account_id",
+          "selected_ids"
+        ],
+        "title": "CalendarSelectionUpdate",
+        "type": "object"
+      },
       "CampaignAttributionResponse": {
         "properties": {
           "campaign_id": {
@@ -9899,6 +9960,16 @@
             ],
             "title": "Language"
           },
+          "live_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveSummaryPreview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "manual_end": {
             "anyOf": [
               {
@@ -10017,6 +10088,18 @@
                 "type": "null"
               }
             ]
+          },
+          "processing_tier": {
+            "anyOf": [
+              {
+                "const": "historical",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Tier"
           },
           "record_audio_partial": {
             "anyOf": [
@@ -10153,6 +10236,17 @@
               }
             ],
             "title": "Summary Covers Through"
+          },
+          "summary_on_open": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary On Open"
           },
           "summary_retryable": {
             "anyOf": [
@@ -11451,6 +11545,16 @@
             ],
             "title": "Language"
           },
+          "live_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveSummaryPreview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "manual_end": {
             "anyOf": [
               {
@@ -11577,6 +11681,18 @@
                 "type": "null"
               }
             ]
+          },
+          "processing_tier": {
+            "anyOf": [
+              {
+                "const": "historical",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Tier"
           },
           "record_audio_partial": {
             "anyOf": [
@@ -11713,6 +11829,17 @@
               }
             ],
             "title": "Summary Covers Through"
+          },
+          "summary_on_open": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary On Open"
           },
           "summary_retryable": {
             "anyOf": [
@@ -21188,6 +21315,18 @@
             "description": "Whether the integration is connected",
             "title": "Connected",
             "type": "boolean"
+          },
+          "read_selection_configured": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Google Calendar has an explicit saved read scope, even if its grant is disconnected",
+            "title": "Read Selection Configured"
           }
         },
         "required": [
@@ -21742,6 +21881,24 @@
           "status"
         ],
         "title": "LiveConversation",
+        "type": "object"
+      },
+      "LiveSummaryPreview": {
+        "properties": {
+          "structured": {
+            "$ref": "#/components/schemas/Structured"
+          },
+          "summary_covers_through": {
+            "format": "date-time",
+            "title": "Summary Covers Through",
+            "type": "string"
+          }
+        },
+        "required": [
+          "structured",
+          "summary_covers_through"
+        ],
+        "title": "LiveSummaryPreview",
         "type": "object"
       },
       "LlmTotalCostResponse": {
@@ -26960,6 +27117,29 @@
             "$ref": "#/components/schemas/PlanType",
             "default": "basic"
           },
+          "prepaid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepaid"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "const": "play",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
           "status": {
             "$ref": "#/components/schemas/SubscriptionStatus",
             "default": "active"
@@ -27084,6 +27264,27 @@
                 "type": "null"
               }
             ]
+          },
+          "play_billing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlayBillingConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prepaid_code_redeem": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepaid Code Redeem"
           },
           "processing_backlog": {
             "anyOf": [
@@ -27240,6 +27441,128 @@
           "minimum_supported_build"
         ],
         "title": "PlatformMinimumBuild",
+        "type": "object"
+      },
+      "PlayBasePlan": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "year"
+            ],
+            "title": "Interval",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "interval"
+        ],
+        "title": "PlayBasePlan",
+        "type": "object"
+      },
+      "PlayBillingConfig": {
+        "description": "What an Android client needs to sell Omi Pro through Google Play Billing.",
+        "properties": {
+          "base_plans": {
+            "items": {
+              "$ref": "#/components/schemas/PlayBasePlan"
+            },
+            "title": "Base Plans",
+            "type": "array"
+          },
+          "obfuscated_account_id": {
+            "title": "Obfuscated Account Id",
+            "type": "string"
+          },
+          "product_id": {
+            "title": "Product Id",
+            "type": "string"
+          },
+          "trial_offer_id": {
+            "title": "Trial Offer Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "product_id",
+          "base_plans",
+          "trial_offer_id",
+          "obfuscated_account_id"
+        ],
+        "title": "PlayBillingConfig",
+        "type": "object"
+      },
+      "PlayBillingErrorResponse": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "message"
+        ],
+        "title": "PlayBillingErrorResponse",
+        "type": "object"
+      },
+      "PlayPurchaseRequest": {
+        "properties": {
+          "product_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Product Id",
+            "type": "string"
+          },
+          "purchase_token": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Purchase Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purchase_token",
+          "product_id"
+        ],
+        "title": "PlayPurchaseRequest",
+        "type": "object"
+      },
+      "PlayPurchaseResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "active",
+              "pending",
+              "inactive"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Subscription"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PlayPurchaseResponse",
         "type": "object"
       },
       "PluginResult": {
@@ -27712,6 +28035,18 @@
             ],
             "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler so a malformed projection cannot 422 a finished recording. Hash-bound to the persisted transcript. Display only — never an input to intelligence.",
             "title": "Client Processing"
+          },
+          "live_conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional live v3 window to Finish when no active recording is found.",
+            "title": "Live Conversation Id"
           }
         },
         "title": "ProcessConversationRequest",
@@ -28658,6 +28993,34 @@
         "title": "ReadRolloutCapabilities",
         "type": "object"
       },
+      "ReadableCalendar": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "primary": {
+            "title": "Primary",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "primary",
+          "available"
+        ],
+        "title": "ReadableCalendar",
+        "type": "object"
+      },
       "RebuildResponse": {
         "properties": {
           "edges_count": {
@@ -29502,6 +29865,34 @@
           "status"
         ],
         "title": "RedeemCodeResponse",
+        "type": "object"
+      },
+      "RedeemPrepaidCodeResponse": {
+        "properties": {
+          "ends_at": {
+            "title": "Ends At",
+            "type": "integer"
+          },
+          "months": {
+            "title": "Months",
+            "type": "integer"
+          },
+          "plan": {
+            "title": "Plan",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "plan",
+          "ends_at",
+          "months"
+        ],
+        "title": "RedeemPrepaidCodeResponse",
         "type": "object"
       },
       "ReferralClaimRequest": {
@@ -35537,6 +35928,29 @@
               "operator"
             ]
           },
+          "prepaid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepaid"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "const": "play",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
           "status": {
             "$ref": "#/components/schemas/SubscriptionStatus",
             "default": "active"
@@ -40453,6 +40867,27 @@
                 "type": "null"
               }
             ]
+          },
+          "play_billing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlayBillingConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prepaid_code_redeem": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepaid Code Redeem"
           },
           "processing_backlog": {
             "anyOf": [
@@ -48936,6 +49371,168 @@
         ]
       }
     },
+    "/v1/calendar/google/calendars": {
+      "get": {
+        "operationId": "list_readable_google_calendars_v1_calendar_google_calendars_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarSelection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "List Readable Google Calendars",
+        "tags": [
+          "google_calendar"
+        ]
+      },
+      "put": {
+        "operationId": "save_google_calendar_selection_v1_calendar_google_calendars_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarSelectionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarSelection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Save Google Calendar Selection",
+        "tags": [
+          "google_calendar"
+        ]
+      }
+    },
     "/v1/calendar/google/events": {
       "get": {
         "description": "List Google Calendar events within a time range.\n\nUsed by the event picker UI when manually linking a conversation to a calendar event.",
@@ -51260,6 +51857,24 @@
               ],
               "description": "Filter by starred status",
               "title": "Starred"
+            }
+          },
+          {
+            "description": "Opaque page cursor from a previous response's X-Omi-Next-Cursor header; when accepted it replaces offset. An unknown or stale cursor falls back to offset.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opaque page cursor from a previous response's X-Omi-Next-Cursor header; when accepted it replaces offset. An unknown or stale cursor falls back to offset.",
+              "title": "Cursor"
             }
           },
           {
@@ -56427,6 +57042,182 @@
           }
         ],
         "summary": "Patch Conversation Summary",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/summary/live-catchup/stream": {
+      "get": {
+        "operationId": "conversation_live_catchup_stream_v1_conversations__conversation_id__summary_live_catchup_stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Conversation Live Catchup Stream",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/summary/open": {
+      "post": {
+        "description": "Generate the one summary of a historical conversation (`summary_on_open: true`) when its owner opens it. Summary only: no memories, tasks, apps or notifications. `X-Omi-Summary-Outcome` is `existing` (no model call) or `generated`. Typed refusals: 404, 409 (`conversation_locked`, `conversation_discarded`, `not_historical`, `byok_keys_required`, `conversation_processing_in_progress`), 402, 429 with Retry-After, 502 `summary_unavailable`, 503 `historical_summary_disabled` or retryable `historical_summary_retry`.",
+        "operationId": "open_historical_summary_v1_conversations__conversation_id__summary_open_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Open Historical Summary",
         "tags": [
           "conversations"
         ]
@@ -70339,6 +71130,114 @@
         "summary": "Payment Issue Monthly Switch Endpoint"
       }
     },
+    "/v1/payments/play/purchases": {
+      "post": {
+        "description": "Verify a Google Play purchase token, bind it to this account and grant Omi Pro once Google says it is paid.",
+        "operationId": "verify_play_purchase_v1_payments_play_purchases_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayPurchaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayPurchaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayBillingErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayBillingErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Verify Play Purchase"
+      }
+    },
     "/v1/payments/portal-return": {
       "get": {
         "operationId": "portal_return_v1_payments_portal_return_get",
@@ -70363,6 +71262,107 @@
           }
         ],
         "summary": "Portal Return"
+      }
+    },
+    "/v1/payments/prepaid-code/redeem": {
+      "post": {
+        "description": "Redeem a fully prepaid Omi Pro code with no card. Errors carry a reason code as ``detail``.",
+        "operationId": "redeem_prepaid_code_endpoint_v1_payments_prepaid_code_redeem_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedeemCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedeemPrepaidCodeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Redeem Prepaid Code Endpoint"
       }
     },
     "/v1/payments/redeem-code": {
@@ -80809,6 +81809,22 @@
             "schema": {
               "title": "X-App-Version",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
             }
           },
           {

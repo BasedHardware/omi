@@ -49,6 +49,9 @@ def deletion_billing_error_is_already_gone(error: object) -> bool:
             'already canceled',
             'already cancelled',
             'incomplete_expired',
+            # Play cancel failures parked by the first Play release: the wipe re-reads Google and retries.
+            'androidpublisher.googleapis.com',
+            'google play cancel',
         )
     )
 

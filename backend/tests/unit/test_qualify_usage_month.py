@@ -258,7 +258,8 @@ def test_pending_patch_composes_only_the_six_reviewed_values(tmp_path):
     served = read_yaml(ROOT / 'backend/deploy/runtime_env.yaml')
     assert monthly_config(before) == monthly_config(served)  # pending patch is never a compose input
     after = compose(base_path=destination / '_base.yaml', runtime_env_dir=destination)
-    for service in check.SERVICES:
+    # SCA-3120: the prod projection pump derives integration's env, so it follows the patched literal.
+    for service in (*check.SERVICES, 'backend-projection-pump'):
         original = before['environments']['prod']['cloud_run']['services'][service]['env']['FIRESTORE_READ_LEVERS']
         candidate = after['environments']['prod']['cloud_run']['services'][service]['env']['FIRESTORE_READ_LEVERS']
         levers = json.loads(candidate['value'])

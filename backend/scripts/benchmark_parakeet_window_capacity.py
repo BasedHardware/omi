@@ -23,7 +23,6 @@ from utils.stt.vad_gate import VADStreamingGate
 async def main() -> None:
     os.environ['PARAKEET_WINDOW_PACE_SECONDS'] = '6'
     os.environ['PARAKEET_WINDOW_MAX_CONTEXT_SECONDS'] = '24'
-    os.environ['PARAKEET_WINDOW_DIARIZATION'] = 'false'
     VADStreamingGate()  # Warm the shared process model before measuring per-session cost.
     tracemalloc.start()
     before = tracemalloc.get_traced_memory()[0]

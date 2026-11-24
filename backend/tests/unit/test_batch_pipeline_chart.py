@@ -10,6 +10,8 @@ import pytest
 import yaml
 
 CHART = Path(__file__).resolve().parents[2] / 'charts' / 'batch-pipeline-worker'
+# Rolls replace pods in place: no surge GPU, and no GPU node left empty mid-roll (SCA-3274).
+NO_SURGE_ROLL = {'type': 'RollingUpdate', 'rollingUpdate': {'maxSurge': 0, 'maxUnavailable': '50%'}}
 
 
 def render(*arguments, namespace='synthetic'):
@@ -238,7 +240,7 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
 
     deployments = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment']
     deployment = next(doc for doc in deployments if doc['metadata']['name'] == 'synthetic-worker')
-    assert deployment['spec']['progressDeadlineSeconds'] == 2400
+    assert deployment['spec']['progressDeadlineSeconds'] == 3000
     pod = deployment['spec']['template']['spec']
     if environment == 'prod':
         # Borrowing stays off in prod so Parakeet's freed L4s go back to GCE; the
@@ -248,13 +250,13 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
             'synthetic-worker',
             'synthetic-worker-t4',
         ]
-        assert deployment['spec']['replicas'] == 4  # Preserve the approved live floor for HPA.
+        assert deployment['spec']['replicas'] == 6  # Preserve the approved live floor for HPA.
         hpa = next(
             doc['spec']
             for doc in yaml.safe_load_all(result.stdout)
             if doc and doc['kind'] == 'HorizontalPodAutoscaler' and doc['metadata']['name'] == 'synthetic-worker'
         )
-        assert hpa['minReplicas'] == 4 and hpa['maxReplicas'] == 16
+        assert hpa['minReplicas'] == 6 and hpa['maxReplicas'] == 16
         assert 'omi.ai/required-companion-deployment' not in deployment['metadata'].get('annotations', {})
     else:
         assert len(deployments) == 1 and deployment['spec']['replicas'] == 1
@@ -277,21 +279,27 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
             if worker['name'] != 'worker':
                 continue
             worker_env = {item['name']: item.get('value') for item in worker['env']}
-            # SCA-1993/SCA-2024: default-off backoff must stay absent from every worker sibling.
+            # SCA-3503: neither retired batch flag belongs on a worker.
+            assert 'BATCH_HELD_POLL_SKIP_ENABLED' not in worker_env
             assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in worker_env
             assert 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED' not in worker_env
             if environment == 'prod':
-                assert worker_env['BATCH_HELD_POLL_SKIP_ENABLED'] == 'true'
+                assert 'BATCH_PROJECTION_OUTBOX' not in worker_env
+                assert worker_env['RECORD_SEAL_REPAIR_FRESH_ENABLED'] == 'true'
+                assert 'RECORD_FRESH_MERGE_ENABLED' not in worker_env
+                assert 'BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST' not in worker_env
+                assert 'BATCH_PIPELINE_PACKING_SAMPLE_RATE' not in worker_env
+                assert worker_env['BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY'] == 'false'
+                assert worker_env['BUCKET_AUDIO_DERIVED'] is None
                 assert json.loads(worker_env['FIRESTORE_READ_LEVERS']) == dict(
                     integration_levers,
                     usage_month_cache=0,
                     usage_month_total=0,
-                    bpp_decision_cache=100,
-                    privacy_checks_shadow=10,
+                    bpp_decision_cache=0,
+                    privacy_checks_shadow=0,
                     bpp_owner_memo_enforce=0,
                 )
             else:
-                assert 'BATCH_HELD_POLL_SKIP_ENABLED' not in worker_env
                 assert worker_env['FIRESTORE_READ_LEVERS'] == '{}'
     assert project_env['OMI_FIRESTORE_DATA_PLANE_PROJECT']['value'] == project
     assert project_env['OMI_ENV_STAGE']['value'] == stage
@@ -351,7 +359,7 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
         assert pod['metadata']['labels']['app.kubernetes.io/instance'] == name
         assert pod['spec']['nodeSelector']['cloud.google.com/gke-nodepool'] == pool
         assert 'topologySpreadConstraints' not in pod['spec']
-        assert d['spec']['strategy']['type'] == 'Recreate'
+        assert d['spec']['strategy'] == NO_SURGE_ROLL
         assert pod['spec']['terminationGracePeriodSeconds'] == 1500
         env = {v['name']: v.get('value') for v in pod['spec']['containers'][0]['env']}
         assert env['BATCH_PIPELINE_WORKER_RELEASE'] == 'synthetic-worker'
@@ -453,18 +461,18 @@ def by_name(docs, kind):
     return {d['metadata']['name']: d for d in docs if d['kind'] == kind}
 
 
-def test_production_cutover_preserves_live_single_od_hpa_min4_max16():
-    # The approved live shape (floor 2026-11-06 David D4 / bc18db; ceiling 16
+def test_production_cutover_preserves_live_single_od_hpa_min6_max16():
+    # The approved live shape (floor 6 David 2026-11-20, superseding D4; ceiling 16
     # David 2026-11-16): one HPA pinned to the on-demand pool; no -spot deployment.
     # The floor is config: replicaCount and minReplicas move together.
     # The stockout borrower (below) is extra and never part of this floor.
     values = yaml.safe_load((CHART / 'prod_omi_batch-pipeline-worker_values.yaml').read_text())
-    assert values['replicaCount'] == values['autoscaling']['minReplicas'] == 4
+    assert values['replicaCount'] == values['autoscaling']['minReplicas'] == 6
     result = render_prod()
     assert result.returncode == 0, result.stderr
     docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
     hpas = by_name(docs, 'HorizontalPodAutoscaler')
-    assert hpas['synthetic-worker']['spec']['minReplicas'] == 4
+    assert hpas['synthetic-worker']['spec']['minReplicas'] == 6
     assert hpas['synthetic-worker']['spec']['maxReplicas'] == 16
     assert not [name for name in hpas if name.endswith('-spot')]
     pod = by_name(docs, 'Deployment')['synthetic-worker']['spec']['template']['spec']
@@ -499,7 +507,7 @@ def test_prod_borrower_runs_only_on_parakeet_nodes_and_yields_fast():
 
     borrow = by_name(docs, 'Deployment')['synthetic-worker-borrow']
     pod = borrow['spec']['template']['spec']
-    assert borrow['spec']['strategy']['type'] == 'Recreate' and borrow['spec']['replicas'] == 1
+    assert borrow['spec']['strategy'] == NO_SURGE_ROLL and borrow['spec']['replicas'] == 1
     assert pod['priorityClassName'] == priority_class['metadata']['name'] == 'synthetic-worker-borrower'
     assert pod['terminationGracePeriodSeconds'] == 120
     [term] = pod['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms']
@@ -653,9 +661,9 @@ def test_production_worker_policy_binding_matches_accepted_identity():
     assert env['BATCH_PIPELINE_ENABLED'] == 'false'
     assert env['BATCH_PIPELINE_API_URL'] == config['worker']['apiUrl'] == config['worker']['audience']
     assert env['BATCH_PIPELINE_WORKER_AUDIENCE'] == config['worker']['audience']
-    assert docs['Deployment']['spec']['replicas'] == 4  # Keep the HPA floor through Helm upgrades.
+    assert docs['Deployment']['spec']['replicas'] == 6  # Keep the HPA floor through Helm upgrades.
     hpa = docs['HorizontalPodAutoscaler']['spec']
-    assert hpa['minReplicas'] == 4 and hpa['maxReplicas'] == 16
+    assert hpa['minReplicas'] == 6 and hpa['maxReplicas'] == 16
 
 
 @pytest.mark.parametrize('enabled', [False, True])
@@ -799,7 +807,7 @@ def test_worker_dispatch_rollout_defaults_are_dark_and_live_only(environment):
     env = {row['name']: row.get('value') for row in deployment['spec']['template']['spec']['containers'][0]['env']}
     assert env['STT_CAP_DISPATCH_ENFORCEMENT'] == 'false'
     assert 'LADDER_V1_BUDGET_ENFORCEMENT_ENABLED' not in env
-    assert env['STT_CAP_DISPATCH_COHORT'] == ''
+    assert env['STT_CAP_DISPATCH_COHORT'] == (None if environment == 'prod' else '')
     assert env['STT_CAP_DISPATCH_LANES'] == 'live'
 
 
@@ -852,7 +860,7 @@ def test_t4_fallback_is_a_zero_replica_t4_sibling_without_hpa():
     }
     assert pod['spec']['tolerations'] == primary['spec']['template']['spec']['tolerations']
     assert pod['spec']['containers'][0]['image'] == primary['spec']['template']['spec']['containers'][0]['image']
-    assert t4['spec']['strategy']['type'] == 'Recreate'
+    assert t4['spec']['strategy'] == NO_SURGE_ROLL
 
 
 @pytest.mark.parametrize(
@@ -1032,7 +1040,7 @@ def test_worker_default_inheritance_is_reviewed_and_unresolved(environment):
     assert surface['effective']['batch_timeliness_leader'] == 100
 
 
-def test_prod_worker_levers_match_backend_integration():
+def test_prod_worker_levers_match_backend_integration_with_worker_overrides():
     manifest = json.loads((CHART.parents[1] / 'deploy/firestore_read_levers_manifest.json').read_text())
     worker = manifest['surfaces']['chart/prod/batch-pipeline-worker']
     integration = manifest['surfaces']['runtime/prod/cloud_run/services/backend-integration']
@@ -1040,17 +1048,44 @@ def test_prod_worker_levers_match_backend_integration():
         integration['explicit'],
         usage_month_cache=0,
         usage_month_total=0,
-        bpp_decision_cache=100,
-        privacy_checks_shadow=10,
+        bpp_decision_cache=0,
+        privacy_checks_shadow=0,
         bpp_owner_memo_enforce=0,
     )
     assert worker['effective'] == dict(
         integration['effective'],
         usage_month_cache=0,
         usage_month_total=0,
-        bpp_decision_cache=100,
-        privacy_checks_shadow=10,
+        bpp_decision_cache=0,
+        privacy_checks_shadow=0,
         bpp_owner_memo_enforce=0,
     )
-    assert worker['explicit']['bpp_decision_cache'] == 100
     assert 'inheritance' not in worker
+
+
+def test_worker_rolls_never_surge_and_reject_non_percent_unavailability():
+    """SCA-3274: maxSurge is fixed at 0 (never a surge GPU); maxUnavailable is a bounded percentage."""
+    result = render_prod()
+    assert result.returncode == 0, result.stderr
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    workers = {name: d for name, d in by_name(docs, 'Deployment').items() if name.startswith('synthetic-worker')}
+    assert sorted(workers) == ['synthetic-worker', 'synthetic-worker-borrow', 'synthetic-worker-t4']
+    for d in workers.values():
+        assert d['spec']['strategy'] == NO_SURGE_ROLL
+    whole = render_prod('--set-string', 'rollout.maxUnavailable=100%')
+    assert whole.returncode == 0, whole.stderr
+    [primary] = [
+        d
+        for d in yaml.safe_load_all(whole.stdout)
+        if d and d['kind'] == 'Deployment' and d['metadata']['name'] == 'synthetic-worker'
+    ]
+    assert primary['spec']['strategy']['rollingUpdate'] == {'maxSurge': 0, 'maxUnavailable': '100%'}
+    for bad in ('0%', '1', '150%', '25', 'all'):
+        rendered = render_prod('--set-string', 'rollout.maxUnavailable=' + bad)
+        assert rendered.returncode != 0, bad
+        assert 'rollout.maxUnavailable must be a percentage' in rendered.stderr, bad
+    # A null or missing rollout map reaches the same message, not a nil-pointer render error.
+    for missing in (('--set', 'rollout=null'), ('--set', 'rollout.maxUnavailable=null')):
+        rendered = render_prod(*missing)
+        assert rendered.returncode != 0, missing
+        assert 'rollout.maxUnavailable must be a percentage' in rendered.stderr, missing

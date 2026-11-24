@@ -117,9 +117,46 @@ def test_prod_rejects_key_overrides_and_dev_behavior_is_preserved(credential_ove
 
 
 @pytest.fixture(scope="module")
-def prod_allowed_private_override():
+def prod_retired_private_override():
     return _render("prod", "prod-omi-backend-listen", "--set-string", "privateEnv.OMI_PRIVATE_TEST=synthetic-value")
 
 
-def test_prod_still_accepts_noncredential_private_values(prod_allowed_private_override):
-    assert prod_allowed_private_override.returncode == 0, prod_allowed_private_override.stderr
+def test_prod_refuses_the_retired_private_env_overlay(prod_retired_private_override):
+    # Private values are Secret Manager references (privateSecretEnv); a literal
+    # privateEnv value can no longer reach a prod render.
+    assert prod_retired_private_override.returncode != 0
+    assert "privateEnv is retired" in prod_retired_private_override.stderr
+    assert "synthetic-value" not in prod_retired_private_override.stderr
+
+
+def test_prod_private_secret_env_renders_references_only():
+    result = _render(
+        "prod", "prod-omi-backend-listen", "--set", "privateSecretEnv.keys={STT_CAP_DISPATCH_COHORT,OMI_PRIVATE_TEST}"
+    )
+    assert result.returncode == 0, result.stderr
+    documents = [document for document in yaml.safe_load_all(result.stdout) if document]
+    deployment = next(document for document in documents if document["kind"] == "Deployment")
+    env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    names = [entry["name"] for entry in env]
+    assert len(names) == len(set(names))
+    by_name = {entry["name"]: entry for entry in env}
+    for name in ("STT_CAP_DISPATCH_COHORT", "OMI_PRIVATE_TEST"):
+        assert "value" not in by_name[name]
+        assert by_name[name]["valueFrom"] == {
+            "secretKeyRef": {"name": "prod-omi-backend-listen-private-env", "key": name, "optional": False}
+        }
+
+
+@pytest.mark.parametrize("name", sorted(KEY_ENV_NAMES))
+def test_prod_private_secret_env_cannot_carry_a_key_credential(name):
+    result = _render("prod", "prod-omi-backend-listen", "--set", f"privateSecretEnv.keys={{{name}}}")
+    assert result.returncode != 0
+    assert "workloadIdentityOnly forbids key credential environment variables" in result.stderr
+
+
+@pytest.mark.parametrize("name", ["GOOGLE_CLOUD_PROJECT", "STT_SERVICE_MODELS", "OMI_LLM_GATEWAY_FEATURE_MODE"])
+def test_prod_private_secret_env_cannot_shadow_chart_or_dispatch_owned_env(name):
+    # A secretKeyRef would silently win over the chart-derived value or a workflow_dispatch --set override.
+    result = _render("prod", "prod-omi-backend-listen", "--set", f"privateSecretEnv.keys={{{name}}}")
+    assert result.returncode != 0
+    assert f"privateSecretEnv.keys cannot name {name}" in result.stderr

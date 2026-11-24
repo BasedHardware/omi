@@ -1,5 +1,16 @@
 part of 'conversation_provider.dart';
 
+/// One Home list page as the provider consumes it: rows, the storage-row offset advance, and the
+/// server's pagination headers ([ConversationPageHeaders]; empty from an older server).
+typedef _HomePage = ({
+  List<ServerConversation> items,
+  bool ok,
+  bool truncated,
+  int storageCount,
+  ConversationPageHeaders page,
+  ApiResult<List<ServerConversation>>? typed
+});
+
 /// Home fetch projection keeps its held replacements and storage cursor in one boundary.
 extension _ConversationHomeFetch on ConversationProvider {
   int _recordServerPageIds(List<ServerConversation> rows, int storageCount) {
@@ -70,89 +81,103 @@ extension _ConversationHomeFetch on ConversationProvider {
           !isSelectionModeActive
       ? acknowledgeLoadedHomeMembers(heldHomeEpisodes?.call() ?? const {}, conversations)
       : const {};
-  ({
-    List<ServerConversation> items,
-    bool ok,
-    bool truncated,
-    int storageCount,
-    ApiResult<List<ServerConversation>>? typed
-  }) _packTypedConversationList(ApiResult<List<ServerConversation>> typed, {int? storageCount}) {
+  _HomePage _packTypedConversationList(ApiResult<List<ServerConversation>> typed,
+      {int? storageCount, ConversationPageHeaders page = const ConversationPageHeaders()}) {
     return switch (typed) {
       ApiSuccess(:final data, :final truncated) => (
           items: data,
           ok: true,
           truncated: truncated,
           storageCount: storageCount ?? data.length,
+          page: page,
           typed: typed
         ),
-      ApiFailure() => (items: <ServerConversation>[], ok: false, truncated: false, storageCount: 0, typed: typed),
+      ApiFailure() => (
+          items: <ServerConversation>[],
+          ok: false,
+          truncated: false,
+          storageCount: 0,
+          page: const ConversationPageHeaders(),
+          typed: typed
+        ),
     };
   }
 
-  Future<
-      ({
-        List<ServerConversation> items,
-        bool ok,
-        bool truncated,
-        int storageCount,
-        ApiResult<List<ServerConversation>>? typed
-      })> _getConversationsFromServer() async {
+  /// [since] bounds the read to rows created at or after it (the recent-rows refresh); the
+  /// default reads the newest page.
+  Future<_HomePage> _getConversationsFromServer({DateTime? since}) async {
     final typedApi = _conversationApi;
+    var page = const ConversationPageHeaders();
     if (typedApi != null) {
-      final (startDate, endDate) = _getDateFilterRange();
+      var (startDate, endDate) = _getDateFilterRange();
+      startDate = since ?? startDate;
       var storageCount = 0;
       final typed = await typedApi.list(
         heldHomeEpisodes: _homeEpisodeAcknowledgements,
         onStorageCount: (count) => storageCount = count,
+        onPageHeaders: (headers) => page = headers,
         includeDiscarded: showDiscardedConversations,
         startDate: startDate,
         endDate: endDate,
         folderId: selectedFolderId,
         starred: showStarredOnly ? true : null,
       );
-      return _packTypedConversationList(typed, storageCount: storageCount);
+      return _packTypedConversationList(typed, storageCount: storageCount, page: page);
     }
     final fetcher = _conversationListFetcher;
     if (fetcher != null) {
       final result = await fetcher();
-      return (items: result.items, ok: result.ok, truncated: false, storageCount: result.items.length, typed: null);
+      return (
+        items: result.items,
+        ok: result.ok,
+        truncated: false,
+        storageCount: result.items.length,
+        page: page,
+        typed: null
+      );
     }
 
-    final (startDate, endDate) = _getDateFilterRange();
+    var (startDate, endDate) = _getDateFilterRange();
+    startDate = since ?? startDate;
 
     var storageCount = 0;
     final result = await getConversationsResult(
       heldHomeEpisodes: _homeEpisodeAcknowledgements,
       onStorageCount: (count) => storageCount = count,
+      onPageHeaders: (headers) => page = headers,
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
       folderId: selectedFolderId,
       starred: showStarredOnly ? true : null,
     );
-    return (items: result.items, ok: result.ok, truncated: result.truncated, storageCount: storageCount, typed: null);
+    return (
+      items: result.items,
+      ok: result.ok,
+      truncated: result.truncated,
+      storageCount: storageCount,
+      page: page,
+      typed: null
+    );
   }
 
-  Future<
-      ({
-        List<ServerConversation> items,
-        bool ok,
-        bool truncated,
-        int storageCount,
-        ApiResult<List<ServerConversation>>? typed
-      })> _getTypedHomePage(ConversationApi api, int offset, DateTime? startDate, DateTime? endDate) async {
+  Future<_HomePage> _getTypedHomePage(
+      ConversationApi api, int offset, String? cursor, DateTime? startDate, DateTime? endDate) async {
     var storageCount = 0;
+    var page = const ConversationPageHeaders();
     final result = await api.list(
       heldHomeEpisodes: _homeEpisodeAcknowledgements,
       onStorageCount: (count) => storageCount = count,
+      onPageHeaders: (headers) => page = headers,
       limit: ConversationProvider._conversationPageSize,
       offset: offset,
+      cursor: cursor,
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
       folderId: selectedFolderId,
       starred: showStarredOnly ? true : null,
     );
-    return _packTypedConversationList(result, storageCount: storageCount);
+    return _packTypedConversationList(result, storageCount: storageCount, page: page);
   }
 }

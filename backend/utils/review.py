@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Sequence
 
 from database import candidates, conversations, review_changes, review_store as store
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from models.action_item import TaskCreatePayload
 from models.review_context import enrich_spelling
 from models.candidate import CandidateAction, CandidateStatus, CandidateSubjectKind
@@ -327,6 +328,11 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer | ReviewAnswerV2, *
         candidates.CandidateStoreError,
         TaskLinkValidationError,
     ):
+        store.release_failed_answer(uid, item_id)
+        raise
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable):
+        # A live account gate means nothing was written: release the offered
+        # answer so the client's retry can apply it after the gate clears.
         store.release_failed_answer(uid, item_id)
         raise
     except LookupError as exc:

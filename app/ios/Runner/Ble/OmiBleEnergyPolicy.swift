@@ -130,8 +130,14 @@ struct OmiBleReconnectDiagnostics {
         return (timestamp, max(0, atMs - timestamp))
     }
 
-    /// Start timestamp of one disconnect-history row, used to match a reconnect
-    /// interval back to the event that started it.
+    /// Legacy audio-recovery stamps are not BLE disconnects.
+    static func eventType(_ entry: [String: Any]) -> String {
+        if let type = entry["eventType"] as? String { return type }
+        // Older iOS audio-recovery stamps have no BLE event metadata.
+        return entry["lostAudioResolvedAt"] != nil && entry["reasonCode"] == nil ? "audio_recovered" : "disconnect"
+    }
+
+    /// The event row timestamp is the reconnect-matching key.
     static func eventTimestamp(_ entry: [String: Any]) -> Int64 {
         entry["timestamp"] as? Int64 ?? 0
     }

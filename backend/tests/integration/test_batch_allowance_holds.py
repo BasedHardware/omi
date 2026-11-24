@@ -2,6 +2,7 @@
 
 from unittest.mock import Mock
 from threading import Barrier, Lock
+import time
 
 import pytest
 from google.api_core.exceptions import Aborted
@@ -10,9 +11,11 @@ from testing.store_fixtures import store_backend  # noqa: F401
 from database import batch_pipeline_allowance_migration as migration
 from database import batch_pipeline_store as store_module
 from database.batch_pipeline_allowance_migration import KEY, apply_page, counts
+from database.batch_pipeline_intake import admit
+from config.policy import BatchUnitPolicy
 from utils.batch_pipeline.allowance_hold import AllowanceHolds
-from database.batch_pipeline_allowance_hold import OWNERS, STATE, park
-from utils.batch_pipeline.contracts import WorkItem, WorkResult, Priority
+from database.batch_pipeline_allowance_hold import IntakeRefusal, OWNERS, STATE, park
+from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, WorkResult, Priority
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 
@@ -21,7 +24,9 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture
 def h(store_backend, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.delenv('BATCH_ALLOWANCE_PARK_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_ALLOWANCE_INTAKE_PARK_ENABLED', raising=False)
     store_backend.seed_user('owner')
     return store_backend
 
@@ -41,6 +46,91 @@ def hold(h, segment='a', capture=1, now=2, owner='owner'):
     lease = queue.pull(now - 1)[0]
     assert queue.defer(segment, lease.token, now, held_reason='allowance_exhausted', admission_refused=True)
     return queue
+
+
+def admit_intake(h, now, refusal, segments=('z', 'a')):
+    uid = h.uid('owner')
+    items = [
+        WorkItem(
+            segment,
+            uid,
+            now - 600 + offset,
+            f'gs://synthetic/{segment}',
+            30,
+            Priority.DEEP,
+            privacy_generation=0,
+            requires_compute_admission=True,
+        )
+        for offset, segment in enumerate(segments)
+    ]
+    binding = ProjectionBinding(uid, 'bp_intake', 'content', segments)
+    return admit(
+        h.store,
+        items,
+        binding,
+        now,
+        namespace=h.namespace,
+        policy=BatchUnitPolicy(batch_enabled=True),
+        intake={'owner_id': uid, 'lane': 'backfill', 'segment_ids': list(segments)},
+        intake_refusal=refusal,
+    )
+
+
+def test_intake_parks_before_queueing_and_releases_in_capture_order(h):
+    now = time.time()
+    refusal = IntakeRefusal(now, (None, None))
+    key = owner_key(h.uid('owner'))
+    receipt = admit_intake(h, now, refusal)
+    assert admit_intake(h, now, refusal) == receipt
+    owner = h.store.run(lambda tx: tx.get(OWNERS, key))
+    assert owner['held_count'] == owner['revision'] == 2 and owner['active']
+
+    for segment in ('z', 'a'):
+        row = get(h, segment)
+        assert row['state'] == STATE and row['allowance_held_at'] == now
+        assert row['compute_decision'] == {'outcome': 'held', 'reason': 'allowance_exhausted', 'at': now}
+        assert row['last_policy_hold'] == {'reason': 'allowance_exhausted', 'at': now}
+        assert not row['merge_pending'] and not row['token'] and not row['lease_until']
+        assert row['next'] == '' and row['attempt'] == 0
+        assert 'retry_started_at' not in row and 'admission_refusals' not in row
+
+    queue = Scheduler(h.store)
+    assert h.store.run(lambda tx: (tx.first_pending(key), tx.fresh_first_pending(key))) == (None, None)
+    assert not h.store.run(lambda tx: tx.get('queues', f'2_{key}'))
+    # Frozen GPU recovery discovers only leased/retry rows, and pull follows ready owner queues.
+    for state in ('leased', 'retry'):
+        assert h.store.due(state, now + 10000, 100) == []
+    assert queue.pull(now + 1) == []
+    assert h.store.oldest(2) is None
+
+    current = ['exhausted', False]
+    service = AllowanceHolds(h.store, lambda *args: tuple(current))
+    assert service.tick(now + 2) == 0
+    current[:] = ['upgraded', True]
+    assert service.tick(now + 400, page_size=1) == 1
+    assert service.tick(now + 401, page_size=1) == 1
+    assert service.tick(now + 402, page_size=1) == 0
+    assert [lease.item.segment_id for lease in queue.pull(now + 403, limit=2)] == ['z', 'a']
+    for segment in ('z', 'a'):
+        row = get(h, segment)
+        assert row['compute_decision'] == {'outcome': 'unattempted'} and not row.get('compute_admission_token')
+    owner = h.store.run(lambda tx: tx.get(OWNERS, key))
+    assert owner['held_count'] == 0 and not owner['active']
+
+
+def test_probe_crossing_owner_release_falls_back_to_worker(h):
+    now = time.time()
+    key = owner_key(h.uid('owner'))
+    h.store.run(
+        lambda tx: tx.put(
+            OWNERS,
+            key,
+            {'owner_id': h.uid('owner'), 'owner_key': key, 'generation': 'upgraded', 'cutoff': now},
+        )
+    )
+    admit_intake(h, now, IntakeRefusal(now, (None, None)), segments=('z',))
+    assert get(h, 'z')['state'] == 'ready'
+    assert 'held_count' not in h.store.run(lambda tx: tx.get(OWNERS, key))
 
 
 def test_held_is_absent_from_retry_pending_and_age_scans_and_retains_audio(h):

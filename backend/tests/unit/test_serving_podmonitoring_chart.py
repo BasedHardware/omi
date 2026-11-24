@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 import subprocess
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -72,9 +73,14 @@ def test_serving_podmonitoring_render(chart, values_suffix, stage):
         bulk = next(m for m in monitors if m['metadata']['name'] == 'synthetic-serving-bulk')
         assert bulk['spec']['selector'] == monitor['spec']['selector']
         assert bulk['spec']['targetLabels'] == monitor['spec']['targetLabels']
-        bulk_endpoint = dict(expected_endpoint, interval='60s')
+        bulk_endpoint = dict(expected_endpoint, interval='120s')
         bulk_endpoint['metricRelabeling'] = [dict(fast[0], action='drop')]
         assert bulk['spec']['endpoints'] == [bulk_endpoint]
+        rollback_bulk = deepcopy(bulk)
+        rollback_bulk['spec']['endpoints'][0]['interval'] = '60s'
+        assert render('--set-string', 'podMonitoring.bulkInterval=60s') == [
+            rollback_bulk if doc is bulk else doc for doc in default
+        ]
         # Only PodMonitoring changes: the pod template, HPA, RBAC and service
         # must be identical to the single 15s scrape configuration.
         unsplit = render('--set-string', 'podMonitoring.bulkInterval=')

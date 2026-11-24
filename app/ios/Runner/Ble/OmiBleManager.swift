@@ -23,6 +23,7 @@ final class OmiBleManager: NSObject {
             audioExpected.removeAll()
             for uuid in connectionStartTimes.keys { connectionStartTimes[uuid] = CheckedIntegerConversion.epochMs() }
             reconnectDiagnostics.removeAll()
+            everConnected.removeAll()
             chargingState.removeAll()
             // Battery throttling must not reuse the previous account's baseline.
             batteryBaselineRehydrated.removeAll()
@@ -43,6 +44,9 @@ final class OmiBleManager: NSObject {
 
     private var centralManager: CBCentralManager!
     private(set) var flutterApi: BleFlutterApi?
+    // A registered messenger or persisted pairing does not own a live uplink.
+    private var dartConnectionTargets: Set<String> = []
+    private var headlessRetiringLinks: Set<String> = []
 
     /// Connected/connecting peripherals keyed by UUID string.
     private var peripherals: [String: CBPeripheral] = [:]
@@ -103,6 +107,9 @@ final class OmiBleManager: NSObject {
     private var connectionStartTimes: [String: Int64] = [:]
 
     /// Tracks peripherals that have connected at least once (for reconnection counting).
+    private func hasEverConnected(_ uuid: String) -> Bool {
+        everConnected.contains(uuid) || healthStore.connectedBefore(uuid)
+    }
     private var everConnected: Set<String> = []
     // Authorized by Dart's persisted pairing, never by scan discovery.
     private var reconnectIntent = OmiSavedReconnectIntent()
@@ -180,7 +187,13 @@ final class OmiBleManager: NSObject {
         max(0, (savedSetupRetryAfter[uuid] ?? 0) - ProcessInfo.processInfo.systemUptime)
     }
 
+    private func canConnect(_ uuid: String) -> Bool {
+        dartConnectionTargets.contains(uuid) ||
+            (savedReconnect.contains(uuid) && LimitlessFlashDrainEngine.shared.canDrainAfterRelaunch(uuid))
+    }
+
     private func issueConnect(_ peripheral: CBPeripheral, uuid: String, source: String) {
+        guard canConnect(uuid), !headlessRetiringLinks.contains(uuid) else { return }
         if savedReconnect.contains(uuid), connectPendingSince[uuid] == nil {
             // Native scan/restoration/retry paths need the same bounded GATT
             // readiness recovery as an explicit Flutter manageDevice request.
@@ -222,6 +235,10 @@ final class OmiBleManager: NSObject {
 
     private func reconcileSavedReconnect(_ uuid: String, source: String) {
         guard centralManager.state == .poweredOn else { return }
+        guard canConnect(uuid) else {
+            logBle(uuid: uuid, event: "reconnect_deferred", detail: "headless_audio_custody")
+            return
+        }
         let found = peripherals[uuid] ?? UUID(uuidString: uuid).flatMap {
             centralManager.retrievePeripherals(withIdentifiers: [$0]).first
         }
@@ -433,11 +450,14 @@ final class OmiBleManager: NSObject {
     // MARK: - Connection
 
     func connectPeripheral(uuid: String) {
+        dartConnectionTargets.insert(uuid)
         // A reset owns this peripheral until a native disconnect and fresh discovery.
         manuallyDisconnected.remove(uuid)
         reconnectIntent.resume(uuid)
         pairingLostBlocked.remove(uuid)
 
+        // A restored link already being cancelled must settle before Dart adopts it.
+        guard !headlessRetiringLinks.contains(uuid) else { return }
         if savedReconnect.contains(uuid), centralManager.state != .poweredOn {
             logBle(uuid: uuid, event: "saved_connect_queued", detail: getBluetoothState())
             return // savedReconnect is drained when the adapter powers on.
@@ -677,6 +697,7 @@ final class OmiBleManager: NSObject {
         if keepReconnect {
             logBle(uuid: uuid, event: "transport_released", detail: "saved_reconnect_retained")
         } else {
+            dartConnectionTargets.remove(uuid)
             endSavedScan(uuid, reason: "manual_disconnect_or_retirement")
             connectPendingSince.removeValue(forKey: uuid)
             diagnosticScanStarted.remove(uuid)
@@ -728,7 +749,7 @@ final class OmiBleManager: NSObject {
         guard centralManager.state == .poweredOn else { return }
         for (uuid, peripheral) in peripherals {
             guard OmiBleConnectionPolicy.savedRetryAllowed(
-                saved: savedReconnect.contains(uuid), everConnected: everConnected.contains(uuid),
+                saved: savedReconnect.contains(uuid), everConnected: hasEverConnected(uuid),
                 manual: manuallyDisconnected.contains(uuid), pairingLost: pairingLostBlocked.contains(uuid)
             ) else { continue }
             // Only skip if already connected. For peripherals in .connecting state,
@@ -1103,7 +1124,9 @@ final class OmiBleManager: NSObject {
     private static let diagnosticsKeyPrefix = "ble_diagnostics_disconnect_history_"
     private static let reconnectCountKeyPrefix = "ble_diagnostics_reconnect_count_"
     private static let failToConnectCountKeyPrefix = "ble_diagnostics_fail_to_connect_count_"
-    private static let maxDisconnectHistory = 500
+    // One week at about p90 fleet drop rates (~140/day) while keeping each synchronous
+    // per-disconnect rewrite well under the 4096-row cost measured in the PR evidence.
+    private static let maxDisconnectHistory = 1024
     private static let disconnectRetentionMs: Int64 = 7 * 24 * 3600 * 1000
     private static let rssiHistoryLimit = 120
 
@@ -1439,12 +1462,16 @@ final class OmiBleManager: NSObject {
         let ringRead = eventType == "disconnect"
             ? ringReadDiagnostics.disconnected(uuid, now: OmiRingReadDiagnostics.now()) : [:]
         guard healthStore.enabled else { return }
-        if eventType == "disconnect" { healthStore.end(uuid, at: CheckedIntegerConversion.epochMs()) }
+        let now = CheckedIntegerConversion.epochMs()
+        if eventType == "disconnect" {
+            healthStore.end(uuid, at: now)
+            // A manual disconnect never seeds a reconnect-latency marker.
+            if !isManual { healthStore.recordDisconnect(uuid, at: now) }
+        }
         let defaults = UserDefaults.standard
         let key = OmiBleManager.historyKey(uuid)
         var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
 
-        let now = CheckedIntegerConversion.epochMs()
         let startedAt = connectionStartTimes[uuid] ?? 0
         let durationMs: Int64 = (eventType == "disconnect" && startedAt > 0) ? (now - startedAt) : 0
 
@@ -1495,13 +1522,13 @@ final class OmiBleManager: NSObject {
     private func backfillTimeToReconnect(uuid: String) {
         let defaults = UserDefaults.standard
         var pending = reconnectDiagnostics.removeValue(forKey: uuid) ?? OmiBleReconnectDiagnostics()
-        if let start = defaults.object(forKey: "ble_audio_outage_\(uuid)") as? Int64 {
+        if let start = healthStore.reconnectEvent(uuid) ?? (defaults.object(forKey: "ble_audio_outage_\(uuid)") as? Int64) {
             pending.recordEvent(timestampMs: start, eventType: "disconnect", isManual: false)
         }
         let key = OmiBleManager.historyKey(uuid)
         let history = defaults.array(forKey: key) as? [[String: Any]] ?? []
         if let updated = pending.backfilledHistory(
-            history, nowMs: CheckedIntegerConversion.epochMs(), hadConnection: everConnected.contains(uuid) || defaults.object(forKey: "ble_audio_outage_\(uuid)") != nil,
+            history, nowMs: CheckedIntegerConversion.epochMs(), hadConnection: hasEverConnected(uuid) || defaults.object(forKey: "ble_audio_outage_\(uuid)") != nil,
             timestampOf: OmiBleReconnectDiagnostics.eventTimestamp,
             resolvedAtOf: { $0["lostAudioResolvedAt"] as? Int64 },
             onLookupMiss: { start in
@@ -1541,7 +1568,7 @@ final class OmiBleManager: NSObject {
                 reason: obj["reason"] as? String ?? "unknown",
                 reasonCode: Int64(obj["reasonCode"] as? Int ?? -1),
                 isManual: obj["isManual"] as? Bool ?? false,
-                eventType: obj["eventType"] as? String ?? "disconnect",
+                eventType: OmiBleReconnectDiagnostics.eventType(obj),
                 lastRssi: obj["lastRssi"] as? Int64 ?? 0,
                 connectionDurationMs: obj["connectionDurationMs"] as? Int64 ?? 0,
                 appState: obj["appState"] as? String ?? "",
@@ -1648,6 +1675,7 @@ final class OmiBleManager: NSObject {
     // MARK: - Audio Batch Helpers
 
     private func cleanupPeripheral(_ peripheralUuid: String) {
+        headlessRetiringLinks.remove(peripheralUuid)
         timedOutNotifications = timedOutNotifications.filter { !$0.hasPrefix(peripheralUuid.lowercased() + ":") }
         freshConnections.remove(peripheralUuid)
         for key in notificationRequests.keys.filter({ $0.hasPrefix(peripheralUuid.lowercased() + ":") }) {
@@ -1684,6 +1712,19 @@ final class OmiBleManager: NSObject {
 
 extension OmiBleManager: CBCentralManagerDelegate {
 
+    private func cancelConnectionWithoutCapture(_ peripheral: CBPeripheral, uuid: String) {
+        if peripheral.state == .disconnected {
+            headlessRetiringLinks.remove(uuid)
+            return
+        }
+        headlessRetiringLinks.insert(uuid)
+        // willRestoreState can arrive before the first powered-on callback.
+        guard centralManager.state == .poweredOn,
+              peripheral.state == .connected || peripheral.state == .connecting else { return }
+        logBle(uuid: uuid, event: "connect_cancelled", detail: "headless_audio_custody")
+        centralManager.cancelPeripheralConnection(peripheral)
+    }
+
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         let state = getBluetoothState()
         if state == "on" || state == "off" { appendLifecycleEvent("bluetooth_\(state)") }
@@ -1692,6 +1733,11 @@ extension OmiBleManager: CBCentralManagerDelegate {
         flutterApi?.onBluetoothStateChanged(state: state) { _ in }
 
         if central.state == .poweredOn {
+            for uuid in headlessRetiringLinks {
+                if let peripheral = peripherals[uuid] {
+                    cancelConnectionWithoutCapture(peripheral, uuid: uuid)
+                }
+            }
             for uuid in savedReconnect where shouldAutoReconnect(uuid: uuid, pairingLost: false) {
                 reconcileSavedReconnect(uuid, source: "adapter_on")
             }
@@ -1716,6 +1762,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        OmiBluetoothLaunchDiagnostics.record("restore_launch")
         appendLifecycleEvent("corebluetooth_restored")
         // CoreBluetooth can relaunch the process directly into the background;
         // applicationDidEnterBackground is not delivered for that lifecycle.
@@ -1740,6 +1787,12 @@ extension OmiBleManager: CBCentralManagerDelegate {
                     central.cancelPeripheralConnection(peripheral)
                     continue
                 }
+                // An inherited link can still be in its prior live mode. Even
+                // Limitless flash drain starts headlessly only on a fresh link.
+                guard canConnect(uuid), peripheral.state != .connected || dartConnectionTargets.contains(uuid) else {
+                    cancelConnectionWithoutCapture(peripheral, uuid: uuid)
+                    continue
+                }
                 // State-restored peripherals have already connected in a prior
                 // process lifetime; count a later connection as a reconnect.
                 everConnected.insert(uuid)
@@ -1754,10 +1807,8 @@ extension OmiBleManager: CBCentralManagerDelegate {
                     } else {
                         discoverServices(for: peripheral, uuid: uuid)
                     }
-                } else if shouldAutoReconnect(uuid: uuid, pairingLost: false) {
-                    if central.state == .poweredOn { issueConnect(peripheral, uuid: uuid, source: "state_restoration") }
-                } else {
-                    logBle(uuid: uuid, event: "reconnect_suppressed", detail: "restored_user_or_pairing_block")
+                } else if central.state == .poweredOn {
+                    issueConnect(peripheral, uuid: uuid, source: "state_restoration")
                 }
             }
             flutterApi?.onStateRestored(peripheralUuids: uuids) { _ in }
@@ -1803,6 +1854,11 @@ extension OmiBleManager: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         let uuid = peripheralUuidString(peripheral)
         guard peripherals[uuid] === peripheral else { return }
+        // An OS-owned pending connect can complete as restoration cancels it.
+        guard canConnect(uuid), !headlessRetiringLinks.contains(uuid) else {
+            cancelConnectionWithoutCapture(peripheral, uuid: uuid)
+            return
+        }
         logBle(uuid: uuid, event: "connect_completed", detail: "pending_since_ms=\(connectPendingSince.removeValue(forKey: uuid) ?? 0)")
         endSavedScan(uuid, reason: "connected")
         diagnosticScanStarted.remove(uuid)
@@ -1810,13 +1866,14 @@ extension OmiBleManager: CBCentralManagerDelegate {
         NSLog("[OmiBle] didConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid)")
 
         // Track reconnections (not first connect)
-        if everConnected.contains(uuid) {
+        if hasEverConnected(uuid) {
             incrementReconnectionCount(uuid: uuid)
         }
         // Consume first-time failure markers too, without recording those
         // initial connections as reconnections.
         backfillTimeToReconnect(uuid: uuid)
         everConnected.insert(uuid)
+        healthStore.recordConnected(uuid)
         freshConnections.insert(uuid)
         readyNotified.remove(uuid)
         discoveryStartedAt.removeValue(forKey: uuid)
@@ -1896,7 +1953,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
         // Retry previously-connected peripherals — otherwise a failed connect silently
         // drops the user. iOS queues this at the chipset level; it's free while waiting.
-        if !isManual, shouldAutoReconnect(uuid: uuid, pairingLost: pairingLost), everConnected.contains(uuid) {
+        if !isManual, shouldAutoReconnect(uuid: uuid, pairingLost: pairingLost), hasEverConnected(uuid) {
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
                 guard let self = self, self.shouldAutoReconnect(uuid: uuid, pairingLost: false),
                       self.centralManager.state == .poweredOn else { return }
@@ -2130,8 +2187,14 @@ extension OmiBleManager: CBPeripheralDelegate {
             return
         }
 
+        guard let flutterApi else {
+            if characteristic.uuid == Self.audioCharUuid {
+                OmiBluetoothLaunchDiagnostics.recordAudioDropBeforeFlutter()
+            }
+            return
+        }
         let typedData = FlutterStandardTypedData(bytes: data)
-        flutterApi?.onCharacteristicValueUpdated(
+        flutterApi.onCharacteristicValueUpdated(
             peripheralUuid: uuid,
             serviceUuid: serviceUuid,
             characteristicUuid: charUuid,

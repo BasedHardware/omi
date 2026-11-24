@@ -432,3 +432,12 @@ def test_generic_signal_preserves_real_facts_in_a_mixed_non_english_section():
         }
     )
     assert invalid_span.overview == 'There is insufficient evidence to approve the claim.'
+
+
+def test_home_readers_recognize_every_fallback_label_this_policy_emits():
+    # utils.conversations.home_titles matches these labels by pattern; a new
+    # label here must be added there or Home serves it as a finished title.
+    from utils.conversations.home_titles import is_fallback_title
+
+    assert is_fallback_title(title_or_fallback(''))
+    assert is_fallback_title(title_or_fallback(None, index=7))

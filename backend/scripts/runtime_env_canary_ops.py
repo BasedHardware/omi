@@ -43,7 +43,7 @@ QUALITY = {
     'HOME_TRANSCRIPTION_MAX_AGE_SECONDS': '86400',
     'RECORD_SEAL_REPAIR_FRESH_ENABLED': 'true',
 }
-BACKOFF = 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'
+RETIRED_BATCH_ENV = frozenset({'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED', 'BATCH_HELD_POLL_SKIP_ENABLED'})
 PROVIDER = 'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED'
 
 
@@ -91,7 +91,7 @@ def compose(config, snapshot, source):
         if integration_only:
             # This narrow recovery is not a full manifest reconciliation. Carry
             # every existing literal/secret binding, then apply only the named
-            # quality/backoff/provider/stamp decisions and two removals.
+            # quality/provider/stamp decisions and authorized removals.
             symbolic = {
                 key: deepcopy(entry)
                 for key, entry in desired.get('env', {}).items()
@@ -133,15 +133,10 @@ def compose(config, snapshot, source):
         for key, value in {**QUALITY, 'OMI_BACKEND_RELEASE_SHA': source, PROVIDER: 'false'}.items():
             secrets.pop(key, None)
             env[key] = {'value': value, 'category': 'rollout'}
-        if service in ('backend-sync', 'backend-integration'):
-            if BACKOFF in forbidden:
-                raise ValueError('canary backoff disposition conflicts with manifest')
-            secrets.pop(BACKOFF, None)
-            env[BACKOFF] = {'value': 'false', 'category': 'rollout'}
-        else:
-            env.pop(BACKOFF, None)
-            secrets.pop(BACKOFF, None)
-            desired['forbidden_env'] = sorted(forbidden | {BACKOFF})
+        for key in RETIRED_BATCH_ENV:
+            env.pop(key, None)
+            secrets.pop(key, None)
+        desired['forbidden_env'] = sorted(forbidden | RETIRED_BATCH_ENV)
         if integration_only:
             for key, saved in RESTORED_DEFAULTS.items():
                 if live.get(key) != {'name': key, 'value': saved}:

@@ -369,8 +369,18 @@ workflows:
             --flavor prod \
             $PROVENANCE_ARGS
 
+      # Play keeps flipping whether changesNotSentForReview is required or
+      # rejected, so publish here instead of the built-in google_play block:
+      # try without it, retry with it only on Play's held instruction.
+      - name: Publish to Google Play internal (self-healing review mode)
+        script: |
+          python3 scripts/play_internal_publish.py \
+            --bundle-dir build/app/outputs/bundle/prodRelease \
+            --out-dir build/play-internal-publish
+
     artifacts:
       - build/**/outputs/**/*.aab
+      - build/play-internal-publish/*.json
       - flutter_drive.log
     publishing:
       email:
@@ -383,16 +393,6 @@ workflows:
         notify:
           success: true
           failure: true
-      google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: "internal"
-        submit_as_draft: false
-        # Codemagic android-internal-auto builds on 2026-10-28 at 03:18Z,
-        # 05:55Z and 06:24Z uploaded bundles but failed at Publishing:
-        # "Changes cannot be sent for review automatically. Please set the
-        # query parameter changesNotSentForReview to true." Hold for the
-        # required Play Console Send changes for review press.
-        changes_not_sent_for_review: true
 
   # ============================================
   # PRODUCTION RELEASE WORKFLOWS (Triggered by tags)

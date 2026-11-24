@@ -14,6 +14,7 @@ from database import rpc_deadline
 from database.batch_pipeline_shadow_hook import shadow_mode_enabled
 import database.jobstore.codec as codec
 from database.jobstore.cohort import project_document
+from database.jobstore.connection import sql
 from database.jobstore.dual_store import mirrored, read_current, shadow_writes_enabled
 from utils.staging_fence import jobstore_mirror_factory_admits
 
@@ -49,7 +50,11 @@ def compare_sampled_due(primary, shadow, args: tuple, kwargs: dict, budget_s: fl
         with shadow.pool.connection(timeout=max(0, deadline - time.monotonic()), existing_only=True) as conn:
             with connection_deadline(conn, deadline), conn.transaction():
                 conn.execute('SET TRANSACTION READ ONLY')
-                conn.execute(f'SET LOCAL statement_timeout = {max(1, int((deadline-time.monotonic())*1000))}')
+                conn.execute(
+                    sql()
+                    .SQL('SET LOCAL statement_timeout = {}')
+                    .format(sql().Literal(max(1, int((deadline - time.monotonic()) * 1000))))
+                )
                 copies = {key: shadow.read_doc(conn, 'jobs', key) for key in copy_keys}
         selected = {
             key: project_document(primary.namespace, 'jobs', key, current.get(('jobs', key), {})) for key in keys

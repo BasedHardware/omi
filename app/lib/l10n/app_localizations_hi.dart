@@ -558,11 +558,11 @@ class AppLocalizationsHi extends AppLocalizations {
   String get hardwareSection => 'हार्डवेयर';
 
   @override
-  String get v2Undetected => 'V2 का पता नहीं चला';
+  String get v2Undetected => 'ऑफ़लाइन सिंक उपलब्ध नहीं है';
 
   @override
   String get v2UndetectedMessage =>
-      'हमें लगता है कि आप V1 डिवाइस का उपयोग कर रहे हैं या यह कनेक्ट नहीं है। SD कार्ड कार्यक्षमता केवल V2 उपकरणों के लिए है।';
+      'ऑफ़लाइन सिंक के लिए SD कार्ड स्टोरेज वाला कनेक्टेड Omi डिवाइस चाहिए। आपका वर्तमान डिवाइस इसका समर्थन नहीं करता।';
 
   @override
   String get endConversation => 'बातचीत समाप्त करें';
@@ -1118,6 +1118,11 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get nameUpdatedSuccessfully => 'नाम सफलतापूर्वक अपडेट किया गया!';
+
+  @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'चुने गए कैलेंडर पढ़ें। नए इवेंट $calendar में बनेंगे।';
+  }
 
   @override
   String get calendarSettings => 'कैलेंडर सेटिंग्स';
@@ -7031,6 +7036,26 @@ class AppLocalizationsHi extends AppLocalizations {
   String get authUnexpectedError => 'साइन इन करते समय अप्रत्याशित त्रुटि, कृपया पुनः प्रयास करें';
 
   @override
+  String get accountSignInMethods => 'साइन इन करने के तरीके';
+
+  @override
+  String get accountAddSignInMethod => 'साइन इन का तरीका जोड़ें';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'इस Omi खाते में साइन इन करने का एक तरीका जोड़ें। आपका प्लान, रिकॉर्डिंग और इंटीग्रेशन इसी खाते में बने रहेंगे।';
+
+  @override
+  String get accountSignInConflictTitle => 'साइन इन का यह तरीका किसी दूसरे खाते से जुड़ा है';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'आप अभी भी इसी खाते में साइन इन हैं। हर Omi खाते का प्लान, रिकॉर्डिंग और इंटीग्रेशन उसी खाते में रहते हैं।';
+
+  @override
+  String get accountSignInMethodAdded => 'साइन इन का तरीका जोड़ दिया गया';
+
+  @override
   String get authFailedToLinkGoogle => 'Google से लिंक करने में विफल, कृपया पुनः प्रयास करें।';
 
   @override
@@ -9062,7 +9087,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'यह रिकॉर्डिंग अपलोड हो गई है लेकिन Omi अभी भी बातचीत बना रहा है। यदि आप इसे अभी हटाते हैं और प्रोसेसिंग विफल होती है, तो इसे पुनर्प्राप्त नहीं किया जा सकेगा। फिर भी हटाएँ?';
+      'यह रिकॉर्डिंग पहले ही अपलोड हो चुकी है और Omi इसे प्रोसेस कर रहा है। यहाँ डिलीट करने से फ़ोन की कॉपी हट जाएगी। अगर प्रोसेसिंग विफल हुई, तो Omi इस फ़ोन से दोबारा कोशिश नहीं कर पाएगा।';
 
   @override
   String get syncCardAllBackedUp => 'सभी रिकॉर्डिंग सिंक हो गईं';
@@ -12210,7 +12235,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'पेयरिंग के बाद से: $drops रुकावटें, $failed विफल कनेक्शन।';
+    return 'पेयरिंग के बाद से: $drops पुनः कनेक्शन, $failed असफल कनेक्शन।';
   }
 
   @override
@@ -13446,16 +13471,6 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount को बातचीत में बदला जा रहा है';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total पूरा · आप इस स्क्रीन से बाहर जा सकते हैं';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount सिंक के लिए तैयार';
   }
@@ -13479,7 +13494,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'इस फ़ोन पर प्रतीक्षारत';
 
   @override
-  String get syncDetailsTranscribing => 'Omi पर ट्रांसक्राइब हो रहा है';
+  String get syncDetailsTranscribing => 'अपलोड हो गया, सर्वर की प्रतीक्षा में';
 
   @override
   String get syncDetailsAudioFiles => 'ऑडियो फ़ाइलें';
@@ -13938,6 +13953,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get summaryBusyBody => 'Omi पहले से ही इस बातचीत पर काम कर रहा है। पूरा होने पर सारांश यहां दिखाई देगा।';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'अभी तक ट्रांसक्राइब नहीं हुआ';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'ट्रांसक्रिप्ट तैयार होने पर सारांश दिखाई देगा।';
+
+  @override
   String get summaryCheckAgain => 'फिर से जांचें';
 
   @override
@@ -14343,6 +14364,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get processingProgress => 'आपकी प्रतीक्षारत रिकॉर्डिंग प्रोसेस हो रही हैं…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'ट्रांसक्रिप्शन कोटा उपलब्ध होने की प्रतीक्षा है';
+
+  @override
   String get processingDeferred => 'प्रोसेसिंग की प्रतीक्षा में';
 
   @override
@@ -14471,14 +14495,6 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done/$total मिनट';
-  }
-
-  @override
-  String get deviceRecently => 'हाल ही में';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration तक डिस्कनेक्ट रहा';
   }
 
   @override
@@ -15303,9 +15319,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get stopThese => 'इन्हें रोकें';
 
   @override
-  String get meetingActionItemsTitle => 'कार्रवाई के आइटम';
-
-  @override
   String get addToTasks => 'टास्क में जोड़ें';
 
   @override
@@ -15417,6 +15430,11 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'अपडेट इंस्टॉल नहीं हुआ। आपका पेंडेंट मौजूदा फ़र्मवेयर ($version) पर काम कर रहा है। अपडेट दोबारा आज़माने के बजाय कृपया सपोर्ट से संपर्क करें।';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15458,7 +15476,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15539,4 +15557,261 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'आपका सारांश लिखा जा रहा है…';
+
+  @override
+  String get onTheWayServerWork => 'सर्वर द्वारा बताया गया काम';
+
+  @override
+  String get finishNothingToProcess => 'अभी प्रोसेस करने के लिए कुछ नहीं है।';
+
+  @override
+  String get finishStillProcessing => 'अभी प्रोसेस हो रहा है। यह होम पर दिखेगा।';
+
+  @override
+  String get finishBackToHome => 'होम पर वापस जाएं';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'यह बातचीत खत्म होने पर सारांश';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'सर्वर पर प्रतीक्षारत अपलोड';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'आपका ऑडियो आपके डिवाइस या फ़ोन पर सुरक्षित है';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time तक का सारांश';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'हालिया ट्रांसक्रिप्ट';
+
+  @override
+  String get finishAlreadySaved => 'पहले ही सहेजा जा चुका है। यह होम पर है।';
+
+  @override
+  String get finishAudioNotReceived => 'ऑडियो अभी रास्ते में है।';
+
+  @override
+  String get finishFailedOffline => 'अनुरोध पूरा नहीं हो सका। आपका ऑडियो सुरक्षित है।';
+
+  @override
+  String get finishFailed => 'अनुरोध पूरा नहीं हो सका। आपका ऑडियो सुरक्षित है।';
+
+  @override
+  String get micBlockedCannotRecord => 'रिकॉर्ड करने के लिए माइक को अनुमति दें।';
+
+  @override
+  String get couldNotStartRecording => 'रिकॉर्डिंग शुरू नहीं हो सकी।';
+
+  @override
+  String get restorePurchasesFailed => 'आपका प्लान जांचा नहीं जा सका।';
+
+  @override
+  String get firmwareCheckFailed => 'अपडेट की जांच नहीं हो सकी।';
+
+  @override
+  String get conversationStillPublic => 'यह अभी भी लिंक से साझा किया गया है।';
+
+  @override
+  String get goalSaveFailed => 'आपका लक्ष्य सहेजा नहीं जा सका।';
+
+  @override
+  String get goalDeleteFailed => 'हटाया नहीं जा सका। लक्ष्य वापस आ गया है।';
+
+  @override
+  String get goalsLoadFailed => 'आपके लक्ष्य लोड नहीं हो सके।';
+
+  @override
+  String get missingTargetEndedRecording => 'यह रिकॉर्डिंग समाप्त हो चुकी है।';
+
+  @override
+  String get missingTargetMemory => 'यह याद अब मौजूद नहीं है।';
+
+  @override
+  String get missingTargetTask => 'यह कार्य अब मौजूद नहीं है।';
+
+  @override
+  String get missingTargetConversation => 'यह बातचीत नहीं खोली जा सकी।';
+
+  @override
+  String get couldNotRefreshConversations => 'रिफ्रेश नहीं हो सका।';
+
+  @override
+  String get connectDeviceForOfflineSync => 'सिंक करने के लिए अपना Omi कनेक्ट करें।';
+
+  @override
+  String get useDifferentAccountMessage => 'आप साइन आउट हो जाएंगे, और इस फ़ोन की Omi सेटिंग्स रीसेट हो जाएंगी।';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'चश्मा नहीं मिला। क्या वह चालू है?';
+
+  @override
+  String get couldNotMoveTask => 'कार्य को दूसरी जगह नहीं ले जाया जा सका।';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'हटा दिया गया। $count लॉक किए गए कार्य रखे गए।',
+      one: 'हटा दिया गया। 1 लॉक किया गया कार्य रखा गया।',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'यह बदलाव सहेजा नहीं जा सका।';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'आपकी सेटिंग्स लोड नहीं हो सकीं।';
+
+  @override
+  String get waitForOmiToFinish => 'Omi के पूरा होने तक इंतज़ार करें।';
+
+  @override
+  String get voiceNoteTooShort => 'बहुत छोटा है। रिकॉर्ड करने के लिए दबाकर रखें।';
+
+  @override
+  String get submitAppMissingFields => 'सबमिट करने के लिए नाम, विवरण, इमेज, श्रेणी और क्षमता जोड़ें।';
+
+  @override
+  String get appSetupNotFinished => 'सेटअप अभी पूरा नहीं हुआ है।';
+
+  @override
+  String get finishNothingKeptTitle => 'रखने के लिए कुछ नहीं';
+
+  @override
+  String get submitAppFinishDetails => 'सबमिट करने के लिए ऊपर क्षमता और कीमत की जानकारी पूरी करें।';
+
+  @override
+  String get finishNothingNew => 'अभी कुछ नया नहीं है।';
+
+  @override
+  String get takingLongerThanUsual => 'आम से ज़्यादा समय लग रहा है। यह होम पर आ जाएगा।';
+
+  @override
+  String get couldNotCheckOnIt => 'इसे जांचा नहीं जा सका। फिर से कोशिश करें।';
+
+  @override
+  String get upgradeToOpenThisOne => 'इसे खोलने के लिए अपग्रेड करें।';
+
+  @override
+  String get missingTargetConversationGone => 'यह बातचीत हटा दी गई है।';
+
+  @override
+  String get cantConnectRightNow => 'अभी कनेक्ट नहीं किया जा सकता।';
+
+  @override
+  String get loadOlderFailed => 'पुराने आइटम लोड नहीं हो सके। फिर से कोशिश करने के लिए टैप करें।';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'सुन रहा है · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'बदलने से पहले इसके समाप्त होने का इंतज़ार करें।';
+
+  @override
+  String get finishedSummaryReady => 'सारांश तैयार है';
+
+  @override
+  String get writingSummaryStatus => 'सारांश लिखा जा रहा है…';
+
+  @override
+  String get stillWorkingOnIt => 'अभी भी इस पर काम चल रहा है।';
+
+  @override
+  String get deviceReadyToUse => 'उपयोग के लिए तैयार';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'इस अपडेट के लिए आपके डिवाइस का फ़र्मवेयर बहुत पुराना है। डिवाइस अपडेट करने में मदद के लिए सहायता टीम से संपर्क करें।';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'इस फ़र्मवेयर अपडेट के लिए Omi ऐप के नए संस्करण की ज़रूरत है। अपने ऐप स्टोर से ऐप अपडेट करें, फिर दोबारा जाँचें।';
+
+  @override
+  String get quietPayerTitle => '5 दिनों से कोई रिकॉर्डिंग नहीं';
+
+  @override
+  String get quietPayerMessage => 'अपना Omi जांचें।';
+
+  @override
+  String get quietPayerCheck => 'जांचें';
+
+  @override
+  String get playManageSubscription => 'सदस्यता प्रबंधित करें';
+
+  @override
+  String get playBilledByGoogle => 'Google Play द्वारा बिल किया जाता है';
+
+  @override
+  String get playPurchasePending => 'आपका भुगतान लंबित है। Google Play की पुष्टि होते ही Omi Pro शुरू होगा।';
+
+  @override
+  String get playPurchaseOtherAccount => 'यह Google Play खरीदारी किसी दूसरे Omi खाते की है।';
+
+  @override
+  String get playPurchaseNotConfirmed => 'हम अभी आपकी खरीदारी की पुष्टि नहीं कर सके। हम अपने आप फिर कोशिश करेंगे।';
+
+  @override
+  String get playRenewalTerms =>
+      'रद्द करने तक दिखाई गई कीमत पर अपने आप नवीनीकृत होता है। Google Play में कभी भी प्रबंधित या रद्द करें।';
+
+  @override
+  String get playPaidAppUnavailable => 'Android पर उपलब्ध नहीं';
+
+  @override
+  String get pageNotAvailableInApp => 'यह पेज ऐप में उपलब्ध नहीं है।';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ऑर्डर हो गया। पुष्टि के लिए अपना ईमेल देखें।';
+
+  @override
+  String get prepaidCodeEntry => 'कोड है?';
+
+  @override
+  String get prepaidCodeTitle => 'कोड रिडीम करें';
+
+  @override
+  String get prepaidCodeFieldHint => 'अपना कोड दर्ज करें';
+
+  @override
+  String get prepaidCodeRedeem => 'रिडीम करें';
+
+  @override
+  String get prepaidCodeRedeemed => 'कोड रिडीम हो गया';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'यह कोड मान्य नहीं है। जांचें और फिर से कोशिश करें।',
+        'used': 'यह कोड पहले ही इस्तेमाल हो चुका है।',
+        'expired': 'इस कोड की अवधि समाप्त हो गई है।',
+        'hasPlan': 'आपके पास पहले से एक प्लान है। आपका कोड इस्तेमाल नहीं हुआ। प्लान खत्म होने के बाद इसे रिडीम करें।',
+        'notPrepaid': 'यह कोड यहां रिडीम नहीं हो सकता। प्लान चुनते समय इसका इस्तेमाल करें।',
+        'notEligible': 'यह कोड इस खाते पर इस्तेमाल नहीं हो सकता।',
+        'rateLimited': 'बहुत ज़्यादा कोशिशें। बाद में फिर कोशिश करें।',
+        'other': 'कुछ गलत हो गया। कृपया फिर से कोशिश करें।',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me के ज़रिए बिल किया जाता है। यहाँ कभी भी रद्द करें।';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me के ज़रिए बिल किया जाता है।';
+
+  @override
+  String playStripeUpdateCardToGetPlanBack(String plan) {
+    return '$plan वापस पाने के लिए omi.me पर अपना कार्ड अपडेट करें।';
+  }
 }

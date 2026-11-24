@@ -40,6 +40,7 @@ import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/home/home_widgets_publisher.dart';
+import 'package:omi/pages/home/plan_refresh_on_resume.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/search/global_search.dart';
@@ -461,9 +462,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
+  HomeProvider? _homeForNewest;
+
+  void _showNewest() => WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToTop(HomeProvider.homeTab);
+      });
+
   @override
   void initState() {
     ListenClientState.startSurfaceReporting();
+    _homeForNewest = context.read<HomeProvider?>()?..onShowNewest = _showNewest;
     unawaited(
       _backgroundResourceTelemetry.recoverInterrupted(
         launchContext: classifyBackgroundInterruptLaunch(
@@ -996,7 +1004,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     // post-frame callbacks still fire after them, so neither of those proves
     // success. A later Home then truthfully classifies as cold_start.
     BackgroundInterruptProcessLaunch.mark();
-    return content;
+    return PlanRefreshOnResume(child: content);
   }
 
   /// Chat opens as a sheet that rises over Home (see chat_route.dart); the mic opens it listening.
@@ -1124,6 +1132,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void dispose() {
+    if (_homeForNewest?.onShowNewest == _showNewest) _homeForNewest?.onShowNewest = null;
     HomeNavigation.unregister(_openRoute);
     _promptGate.detach();
     // These prompts close over this Home; a later Home (after sign-out and sign-in) enqueues its own.

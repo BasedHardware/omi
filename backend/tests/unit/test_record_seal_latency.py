@@ -110,6 +110,9 @@ def test_native_record_freshness_uses_record_end_for_every_sibling(monkeypatch, 
         assert merge.commit_next('synthetic-owner', NOW)['segment_id'] == 'last'
         assert store.rows['jobs', 'older']['state'] == 'retry'
         assert merge.commit_next('synthetic-owner', NOW) is None
+        # That blocked drain requeued the due retry head; it still appends later with its own result.
+        assert store.rows['jobs', 'older']['state'] == 'ready'
+        assert store.rows['jobs', 'older']['merge_pending'] is True
 
 
 @pytest.mark.parametrize('summary_seen', [False, True])

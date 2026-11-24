@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/paywall/paywall_checkout.dart';
+import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
 import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -57,17 +58,21 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
   }
 
   Future<void> _restore() async {
-    final usage = context.read<UsageProvider>();
-    await usage.fetchSubscription();
+    final outcome = await context.read<UsageProvider>().restorePurchases();
     if (!mounted) return;
     final l10n = context.l10n;
-    if (usage.subscription?.subscription.plan.isPaid == true) {
-      OmiFeedback.confirm(context, l10n.unlimitedPlan);
-      _dismissed = true;
-      Navigator.of(context).pop(true);
-      return;
+    switch (outcome) {
+      case RestoreOutcome.paid:
+        OmiFeedback.confirm(context, l10n.unlimitedPlan);
+        _dismissed = true;
+        Navigator.of(context).pop(true);
+      case RestoreOutcome.free when context.read<UsageProvider>().lastPlayRestoreRefusal != null:
+        OmiFeedback.error(context, playRefusalMessage(l10n, context.read<UsageProvider>().lastPlayRestoreRefusal));
+      case RestoreOutcome.free:
+        OmiFeedback.info(context, l10n.freePlan);
+      case RestoreOutcome.failed:
+        OmiFeedback.error(context, l10n.restorePurchasesFailed, actionLabel: l10n.tryAgain, onAction: _restore);
     }
-    OmiFeedback.info(context, l10n.freePlan);
   }
 
   Future<void> _purchase(PaywallOffer offer) async {
@@ -91,9 +96,9 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
       if (outcome == PaywallCheckoutOutcome.failed && _notice == null) {
         setState(() => _notice = context.l10n.anErrorOccurredTryAgain);
       }
-      if (outcome == PaywallCheckoutOutcome.purchased) {
+      if (outcome == PaywallCheckoutOutcome.purchased || outcome == PaywallCheckoutOutcome.alreadyPaid) {
         _dismissed = true;
-        Navigator.of(context).pop(true);
+        Navigator.of(context).pop(outcome == PaywallCheckoutOutcome.purchased);
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -145,12 +150,14 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
             final subscription = usage.subscription?.subscription;
             final cancelPending = subscription?.cancelAtPeriodEnd == true;
             final offer = widget.offer ??
-                PaywallOffer.fromCatalog(
-                  usage.availablePlans,
+                PaywallOffer.forUsage(
+                  usage,
                   cancelAtPeriodEnd: cancelPending,
                   currentPriceId: subscription?.currentPriceId,
                 );
-            final loading = offer == null && widget.offer == null && usage.isLoadingPlans;
+            final loading = offer == null &&
+                widget.offer == null &&
+                (usage.isLoadingPlans || usage.playOffersLoading || usage.billingProviderPending);
             final blocked = cancelPending && widget.offer == null && !loading && offer?.resubscribe != true;
             final freeMinutes = (usage.subscription?.transcriptionSecondsLimit ?? 0) ~/ 60;
             final yearly = offer?.yearly;
@@ -229,14 +236,20 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
                           const SizedBox(height: 10),
                           const _Skeleton(height: 74),
                         ] else if (offer == null && !blocked) ...[
-                          Text(l10n.unableToLoadPlans, style: _Graphite.body()),
+                          if (usage.playBilledPurchaser || usage.billingProviderFailed)
+                            const PlayPlansError()
+                          else
+                            Text(l10n.unableToLoadPlans, style: _Graphite.body()),
                         ] else if (offer != null) ...[
                           if (yearly != null)
                             _PlanOption(
                               key: const Key('outline_paywall_yearly'),
                               title: l10n.billingYearly,
                               badge: saving == null ? null : l10n.savePercent(saving),
-                              subtitle: yearly.formattedPerMonth + l10n.perMonthLabel,
+                              // Google Play shows only its own price strings, never a computed per-month.
+                              subtitle: usage.playBilledPurchaser
+                                  ? l10n.paywallTrialBilledYearly
+                                  : yearly.formattedPerMonth + l10n.perMonthLabel,
                               price: yearly.formatted,
                               per: l10n.billingYearly,
                               selected: _yearly || monthly == null,
@@ -286,11 +299,14 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
                             onPressed: offer == null || _busy ? null : () => _purchase(offer),
                           ),
                         const SizedBox(height: 8),
-                        Text(
-                          l10n.paywallCancelAnytime,
-                          textAlign: TextAlign.center,
-                          style: _Graphite.body(size: 12, color: _Graphite.textTertiary),
-                        ),
+                        if (usage.playBilledPurchaser)
+                          const PlayBillingDisclosure(color: _Graphite.textTertiary)
+                        else
+                          Text(
+                            l10n.paywallCancelAnytime,
+                            textAlign: TextAlign.center,
+                            style: _Graphite.body(size: 12, color: _Graphite.textTertiary),
+                          ),
                         const SizedBox(height: 4),
                         _Button(
                           key: const Key('outline_paywall_free'),

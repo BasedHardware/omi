@@ -44,6 +44,21 @@ abstract interface class CaptureExternalActions {
   /// episode closes and a fresh one starts counting from now (David 2026-10-23).
   void onLiveFinalized();
 
+  bool get v3FinishFeedbackEnabled;
+
+  void onManualFinishStarted(
+    ServerConversation placeholder,
+    String? recordingId, {
+    String? liveConversationId,
+    String? captureId,
+  });
+
+  void onManualFinishSettled(
+    ServerConversation placeholder,
+    InProgressProcessOutcome? outcome, {
+    required bool showFailure,
+  });
+
   Future<Person?> createPerson(String name);
 
   int get lastSpeakerAppliedCount;
@@ -104,6 +119,24 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
 
   @override
   void onLiveFinalized() {}
+
+  @override
+  bool get v3FinishFeedbackEnabled => false;
+
+  @override
+  void onManualFinishStarted(
+    ServerConversation placeholder,
+    String? recordingId, {
+    String? liveConversationId,
+    String? captureId,
+  }) {}
+
+  @override
+  void onManualFinishSettled(
+    ServerConversation placeholder,
+    InProgressProcessOutcome? outcome, {
+    required bool showFailure,
+  }) {}
 
   @override
   Future<Person?> createPerson(String name) async => null;

@@ -8,10 +8,16 @@ import pytest
 from google.api_core.exceptions import FailedPrecondition
 
 from config import record_seal_repair as config
-from utils.batch_pipeline import record_seal_cluster_repair as cluster, record_seal_backlog as backlog
+from database import _client
+from utils.batch_pipeline import (
+    record_seal_cluster_repair as cluster,
+    record_seal_backlog as backlog,
+    record_seal_sweeper,
+)
 from utils.batch_pipeline.record_seal_budget import SweepBudget
 from utils.batch_pipeline.record_seal_repair_cursor import RepairCursor
 from tests.unit.test_record_seal_cluster_repair import OrderedJobsClient, pending_job, FakeProcess, CursorClient
+from tests.unit.test_record_seal_nojob import SERVER
 
 
 def test_empty_fresh_reservation_lends_every_slot_but_bounds_loans():
@@ -86,6 +92,75 @@ def test_prefetch_does_not_checkpoint_past_deferred_rows_and_preview_never_write
         if mode == 'apply':
             cursor = frontier.write.call_args.args[0]
             assert cursor['enqueued_at'] == stamp - 8000 - 127
+
+
+@pytest.mark.parametrize('mode', ['apply', 'plan'])
+def test_next_run_resumes_after_last_backlog_attempt_at_deadline(monkeypatch, mode):
+    stamp = datetime.now(timezone.utc).timestamp()
+    jobs = OrderedJobsClient([pending_job(i, stamp - 8000 - i) for i in range(10)])
+    refs = {}
+
+    def collection(name):
+        if name == 'batch_pipeline_prod_maintenance':
+            return SimpleNamespace(document=lambda key: refs.setdefault(key, CursorClient()))
+        return jobs.collection(name)
+
+    client = CursorClient()
+    client.collection = collection
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(record_seal_sweeper, 'read_pusher_pod_proof', lambda: None)
+    monkeypatch.setattr(record_seal_sweeper, 'require_fresh_proof', lambda _: None)
+    monkeypatch.setattr(config, 'enabled', lambda: True)
+    monkeypatch.setattr(config, 'jobs_enabled', lambda: True)
+    monkeypatch.setattr(config, 'require_runtime', lambda: None)
+    monkeypatch.setattr(config, 'server_flags', lambda: SERVER)
+    monkeypatch.setattr(config, 'cursor_secret', lambda: b'x' * 32)
+    monkeypatch.setattr(config, 'settings', lambda: (1, 20, 1, mode))
+    monkeypatch.setattr(cluster, 'promote_record_recoveries', lambda *args, **kwargs: 0)
+    monkeypatch.setattr(cluster.record_custody_receipts, 'prune', lambda *args, **kwargs: 0)
+    monkeypatch.setattr(cluster.refactor_modes, 'record_seal_repair_age_order', lambda: False)
+    discover_jobs = cluster.discover_jobs
+    monkeypatch.setattr(
+        cluster,
+        'discover_jobs',
+        lambda *args, **kwargs: discover_jobs(*args, **kwargs) if kwargs.get('newest') else ([], False, None),
+    )
+
+    launched = []
+    coordinate = cluster.coordinate
+
+    def run_to_deadline(rows, **kwargs):
+        now = [0.0]
+
+        def launch(path, seconds, mode):
+            launched.append(path)
+            return FakeProcess(now, float('inf'))
+
+        return coordinate(
+            rows,
+            **kwargs,
+            launch=launch,
+            clock=lambda: now[0],
+            pause=lambda seconds: now.__setitem__(0, now[0] + seconds),
+        )
+
+    monkeypatch.setattr(cluster, 'coordinate', run_to_deadline)
+    assert cluster.run()['dispositions'] == {'budget_exhausted': 1, 'deferred': 9}
+    first_query = jobs.queries[-1]
+    assert first_query.after is None
+    report = cluster.run()
+    second_query = jobs.queries[-1]
+    assert report['dispositions']['budget_exhausted'] == 1
+    if mode == 'apply':
+        assert report['dispositions']['deferred'] == 8
+        assert second_query.after['enqueued_at'] == stamp - 8000
+        assert second_query.filters == first_query.filters  # Same frozen horizon.
+        assert launched == [f'users/synthetic/conversations/capture-{i}' for i in (0, 1)]
+    else:
+        assert report['dispositions']['deferred'] == 9
+        assert all(doc.writes == 0 for doc in refs.values())
+        assert second_query.after is None
+        assert launched[0] == launched[1]
 
 
 def test_backlog_fails_closed_on_missing_index_instead_of_hash_order():

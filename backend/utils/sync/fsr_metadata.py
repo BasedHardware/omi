@@ -9,6 +9,7 @@ from typing import Any
 from prometheus_client import Counter
 
 from config.firestore_read_levers import lever_enabled
+from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD
 
 READS = Counter(
     'omi_sync_backfill_metadata_reads_total',
@@ -17,6 +18,8 @@ READS = Counter(
 )
 
 BRIDGE_FIELDS = [
+    ENGINE_FIELD,
+    EPOCH_FIELD,
     'sync_bridge_pending',
     'id',
     'deleted',

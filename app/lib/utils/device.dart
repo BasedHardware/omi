@@ -6,6 +6,22 @@ import 'package:version/version.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 
+/// Outcome of a firmware lookup that got an answer, as far as the firmware update page may claim it.
+///
+/// [releaseUnavailable]: the answer has no usable release (empty, draft, or a version that does not parse),
+/// so it is as inconclusive as no answer. [firmwareTooOld] and [appUpdateRequired] distinguish a usable
+/// release's device and app requirements so the page can explain the actual blocker. [currentVersionUnknown] is a device-side
+/// failure: the paired device reported no revision or one that does not parse (e.g. the `Unknown` sentinel
+/// after a failed BLE read), so no lookup can be conclusive.
+enum FirmwareUpdateCheck {
+  updateAvailable,
+  upToDate,
+  releaseUnavailable,
+  firmwareTooOld,
+  appUpdateRequired,
+  currentVersionUnknown
+}
+
 class DeviceUtils {
   /// Closed, analysis-safe hardware family used by product telemetry.
   static String analyticsHardwareFamily(BtDevice device) {
@@ -46,33 +62,56 @@ class DeviceUtils {
     }
   }
 
+  static bool isValidFirmwareVersion(Object? value) => _tryParseVersion(value) != null;
+
   static Future<(String, bool, String)> shouldUpdateFirmware({
     required String currentFirmware,
     required Map latestFirmwareDetails,
   }) async {
-    if (currentFirmware.isEmpty) {
-      return ('Unable to determine current firmware version', false, '');
-    }
-    if (latestFirmwareDetails.isEmpty || latestFirmwareDetails['version'] == null) {
-      return ('Latest Version Not Available', false, '');
-    }
-    if (latestFirmwareDetails['draft'] == true) {
-      return ('Latest Version Not Available', false, '');
-    }
+    final check = await checkFirmwareUpdate(
+      currentFirmware: currentFirmware,
+      latestFirmwareDetails: latestFirmwareDetails,
+    );
+    return (check.message, check.status == FirmwareUpdateCheck.updateAvailable, check.version);
+  }
 
+  /// Classifies a firmware lookup. Only [FirmwareUpdateCheck.upToDate] means the lookup confirmed the
+  /// device already runs the latest release. An empty or unparsable device revision is
+  /// [FirmwareUpdateCheck.currentVersionUnknown] whatever the lookup says.
+  static Future<({FirmwareUpdateCheck status, String message, String version})> checkFirmwareUpdate({
+    required String currentFirmware,
+    required Map latestFirmwareDetails,
+  }) async {
+    const releaseUnavailable = FirmwareUpdateCheck.releaseUnavailable;
     Version? currentVersion = _tryParseVersion(currentFirmware);
     if (currentVersion == null) {
-      return ('Unable to determine current firmware version', false, '');
+      return (
+        status: FirmwareUpdateCheck.currentVersionUnknown,
+        message: 'Unable to determine current firmware version',
+        version: '',
+      );
     }
-    String latestVersionStr = latestFirmwareDetails['version'];
-    Version? latestVersion = _tryParseVersion(latestVersionStr);
-    Version? minVersion = _tryParseVersion(latestFirmwareDetails['min_version']);
-    if (latestVersion == null || minVersion == null) {
-      return ('Latest Version Not Available', false, '');
+    if (latestFirmwareDetails.isEmpty || latestFirmwareDetails['version'] == null) {
+      return (status: releaseUnavailable, message: 'Latest Version Not Available', version: '');
+    }
+    if (latestFirmwareDetails['draft'] == true) {
+      return (status: releaseUnavailable, message: 'Latest Version Not Available', version: '');
     }
 
+    final latestVersionValue = latestFirmwareDetails['version'];
+    Version? latestVersion = _tryParseVersion(latestVersionValue);
+    Version? minVersion = _tryParseVersion(latestFirmwareDetails['min_version']);
+    if (latestVersion == null || minVersion == null) {
+      return (status: releaseUnavailable, message: 'Latest Version Not Available', version: '');
+    }
+    final latestVersionStr = latestVersionValue as String;
+
     if (currentVersion < minVersion) {
-      return ('0', false, latestVersionStr);
+      return (
+        status: FirmwareUpdateCheck.firmwareTooOld,
+        message: 'Current firmware is below the minimum version required for this update',
+        version: latestVersionStr,
+      );
     } else {
       if (latestVersion > currentVersion) {
         PackageInfo packageInfo = await PackageInfo.fromPlatform();
@@ -80,22 +119,34 @@ class DeviceUtils {
         final minAppVersion = _tryParseVersion(latestFirmwareDetails['min_app_version']);
         final buildNumber = int.tryParse(packageInfo.buildNumber);
         final minBuildNumber = int.tryParse('${latestFirmwareDetails['min_app_version_code']}');
-        if (appVersion != null &&
-            minAppVersion != null &&
-            buildNumber != null &&
-            minBuildNumber != null &&
-            appVersion <= minAppVersion &&
-            buildNumber < minBuildNumber) {
+        // The release workflow permits either floor independently; absent floors keep legacy
+        // releases eligible, while a declared but unreadable requirement is inconclusive.
+        final hasVersionFloor = latestFirmwareDetails['min_app_version'] != null;
+        final hasBuildFloor = latestFirmwareDetails['min_app_version_code'] != null;
+        if ((hasVersionFloor && minAppVersion == null) || (hasBuildFloor && minBuildNumber == null)) {
+          return (status: releaseUnavailable, message: 'Latest Version Not Available', version: '');
+        }
+        if ((hasVersionFloor && (appVersion == null || appVersion < minAppVersion!)) ||
+            (hasBuildFloor && (buildNumber == null || buildNumber < minBuildNumber!))) {
           return (
-            'The latest version of firmware is not compatible with this version of App (${packageInfo.version}+${packageInfo.buildNumber}). Please update the app from ${Platform.isAndroid ? 'Play Store' : 'App Store'}',
-            false,
-            latestVersionStr,
+            status: FirmwareUpdateCheck.appUpdateRequired,
+            message:
+                'The latest version of firmware is not compatible with this version of App (${packageInfo.version}+${packageInfo.buildNumber}). Please update the app from ${Platform.isAndroid ? 'Play Store' : 'App Store'}',
+            version: latestVersionStr,
           );
         } else {
-          return ('A new version is available! Update your Omi now.', true, latestVersionStr);
+          return (
+            status: FirmwareUpdateCheck.updateAvailable,
+            message: 'A new version is available! Update your Omi now.',
+            version: latestVersionStr,
+          );
         }
       } else {
-        return ('You are already on the latest version', false, latestVersionStr);
+        return (
+          status: FirmwareUpdateCheck.upToDate,
+          message: 'You are already on the latest version',
+          version: latestVersionStr,
+        );
       }
     }
   }

@@ -49,6 +49,13 @@ def release(uid, key, token, *, firestore_client=None):
     finish(client.transaction())
 
 
+def held(uid, key, *, now=None, firestore_client=None):
+    """True while some writer holds this lease (read only)."""
+    client = firestore_client or get_firestore_client()
+    row = lease_ref(client, uid, key).get().to_dict() or {}
+    return bool(row.get('token') and row.get('until') and row['until'] > (now or datetime.now(timezone.utc)))
+
+
 def renew(uid, key, token, *, firestore_client=None):
     client = firestore_client or get_firestore_client()
     ref = lease_ref(client, uid, key)
@@ -65,18 +72,19 @@ def renew(uid, key, token, *, firestore_client=None):
 
 
 @contextmanager
-def keepalive(uid, key, token):
-    """Own and join the heartbeat of synchronous reprocess/merge writers."""
+def keepalive(uid, key, token, *, firestore_client=None, max_seconds: int | None = 900):
+    """Own and join the heartbeat of a synchronous writer."""
     stop = threading.Event()
-    deadline = monotonic() + 900
+    deadline = monotonic() + max_seconds if max_seconds is not None else None
+    client_args = {'firestore_client': firestore_client} if firestore_client is not None else {}
 
     def heartbeat():
         failures, delay = 0, LEASE_SECONDS / 3
         while not stop.wait(delay):
-            if monotonic() >= deadline:
+            if deadline is not None and monotonic() >= deadline:
                 return
             try:
-                renew(uid, key, token)
+                renew(uid, key, token, **client_args)
                 failures, delay = 0, LEASE_SECONDS / 3
             except Exception as exc:
                 # Persistence still checks the token and expiry. A transient

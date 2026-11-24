@@ -1,5 +1,27 @@
 # Mobile browser authorization
 
+## Account sign-in methods
+
+Settings → Account links an unused provider credential to the active Firebase
+user. Apple and Google use the configured sign-in flow to obtain a credential.
+Browser linking requests provider credentials without minting a Firebase sign-in
+token. It asks Google to show the account chooser explicitly. The user can
+cancel authorization until Firebase receives the link request. The owner fence
+is checked before OAuth and again when the credential returns. An
+established-account collision leaves the active account in place and explains
+which resources belong to each account. Anonymous-source migration uses its
+existing separate proof.
+The [support runbook](../../backend/docs/runbooks/support-operator-cli.md#apple-and-google-sign-ins-on-separate-accounts)
+documents how to recover access to separate accounts.
+
+- [ ] Deploy the authorization endpoint's optional Google account chooser.
+- [ ] On signed iOS and Android builds, verify provider choice, cancellation,
+      separate-account refusal and same-account linking with disposable users.
+- [ ] Verify the plan and a known conversation using the original sign-in in
+      the existing private support case.
+
+## Integration authorization
+
 `launchIntegrationOAuth` owns the browser handoff for Google Calendar/Gmail,
 Todoist, Asana, Google Tasks and ClickUp. It obtains the existing authenticated
 backend OAuth URL and launches it in the system browser. It uses the actual

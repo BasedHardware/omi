@@ -4,6 +4,7 @@ from database import batch_pipeline_upload_metrics as upload_metrics
 
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
+import logging
 from typing import Callable
 import time
 
@@ -13,14 +14,18 @@ from config.record_audio import record_identity, require_record_audio_barrier, r
 from config.record_seal_rules import token_lease_mode
 from config.record_latency import recent_record_end, record_fresh_merge_enabled, record_notes_eager_enabled
 from database.batch_pipeline_store import Store
+from database import batch_pipeline_allowance_hold as allowance_hold
 from database.batch_pipeline_staging import artifact_id
 from database import batch_pipeline_coalescing_completion as coalescing_completion
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
-from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.result_protocol import stamp
+from utils.batch_pipeline.scheduler import Scheduler, owner_key
+from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
 
 PROTOCOL = 'batch_v1'
+logger = logging.getLogger(__name__)
 
 
 class AdmissionDisabled(RuntimeError):
@@ -42,6 +47,8 @@ def admit(
     record_barrier: dict | None = None,
     coalescing_group: dict | None = None,
     source_aliases: dict | None = None,
+    packing_observations: dict | None = None,
+    intake_refusal: allowance_hold.IntakeRefusal | None = None,
 ) -> dict:
     """Admit one content upload atomically.
 
@@ -50,7 +57,7 @@ def admit(
     record the admission ``policy`` on the job as the ring does. ``adopt`` lets a caller take over a
     non-batch ledger row it has re-validated inside this transaction (a legacy
     row legacy can no longer finish); the batch ledger write below replaces it.
-    With both unset, behaviour is unchanged.
+    A verified intake refusal can park new GPU units before they reach the ring.
     """
     enqueue_item = enqueue or Scheduler.enqueue_in_transaction
     if not items or tuple(item.segment_id for item in items) != binding.segment_ids:
@@ -171,6 +178,18 @@ def admit(
                 raise ValueError('record owner is immutable')
             if row.get('record_lane_owner') != expected:
                 tx.patch('conversations', key, {'record_lane_owner': expected})
+        park_allowance = (
+            intake_refusal is not None
+            and enqueue is None
+            and not reserved_recording
+            and not binding.native_record
+            and partial_metadata.get('lane') in {'fresh', 'backfill'}
+            and admission.stt_route == 'parakeet'
+            and admission.provider_reason != 'byok'
+            and allowance_hold.intake_enabled()
+            and intake_refusal.current(tx.get(allowance_hold.OWNERS, owner_key(binding.owner_id)), time.time())
+        )
+        parked = 0
         for item in items:
             if require_artifacts:
                 key = artifact_id(item.segment_id, item.audio_uri)
@@ -192,19 +211,27 @@ def admit(
                 created = enqueue_alias(tx, item, now, policy=admission, proposal=proposal)
                 attach_alias_artifacts(tx, item, proposal)
             else:
-                created = enqueue_item(tx, item, now, policy=admission)
+                created = (
+                    Scheduler.enqueue_in_transaction(tx, item, now, policy=admission, park_allowance=True)
+                    if park_allowance
+                    else enqueue_item(tx, item, now, policy=admission)
+                )
                 if getattr(item, 'source_reuse_key', None):
                     marked = tx.get('jobs', item.segment_id)
-                    marked.update(protocol_version=2, source_reuse_version=1)
+                    stamp(marked, 'source_reuse_version')
                     tx.put('jobs', item.segment_id, marked)
             created_units += int(bool(created) and not item.shadow)
             job = tx.get('jobs', item.segment_id)
+            if park_allowance and created and job.get('state') == allowance_hold.STATE:
+                parked += 1
             previous_binding = dict(job.get('projection_binding') or {})
             if previous_binding.get('partial_record') is False:
                 previous_binding.pop('partial_record')
             if not created and previous_binding != serialized_binding:
                 raise ValueError('existing segment cannot change its immutable intake binding')
             job['projection_binding'] = serialized_binding
+            if created and packing_observations and item.segment_id in packing_observations:
+                job['packing_observation'] = packing_observations[item.segment_id]
             if created and binding.native_record:
                 # Admission commits after staging. Reuse the pending-job and
                 # conversation snapshots already read in this transaction.
@@ -263,6 +290,7 @@ def admit(
             '_admitted_seconds': sum(i.duration_seconds for i in items),
             '_reused_seconds': sum(i.duration_seconds for i in items if i.segment_id in (source_aliases or {})),
             '_created_units': created_units,
+            '_allowance_parked': parked,
         }
 
     outcome = store.run(commit)
@@ -271,6 +299,10 @@ def admit(
         upload_metrics.CREATED.labels(upload_metrics.bounded_class((intake or {}).get('upload_entitlement'))).inc(
             created_units
         )
+    parked = outcome.pop('_allowance_parked', 0)
+    if parked:
+        record_decision(DispatchPath.BATCH_INTAKE, False, DispatchReason.ALLOWANCE_EXHAUSTED)
+        logger.info('event=batch_allowance_intake outcome=parked units=%s', parked)
     policy_id = str(outcome.pop('_policy_id', policy.policy_id))
     reused_seconds = outcome.pop('_reused_seconds', 0.0)
     if reused_seconds:

@@ -1,10 +1,19 @@
+import 'live_wal_receipt.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' show min;
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as path;
+import 'package:crypto/crypto.dart';
+import 'package:omi/backend/schema/capture_committed_event.dart';
+import 'package:omi/services/wals/capture_committed_journal.dart';
+import 'package:omi/utils/batch_recording.dart';
+
 import 'package:omi/utils/off_ui_isolate.dart';
+
+part 'orphan_audio_classifier.dart';
+part 'recording_inventory_sources.dart';
 
 /// Internal metadata only. Paths/owners are used to correlate locally and are
 /// NEVER returned by the export. No audio, titles or transcripts are read.
@@ -17,7 +26,9 @@ class RecordingInventoryRow {
       required this.disk,
       this.filePath,
       this.owner,
-      this.rebase = true});
+      this.rebase = true,
+      this.onDeviceOnly = false,
+      this.holdForUser = false});
   final String status;
   final int? captureSeconds;
   final double? audioSeconds;
@@ -26,15 +37,18 @@ class RecordingInventoryRow {
   final String? filePath;
   final String? owner;
   final bool rebase;
+  final bool onDeviceOnly, holdForUser;
 }
 
 /// Concurrent stats per batch while walking a recordings directory.
 const _statConcurrency = 64;
 
 class _Metadata {
-  _Metadata(this.filePath, this.kind, this.bytes, this.modifiedMs, this.changedMs);
+  _Metadata(this.filePath, this.kind, this.bytes, this.modifiedUs, this.changedUs);
   final String filePath, kind;
-  final int bytes, modifiedMs, changedMs;
+  final int bytes, modifiedUs, changedUs;
+  int get modifiedMs => modifiedUs ~/ 1000;
+  int get changedMs => changedUs ~/ 1000;
 }
 
 class _Decoded {
@@ -60,7 +74,8 @@ int? _integer(Object? value) => value is int ? value : null;
 String? _string(Object? value) => value is String ? value : null;
 
 int? _filenameTime(String name) {
-  final token = RegExp(r'_(-?\d+(?:\.\d+)?)\.bin(?:\.part|\.torn)?$').firstMatch(path.basename(name))?.group(1);
+  final token =
+      RegExp(r'_(-?\d+(?:\.\d+)?)(?:_u\d{1,9})?\.bin(?:\.part|\.torn)?$').firstMatch(path.basename(name))?.group(1);
   final value = token == null ? null : double.tryParse(token);
   if (value == null || !value.isFinite) return null;
   return (value >= 100000000000 ? value / 1000 : value).floor();
@@ -82,74 +97,9 @@ RecordingInventoryRow _row(Map row) {
       indexBytes: (_integer(row['storage_total_bytes']) ?? 0).clamp(0, 1 << 62),
       disk: row['storage'] == 'disk',
       filePath: _string(row['file_path']),
-      owner: _string(row['owner_uid']));
-}
-
-_Decoded _decode(Uint8List bytes, String kind) {
-  try {
-    final decoded = jsonDecode(utf8.decode(bytes));
-    if (kind == 'boot_journal') {
-      if (decoded is! List) return _Decoded([], 'invalid_schema');
-      final events = <Map<String, Object?>>[];
-      for (final row in decoded.whereType<Map>()) {
-        final stage = _string(row['stage']) ?? '';
-        final state = row['state'];
-        if ((stage.startsWith('quarantine:') || stage.contains('wal') || stage.contains('recover')) &&
-            const {'begin', 'completed', 'failed', 'invalid_entry', 'invalid_schema', 'unreadable', 'rename_failed'}
-                .contains(state)) {
-          events.add({
-            'category': stage.startsWith('quarantine:') ? 'index_quarantine' : 'loader_or_recovery',
-            'result': state,
-            'at_ms': _integer(row['at_ms'])
-          });
-        }
-      }
-      return _Decoded([], null, loaderEvents: events.length > 24 ? events.sublist(events.length - 24) : events);
-    }
-    if (kind == 'ownership_receipts') {
-      return decoded is Map
-          ? _Decoded([
-              for (final owner in decoded.values)
-                RecordingInventoryRow(
-                    status: 'unknown',
-                    captureSeconds: null,
-                    audioSeconds: null,
-                    indexBytes: 0,
-                    disk: false,
-                    owner: _string(owner))
-            ], null)
-          : _Decoded([], 'invalid_schema');
-    }
-    final List rows;
-    if (kind == 'batch_journal') {
-      if (decoded is! Map) return _Decoded([], 'invalid_schema');
-      rows = [decoded];
-    } else {
-      if (decoded is! Map || decoded['wals'] is! List) return _Decoded([], 'invalid_schema');
-      rows = decoded['wals'] as List;
-    }
-    return _Decoded([
-      for (final row in rows)
-        row is Map
-            ? _row(row)
-            : const RecordingInventoryRow(
-                status: 'unknown', captureSeconds: null, audioSeconds: null, indexBytes: 0, disk: false)
-    ], null,
-        invalidRows: rows.where((row) => row is! Map || row['timer_start'] is! int || row['codec'] is! String).length);
-  } catch (_) {
-    return _Decoded([], 'unreadable');
-  }
-}
-
-String? _kind(String name) {
-  if (name == 'wals.json') return 'main_index';
-  if (name == 'wals_backup.json') return 'backup_index';
-  if (name == 'wals.json.tmp' || name == 'wals_backup.json.tmp') return 'temporary_index';
-  if (name.startsWith('wals.json.corrupt-') || name.startsWith('wals_backup.json.corrupt-')) return 'quarantine_index';
-  if (name.endsWith('.batch-journal')) return 'batch_journal';
-  if (name == 'omibatch_owners.json') return 'ownership_receipts';
-  if (name == 'boot_stages.json') return 'boot_journal';
-  return null;
+      owner: _string(row['owner_uid']),
+      onDeviceOnly: row['on_device_only'] != null && row['on_device_only'] != false,
+      holdForUser: row['hold_for_user'] != null && row['hold_for_user'] != false);
 }
 
 bool _audio(String name) =>
@@ -245,7 +195,7 @@ Map<String, Object?> _summarize(
 /// Async metadata reads never acquire the WAL writer/custody locks. JSON decode
 /// and all large correlation/aggregation run off the UI isolate. Never call the
 /// production loader here: it quarantines, repairs, recovers and writes indexes.
-Future<Map<String, Object?>> captureRecordingInventory(
+Future<RecordingOrphanCensus> captureRecordingCensus(
     {required String documents,
     required Map<String, List<RecordingInventoryRow>> memoryBuckets,
     required int phoneSeconds,
@@ -254,22 +204,36 @@ Future<Map<String, Object?>> captureRecordingInventory(
     List<String> legacyFiles = const [],
     String legacyJobs = '',
     String corruptLegacyJobs = '',
+    bool legacyPreferencesComplete = true,
+    OrphanAudioFrameCache frameCache = const OrphanAudioFrameCache.empty(),
     int? freeBytes}) async {
   final started = DateTime.now().millisecondsSinceEpoch;
   final roots =
       {path.normalize(documents), ...additionalDirectories.where((p) => p.isNotEmpty).map(path.normalize)}.toList();
   final audio = <String, _Metadata>{}, metadata = <_Metadata>[];
   final directoryErrors = <int>[];
+  final sourceDirectories = <String, FileStat>{};
   var statErrors = 0, linksSkipped = 0;
   for (var i = 0; i < roots.length; i++) {
     final files = <File>[];
     try {
+      sourceDirectories[roots[i]] = await Directory(roots[i]).stat();
       await for (final entry in Directory(roots[i]).list(followLinks: false)) {
         if (entry is Link) {
           linksSkipped++;
           continue;
         }
         if (entry is File) files.add(entry);
+        if (entry is Directory && path.basename(entry.path) == 'pendant_ring_custody') {
+          sourceDirectories[entry.path] = await entry.stat();
+          await for (final receipt in entry.list(followLinks: false)) {
+            if (receipt is File) {
+              files.add(receipt);
+            } else {
+              linksSkipped++;
+            }
+          }
+        }
       }
     } catch (_) {
       directoryErrors.add(i);
@@ -286,9 +250,10 @@ Future<Map<String, Object?>> captureRecordingInventory(
           statErrors++;
           continue;
         }
-        final name = path.basename(entry.path), kind = _kind(name);
+        final name = path.basename(entry.path);
+        final kind = path.basename(path.dirname(entry.path)) == 'pendant_ring_custody' ? 'ring_custody' : _kind(name);
         final value = _Metadata(path.normalize(entry.path), kind ?? (_audio(name) ? 'audio' : 'other'), stat.size,
-            stat.modified.millisecondsSinceEpoch, stat.changed.millisecondsSinceEpoch);
+            stat.modified.microsecondsSinceEpoch, stat.changed.microsecondsSinceEpoch);
         // Stat all regular files so a referenced legacy name is not falsely
         // called missing merely because it predates today's audio prefix.
         audio[value.filePath] = value;
@@ -296,7 +261,7 @@ Future<Map<String, Object?>> captureRecordingInventory(
       }
     }
   }
-  final buckets = Map<String, List<RecordingInventoryRow>>.of(memoryBuckets);
+  final buckets = {for (final e in memoryBuckets.entries) e.key: List<RecordingInventoryRow>.of(e.value)};
   final indexFiles = <Map<String, Object?>>[], references = <String>{};
   final loaderEvents = <Map<String, Object?>>[];
   var unreadable = 0, changed = 0, invalidRows = 0;
@@ -314,10 +279,11 @@ Future<Map<String, Object?>> captureRecordingInventory(
         result = _Decoded([], 'size_limit');
       } else {
         final bytes = await File(meta.filePath).readAsBytes();
-        result = await offUiIsolate(() => _decode(bytes, meta.kind),
+        final name = path.basename(meta.filePath);
+        result = await offUiIsolate(() => _decode(bytes, meta.kind, name),
             size: bytes.length, threshold: 0, debugName: 'recording_inventory_decode');
         final after = await File(meta.filePath).stat();
-        if (after.size != meta.bytes || after.modified.millisecondsSinceEpoch != meta.modifiedMs) changed++;
+        if (after.size != meta.bytes || after.modified.microsecondsSinceEpoch != meta.modifiedUs) changed++;
       }
     } catch (_) {
       result = _Decoded([], 'unreadable');
@@ -330,6 +296,17 @@ Future<Map<String, Object?>> captureRecordingInventory(
     indexFiles.add(details);
     loaderEvents.addAll(result.loaderEvents);
     buckets.putIfAbsent(meta.kind, () => []).addAll(result.rows);
+    if (meta.kind == 'capture_committed') {
+      final expected = 'capture_committed_${sha256.convert(utf8.encode(currentOwner))}';
+      final name = path.basename(meta.filePath).replaceFirst(RegExp(r'\.tmp$'), '');
+      buckets[meta.kind]!.add(RecordingInventoryRow(
+          status: 'unknown',
+          captureSeconds: null,
+          audioSeconds: null,
+          indexBytes: 0,
+          disk: false,
+          owner: name == '$expected.json' || name == '$expected.jsonl' ? currentOwner : 'unknown-journal-owner'));
+    }
   }
   final legacy = <RecordingInventoryRow>[
     for (final file in legacyFiles)
@@ -373,7 +350,7 @@ Future<Map<String, Object?>> captureRecordingInventory(
   }
   // All output below is constructed from counts, bounded vocabulary and times.
   // Paths, basenames, row IDs, account IDs and raw JSON never leave this function.
-  return offUiIsolate(() {
+  final summary = await offUiIsolate(() {
     final summaries = <String, Object?>{};
     var unresolvedReferences = 0;
     const allowedBuckets = {
@@ -389,7 +366,9 @@ Future<Map<String, Object?>> captureRecordingInventory(
       'boot_journal',
       'legacy_preference_files',
       'legacy_jobs',
-      'quarantined_legacy_jobs'
+      'quarantined_legacy_jobs',
+      'ring_custody',
+      'capture_committed'
     };
     for (final entry in buckets.entries) {
       if (!allowedBuckets.contains(entry.key)) continue;
@@ -399,7 +378,7 @@ Future<Map<String, Object?>> captureRecordingInventory(
       summary['unreadable_source_files'] = sources.where((f) => f['read_result'] != 'readable').length;
       summaries[entry.key] = summary;
       unresolvedReferences += summary['rows_without_file_reference']! as int;
-      if (entry.key == 'ownership_receipts' || entry.key == 'boot_journal') continue;
+      if (entry.key == 'boot_journal' || entry.key == 'capture_committed') continue;
       for (final row in entry.value) {
         final ref = _reference(row, documents);
         if (ref != null) references.add(ref);
@@ -419,7 +398,7 @@ Future<Map<String, Object?>> captureRecordingInventory(
         'regular_files_seen': audio.values.where((m) => path.dirname(m.filePath) == roots[i]).length,
         'audio_files': files.length,
         'audio_bytes': files.fold<int>(0, (n, m) => n + m.bytes),
-        'working_audio_files': files.where((m) => m.filePath.endsWith('.part')).length,
+        'working_audio_files': files.where((m) => m.filePath.endsWith('.part') || m.filePath.endsWith('.torn')).length,
         'referenced_audio_files': files.length - orphans.length,
         'unreferenced_audio_files': orphans.length,
         'unreferenced_audio_bytes': orphans.fold<int>(0, (n, m) => n + m.bytes),
@@ -451,7 +430,10 @@ Future<Map<String, Object?>> captureRecordingInventory(
       'symlinks_skipped': linksSkipped,
       'orphan_scope': 'unreferenced_by_readable_indexes_journals_preferences_and_memory_snapshot',
       'audio_file_scope': 'audio_prefix_bin_part_torn_and_wav',
-      'orphan_census_complete': unreadable == 0 &&
+      'local_only_history': buckets.values.expand((rows) => rows).any((r) => r.onDeviceOnly || r.holdForUser),
+      'legacy_preferences_complete': legacyPreferencesComplete,
+      'orphan_census_complete': legacyPreferencesComplete &&
+          unreadable == 0 &&
           invalidRows == 0 &&
           unresolvedReferences == 0 &&
           changed == 0 &&
@@ -471,4 +453,78 @@ Future<Map<String, Object?>> captureRecordingInventory(
       size: audio.length + buckets.values.fold<int>(0, (n, r) => n + r.length),
       threshold: 0,
       debugName: 'recording_inventory_summary');
+  // Keep local identities separate from the aggregate export. Isolate closures
+  // receive immutable snapshots, never the ledger or its capture queue.
+  final allReferences = <String>{
+    for (final entry in buckets.entries)
+      if (entry.key != 'boot_journal' && entry.key != 'capture_committed')
+        for (final row in entry.value)
+          if (_reference(row, documents) case final ref?) ref,
+  };
+  // Historical preference/job references have no owner stamp; they must not
+  // disappear from phone-wide ownership proof merely because they are legacy.
+  final ownerBuckets = buckets.entries.where((e) => e.key != 'boot_journal');
+  final singleOwner = currentOwner.isNotEmpty &&
+      ownerBuckets.expand((e) => e.value).every((r) => r.owner == currentOwner) &&
+      buckets.entries
+          .where((e) => const {
+                'active',
+                'retired',
+                'foreign',
+                'main_index',
+                'backup_index',
+                'temporary_index',
+                'quarantine_index'
+              }.contains(e.key))
+          .expand((e) => e.value)
+          .any((r) => r.owner == currentOwner);
+  final complete = summary['orphan_census_complete'] == true;
+  // A reference that differs only in case (or directory alias) can name the same file on
+  // case-insensitive storage. Reserve by case-folded basename so such a file is never an orphan.
+  final referencedNames = {for (final r in allReferences) path.basename(r).toLowerCase()};
+  final candidates = audio.values
+      .where((m) =>
+          _audio(path.basename(m.filePath)) &&
+          !LiveWalReceipt.isManagedBasename(path.basename(m.filePath)) &&
+          !allReferences.contains(m.filePath) &&
+          !referencedNames.contains(path.basename(m.filePath).toLowerCase()))
+      .toList();
+  final classified = await offUiIsolate(
+      () => _classifyOrphans(candidates, phoneSeconds, singleOwner && complete, frameCache),
+      size: candidates.length,
+      threshold: 0,
+      debugName: 'orphan_audio_classifier');
+  summary['orphan_classification'] = {
+    ...orphanClassificationSummary(classified.files, phoneSeconds),
+    'frame_files_read': classified.reads,
+    'frame_cache_hits': classified.hits,
+  };
+  return RecordingOrphanCensus(summary, classified.files, sourceDirectories, metadata, currentOwner, classified.cache);
 }
+
+/// Aggregate-only diagnostics. Local paths/owners in the census never escape.
+Future<Map<String, Object?>> captureRecordingInventory(
+        {required String documents,
+        required Map<String, List<RecordingInventoryRow>> memoryBuckets,
+        required int phoneSeconds,
+        String currentOwner = '',
+        List<String> additionalDirectories = const [],
+        List<String> legacyFiles = const [],
+        String legacyJobs = '',
+        String corruptLegacyJobs = '',
+        bool legacyPreferencesComplete = true,
+        OrphanAudioFrameCache frameCache = const OrphanAudioFrameCache.empty(),
+        int? freeBytes}) async =>
+    (await captureRecordingCensus(
+            documents: documents,
+            memoryBuckets: memoryBuckets,
+            phoneSeconds: phoneSeconds,
+            currentOwner: currentOwner,
+            additionalDirectories: additionalDirectories,
+            legacyFiles: legacyFiles,
+            legacyJobs: legacyJobs,
+            corruptLegacyJobs: corruptLegacyJobs,
+            legacyPreferencesComplete: legacyPreferencesComplete,
+            frameCache: frameCache,
+            freeBytes: freeBytes))
+        .summary;

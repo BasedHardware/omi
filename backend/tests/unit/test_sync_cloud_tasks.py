@@ -1334,6 +1334,11 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.conversations.deterministic_minimum'] = MagicMock()
 
     sys.modules['utils'].__path__ = []
+    # The upload-time unlimited_v2 backfill day cap defaults off; a bare MagicMock
+    # attribute would read as enabled and defer every historical upload.
+    sys.modules['utils'].backfill_hours_cap = types.SimpleNamespace(
+        cap_enabled=lambda: False, defers_upload=lambda *_a, **_k: False
+    )
     # These tests exercise Cloud Tasks dispatch, not voiceprint acquisition.
     # Register the new shared dependency under the existing non-package stubs.
     sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)

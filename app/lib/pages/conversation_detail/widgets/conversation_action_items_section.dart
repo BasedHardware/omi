@@ -466,7 +466,7 @@ class _ConversationActionItemsSectionState extends State<ConversationActionItems
                   const SizedBox(width: OmiSpacing.xs),
                   Flexible(
                     child: Text(
-                      l10n.meetingActionItemsTitle,
+                      l10n.tasks,
                       style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
                     ),
                   ),

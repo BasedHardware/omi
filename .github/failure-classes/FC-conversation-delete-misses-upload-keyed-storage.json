@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-conversation-delete-misses-upload-keyed-storage",
+  "family": "other",
+  "violated_contract": "Deleting a conversation must remove every copy of its audio and transcript, including state keyed by the sync upload or a provisional capture identity rather than the conversation id. Sync staging (syncing/{uid}/{job_id}/, no lifecycle delete) and batch-pipeline rows carrying the capture identity survived conversation deletion; non-cascade deletes kept all audio.",
+  "canonical_prevention": "Conversation deletion resolves upload-keyed storage through the sync content ledger (database/sync_ledger_sources.py) and erases it with the existing owner-prefix purge and batch purges; both cascade modes schedule the audio purge.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_ledger_sources.py",
+    "backend/tests/unit/test_owner_storage_purge_and_gate.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/sync_ledger_sources.py",
+    "backend/utils/other/storage.py",
+    "backend/database/batch_pipeline_purge.py",
+    "backend/database/batch_pipeline_conversation_purge.py",
+    "backend/routers/conversations.py"
+  ],
+  "status": "open"
+}

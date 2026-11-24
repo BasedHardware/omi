@@ -2277,6 +2277,9 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('conversations', 'live_transcript_replay_receipt'),
     # Internal, bounded metadata read by document ID only; descendants inherit.
     ('conversations', 'owner_recognition_diagnostics'),
+    # Lease observations are projected from an existing owner index.
+    ('batch_pipeline_prod_jobs', 'packing_observation'),
+    ('batch_pipeline_dev_jobs', 'packing_observation'),
 )
 
 FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_REQUIREMENTS + (
@@ -2297,6 +2300,9 @@ FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_RE
     # Census stock: stage equality over the collection group needs its own
     # group-scoped single-field index; automatic indexes are collection-scoped.
     FieldIndexRequirement('pipeline_ledger_stage_group_ascending', 'pipeline_ledger', 'stage', ('ASCENDING',)),
+    FieldIndexRequirement(
+        'deleted_conversations_deleted_at_group_ascending', 'deleted_conversations', 'deleted_at', ('ASCENDING',)
+    ),
     FieldIndexRequirement('conversations_id_group_ascending', 'conversations', 'id', ('ASCENDING',)),
     FieldIndexRequirement('conversations_source_group_ascending', 'conversations', 'source', ('ASCENDING',)),
     FieldIndexRequirement('conversations_status_group_ascending', 'conversations', 'status', ('ASCENDING',)),

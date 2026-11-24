@@ -31,8 +31,8 @@ fi
 # every selected gate after a failure and reports all of them in one summary.
 # PRE_PUSH_PREFLIGHT_ALL is the hook-safe env form; pre-push-singleflight also
 # fingerprints it, so keep-going and fail-fast pushes cannot join the same run.
-# The default stays fail-fast so ordinary preflight runs retain their existing
-# duration; use the opt-in mode when a complete repair list is useful.
+# The shared preflight below keeps going in the local lane using the existing
+# manifest runner. Set either switch to 0 to make that lane fail fast.
 KEEP_GOING=0
 for flag_value in "${OMI_PREFLIGHT_ALL:-}" "${PRE_PUSH_PREFLIGHT_ALL:-}"; do
   case "$flag_value" in

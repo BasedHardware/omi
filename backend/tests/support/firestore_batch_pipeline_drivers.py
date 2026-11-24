@@ -20,12 +20,6 @@ def _repair_age_orders(client):
     return patch.object(refactor_modes, 'record_seal_repair_age_order', side_effect=cycle((False, True)))
 
 
-def _poll_skip_modes(client):
-    from database import batch_pipeline_store
-
-    return patch.object(batch_pipeline_store, 'held_poll_skip_enabled', side_effect=cycle((False, True)))
-
-
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
@@ -315,6 +309,10 @@ def entries():
             neutrals={'limit': (10, 'bounded page size')},
         ),
         DriverEntry(
+            'utils.batch_pipeline.parked_sweep.parked_page',
+            domains={'namespace': namespaces, 'expired': [False, True], 'after': [None, 'held-09']},
+        ),
+        DriverEntry(
             'database.batch_pipeline_quarantine_recovery.dead_held_candidates',
             domains={'namespace': namespaces, 'after_id': [None, 'held-09']},
             neutrals={'limit': (32, 'bounded page size')},
@@ -360,7 +358,15 @@ def entries():
                 CallerProfile('finish_clock', {'due_before': [3000000.0], 'followup_due_before': [None]}),
                 CallerProfile('followup_clock', {'due_before': [None], 'followup_due_before': [3000000.0]}),
             ),
-            neutrals={'limit': (100, 'bounded page size only')},
+            neutrals={
+                'limit': (100, 'bounded page size only'),
+                'include_outbox': (False, 'reports a subset of the existing page without changing query shape'),
+            },
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.projection_outbox_page',
+            domains={'namespace': namespaces},
+            neutrals={'now': (3000000.0, 'due cutoff operand only'), 'limit': (100, 'bounded page size only')},
         ),
         DriverEntry(
             'database.batch_pipeline_store.projection_successor',
@@ -384,12 +390,26 @@ def entries():
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_page',
             covered_by=('database.batch_pipeline_store.projection_page',),
-            reason='store adapter forwards namespace, limit, cursor, drain states, independent clock cutoffs and async exclusion unchanged',
+            reason='store adapter forwards namespace, limit, cursor, drain states and clocks',
             expect_observed=False,
             # Re-reviewed for the scoped dual-clock composition: both clock cutoffs and
             # async exclusion are forwarded unchanged to the recorded projection_page driver.
             # Clock-order exclusivity and finish-only exclusion stay in the query builder.
-            body_digest='96f024578c9d338e4fb3a528f1c59801c928167da8ddf0d2747d686700b46ff5',
+            body_digest='4284286d5c06295eaea7b2bd915d0bdc5028bd24534e0426f08fd384b055e628',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.projection_page_with_outbox',
+            covered_by=('database.batch_pipeline_store.projection_page',),
+            reason='requests coverage metadata on the same legacy page and forwards query scope unchanged',
+            expect_observed=False,
+            body_digest='f13299101963feeb96452b98bd9efa5df4d171133ecbf8179ea00ef2fee69140',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.projection_outbox_page',
+            covered_by=('database.batch_pipeline_store.projection_outbox_page',),
+            reason='store adapter forwards namespace, time and page size unchanged',
+            expect_observed=False,
+            body_digest='d14bfb2b36919dacd8c818eeaadb5c21120d7de1cd77c7a082b73e09ad0242c5',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_pending',
@@ -491,11 +511,25 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.first_pending',
-            trials=2,
-            patchers=(_poll_skip_modes,),
             base={'owner_key': 'owner-hash'},
-            domains={'namespace': namespaces, 'skip_terminal': [False, True]},
+            domains={'namespace': namespaces},
             neutrals={'transaction': (None, 'transaction binding only, no shape change')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.pending_page',
+            covered_by=('database.batch_pipeline_store.pending_page',),
+            reason='thin store adapter delegates unchanged query arguments to the named query builder',
+            expect_observed=False,
+            body_digest='b7bcced82f592d8f14f8cdae8f7bde59e27b63c90e165ec175b762e30876cb5c',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.pending_page',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces},
+            neutrals={
+                'limit': (129, 'first_pending shape; only the bounded stale-head page size differs'),
+                'transaction': (None, 'transaction binding only, no shape change'),
+            },
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.first_ready_pending',
@@ -564,8 +598,6 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.fresh_pending',
-            trials=2,
-            patchers=(_poll_skip_modes,),
             base={'owner_key': 'owner-hash'},
             domains={'namespace': namespaces},
             neutrals={'limit': (8, 'bounded page size')},

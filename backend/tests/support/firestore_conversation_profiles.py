@@ -62,10 +62,6 @@ COUNT_PROFILES = (
 
 WITHOUT_PHOTOS_PROFILES = (
     _profile(
-        'v3-live-conversation',
-        statuses=[['in_progress']],
-    ),
-    _profile(
         'developer-list',
         statuses=[['completed']],
         categories=[[], ['personal'], ['personal', 'technology']],

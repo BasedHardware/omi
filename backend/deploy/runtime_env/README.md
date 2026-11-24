@@ -14,6 +14,35 @@ Keep it out of deployment defaults and use the
 one-time zero seed, controller/guard cutover and rollback. Existing env values
 are fallback only, never evidence of effective admission after that seed.
 
+## Live-only values are a debt with a due date
+
+A value that exists only on a serving host is not configuration: it is an
+unreviewed change that the next listen/pusher Helm roll deletes (Helm replaces
+the env list) and the next Cloud Run train preserves invisibly (the train folds
+live values back). Do not change production env with `kubectl set env` or
+`gcloud run services update --update-env-vars` as a shortcut. The sanctioned
+paths are:
+
+- **Reviewed Git** (this manifest and the charts): the default for every public
+  value, including kill switches flipped in an incident. Open the PR in the same
+  task; the next deploy applies it.
+- **Runtime-owned** (batch ramp percent, `rollout_cohorts/*` documents):
+  deliberately absent from this manifest, changed through their own tools and
+  never expected to match Git.
+- **Private values** (uid-bearing cohorts, tokens): names in Git, values in
+  Secret Manager. On backend-listen the chart's `privateSecretEnv` declares the
+  names and the `LISTEN_PRIVATE_ENV` document holds the values; a value change
+  is a new version, force-sync and rollout restart
+  ([runbook](../../docs/runbooks/listen-private-env.md)), never a code deploy.
+  The retired `LISTEN_PRIVATE_VALUES_YAML` privateEnv overlay is refused by the
+  chart.
+
+If an incident truly needs a live edit before a PR can land, it is a loan: record
+it in the meta repo's drift ledger (`infra/rollout/bin/drift_ledger.py add` with
+owner, ruling and expiry, scoped to one target) and open the fold-back PR in the
+same task. The train's drift gate refuses a live-only key nobody owns; a
+refusal is a finding, not an obstacle.
+
 Version 2 requires the backend voice route's staging bucket as an explicit
 literal: `syncing-local-development` in dev and `syncing-local` in prod. Normal
 admission and the existing prebuild preflight reject missing, blank, implicit,
@@ -118,12 +147,8 @@ explicit prod values): candidate fanout 16, parallel admission true, idle max 10
 and `firestoreReadLevers: '{}'` outside prod. Prod keeps integration's non-privacy map except `usage_month_cache:0` and
 `usage_month_total:0`. The API-only O2b admission below does not move the worker:
 its source retains `bpp_decision_cache:100`, `privacy_checks_shadow:10` and
-`bpp_owner_memo_enforce:0`, plus `batch_timeliness_leader:100` and held-poll skip.
-The offline parity check requires exactly that named role split and still rejects
-other divergence. Its kill switch is setting `heldPollSkipEnabled` to false.
-Projection finish backoff remains at its code default, off (SCA-2024).
-The three control knobs
-also have matching base declarations on serving batch hosts; pusher does not run
+`bpp_owner_memo_enforce:0`, plus `batch_timeliness_leader:100`. The offline parity check requires
+that role split. The three control knobs also have matching base declarations on serving batch hosts; pusher does not run
 the batch scheduler/pump and the co-host contract classifies them listen-only.
 The retired WQ12 privacy lever is absent from worker and serving-role literals.
 Worker rollback: 64 / false / 2 / `{}` respectively. See
@@ -144,8 +169,10 @@ The existing backend unit selector runs these checks when any source changes.
 
 `firestore_read_lever_policy.lever_expiry` in `_base.yaml` is a surface-keyed
 map: each partial `(surface, lever)` entry binds the exact `value` to an ISO UTC
-`expires` date. Dates must be today through seven days out. Existing lifecycle approvals
-end on 2026-11-17. The three retained prod backfill/worker shadow-10 entries
+`expires` date. Dates must be today through seven days out. The lifecycle
+`lifecycle_record_pending_head:5` approvals ended on 2026-11-17 with no owner decision and
+started failing every backend PR; they were renewed unchanged through 2026-11-24 on 2026-11-18
+(value and admission unchanged) so the owning lane can decide 0, 100 or another renewal. The three retained prod backfill/worker shadow-10 entries
 are renewed through 2026-11-24 under the margin lead's panel F3 disposition to
 retain their excluded scope; percentages and runtime admission do not change.
 An expiry deadline is not permission to expand the rollout.

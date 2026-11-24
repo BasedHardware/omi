@@ -15,12 +15,12 @@ from typing import Any
 
 from config.firestore_read_levers import lever_enabled, lever_percent
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from database.batch_account_authority_schema import PRIVACY_COLLECTION as PRIVACY_COLLECTION
 from database.batch_privacy_attempt import SCHEMA_FIELD, TOKEN_FIELD, TOKEN_SCHEMA, current_attempt, token_version
 from database import privacy_check_metrics as metrics
 from database import batch_privacy_negative_cache as negative_cache
 from database.privacy_ttl_cache import BoundedTTLCache, disabled as ttl_disabled, enabled as ttl_enabled, is_missing
 
-PRIVACY_COLLECTION = 'batch_pipeline_privacy'
 # Token-validated generations shared across task attempts in this process
 # (lever bpp_decision_cache). Keys hold the client object itself, so planes and
 # recycled ids never mix; entries expire 60s after the authority walk started.
@@ -82,6 +82,44 @@ def privacy_owner_key(uid: str) -> str:
     return hashlib.sha256(uid.encode()).hexdigest()
 
 
+def matches_live_privacy_version(client: Any, uid: str, generation: int, version: tuple) -> bool:
+    """The same writer fence and rollout admission used by the id-set memo."""
+    if not lever_enabled('bpp_generation_memo', uid) or lever_percent('privacy_checks_shadow') != 0 or ttl_disabled():
+        return False
+    try:
+        reference = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
+        snapshot = metrics.read_snapshot('batch', reference, timeout=2, retry=None)
+        actual = (snapshot.to_dict() or {}).get('generation', 0)
+        return token_version(snapshot) == version and type(actual) is int and actual == generation
+    except Exception:
+        return False
+
+
+@metrics.with_batch_plan
+def read_batch_owner_snapshot(
+    client: Any,
+    transaction: Any,
+    uid: str,
+    *,
+    conversation_ids: Iterable[str],
+    expected_generation: int | None,
+    snapshots: dict,
+    read_budget,
+) -> int:
+    """Read the live privacy decision and its rows inside a bounded read-only snapshot."""
+    metrics.called('batch')
+    with metrics.mode_scope('live'):
+        return _assert_batch_write_allowed_live(
+            client,
+            transaction,
+            uid,
+            conversation_ids=conversation_ids,
+            expected_generation=expected_generation,
+            snapshots=snapshots,
+            read_budget=read_budget,
+        )
+
+
 @metrics.with_batch_plan
 def assert_batch_write_allowed(
     client: Any,
@@ -94,6 +132,7 @@ def assert_batch_write_allowed(
     allow_token_mint: bool = True,
     read_budget=None,
     verified_out: set | None = None,
+    live_version_out: list | None = None,
 ) -> int:
     """Measure the authorizing decision; shadow always runs after live authority.
 
@@ -106,6 +145,8 @@ def assert_batch_write_allowed(
     ``verified_out`` optionally receives every conversation document id this
     check actually verified, redirect hops included. Callers use it to keep a
     distinct-document budget across several checks without an export.
+    ``live_version_out`` receives the token revision only after a successful
+    live walk that issued its reads without the negative cache.
     """
     metrics.called('batch')
     # A generation-memo hit would hide the live lookups needed for shadow proof.
@@ -140,6 +181,8 @@ def assert_batch_write_allowed(
         read_budget=read_budget,
         verified_out=verified_out,
     )
+    if live_version_out is not None and not shadow:
+        kwargs['live_version_out'] = live_version_out
     if enforce:
         kwargs['allow_token_mint'] = allow_token_mint
     # The candidate always gets a throwaway export: a comparison may fill its
@@ -227,6 +270,7 @@ def _assert_batch_write_allowed_memo(
     allow_token_mint: bool = True,
     read_budget=None,
     verified_out: set | None = None,
+    live_version_out: list | None = None,
     owner_candidate: bool = False,
 ):
     # Keep the disabled path's live read order and counts unchanged.
@@ -283,6 +327,7 @@ def _assert_batch_write_allowed_memo(
             snapshots=snapshots,
             read_budget=read_budget,
             verified_out=verified_out,
+            live_version_out=live_version_out,
         )
     ids = frozenset(conversation_ids)
     # Retain the client object itself, preventing id reuse and cross-plane hits.
@@ -407,6 +452,7 @@ def _assert_batch_write_allowed_memo(
             read_budget=read_budget,
             walk_out=walk_out,
             verified_out=verified_out,
+            live_version_out=live_version_out,
         )
         if eligible:
             if idset_on:
@@ -576,6 +622,7 @@ def _assert_batch_write_allowed_live(
     privacy_snapshot: Any = None,
     walk_out: dict | None = None,
     verified_out: set | None = None,
+    live_version_out: list | None = None,
 ) -> int:
     """Fence a mutation. Admission records the returned generation for replay.
 
@@ -626,9 +673,9 @@ def _assert_batch_write_allowed_live(
         or data.get('migration_status') is not None
     ):
         raise BatchPrivacyBlocked('data_protection_changed')
-    privacy = (
-        privacy_snapshot if privacy_snapshot is not None else read(client.collection(PRIVACY_COLLECTION).document(key))
-    ).to_dict() or {}
+    if privacy_snapshot is None:
+        privacy_snapshot = read(client.collection(PRIVACY_COLLECTION).document(key))
+    privacy = privacy_snapshot.to_dict() or {}
     generation = int(privacy.get('generation', 0))
     if (
         privacy.get('blocked')
@@ -652,6 +699,10 @@ def _assert_batch_write_allowed_live(
         walk_out=walk_out,
         verified_out=verified_out,
     )
+    if live_version_out is not None and not negative_on:
+        version = token_version(privacy_snapshot)
+        if version is not None:
+            live_version_out.append(version)
     return generation
 
 
@@ -831,6 +882,14 @@ def _mint_worker() -> None:
             metrics.memo_result('batch', 'mint_error')
 
 
+def privacy_purge_patch(previous: dict, *, blocked: bool) -> dict:
+    return {
+        'generation': int(previous.get('generation', 0)) + 1,
+        'blocked': blocked or bool(previous.get('blocked')),
+        'purging': True,
+    }
+
+
 def advance_privacy_generation(client: Any, uid: str, *, blocked: bool) -> int:
     """Invalidate in-flight references before account/protection cleanup."""
     from google.cloud import firestore
@@ -840,11 +899,9 @@ def advance_privacy_generation(client: Any, uid: str, *, blocked: bool) -> int:
     @firestore.transactional
     def advance(transaction):
         previous = reference.get(transaction=transaction).to_dict() or {}
-        generation = int(previous.get('generation', 0)) + 1
-        transaction.set(
-            reference, {'generation': generation, 'blocked': blocked or bool(previous.get('blocked')), 'purging': True}
-        )
-        return generation
+        patch = privacy_purge_patch(previous, blocked=blocked)
+        transaction.set(reference, patch, merge=True)
+        return patch['generation']
 
     return advance(client.transaction())
 

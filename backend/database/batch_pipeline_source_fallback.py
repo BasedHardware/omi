@@ -8,11 +8,13 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 from config.policy import BatchUnitPolicy
+from database.batch_pipeline_projection_outbox import arm as arm_projection
 from database.batch_pipeline_staging import artifact_id
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_policy import check_unit_privacy
 from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
 from utils.batch_pipeline.retention import RECEIPT_RETENTION
+from utils.batch_pipeline.result_protocol import REQUIRED, stamp, merge_markers, supported
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.capture import chunk_identity
 
@@ -29,6 +31,8 @@ def enqueue(session, view, item, now):
         or (entry.get('projection') or {}).get('disposition') not in {None, 'source_alias'}
     ):
         raise ProjectionBlocked('unresolved retained alias required for fallback')
+    if not supported({'protocol_version': 1, **job}):
+        raise ProjectionBlocked('unsupported alias result requirements for fallback')
     check_unit_privacy(view, job)
     binding = job['projection_binding']
     own_ids = sorted(
@@ -88,8 +92,6 @@ def enqueue(session, view, item, now):
         source_alias_fallback=marker,
         source_conversation_ids=own_ids,
         requires_compute_admission=False,
-        protocol_version=2,
-        source_reuse_version=1,
         state='provider_pending',
         stt_route={
             'stt_route': 'provider',
@@ -106,6 +108,8 @@ def enqueue(session, view, item, now):
     )
     for name in ('source_alias', 'source_alias_of', 'source_alias_version', 'result', 'ready_at', 'conversation_ids'):
         job.pop(name, None)
+    job.pop(REQUIRED, None)
+    stamp(job, 'source_reuse_version')
     for key, artifact in reservations:
         artifact['source_conversation_ids'] = own_ids
         artifact['conversation_ids'] = own_ids
@@ -137,6 +141,9 @@ def enqueue(session, view, item, now):
 
 def merge_ready(tx, job, now):
     """Replace only the unresolved marker; never append a second owner-log slot."""
+    markers = merge_markers(job)
+    if markers is None:
+        return None
     existing = tx.get('results', job['segment_id'])
     entry = dict((job.get('source_alias_fallback') or {}).get('log_slot') or {})
     binding = job.get('projection_binding') or {}
@@ -159,11 +166,15 @@ def merge_ready(tx, job, now):
     entry.update(
         result=job['result'],
         protocol_version=2,
-        source_reuse_version=1,
+        **markers,
         projection_redriven_at=now,
         projection_state='pending',
+        # A redriven slot starts a new head-wait episode, as the release reset does.
+        projection_blocked_since=None,
+        projection_block_type=None,
     )
     entry.pop('source_alias_version', None)
+    entry.update(arm_projection(entry, now))
     job.update(state='committed', merge_pending=False)
     owner['revision'] = owner.get('revision', 0) + 1
     tx.put('results', job['segment_id'], entry)

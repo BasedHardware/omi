@@ -77,6 +77,7 @@ def write(transaction, prepared, result, now):
             {
                 'status': 'completed',
                 'result': {**result, 'total_segments': member['original_units']},
+                'completed_at': stamp,
                 'updated_at': stamp,
                 'expires_at': expires,
             },

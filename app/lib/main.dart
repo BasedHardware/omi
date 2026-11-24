@@ -622,7 +622,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void _deinit() {
     unawaited(OnboardingSyncRuntime.dispose());
     Logger.debug("App > _deinit");
-    ServiceManager.instance().deinit();
+    unawaited(ServiceManager.instance().deinit().catchError((Object error) {
+      Logger.error('App service shutdown failed: ${error.runtimeType}');
+    }));
     ApiClient.dispose();
   }
 
@@ -722,6 +724,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               peopleProvider: people,
               usageProvider: usage,
               episodeProvider: episodes,
+              conversationsV3: context.read<ConversationsV3Provider>(),
             );
             return (previous?..updateExternalActions(externalActions)) ??
                 composeProductionCaptureProvider(

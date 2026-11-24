@@ -112,11 +112,16 @@ def sealed(uid: str, conversation_data: Mapping[str, Any], *, firestore_client: 
     """Whether the server's own seal proves this batch-owned live row ended with all its text landed.
 
     The row decides first with no read (``policy.seal_barrier``); only a row
-    that passes reads its ledger document once. A read failure is "not proven".
+    that passes reads its ledger document once, unless projection already
+    stamped every unit landed or held for recovery on the row. A read failure
+    is "not proven".
     """
     capture_id = conversation_data.get('id')
     if not policy.enabled() or policy.seal_barrier(conversation_data) is not None or not isinstance(capture_id, str):
         return False
+    if policy.seal_proof(conversation_data, None) == 'units_held':
+        policy.record_proof('sealed_held')
+        return True
     try:
         ledger = load_ledger(uid, capture_id, firestore_client=firestore_client)
     except Exception as error:
