@@ -7238,6 +7238,15 @@ empty_asr_attempt (raw GPU failures, may repeat). Commit sources distinguish
 `gpu_pump` from CPU `ordered_merge`; aggregate across both processes.
 `omi_batch_pipeline_projected_segments_total{authority=batch|legacy|abstained}`
 counts newly persisted survivors, not input words or complete conversations.
+`omi_batch_pipeline_recovery_recognizer_outcomes_total{modulate,soniox,speech,language_guarded,result}`
+adds one sample per committed recovery settlement, read from the unit's own
+recognizer receipts in the settling transaction. `modulate` and `soniox` are
+`words|empty|error|refused|started|not_called`; `speech` buckets the held VAD
+census as `none` (below the silence threshold), `under_2s`, `2s_or_more` or
+`unmeasured`; `result` is `words|silence|no_recoverable_speech|failed_held`.
+It shows how often our detectors measured speech while both recognizers
+returned nothing, and each recognizer's answers on their own. It records
+disagreement, not which side was right.
 No telemetry reads are added. Counters can miss a lost commit reply or process
 exit; they do not replace durable receipts. Projection completion establishes
 canonical persistence and enrichment scheduling, not completed summary/client display.

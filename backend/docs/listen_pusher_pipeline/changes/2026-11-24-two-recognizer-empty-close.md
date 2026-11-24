@@ -29,5 +29,16 @@ Production readback before enabling (2026-11-24, six hours of recovery logs):
 the same period. Of the sampled second-provider calls in that window, 41
 returned empty, 24 returned words and 7 failed. The logs do not separate
 language-guarded units, so the share this switch would close is at most that
-figure. After enabling, compare `event=batch_terminal_empty` with
-`event=batch_recovery_failure reason=empty_asr` on the recovery role.
+figure.
+
+Readout: `omi_batch_pipeline_recovery_recognizer_outcomes_total` (behind the
+existing `BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED`, no new switch) counts
+every committed recovery settlement by Modulate's answer, Soniox's answer, the
+held speech our detectors measured (`none`, `under_2s`, `2s_or_more`,
+`unmeasured`), the language guard and the result. Both the switch on and off
+report the two-empty case: `modulate="empty",soniox="empty"` with
+`result="failed_held"` before and `result="no_recoverable_speech"` after.
+The recovery role's scrape profile already keeps `omi_batch_pipeline_.*`, so
+no deploy change is needed for it to be readable. Until now Modulate's
+answer had no counter, and `omi_batch_recovery_second_provider_total` is not
+in that keep list.
