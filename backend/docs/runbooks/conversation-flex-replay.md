@@ -3,7 +3,7 @@
 SCA-4247 uses the existing Luna lanes. The finalization worker opts in for
 CAPTURE_END structure and L1 fanout using the recording close time; each phase
 has at most 57 seconds of gateway time. Standard reserves are 40 seconds for
-structure, 24 for L1, and 30 for V3 summary. Summary opts in only during the
+structure, 24 for L1, and 42 for V3 summary. Summary opts in only during the
 existing background model call. Interactive and catch-up callers pass no
 background budget; tool turns, streaming requests, BYOK, and caller-selected
 tiers do not qualify. The shared gateway retries one Flex 429 if the provider

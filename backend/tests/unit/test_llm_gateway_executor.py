@@ -1284,7 +1284,7 @@ def byok_policy():
     [
         ('conv-structure', 57_000, 17_000),
         ('memory-l1', 57_000, 33_000),
-        ('conversation-v3-summary', 57_000, 27_000),
+        ('conversation-v3-summary', 57_000, 15_000),
         ('conversation-v3-outline', 110_000, 65_000),
     ],
 )
@@ -1295,7 +1295,7 @@ async def test_background_flex_retries_within_shared_budget(monkeypatch, lane, b
     reply = fake_success_response(resolved.active_route.primary)
     provider = FakeChatCompletionProvider(
         [
-            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=3),
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=2),
             {**reply, 'service_tier': 'flex'},
         ]
     )
@@ -1307,9 +1307,9 @@ async def test_background_flex_retries_within_shared_budget(monkeypatch, lane, b
         resolved, omi_credentials(), ProviderRegistry({'openai': provider}), background_flex_budget_ms=budget
     )
 
-    assert slept == [3]
+    assert slept == [2]
     assert [call.request['service_tier'] for call in provider.calls] == ['flex', 'flex']
-    assert [call.timeout_ms for call in provider.calls] == pytest.approx([flex_ms, flex_ms - 3_000], abs=1)
+    assert [call.timeout_ms for call in provider.calls] == pytest.approx([flex_ms, flex_ms - 2_000], abs=1)
     assert REGISTRY.get_sample_value('llm_gateway_flex_first_total', outcome) == previous + 1
 
 

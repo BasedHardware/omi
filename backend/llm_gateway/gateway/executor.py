@@ -564,7 +564,7 @@ BACKGROUND_FLEX_MAX_BUDGET_MS = 110_000
 BACKGROUND_FLEX_STANDARD_RESERVE_MS = {
     'omi:auto:conv-structure': 40_000,
     'omi:auto:memory-l1': 24_000,
-    'omi:auto:conversation-v3-summary': 30_000,
+    'omi:auto:conversation-v3-summary': 42_000,
 }
 BACKGROUND_FLEX_MIN_ATTEMPT_MS = 12_000
 BACKGROUND_FLEX_MAX_ATTEMPTS = 2

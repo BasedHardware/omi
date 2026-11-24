@@ -113,8 +113,8 @@ async def summary_model_attempt():
     feature = 'conversation_v3_summary'
     key = 'summary-' + cid
     with background_flex.background_flex(closed_at, features=frozenset({feature})):
-        # The gateway needs 30s Standard reserve plus 12s of Flex headroom.
-        if background_flex.budget_ms(feature) <= 42_000:
+        # The gateway needs 42s Standard reserve plus 12s of Flex headroom.
+        if background_flex.budget_ms(feature) <= 54_000:
             yield
             return
         await run_blocking(db_executor, leases.mark_llm_preemptible, uid, key, token, True)
