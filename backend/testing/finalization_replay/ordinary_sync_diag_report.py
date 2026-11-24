@@ -30,6 +30,19 @@ UNREADABLE_CASE = 'unreadable-ciphertext-dead-letters'
 UNREADABLE_PARK_RULE = 'SCA-4178: verified unreadable retry age-park consequences; both sides retained ciphertext'
 UNREADABLE_RETRY_BUG = 'python_bug:unreadable_ciphertext_retry_until_age_gate'
 UNREADABLE_RETRY_ISSUE = 'SCA-4178'
+GO_COORDINATION_FIELDS = {
+    'go_sync_inline_fanout_epoch',
+    'go_sync_inline_fanout_revision',
+    'go_empty_discard_fanout_epoch',
+    'go_sync_empty_discard_home_revision',
+}
+UNREADABLE_RETRY_CONSEQUENCE_PATHS = {
+    '/conversation/finalization_status': 'missing_in_python',
+    '/go/admitted': 'invalid_binding',
+    '/python/batch_pipeline_privacy/final': 'missing_document',
+    '/python/batch_pipeline_privacy/final_snapshot': 'invalid_binding',
+    '/python/firestore_operations/batch_pipeline_privacy_document': 'invalid_operations',
+}
 
 PYTHON_BUG_ISSUE = re.compile(r'^[A-Z][A-Z0-9]*-[1-9][0-9]*$')
 DYNAMIC_DERIVED_DOCUMENT_IDS = {
@@ -149,6 +162,40 @@ def validate_unreadable_park(case: dict) -> bool:
     return True
 
 
+def is_go_coordination_stamp_difference(difference: dict) -> bool:
+    path = difference.get('path', '')
+    return (
+        path.startswith('/conversation/')
+        and path.removeprefix('/conversation/') in GO_COORDINATION_FIELDS
+        and difference.get('kind') == 'missing_in_python'
+    )
+
+
+def is_unreadable_retry_consequence(difference: dict) -> bool:
+    path = difference.get('path', '')
+    kind = difference.get('kind')
+    if UNREADABLE_RETRY_CONSEQUENCE_PATHS.get(path) == kind:
+        return True
+    if (
+        path.startswith('/derived_documents/sync_reprocess_outbox~1')
+        and path.count('/') == 2
+        and kind == 'missing_in_go'
+    ):
+        return True
+    if (
+        path.startswith('/derived_documents/users~1')
+        and '~1processing_attention_items~1' in path
+        and path.count('/') == 2
+        and kind == 'missing_in_python'
+    ):
+        return True
+    if path.startswith('/python/derived_documents/batch_pipeline_privacy~1'):
+        field = path.rsplit('/', 1)[-1]
+        expected_kind = {'memo_token': 'invalid_binding', 'memo_schema': 'missing_evidence'}.get(field)
+        return expected_kind == kind and path.count('/') == 4
+    return False
+
+
 def normalized_difference_location(path: str, case_name: str) -> tuple[str, str, bool]:
     side = ''
     for prefix in ('/python/derived_documents/', '/go/derived_documents/'):
@@ -204,20 +251,6 @@ def pass3_go_gap_group(path: str, case_name: str, groups: list[dict[str, str]]) 
         if group_field == '<document>' or field == group_field or field.startswith(group_field + '/'):
             return group['group']
     return None
-
-
-def is_episode_attach_memo_path(path: str) -> bool:
-    if path.startswith('/go/derived_documents/'):
-        path = path.removeprefix('/go')
-    if not path.startswith('/derived_documents/') or '~1episode_links~1' not in path:
-        return False
-    return path.rsplit('/', 1)[-1] in {
-        'attach_revision',
-        'attach_completed',
-        'attach_finalized',
-        'attach_owner_id',
-        'attach_memo_evidence',
-    }
 
 
 def unlabelled_groups(cases: list[dict]) -> list[dict]:
@@ -343,14 +376,14 @@ def enrich(report: dict) -> dict:
                 or difference.get('failure_reason') == 'go_attach_memo_invalid'
             ):
                 label = 'go_gap'
-            elif (
-                is_episode_attach_memo_path(difference.get('path', ''))
-                and (case.get('episode_attach_memo_checks', {}).get('go') or {}).get('valid') is False
-            ):
-                label = 'go_gap'
-            elif unreadable_park and (
-                difference.get('path') == '/status' or difference.pop('unreadable_terminal_consequence', False) is True
-            ):
+            elif is_go_coordination_stamp_difference(difference):
+                label = 'by_design:go_coordination_stamp'
+                difference['reason'] = 'go_coordination_stamp'
+            elif unreadable_park and difference.get('path') == '/status':
+                label = UNREADABLE_RETRY_BUG
+                difference['issue'] = UNREADABLE_RETRY_ISSUE
+                difference['reason'] = UNREADABLE_PARK_RULE
+            elif unreadable_park and is_unreadable_retry_consequence(difference):
                 label = UNREADABLE_RETRY_BUG
                 difference['issue'] = UNREADABLE_RETRY_ISSUE
                 difference['reason'] = UNREADABLE_PARK_RULE

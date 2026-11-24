@@ -108,13 +108,22 @@ SCA-3551: Go will write Python's notes keys instead. They are not approved as by
 `conversation.finalization_job_id` is also `go_gap`: the Go status route resolves that pointer
 and returns it as `job_id`, while the Go ID breaks Python's status lookup.
 
-The SCA-3874 unreadable-ciphertext case compares Python's first-summary retries through
-its durable enrichment age park with Go's unreadable-ciphertext dead letter. The status
-difference receives `python_bug:unreadable_ciphertext_retry_until_age_gate` (SCA-4178)
-only when both sides retain the seeded ciphertext, Python records retry attempts and an
-age park, and Go records the expected dead letter. Other differences remain visible.
-R7 compares the sum of the metered Python attempt and park operations with Go's terminal
-cost.
+The unreadable-ciphertext case compares Python's first-summary retries through its durable
+enrichment age park with Go's unreadable-ciphertext dead letter. The status difference and
+the nine resulting custody and retry evidence rows receive
+`python_bug:unreadable_ciphertext_retry_until_age_gate` (SCA-4178) only when both sides retain
+the seeded ciphertext, Python records the retry attempts and `age_gate_72h` park, and Go
+records the dead letter. The consequence rows are limited to the finalization status,
+reprocess outbox, processing attention item, Go admission evidence, and the Python batch
+privacy and operation evidence. Other differences remain visible. R7 compares the sum of the
+metered Python attempt and park operations with Go's terminal cost.
+
+The four exact conversation fields `go_sync_inline_fanout_epoch`,
+`go_sync_inline_fanout_revision`, `go_empty_discard_fanout_epoch`, and
+`go_sync_empty_discard_home_revision` are Go coordination stamps. A missing Python field is
+`by_design:go_coordination_stamp` only when the identical field name exists in the Go row.
+The Python row is invalid if it copies any of these Go-owned stamps; near-match field names
+and mismatched values do not qualify.
 
 The attach memo fallthrough rule applies only to the case's own episode link
 and the four exact memo fields. Each side recomputes the key from its stored

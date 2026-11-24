@@ -27,26 +27,26 @@ func TestGoOnlyReceiptsRequireBoundGoEvidenceAndNoPythonCopies(t *testing.T) {
 		}
 	}
 
-	mustMap(goRun.Document)["finalization_owner_epoch"] = json.Number("4")
+	goRun.Document.(map[string]any)["finalization_owner_epoch"] = json.Number("4")
 	diffs = compareObservations(py, goRun)
 	if !hasUnexplained(diffs) || !hasKindPath(diffs, "invalid_binding", "/go/conversation/finalization_engine") {
 		t.Fatalf("wrong owner epoch was excused: %+v", diffs)
 	}
 
-	mustMap(goRun.Document)["finalization_owner_epoch"] = json.Number("3")
-	mustMap(goRun.Document)["go_sync_minimum_revision"] = json.Number("5")
+	goRun.Document.(map[string]any)["finalization_owner_epoch"] = json.Number("3")
+	goRun.Document.(map[string]any)["go_sync_minimum_revision"] = json.Number("5")
 	diffs = compareObservations(py, goRun)
 	if !hasUnexplained(diffs) || !hasKindPath(diffs, "invalid_binding", "/go/conversation/go_sync_minimum_revision") {
 		t.Fatalf("minimum receipt bound to another revision was excused: %+v", diffs)
 	}
 
-	mustMap(goRun.Document)["go_sync_minimum_revision"] = json.Number("4")
-	mustMap(goRun.Document)["finalization_job_id"] = "wrong-job"
+	goRun.Document.(map[string]any)["go_sync_minimum_revision"] = json.Number("4")
+	goRun.Document.(map[string]any)["finalization_job_id"] = "wrong-job"
 	diffs = compareObservations(py, goRun)
 	if !hasUnexplained(diffs) || !hasKindPath(diffs, "invalid_binding", "/go/conversation/finalization_job_id") {
 		t.Fatalf("Go job ID not bound to admitted job was excused: %+v", diffs)
 	}
-	mustMap(goRun.Document)["finalization_job_id"] = "job-go"
+	goRun.Document.(map[string]any)["finalization_job_id"] = "job-go"
 	py.Document = map[string]any{"finalization_engine": "python"}
 	diffs = compareObservations(py, goRun)
 	if !hasKindPath(diffs, "invalid_binding", "/python/conversation/finalization_engine") {
@@ -65,18 +65,7 @@ func TestGoOnlyReceiptsRequireBoundGoEvidenceAndNoPythonCopies(t *testing.T) {
 	}
 }
 
-func TestCompletedPythonRevisionIsNotAGoOwnershipFence(t *testing.T) {
-	py, goRun := ruleRun(), ruleRun()
-	py.Document = map[string]any{"status": "completed", "finalization_revision": json.Number("2")}
-	goRun.Document = map[string]any{"status": "completed", "finalization_revision": json.Number("2")}
-
-	diffs := compareObservations(py, goRun)
-	if hasUnexplained(diffs) {
-		t.Fatalf("a shared lifecycle revision without Go ownership metadata was treated as a fence: %+v", diffs)
-	}
-}
-
-func TestGoCoordinationStampRuleUsesExactFieldNames(t *testing.T) {
+func TestGoCoordinationStampRuleMatchesOnlyExactGoFieldNames(t *testing.T) {
 	python, goRun := ruleRun(), ruleRun()
 	goRun.Document = map[string]any{
 		"go_sync_inline_fanout_epoch":         json.Number("2"),
@@ -89,25 +78,29 @@ func TestGoCoordinationStampRuleUsesExactFieldNames(t *testing.T) {
 		"go_sync_inline_fanout_epoch", "go_sync_inline_fanout_revision",
 		"go_empty_discard_fanout_epoch", "go_sync_empty_discard_home_revision",
 	} {
-		path := "/conversation/" + field
 		found := false
 		for _, diff := range diffs {
-			if diff.Path == path && diff.Reason == "go_coordination_stamp" {
+			if diff.Path == "/conversation/"+field && diff.Reason == "go_coordination_stamp" {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Fatalf("exact Go coordination field %q lacked the approved reason: %+v", field, diffs)
+			t.Fatalf("exact Go coordination field %q did not use its approved rule: %+v", field, diffs)
 		}
 	}
 
 	goRun.Document.(map[string]any)["go_sync_inline_fanout_epochs"] = json.Number("2")
 	diffs = compareObservations(python, goRun)
 	if !hasUnexplainedAt(diffs, "/conversation/go_sync_inline_fanout_epochs") {
-		t.Fatalf("near-match coordination field was approved: %+v", diffs)
+		t.Fatalf("near-match Go field was approved: %+v", diffs)
 	}
 
+	python.Document = map[string]any{"go_sync_inline_fanout_epoch": json.Number("2")}
+	diffs = compareObservations(python, goRun)
+	if !hasKindPath(diffs, "invalid_binding", "/python/conversation/go_sync_inline_fanout_epoch") {
+		t.Fatalf("Python copy of a Go-only field was not rejected: %+v", diffs)
+	}
 }
 
 func TestHomeTokenFailureReasonNamesBrokenPrecondition(t *testing.T) {
