@@ -4448,6 +4448,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            CONVERSATIONS_V3_LIVE_TITLE:
+              value: 'on'
+              category: ops_kill
             CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             ANDROID_BILLING: {value: stripe, category: rollout}
             PLAY_RTDN_OIDC_AUDIENCE:
