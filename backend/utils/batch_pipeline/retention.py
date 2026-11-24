@@ -287,6 +287,7 @@ def _register_batch_artifact(
                     'capture_at': getattr(item, 'capture_at', None) or job.get('capture_at'),
                     'duration_seconds': getattr(item, 'duration_seconds', None) or job.get('duration_seconds'),
                     'privacy_generation': expected_generation,
+                    **({'record_origin': True} if binding.get('record_origin') or binding.get('native_record') else {}),
                     'write_pending_until': datetime.now(timezone.utc) + timedelta(seconds=UPLOAD_PENDING_SECONDS),
                     **({'cleanup_after': voice_due} if voice_write else {}),
                     **(

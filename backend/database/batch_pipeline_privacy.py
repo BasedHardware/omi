@@ -135,7 +135,6 @@ def assert_batch_write_allowed(
     verified_out: set | None = None,
     live_version_out: list | None = None,
     shared_owner_cache: bool = False,
-    tokenless_precheck: bool = False,
 ) -> int:
     """Measure the authorizing decision; shadow always runs after live authority.
 
@@ -159,38 +158,6 @@ def assert_batch_write_allowed(
         and live_version_out is None
         and lever_percent('privacy_checks_shadow') == 0
     )
-    tokenless_shadow = shared_eligible and lever_enabled('bpp_tokenless_owner_shadow', uid)
-    tokenless_enforce = (
-        shared_eligible
-        and tokenless_precheck
-        and lever_enabled('bpp_tokenless_owner_cache', uid)
-        and lever_enabled('bpp_shared_owner_cache', uid)
-        and lever_percent('bpp_tokenless_owner_shadow') == 0
-        and lever_percent('bpp_shared_owner_shadow') == 0
-    )
-    if (tokenless_shadow or tokenless_enforce) and shared_cache.available(client) and not ttl_disabled():
-        conversation_ids = tuple(conversation_ids)
-        started = time.time()
-        owner = privacy_owner_key(uid)
-        ids = frozenset(conversation_ids)
-        lookup = shared_cache.read_tokenless(client, owner, ids, expected_generation)
-        if lookup is not None:
-            if tokenless_enforce and lookup.decision is not None:
-                shared_cache.TOKENLESS.labels('hit').inc()
-                metrics.decision('batch')
-                return lookup.decision.generation
-            return _read_and_cache_tokenless(
-                client,
-                transaction,
-                uid,
-                lookup,
-                ids,
-                started,
-                shadow=tokenless_shadow,
-                expected_generation=expected_generation,
-                verified_out=verified_out,
-                read_budget=read_budget,
-            )
     shared_shadow = shared_eligible and lever_enabled('bpp_shared_owner_shadow', uid)
     shared_enforce = (
         shared_eligible
@@ -355,56 +322,6 @@ def assert_batch_write_allowed(
         metrics.decision('batch')
         shadow_after('allow')
         return result
-
-
-def _read_and_cache_tokenless(
-    client, transaction, uid, lookup, ids, started, *, shadow, expected_generation, verified_out, read_budget
-):
-    walk: dict[str, Any] = {}
-    snapshot, version = None, None
-
-    def compare(generation):
-        if shadow and lookup.decision is not None:
-            try:
-                shared_cache.compare_tokenless(lookup.decision, snapshot, version, generation)
-            except Exception:
-                shared_cache.TOKENLESS_SHADOW.labels('unavailable').inc()
-
-    try:
-        reference = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
-        snapshot = metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
-        version = token_version(snapshot)
-        generation = _assert_batch_write_allowed_live(
-            client,
-            transaction,
-            uid,
-            conversation_ids=ids,
-            expected_generation=expected_generation,
-            privacy_snapshot=snapshot,
-            read_budget=read_budget,
-            verified_out=verified_out,
-            walk_out=walk,
-            allow_negative_cache=False,
-        )
-    except BatchPrivacyBlocked as error:
-        metrics.decision('batch', error.reason.value)
-        compare(None)
-        raise
-    except Exception:
-        metrics.decision('batch', 'authority_unavailable')
-        if shadow and lookup.decision is not None:
-            shared_cache.TOKENLESS_SHADOW.labels('unavailable').inc()
-        raise
-    metrics.decision('batch')
-    compare(generation)
-    if version is not None:
-        try:
-            shared_cache.store_tokenless(
-                lookup, ids | walk.get('verified', set()), snapshot, version, generation, started
-            )
-        except Exception:
-            shared_cache.TOKENLESS.labels('set_error').inc()
-    return generation
 
 
 def _assert_batch_write_allowed_memo(
@@ -793,6 +710,23 @@ def _owner_decision(
     return generation
 
 
+def read_live_batch_write_authority(
+    client, transaction, uid, *, privacy_snapshot, conversation_ids, expected_generation, read_budget, walk_out
+) -> int:
+    """Complete a fresh authority walk using the token already read in this transaction."""
+    return _assert_batch_write_allowed_live(
+        client,
+        transaction,
+        uid,
+        privacy_snapshot=privacy_snapshot,
+        conversation_ids=conversation_ids,
+        expected_generation=expected_generation,
+        read_budget=read_budget,
+        walk_out=walk_out,
+        snapshots={},
+    )
+
+
 def _assert_batch_write_allowed_live(
     client: Any,
     transaction: Any,
@@ -806,7 +740,6 @@ def _assert_batch_write_allowed_live(
     walk_out: dict | None = None,
     verified_out: set | None = None,
     live_version_out: list | None = None,
-    allow_negative_cache: bool = True,
 ) -> int:
     """Fence a mutation. Admission records the returned generation for replay.
 
@@ -822,12 +755,7 @@ def _assert_batch_write_allowed_live(
     # Full-row exports and nontransactional preflights always read live. The
     # disabled path retains its exact original read order/counts. Do not poll
     # the older TTL cache's Firestore kill doc or involve Redis in this path.
-    negative_on = (
-        allow_negative_cache
-        and lever_enabled('privacy_negative_lookup_cache', uid)
-        and transaction is not None
-        and snapshots is None
-    )
+    negative_on = lever_enabled('privacy_negative_lookup_cache', uid) and transaction is not None and snapshots is None
     negative_shadow = negative_on and lever_enabled('privacy_checks_shadow', uid)
     started = negative_cache.LOOKUPS.clock() if negative_on else None
     if negative_on and privacy_snapshot is None:

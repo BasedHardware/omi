@@ -7,7 +7,6 @@ from typing import Any, Iterator, List, Optional, Tuple
 
 from google.api_core.exceptions import AlreadyExists, NotFound
 
-from config.firestore_read_levers import lever_enabled
 from config.parked_conversations import parked_terminal_status_enabled
 from database._client import db
 from database.fsr_read_cache import cache_writer
@@ -182,12 +181,11 @@ def record_deletion(uid: str, conversation_id: str) -> None:
         # Both obligations commit with the user intent. A successful first
         # pass cannot clear the independent delayed discovery pass.
         immediate = (job_ref(db, uid, conversation_id), arm_fields(uid, conversation_id))
-        delayed = post_window_job(db, uid, conversation_id) if lever_enabled('bpp_tokenless_owner_cache', uid) else None
+        delayed = post_window_job(db, uid, conversation_id)
 
         def arm_jobs(batch):
             batch.set(*immediate, merge=True)
-            if delayed is not None:
-                batch.set(*delayed, merge=True)
+            batch.set(*delayed, merge=True)
 
         try:
             batch = db.batch()

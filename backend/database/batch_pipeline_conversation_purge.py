@@ -111,7 +111,7 @@ class Progress(MemberProgress, Protocol):
         ...
 
 
-def _cursor(client: Any, namespace: str, table: str, after: str | None) -> Any:
+def purge_cursor(client: Any, namespace: str, table: str, after: str | None) -> Any:
     # Name-ordered cursor that stays valid after the row it names was erased.
     if not after:
         return None
@@ -332,7 +332,7 @@ def purge_conversations(
                     while True:
                         _ensure_budget(progress)
                         rows = queries.owner_documents(
-                            client, namespace, table, key, after=_cursor(client, namespace, table, cursor)
+                            client, namespace, table, key, after=purge_cursor(client, namespace, table, cursor)
                         )
                         if not rows:
                             break
@@ -385,7 +385,7 @@ def purge_conversations(
                 while True:
                     _ensure_budget(progress)
                     rows = queries.artifacts_by_owner_id(
-                        client, namespace, uid, after=_cursor(client, namespace, 'artifacts', cursor)
+                        client, namespace, uid, after=purge_cursor(client, namespace, 'artifacts', cursor)
                     )
                     if not rows:
                         break

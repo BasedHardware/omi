@@ -37,7 +37,8 @@ from database.batch_account_authority_schema import (
     PRIVACY_COLLECTION,
     USER_POLICY_FIELDS,
 )
-from database.batch_privacy_owner_cache import invalidate_tokenless
+from database.batch_privacy_write_cache import invalidate_tokenless
+from database.batch_privacy_late_intents import late_sweep_writes
 from utils.executors import db_executor, run_blocking
 from database.home_feed_writer import augment_home_writes, affects_home, bulk_erasure_scope
 from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS, TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
@@ -254,6 +255,8 @@ def augment_commit(request: Any, *, invalidations: set[str] | None = None) -> tu
     # The final token is unique after source wipe/recreation;
     # no generation, blocked or purging field is changed by this masked write.
     prepared.writes.extend(token_write(path) for path in sorted(tokens))
+    if tokens:
+        prepared.writes.extend(late_sweep_writes(writes))
     # Preserve expanded atomic batches. The installed list-projection writer
     # already emits >500 writes in a Commit (covered by emulator tests). The
     # server owns request-size/transaction limits; never split the request or

@@ -62,11 +62,15 @@ from utils.executors import (
     log_executor_health,
     run_blocking,
     db_executor,
+    erasure_executor,
 )
 from utils.executors import start_background_task
 from utils.episodes.composer import retry_settled_composes
 from utils.batch_pipeline.serving import start_serving_from_env, stop_serving
-from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
+from utils.cloud_tasks import (
+    is_conversation_batch_purge_dispatch_configured,
+    validate_account_deletion_dispatch_configuration,
+)
 from utils.stt.streaming import validate_streaming_stt_env
 from utils.stt.soniox_usage import start_if_configured as start_soniox_usage_if_configured
 from utils.stt.live_health import health as live_stt_health
@@ -77,6 +81,7 @@ from services.conversation_finalization import reconcile_listen_finalization_job
 from services.conversation_finalization import reconcile_stale_in_progress_conversations
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from database.durable_queue_age import publish_all_queue_oldest_ready_ages
+from database.batch_privacy_late_sweeps import reconcile_batch_privacy_late_sweeps
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 from utils.conversations.deletion_batch_purge import reconcile_conversation_batch_purges
 from utils.other.local_storage import local_storage_root_from_env
@@ -300,7 +305,7 @@ async def startup_event():
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
     # Sole dispatcher of conversation batch-purge obligations (deletes only arm them).
     start_background_task(
-        run_blocking(db_executor, _drain_conversation_batch_purges),
+        run_blocking(erasure_executor, _drain_conversation_batch_purges),
         name='startup_conversation_batch_purge_reconcile',
     )
     start_background_task(
@@ -361,12 +366,19 @@ async def _periodic_deletion_wipe_reconcile(interval_seconds: int | None = None)
             logger.error(f"Periodic deletion-wipe reconciliation failed: {e}")
 
 
+def _reconcile_batch_erasure():
+    result = reconcile_conversation_batch_purges()
+    if is_conversation_batch_purge_dispatch_configured():
+        reconcile_batch_privacy_late_sweeps()
+    return result
+
+
 def _drain_conversation_batch_purges():
     """Best-effort dispatch of due batch-purge obligations right after a restart/deploy."""
     try:
         result = _run_fsr_loop(
             'reconcile_conversation_batch_purges',
-            reconcile_conversation_batch_purges,
+            _reconcile_batch_erasure,
             _conversation_batch_purge_reconcile_interval_seconds(),
         )
         if result.get('dispatched') or result.get('held_for_consumer'):
@@ -393,10 +405,10 @@ async def _periodic_conversation_batch_purge_reconcile(interval_seconds: int | N
         await asyncio.sleep(poll_delay(interval_seconds))
         try:
             result = await run_blocking(
-                db_executor,
+                erasure_executor,
                 _run_fsr_loop,
                 'reconcile_conversation_batch_purges',
-                reconcile_conversation_batch_purges,
+                _reconcile_batch_erasure,
                 interval_seconds,
             )
             if any(result.get(key) for key in ('dispatched', 'queued', 'held_for_consumer', 'enqueue_failed')):
@@ -481,7 +493,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
         await asyncio.sleep(poll_delay(interval_seconds))
         try:
             result = await run_blocking(
-                db_executor,
+                erasure_executor,
                 _run_fsr_loop,
                 'reconcile_listen_finalization_jobs',
                 reconcile_listen_finalization_jobs,
@@ -493,7 +505,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
             logger.error(f"Periodic listen-finalization reconciliation failed: {e}")
         try:
             stale_result = await run_blocking(
-                db_executor,
+                erasure_executor,
                 _run_fsr_loop,
                 'reconcile_stale_processing_conversations',
                 reconcile_stale_processing_conversations,
@@ -505,7 +517,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
             logger.error(f"Periodic stale-processing reconciliation failed: {e}")
         try:
             in_progress_result = await run_blocking(
-                db_executor,
+                erasure_executor,
                 _run_fsr_loop,
                 'reconcile_stale_in_progress_conversations',
                 reconcile_stale_in_progress_conversations,
@@ -517,7 +529,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
             logger.error(f"Periodic stale-in-progress reconciliation failed: {e}")
         try:
             byok_result = await run_blocking(
-                db_executor,
+                erasure_executor,
                 _run_fsr_loop,
                 'reconcile_abandoned_byok_finalization_jobs',
                 reconcile_abandoned_byok_finalization_jobs,
@@ -531,7 +543,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
             continue  # The alert publisher has an independent takeover clock.
         try:
             await run_blocking(
-                db_executor,
+                erasure_executor,
                 _run_fsr_loop,
                 'publish_all_queue_oldest_ready_ages',
                 publish_all_queue_oldest_ready_ages,

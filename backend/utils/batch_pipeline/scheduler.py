@@ -189,6 +189,10 @@ class _OwnWrites:
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
         return self._tx.check_privacy(uid, conversation_ids, expected_generation)
 
+    def probe_write_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
+        probe = getattr(self._tx, 'probe_write_privacy', self._tx.check_privacy)
+        return probe(uid, conversation_ids, expected_generation)
+
 
 def _prefer_merge_head(
     tx: Transaction,
@@ -809,7 +813,7 @@ class Scheduler:
                 job.setdefault('unit_kind', 'conversation')
                 if queue_key not in eligible_queues and queue_key not in blocked:
                     try:
-                        tx.check_privacy(
+                        tx.probe_write_privacy(
                             job['owner_id'],
                             (job['conversation_id'],) if job.get('conversation_id') else (),
                             job.get('privacy_generation'),
@@ -838,7 +842,7 @@ class Scheduler:
                         park = None
                         try:
                             if job['segment_id'] != privacy_checked_segment:
-                                tx.check_privacy(
+                                tx.probe_write_privacy(
                                     job['owner_id'],
                                     (job['conversation_id'],) if job.get('conversation_id') else (),
                                     job.get('privacy_generation'),

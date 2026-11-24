@@ -1,35 +1,42 @@
-# Five-minute batch projection prechecks
+# Batch privacy write evidence and delayed erasure
 
-SCA-3508 allows an assignment precheck with no prior projection receipt to reuse
-an owner privacy decision for five minutes. The original Firestore snapshot
-bounds the deadline. The Redis slot carries the last invalidation revision and
-the decision together. Successful privacy-authority commits rotate the slot.
-Scope, coverage, age and generation must match before reuse. A Redis failure
-falls back to the current path.
+SCA-3508 keeps the projection precheck in its own change. On the write side,
+`bpp_tokenless_write_shadow` samples Redis candidates against a live walk without
+changing the authorizing decision. The candidate's original Firestore snapshot
+and walk start bound reuse to five minutes, including a clock margin. A
+purpose-derived HMAC binds the proof to its database, owner and covered sources.
+A postcommit owner marker invalidates outstanding evidence and prevents late
+fills. Both new levers default to zero.
 
-Projection assignment, follow-up proof export and other write transactions
-retain transactional privacy certification. GPU workers still use the live path
-pending evidence for a Redis binding or a job-scoped attestation.
+`bpp_tokenless_write_cache` can reuse a decision during scheduler probing and
+when committing scheduling fields on a previously read, existing ready job
+that independently requires live compute admission. A lease commit may also
+update queue, control and GPU reservation metadata. Creating jobs, persisting
+results, PostgreSQL primary writes, provider calls, artifact IO and projection
+all retain their certified paths. Removing the authorization lever restores
+the phase-one read path. A separately named, optional worker-chart secret can
+bind only this cache to the shared Redis. Missing bindings and Redis errors
+fall through. Verify route and access before assuming GPU savings.
 
-Deferred conversation deletes arm a separate batch purge ten minutes after the
-Firestore commit. The job starts discovery again, survives a completed immediate
-pass and uses the existing short, transactionally fenced destructive units.
-It retries held accounts and unknown remote outcomes. The same collection and
-dispatcher carry both obligations. Watch
-`omi_batch_pipeline_privacy_post_window_sweeps_total` for durable completion and
-`omi_batch_pipeline_privacy_post_window_operations_total` for reprocessed
-Firestore, Postgres and object-storage work. Operation counts include retries.
+Deferred conversation deletes keep a separate ten-minute batch purge under the
+existing transactional hold fences. The Firestore authority commit also arms a
+delayed artifact scan for completed account wipes, protection changes, and
+batch cloud-sync or conversation recording opt-outs. Playback-storage
+permission still invalidates decisions. Its separate recording archive has its
+own erasure path. Reversible batch policy events select only in-flight, pre-event
+artifact receipts in the affected scope. A completed account must still have its
+wipe marker and an absent user row. The runner waits for an outstanding upload
+reservation, deletes a pinned object generation, erases the Firestore receipt
+under its current revision, and durably redrives Postgres mirror reconciliation.
+Receipts issued after the event survive. Existing obligations continue when
+either authorization lever is off.
 
-Before canary, set `bpp_tokenless_owner_shadow` to a positive percent and observe
-six hours with evaluated samples and zero `mismatch_outside_window` on
-`omi_batch_pipeline_privacy_tokenless_owner_shadow_total`. Measure eligible
-lookups, hits, and invalidations on
-`omi_batch_pipeline_privacy_tokenless_owner_cache_total`, and compare net
-Firestore reads per compute completion to the matched baseline. The inverse
-`bpp_tokenless_owner_cache=0` restores the phase-one read path and stops arming
-new delayed obligations. Previously armed jobs still run.
-
-The broader budget assumes reusable decisions in write-bearing paths. Before
-admitting those paths, establish account, protection and recording-policy
-late-write coverage across their sinks. In particular, a delayed sweep needs to
-distinguish stale writes from writes under the newer policy.
+The same conversation reconciler polls at most four due intents per minute.
+Each slice reads at most one page of 100 batch artifact receipts. Readback
+includes cache and shadow outcomes, due queue age, durable completions, and
+Firestore, Postgres and object-storage work from
+`omi_batch_pipeline_privacy_post_window_operations_total`. Before widening
+authorization, use six hours with evaluated samples and zero
+`mismatch_outside_window` on
+`omi_batch_pipeline_privacy_tokenless_write_shadow_total`. The 137M reads/day
+scenario assumes much wider proven sink coverage and GPU connectivity.

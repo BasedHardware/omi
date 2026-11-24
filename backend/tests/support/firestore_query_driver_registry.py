@@ -164,6 +164,7 @@ BODY_DIGEST = {
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3.commit_projection': '2587c3ec10a675e41ecfed4ded303bdb9bda893380df227564408184e3daba62',
+    'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps': '470e3d3aaaf87a8a0387371178f944380bcdd0c4b3cc358ddd3e478b26c777cc',
     'database.batch_pipeline_conversation_purge_scans._claim': '662c759fc79795f0851e0b18082b7dcb006e109253e45ba1fde2190d542bddf8',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -418,6 +419,17 @@ _add(
         'database.conversation_batch_purge_jobs.due_jobs',
         neutrals={'now': _NOW, 'limit': _LIMIT},
         domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
+    )
+)
+# Post-window artifact sweep intent has the same bounded due-at query.
+_add(DriverEntry('database.batch_privacy_late_sweeps.due_jobs', base={'now': T0}, neutrals={'limit': _LIMIT}))
+_add(
+    CoveredByEntry(
+        'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps',
+        ('database.batch_privacy_late_sweeps.due_jobs',),
+        'The reconciler reuses the bounded due query; its per-intent artifact traversal uses owner_documents.',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps'],
     )
 )
 # Play billing reconcile: one single-field ``next_check_at`` range, oldest first.

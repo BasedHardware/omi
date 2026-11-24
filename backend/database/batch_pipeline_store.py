@@ -40,8 +40,8 @@ from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database import record_recovery_gate
 from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.batch_privacy_write_authority import authorize_buffered_writes, check_cached_write
 from database.batch_pipeline_transaction_attempt import note_direct_reads as _note_direct_reads, prepare_transaction
-from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_recovery import defer_privacy_blocked_record, quarantine_fenced
 from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
 from database.batch_pipeline_transaction_labels import (
@@ -247,17 +247,32 @@ class FirestoreTransaction:
         return service_frontier(self.client, self.namespace, priority, transaction=self.transaction)
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
-        options = {}
-        if self.read_budget is not None:
-            options['read_budget'] = self.read_budget
+        return self._check_privacy(uid, conversation_ids, expected_generation)
+
+    def probe_write_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
+        return self._check_privacy(uid, conversation_ids, expected_generation, site='probe')
+
+    def _check_privacy(self, uid, conversation_ids, expected_generation, *, site=None):
+        ids = tuple(conversation_ids)
+        generation = check_cached_write(
+            self.client,
+            self.transaction,
+            uid,
+            conversation_ids=ids,
+            expected_generation=expected_generation,
+            read_budget=self.read_budget,
+            site=site,
+        )
+        if generation is not None:
+            return generation
         return assert_batch_write_allowed(
             self.client,
             self.transaction,
             uid,
-            conversation_ids=conversation_ids,
+            conversation_ids=ids,
             expected_generation=expected_generation,
             shared_owner_cache=True,
-            **options,
+            **({'read_budget': self.read_budget} if self.read_budget is not None else {}),
         )
 
     def flush(self):
@@ -266,29 +281,7 @@ class FirestoreTransaction:
         fence_tokens = len({key.split('/', 1)[0] for table, key in self.patches if table == 'conversations'})
         if len(self.writes) + len(self.patches) + len(self.external) + fence_tokens > 450:
             raise RuntimeError('batch transaction write budget exceeded')
-        guarded = set()
-        for (table, key), value in self.writes.items():
-            if table not in {'jobs', 'results', 'coalesce_groups', 'coalesce_sources', 'coalesce_heads'}:
-                continue
-            job = self.get('jobs', key) if table == 'results' else value
-            identity = (
-                job['owner_id'],
-                job.get('conversation_id'),
-                job.get('capture_source_conversation_id'),
-                job.get('privacy_generation'),
-            )
-            if identity in guarded:
-                continue
-            guarded.add(identity)
-            generation = self.check_privacy(
-                job['owner_id'],
-                conversation_ids=tuple(
-                    value for value in (job.get('conversation_id'), job.get('capture_source_conversation_id')) if value
-                ),
-                expected_generation=job.get('privacy_generation'),
-            )
-            if table == 'jobs' and value.get('privacy_generation') is None:
-                value['privacy_generation'] = generation
+        authorize_buffered_writes(self)
         for (table, key), value in self.writes.items():
             self.transaction.set(self._ref(table, key), value)
         for (table, key), fields in self.patches.items():

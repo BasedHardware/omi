@@ -81,6 +81,16 @@
       "reviewed": "2026-11-19"
     },
     {
+      "collection": "batch_privacy_late_sweeps",
+      "owner": "Goal: Margin (SCA-3508)",
+      "unit": "due post-window artifact sweep slice",
+      "reads_per_unit_budget": 6,
+      "reads_per_day_budget": 36000,
+      "basis": "planning-bound",
+      "source": "One minute polling on the existing conversation reconciliation leader, up to four due intents per tick. Includes due-query results, custody rechecks and a bounded retry allowance. An intent reads at most one page of 100 artifacts per slice, a separate ceiling of 576,000 artifact reads per day before retries at that maximum. Revisit against measured queue and artifact counts before increasing the cadence or limit.",
+      "reviewed": "2026-11-24"
+    },
+    {
       "collection": "conversation_erasure_jobs",
       "owner": "backend conversation deletion (accepted-delete erasure obligations)",
       "unit": "conversation delete accepted behind a busy account gate",

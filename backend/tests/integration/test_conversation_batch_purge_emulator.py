@@ -861,3 +861,192 @@ def test_post_window_sweep_erases_a_late_commit_and_keeps_unrelated_rows(plane, 
     assert _results_left(plane, 'other-1') == 1
     assert completed._value.get() == before + 1
     assert _quick(job, generation) == 'missing'
+
+
+@pytest.mark.parametrize('policy', ['account_deleted', 'data_protection', 'recording_policy', 'conversation_recording'])
+def test_late_privacy_sweep_recovers_an_inflight_object(plane, monkeypatch, tmp_path, policy):
+    from datetime import datetime, timezone
+
+    from database import batch_privacy_late_intents as intents, batch_privacy_late_sweeps as sweeps
+    from database import legal_holds, privacy_check_metrics as metrics
+    from utils.other.local_storage import LocalStorageClient
+
+    client, uid = plane.client, plane.uid
+    reason = 'recording_policy' if policy == 'conversation_recording' else policy
+    storage = LocalStorageClient(tmp_path / 'late-purge')
+    name = 'synthetic-late-batch'
+    monkeypatch.setenv('BUCKET_BATCH_PIPELINE', name)
+    monkeypatch.setattr(sweeps, 'create_storage_client', lambda: storage)
+    mirrored = []
+
+    def reconcile_postgres(namespace, owner):
+        mirrored.append((namespace, owner))
+        return 1
+
+    monkeypatch.setattr(sweeps, 'purge_owner', reconcile_postgres)
+    artifacts = client.collection('batch_pipeline_prod_artifacts')
+    cid = 'synthetic-recording'
+    pending = datetime.now(timezone.utc) + timedelta(minutes=30)
+
+    def receipt(key, owner=uid, source=cid):
+        segment = f'synthetic-{key}'
+        object_name = f'batch-pipeline/batch_pipeline_prod/owners/{plane.key}/results/{segment}/{uuid4().hex}.enc'
+        ref = artifacts.document(key)
+        ref.set(
+            {
+                'owner_key': plane.key,
+                'owner_id': owner,
+                'segment_id': segment,
+                'conversation_ids': [source],
+                'kind': 'results',
+                'record_origin': True,
+                'uri': f'gs://{name}/{object_name}',
+                'write_pending_until': pending,
+            }
+        )
+        return ref, storage.bucket(name).blob(object_name)
+
+    old, stale = receipt('late')
+    other, unrelated = receipt('unrelated', owner='another-synthetic-owner')
+    unrelated.upload_from_string(b'outside the erasure scope')
+    user = client.collection('users').document(uid)
+    if policy == 'conversation_recording':
+        conversation = user.collection('conversations').document(cid)
+        conversation.set({'record_lane_owner': 'batch_live_v1', 'private_cloud_sync_enabled': True})
+        other_source, other_audio = receipt('another-recording', source='another-synthetic-conversation')
+        other_audio.upload_from_string(b'outside the recording scope')
+        conversation.update({'private_cloud_sync_enabled': False})
+    elif reason == 'account_deleted':
+        # Irreversible completion, after the primary wipe has removed the root.
+        user.delete()
+        client.collection('account_deletions').document(uid).set({'wipe_status': 'completed'})
+    elif reason == 'data_protection':
+        user.update({'data_protection_level': 'e2ee'})
+    else:
+        user.update({'private_cloud_sync_enabled': False})
+
+    [intent] = list(client.collection(intents.COLLECTION).stream())
+    data = intent.to_dict()
+    assert data['reason'] == reason
+    assert sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {}
+
+    # The delayed provider write lands after the privacy mutation, while the
+    # original create-only receipt still predates the new policy.
+    stale.upload_from_string(b'in-flight object')
+    if reason != 'account_deleted':
+        new, fresh = receipt('newer')
+        fresh.upload_from_string(b'new-policy object')
+
+    clock = [data['changed_at'] + intents.DELAY + timedelta(seconds=1)]
+    monkeypatch.setattr(sweeps, '_now', lambda: clock[0])
+    assert sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'waiting_for_upload': 1}
+    assert stale.exists()
+
+    clock[0] = pending + timedelta(seconds=10)
+    legal_holds.place_legal_hold(uid, issuer='legal_hold_service', firestore_client=client)
+    assert sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'held': 1}
+    assert old.get().exists and stale.exists()
+    legal_holds.place_legal_hold(uid, issuer='legal_hold_service', active=False, firestore_client=client)
+
+    clock[0] += sweeps.HOLD_RETRY + timedelta(seconds=5)
+    completed = metrics.POST_WINDOW_SWEEPS.labels(reason)
+    before = completed._value.get()
+    for _ in range(10):
+        sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client)
+        if not intent.reference.get().exists:
+            break
+        clock[0] += timedelta(seconds=10)
+
+    assert not intent.reference.get().exists
+    assert not old.get().exists and not stale.exists()
+    assert other.get().exists and unrelated.exists()
+    if reason != 'account_deleted':
+        assert new.get().exists and fresh.exists()
+    if policy == 'conversation_recording':
+        assert other_source.get().exists and other_audio.exists()
+    assert ('batch_pipeline_prod', uid) in mirrored
+    assert completed._value.get() == before + 1
+    assert sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {}
+
+
+def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(plane, monkeypatch):
+    import fakeredis
+
+    from database import batch_privacy_write_authority as authority, batch_privacy_write_cache as cache
+    from database import batch_privacy_write_fence
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from database.batch_pipeline_store import FirestoreStore
+    from testing.firestore_read_budget import delta_reads, reads_for_caller, snapshot_reads
+
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setenv('REDIS_DB_HOST', 'synthetic-test-only')
+    monkeypatch.setenv('ENCRYPTION_SECRET', 'synthetic-write-proof-key-for-test-only')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(cache, '_redis', lambda: redis)
+    monkeypatch.setattr(cache, 'available', lambda client: True)
+    monkeypatch.setattr(authority, 'ttl_disabled', lambda: False)
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":100}')
+    store = FirestoreStore('batch_pipeline_dev', firestore_client=plane.client)
+    assert store.run(lambda tx: tx.probe_write_privacy(plane.uid, ('source',), 0)) == 0
+
+    ref = plane.client.collection('batch_pipeline_dev_jobs').document('unleased')
+    row = {
+        'owner_id': plane.uid,
+        'owner_key': plane.key,
+        'conversation_id': 'source',
+        'privacy_generation': 0,
+        'state': 'ready',
+        'requires_compute_admission': True,
+        'segment_id': 'unleased',
+    }
+    ref.set(row)
+
+    def lease(tx):
+        job = tx.get('jobs', ref.id)
+        tx.put('jobs', ref.id, {**job, 'state': 'leased', 'attempt': 1, 'token': 'synthetic-lease'})
+
+    def read_count():
+        before = snapshot_reads()
+        store.run(lease)
+        return reads_for_caller(delta_reads(before), 'database.batch_pipeline_privacy:read')
+
+    assert read_count() == 0
+    ref.set(row)
+    shadow = cache.TOKENLESS_SHADOW.labels('match')
+    before = shadow._value.get()
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":100,"bpp_tokenless_write_shadow":100}')
+    assert read_count() > 0
+    assert shadow._value.get() == before + 1
+    ref.set(row)
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":0}')
+    assert read_count() > 0
+
+    # A missed invalidation can influence the bounded lease. A content write
+    # still calls durable authority, even while that lease proof is cached.
+    monkeypatch.setattr(batch_privacy_write_fence, 'invalidate_tokenless', lambda *args: None)
+    plane.client.collection('users').document(plane.uid).update({'migration_status': 'pending'})
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":100}')
+    with pytest.raises(BatchPrivacyBlocked, match='data_protection_changed'):
+        store.run(lambda tx: tx.put('jobs', ref.id, {**row, 'state': 'result_ready', 'result': {'outcome': 'silence'}}))
+
+
+def test_completed_account_intent_is_inert_if_account_is_restored(plane, monkeypatch):
+    from database import batch_privacy_late_intents as intents, batch_privacy_late_sweeps as sweeps
+
+    client, uid = plane.client, plane.uid
+    marker = client.collection('account_deletions').document(uid)
+    user = client.collection('users').document(uid)
+    user.delete()
+    marker.set({'wipe_status': 'completed'})
+    [intent] = list(client.collection(intents.COLLECTION).stream())
+    marker.update({'wipe_status': 'cancelled'})
+    user.set({'data_protection_level': 'standard'})
+    clock = intent.to_dict()['changed_at'] + intents.DELAY + timedelta(seconds=5)
+    monkeypatch.setattr(sweeps, '_now', lambda: clock)
+
+    def unexpected_erase(*args, **kwargs):
+        raise AssertionError('superseded sweep opened storage')
+
+    monkeypatch.setattr(sweeps, 'create_storage_client', unexpected_erase)
+    assert sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'superseded': 1}
+    assert not intent.reference.get().exists and user.get().exists
