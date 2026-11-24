@@ -13,6 +13,8 @@ from cryptography.exceptions import InvalidTag
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from google.api_core.exceptions import NotFound
+from google.cloud import firestore
+from functools import partial
 import threading
 import time
 import math
@@ -1065,7 +1067,13 @@ class Projector:
             if preflight.job != job:
                 return None
             return self.assign_parts(item, entry, binding, finish=False, policy=policy, job=job, merge_plan=merge_plan)
-        except (ProjectionBlocked, ProjectionPredecessorPending, BatchPrivacyBlocked, SyncAssignmentConflict):
+        except (
+            ProjectionBlocked,
+            ProjectionPredecessorPending,
+            BatchPrivacyBlocked,
+            SyncAssignmentConflict,
+            SyncAssignmentSuperseded,
+        ):
             return None
         except Exception as error:
             from database._client import is_document_size_limit_error
@@ -1073,6 +1081,64 @@ class Projector:
             if is_document_size_limit_error(error):
                 return None
             raise
+
+    def _commit_joined_parts(self, entry, merge_plan, job, policy, parts, assignment_plans):
+        from database.batch_pipeline_joined_assignment import JoinedAssignmentWrites
+        from database.batch_pipeline_store import FirestoreTransaction
+        from database.sync_assignment import run_sync_assignment
+        from utils.sync.assignment import SyncAssignmentDiscoveryRequired
+
+        client = self.store.client
+        namespace = self.store.store.namespace
+        needs_discovery = None
+        retried_discovery = set()
+
+        @firestore.transactional
+        def commit(transaction, full_ids):
+            nonlocal needs_discovery
+            writes = JoinedAssignmentWrites(client, transaction)
+            view = FirestoreTransaction(client, namespace, transaction)
+            if merge_plan(view) != entry:
+                raise ProjectionBlocked('ordered merge plan changed')
+            view.validate_writes()
+            view.write_validated(write_view=writes)
+            assignments = []
+            for (session, _), (plan, _, discover) in zip(parts, assignment_plans, strict=True):
+                staged = writes.read_assignment_document(session.result_ref)
+                session.prepare(transaction, staged_merge=staged)
+                if session.job != job:
+                    raise ProjectionBlocked('staged job changed during artifact preparation')
+                try:
+                    assigned = plan(transaction, full_ids, write_view=writes)
+                except SyncAssignmentDiscoveryRequired:
+                    needs_discovery = discover
+                    raise
+                receipt = session.persist(transaction, assigned, write_view=writes)
+                if not receipt.get('transcript_outputs'):
+                    raise ProjectionBlocked('joined merge lacks a transcript publication')
+                assignments.append(assigned)
+            result = writes.read_assignment_document(parts[-1][0].result_ref)
+            writes.flush(client, namespace)
+            return result, assignments
+
+        while True:
+            try:
+                result, assignments = run_sync_assignment(
+                    client, commit, frozenset(), retry_contention=policy.projection_contention
+                )
+                break
+            except SyncAssignmentDiscoveryRequired:
+                if needs_discovery in retried_discovery:
+                    raise ProjectionBlocked('joined assignment discovery did not resolve the target')
+                retried_discovery.add(needs_discovery)
+                needs_discovery()
+        for (session, finish_assignment), (_, after_commit, _), assigned in zip(
+            parts, assignment_plans, assignments, strict=True
+        ):
+            self._mirror_assignment(session)
+            after_commit(assigned)
+            finish_assignment(assigned)
+        return result
 
     def assign_parts(self, item, entry, binding, *, finish=True, policy=None, hint=None, job=None, merge_plan=None):
         policy = policy or self.store.policy(item.segment_id)
@@ -1101,8 +1167,6 @@ class Projector:
             if binding.record_origin:
                 projection_speech_spans(payload, item.duration_seconds)
             parts = [(item, payload)] if binding.record_origin else split_result(item, payload)
-            if merge_plan is not None and len(parts) != 1:
-                return None
             from utils.capture.batch_coverage import optional_manifest
 
             manifest = None if item.requires_compute_admission else optional_manifest(self, item, hint)
@@ -1133,6 +1197,8 @@ class Projector:
             self._quarantine_payload_contract(item, binding, policy, error)
             return
         receipts = entry.get('projection_parts') or {}
+        multipart_joined = merge_plan is not None and len(parts) > 1
+        assignment_plans, joined_parts = [], []
         for index, (part, part_payload) in enumerate(parts):
             if index and hint is not None and hint.deadline is not None and time.monotonic() >= hint.deadline:
                 raise StepDeadline()
@@ -1254,35 +1320,49 @@ class Projector:
 
                         # Same v3 admission as sync intake, or admitted owners get legacy duplicates.
                         v3_triggers.mark_new(binding.owner_id, incoming)
-                        try:
-                            assigned = (self.assign_conversation or conversations_db.assign_sync_conversation)(
+
+                        def finish_assignment(incoming, assigned):
+                            v3_triggers.committed_sync_assignment(binding.owner_id, assigned[0])
+                            transcript_receipts.enqueue(
+                                binding.owner_id, assigned[0], firestore_client=self.store.client
+                            )
+                            incoming.pop('_sync_lineage_eligible', None)
+                            record_projection(
                                 binding.owner_id,
                                 incoming,
-                                target_id=context.target_id,
-                                candidate_id=candidate['id'] if candidate else None,
-                                firestore_client=self.store.client,
+                                assigned[0],
+                                manifest,
+                                capture_at=item.capture_at,
+                                survivors=assigned[2],
+                            )
+                            record_labels(assigned[2])
+
+                        assign = self.assign_conversation or conversations_db.assign_sync_conversation
+                        options = dict(
+                            target_id=context.target_id,
+                            candidate_id=candidate['id'] if candidate else None,
+                            firestore_client=self.store.client,
+                            validate_plan=session.validate_plan,
+                            retry_contention=policy.projection_contention,
+                            timing=policy.projection_timing,
+                            **self._index_options(hint),
+                        )
+                        if multipart_joined:
+                            assign(binding.owner_id, incoming, assignment_plans=assignment_plans, **options)
+                            joined_parts.append((session, partial(finish_assignment, incoming)))
+                            continue
+                        try:
+                            assigned = assign(
+                                binding.owner_id,
+                                incoming,
                                 before_assign=prepare if merge_plan is not None else session.prepare,
-                                validate_plan=session.validate_plan,
                                 after_assign=persisted,
-                                retry_contention=policy.projection_contention,
-                                timing=policy.projection_timing,
-                                **self._index_options(hint),
+                                **options,
                             )
                         finally:
                             self._mirror_assignment(session)
-                        v3_triggers.committed_sync_assignment(binding.owner_id, assigned[0])
-                        transcript_receipts.enqueue(binding.owner_id, assigned[0], firestore_client=self.store.client)
-                        incoming.pop('_sync_lineage_eligible', None)
-                        record_projection(
-                            binding.owner_id,
-                            incoming,
-                            assigned[0],
-                            manifest,
-                            capture_at=item.capture_at,
-                            survivors=assigned[2],
-                        )
+                        finish_assignment(incoming, assigned)
                         receipt = receipt_box[0]
-                        record_labels(assigned[2])
                         if merge_plan is not None:
                             return {**entry, 'projection': dict(receipt), 'projection_state': receipt['state']}
             except ProjectionReplay as replay:
@@ -1333,6 +1413,8 @@ class Projector:
                 raise
             if finish:
                 self.finish_part(item, binding, receipt, index, policy=policy)
+        if multipart_joined:
+            return self._commit_joined_parts(entry, merge_plan, job, policy, joined_parts, assignment_plans)
 
     def _quarantine_payload_contract(self, item, binding, policy, error, *, session=None):
         """Hold a committed payload that can never validate: the walk retries a

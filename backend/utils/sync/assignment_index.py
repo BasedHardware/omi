@@ -23,18 +23,23 @@ def days_for(row: dict, *, padding: bool = False) -> list[str]:
     return [(start + timedelta(days=i)).isoformat() for i in range((end - start).days + 1)]
 
 
+def read_assignment_document(transaction, ref):
+    read_pending = getattr(transaction, 'read_assignment_document', None)
+    return read_pending(ref) if read_pending is not None else ref.get(transaction=transaction).to_dict()
+
+
 class AssignmentIndex:
     def __init__(self, transaction: 'firestore_transaction.Transaction', user_ref: 'DocumentReference') -> None:
         self.transaction = transaction
         self.collection = user_ref.collection('sync_assignment')
         self.recent_ref = self.collection.document('recent')
-        self.recent = (self.recent_ref.get(transaction=transaction).to_dict() or {}).get('entries', [])
+        self.recent = (read_assignment_document(transaction, self.recent_ref) or {}).get('entries', [])
         self.buckets: dict[str, list[dict]] = {}
 
     def read(self, interval: dict) -> ValuesView[dict]:
         for day in days_for(interval, padding=True):
             if day not in self.buckets:
-                raw = self.collection.document(day).get(transaction=self.transaction).to_dict() or {}
+                raw = read_assignment_document(self.transaction, self.collection.document(day)) or {}
                 self.buckets[day] = raw.get('entries', [])
         return {row['id']: row for rows in [self.recent, *self.buckets.values()] for row in rows}.values()
 

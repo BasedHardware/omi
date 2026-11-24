@@ -500,7 +500,15 @@ class ProjectionSession:
             self._validated_transcript_revisions.add((planned['id'], revision))
 
     def persist(
-        self, transaction, planned=None, *, superseded=False, quarantined=False, privacy_deleted=False, silence=False
+        self,
+        transaction,
+        planned=None,
+        *,
+        superseded=False,
+        quarantined=False,
+        privacy_deleted=False,
+        silence=False,
+        write_view=None,
     ):
         if silence and (
             planned is not None
@@ -525,6 +533,7 @@ class ProjectionSession:
             raise ProjectionBlocked('privacy disposition cannot assign content')
         if quarantined and (planned is not None or superseded):
             raise ProjectionBlocked('quarantine cannot assign content')
+        writer = transaction if write_view is None else write_view
         held = quarantined
         assigned, created, survivors = planned if planned is not None else ({}, False, [])
         outputs = [(assigned, created), *assigned.get('_sync_size_rollover_rows', [])]
@@ -540,7 +549,7 @@ class ProjectionSession:
                 raise ProjectionBlocked('silent redrive requires a content revision')
             conversation = self.client.collection('users').document(self.binding.owner_id).collection('conversations')
             for row, _ in outputs:
-                transaction.update(
+                writer.update(
                     conversation.document(row['id']), {'sync_silent_redrive_revision': row['sync_content_revision']}
                 )
         receipt: dict[str, Any] = {
@@ -572,7 +581,7 @@ class ProjectionSession:
 
         claim(
             self,
-            transaction,
+            writer,
             {
                 **receipt,
                 'size_rollover_outputs': [{'conversation_id': row['id']} for row, _ in outputs if row.get('id')],
@@ -629,12 +638,12 @@ class ProjectionSession:
                     )
             if assigned.get('id'):
                 changes['conversation_ids'] = firestore.ArrayUnion(output_ids)
-                transaction.update(
+                writer.update(
                     self.store.ref('jobs', self.segment_id),
                     {'conversation_ids': firestore.ArrayUnion(output_ids)},
                 )
             if len(parts) != self.part_count:
-                transaction.update(self.result_ref, changes)
+                writer.update(self.result_ref, changes)
                 return receipt
             summary = {
                 **parts[str(self.part_count - 1)],
@@ -686,9 +695,9 @@ class ProjectionSession:
             changes.update(completed_checkpoint_fields(self.entry, quarantined=held))
             if not held and self.entry.get('projection_redriven_at'):
                 changes['projection_release_attempts'] = 0
-            transaction.update(self.result_ref, changes)
+            writer.update(self.result_ref, changes)
         else:
-            transaction.update(
+            writer.update(
                 self.result_ref,
                 {
                     'projection': receipt,
@@ -722,15 +731,15 @@ class ProjectionSession:
         # A released held unit re-enters projection behind the watermark;
         # re-advancing the chain onto it would stall on replaying terminal rows.
         if not privacy_replay and not self.entry.get('projection_redriven_at'):
-            transaction.update(self.owner_ref, {'projection_watermark': self.segment_id})
+            writer.update(self.owner_ref, {'projection_watermark': self.segment_id})
         if held and not privacy_replay:
             # A quarantined receipt is replay-fenced: nothing automatic will
             # change this unit again. Hold the job in the same transaction so
             # the held-partial scan and a reviewed redrive (for example after a
             # discarded record is restored) own it; audio and result stay.
-            transaction.update(self.store.ref('jobs', self.segment_id), {'recovery_state': 'held'})
+            writer.update(self.store.ref('jobs', self.segment_id), {'recovery_state': 'held'})
         for reference in self.erased_predecessors:
-            transaction.update(
+            writer.update(
                 reference,
                 {
                     'expires_at': datetime.fromtimestamp(self.now, timezone.utc)
@@ -738,7 +747,7 @@ class ProjectionSession:
                 },
             )
         # A read-before-write ledger checkpoint shares the assignment commit.
-        transaction.update(
+        writer.update(
             self.ledger_ref,
             {
                 ('quarantined_segment_ids' if held else 'processed_segment_ids'): firestore.ArrayUnion(

@@ -125,6 +125,9 @@ def contention_tables(view: 'FirestoreTransaction') -> tuple[str, str]:
 
 
 class FirestoreTransaction:
+    JOINED_MAX_WRITES = 440
+    JOINED_MAX_WRITE_BYTES = 8 * 1024 * 1024
+
     def __init__(self, client: Any, namespace: str, transaction: Any, *, read_budget=None):
         self.client = client
         self.namespace = namespace
@@ -288,13 +291,14 @@ class FirestoreTransaction:
             if table == 'jobs' and value.get('privacy_generation') is None:
                 value['privacy_generation'] = generation
 
-    def write_validated(self):
+    def write_validated(self, *, write_view=None):
+        writer = self.transaction if write_view is None else write_view
         for (table, key), value in self.writes.items():
-            self.transaction.set(self._ref(table, key), value)
+            writer.set(self._ref(table, key), value)
         for (table, key), fields in self.patches.items():
-            self.transaction.update(self._ref(table, key), fields)
+            writer.update(self._ref(table, key), fields)
         for ref, value in self.external.values():
-            self.transaction.set(ref, value)
+            writer.set(ref, value)
 
     def check_joined_commit_budget(self):
         from google.cloud.firestore_v1.types import Write
@@ -302,7 +306,10 @@ class FirestoreTransaction:
         # Reserve headroom for commit framing, index overhead, and privacy
         # fence writes appended by the Firestore commit hook.
         writes = self.transaction._write_pbs
-        if len(writes) > 440 or sum(len(Write.serialize(write)) for write in writes) > 8 * 1024 * 1024:
+        if (
+            len(writes) > self.JOINED_MAX_WRITES
+            or sum(len(Write.serialize(write)) for write in writes) > self.JOINED_MAX_WRITE_BYTES
+        ):
             from database.batch_pipeline_projection_protocol import ProjectionBlocked
 
             raise ProjectionBlocked('joined merge exceeds Firestore commit budget')

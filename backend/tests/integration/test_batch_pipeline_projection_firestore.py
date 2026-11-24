@@ -962,7 +962,74 @@ def multipart(lane, count, *, merge=True):
     return batch
 
 
-def test_joined_merge_keeps_unsupported_multipart_artifact_staged(lane, monkeypatch):
+def test_joined_multipart_updates_shared_row_and_indexes_once(lane, monkeypatch):
+    from utils.batch_pipeline.merge import OrderedMerge
+    from utils.batch_pipeline.scheduler import owner_key
+    from utils.mcp_server.handlers.conversations import fetch_conversation_for_detail
+
+    monkeypatch.setenv('BATCH_PIPELINE_JOINED_MERGE_ENABLED', 'true')
+    monkeypatch.setattr(lane.conversations, 'get_firestore_client', lambda: lane.client)
+    batch = lane.seed(duration_seconds=310)
+    lane.payload.update(
+        audio_seconds=310,
+        speech_seconds=310,
+        speech_spans=[{'start': 0, 'end': 310}],
+        words=[
+            {'word': 'First update.', 'timestamp': [298, 299]},
+            {'word': 'Second update.', 'timestamp': [301, 302]},
+        ],
+        diarization={'turns': [{'start': 0, 'end': 310, 'speaker': 'SPEAKER_00'}]},
+    )
+    sid = batch.ids[0]
+    assert lane.queue.complete(lane.WorkResult(sid, f'gs://synthetic/results/{sid}#1'), batch.leases[sid].token, 1)
+    commits = []
+
+    def lose_reply(entry, plan):
+        published = lane.projector.commit_joined_merge(entry, plan)
+        assert published['projection_state'] == 'persisted'
+        commits.append(published)
+        raise ConnectionError('synthetic lost multipart reply')
+
+    merge = OrderedMerge(lane.store, joined_writer=lose_reply)
+    with pytest.raises(ConnectionError, match='lost multipart reply'):
+        merge.commit_next(lane.uid, 2)
+
+    result_ref = lane.projector.store.ref('results', sid)
+    entry = result_ref.get().to_dict()
+    assert commits == [entry]
+    assert entry['projection_part_count'] == entry['projection']['part_count'] == 2
+    assert entry['projection']['speech_seconds'] == 310
+    first, second = (entry['projection_parts'][str(i)]['transcript_outputs'] for i in range(2))
+    cid = first[0]['conversation_id']
+    assert first == [{'conversation_id': cid, 'sync_content_revision': 1}]
+    assert second == [{'conversation_id': cid, 'sync_content_revision': 2}]
+    assert entry['conversation_ids'] == [cid]
+    row = fetch_conversation_for_detail(lane.uid, cid)
+    assert [segment['text'] for segment in row['transcript_segments']] == ['First update.', 'Second update.']
+    (stored,) = active_rows(lane)
+    assert stored['sync_content_revision'] == 2
+
+    indexes = lane.user.collection('sync_assignment')
+    indexed = {snap.id: snap.to_dict() for snap in indexes.stream()}
+    for key in ('1970-01-01', 'recent'):
+        (indexed_row,) = indexed[key]['entries']
+        assert indexed_row['id'] == cid
+        assert indexed_row['started_at'] == stored['started_at']
+        assert indexed_row['finished_at'] == stored['finished_at']
+    owner = lane.store.run(lambda tx: tx.get('owners', owner_key(lane.uid)))
+    assert owner['watermark']['segment_id'] == owner['projection_watermark'] == sid
+
+    restarted = OrderedMerge(lane.store, joined_writer=lane.projector.commit_joined_merge)
+    assert restarted.commit_next(lane.uid, 3) is None
+    assert result_ref.get().to_dict() == entry
+    assert active_rows(lane) == [stored]
+    assert {snap.id: snap.to_dict() for snap in indexes.stream()} == indexed
+
+
+@pytest.mark.parametrize('refusal', ['erased', 'oversized'])
+def test_joined_merge_keeps_all_multipart_outputs_staged_on_refusal(lane, monkeypatch, refusal):
+    from database.batch_pipeline_projection_session import ProjectionSession
+    from database.batch_pipeline_store import FirestoreTransaction
     from utils.batch_pipeline.merge import OrderedMerge
     from utils.batch_pipeline.scheduler import owner_key
 
@@ -971,16 +1038,47 @@ def test_joined_merge_keeps_unsupported_multipart_artifact_staged(lane, monkeypa
     sid = batch.ids[0]
     result = lane.WorkResult(sid, f'gs://synthetic/results/{sid}#1')
     assert lane.queue.complete(result, batch.leases[sid].token, 1)
+    planned = []
+    persist = ProjectionSession.persist
+
+    def observe_plan(session, *args, **kwargs):
+        receipt = persist(session, *args, **kwargs)
+        planned.append(session.part_index)
+        return receipt
+
+    monkeypatch.setattr(ProjectionSession, 'persist', observe_plan)
+    write_ceiling = FirestoreTransaction.JOINED_MAX_WRITES
+    if refusal == 'erased':
+        binding = batch.binding
+        erased = lane.chunk_identity(lane.uid, binding.source, binding.client_device_id, binding.is_locked, 1150)
+        lane.user.collection('deleted_conversations').document(erased).set({'deleted': True})
+    else:
+        # Each assignment fits, but their native writes and the merge exceed the combined ceiling.
+        monkeypatch.setattr(FirestoreTransaction, 'JOINED_MAX_WRITES', 12)
     merge = OrderedMerge(lane.store, joined_writer=lane.projector.commit_joined_merge)
+    before = lane.store.run(lambda tx: tx.get('owners', owner_key(lane.uid)))
+    ledger = batch.ledger.get().to_dict()
 
     assert merge.commit_next(lane.uid, 2) is None
+    assert planned == ([0] if refusal == 'erased' else [0, 1])
 
     assert not lane.projector.store.ref('results', sid).get().exists
     job = lane.projector.store.ref('jobs', sid).get().to_dict()
-    assert job['state'] == 'result_ready' and job['result'] == result.to_dict()
+    assert job['state'] == 'result_ready' and job['result'] == result.to_dict() and job['merge_pending']
     owner = lane.store.run(lambda tx: tx.get('owners', owner_key(lane.uid)))
-    assert owner.get('watermark') is None and owner.get('projection_watermark') is None
-    assert active_rows(lane) == []
+    assert owner.get('watermark') == before.get('watermark')
+    assert owner.get('projection_watermark') == before.get('projection_watermark')
+    assert batch.ledger.get().to_dict() == ledger
+    assert list(lane.user.collection('conversations').stream()) == []
+    indexes = lane.user.collection('sync_assignment')
+    assert list(indexes.stream()) == []
+    if refusal == 'oversized':
+        monkeypatch.setattr(FirestoreTransaction, 'JOINED_MAX_WRITES', write_ceiling)
+        assert merge.commit_next(lane.uid, 3)['projection_state'] == 'persisted'
+        ids = {row['id'] for row in active_rows(lane)}
+        assert len(ids) == 2
+        for key in ('1970-01-01', 'recent'):
+            assert {row['id'] for row in indexes.document(key).get().to_dict()['entries']} == ids
 
 
 @pytest.mark.parametrize('count', [2, 3])

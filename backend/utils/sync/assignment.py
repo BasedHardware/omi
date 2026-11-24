@@ -78,7 +78,7 @@ from utils.sync.assignment_telemetry import lineage_span_delta_bucket as _lineag
 from utils.sync.assignment_telemetry import created_sync_row_observation
 from utils.capture.dedupe import choose_segments
 from utils.capture.identity import assignment_keys_compatible, persist_identity
-from utils.sync.assignment_index import AssignmentIndex
+from utils.sync.assignment_index import AssignmentIndex, read_assignment_document
 from utils.sync.live_overlap import (
     batch_target_contains,
     choose_live_overlap,
@@ -287,7 +287,7 @@ def assign_in_transaction(
 
     def load(cid: str) -> dict | None:
         if cid not in read:
-            row = collection.document(cid).get(transaction=transaction).to_dict()
+            row = read_assignment_document(transaction, collection.document(cid))
             if row and not row.get('deleted') and isinstance(row.get('transcript_segments'), dict):
                 try:
                     # Validate before canonical/candidate admission; later merge
@@ -299,12 +299,13 @@ def assign_in_transaction(
         return read[cid]
 
     tombstones: dict[str, bool] = {}
+    read_transaction = getattr(transaction, 'read_transaction', transaction)
 
     def tombstoned(cid: str) -> bool:
         # Same transactional deletion authority as the batch privacy fence.
         if cid not in tombstones:
             tombstones[cid] = (
-                user_ref.collection('deleted_conversations').document(cid).get(transaction=transaction).exists
+                user_ref.collection('deleted_conversations').document(cid).get(transaction=read_transaction).exists
             )
         return tombstones[cid]
 

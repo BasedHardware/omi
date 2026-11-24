@@ -5027,12 +5027,15 @@ def assign_sync_conversation(
     timing: bool = False,
     defer_index: Callable[[str, str, list[str]], None] | None = None,
     absorb_contained_processed_donor: bool = False,
+    assignment_plans: list | None = None,
 ):
     """Atomically choose, create or append a sync conversation; ``timing`` logs bounded sub-phases.
 
     ``defer_index`` takes the post-commit search/people-stats step off this
     call: it receives the canonical and its donor lineage, and the caller
     converges each conversation once later (``index_sync_assignment``).
+    Joined multipart projection supplies ``assignment_plans`` to collect the
+    transaction body, post-commit callback and discovery retry for each part.
     """
     from utils.conversations.recorded_time import write_span
 
@@ -5080,8 +5083,7 @@ def assign_sync_conversation(
 
     attempted: dict[str, str] = {}
 
-    @firestore.transactional
-    def assign(transaction, full_ids=frozenset()):
+    def plan(transaction, full_ids=frozenset(), *, write_view=None):
         clock.attempt()
         score_snapshots.clear()
         # Projection guards only read; after_assign only writes in this transaction.
@@ -5106,7 +5108,7 @@ def assign_sync_conversation(
 
         with clock.timed('plan'):
             planned = assign_in_transaction(
-                transaction,
+                transaction if write_view is None else write_view,
                 user_ref,
                 incoming,
                 candidate_id=candidate_id,
@@ -5129,21 +5131,15 @@ def assign_sync_conversation(
         clock.body_done()
         return planned
 
+    @firestore.transactional
+    def assign(transaction, full_ids=frozenset()):
+        return plan(transaction, full_ids)
+
     def discover_live_candidates():
         with clock.timed('live_overlap'):
             discovery.discover(user_ref, incoming, find_sync_live_overlap_candidates)
 
-    with clock.call():
-        if not target_id and (
-            (incoming.get('client_device_id') and live_overlap_enabled()) or shadow_or_serve('CAPTURE_COVERAGE_MODE')
-        ):
-            discover_live_candidates()
-        with clock.timed('transaction'):
-            result = discovery.run(
-                lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
-                lambda: attempted.get('canonical'),
-                discover_live_candidates,
-            )
+    def after_commit(result):
         conversation = result[0]
         log_assignment_observations(conversation, lineage_eligible=lineage_eligible)
         output_ids = [conversation['id'], *(row['id'] for row, _ in conversation.get('_sync_size_rollover_rows', []))]
@@ -5158,6 +5154,27 @@ def assign_sync_conversation(
             with clock.timed('index'):
                 clock.donors = len(conversation.get('sync_merged_from') or [])
                 index_sync_assignment(uid, output_ids, conversation.get('sync_merged_from') or [])
+
+    def discover():
+        if not target_id and (
+            (incoming.get('client_device_id') and live_overlap_enabled()) or shadow_or_serve('CAPTURE_COVERAGE_MODE')
+        ):
+            discover_live_candidates()
+
+    if assignment_plans is not None:
+        discover()
+        assignment_plans.append((plan, after_commit, discover_live_candidates))
+        return None
+
+    with clock.call():
+        discover()
+        with clock.timed('transaction'):
+            result = discovery.run(
+                lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
+                lambda: attempted.get('canonical'),
+                discover_live_candidates,
+            )
+        after_commit(result)
     return result
 
 
