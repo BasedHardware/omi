@@ -15754,7 +15754,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'เรียกเก็บเงินผ่าน omi.me';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'อัปเดตบัตรของคุณที่ omi.me เพื่อรับ $plan คืน';
+  String playStripePlanPaused(String plan) {
+    return 'แพ็กเกจ $plan ของคุณหยุดชั่วคราวอยู่';
   }
 }

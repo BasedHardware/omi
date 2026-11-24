@@ -20,6 +20,7 @@ import stripe
 import database.play_subscriptions as play_db
 import database.users as users_db
 from config import play_billing as config
+from config import prepaid_code_redeem as prepaid_code_config
 from database import action_items as action_items_db, conversations as conversations_db, memories as memories_db
 from database import redis_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
@@ -314,7 +315,7 @@ NOTICE_CLAIM_SECONDS = 600
 DOUBLE_CHARGE_LOG = 'play_billing_double_charge uid=%s purchase=%s state=%s'
 
 
-def _paid_stripe_subscription_ids(uid: str) -> list[str]:
+def _paid_stripe_subscription_ids(uid: str, prepaid: Optional[list] = None) -> list[str]:
     """Recurring Stripe subscriptions (``sub_``) Stripe itself reports active or trialing for ``uid``.
 
     Stricter than ``_live_stripe_subscription``: a stored row, a one-time ``pi_`` grant, an ended
@@ -323,7 +324,7 @@ def _paid_stripe_subscription_ids(uid: str) -> list[str]:
     customer_id = users_db.get_stripe_customer_id(uid)
     if not customer_id:
         return []
-    ids = []
+    ids, prepaid = [], ([] if prepaid is None else prepaid)
     try:
         for sub in stripe.Subscription.list(customer=customer_id, status='all', limit=100).auto_paging_iter():
             data = sub.to_dict()
@@ -332,6 +333,8 @@ def _paid_stripe_subscription_ids(uid: str) -> list[str]:
                 continue
             if str(data.get('id') or '').startswith('sub_') and data.get('status') in ('active', 'trialing'):
                 ids.append(data['id'])
+                if prepaid_code_config.is_prepaid_subscription(data):
+                    prepaid.append(str(metadata.get('redeemed_promotion_code_id')))
     except Exception as error:
         logger.warning('play_billing stripe conflict check unavailable: %s', type(error).__name__)
     return ids
@@ -344,7 +347,12 @@ def _record_stripe_conflict(uid: str, token_hash: str, state: PlayState) -> None
     and tells the user once; a failed notice is sent again on the next observation.
     Runbook: backend/docs/runbooks/play-billing-double-charge.md.
     """
-    stripe_ids = _paid_stripe_subscription_ids(uid)
+    prepaid_codes: list = []
+    stripe_ids = _paid_stripe_subscription_ids(uid, prepaid_codes)
+    if prepaid_codes and len(prepaid_codes) == len(stripe_ids):
+        # Only prepaid code subscriptions: they charge nothing, so no double charge and no user notice.
+        logger.error(prepaid_code_config.PLAY_OVERLAP_LOG, uid, token_hash[:12], prepaid_codes[0])
+        return
     if not stripe_ids:
         logger.warning('play_billing Stripe overlap not confirmed as a paid subscription uid=%s', uid)
         return

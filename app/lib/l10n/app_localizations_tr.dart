@@ -15839,7 +15839,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'omi.me üzerinden faturalandırılır.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return '$plan planını geri almak için kartını omi.me üzerinden güncelle.';
+  String playStripePlanPaused(String plan) {
+    return '$plan planın duraklatıldı.';
   }
 }

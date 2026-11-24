@@ -4765,5 +4765,5 @@
     "prepaidCodeResult": "{reason, select, invalid{هذا الرمز غير صالح. تحقق منه وحاول مرة أخرى.} used{تم استخدام هذا الرمز بالفعل.} expired{انتهت صلاحية هذا الرمز.} hasPlan{لديك خطة بالفعل. لم يتم استخدام رمزك. استرده بعد انتهاء خطتك.} notPrepaid{لا يمكن استرداد هذا الرمز هنا. استخدمه عند اختيار خطة.} notEligible{لا يمكن استخدام هذا الرمز على هذا الحساب.} rateLimited{محاولات كثيرة جدًا. حاول لاحقًا.} other{حدث خطأ ما. يرجى المحاولة مرة أخرى.}}",
     "playStripeBilledOnWeb": "تتم الفوترة عبر omi.me. يمكنك الإلغاء من هنا في أي وقت.",
     "playStripeBilledOnWebShort": "تتم الفوترة عبر omi.me.",
-    "playStripeUpdateCardToGetPlanBack": "حدّث بطاقتك على omi.me لاستعادة {plan}."
+    "playStripePlanPaused": "خطة {plan} الخاصة بك متوقفة مؤقتًا."
 }

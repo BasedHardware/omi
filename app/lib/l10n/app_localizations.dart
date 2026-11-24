@@ -27777,11 +27777,11 @@ abstract class AppLocalizations {
   /// **'Billed through omi.me.'**
   String get playStripeBilledOnWebShort;
 
-  /// Home row line under 'Your card was declined' on an Android build that sells through Google Play; the card can only be updated on the omi.me website. plan = a product name such as Omi Pro. Plain text, no link.
+  /// Home row line under 'Your card was declined' on an Android build that sells through Google Play. Neutral: names no place or way to pay. plan = a product name such as Omi Pro.
   ///
   /// In en, this message translates to:
-  /// **'Update your card at omi.me to get {plan} back.'**
-  String playStripeUpdateCardToGetPlanBack(String plan);
+  /// **'Your {plan} plan is paused.'**
+  String playStripePlanPaused(String plan);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

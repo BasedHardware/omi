@@ -32,7 +32,7 @@ void main() {
         'play_subscription_on_hold',
         'You have a Google Play subscription on hold. Fix the payment in Google Play.'
       ),
-      (503, 'play_check_unavailable', 'We could not check your Google Play subscription. Try again in a minute.'),
+      (400, 'play_check_unavailable', 'We could not check your Google Play subscription. Try again in a minute.'),
     ]) {
       final result = paymentErrorFromBody(status, '{"detail": "$sentence", "code": "$code"}');
       expect(result['status_code'], status);

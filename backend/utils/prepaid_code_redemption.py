@@ -141,18 +141,25 @@ def _classify(promo: dict, uid: str, now: int) -> tuple[dict, int]:
     return monthly, months
 
 
-def _has_live_plan(uid: str, now: int, own_promotion_code_id: Optional[str] = None) -> bool:
-    """A live Play row, a live paid stored row, or any Stripe subscription that can still bill.
-    With ``own_promotion_code_id`` (a resumed redemption), the prepaid subscription this same code
-    created is not counted, so the reader's own half-finished plan never blocks its resume."""
+def _play_live(uid: str):
+    """(live Play row or an owned Play purchase that can charge or recover, the stored plan), from one fresh read
+    of the user document and, for a reader with Play history, Google itself. Unreadable Google: try again."""
     # One read for the stored plan and the Play history fields: a buyer with no Play history reads nothing more.
     current, play_fields = users_db.get_existing_user_subscription_and_fields(uid, play_subscriptions_db.HISTORY_FIELDS)
     if play_stripe_guard.live_play_row(current):
-        return True
+        return True, current
     play_refusal = play_admission_refusal(uid, play_fields)
     if play_refusal == PLAY_CHECK_UNAVAILABLE_REASON:
         raise PrepaidCodeError(503, TRY_AGAIN)
-    if play_refusal:
+    return bool(play_refusal), current
+
+
+def _has_live_plan(uid: str, now: int, own_promotion_code_id: Optional[str] = None) -> bool:
+    """A live Play row or purchase, a live paid stored row, or any Stripe subscription that can still bill.
+    With ``own_promotion_code_id`` (a resumed redemption), the prepaid subscription this same code
+    created is not counted, so the reader's own half-finished plan never blocks its resume."""
+    play_live, current = _play_live(uid)
+    if play_live:
         return True
     other_open, own_ids = _open_stripe_subscriptions(uid, own_promotion_code_id)
     if other_open:
@@ -283,6 +290,17 @@ def redeem_prepaid_code(uid: str, raw_code: str) -> dict:
         if claim.get('uid') == uid:
             return _resume(uid, promo, claim)
         raise PrepaidCodeError(409, USED)
+
+    # A Play purchase verified since the first check (another device, a notification): read Google once more
+    # with the claim held. Narrows the window; the webhook keeps a prepaid subscription that still overlaps.
+    try:
+        play_now = _play_live(uid)[0]
+    except PrepaidCodeError:
+        redemptions_db.release(promo['id'])
+        raise
+    if play_now:
+        redemptions_db.release(promo['id'])
+        raise PrepaidCodeError(409, HAS_PLAN)
 
     try:
         subscription = _create_subscription(uid, promo, monthly['id'], ends_at)
