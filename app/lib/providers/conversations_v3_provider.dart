@@ -10,6 +10,7 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
+import 'package:omi/services/capture/optimistic_processing.dart';
 
 typedef ConversationsLiveFetcher = Future<ApiResult<api.ConversationsLiveRead>> Function();
 
@@ -49,6 +50,115 @@ class ConversationsV3Provider extends ChangeNotifier {
   bool _resolved = false;
   ServerConversation? _live;
   Future<void>? _reading;
+  ServerConversation? _finishRow;
+  String? _finishRecordingId;
+  String? _finishLiveId;
+  bool _suppressListening = false;
+  String? _finishCaptureId;
+  bool _finishAccepted = false;
+  bool _finishExpired = false;
+  Timer? _finishExpiry;
+
+  bool get finishFeedbackEnabled => v3 && !const bool.fromEnvironment('OMI_V3_FINISH_FEEDBACK_OFF');
+  ServerConversation? get finishRow => finishFeedbackEnabled && !_finishExpired ? _finishRow : null;
+
+  bool suppressListeningAfterFinish(String? captureId) =>
+      finishFeedbackEnabled && _suppressListening && _finishCaptureId == captureId;
+
+  void startManualFinish(ServerConversation row, String? recordingId, {String? liveConversationId, String? captureId}) {
+    if (!finishFeedbackEnabled) return;
+    _clearManualFinish();
+    _finishRow = row;
+    _suppressListening = true;
+    _finishCaptureId = captureId;
+    _finishRecordingId = recordingId;
+    final live = _live;
+    if (live != null &&
+        (live.id == liveConversationId ||
+            live.id == recordingId ||
+            (recordingId != null && live.v3?.recordingIds.contains(recordingId) == true))) {
+      _finishLiveId = live.id;
+    }
+    _armFinishExpiry();
+    notifyListeners();
+  }
+
+  bool settleManualFinish(ServerConversation row, ServerConversation? result) {
+    if (!finishFeedbackEnabled || !identical(_finishRow, row)) return false;
+    if (result == null || result.discarded || result.status == ConversationStatus.in_progress) {
+      _clearManualFinish();
+    } else {
+      _finishAccepted = true;
+      _finishExpired = false;
+      _suppressListening = true;
+      _finishExpiry?.cancel();
+      _finishRecordingId = result.id;
+      if (result.v3?.recording != true) {
+        _finishLiveId = result.id;
+      } else if (_live?.v3?.recordingIds.contains(result.id) == true) {
+        _finishLiveId ??= _live!.id;
+      }
+    }
+    notifyListeners();
+    return true;
+  }
+
+  /// Home supplies visible successors and failed conversations separately.
+  bool finishHasSuccessor(Iterable<ServerConversation> visibleRows) => _matchesFinish(visibleRows);
+
+  bool finishHasFailedMatch(Iterable<ServerConversation> failedRows) => _finishAccepted && _matchesFinish(failedRows);
+
+  bool _matchesFinish(Iterable<ServerConversation> rows) => rows.any(
+        (row) =>
+            row.v3?.tileState != ConversationTileState.live &&
+            row.status != ConversationStatus.in_progress &&
+            (row.id == _finishLiveId ||
+                (_finishAccepted &&
+                    _finishLiveId == null &&
+                    _finishRecordingId != null &&
+                    (row.v3?.recordingIds.contains(_finishRecordingId) == true ||
+                        row.v3?.recordingPieces.any(
+                              (piece) => piece.recordingId == _finishRecordingId,
+                            ) ==
+                            true))),
+      );
+
+  bool acknowledgeManualFinish(ServerConversation row) {
+    if (!_finishAccepted || !identical(finishRow, row)) return false;
+    _clearManualFinish(keepClosedLive: true);
+    notifyListeners();
+    return true;
+  }
+
+  void _armFinishExpiry() {
+    _finishExpiry?.cancel();
+    _finishExpiry = Timer(OptimisticProcessingPlaceholder.timeout, () {
+      _finishExpired = true;
+      _suppressListening = false;
+      notifyListeners();
+    });
+  }
+
+  void _clearManualFinish({bool keepClosedLive = false}) {
+    _finishExpiry?.cancel();
+    _finishRow = null;
+    _finishRecordingId = null;
+    if (!keepClosedLive) {
+      _finishLiveId = null;
+      _finishCaptureId = null;
+      _suppressListening = false;
+    }
+    _finishAccepted = false;
+    _finishExpired = false;
+  }
+
+  Future<void> refreshAfterManualFinish() async {
+    final owner = _owner;
+    await _reading?.then<void>((_) {}, onError: (Object _) {});
+    if (owner != _uid()) return;
+    if (!_disposed && finishFeedbackEnabled) await refresh();
+  }
+
   Timer? _poll;
   bool Function()? _pollWhen;
   bool Function()? _rowsPending;
@@ -64,7 +174,8 @@ class ConversationsV3Provider extends ChangeNotifier {
   /// Episode and Home-feed reads wait for this: off for a v3 account, and until the first answer.
   bool get suppressesLegacy => !resolved || v3;
 
-  ServerConversation? get live => v3 ? _live : null;
+  ServerConversation? get live =>
+      v3 && ((_finishExpired && !_finishAccepted) || _live?.id != _finishLiveId) ? _live : null;
 
   @visibleForTesting
   bool get polling => _poll != null;
@@ -87,6 +198,7 @@ class ConversationsV3Provider extends ChangeNotifier {
   void _ensureOwner() {
     final uid = _uid();
     if (uid == _owner) return;
+    _clearManualFinish();
     _owner = uid;
     _v3 = false;
     _resolved = false;
@@ -118,6 +230,12 @@ class ConversationsV3Provider extends ChangeNotifier {
       case ApiSuccess(:final data):
         _v3 = data.v3;
         _live = data.v3 ? data.conversation : null;
+        if (_live != null &&
+            _live!.id != _finishLiveId &&
+            (_finishRecordingId == null || _live!.v3?.recordingIds.contains(_finishRecordingId) != true)) {
+          _suppressListening = false;
+          if (_finishRow == null) _finishLiveId = null;
+        }
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
         // An older server: today's Home.
         _v3 = false;
@@ -194,6 +312,7 @@ class ConversationsV3Provider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _clearManualFinish();
     _poll?.cancel();
     super.dispose();
   }
