@@ -207,6 +207,21 @@ def _receiver(client):
     return dispatch
 
 
+def _observed_notes_output(observation):
+    from models.conversation import Structured
+    from pydantic import ValidationError
+    from testing.finalization_replay.corpus import unpack
+    from utils.conversations.llm_input_dedupe import output_fingerprint
+
+    document = observation.get('conversation') or {}
+    if not isinstance(document.get('structured'), dict):
+        return None
+    try:
+        return output_fingerprint(Structured.model_validate(unpack(document['structured'])))
+    except (ValidationError, TypeError, ValueError):
+        return None
+
+
 def _observe_sync(state, run, leaves, url):
     from utils import ai_profile_refresh, executors
     from utils.episodes import finalize
@@ -388,6 +403,8 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                         out['errors'][side] = f'ModuleNotFoundError: {state.diag_missing_module}'
                     if side in out:
                         out[side]['speaker_trace'] = getattr(state, 'speaker_trace', None)
+                        if state.case['name'] == 'kept-with-effects':
+                            out[side]['observed_notes_output'] = _observed_notes_output(out[side])
                         out[side]['hourly_usage_replay_bucket'] = HOURLY_USAGE_REPLAY_TIME.strftime('%Y-%m-%d-%H')
                         if getattr(state, 'python_retry', None):
                             out[side]['python_retry'] = state.python_retry

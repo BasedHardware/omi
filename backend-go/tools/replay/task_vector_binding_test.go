@@ -70,3 +70,52 @@ func TestOnlySameAuthorizedTaskAndVectorMayPair(t *testing.T) {
 		}
 	}
 }
+
+func receiptTestObject(t *testing.T, value any) map[string]any {
+	t.Helper()
+	object, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("fixture expected an object, got %T", value)
+	}
+	return object
+}
+
+func TestNotesReceiptClockNeedsBothDigestsAndWholeStructuredOutput(t *testing.T) {
+	for _, mutation := range []string{"", "bad witness", "missing receipt", "missing witness", "different input", "other notes field", "different action", "outside window", "second task"} {
+		py, g := taskProofRun(strings.Repeat("A", 20)), taskProofRun(strings.Repeat("B", 20))
+		for i, r := range []*observation{py, g} {
+			row := receiptTestObject(t, r.Document)
+			row["notes_llm_input_hash"] = strings.Repeat("a", 64)
+			r.ObservedNotesOutput = fmt.Sprintf("%064x", i+1)
+			row["notes_llm_output_hash"] = r.ObservedNotesOutput
+			// Each run has its own witnessed item creation timestamp.
+			stamp := receiptTestObject(t, singleObject(objectField(row["structured"], "action_items"))["created_at"])
+			stamp["$timestamp"] = r.Started.Add(time.Second + time.Duration(i)).Format(time.RFC3339Nano)
+		}
+		row := receiptTestObject(t, g.Document)
+		structured := receiptTestObject(t, row["structured"])
+		switch mutation {
+		case "bad witness":
+			g.ObservedNotesOutput = strings.Repeat("f", 64)
+		case "missing receipt":
+			delete(row, "notes_llm_output_hash")
+		case "missing witness":
+			g.ObservedNotesOutput = ""
+		case "different input":
+			row["notes_llm_input_hash"] = strings.Repeat("b", 64)
+		case "other notes field":
+			structured["gist"] = "Changed"
+		case "different action":
+			singleObject(structured["action_items"])["completed"] = true
+		case "outside window":
+			singleObject(structured["action_items"])["created_at"] = map[string]any{"$timestamp": g.Finished.Add(time.Second).Format(time.RFC3339Nano)}
+		case "second task":
+			g.TaskWrites = append(g.TaskWrites, g.TaskWrites[0])
+		}
+		diff := []difference{{Path: "/conversation/notes_llm_output_hash", Kind: "different_value"}}
+		reviewSingleTaskBinding(diff, py, g)
+		if (diff[0].Reason == "replay_clock") != (mutation == "") {
+			t.Fatalf("%s: %s", mutation, diff[0].Reason)
+		}
+	}
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -133,6 +134,31 @@ func singleTaskBinding(run *observation) (taskBinding, bool) {
 	return b, true
 }
 
+// The first-create fixture has exactly one owner-bound action. Its creation
+// clock is already witnessed by the task and vector proof. Require complete
+// output parity after excluding only that clock, and independently recompute
+// both stored receipts using the serving Structured model before labeling.
+func notesReceiptOutput(run *observation, itemWithoutClock map[string]any) map[string]any {
+	raw, ok := documentField(run, "structured").(map[string]any)
+	output, err := hex.DecodeString(run.ObservedNotesOutput)
+	if !ok || err != nil || len(output) != sha256.Size || documentField(run, "notes_llm_output_hash") != run.ObservedNotesOutput {
+		return nil
+	}
+	structured := maps.Clone(raw)
+	structured["action_items"] = []any{itemWithoutClock}
+	return structured
+}
+
+func sameNotesReceiptExceptTaskClock(py, goRun *observation, binding taskBinding) bool {
+	input, ok := documentField(py, "notes_llm_input_hash").(string)
+	digest, err := hex.DecodeString(input)
+	if !ok || err != nil || len(digest) != sha256.Size || documentField(goRun, "notes_llm_input_hash") != input {
+		return false
+	}
+	left := notesReceiptOutput(py, binding.item)
+	return left != nil && equalReplayValue(left, notesReceiptOutput(goRun, binding.item))
+}
+
 func reviewSingleTaskBinding(diffs []difference, python, goRun *observation) bool {
 	// This first-create fixture seeds no task or vector. Multiple creations and
 	// refresh/reuse require separate evidence and stay on the literal comparator.
@@ -166,6 +192,10 @@ func reviewSingleTaskBinding(diffs []difference, python, goRun *observation) boo
 			diffs[i].Reason = "generated_identity"
 		case d.Kind == "different_value":
 			switch d.Path {
+			case "/conversation/notes_llm_output_hash":
+				if sameNotesReceiptExceptTaskClock(python, goRun, py) {
+					diffs[i].Reason = "replay_clock"
+				}
 			case "/effects/other_vectors/0/record/id", "/effects/other_vectors/0/record/metadata/action_item_id",
 				"/effects/other_vectors/0/record/metadata/created_at", "/conversation/structured/action_items/0/created_at/$timestamp":
 				diffs[i].Reason = "generated_identity"
