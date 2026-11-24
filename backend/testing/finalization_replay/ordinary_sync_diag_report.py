@@ -206,6 +206,20 @@ def pass3_go_gap_group(path: str, case_name: str, groups: list[dict[str, str]]) 
     return None
 
 
+def is_episode_attach_memo_path(path: str) -> bool:
+    if path.startswith('/go/derived_documents/'):
+        path = path.removeprefix('/go')
+    if not path.startswith('/derived_documents/') or '~1episode_links~1' not in path:
+        return False
+    return path.rsplit('/', 1)[-1] in {
+        'attach_revision',
+        'attach_completed',
+        'attach_finalized',
+        'attach_owner_id',
+        'attach_memo_evidence',
+    }
+
+
 def unlabelled_groups(cases: list[dict]) -> list[dict]:
     groups = {}
     for case in cases:
@@ -323,6 +337,11 @@ def enrich(report: dict) -> dict:
                 '/conversation/go_finalization_notes_output_hash',
                 '/conversation/finalization_job_id',
             }:
+                label = 'go_gap'
+            elif (
+                is_episode_attach_memo_path(difference.get('path', ''))
+                and (case.get('episode_attach_memo_checks', {}).get('go') or {}).get('valid') is False
+            ):
                 label = 'go_gap'
             elif unreadable_park and difference.get('path') == '/status':
                 label = UNREADABLE_RETRY_BUG

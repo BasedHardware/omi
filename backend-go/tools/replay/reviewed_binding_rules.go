@@ -5,6 +5,8 @@ import "strings"
 var reviewedGoOnlyFields = []string{
 	"finalization_engine", "finalization_owner_epoch", "finalization_revision",
 	"go_sync_minimum_discarded", "go_sync_minimum_revision",
+	"go_sync_inline_fanout_epoch", "go_sync_inline_fanout_revision",
+	"go_empty_discard_fanout_epoch", "go_sync_empty_discard_home_revision",
 }
 
 func validateReviewedGoOnlyFields(diffs *[]difference, python, goRun *observation) {
@@ -119,6 +121,11 @@ func approvedGoOnlyDifference(path string, python, goRun *observation) string {
 		case "go_sync_minimum_discarded", "go_sync_minimum_revision":
 			if goMinimumBinds(goRun) && !hasDocumentField(python.Document, field) {
 				return "Go deterministic-minimum receipt binds to its own sync content revision and discarded outcome; the Python row carries no Go receipt"
+			}
+		case "go_sync_inline_fanout_epoch", "go_sync_inline_fanout_revision",
+			"go_empty_discard_fanout_epoch", "go_sync_empty_discard_home_revision":
+			if hasDocumentField(goRun.Document, field) && !hasDocumentField(python.Document, field) {
+				return "go_coordination_stamp"
 			}
 		}
 	}

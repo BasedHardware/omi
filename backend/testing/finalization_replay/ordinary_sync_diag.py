@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from hashlib import sha256
 import importlib
 import importlib.util
@@ -36,6 +37,18 @@ def _worker_providers(worker_backend):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.provider_server, module.allow_provider_port
+
+
+def _usage_bucket_datetime(bucket):
+    """Freeze hourly usage bucket selection while retaining real write timestamps."""
+    anchor = datetime.strptime(bucket, '%Y-%m-%d-%H').replace(minute=30, tzinfo=timezone.utc)
+
+    class UsageBucketDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return anchor if tz is None else anchor.astimezone(tz)
+
+    return UsageBucketDatetime
 
 
 def _enable_worker_backend(worker_backend):
@@ -254,6 +267,12 @@ def _run_side(cases, side, binary, database, key, worker_backend):
             import tiktoken
 
             tiktoken.encoding_for_model('text-embedding-3-large')
+            from utils import analytics
+
+            usage_bucket = os.environ.get('OMI_REPLAY_USAGE_BUCKET')
+            if usage_bucket is None:
+                usage_bucket = datetime.now(timezone.utc).strftime('%Y-%m-%d') + '-12'
+            cleanup.enter_context(patch.object(analytics, 'datetime', _usage_bucket_datetime(usage_bucket)))
             from database import redis_db
 
             with fakeredis.FakeRedis() as redis, patch.object(redis_db, 'r', redis), patch.object(
@@ -327,7 +346,10 @@ def _run_side(cases, side, binary, database, key, worker_backend):
 
 def _paired(payload, worker_binary, worker_backend):
     sides = []
+    usage_bucket = datetime.now(timezone.utc).strftime('%Y-%m-%d') + '-12'
     for side in ('python', 'go'):
+        child_environment = os.environ.copy()
+        child_environment['OMI_REPLAY_USAGE_BUCKET'] = usage_bucket
         result = subprocess.run(
             [
                 sys.executable,
@@ -344,6 +366,7 @@ def _paired(payload, worker_binary, worker_backend):
             input=payload,
             capture_output=True,
             timeout=240,
+            env=child_environment,
         )
         if result.returncode:
             detail = result.stderr.decode(errors='replace')[-2000:]

@@ -61,7 +61,15 @@ def _documents(collection):
 
 
 def _episode_attach_memo_failure_reason(
-    uid, cid, conversation, derived_documents, *, transcript_decoder=None, content_key_fn=None
+    uid,
+    cid,
+    conversation,
+    derived_documents,
+    *,
+    transcript_decoder=None,
+    content_key_fn=None,
+    require_finalized=False,
+    require_conversation_owner=False,
 ):
     """Return a value-free failure code when this side's attach memo check fails."""
     try:
@@ -96,9 +104,13 @@ def _episode_attach_memo_failure_reason(
             return 'completed_key_mismatch'
         if link.get('attach_revision') != key:
             return 'revision_key_mismatch'
-        if link.get('attach_owner_id') != link.get('episode_id'):
+        episode_id = link.get('episode_id')
+        if not episode_id or link.get('attach_owner_id') != episode_id:
             return 'owner_binding_mismatch'
-        if link.get('attach_finalized') is not None and link.get('attach_finalized') != completed:
+        if require_conversation_owner and conversation.get('episode_id') != episode_id:
+            return 'conversation_owner_mismatch'
+        finalized = link.get('attach_finalized')
+        if (require_finalized and finalized != completed) or (finalized is not None and finalized != completed):
             return 'finalized_binding_mismatch'
         return ''
     except Exception:
@@ -132,29 +144,45 @@ def episode_attach_memo_failure_reason(
     )
 
 
-def episode_attach_memo_source_failure_reason(uid, cid, source_keys, derived_documents):
-    """Validate final memo fields against a key computed from their source row.
+def episode_attach_go_memo_failure_reason(
+    uid, cid, conversation, derived_documents, *, transcript_decoder=None, content_key_fn=None
+):
+    """Require Go's complete attach memo to match the final stored row exactly."""
+    return _episode_attach_memo_failure_reason(
+        uid,
+        cid,
+        conversation,
+        derived_documents,
+        transcript_decoder=transcript_decoder,
+        content_key_fn=content_key_fn,
+        require_finalized=True,
+        require_conversation_owner=True,
+    )
 
-    Go's source row is the intake snapshot; Python may re-encode the transcript
-    and stamp from a later attach row. The final Firestore conversation can be a
-    different snapshot from either source, so validate the stamp against the
-    side's own key. Keys stay in-process and are never serialized in diagnostics.
+
+def episode_attach_memo_cache_failure_reason(uid, cid, source_keys, derived_documents, conversation):
+    """Check Python memo fields against keys its own intake or writer path produced.
+
+    Missing memo fields are valid cache fall-through. Present memo keys must have
+    been produced earlier by this Python replay; owner metadata, when present,
+    must still bind to this conversation's episode.
     """
     link_path = f'users/{uid}/episode_links/{cid}'
     link = derived_documents.get(link_path)
     if not isinstance(link, dict):
-        return 'missing_link'
+        return ''
+
     expected_keys = {key for key in (source_keys or ()) if isinstance(key, str) and key}
-    if not expected_keys:
-        return 'source_key_unobserved'
-    completed = link.get('attach_completed')
-    revision = link.get('attach_revision')
-    if not completed or completed != revision or completed not in expected_keys:
-        return 'completed_key_mismatch'
-    if not link.get('episode_id') or link.get('attach_owner_id') != link.get('episode_id'):
-        return 'owner_binding_mismatch'
-    if link.get('attach_finalized') is not None and link.get('attach_finalized') != completed:
-        return 'finalized_binding_mismatch'
+    memo_values = [link.get(field) for field in ('attach_revision', 'attach_completed', 'attach_finalized')]
+    present_values = [value for value in memo_values if value is not None]
+    if any(not isinstance(value, str) or value not in expected_keys for value in present_values):
+        return 'python_key_not_produced'
+
+    owner = link.get('attach_owner_id')
+    if owner is not None:
+        episode_id = link.get('episode_id')
+        if not episode_id or owner != episode_id or conversation.get('episode_id') != episode_id:
+            return 'owner_binding_mismatch'
     return ''
 
 
@@ -345,17 +373,21 @@ class CaseState:
             derived_documents = changed_documents
         document = self.conversation.get().to_dict()
         if getattr(self, 'replay_side', None) == 'python':
-            memo_failure_reason = episode_attach_memo_source_failure_reason(
+            memo_failure_reason = episode_attach_memo_cache_failure_reason(
                 getattr(self, 'uid', ''),
                 getattr(self, 'cid', ''),
-                getattr(self, 'episode_attach_memo_writer_keys', []),
+                [
+                    *getattr(self, 'episode_attach_memo_intake_keys', []),
+                    *getattr(self, 'episode_attach_memo_writer_keys', []),
+                ],
                 derived_documents,
+                document or {},
             )
         elif getattr(self, 'replay_side', None) == 'go':
-            memo_failure_reason = episode_attach_memo_source_failure_reason(
+            memo_failure_reason = episode_attach_go_memo_failure_reason(
                 getattr(self, 'uid', ''),
                 getattr(self, 'cid', ''),
-                getattr(self, 'episode_attach_memo_intake_keys', []),
+                document or {},
                 derived_documents,
             )
         else:

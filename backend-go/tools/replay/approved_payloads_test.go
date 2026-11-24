@@ -299,13 +299,44 @@ func TestEpisodeAttachMemoDifferenceRequiresBothSideChecks(t *testing.T) {
 	}
 	diffs := compareObservations(python, goRun)
 	for _, field := range []string{"attach_revision", "attach_completed", "attach_finalized"} {
-		if !hasReason(diffs, field) {
-			t.Fatalf("valid side-local memo check did not explain %s: %+v", field, diffs)
+		found := false
+		for _, diff := range diffs {
+			if strings.HasSuffix(diff.Path, "/"+field) && diff.Reason == "attach_memo_cache_fallthrough" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("valid attach memo checks did not explain %s with cache fall-through: %+v", field, diffs)
 		}
 	}
 	goRun.EpisodeAttachMemoValid = false
 	if diffs = compareObservations(python, goRun); !hasUnexplained(diffs) {
 		t.Fatalf("invalid Go memo evidence was excused: %+v", diffs)
+	}
+}
+
+func TestInvalidGoAttachMemoIsReportedEvenWhenStoredValuesMatchPython(t *testing.T) {
+	python, goRun := ruleRun(), ruleRun()
+	python.OwnerID, goRun.OwnerID = "u", "u"
+	python.ConversationID, goRun.ConversationID = "c", "c"
+	python.EpisodeAttachMemoValid = true
+	goRun.EpisodeAttachMemoValid = false
+	goRun.EpisodeAttachMemoFailureReason = "completed_key_mismatch"
+	path := "users/u/episode_links/c"
+	link := map[string]any{
+		"attach_revision": "same-key", "attach_completed": "same-key",
+		"attach_finalized": "same-key", "attach_owner_id": "episode",
+	}
+	python.Derived[path] = link
+	goRun.Derived[path] = map[string]any{
+		"attach_revision": "same-key", "attach_completed": "same-key",
+		"attach_finalized": "same-key", "attach_owner_id": "episode",
+	}
+
+	diffs := compareObservations(python, goRun)
+	if !hasKindPath(diffs, "invalid_binding", "/go/derived_documents/users~1u~1episode_links~1c/attach_memo_evidence") {
+		t.Fatalf("invalid Go memo evidence was hidden by equal stored values: %+v", diffs)
 	}
 }
 

@@ -13,11 +13,13 @@ from unittest.mock import patch
 from testing.finalization_replay.candidate import _Handler, replay_database
 from testing.finalization_replay.driver import _observe
 from testing.finalization_replay.metrics import _delete_write, _invoke_rpc, _wrap_stream, prompt_token_estimate
+from testing.finalization_replay.ordinary_sync_diag_report import is_episode_attach_memo_path
 from testing.finalization_replay.state import (
     CaseState,
+    episode_attach_go_memo_failure_reason,
+    episode_attach_memo_cache_failure_reason,
     episode_attach_memo_failure_reason,
     episode_attach_memo_valid,
-    episode_attach_memo_source_failure_reason,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -28,6 +30,13 @@ VERIFY_SPEC.loader.exec_module(verify)
 
 
 class ReplayContractTests(unittest.TestCase):
+    def test_attach_memo_report_recognizes_value_and_synthetic_evidence_paths(self):
+        self.assertTrue(is_episode_attach_memo_path('/derived_documents/users~1u~1episode_links~1c/attach_completed'))
+        self.assertTrue(
+            is_episode_attach_memo_path('/go/derived_documents/users~1u~1episode_links~1c/attach_memo_evidence')
+        )
+        self.assertFalse(is_episode_attach_memo_path('/derived_documents/users~1u~1episode_links~1c/attach_updated_at'))
+
     def test_episode_attach_memo_evidence_checks_key_owner_and_completion(self):
         conversation = {'transcript_segments': 'fixture-envelope', 'transcript_segments_compressed': True}
         link_path = 'users/owner/episode_links/conversation'
@@ -148,41 +157,97 @@ class ReplayContractTests(unittest.TestCase):
             )
         )
 
-    def test_attach_memo_source_check_rejects_unbound_stamp(self):
+    def test_go_attach_memo_must_match_final_conversation_and_owner(self):
         path = 'users/owner/episode_links/conversation'
+        conversation = {
+            'episode_id': 'episode',
+            'transcript_segments': [{'text': 'final transcript'}],
+        }
         link = {
             'episode_id': 'episode',
             'attach_owner_id': 'episode',
-            'attach_revision': 'v2:writer-key',
-            'attach_completed': 'v2:writer-key',
-            'attach_finalized': 'v2:writer-key',
+            'attach_revision': 'v2:final-key',
+            'attach_completed': 'v2:final-key',
+            'attach_finalized': 'v2:final-key',
         }
-        documents = {path: link}
+
+        def content_key(_row):
+            return 'v2:final-key'
 
         self.assertEqual(
-            episode_attach_memo_source_failure_reason('owner', 'conversation', ['v2:writer-key'], documents),
+            episode_attach_go_memo_failure_reason(
+                'owner',
+                'conversation',
+                conversation,
+                {path: link},
+                transcript_decoder=lambda *_args: None,
+                content_key_fn=content_key,
+            ),
             '',
         )
+        link['attach_completed'] = 'v2:wrong-go-key'
         self.assertEqual(
-            episode_attach_memo_source_failure_reason('owner', 'conversation', ['v2:other-key'], documents),
+            episode_attach_go_memo_failure_reason(
+                'owner',
+                'conversation',
+                conversation,
+                {path: link},
+                transcript_decoder=lambda *_args: None,
+                content_key_fn=content_key,
+            ),
             'completed_key_mismatch',
         )
-
-        link['attach_owner_id'] = 'other-episode'
+        link['attach_completed'] = 'v2:final-key'
+        link['attach_owner_id'] = 'wrong-episode'
         self.assertEqual(
-            episode_attach_memo_source_failure_reason('owner', 'conversation', ['v2:writer-key'], documents),
+            episode_attach_go_memo_failure_reason(
+                'owner',
+                'conversation',
+                conversation,
+                {path: link},
+                transcript_decoder=lambda *_args: None,
+                content_key_fn=content_key,
+            ),
             'owner_binding_mismatch',
         )
         link['attach_owner_id'] = 'episode'
-        link['attach_finalized'] = 'stale-key'
+        conversation['episode_id'] = 'other-episode'
         self.assertEqual(
-            episode_attach_memo_source_failure_reason('owner', 'conversation', ['v2:writer-key'], documents),
-            'finalized_binding_mismatch',
+            episode_attach_go_memo_failure_reason(
+                'owner',
+                'conversation',
+                conversation,
+                {path: link},
+                transcript_decoder=lambda *_args: None,
+                content_key_fn=content_key,
+            ),
+            'conversation_owner_mismatch',
         )
+
+    def test_python_attach_memo_cache_fallthrough_requires_own_prior_key(self):
+        path = 'users/owner/episode_links/conversation'
+        conversation = {'episode_id': 'episode'}
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:older-python-key',
+            'attach_completed': 'v2:older-python-key',
+        }
+
         self.assertEqual(
-            episode_attach_memo_source_failure_reason('owner', 'conversation', [], documents),
-            'source_key_unobserved',
+            episode_attach_memo_cache_failure_reason(
+                'owner', 'conversation', ['v2:older-python-key'], {path: link}, conversation
+            ),
+            '',
         )
+        link['attach_finalized'] = 'v2:unproduced-key'
+        self.assertEqual(
+            episode_attach_memo_cache_failure_reason(
+                'owner', 'conversation', ['v2:older-python-key'], {path: link}, conversation
+            ),
+            'python_key_not_produced',
+        )
+        self.assertEqual(episode_attach_memo_cache_failure_reason('owner', 'conversation', [], {path: {}}, {}), '')
 
     def test_database_creation_ignores_hostile_libpq_environment(self):
         observed = {}

@@ -21,6 +21,7 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	compareValue(&diffs, "/status", python.Status, goRun.Status)
 	compareValue(&diffs, "/conversation", python.Document, goConversation(goRun, python))
 	compareDerivedDocuments(&diffs, python, goRun)
+	validateGoAttachMemoEvidence(&diffs, goRun)
 	compareObject(&diffs, "/effects", python.Effects, goRun.Effects)
 	compareObject(&diffs, "/provider_calls", countProviderCalls(python.ProviderCalls), countProviderCalls(goRun.ProviderCalls))
 	compareObject(&diffs, "/webhooks", webhookGroups(python), webhookGroups(goRun))
@@ -71,6 +72,9 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 				diff.FailureReason = failureReason
 			}
 			if diff.Reason == "" {
+				diff.Reason = approvedEpisodeAttachMemoDifference(diff.Path, python, goRun)
+			}
+			if diff.Reason == "" {
 				diff.Reason = approvedGoOnlyDifference(diff.Path, python, goRun)
 			}
 		}
@@ -86,6 +90,48 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	validateBinding(&diffs, "/go", goRun, true)
 	validateReviewedGoOnlyFields(&diffs, python, goRun)
 	return diffs
+}
+
+func validateGoAttachMemoEvidence(diffs *[]difference, goRun *observation) {
+	if goRun == nil || goRun.EpisodeAttachMemoValid || goRun.EpisodeAttachMemoFailureReason == "missing_transcript" ||
+		goRun.EpisodeAttachMemoFailureReason == "transcript_decode_failed" ||
+		goRun.EpisodeAttachMemoFailureReason == "content_key_unavailable" {
+		return
+	}
+	conversation, conversationOK := goRun.Document.(map[string]any)
+	needsMemo := conversationOK && hasDocumentField(conversation, "episode_id") &&
+		conversation["transcript_segments"] != nil
+	linkPath := "users/" + goRun.OwnerID + "/episode_links/" + goRun.ConversationID
+	link, ok := goRun.Derived[linkPath].(map[string]any)
+	if !ok && !needsMemo {
+		return
+	}
+	hasMemo := needsMemo
+	if ok {
+		for _, field := range []string{"attach_revision", "attach_completed", "attach_finalized", "attach_owner_id"} {
+			hasMemo = hasMemo || hasDocumentField(link, field)
+		}
+	}
+	if !hasMemo {
+		return
+	}
+	for _, diff := range *diffs {
+		if isEpisodeAttachMemoDifferencePath(diff.Path) {
+			return
+		}
+	}
+	path := "/go/derived_documents/" + escapePointer(linkPath) + "/attach_memo_evidence"
+	*diffs = append(*diffs, difference{
+		Path: path, Kind: "invalid_binding", FailureReason: goRun.EpisodeAttachMemoFailureReason,
+	})
+}
+
+func isEpisodeAttachMemoDifferencePath(path string) bool {
+	parts := pointerParts(path)
+	return len(parts) == 3 && parts[0] == "derived_documents" &&
+		strings.Contains(parts[1], "/episode_links/") &&
+		(parts[2] == "attach_completed" || parts[2] == "attach_finalized" ||
+			parts[2] == "attach_revision" || parts[2] == "attach_owner_id")
 }
 
 // Fanout IDs are validated against each side's own queue/job binding, not across engines.
