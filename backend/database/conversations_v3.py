@@ -583,8 +583,8 @@ def promote_manual_end(uid, cid, *, firestore_client=None):
     """Turn a stored manual-end request into the cut. True when this call wrote it.
 
     Called once the whole recording will land as one transcript. It does not mark the recording
-    pending: the transcript write that follows owns that wake, so a recording with no speech costs
-    no reconcile.
+    pending when no speech has landed: the transcript write that follows owns that wake, so a
+    recording with no speech costs no reconcile.
     """
     client = firestore_client or get_firestore_client()
     ref = user_conversations(client, uid).document(cid)
@@ -602,7 +602,12 @@ def promote_manual_end(uid, cid, *, firestore_client=None):
             or row.get('discarded')
         ):
             return False
-        tx.update(ref, {'v3_manual_end': True})
+        update = {'v3_manual_end': True}
+        if row.get('v3_speech_landed_at') is not None:
+            # Speech already landed, so its reconcile may have run without the cut. Leave the
+            # recording pending: the sweep re-enqueues an owner whose pending is older than ten minutes.
+            update.update(v3_pending=True, v3_pending_since=row.get('v3_pending_since') or datetime.now(timezone.utc))
+        tx.update(ref, update)
         return True
 
     return promote(client.transaction())

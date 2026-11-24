@@ -246,8 +246,14 @@ def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, 
     started = time.monotonic()
     try:
         if write is None:
-            from database.conversations import update_conversation_segments as write
-        # False: the canonical record already projected (or the row is gone); the batch transcript wins.
+            from database.conversations import update_conversation_segments
+
+            # The stored row is judged again inside the write transaction: a delete, discard, lock or
+            # canonical projection committed since the read above still wins.
+            def write(uid, conversation_id, segments):
+                return update_conversation_segments(uid, conversation_id, segments, require_row=candidate)
+
+        # False: the row no longer qualifies, or the canonical record already projected.
         written = write(uid, conversation_id, segments)
     except Exception as error:
         logger.warning('event=v3_fast_finish outcome=write_error exception_type=%s', type(error).__name__)

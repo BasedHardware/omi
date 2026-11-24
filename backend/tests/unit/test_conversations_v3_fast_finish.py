@@ -407,7 +407,8 @@ def _admit(monkeypatch, current, units, *, fast='written', promoted=True, member
     def run(uid, cid, row_, units_, read, *, refresh, cut):
         calls['fast'] += 1
         # The pass is handed a decoded row, never admission's raw snapshot.
-        assert row_ == decoded and refresh() == decoded
+        expected = dict(decoded, _recovery_transcript_decoded=True)
+        assert row_ == expected and refresh() == expected
         assert units_ is not units and units_[0][2] is not units[0][2]
         # A single unit is cut by admission before the pass; several units only by the pass itself.
         assert (cut is None) is (len(units) == 1)
@@ -426,7 +427,11 @@ def _admit(monkeypatch, current, units, *, fast='written', promoted=True, member
     monkeypatch.setattr(fast_finish, 'run', run)
     monkeypatch.setattr(fast_finish, 'enabled', lambda uid: member)
     monkeypatch.setattr(conversations_v3, 'promote_manual_end', promote)
-    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, cid, firestore_client=None: decoded)
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        lambda uid, cid, **kwargs: dict(decoded, _recovery_transcript_decoded=True),
+    )
     monkeypatch.setattr(triggers, 'changed', changed)
 
     async def admit():
@@ -465,6 +470,47 @@ def test_the_pass_gets_the_decoded_row_for_a_raw_row_with_stored_bytes(monkeypat
     assert _admit(monkeypatch, raw, [UNIT, UNIT], decoded=row()) == {'fast': 1, 'promote': 0, 'cut': 1}
 
 
+def test_an_undecodable_stored_transcript_is_not_treated_as_empty(monkeypatch):
+    live._FAST_FINISH_STARTED.clear()
+    seen = []
+    monkeypatch.setattr(fast_finish, 'enabled', lambda uid: True)
+    monkeypatch.setattr(
+        fast_finish,
+        'run',
+        lambda uid, cid, row_, *a, **k: seen.append(row_)
+        or fast_finish._run(
+            uid, cid, row_, [], None, write=None, transcribe=None, refresh=k['refresh'], cut=None, authorize=None
+        ),
+    )
+    monkeypatch.setattr(
+        conversations_db, 'get_conversation', lambda uid, cid, **kwargs: row(_recovery_transcript_decoded=False)
+    )
+
+    async def admit():
+        await live._manual_finish_admitted(_Store(row()), UID, 'cid', row(), [UNIT, UNIT], object(), b'k')
+        await asyncio.gather(*list(live._FAST_FINISH_TASKS))
+        await asyncio.sleep(0)
+
+    asyncio.run(admit())
+    # The pass is handed no row at all, which is ineligible before any audio is read.
+    assert seen == [{}]
+
+
+def test_the_default_writer_rechecks_the_stored_row_inside_its_transaction(monkeypatch):
+    seen = {}
+
+    def writer(uid, cid, segments, *, require_row):
+        seen.update(uid=uid, cid=cid, count=len(segments), require_row=require_row)
+        return False
+
+    monkeypatch.setattr(conversations_db, 'update_conversation_segments', writer)
+    outcome = fast_finish.run(
+        UID, 'cid', row(), one_unit(), lambda r: bytes(4), transcribe=lambda pcm, language: [seg(0.0, 1.0)]
+    )
+    assert outcome == 'superseded'
+    assert seen['require_row'] is fast_finish.candidate and (seen['uid'], seen['cid'], seen['count']) == (UID, 'cid', 1)
+
+
 @pytest.mark.parametrize(
     'admitted,expected',
     [
@@ -501,7 +547,9 @@ def _admit_many(monkeypatch, ids, release):
 
     monkeypatch.setattr(fast_finish, 'run', run)
     monkeypatch.setattr(fast_finish, 'enabled', lambda uid: True)
-    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, cid, firestore_client=None: row())
+    monkeypatch.setattr(
+        conversations_db, 'get_conversation', lambda uid, cid, **kwargs: row(_recovery_transcript_decoded=True)
+    )
 
     async def admit():
         for cid in ids:

@@ -288,3 +288,13 @@ def test_promotion_writes_the_cut_once_and_marks_nothing_pending(monkeypatch, ro
     assert conversations_v3.promote_manual_end(UID, CID, firestore_client=db) is expected
     assert bool(db.rows[ROW].get('v3_manual_end')) is (expected or bool(row.get('v3_manual_end')))
     assert 'v3_pending' not in db.rows[ROW]
+
+
+def test_promotion_after_speech_landed_leaves_the_recording_pending(monkeypatch):
+    db = StrictFirestore(
+        {ROW: {'recording': True, 'v3_manual_end_requested': True, 'finished_at': NOW, 'v3_speech_landed_at': NOW}}
+    )
+    monkeypatch.setattr(conversations_v3.firestore, 'transactional', lambda fn: fn)
+    assert conversations_v3.promote_manual_end(UID, CID, firestore_client=db) is True
+    # Its reconcile may already have run without the cut; pending hands it to the sweep.
+    assert db.rows[ROW]['v3_manual_end'] is True and db.rows[ROW]['v3_pending'] is True

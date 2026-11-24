@@ -425,8 +425,12 @@ async def _manual_finish_admitted(store, uid, conversation_id, current, units, c
             return read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True)
 
         def refresh():
-            # Decoded: an empty stored transcript is not empty bytes.
-            return conversations_db.get_conversation(uid, conversation_id, firestore_client=store.client) or {}
+            # Decoded: an empty stored transcript is not empty bytes. A transcript that cannot be
+            # decoded reads as empty, so it is reported as no row: the pass must not treat it as blank.
+            row = conversations_db.get_conversation(
+                uid, conversation_id, firestore_client=store.client, include_transcript_decode_status=True
+            )
+            return row if row and row.get('_recovery_transcript_decoded') is True else {}
 
         def cut():
             # Sets the cut and wakes the builder again; the transcript write's own wake may have
