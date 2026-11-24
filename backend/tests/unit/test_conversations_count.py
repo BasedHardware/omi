@@ -661,7 +661,8 @@ def _visible_list_ids(monkeypatch, docs, *, include_discarded):
 
 @pytest.mark.parametrize(
     'visible,donors,deleted,duplicates',
-    [(4000, 6000, 40, 500), (8000, 20000, 960, 4000)],
+    # Use one-tenth scale for the fast unit suite. Snapshot counts are exact.
+    [(400, 600, 4, 50), (800, 2000, 96, 400)],
 )
 def test_donor_heavy_count_excludes_redirects_before_streaming(monkeypatch, visible, donors, deleted, duplicates):
     from utils.sync import bridge_pending
