@@ -83,6 +83,7 @@ class FakeStore:
     PENDING_FIELD = play_db.PENDING_FIELD
     CUSTOMER_FIELD = play_db.CUSTOMER_FIELD
     DELETION_CONFIRMED_FIELD = play_db.DELETION_CONFIRMED_FIELD
+    BOUND_FIELD = play_db.BOUND_FIELD
 
     @property
     def pointers(self):
@@ -107,6 +108,19 @@ class FakeStore:
 
     def purchase_keys_for_uid(self, uid):
         return [key for key, doc in self.docs.items() if doc.get('uid') == uid]
+
+    def compare_and_set(self, key, field, value, can_replace):
+        # Sequential only; the real helper's atomicity is tested against interleaved callers.
+        if key not in self.docs or not can_replace(self.docs[key].get(field)):
+            return False
+        self.docs[key][field] = value
+        return True
+
+    def mark_once(self, key, field, value):
+        return self.compare_and_set(key, field, value, lambda current: not current)
+
+    def mark_play_history(self, uid):
+        self.set_user_fields(uid, {self.BOUND_FIELD: True})
 
     def due_for_reconcile(self, now, limit):
         rows = [dict(v, _key=k) for k, v in self.docs.items() if v.get('next_check_at') and v['next_check_at'] <= now]
@@ -177,11 +191,14 @@ def env(monkeypatch):
         )
     monkeypatch.setattr(play_billing, 'clear_fair_use_on_upgrade', lambda uid: effects.append('fair_use'))
     stripe_subs = []
-    monkeypatch.setattr(
-        play_billing.stripe.Subscription,
-        'list',
-        lambda **_: SimpleNamespace(data=[SimpleNamespace(to_dict=lambda s=s: s) for s in stripe_subs]),
-    )
+
+    def stripe_list(limit=10, status=None, **_):
+        # Like Stripe: one page in ``data``, every page through auto_paging_iter, default list hides ended ones.
+        shown = [s for s in stripe_subs if status == 'all' or s.get('status') not in ('canceled', 'incomplete_expired')]
+        wrapped = [SimpleNamespace(to_dict=lambda s=s: s) for s in shown]
+        return SimpleNamespace(data=wrapped[:limit], auto_paging_iter=lambda: iter(wrapped))
+
+    monkeypatch.setattr(play_billing.stripe.Subscription, 'list', stripe_list)
     for name in list(os.environ):
         if name.startswith('PLAY_') or name in (config.ANDROID_BILLING_ENV, config.MIN_BUILD_ENV):
             monkeypatch.delenv(name)

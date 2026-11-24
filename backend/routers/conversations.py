@@ -43,6 +43,7 @@ from database.legal_holds import (
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from config import historical_tier
+from config import play_billing as play_billing_config
 from utils.conversations import historical_projection, home_step, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
@@ -2911,7 +2912,11 @@ async def _search_conversation_page(
     response_model=ConversationSuggestedAppsResponse,
     tags=['conversations'],
 )
-async def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def get_conversation_suggested_apps(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+):
     conversation_data = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
     conversation = deserialize_conversation(conversation_data)
 
@@ -2927,6 +2932,11 @@ async def get_conversation_suggested_apps(conversation_id: str, uid: str = Depen
 
     hydrated = await asyncio.gather(*(hydrate(app_id) for app_id in conversation.suggested_summarization_apps))
     suggested_apps = [app for app in hydrated if app is not None]
+    # A Google Play build gets no Stripe payment link (config.play_billing.hide_payment_links).
+    if http_request and play_billing_config.hide_payment_links(http_request.headers, uid):
+        for app in suggested_apps:
+            if app.payment_link:
+                app.payment_link = None
 
     return {"suggested_apps": [app.model_dump() for app in suggested_apps], "conversation_id": conversation_id}
 

@@ -124,6 +124,10 @@ def _google_view(publisher: PublisherClient, token: str) -> tuple[bool, bool]:
         resource = publisher.get_subscription(config.package_name(), token)
     except PurchaseNotFound:
         return False, False
+    return _google_view_of(resource)
+
+
+def _google_view_of(resource: dict) -> tuple[bool, bool]:
     state = str(resource.get('subscriptionState') or '')
     if state in _CHARGEABLE_STATES:
         return True, False
@@ -138,6 +142,59 @@ def _expires_in_future(resource: dict) -> bool:
         return datetime.fromisoformat(str(expiry).replace('Z', '+00:00')) > datetime.now(timezone.utc)
     except ValueError:
         return False
+
+
+class PlayStateUnavailable(RuntimeError):
+    """Google could not be read for a purchase stored as chargeable; checkout must refuse and ask for a retry."""
+
+
+# Stored states that may skip Google's read at checkout, but only once their expiry is in the past.
+_ENDED_STATES = frozenset({'SUBSCRIPTION_STATE_EXPIRED', 'SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED'})
+
+
+def _stored_has_ended(record: dict, now: int) -> bool:
+    """Only an ended state whose expiry has passed is trusted without asking Google; anything else is re-read."""
+    expiry = record.get('expiry_time')
+    return record.get('state') in _ENDED_STATES and isinstance(expiry, (int, float)) and expiry < now
+
+
+def recoverable_play_purchase(uid: str, publisher: Optional[PublisherClient] = None) -> Optional[str]:
+    """Google's state for a purchase of ``uid`` that Google can still charge or the user can restore, else None.
+
+    Covers every purchase bound to ``uid``. Each one not provably ended is re-read from Google, and the
+    fresh answer is used only for this decision: nothing is written here (notifications, verify and
+    reconcile own the stored state and its ordering). Raises ``PlayStateUnavailable`` when the purchase
+    list, a purchase record or Google cannot be read, so a possibly chargeable purchase is never skipped.
+    """
+    now = int(datetime.now(timezone.utc).timestamp())
+    try:
+        keys = play_db.purchase_keys_for_uid(uid)
+    except Exception as error:
+        logger.warning('play_billing admission purchase list failed: %s', type(error).__name__)
+        raise PlayStateUnavailable('purchase list') from None
+    for key in keys:
+        try:
+            record = play_db.get_purchase(key) or {}
+        except Exception as error:
+            logger.warning('play_billing admission record read failed: %s purchase=%s', type(error).__name__, key[:12])
+            raise PlayStateUnavailable(key[:12]) from None
+        if record.get('uid') != uid or _stored_has_ended(record, now):
+            continue
+        token = record.get('purchase_token')
+        if not token:
+            raise PlayStateUnavailable(key[:12])
+        try:
+            publisher = publisher or default_publisher()
+            resource = publisher.get_subscription(config.package_name(), token)
+        except PurchaseNotFound:
+            continue
+        except Exception as error:
+            logger.warning('play_billing admission read failed: %s purchase=%s', type(error).__name__, key[:12])
+            raise PlayStateUnavailable(key[:12]) from None
+        chargeable, restorable = _google_view_of(resource)
+        if chargeable or restorable:
+            return str(resource.get('subscriptionState') or '')
+    return None
 
 
 def _status_code(error: BaseException) -> Optional[int]:
