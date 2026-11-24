@@ -17,6 +17,7 @@ from utils.conversations import summary_delivery, lifecycle_clocks
 from utils.observability.delivery import summary_terminal_outcome
 from utils.sync import processing_hold, bridge_pending
 from config.refactor_modes import serving_for, shadow_or_serve
+from config.transcript_publication import deferred_transcript_reads_enabled
 import copy
 import hashlib
 import json
@@ -86,6 +87,7 @@ from utils.conversations.home_titles import (
 from utils.conversations import transcribing_hold
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
+from database import recording_transcript_publication as recording_publication
 from database import transcript_pointer
 from utils.home_feed.projection import DISPLAY_FIELDS, stamp as stamp_home_display
 from database.transcript_pointer import (
@@ -385,6 +387,9 @@ def _prepare_conversation_for_write(
     allow_offload: bool = True,
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
+
+    data.pop(recording_publication.FIELD, None)
+    data.pop(recording_publication.RESOLVED_RECORDING_ID, None)
 
     # Partial writes cannot certify an entire legacy row. Explicit prepare
     # reconciles them; full creates/processing results get compact content now.
@@ -718,16 +723,20 @@ def prepare_conversation_for_read(
         return None
 
     data = copy.deepcopy(conversation_data)
+    data.pop(recording_publication.FIELD, None)
     # Separate encrypted card data must not leak into hydrated detail or be
     # replayed as stale projection metadata by a logical-state writer.
     for field in DISPLAY_FIELDS:
         data.pop(field, None)
-    if strict_transcript and 'transcript_segments' in data:
+    published_recording = bool(data.get(recording_publication.RESOLVED_RECORDING_ID))
+    if (strict_transcript or published_recording) and 'transcript_segments' in data:
         try:
             data['transcript_segments'] = decode_transcript_segments_verified(
                 uid, data['transcript_segments'], bool(data.get('transcript_segments_compressed'))
             )
-        except transcript_pointer.TranscriptBlobAbsent:
+        except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+            return None
+        if published_recording and not data['transcript_segments']:
             return None
     elif isinstance(data.get('transcript_segments'), dict):
         try:
@@ -1917,6 +1926,7 @@ def get_conversation(
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
     include_transcript_decode_status: bool = False,
     strict_transcript: bool = False,
+    allow_published_recording: bool = False,
 ):
     client = firestore_client if firestore_client is not None else db
     user_ref = client.collection('users').document(uid)
@@ -1925,6 +1935,15 @@ def get_conversation(
     record_document_read(
         read_site, FirestoreReadOutcome.HIT if conversation_data is not None else FirestoreReadOutcome.MISS
     )
+    if conversation_data:
+        conversation_data.pop(recording_publication.RESOLVED_RECORDING_ID, None)
+        if (
+            (strict_transcript or allow_published_recording)
+            and deferred_transcript_reads_enabled()
+            and conversation_data.get('recording')
+            and recording_publication.FIELD in conversation_data
+        ):
+            return recording_publication.read_snapshot(client, uid, conversation_id)
     if (
         strict_transcript
         and conversation_data
@@ -2485,8 +2504,6 @@ def get_conversations_without_photos(
 
 
 def _prepare_mcp_conversation_for_read(data: Dict[str, Any], uid: str) -> Optional[Dict[str, Any]]:
-    from config.transcript_publication import deferred_transcript_reads_enabled
-
     strict_transcript = deferred_transcript_reads_enabled()
     if data.get('is_locked') and strict_transcript:
         data = dict(data)
@@ -2501,6 +2518,7 @@ def get_mcp_conversations_by_id(
     *,
     include_transcript: bool,
     include_discarded: bool = False,
+    allow_published_recording: bool = False,
     firestore_client: Any = None,
     extra_field_paths: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
@@ -2515,6 +2533,9 @@ def get_mcp_conversations_by_id(
         field_paths.extend(transcribing_hold.READ_FIELDS)
     if extra_field_paths:
         field_paths.extend(extra_field_paths)
+    published_recordings = include_transcript and allow_published_recording and deferred_transcript_reads_enabled()
+    if published_recordings:
+        field_paths.append(recording_publication.FIELD)
     docs = client.get_all(doc_refs, field_paths=list(dict.fromkeys(field_paths)))
     conversations_by_id: Dict[str, Dict[str, Any]] = {}
     for doc in docs:
@@ -2523,10 +2544,19 @@ def get_mcp_conversations_by_id(
         data = document_data_with_revision(doc)
         if data is None:
             continue
-        if not is_visible_conversation(data, include_discarded=include_discarded, presentation=True):
+        if published_recordings and data.get('recording') and recording_publication.FIELD in data:
+            data = recording_publication.read_snapshot(client, uid, doc.id, field_paths=field_paths)
+            if data is None:
+                continue
+        if not is_visible_conversation(
+            data,
+            include_discarded=include_discarded,
+            presentation=True,
+            include_recordings=bool(data.get(recording_publication.RESOLVED_RECORDING_ID)),
+        ):
             continue
         data.setdefault('id', doc.id)
-        conversations_by_id[str(data['id'])] = data
+        conversations_by_id[str(data.get(recording_publication.RESOLVED_RECORDING_ID) or data['id'])] = data
     return [
         conversations_by_id[str(conversation_id)]
         for conversation_id in conversation_ids

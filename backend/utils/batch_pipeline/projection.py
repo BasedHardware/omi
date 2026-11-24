@@ -1272,6 +1272,7 @@ class Projector:
 
                     admit_projection(binding.owner_id, incoming, manifest, capture_at=item.capture_at)
                     session.incoming_segment_count = len(incoming['transcript_segments'])
+                    session.recording_target_id = context.target_id
                     receipt_box = []
                     merge_views = []
 

@@ -59,6 +59,7 @@ def lane(monkeypatch):
     monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *_: None)
     monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *_: None)
     monkeypatch.setattr(conversations, '_delete_conversation_search_index', lambda *_: None)
+    product_get_conversation = conversations.get_conversation
     # Keep the bridge's actual redirect/retraction decisions; only its legacy
     # global read boundary is injected with this isolated emulator client.
     monkeypatch.setattr(
@@ -175,6 +176,146 @@ def test_joined_commit_publishes_on_first_read_and_replays_lost_reply(lane, monk
     assert owner['watermark']['segment_id'] == owner['projection_watermark'] == sid
     assert OrderedMerge(lane.store, joined_writer=lane.projector.commit_joined_merge).commit_next(lane.uid, 3) is None
     assert lane.projector.store.ref('results', sid).get().to_dict() == entry
+
+
+@pytest.mark.parametrize('rerouted', [False, True])
+def test_worker_publishes_authorized_recording_detail_without_promoting(lane, monkeypatch, rerouted):
+    from dataclasses import asdict
+    from datetime import datetime, timezone
+
+    from fastapi import HTTPException, Request
+
+    from database.recording_transcript_publication import FIELD
+    from dependencies import ApiKeyAuth
+    from routers import conversations as app, developer
+    from utils.batch_pipeline.merge import OrderedMerge
+    from utils.mcp_server.handlers import conversations as mcp
+    from utils.sync import assignment
+
+    monkeypatch.setenv('OMI_DEFERRED_TRANSCRIPT_READS_ENABLED', 'on')
+    monkeypatch.setattr(lane.conversations, 'db', lane.client)
+    monkeypatch.setattr(lane.conversations, 'get_firestore_client', lambda: lane.client)
+    start = datetime.fromtimestamp(1000, timezone.utc)
+    recording_id = 'synthetic-deferred-recording'
+    recording = lane.user.collection('conversations').document(recording_id)
+    recording.set(
+        {
+            'id': recording_id,
+            'recording': True,
+            'deferred': True,
+            'status': 'processing',
+            'source': 'omi',
+            'created_at': start,
+            'started_at': start,
+            'finished_at': datetime.fromtimestamp(1030, timezone.utc),
+            'structured': {},
+            'transcript_segments': [],
+            'data_protection_level': 'standard',
+            'has_photos': False,
+        }
+    )
+    batch = lane.seed()
+    sid = batch.ids[0]
+    job = lane.projector.store.ref('jobs', sid)
+    job.update({'projection_binding': asdict(replace(batch.binding, target_conversation_id=recording_id))})
+    if rerouted:
+        estimate = assignment._stored_document_bytes
+
+        def full_recording(ref, *args):
+            if ref.id == recording_id:
+                return assignment.SYNC_CONVERSATION_BYTE_BUDGET + 1
+            return estimate(ref, *args)
+
+        monkeypatch.setattr(assignment, '_stored_document_bytes', full_recording)
+        monkeypatch.setenv('BATCH_PIPELINE_JOINED_MERGE_ENABLED', 'true')
+        artifact = lane.WorkResult(sid, f'gs://synthetic/results/{sid}#1')
+        assert lane.queue.complete(artifact, batch.leases[sid].token, 1)
+        merge = OrderedMerge(lane.store, joined_writer=lane.projector.commit_joined_merge)
+        assert merge.commit_next(lane.uid, 2)['projection_state'] == 'persisted'
+    else:
+        lane.finish(batch)
+        assert FIELD not in recording.get().to_dict()
+
+        def lose_assignment_reply(*_):
+            raise ConnectionError('synthetic lost assignment reply before follow-ups')
+
+        monkeypatch.setattr(lane.conversations, '_sync_conversation_search_index', lose_assignment_reply)
+        with pytest.raises(ConnectionError, match='before follow-ups'):
+            lane.projector.project(sid)
+
+    entry = lane.projector.store.ref('results', sid).get().to_dict()
+    (target,) = entry['projection_parts']['0']['transcript_outputs']
+    assert recording.get().to_dict()[FIELD] == target
+    cid = target['conversation_id']
+    assert (cid != recording_id) is rerouted
+    output = lane.user.collection('conversations').document(cid)
+    assert output.get().to_dict()['sync_content_revision'] == target['sync_content_revision']
+    if not rerouted:
+        assert output.get().to_dict()['deferred']
+
+    monkeypatch.setattr(lane.conversations, 'get_conversation', lane.product_get_conversation)
+    monkeypatch.setattr(developer, 'check_conversation_transcript_read_limit', lambda *_a, **_kw: None)
+    monkeypatch.setattr(developer, 'populate_speaker_names', lambda *_a, **_kw: None)
+    monkeypatch.setattr(developer, 'populate_folder_names', lambda *_a, **_kw: None)
+    monkeypatch.setattr(developer, '_audit_developer_read', lambda **_kw: None)
+    monkeypatch.setattr(app, 'live_recap_enabled', lambda _uid: False)
+    monkeypatch.setattr(app, '_heal_locked_conversations_if_eligible', lambda *_: None)
+    promotions = []
+
+    def promote(*_a, **_kw):
+        promotions.append(True)
+        pytest.fail('agent read attempted to start paid processing')
+
+    monkeypatch.setattr(app, 'open_recording', promote)
+    monkeypatch.setattr(app, '_enrich_deferred_conversation', promote)
+    monkeypatch.setattr(app, 'process_conversation', promote)
+
+    def mcp_read(uid):
+        return mcp.get_conversation_by_id(uid, {'conversation_id': recording_id})['conversation']
+
+    def developer_read(uid):
+        return developer.get_conversation_endpoint(recording_id, True, ApiKeyAuth(uid, []))
+
+    def app_read(uid):
+        request = Request({'type': 'http', 'headers': []})
+        return app.get_conversation_by_id(recording_id, source=None, include_discarded=None, uid=uid, request=request)
+
+    def assert_denied(uid):
+        with pytest.raises(mcp.ToolExecutionError) as mcp_error:
+            mcp_read(uid)
+        assert mcp_error.value.code == -32001
+        for read in (developer_read, app_read):
+            with pytest.raises(HTTPException) as http_error:
+                read(uid)
+            assert http_error.value.status_code == 404
+
+    for read in (mcp_read, developer_read, app_read):
+        result = read(lane.uid)
+        assert result['id'] == cid
+        assert [segment['text'] for segment in result['transcript_segments']] == ['We discussed the project.']
+    batch_read = mcp.get_conversations_by_ids(lane.uid, {'conversation_ids': [recording_id]})
+    assert batch_read['not_found'] == []
+    assert batch_read['conversations'][0]['id'] == recording_id
+    assert batch_read['conversations'][0]['conversation']['id'] == cid
+    assert_denied('synthetic-other-owner')
+
+    account = lane.client.collection('account_deletions').document(lane.uid)
+    account.set({'wipe_status': 'pending_deletion'})
+    assert_denied(lane.uid)
+    account.delete()
+
+    output.update({'sync_content_revision': target['sync_content_revision'] + 1})
+    assert_denied(lane.uid)
+    output.update({'sync_content_revision': target['sync_content_revision']})
+
+    tombstones = lane.user.collection('deleted_conversations')
+    if rerouted:
+        tombstones.document(recording_id).set({'deleted': True})
+        assert_denied(lane.uid)
+        tombstones.document(recording_id).delete()
+    tombstones.document(cid).set({'deleted': True})
+    assert_denied(lane.uid)
+    assert not promotions and not lane.tasks and not lane.published
 
 
 def test_replay_has_one_assignment_one_enrichment_version_and_durable_before_client(lane):

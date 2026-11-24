@@ -7,6 +7,7 @@ outcomes stay shared by origin and cache paths.
 
 from config.transcript_publication import deferred_transcript_reads_enabled
 from database.transcript_pointer import TranscriptSegmentsDecodeError
+from database.recording_transcript_publication import RESOLVED_RECORDING_ID
 from utils.conversations.layer import read_product as read_product_conversation
 from fastapi import HTTPException
 from typing import Any, Callable
@@ -49,10 +50,17 @@ def read_conversation_item(
                 conversations_db.get_conversation,
                 uid,
                 conversation_id,
+                include_published_recording=fresh_transcript,
                 **({'strict_transcript': True} if fresh_transcript else {}),
             )
         except TranscriptSegmentsDecodeError as error:
             raise HTTPException(status_code=503, detail='Stored transcript could not be decoded.') from error
+        if (
+            conversation
+            and conversation.pop(RESOLVED_RECORDING_ID, False)
+            and not conversations_db.is_visible_conversation(conversation, presentation=True, include_recordings=True)
+        ):
+            conversation = None
         if conversation is None and negative_key:
             polling_cache.remember_missing(cache_client(), negative_key)
         if not conversation or conversation.get('deleted', False):

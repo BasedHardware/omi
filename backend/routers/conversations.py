@@ -38,6 +38,7 @@ from database.legal_holds import (
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from config import historical_tier
+from database.recording_transcript_publication import RESOLVED_RECORDING_ID
 from utils.conversations import historical_projection, home_step, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
@@ -236,9 +237,15 @@ def _heal_locked_conversations_if_eligible(uid: str, conversations: List[Dict[st
 def _get_valid_conversation_by_id(
     uid: str, conversation_id: str, *, follow_sync_bridge: bool = False, allow_recording: bool = False
 ) -> dict:
-    conversation = conversations_db.get_conversation(
-        uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
-    )
+    try:
+        conversation = conversations_db.get_conversation(
+            uid,
+            conversation_id,
+            read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID,
+            **({'allow_published_recording': True} if follow_sync_bridge else {}),
+        )
+    except conversations_db.TranscriptSegmentsDecodeError as error:
+        raise HTTPException(status_code=503, detail='Stored transcript could not be decoded.') from error
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -251,7 +258,7 @@ def _get_valid_conversation_by_id(
         if not conversation or conversations_db.is_soft_deleted(conversation):
             raise HTTPException(status_code=404, detail="Conversation not found")
 
-    if conversation.get('recording') and not allow_recording:
+    if conversation.get('recording') and not (allow_recording or conversation.get(RESOLVED_RECORDING_ID)):
         raise HTTPException(status_code=404, detail="Conversation not found")
     _heal_locked_conversations_if_eligible(uid, [conversation])
     if conversation.get('is_locked', False):
@@ -1346,7 +1353,12 @@ def get_conversation_by_id(
     show_discarded = True if include_discarded is None else include_discarded
     if hidden_from_default_detail(conversation) and include_discarded is not True:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded, presentation=True):
+    if not conversations_db.is_visible_conversation(
+        conversation,
+        include_discarded=show_discarded,
+        presentation=True,
+        include_recordings=bool(conversation.pop(RESOLVED_RECORDING_ID, None)),
+    ):
         raise HTTPException(status_code=404, detail="Conversation not found")
     gui_signal = request is not None and request.headers.get('X-Omi-Recording-Detail') == '1'
     was_deferred = bool(conversation.get('deferred') or conversation.get('processing_deferred'))

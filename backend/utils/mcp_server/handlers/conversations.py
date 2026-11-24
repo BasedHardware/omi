@@ -13,6 +13,7 @@ from google.api_core.exceptions import FailedPrecondition
 import database.conversations as conversations_db
 import database.mcp_conversation_pages as mcp_conversation_pages
 import database.vector_db as vector_db
+from database.recording_transcript_publication import RESOLVED_RECORDING_ID
 from models.conversation_enums import CategoryEnum
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
@@ -176,6 +177,7 @@ def fetch_conversation_for_detail(
             [str(conversation_id)],
             include_transcript=True,
             include_discarded=False,
+            allow_published_recording=True,
             extra_field_paths=extra_field_paths,
         )
     except conversations_db.TranscriptSegmentsDecodeError as error:
@@ -452,14 +454,18 @@ def get_conversations_by_ids(
 
     max_segments, max_chars = _conversation_fetch_bounds(arguments)
 
-    # Exactly one batch document read for the whole id list.
+    # Fetch requested rows together. Published recordings resolve their bound revisions separately.
     conversations = conversations_db.get_mcp_conversations_by_id(
         uid,
         conversation_ids,
         include_transcript=True,
         include_discarded=False,
+        allow_published_recording=True,
     )
-    by_id = {str(conversation.get("id")): transcribing_hold.project(conversation) for conversation in conversations}
+    by_id = {
+        str(conversation.get(RESOLVED_RECORDING_ID) or conversation.get('id')): transcribing_hold.project(conversation)
+        for conversation in conversations
+    }
     not_found = [conversation_id for conversation_id in conversation_ids if conversation_id not in by_id]
 
     filters = {

@@ -31,6 +31,7 @@ from database.batch_pipeline_projection_protocol import (
 )
 from database.batch_pipeline_projection_finish import projection_finish_state_fields
 from database.privacy_ttl_cache import ttl_seconds
+from database import recording_transcript_publication as recording_publication
 
 from database.sync_ledger import sync_content_ledger_ref, LEDGER_RETENTION_DAYS
 from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
@@ -138,6 +139,8 @@ class ProjectionSession:
         self.ledger: dict[str, Any] = {}
         self.job: dict[str, Any] = {}
         self.incoming_segment_count = 0
+        self.recording_target_id: str | None = None
+        self.recording_source = None
         self.speech_seconds = 0.0
         self.erased_predecessors: list[Any] = []
         self.part_index, self.part_count = part_index, part_count
@@ -376,6 +379,7 @@ class ProjectionSession:
         self._source_deleted = False
         self._privacy_fence_ids = set()
         self._validated_transcript_revisions.clear()
+        self.recording_source = None
         self.followup_privacy_proof = None
         self._followup_privacy_failed = False
         self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
@@ -471,6 +475,8 @@ class ProjectionSession:
                 raise ProjectionBlocked('earlier projection part must persist first')
         if self._privacy_replay_transaction is transaction:
             return
+        if self.recording_target_id:
+            self._prepare_recording_source(transaction, self.recording_target_id)
         if self.entry.get('projection_redriven_at'):
             # A released held unit re-enters projection behind the watermark:
             # its hold already advanced the chain past it, so the erased-
@@ -492,12 +498,48 @@ class ProjectionSession:
             raise ProjectionPredecessorPending('earlier committed projection must persist first')
         self.erased_predecessors = erased
 
+    def _prepare_recording_source(self, transaction, cid):
+        uid = self.binding.owner_id
+        ref = self.client.collection('users').document(uid).collection('conversations').document(cid)
+        row = ref.get(
+            transaction=transaction,
+            field_paths=['id', 'owner_uid', 'recording', 'source', 'client_device_id', 'is_locked', 'sync_merged_into'],
+        ).to_dict()
+        if (
+            recording_publication.belongs_to(row, uid, cid)
+            and row.get('recording')
+            and row.get('source') == self.binding.source
+            and row.get('client_device_id') == self.binding.client_device_id
+            and bool(row.get('is_locked')) == self.binding.is_locked
+        ):
+            self.guard(transaction, [cid])
+            self.recording_source = (ref, row.get('sync_merged_into'))
+
     def validate_plan(self, transaction, planned):
         # encode is still in assignment's read-only planning phase.
         self.guard(transaction, [planned['id'], *(planned.get('sync_merged_from') or [])])
         revision = planned.get('sync_content_revision')
         if type(revision) is int and revision > 0:
             self._validated_transcript_revisions.add((planned['id'], revision))
+
+    def _publish_recording_outputs(self, writer, outputs, publication):
+        # An unaccepted source hint cannot become an alias for the winning output.
+        source_id = None
+        if self.recording_source is not None:
+            ref, redirect = self.recording_source
+            destination = publication[0]['conversation_id']
+            if redirect == destination or any(cid == ref.id for cid, _ in self._validated_transcript_revisions):
+                writer.update(ref, {recording_publication.FIELD: publication[0]})
+                source_id = ref.id
+        recording_outputs = [
+            output
+            for (row, _), output in zip(outputs, publication, strict=True)
+            if row.get('recording') and row['id'] != source_id
+        ]
+        if recording_outputs:
+            rows = self.client.collection('users').document(self.binding.owner_id).collection('conversations')
+            for output in recording_outputs:
+                writer.update(rows.document(output['conversation_id']), {recording_publication.FIELD: output})
 
     def persist(
         self,
@@ -577,6 +619,7 @@ class ProjectionSession:
             receipt['transcript_outputs'] = [
                 {'conversation_id': cid, 'sync_content_revision': revision} for cid, revision in revisions
             ]
+            self._publish_recording_outputs(writer, outputs, receipt['transcript_outputs'])
         from database.batch_pipeline_source_reuse import claim
 
         claim(
