@@ -138,7 +138,9 @@ class VectorReceiver:
             texts, produced = pending
             if len(texts) == len(vectors) and [record['values'] for record in vectors] == produced:
                 for record, text in zip(vectors, texts):
-                    self.state.task_embedding_inputs.setdefault(record['id'], []).append(sha256(text.encode()).hexdigest())
+                    self.state.task_embedding_inputs.setdefault(record['id'], []).append(
+                        sha256(text.encode()).hexdigest()
+                    )
         for record in vectors:
             if record['id'] == f'{self.state.uid}-{self.state.cid}':
                 self.state.vector(self.state.cid)

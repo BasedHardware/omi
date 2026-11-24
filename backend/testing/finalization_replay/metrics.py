@@ -258,7 +258,10 @@ def _count_write_request(state, request, statuses=None):
         fields = _field(update, 'fields', {}) or {}
         if statuses is None or (index < len(statuses) and statuses[index].code == 0):
             _capture_parity_write(
-                state, name, fields, deleted=_delete_write(write),
+                state,
+                name,
+                fields,
+                deleted=_delete_write(write),
                 paths=_field(_field(write, 'update_mask'), 'field_paths', ()) or (),
             )
         if _delete_write(write):
@@ -354,7 +357,10 @@ def install_firestore_meter():
                     document_name = _direct_write_document_name(name, request)
                     fields = _field(document, 'fields', {}) or {}
                     _capture_parity_write(
-                        state, document_name, fields, deleted=deleted,
+                        state,
+                        document_name,
+                        fields,
+                        deleted=deleted,
                         paths=_field(_field(request, 'update_mask'), 'field_paths', ()) or (),
                     )
                     if deleted:
@@ -363,7 +369,9 @@ def install_firestore_meter():
                     else:
                         _record_home_receipt_write(state, document_name, fields)
                 elif name in batched_writes:
-                    _count_write_request(state, request, _field(result, 'status', ()) if name == 'batch_write' else None)
+                    _count_write_request(
+                        state, request, _field(result, 'status', ()) if name == 'batch_write' else None
+                    )
                 if name in streams:
                     return _wrap_stream(result, name, state)
                 return result
