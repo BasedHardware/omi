@@ -196,7 +196,7 @@ def create_processing_conversation(uid: str, conversation_data: dict[str, Any], 
 
 
 def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
-    """Create a fully processed conversation without granting processors recreate authority."""
+    """Create a terminal intake or processing result without granting processors recreate authority."""
     _require_status(conversation_data, ConversationStatus.completed)
     stamp_terminal_decision(
         conversation_data, path='import' if conversation_data.get('imported') else 'lifecycle_terminal'
@@ -206,7 +206,7 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
     else:
         conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
         created = True
-    if created:
+    if created and not conversation_data.get('deferred'):
         observe_completed_conversation_shape(uid, conversation_data)
     return created
 
@@ -266,7 +266,8 @@ def persist_processed_conversation(
     stamp_terminal_decision(conversation_data, path='lifecycle_terminal')
 
     def _observe_first_completion() -> None:
-        observe_completed_conversation_shape(uid, conversation_data)
+        if not conversation_data.get('deferred'):
+            observe_completed_conversation_shape(uid, conversation_data)
 
     kwargs: dict[str, Any] = {
         'on_first_completion': _observe_first_completion,
@@ -629,24 +630,26 @@ def fail_and_discard_processing(uid: str, conversation_id: str) -> bool:
     return claimed
 
 
-def reacquire_deferred_processing(uid: str, conversation_id: str) -> bool:
+def reacquire_deferred_processing(uid: str, conversation_id: str, admitted_at: datetime | None = None) -> bool:
     """Atomically claim deferred ownership and renew the admission lease.
 
     ``deferred=True`` is also the ownership fence, so two concurrent first
     opens cannot both launch enrichment. A completed deferred row is an
     explicit failed-attempt terminal and may be reopened for retry.
     """
-    return jobs_db.reacquire_deferred_processing(uid, conversation_id)
+    return jobs_db.reacquire_deferred_processing(uid, conversation_id, admitted_at=admitted_at)
 
 
-def recover_deferred_processing_failure(uid: str, conversation_id: str) -> bool:
+def recover_deferred_processing_failure(
+    uid: str, conversation_id: str, *, expected_admitted_at: datetime | None = None
+) -> bool:
     """Atomically re-arm deferred enrichment and expose a non-spinning terminal.
 
     The paired status/flag mutation belongs here rather than in a router so a
     partial recovery write cannot strand a row in ``processing`` while the
     stale sweep intentionally excludes deferred conversations.
     """
-    return jobs_db.recover_deferred_processing_failure(uid, conversation_id)
+    return jobs_db.recover_deferred_processing_failure(uid, conversation_id, expected_admitted_at=expected_admitted_at)
 
 
 def begin_merge(uid: str, conversation_id: str) -> bool:

@@ -571,6 +571,10 @@
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
   },
+  "backend/scripts/settle_parked_conversations.py:collection_group": {
+    "policy": "operator",
+    "reason": "SCA-3590 one-time parked-status migration. Bounded projected scan, with lifecycle and custody rechecked transactionally before status-only writes."
+  },
   "backend/scripts/staging/replay.py:collection": {
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."

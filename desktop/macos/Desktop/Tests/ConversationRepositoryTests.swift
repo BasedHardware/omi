@@ -1409,7 +1409,7 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
     countQueries.append(query)
     return try countResult.get()
   }
-  func detail(id: String) async throws -> ServerConversation {
+  func detail(id: String, polling: Bool) async throws -> ServerConversation {
     if let detailHandler { return try await detailHandler(id) }
     return try detailResult.get()
   }
