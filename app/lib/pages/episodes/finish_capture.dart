@@ -78,17 +78,24 @@ Future<FinishOutcome> finishLiveCapture(
   final owned = liveConversationId != null;
   if (hadContent || retry || phoneOwns || owned || (v3Feedback && provider.verifiedLiveServerRecordingId != null)) {
     final previousFinish = provider.lastClientFinish;
+    final finishingRecording = provider.verifiedLiveServerRecordingId;
     provider.noteClientFinish();
+    final thisFinish = provider.lastClientFinish;
     FinishOutcome outcome;
     try {
       // Ending the capture fires the shared finalize hook, which closes the episode.
       final answer = await provider.finishCaptureWithOutcome(liveConversationId: liveConversationId);
       if (v3Feedback && answer.absence == ProcessAbsence.notFound) {
         // The pointer may be gone before a result is available, or the server may have captured nothing.
+        // A close is this Finish's only when it names the recording being finished or, with no
+        // verified recording, arrived after this tap: the previous window's late close is not it.
         final serverClose = _recentServerClose(provider);
-        outcome = serverClose != null && (previousFinish == null || serverClose.at.isAfter(previousFinish.at))
-            ? FinishProcessing(serverClose.id)
-            : const FinishAwaitingResult();
+        final ours = serverClose != null &&
+            (previousFinish == null || serverClose.at.isAfter(previousFinish.at)) &&
+            (finishingRecording != null
+                ? serverClose.id == finishingRecording
+                : thisFinish != null && !serverClose.at.isBefore(thisFinish.at));
+        outcome = ours ? FinishProcessing(serverClose.id) : const FinishAwaitingResult();
       } else {
         // A retry re-sends what the page held after a failed Finish.
         outcome = FinishOutcome.fromProcess(answer, heardSomething: hadContent || retry || owned || v3Feedback);
