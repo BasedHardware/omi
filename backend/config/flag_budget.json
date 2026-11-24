@@ -238,7 +238,7 @@
     "BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS": {
       "owner": "Goal: Pipeline / SCA-1960",
       "review_by": "2026-12-05",
-      "reason": "SCA-1960: retain owner-drain admission diagnostics for Pipeline troubleshooting. Review diagnostic value and permanent budget placement by December 5."
+      "reason": "SCA-1960: retain owner-drain admission diagnostics for Pipeline troubleshooting. By December 5, confirm whether the telemetry has readers. If it has none, retire the flag through review. Otherwise, review permanent budget placement."
     },
     "BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS": {
       "owner": "provider-stt drain",
