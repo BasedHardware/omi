@@ -50,7 +50,7 @@ func TestHourlyUsageAllowsOnlyFiveSecondScheduledPostFinishWrite(t *testing.T) {
 	if diffs := compareObservations(py, goRun); hasUnexplained(diffs) || !hasReason(diffs, "last_updated") {
 		t.Fatalf("scheduled hourly usage write at grace edge was not allowed: %+v", diffs)
 	}
-	mustMap(py.Derived[path])["last_updated"] = wrappedStamp(stamp.Add(time.Nanosecond))
+	py.Derived[path].(map[string]any)["last_updated"] = wrappedStamp(stamp.Add(time.Nanosecond))
 	if diffs := compareObservations(py, goRun); !hasUnexplained(diffs) ||
 		!hasKindPath(diffs, "invalid_clock", "/python/derived_documents/"+escapePointer(path)+"/last_updated") {
 		t.Fatalf("hourly usage write beyond grace was excused: %+v", diffs)
@@ -62,33 +62,49 @@ func TestHourlyUsageAllowsOnlyFiveSecondScheduledPostFinishWrite(t *testing.T) {
 	}
 }
 
-func TestMemoryExpiryUsesExact48HourTTLFromEachCapture(t *testing.T) {
+func TestHourlyUsageFrozenBucketPreservesWriteTimestampWindow(t *testing.T) {
+	const bucket = "2026-01-02-12"
+	path := "users/u/hourly_usage/" + bucket
+	py, goRun := ruleRun(), ruleRun()
+	py.HourlyUsageReplayBucket, goRun.HourlyUsageReplayBucket = bucket, bucket
+	py.Derived[path] = map[string]any{"last_updated": wrappedStamp(py.Started)}
+	goRun.Derived[path] = map[string]any{"last_updated": wrappedStamp(goRun.Started.Add(time.Second))}
+	if diffs := compareObservations(py, goRun); hasUnexplained(diffs) || !hasReason(diffs, "last_updated") {
+		t.Fatalf("valid write to the pinned bucket was rejected: %+v", diffs)
+	}
+	wrongPath := "users/u/hourly_usage/2026-01-02-13"
+	goRun.Derived[wrongPath] = goRun.Derived[path]
+	py.Derived[path].(map[string]any)["last_updated"] = wrappedStamp(py.Started.Add(-time.Second))
+	diffs := compareObservations(py, goRun)
+	if !hasKindPath(diffs, "invalid_clock", "/go/derived_documents/"+escapePointer(wrongPath)+"/last_updated") ||
+		!hasKindPath(diffs, "invalid_clock", "/python/derived_documents/"+escapePointer(path)+"/last_updated") {
+		t.Fatalf("wrong bucket or out-of-window write was excused: %+v", diffs)
+	}
+}
+
+func TestMemoryExpiryUsesThirtyDayTTLAndMustFollowWrite(t *testing.T) {
 	path := "users/u/memory_items/item"
-	pyCreated := ruleStart.Add(20 * time.Minute)
-	goCreated := pyCreated.Add(time.Minute)
+	created := ruleStart.Add(20 * time.Minute)
+	updated := created.Add(time.Second)
 	py, goRun := ruleRun(), ruleRun()
 	py.Derived[path] = map[string]any{
-		"captured_at": wrappedStamp(pyCreated), "updated_at": wrappedStamp(pyCreated.Add(time.Second)),
-		"expires_at": wrappedStamp(pyCreated.Add(memoryItemTTL)),
+		"captured_at": wrappedStamp(created), "updated_at": wrappedStamp(updated),
+		"expires_at": wrappedStamp(created.Add(memoryItemTTL)),
 	}
 	goRun.Derived[path] = map[string]any{
-		"captured_at": wrappedStamp(goCreated), "updated_at": wrappedStamp(goCreated.Add(time.Second)),
-		"expires_at": wrappedStamp(goCreated.Add(memoryItemTTL)),
+		"captured_at": wrappedStamp(created), "updated_at": wrappedStamp(updated),
+		"expires_at": wrappedStamp(created.Add(memoryItemTTL + postFinishWriteGrace)),
 	}
-	diffs := compareObservations(py, goRun)
-	if hasUnexplained(diffs) || !hasReason(diffs, "expires_at") || !hasExactPathReason(diffs, "/derived_documents/", "replay_clock") {
-		t.Fatalf("side-local 48-hour expiries were not labeled replay_clock: %+v", diffs)
+	if diffs := compareObservations(py, goRun); hasUnexplained(diffs) || !hasReason(diffs, "expires_at") {
+		t.Fatalf("30-day expiries were constrained to replay time: %+v", diffs)
 	}
-	// A 1 ns side-to-side TTL mismatch must fail the exact source-TTL rule.
-	mustMap(goRun.Derived[path])["expires_at"] = wrappedStamp(goCreated.Add(memoryItemTTL + time.Nanosecond))
-	diffs = compareObservations(py, goRun)
-	if !hasUnexplained(diffs) ||
+	goRun.Derived[path].(map[string]any)["expires_at"] = wrappedStamp(created.Add(memoryItemTTL + postFinishWriteGrace + time.Nanosecond))
+	if diffs := compareObservations(py, goRun); !hasUnexplained(diffs) ||
 		!hasKindPath(diffs, "invalid_ttl", "/go/derived_documents/"+escapePointer(path)+"/expires_at") {
-		t.Fatalf("side with a different 48-hour TTL was excused: %+v", diffs)
+		t.Fatalf("expiry beyond 30-day TTL grace was excused: %+v", diffs)
 	}
-	mustMap(goRun.Derived[path])["expires_at"] = wrappedStamp(goCreated.Add(time.Second))
-	diffs = compareObservations(py, goRun)
-	if !hasUnexplained(diffs) ||
+	goRun.Derived[path].(map[string]any)["expires_at"] = wrappedStamp(updated)
+	if diffs := compareObservations(py, goRun); !hasUnexplained(diffs) ||
 		!hasKindPath(diffs, "invalid_ttl", "/go/derived_documents/"+escapePointer(path)+"/expires_at") {
 		t.Fatalf("expiry equal to the item write time was excused: %+v", diffs)
 	}
@@ -103,7 +119,7 @@ func TestApprovedConversationAndNestedWriteClocksAreChecked(t *testing.T) {
 		if hasUnexplained(diffs) || !hasReason(diffs, field) {
 			t.Fatalf("valid %s clock was not explained: %+v", field, diffs)
 		}
-		mustMap(goRun.Document)[field] = wrappedStamp(ruleStart.Add(3 * time.Hour))
+		goRun.Document.(map[string]any)[field] = wrappedStamp(ruleStart.Add(3 * time.Hour))
 		if diffs := compareObservations(py, goRun); !hasUnexplained(diffs) {
 			t.Fatalf("out-of-window %s clock was excused", field)
 		}
@@ -117,13 +133,13 @@ func TestApprovedConversationAndNestedWriteClocksAreChecked(t *testing.T) {
 		t.Fatalf("valid numeric summary clock was not explained: %+v", diffs)
 	}
 
-	mustMap(goRun.Document)["summary_completed_at"] = float64(goRun.Finished.Add(time.Second).UnixNano()) / float64(time.Second)
+	goRun.Document.(map[string]any)["summary_completed_at"] = float64(goRun.Finished.Add(time.Second).UnixNano()) / float64(time.Second)
 	diffs = compareObservations(py, goRun)
 	if !hasUnexplained(diffs) || !hasKindPath(diffs, "invalid_clock", "/go/conversation/summary_completed_at") {
 		t.Fatalf("out-of-window numeric summary clock was excused: %+v", diffs)
 	}
 
-	mustMap(goRun.Document)["summary_completed_at"] = wrappedStamp(ruleStart.Add(2 * time.Minute))
+	goRun.Document.(map[string]any)["summary_completed_at"] = wrappedStamp(ruleStart.Add(2 * time.Minute))
 	diffs = compareObservations(py, goRun)
 	if !hasUnexplained(diffs) || !hasKindPath(diffs, "invalid_clock", "/go/conversation/summary_completed_at") {
 		t.Fatalf("Firestore timestamp was accepted for numeric summary clock: %+v", diffs)
@@ -152,8 +168,8 @@ func TestEveryApprovedDerivedTimestampRuleHasPositiveAndNegativeEvidence(t *test
 			path := "users/u/" + rule.collection + "/" + document
 			py, goRun := ruleRun(), ruleRun()
 			pyDoc, goDoc := map[string]any{}, map[string]any{}
-			setTimestampField(pyDoc, rule.field, timestampForRule(ruleStart.Add(10*time.Minute)))
-			setTimestampField(goDoc, rule.field, timestampForRule(ruleStart.Add(20*time.Minute)))
+			setTimestampField(pyDoc, rule.field, timestampForRule(rule, ruleStart.Add(10*time.Minute)))
+			setTimestampField(goDoc, rule.field, timestampForRule(rule, ruleStart.Add(20*time.Minute)))
 			if strings.Contains(document, "/goal_history/") {
 				parts := strings.Split(document, "/")
 				day := parts[len(parts)-1]
@@ -165,7 +181,7 @@ func TestEveryApprovedDerivedTimestampRuleHasPositiveAndNegativeEvidence(t *test
 				t.Fatalf("valid timestamp rule was not explained: %+v", diffs)
 			}
 
-			setTimestampField(goDoc, rule.field, timestampForRule(goRun.Finished.Add(rule.grace+time.Nanosecond)))
+			setTimestampField(goDoc, rule.field, timestampForRule(rule, goRun.Finished.Add(rule.grace+time.Nanosecond)))
 			diffs = compareObservations(py, goRun)
 			if !hasUnexplained(diffs) {
 				t.Fatalf("timestamp outside rule window was excused: %+v", diffs)
@@ -174,7 +190,7 @@ func TestEveryApprovedDerivedTimestampRuleHasPositiveAndNegativeEvidence(t *test
 	}
 }
 
-func timestampForRule(value time.Time) any {
+func timestampForRule(rule timestampRule, value time.Time) any {
 	return wrappedStamp(value)
 }
 

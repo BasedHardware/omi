@@ -28,11 +28,13 @@ from testing.finalization_replay.metrics import suspend_meter
 from testing.finalization_replay.ordinary_sync_retry import UNREADABLE, check_ciphertext, retry_to_park
 from testing.replay_harness.env import emulator_endpoint, replay_environment
 
+HOURLY_USAGE_REPLAY_TIME = FIXED_DATE.replace(minute=30)
+
 
 class HourlyUsageReplayClock(datetime):
     @classmethod
     def now(cls, tz=None):
-        midhour = FIXED_DATE.replace(minute=30)
+        midhour = HOURLY_USAGE_REPLAY_TIME
         return midhour.astimezone(tz) if tz is not None else midhour.replace(tzinfo=None)
 
 
@@ -323,6 +325,7 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                     if getattr(state, 'diag_missing_module', None):
                         out['errors'][side] = f'ModuleNotFoundError: {state.diag_missing_module}'
                     if side in out:
+                        out[side]['hourly_usage_replay_bucket'] = HOURLY_USAGE_REPLAY_TIME.strftime('%Y-%m-%d-%H')
                         if getattr(state, 'python_retry', None):
                             out[side]['python_retry'] = state.python_retry
                         calls = getattr(state, 'replay_token_calls', [])

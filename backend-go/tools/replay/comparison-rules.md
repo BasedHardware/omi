@@ -126,7 +126,10 @@ is a skip-cache miss. The comparator labels differences that pass these checks
 final memo remains a Go gap, including when the compared field values are equal.
 
 The ordinary-sync driver freezes the hourly usage bucket clock at the corpus
-date at 12:30 UTC. Usage fields and operation costs still compare in full.
+date at 12:30 UTC and records the expected bucket in each observation. The
+comparator checks the bucket against that clock and the Firestore write
+timestamp against the real replay window. Usage fields and operation costs
+still compare in full.
 
 The lead-approved pass-3 Go-gap groups from SCA-4012 are stored in
 `approved-go-gaps-sca-4012.csv`. The reporter applies those path/field patterns only to current

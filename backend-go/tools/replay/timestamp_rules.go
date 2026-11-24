@@ -209,7 +209,8 @@ func approvedTimestampDifference(path string, python, goRun *observation) string
 	if pyOK && goOK && pyValueOK && goValueOK &&
 		validTimestampValueWithin(python, pyValue, rule.kind == firestoreTimestamp, rule.grace) &&
 		validTimestampValueWithin(goRun, goValue, rule.kind == firestoreTimestamp, rule.grace) &&
-		additionalTimestampRuleValid(docPath, pyDoc, field) && additionalTimestampRuleValid(docPath, goDoc, field) {
+		additionalTimestampRuleValid(python, docPath, pyDoc, field) &&
+		additionalTimestampRuleValid(goRun, docPath, goDoc, field) {
 		return "both values retain the contract timestamp type and fall within their own replay windows"
 	}
 	return ""
@@ -322,7 +323,7 @@ func validateNestedTimestampFields(diffs *[]difference, side string, run *observ
 		}
 		if rule, ok := timestampRuleForDocument(docPath, fieldPath); ok {
 			if !validTimestampValueWithin(run, value, rule.kind == firestoreTimestamp, rule.grace) ||
-				!additionalTimestampRuleValid(docPath, docAtPath(root, strings.Split(fieldPath, "/")), field) {
+				!additionalTimestampRuleValid(run, docPath, docAtPath(root, strings.Split(fieldPath, "/")), field) {
 				addDifference(diffs, "/"+side+"/derived_documents/"+escapePointer(docPath)+"/"+fieldPath, "invalid_clock")
 			}
 			continue
@@ -360,7 +361,7 @@ func nestedField(value any, path string) (any, bool) {
 	return current, true
 }
 
-func additionalTimestampRuleValid(path string, doc map[string]any, field string) bool {
+func additionalTimestampRuleValid(run *observation, path string, doc map[string]any, field string) bool {
 	parts := strings.Split(path, "/")
 	if field == "recorded_at" && len(parts) >= 6 && parts[4] == "goal_history" {
 		stamp, ok := timestampText(doc[field])
@@ -382,6 +383,10 @@ func additionalTimestampRuleValid(path string, doc map[string]any, field string)
 		}
 		day := parsed.UTC().Format("2006-01-02")
 		if parts[2] == "hourly_usage" {
+			if run.HourlyUsageReplayBucket != "" {
+				bucket, err := time.Parse("2006-01-02-15", run.HourlyUsageReplayBucket)
+				return err == nil && parts[3] == bucket.Format("2006-01-02-15")
+			}
 			if parts[3] == day {
 				return true
 			}

@@ -41,6 +41,7 @@ type observation struct {
 	EpisodeAttachMemoFailureReason string                     `json:"episode_attach_memo_failure_reason,omitempty"`
 	Started                        time.Time                  `json:"started_at"`
 	Finished                       time.Time                  `json:"finished_at"`
+	HourlyUsageReplayBucket        string                     `json:"hourly_usage_replay_bucket,omitempty"`
 	ProviderTokenCalls             []providerTokenCall        `json:"provider_token_calls,omitempty"`
 	ProviderCalls                  []string                   `json:"provider_calls"`
 	Effects                        map[string]any             `json:"effects"`
