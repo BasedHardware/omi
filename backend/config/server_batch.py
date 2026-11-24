@@ -75,6 +75,11 @@ def enabled() -> bool:
     return os.getenv('SERVER_BATCH_ONLY_ENABLED', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
 
 
+def manual_end_marker_enabled() -> bool:
+    """Kill switch: a user finish of an audio-only v3 recording stores the manual-end cut for its later transcript."""
+    return os.getenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'on').strip().lower() not in {'false', '0', 'off', 'no'}
+
+
 def selected(owner_id: str, platform: str | None, source: str | None) -> bool:
     if source == 'phone_call':
         return False
