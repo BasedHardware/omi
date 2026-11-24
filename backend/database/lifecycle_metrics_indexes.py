@@ -35,5 +35,11 @@ INDEX_REQUIREMENTS = (
         'server_batch_audio_received',
         'created_at',
     ),
-    _index('audio_silence_outbox_owner_window', 'sync_reprocess_outbox', 'uid', 'first_pending_at'),
+    _index(
+        'audio_silence_outbox_active_owner_window',
+        'sync_reprocess_outbox',
+        'dormant',
+        'uid',
+        'first_pending_at',
+    ),
 )

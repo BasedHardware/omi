@@ -279,6 +279,10 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "dormant",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "uid",
           "order": "ASCENDING"
         },

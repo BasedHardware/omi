@@ -99,10 +99,13 @@ and their timestamp.
 
 There is deliberately no alert threshold while the bounded census establishes
 its baseline. To keep only complete observer samples, match each census series
-to its own partial marker before aggregating replicas:
+to its own partial marker and last observation before aggregating replicas.
+The 12-hour age bound allows two six-hour observation intervals:
 `max by (state, source) (omi_audio_silence_census and on (job, instance)
-(omi_audio_silence_census_partial == 0))`. Use `max`, never `sum`, across
-per-observer values so replicas do not multiply the same census.
+(omi_audio_silence_census_partial == 0) and on (job, instance)
+(omi_audio_silence_census_observed_at_seconds > time() - 43200))`. Use `max`,
+never `sum`, across per-observer values so replicas do not multiply the same
+census.
 
 ## Pair consistency and repair fences
 

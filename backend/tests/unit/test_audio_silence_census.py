@@ -8,6 +8,7 @@ from unittest.mock import Mock
 import pytest
 from prometheus_client import CollectorRegistry
 
+from database import audio_silence_census
 from database.audio_silence_census import sample
 from testing.hermetic_network import block_outbound_network
 from utils.batch_pipeline.metrics import QueueMetrics
@@ -33,6 +34,7 @@ class Query:
     cap: int | None = None
 
     def where(self, *, filter):
+        self.client.where_calls.append((self.name, filter.field_path, filter.value))
         return replace(self, filters=(*self.filters, filter))
 
     def order_by(self, field, direction=None):
@@ -104,6 +106,7 @@ class Client:
     def __init__(self, rows=None):
         self.rows = rows or {}
         self.streamed = 0
+        self.where_calls = []
 
     def collection(self, name):
         return Collection(self, name)
@@ -193,10 +196,52 @@ def test_candidate_aggregates_join_audio_and_app_evidence_outside_the_page():
     result = sample(client, 'batch_pipeline_prod', NOW, page_limit=1)
 
     assert result['partial']
-    assert result['reads'] == 6  # one page document plus five candidate COUNT(1)s
+    assert result['reads'] == 4  # two page documents plus two necessary candidate COUNT(1)s
     assert result['counts']['app_active_with_audio', 'omi'] == 1
     assert result['counts']['app_active_with_audio', 'other'] == 1  # no source-bearing row was read
     assert not any(count for (state, _), count in result['counts'].items() if state != 'app_active_with_audio')
+
+
+def test_dormant_outbox_row_does_not_restore_audio_from_fallback():
+    rows = dict([conversation('target', 'one')])
+    rows['sync_reprocess_outbox/live-one'] = {'uid': 'live-one', 'first_pending_at': NOW - 300, 'dormant': False}
+    rows['sync_reprocess_outbox/live-two'] = {'uid': 'live-two', 'first_pending_at': NOW - 200, 'dormant': False}
+    rows['sync_reprocess_outbox/parked-target'] = {
+        'uid': 'target',
+        'first_pending_at': NOW - 100,
+        'dormant': True,
+    }
+
+    result = sample(Client(rows), 'batch_pipeline_prod', NOW, page_limit=2)
+
+    assert result['partial']
+    assert result['counts']['app_active_no_audio', 'omi'] == 1
+    assert result['counts']['app_active_with_audio', 'omi'] == 0
+
+
+@pytest.mark.parametrize('limit', ['deadline', 'budget'])
+def test_verified_active_audio_user_survives_classification_limit(monkeypatch, limit):
+    rows = dict([conversation('zz-verified', 'one', server_batch_audio_received=True)])
+    rows['sync_reprocess_outbox/live'] = {'uid': 'aa-live', 'first_pending_at': NOW, 'dormant': False}
+    client = Client(rows)
+    ticks = iter([0, 0, 0, 0, 6 if limit == 'deadline' else 0])
+    monotonic_calls = []
+
+    def monotonic():
+        monotonic_calls.append(None)
+        return next(ticks)
+
+    monkeypatch.setattr(audio_silence_census, 'time', SimpleNamespace(monotonic=monotonic))
+    kwargs = {'page_limit': 1}
+    if limit == 'budget':
+        kwargs['read_budget'] = 5
+
+    result = sample(client, 'batch_pipeline_prod', NOW, **kwargs)
+
+    assert result['partial']
+    assert result['counts']['app_active_with_audio', 'omi'] == 1
+    assert len(monotonic_calls) == 5  # The earlier unresolved user reaches the deadline/budget stop.
+    assert ('sync_reprocess_outbox', 'uid', 'zz-verified') not in client.where_calls
 
 
 def test_hard_read_budget_stops_candidate_queries():

@@ -173,6 +173,7 @@ def sample(client, namespace, now, *, read_budget=READ_BUDGET, page_limit=PAGE_L
         return (
             client.collection('sync_reprocess_outbox')
             .where(filter=FieldFilter('uid', '==', uid))
+            .where(filter=FieldFilter('dormant', '==', False))
             .where(filter=FieldFilter('first_pending_at', '>=', after))
             .where(filter=FieldFilter('first_pending_at', '<=', current))
         )
@@ -253,19 +254,31 @@ def sample(client, namespace, now, *, read_budget=READ_BUDGET, page_limit=PAGE_L
         item.audio = item.outbox = True
 
     counts = {(state, source): 0 for state in SILENCE_CENSUS_STATES for source in SILENCE_CENSUS_SOURCES}
+    for item in evidence.values():
+        if item.activity and item.audio:
+            counts[_census_state(item), item.source] += 1
+
     try:
         for uid in sorted(evidence):
             item = evidence[uid]
+            if item.activity and item.audio:
+                continue
             if truncated['jobs'] and not item.job and exists(job_query(uid)):
                 item.activity = item.audio = item.job = True
+            if item.activity and item.audio:
+                counts[_census_state(item), item.source] += 1
+                continue
             if truncated['conversations']:
-                if not item.received and exists(
+                if not item.audio and exists(
                     activity_query(uid).where(filter=FieldFilter('server_batch_audio_received', '==', True))
                 ):
                     item.audio = item.received = True
                 if not item.activity and exists(activity_query(uid)):
                     item.activity = True
-            if truncated['outbox'] and not item.outbox and exists(outbox_query(uid)):
+            if item.activity and item.audio:
+                counts[_census_state(item), item.source] += 1
+                continue
+            if truncated['outbox'] and not item.audio and exists(outbox_query(uid)):
                 item.audio = item.outbox = True
             if not item.audio and truncated['conversations']:
                 # An unseen non-empty record_upload_sessions map cannot be
@@ -273,6 +286,8 @@ def sample(client, namespace, now, *, read_budget=READ_BUDGET, page_limit=PAGE_L
                 continue
             counts[_census_state(item), item.source] += 1
     except (_BudgetExhausted, _SampleDeadlineExceeded):
+        # Directly verified active-with-audio users were counted before
+        # candidate checks so an earlier limit cannot erase their lower bound.
         pass
     return {
         'counts': counts,
