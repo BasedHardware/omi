@@ -5,10 +5,13 @@ from functools import lru_cache
 from hashlib import sha256
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import re
 import socket
 from threading import Lock, Thread
 from unittest.mock import patch
 from urllib.parse import urlsplit
+
+_IDEMPOTENCY_KEY = re.compile(r'[A-Za-z0-9._:-]{1,128}')
 
 
 @lru_cache(maxsize=1)
@@ -87,7 +90,7 @@ def provider_server():
         def do_GET(self):
             prefix = '/v1/chat/completions/operations/'
             key = self.path.removeprefix(prefix)
-            if self.path.startswith(prefix) and key in self.server.operations:
+            if self.path.startswith(prefix) and _IDEMPOTENCY_KEY.fullmatch(key) and key in self.server.operations:
                 self._reply(200, self.server.operations[key], key)
                 return
             self._reply(404, {'error': {'code': 'idempotency_not_found'}})
@@ -95,14 +98,17 @@ def provider_server():
         def do_POST(self):
             key = None
             try:
-                body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 path = urlsplit(self.path).path
+                request_key = self.headers.get('Idempotency-Key')
+                if request_key is not None and not _IDEMPOTENCY_KEY.fullmatch(request_key):
+                    raise ValueError('invalid replay operation identity')
+                body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 if path == '/internal/finalization/sync-reference' and self.server.reference is not None:
                     response_status, result = self.server.reference(body, self.headers)
                     self._reply(response_status, result)
                     return
                 if path == '/v1/chat/completions/operations':
-                    key = self.headers['Idempotency-Key']
+                    key = request_key
                     if not key:
                         raise ValueError('missing replay operation identity')
                     with self.server.operation_lock:
