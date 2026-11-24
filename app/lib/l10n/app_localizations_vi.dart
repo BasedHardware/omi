@@ -15337,9 +15337,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get stopThese => 'Dừng Loại Này';
 
   @override
-  String get meetingActionItemsTitle => 'Việc cần làm';
-
-  @override
   String get addToTasks => 'Thêm vào Công việc';
 
   @override

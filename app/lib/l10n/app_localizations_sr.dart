@@ -15344,9 +15344,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get stopThese => 'Заустави ово';
 
   @override
-  String get meetingActionItemsTitle => 'Ставке за рад';
-
-  @override
   String get addToTasks => 'Додај у задатке';
 
   @override

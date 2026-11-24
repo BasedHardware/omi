@@ -15320,9 +15320,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stopThese => 'Stop These';
 
   @override
-  String get meetingActionItemsTitle => 'Action items';
-
-  @override
   String get addToTasks => 'Add to Tasks';
 
   @override

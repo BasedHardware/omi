@@ -15370,9 +15370,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get stopThese => 'Вимкнути такі';
 
   @override
-  String get meetingActionItemsTitle => 'Пункти дій';
-
-  @override
   String get addToTasks => 'Додати до Завдань';
 
   @override

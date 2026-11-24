@@ -15386,9 +15386,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get stopThese => 'Отключить такие';
 
   @override
-  String get meetingActionItemsTitle => 'Пункты действий';
-
-  @override
   String get addToTasks => 'Добавить в задачи';
 
   @override

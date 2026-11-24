@@ -15331,9 +15331,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get stopThese => 'এগুলো বন্ধ করুন';
 
   @override
-  String get meetingActionItemsTitle => 'করণীয় বিষয়';
-
-  @override
   String get addToTasks => 'টাস্কে যোগ করুন';
 
   @override

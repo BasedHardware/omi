@@ -15327,9 +15327,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get stopThese => 'Stop disse';
 
   @override
-  String get meetingActionItemsTitle => 'Handlingspunkter';
-
-  @override
   String get addToTasks => 'Føj til Opgaver';
 
   @override

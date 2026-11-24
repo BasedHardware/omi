@@ -15438,9 +15438,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get stopThese => 'Διακοπή αυτών';
 
   @override
-  String get meetingActionItemsTitle => 'Ενέργειες';
-
-  @override
   String get addToTasks => 'Προσθήκη στις Εργασίες';
 
   @override

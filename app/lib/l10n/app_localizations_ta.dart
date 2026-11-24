@@ -15439,9 +15439,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get stopThese => 'இவற்றை நிறுத்து';
 
   @override
-  String get meetingActionItemsTitle => 'செயல் உருப்படிகள்';
-
-  @override
   String get addToTasks => 'பணிகளில் சேர்க்கவும்';
 
   @override
