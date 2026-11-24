@@ -1070,5 +1070,13 @@
   "backend/utils/batch_pipeline/live.py:get_conversation": {
     "policy": "both",
     "reason": "Record admission's manual-finish first transcript re-reads one owner-scoped recording, decoded, to decide whether it still has no transcript before any provider call and again before the provisional write; recording-layer access by its capture owner."
+  },
+  "backend/database/conversation_batch_purge_jobs.py:collection": {
+    "policy": "both",
+    "reason": "Conversation deletion audio erasure: owner-scoped by-id existence/deleted-flag checks so an erasure never runs on a visible conversation and a fed conversation with neither row nor tombstone is known gone."
+  },
+  "backend/database/sync_ledger_sources.py:collection": {
+    "policy": "both",
+    "reason": "Conversation deletion audio erasure: owner-scoped by-id existence/deleted-flag checks so an erasure never runs on a visible conversation and a fed conversation with neither row nor tombstone is known gone."
   }
 }
