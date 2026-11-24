@@ -487,12 +487,8 @@ PROVIDER_429_BACKOFF_CAP_SECONDS = 60.0
 # memory-l1 18.8s): 60-15=45s and 60-10=50s. A Flex 429 returns fast and costs
 # almost none of that. Kill switch: LLM_GATEWAY_FLEX_FIRST_LANES=off.
 #
-# omi:auto:conversation-v3-summary is deliberately absent from the default list below: v3
-# summaries do not try Flex and go straight to Standard. The lane was on the list until 2026-11-24.
-# In 66 h of prod receipts before that, Flex answered only about 5% of its summaries, which saved
-# about 2% of the lane's token cost. The other 95% were answered by Standard after a discarded
-# Flex attempt, which can hold a summary for the full 10 s cap. Add a lane to the list only when
-# Flex answers most of its requests.
+# omi:auto:conversation-v3-summary is deliberately not on the list: Flex answered only about 5%
+# of its summaries in prod, so v3 summaries go straight to Standard.
 FLEX_FIRST_LANES_ENV_VAR = 'LLM_GATEWAY_FLEX_FIRST_LANES'
 FLEX_FIRST_TIMEOUT_MS_ENV_VAR = 'LLM_GATEWAY_FLEX_FIRST_TIMEOUT_MS'
 DEFAULT_FLEX_FIRST_LANES = frozenset({'omi:auto:conv-structure', 'omi:auto:memory-l1'})
