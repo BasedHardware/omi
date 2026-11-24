@@ -14,7 +14,7 @@ import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/pages/settings/widgets/cancel_subscription_sheet.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/plan_storefront.dart';
-import 'package:omi/backend/http/api/payment.dart' show paymentRefusalMessage;
+import 'package:omi/backend/http/api/payment.dart' show paymentRefusalMessage, useGooglePlayCode;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/plan_storefront_api.dart';
 import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
@@ -553,6 +553,7 @@ class _PlansSheetState extends State<PlansSheet> {
         );
         if (result != null && result['error'] == true && paymentRefusalMessage(result) != null) {
           _surfacePurchaseError(paymentRefusalMessage(result)!);
+          if (result['code'] == useGooglePlayCode) await provider.fetchSubscription(fresh: true);
           return;
         } else if (result != null && result['error'] == true) {
           final detail = isUpgradePendingCancelConflict(result['status_code'], detail: result['detail'] as String?)
@@ -592,6 +593,8 @@ class _PlansSheetState extends State<PlansSheet> {
                     ? l10n.checkoutExistingSubscription
                     : sessionData['detail'] as String? ?? l10n.couldNotProcessSubscription),
           );
+          // The server now sells this client through Google Play: read the plan again so the sheet shows Play.
+          if (sessionData['code'] == useGooglePlayCode) await provider.fetchSubscription(fresh: true);
         } else if (sessionData != null) {
           // Check if this was a reactivation
           if (sessionData.containsKey('status') && sessionData['status'] == 'reactivated') {

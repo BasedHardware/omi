@@ -311,13 +311,13 @@ void main() {
     for (final (code, body, message) in [
       (
         'use_google_play',
-        '{"detail": {"code": "use_google_play", "message": "Subscribe with Google Play in the app."}}',
+        '{"detail": "Subscribe with Google Play in the app.", "code": "use_google_play"}',
         'Subscribe with Google Play in the app.',
       ),
       (
         'play_on_hold',
-        '{"detail": {"code": "play_subscription_on_hold", '
-            '"message": "You have a Google Play subscription on hold. Fix the payment in Google Play."}}',
+        '{"detail": "You have a Google Play subscription on hold. Fix the payment in Google Play.", '
+            '"code": "play_subscription_on_hold"}',
         'You have a Google Play subscription on hold. Fix the payment in Google Play.',
       ),
     ]) {

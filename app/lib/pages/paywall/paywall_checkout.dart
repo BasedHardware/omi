@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/backend/http/api/payment.dart' show paymentRefusalMessage;
+import 'package:omi/backend/http/api/payment.dart' show paymentRefusalMessage, useGooglePlayCode;
 import 'package:omi/pages/settings/payment_webview_page.dart';
 import 'package:omi/services/billing/play_billing.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart' show UpgradeBillingProviderStage;
@@ -70,6 +70,8 @@ abstract final class PaywallCheckout {
                   : session['detail'] as String? ?? l10n.couldNotProcessSubscription),
           error: true,
         );
+        // The server now sells this client through Google Play: read the plan again so the paywall shows Play.
+        if (session['code'] == useGooglePlayCode) await provider.fetchSubscription(fresh: true);
         return PaywallCheckoutOutcome.failed;
       }
       if (session == null) {

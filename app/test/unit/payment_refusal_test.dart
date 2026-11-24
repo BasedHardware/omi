@@ -24,6 +24,23 @@ void main() {
         paymentRefusalMessage(result), 'You have a Google Play subscription on hold. Fix the payment in Google Play.');
   });
 
+  test('the backend shape: a top-level sentence and code', () {
+    for (final (status, code, sentence) in [
+      (409, 'use_google_play', 'Subscribe with Google Play in the app.'),
+      (
+        400,
+        'play_subscription_on_hold',
+        'You have a Google Play subscription on hold. Fix the payment in Google Play.'
+      ),
+      (503, 'play_check_unavailable', 'We could not check your Google Play subscription. Try again in a minute.'),
+    ]) {
+      final result = paymentErrorFromBody(status, '{"detail": "$sentence", "code": "$code"}');
+      expect(result['status_code'], status);
+      expect(result['code'], code);
+      expect(paymentRefusalMessage(result), sentence);
+    }
+  });
+
   test('a top-level code and message is read the same way', () {
     final result =
         paymentErrorFromBody(409, '{"code": "use_google_play", "message": "Subscribe with Google Play in the app."}');

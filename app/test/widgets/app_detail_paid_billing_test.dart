@@ -131,14 +131,15 @@ void main() {
 
   tearDown(() => browser.dispose());
 
-  Future<Completer<UserSubscriptionResponse?>> pumpPaidApp(WidgetTester tester) async {
+  Future<Completer<UserSubscriptionResponse?>> pumpPaidApp(WidgetTester tester,
+      {String? paymentLink = 'https://pay.example.com/app'}) async {
     final gate = Completer<UserSubscriptionResponse?>();
     final platform = FakePlayPlatform();
     final billing = PlayBilling(platform: () => platform, verify: FakePlayServer().call, store: MemoryTokenStore());
     addTearDown(billing.dispose);
     final usage = UsageProvider(subscriptionRequest: () => gate.future, playBilling: billing);
     addTearDown(usage.dispose);
-    final app = _app(paid: true, paymentLink: 'https://pay.example.com/app');
+    final app = _app(paid: true, paymentLink: paymentLink);
     await tester.pumpWidget(
       MultiProvider(
         providers: [
@@ -206,6 +207,18 @@ void main() {
       expect(find.text('Not available on Android'), findsOneWidget);
       expect(find.text('Subscribe'), findsNothing);
       await writeSurfaceRender(tester, 'app-detail-paid-play-${scale == 1 ? 'default' : 'xxxl'}');
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  }
+
+  for (final play in [playConfig, null]) {
+    testWidgets('a paid app with no payment link shows "Not available on Android" (Play setup: ${play != null})',
+        (tester) async {
+      final gate = await pumpPaidApp(tester, paymentLink: null);
+      gate.complete(_response(play: play));
+      await settle(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('app_detail_paid_unavailable')), findsOneWidget);
+      expect(find.text('Subscribe'), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   }
 

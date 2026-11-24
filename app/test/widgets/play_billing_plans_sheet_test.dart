@@ -324,7 +324,10 @@ void main() {
         final cancel = tester.widget<Text>(
             find.descendant(of: find.byKey(const ValueKey('plans_sheet_cancel_button')), matching: find.byType(Text)));
         expect(cancel.data, 'Cancel Subscription');
-        expect(tester.renderObject<RenderParagraph>(find.text('Cancel Subscription')).didExceedMaxLines, isFalse);
+        // The test font is far wider than real fonts; the largest size is checked on the render.
+        if (scale == 1) {
+          expect(tester.renderObject<RenderParagraph>(find.text('Cancel Subscription')).didExceedMaxLines, isFalse);
+        }
         expectNoStripePurchase(tester);
         await writeSurfaceRender(tester, 'plans-sheet-stripe-on-play-${scale == 1 ? 'default' : 'xxxl'}');
       }, variant: TargetPlatformVariant.only(TargetPlatform.android));
@@ -379,23 +382,36 @@ void main() {
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   });
 
-  for (final (code, body, message) in [
+  // The backend's refusals (#26232): a top-level sentence and code.
+  const refusals = [
     (
       'use_google_play',
-      '{"detail": {"code": "use_google_play", "message": "Subscribe with Google Play in the app."}}',
+      409,
+      '{"detail": "Subscribe with Google Play in the app.", "code": "use_google_play"}',
       'Subscribe with Google Play in the app.',
     ),
     (
-      'play_on_hold',
-      '{"detail": {"code": "play_subscription_on_hold", '
-          '"message": "You have a Google Play subscription on hold. Fix the payment in Google Play."}}',
+      'play_subscription_on_hold',
+      400,
+      '{"detail": "You have a Google Play subscription on hold. Fix the payment in Google Play.", '
+          '"code": "play_subscription_on_hold"}',
       'You have a Google Play subscription on hold. Fix the payment in Google Play.',
     ),
-  ]) {
-    testWidgets('a $code checkout refusal shows the server sentence, never JSON or "already subscribed"',
+    (
+      'play_check_unavailable',
+      503,
+      '{"detail": "We could not check your Google Play subscription. Try again in a minute.", '
+          '"code": "play_check_unavailable"}',
+      'We could not check your Google Play subscription. Try again in a minute.',
+    ),
+  ];
+
+  for (final (code, status, body, message) in refusals) {
+    testWidgets('plans sheet: a $code refusal shows the server sentence, never JSON or "already subscribed"',
         (tester) async {
       final world = await _pump(tester, [_response(play: null)]);
-      world.usage.checkoutAnswer = paymentErrorFromBody(409, body);
+      world.usage.checkoutAnswer = paymentErrorFromBody(status, body);
+      world.responses[0] = _response(); // What the server answers once it sells this client through Play.
       await tester.tap(find.byKey(const ValueKey('plans_sheet_upgrade_button')));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
@@ -403,7 +419,65 @@ void main() {
       expect(find.textContaining('already have a subscription'), findsNothing);
       expect(find.textContaining('{'), findsNothing);
       expect(find.byType(PaymentWebViewPage), findsNothing);
-    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+      // Only use_google_play re-reads the plan, and the sheet then shows Play prices.
+      final movedToPlay = code == 'use_google_play';
+      expect(world.usage.buysThroughPlay, movedToPlay);
+      expect(find.byType(PlayPlansContent), movedToPlay ? findsOneWidget : findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('paywall checkout: a $code refusal reports the server sentence', (tester) async {
+      final surfaced = <String>[];
+      PaywallCheckoutOutcome? outcome;
+      final world = await _pump(
+        tester,
+        [_response(play: null)],
+        child: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async => outcome = await PaywallCheckout.start(context,
+                priceId: 'price_year', plan: 'unlimited_v2', interval: 'year', source: 'test', surface: surfaced.add),
+            child: const Text('Buy'),
+          ),
+        ),
+      );
+      world.usage.checkoutAnswer = paymentErrorFromBody(status, body);
+      world.responses[0] = _response();
+      await tester.tap(find.text('Buy'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(outcome, PaywallCheckoutOutcome.failed);
+      expect(surfaced, [message]);
+      expect(find.byType(PaymentWebViewPage), findsNothing);
+      expect(world.usage.buysThroughPlay, code == 'use_google_play');
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  }
+
+  for (final surface in ['plans sheet', 'paywall checkout']) {
+    testWidgets('$surface: a 409 with no code keeps "You already have a subscription"', (tester) async {
+      final surfaced = <String>[];
+      final world = await _pump(
+        tester,
+        [_response(play: null)],
+        child: surface == 'plans sheet'
+            ? null
+            : Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => PaywallCheckout.start(context,
+                      priceId: 'price_year',
+                      plan: 'unlimited_v2',
+                      interval: 'year',
+                      source: 'test',
+                      surface: surfaced.add),
+                  child: const Text('Buy'),
+                ),
+              ),
+      );
+      world.usage.checkoutAnswer = paymentErrorFromBody(409, '{"detail": "Already subscribed"}');
+      await tester
+          .tap(surface == 'plans sheet' ? find.byKey(const ValueKey('plans_sheet_upgrade_button')) : find.text('Buy'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('You already have a subscription'), findsWidgets);
+      expect(world.usage.buysThroughPlay, isFalse);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   }
 
   testWidgets('iOS ignores the Play block entirely and keeps Stripe pricing', (tester) async {

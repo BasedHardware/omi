@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -912,7 +913,12 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
         onPressed: null,
       );
     }
-    if (billing.playBilled) {
+    // A Play build gets no payment link from the server: Android shows the same unavailable state.
+    final noPaymentLink = app.isPaid &&
+        !app.isUserPaid &&
+        (app.paymentLink?.isEmpty ?? true) &&
+        defaultTargetPlatform == TargetPlatform.android;
+    if (billing.playBilled || noPaymentLink) {
       // Its payment link is not Google Play; a Play-billed reader cannot buy it in this app.
       return OmiButton.secondary(
         key: const Key('app_detail_paid_unavailable'),
