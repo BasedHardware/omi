@@ -741,7 +741,6 @@ tests/unit/test_dream_minute_headroom.py	8.7
 tests/unit/test_dream_optimize_levers.py	9.7
 tests/unit/test_dream_outcomes.py	7.7
 tests/unit/test_dream_paid_ramp.py	2.7
-tests/unit/test_dream_prescan.py	8.7
 tests/unit/test_dream_provider_isolation.py	8.7
 tests/unit/test_dream_quality.py	3.7
 tests/unit/test_dream_queue.py	8.7
