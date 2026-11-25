@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,6 +16,57 @@ import (
 
 const speakerDoc = "users/replay-c/conversations/c/speaker_evidence/current"
 const clockPath = "/conversation/owner_recognition_diagnostics/current_resolver/elapsed_seconds"
+
+func TestJobdResolverDepartureRequiresAbsentRowAndProof(t *testing.T) {
+	for _, test := range []struct {
+		caseID, status string
+		evidence       map[string]any
+	}{
+		{"worker-missing-row-fence", "fenced", map[string]any{"job": map[string]any{"outcome": "fenced"}}},
+		{"erase-removes-owner-and-jobs", "completed", map[string]any{
+			"job": map[string]any{"state": "completed"},
+			"erasure": map[string]any{"user_document_absent": true, "jobs_for_uid": json.Number("0"),
+				"tenants_for_uid": json.Number("0")},
+		}},
+	} {
+		t.Run(test.caseID, func(t *testing.T) {
+			py := captureRun(t, "0.2", 1)
+			py.ConversationID, py.OwnerID = test.caseID, "replay-"+test.caseID
+			py.Derived = map[string]any{}
+			diag := mustMap(documentField(py, "owner_recognition_diagnostics"))
+			for _, row := range []map[string]any{
+				py.SpeakerTrace.Exits[0], mustMap(diag["first_resolver"]), mustMap(diag["current_resolver"]),
+			} {
+				row["conversation"], row["uid"] = py.ConversationID, py.OwnerID
+			}
+			g := ruleRun()
+			g.OwnerID, g.ConversationID = py.OwnerID, py.ConversationID
+			g.Document, g.Status, g.GoEvidence = nil, test.status, test.evidence
+			diffs := compareObservations(py, g)
+			if !slices.Contains(diffs, difference{Path: "/conversation", Kind: "different_value"}) ||
+				hasKindPath(diffs, "invalid_binding", "/go"+clockPath) ||
+				hasKindPath(diffs, "invalid_binding", "/python"+clockPath) {
+				t.Fatalf("proved row absence should keep the whole-row difference: %+v", diffs)
+			}
+			g.GoEvidence = nil
+			if diffs := compareObservations(py, g); !hasKindPath(diffs, "invalid_binding", "/go"+clockPath) {
+				t.Fatalf("absent row without a departure proof escaped validation: %+v", diffs)
+			}
+			g.GoEvidence, g.Document = test.evidence, py.Document
+			if diffs := compareObservations(py, g); !hasKindPath(diffs, "invalid_binding", "/go"+clockPath) {
+				t.Fatalf("a present Go result escaped witness validation: %+v", diffs)
+			}
+			g.Document, g.SpeakerTrace = nil, py.SpeakerTrace
+			if diffs := compareObservations(py, g); !hasKindPath(diffs, "invalid_binding", "/go"+clockPath) {
+				t.Fatalf("departure proof excused a claimed Go resolver exit: %+v", diffs)
+			}
+			g.SpeakerTrace, py.SpeakerTrace = nil, nil
+			if diffs := compareObservations(py, g); !hasKindPath(diffs, "invalid_binding", "/python"+clockPath) {
+				t.Fatalf("Go departure excused the missing Python witness: %+v", diffs)
+			}
+		})
+	}
+}
 
 func captureRun(t *testing.T, elapsed string, nonce byte) *observation {
 	t.Helper()

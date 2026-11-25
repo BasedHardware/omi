@@ -106,7 +106,9 @@ func reviewSpeakerDifferences(diffs *[]difference, py, goRun *observation) {
 	docPath := "/derived_documents/" + escapePointer(doc)
 	if expectsResolverWitness(py) || expectsResolverWitness(goRun) {
 		validateResolverWitness(diffs, "/python", pyDiag)
-		validateResolverWitness(diffs, "/go", goDiag)
+		if !provedJobdResolverDeparture(goRun) {
+			validateResolverWitness(diffs, "/go", goDiag)
+		}
 	}
 	var pyPayload, goPayload []byte
 	_, pyStored := py.Derived[doc]
@@ -137,6 +139,28 @@ func reviewSpeakerDifferences(diffs *[]difference, py, goRun *observation) {
 }
 
 const resolverPath = "/conversation/owner_recognition_diagnostics"
+
+// The jobd fence and erase fixtures can end with a proved absent row. There is
+// then no Go resolver result to authenticate. The whole-row difference remains.
+func provedJobdResolverDeparture(run *observation) bool {
+	if run.Document != nil || (run.SpeakerTrace != nil && len(run.SpeakerTrace.Exits) != 0) {
+		return false
+	}
+	job := run.GoEvidence["job"]
+	switch run.ConversationID {
+	case "worker-missing-row-fence":
+		return run.Status == "fenced" && objectField(job, "outcome") == "fenced" &&
+			len(run.ProviderCalls) == 0
+	case "erase-removes-owner-and-jobs":
+		erasure := run.GoEvidence["erasure"]
+		jobs, jobsOK := integerValue(objectField(erasure, "jobs_for_uid"))
+		tenants, tenantsOK := integerValue(objectField(erasure, "tenants_for_uid"))
+		return run.Status == "completed" && objectField(job, "state") == "completed" &&
+			objectField(erasure, "user_document_absent") == true && jobsOK && tenantsOK && jobs == 0 && tenants == 0
+	default:
+		return false
+	}
+}
 
 func expectsResolverWitness(run *observation) bool {
 	if documentField(run, "private_cloud_sync_enabled") == false &&

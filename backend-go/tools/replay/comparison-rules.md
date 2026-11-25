@@ -187,3 +187,10 @@ Each side must provide its own resolver witness for the scoped capture and empty
 resolver results. When either side stored a speaker evidence document, both sides
 must provide authenticated builder evidence, including for equal ciphertext.
 Unsampled shadow processing can build evidence without storing an envelope.
+
+The conformance driver records the Python resolver with the same observer as the
+workerd diagnostic. In the two `jobd` departure fixtures, Go has no final resolver
+result after the worker fences a deleted row or erasure removes the owner and queue
+records. The oracle requires the corresponding Go departure evidence and retains the
+literal conversation difference. Python still needs its witness. A present Go
+conversation or an unproved departure still needs a Go witness.
