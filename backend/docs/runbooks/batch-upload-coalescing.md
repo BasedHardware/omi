@@ -96,12 +96,15 @@ so their samples would mix bucket layouts in an aggregate. A ramp cohort
 without measurements for its expected state leaves the guard blind. The
 rollback expression per state is
 `p90(omi_batch_pipeline_upload_hold_age_seconds) + p90(omi_batch_pipeline_upload_to_transcript_seconds) > H + 300 s`.
-The phone histogram captures age through send, including time spent suspended.
+Use H = 60 s for `fg60` and H = 300 s for `bg300` or `fg_preview300`.
+The guard uses these three held cohorts. The phone histogram captures age
+through send, including time spent suspended, on each fresh batch admission.
 The server histogram starts at request arrival. The sum of their p90s is the
 rollout guard and is not a directly measured end-to-end p90.
 
-Both collectors live in the default Cloud Run registry and the worker private
-registry/multiprocess forwarding. Existing `batch_pipeline_.*` and `omi_.*`
+Sync exports all three families in its default Cloud Run registry. The worker
+private registry and multiprocess forwarding carry unit creation and server
+publication latency. Existing `batch_pipeline_.*` and `omi_.*`
 keep-lists retain the counter and every histogram sample; regression tests
 evaluate every keep/drop rule in the sync, projection pump, and shared Cloud
 Run profiles and verify the actual worker health registry. No keep-list

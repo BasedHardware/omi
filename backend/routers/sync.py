@@ -775,7 +775,6 @@ async def sync_local_files_v2(
                 },
             )
         return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
-    observe_hold_age(x_omi_upload_hold_age_ms, x_omi_upload_hold)
     clamp_enabled = future_capture_clamp_enabled()
     if clamp_enabled:
         future_capture_request.classify_upload((file.filename or '' for file in files), capture_received_at)
@@ -1333,6 +1332,7 @@ async def sync_local_files_v2(
                 # owner is a follow-on, not a batch landing).
                 if intake_evidence.batch_accepted and not intake_evidence.final_pass_owner_followed:
                     record_upload_outcome('batch')
+                    observe_hold_age(x_omi_upload_hold_age_ms, x_omi_upload_hold)
                 return batch_response
             sequencer_registration_started = False
 

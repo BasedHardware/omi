@@ -9,7 +9,7 @@ and coalesced completions retain each original request's label and clock.
 Release verifies labeled samples before the phone flag ramps from 0 to 5,
 25, and 100 percent. During mixed backend revisions the guard selects
 explicit hold states, which use the new 360-second bucket. When the client
-provides a valid hold age, sync also observes it in
+provides a valid hold age on a new batch admission, sync also observes it in
 `omi_batch_pipeline_upload_hold_age_seconds`. The rollback guard adds
 phone-age p90 to server-publication p90 per state and compares the sum with
 the hold window plus 300 seconds. The age adds no Firestore field or operation.

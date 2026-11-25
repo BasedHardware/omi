@@ -265,6 +265,8 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
 
 
 def test_anchor_contention_is_503_before_staging_or_acknowledgement(client, monkeypatch, tmp_path):
+    histogram = Mock()
+    monkeypatch.setattr(sync_upload, 'HOLD_AGE', histogram)
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'true')
     store = MemoryStore()
     store.namespace = 'batch_pipeline_dev'
@@ -305,7 +307,12 @@ def test_anchor_contention_is_503_before_staging_or_acknowledgement(client, monk
     payload = path.read_bytes()
     response = client.post(
         '/v2/sync-local-files',
-        headers={'X-App-Platform': 'ios', 'X-Device-Id-Hash': 'abcd1234'},
+        headers={
+            'X-App-Platform': 'ios',
+            'X-Device-Id-Hash': 'abcd1234',
+            'X-Omi-Upload-Hold': 'bg300',
+            'X-Omi-Upload-Hold-Age-Ms': '1200000',
+        },
         files=[('files', (f'audio_omi_pcm16_16000_clkeone_{future}.bin', payload, 'application/octet-stream'))],
     )
     assert response.status_code == 503, response.text
@@ -313,6 +320,7 @@ def test_anchor_contention_is_503_before_staging_or_acknowledgement(client, monk
     assert response.headers['Retry-After'] == '30'
     artifacts.stage_audio.assert_not_called()
     admit.assert_not_called()
+    histogram.labels.assert_not_called()
     assert path.read_bytes() == payload  # Synthetic phone copy is untouched.
     assert not store.rows
 
