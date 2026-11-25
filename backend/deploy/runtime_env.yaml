@@ -972,6 +972,10 @@ environments:
         PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
+        CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
+        CONVERSATIONS_V3_FIRST_APP_BUILD:
+          value: ''
+          category: config
       secrets:
         SCREEN_VECTOR_STRIPE_API_KEY:
           env_var: SCREEN_VECTOR_STRIPE_READ_SECRET
@@ -4046,6 +4050,13 @@ environments:
         MENTOR_PIPELINE: {value: cohort, category: rollout}
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
+        CONVERSATIONS_V3:
+          value: 'on'
+          category: ops_kill
+        CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
+        CONVERSATIONS_V3_FIRST_APP_BUILD:
+          value: ''
+          category: config
       secrets:
         SCREEN_VECTOR_STRIPE_API_KEY:
           env_var: SCREEN_VECTOR_STRIPE_READ_SECRET

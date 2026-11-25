@@ -134,6 +134,11 @@ def test_one_stage_source_moves_all_runtime_roles(tmp_path):
             if isinstance(j, dict)
         )
         assert env['gke']['config_map']['entries']['CONVERSATIONS_V3_STAGE']['value'] == 'beta'
+        desktop_env = env['desktop_backend']['env']
+        backend_env = env['cloud_run']['services']['backend']['env']
+        for key in ('CONVERSATIONS_V3_STAGE', 'CONVERSATIONS_V3_FIRST_APP_BUILD'):
+            assert desktop_env[key] == backend_env[key]
+        assert desktop_env.get('CONVERSATIONS_V3') == backend_env.get('CONVERSATIONS_V3')
 
 
 @pytest.mark.parametrize('name', ['CONVERSATIONS_V3_STAGE', 'CONVERSATIONS_V3_FIRST_APP_BUILD'])
