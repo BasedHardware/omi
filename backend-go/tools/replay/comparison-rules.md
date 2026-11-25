@@ -128,6 +128,10 @@ index depends on them. Internal lifecycle reads remain in place for fencing. The
 pointer is the exception: the Go status route exposes it as `job_id`, so its row is a `go_gap`.
 The value-free report emits no stored row values.
 
+The paired account-erasure fixture captures the resolver and batch-privacy
+witnesses before the wipe. The oracle checks finalization against those
+witnesses and compares the post-erase documents and effects separately.
+
 ## Go gap and Python bug
 
 `go_finalization_notes_input_hash` and `go_finalization_notes_output_hash` are `go_gap` on

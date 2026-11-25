@@ -156,6 +156,8 @@ def replay(cases, jobd, dsn, key):
                                 if target.case.get('erase_after'):
                                     if status not in {'completed', 'discarded'}:
                                         raise RuntimeError('Python replay did not complete before erase')
+                                    with suspend_meter():
+                                        target.capture_before_erasure()
                                     target.effects['erasure'] = erase_reference(target)
                                 return status
 

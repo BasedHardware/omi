@@ -341,6 +341,23 @@ class CaseState:
         snapshot = self.client.collection(collection).document(document).get()
         return {'exists': snapshot.exists, 'fields': pack(snapshot.to_dict() or {})}
 
+    def capture_before_erasure(self):
+        conversation = self.conversation.get().to_dict()
+        if conversation is None:
+            raise RuntimeError('replay conversation missing before erasure')
+        references = (
+            self.client.document(self.batch_privacy_document_path),
+            self.conversation.collection('speaker_evidence').document('current'),
+        )
+        derived = {ref.path: pack(row) for ref in references if (row := ref.get().to_dict()) is not None}
+        self.before_erasure = {
+            'conversation': pack(conversation),
+            'derived_documents': derived,
+            'batch_pipeline_privacy': self.batch_privacy_snapshot(),
+            'cost': self.cost(),
+            'finished_at': datetime.now(timezone.utc).isoformat(),
+        }
+
     def observe(self, status, before, *, load_memo_bindings=None):
         after = self.documents()
         changed_documents = {
@@ -439,6 +456,8 @@ class CaseState:
             observation['firestore_operation_sources'] = operation_sources
         if hasattr(self, 'speaker_trace'):
             observation['speaker_trace'] = self.speaker_trace
+        if hasattr(self, 'before_erasure'):
+            observation['before_erasure'] = self.before_erasure
         return observation
 
     def vector(self, conversation_id):

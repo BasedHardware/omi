@@ -38,6 +38,7 @@ type speakerTrace struct {
 type observation struct {
 	ObservedNotesOutput            string                     `json:"observed_notes_output,omitempty"`
 	SpeakerTrace                   *speakerTrace              `json:"speaker_trace,omitempty"`
+	BeforeErasure                  *beforeErasure             `json:"before_erasure,omitempty"`
 	OwnerID                        string                     `json:"owner_id"`
 	ConversationID                 string                     `json:"conversation_id"`
 	SeededTokenHashes              []string                   `json:"seeded_token_hashes"`

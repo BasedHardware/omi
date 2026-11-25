@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from testing.finalization_replay.corpus import pack
+from testing.finalization_replay.metrics import suspend_meter
 from testing.finalization_replay.providers import response
 
 
@@ -292,6 +293,8 @@ def _admit(proc, url, state, database):
     state.go_evidence['job']['metadata'] = metadata[0]
     state.queue_fanout_key = job['fanout_key']
     if state.case.get('erase_after'):
+        with suspend_meter():
+            state.capture_before_erasure()
         status, _ = _request('POST', f'{url}/v1/users/{state.uid}/erase')
         if status != 200:
             raise RuntimeError('Go replay erase was refused')

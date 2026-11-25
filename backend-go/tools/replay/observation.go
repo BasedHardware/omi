@@ -41,7 +41,8 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	compareObject(&diffs, "/effects", python.Effects, goRun.Effects)
 	compareObject(&diffs, "/provider_calls", countProviderCalls(python.ProviderCalls), countProviderCalls(goRun.ProviderCalls))
 	compareObject(&diffs, "/webhooks", webhookGroups(python), webhookGroups(goRun))
-	reviewSpeakerDifferences(&diffs, python, goRun)
+	pythonFinalization, goFinalization := finalizationBeforeErasure(&diffs, python, goRun)
+	reviewSpeakerDifferences(&diffs, pythonFinalization, goRun)
 	reviewRuledSyncWrites(&diffs, python, goRun)
 	for i := range diffs {
 		diff := &diffs[i]
@@ -102,9 +103,9 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	}
 	validateTimestampEvidence(&diffs, "python", python)
 	validateTimestampEvidence(&diffs, "go", goRun)
-	validateBatchPrivacyEvidence(&diffs, "python", python)
-	validateBatchPrivacyEvidence(&diffs, "go", goRun)
-	validateBatchPrivacyPair(&diffs, python, goRun)
+	validateBatchPrivacyEvidence(&diffs, "python", pythonFinalization)
+	validateBatchPrivacyEvidence(&diffs, "go", goFinalization)
+	validateBatchPrivacyPair(&diffs, pythonFinalization, goFinalization)
 	validateHomeTokenEvidence(&diffs, "python", python, pythonTokens)
 	validateHomeTokenEvidence(&diffs, "go", goRun, goTokens)
 	validateBinding(&diffs, "/python", python, false)
