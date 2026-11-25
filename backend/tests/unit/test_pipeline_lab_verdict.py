@@ -68,6 +68,7 @@ def test_scenario_verdict_of_an_error_has_no_checks():
         'seconds': 1.0,
         'checks': [],
         'stand_ins': [],
+        'transcripts': {},
         'error': 'RuntimeError',
     }
 
@@ -87,14 +88,40 @@ def test_overall_outcome(outcomes, overall, code):
     assert verdicts.exit_code(outcomes) == code
 
 
-def test_comparable_drops_wall_clock_and_renames_handles():
-    a, b = result('d66c3117', 12.5), result('0abc1234', 40.1)
-    assert verdicts.comparable(a) == verdicts.comparable(b)
-    assert 'd66c3117' not in verdicts.comparable(a) and 'conv1' in verdicts.comparable(a)
+def _write(tmp_path, name, payload, home=None):
+    out = tmp_path / name
+    out.mkdir()
+    (out / 'result.json').write_text(json.dumps(payload))
+    if home is not None:
+        (out / 'home.json').write_text(json.dumps(home))
+    return out
+
+
+def test_repeat_differences_drop_wall_clock_through_determinism(tmp_path):
+    """One allowlist (determinism.SCENARIO_ARTIFACTS): seconds, timings, log, Home's updated_at."""
+    home = {'snapshots': [{'label': 'final', 'response': [{'id': 'd66c3117-x', 'updated_at': '2026-11-25T21:07:18Z'}]}]}
+    later = copy.deepcopy(home)
+    later['snapshots'][0]['response'][0]['updated_at'] = '2026-11-25T21:08:02Z'
+    a = _write(tmp_path, 'a', {**result(seconds=12.5), 'log': '/tmp/a/scenario_error.log'}, home)
+    b = _write(tmp_path, 'b', {**result(seconds=40.1), 'log': '/tmp/b/scenario_error.log'}, later)
     assert verdicts.repeat_differences([a, b]) == []
-    c = result()
-    c['conversations'] = [{**CONV, 'words': 90}]
-    assert verdicts.repeat_differences([a, b, c]) == ['conversations']
+    drifted = result()
+    drifted['conversations'] = [{**CONV, 'words': 90}]
+    c = _write(tmp_path, 'c', drifted, home)
+    assert verdicts.repeat_differences([a, b, c]) == ['result.json $.conversations[0].words']
+    retitled = copy.deepcopy(home)
+    retitled['snapshots'][0]['response'][0]['title'] = 'other'
+    d = _write(tmp_path, 'd', result(), retitled)
+    assert verdicts.repeat_differences([a, d]) == ['home.json $.snapshots[0].response[0].title']
+
+
+def test_transcript_sources_per_recording():
+    payload = result(
+        recordings=[{'label': 'A', 'stt': 'synthetic'}, {'label': 'B'}],
+        audio={'recordings': [{'label': 'A', 'source': 'synthetic'}]},
+    )
+    assert verdicts.transcript_sources(payload) == {'A': 'synthetic', 'B': 'scripted'}
+    assert verdicts.scenario_verdict('x', payload)['transcripts'] == {'A': 'synthetic', 'B': 'scripted'}
 
 
 class _Slots:
@@ -144,7 +171,7 @@ def test_run_dir_layout_contract(tmp_path, fake_runs, capsys):
     printed = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     on_disk = json.loads((out / 'verdict.json').read_text())
     assert printed == on_disk and on_disk['schema'] == 1 and on_disk['outcome'] == 'passed'
-    assert set(on_disk['scenarios'][0]) == {'name', 'outcome', 'seconds', 'checks', 'stand_ins', 'error'}
+    assert set(on_disk['scenarios'][0]) == {'name', 'outcome', 'seconds', 'checks', 'stand_ins', 'transcripts', 'error'}
     assert set(on_disk['scenarios'][0]['checks'][0]) == {'label', 'passed', 'expected', 'actual', 'at'}
     run = json.loads((out / 'run.json').read_text())
     assert {'schema', 'backend_tree', 'ref', 'started_at', 'seconds', 'scenarios', 'isolation'} <= set(run)
@@ -164,9 +191,9 @@ def test_failed_exit_code_and_outcome(tmp_path, fake_runs, capsys):
     assert json.loads((tmp_path / 'r' / 'verdict.json').read_text())['outcome'] == 'failed'
 
 
-def test_repeat_passes_when_only_wall_clock_and_handles_differ(tmp_path, fake_runs, capsys):
+def test_repeat_passes_when_only_wall_clock_differs(tmp_path, fake_runs, capsys):
     queue, calls = fake_runs
-    queue.extend([result('aaaa1111', 10.0), result('bbbb2222', 20.0), result('cccc3333', 30.0)])
+    queue.extend([result(seconds=10.0), result(seconds=20.0), result(seconds=30.0)])
     out = tmp_path / 'r'
     assert cli.main(['scenario', 'run', str(FAST), '--keep', str(out), '--repeat', '3', '--jobs', '2']) == 0
     row = json.loads((out / 'verdict.json').read_text())['scenarios'][0]
@@ -189,8 +216,11 @@ def test_repeat_that_differs_is_nondeterministic(tmp_path, fake_runs, capsys):
     verdict = json.loads((out / 'verdict.json').read_text())
     assert verdict['outcome'] == 'failed'
     assert verdict['scenarios'][0]['outcome'] == 'nondeterministic'
-    assert verdict['scenarios'][0]['differences'] == ['conversations']
-    assert 'differs between repeats in: conversations' in capsys.readouterr().out
+    assert verdict['scenarios'][0]['differences'] == [
+        'result.json $.conversations[0].hidden_reason',
+        'result.json $.conversations[0].visible',
+    ]
+    assert 'differs between repeats at: result.json $.conversations[0].hidden_reason' in capsys.readouterr().out
 
 
 def test_jobs_and_repeat_must_be_positive(tmp_path, fake_runs, capsys):

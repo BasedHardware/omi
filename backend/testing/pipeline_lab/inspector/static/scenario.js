@@ -4,7 +4,8 @@
 
 (() => {
   const $ = (id) => document.getElementById(id);
-  const state = { overview: null, name: null, data: null, snap: null, card: null, side: null, zoom: 'run' };
+  // zoom: null = the range that holds the Home moment shown; 'run' | 'events' once the reader picks one.
+  const state = { overview: null, name: null, data: null, snap: null, card: null, side: null, zoom: null, repeat: 1 };
   const THEMES = ['auto', 'light', 'dark'];
 
   // ---- tiny DOM helper ------------------------------------------------------------------------
@@ -32,6 +33,7 @@
     passed: { cls: 'pass', icon: '✓', text: 'Pass' },
     xfail: { cls: 'pass', icon: '✓', text: 'Pass', note: 'known bug, failing as expected' },
     failed: { cls: 'fail', icon: '✗', text: 'Fail' },
+    nondeterministic: { cls: 'fail', icon: '≠', text: 'Nondeterministic', note: 'repeats of this scenario differ' },
     xpass: { cls: 'fail', icon: '✗', text: 'Fail', note: 'the known bug no longer fails: delete expected_failure' },
     error: { cls: 'error', icon: '!', text: 'Error' },
     unknown: { cls: 'unknown', icon: '?', text: 'No result' },
@@ -51,6 +53,33 @@
     const m = Math.floor(a / 60), s = Math.round(a % 60);
     return `${sign}${m}:${String(s).padStart(2, '0')}`;
   };
+  // One unit style per timeline axis: m:ss once the range exceeds 120 s, plain seconds below that.
+  const axisFormat = (range) => (t) => {
+    if (t === null || t === undefined || Number.isNaN(t)) return '?';
+    const sign = t < 0 ? '-' : '';
+    const a = Math.abs(t);
+    if (range <= 120) return `${sign}${Math.round(a * 10) / 10} s`;
+    const m = Math.floor(a / 60), s = Math.round(a % 60);
+    return s === 60 ? `${sign}${m + 1}:00` : `${sign}${m}:${String(s).padStart(2, '0')}`;
+  };
+  // Underscores are the only places a scenario name may break.
+  const breakable = (name) => String(name).split('_').flatMap((part, i, all) => (i < all.length - 1 ? [part + '_', h('wbr')] : [part]));
+
+  // Transcript source per recording label: scripted (speech lines), synthetic, local or vendor (a cassette).
+  const SOURCES = ['scripted', 'synthetic', 'local', 'vendor'];
+  function sourcesOf(b) {
+    const out = {};
+    const s = b && b.scenario;
+    for (const r of s ? [...(s.recordings || []), ...(s.sync || [])] : []) if (r && r.id) out[r.id] = r.audio_file ? '?' : 'scripted';
+    const res = (b && b.result) || {};
+    for (const r of (res.audio && res.audio.recordings) || []) if (r.label) out[r.label] = r.source || out[r.label];
+    for (const r of res.recordings || []) if (r.label) out[r.label] = r.stt || out[r.label] || 'scripted';
+    const v = b && b.verdict && b.verdict.transcripts;
+    if (v && typeof v === 'object') Object.assign(out, v);
+    return out;
+  }
+  const sourceTag = (src) => h('span', { class: 'src' + (src === 'scripted' ? '' : ' audio'), title: `transcript source: ${src}`, text: src });
+
   const t0Of = (b) => {
     const raw = b && b.scenario && b.scenario.t0;
     const d = new Date(raw || '2026-03-14T09:00:00Z');
@@ -165,13 +194,14 @@
     const raw = location.hash.replace(/^#\/?/, '');
     const [name, q] = raw.split('?');
     const p = new URLSearchParams(q || '');
-    return { name: decodeURIComponent(name || ''), snap: p.get('snap'), card: p.get('card'), theme: p.get('theme'), zoom: p.get('zoom') };
+    return { name: decodeURIComponent(name || ''), snap: p.get('snap'), card: p.get('card'), theme: p.get('theme'), zoom: p.get('zoom'), repeat: p.get('repeat') };
   }
   function writeHash() {
     const p = new URLSearchParams();
     if (state.snap !== null) p.set('snap', state.snap);
     if (state.card) p.set('card', state.card);
-    if (state.zoom !== 'run') p.set('zoom', state.zoom);
+    if (state.zoom) p.set('zoom', state.zoom);
+    if (state.repeat > 1) p.set('repeat', String(state.repeat));
     const theme = document.documentElement.dataset.theme;
     if (theme) p.set('theme', theme);
     const q = p.toString();
@@ -181,7 +211,8 @@
   async function boot() {
     const want = readHash();
     if (want.theme && THEMES.includes(want.theme)) setTheme(want.theme);
-    if (want.zoom === 'events') state.zoom = 'events';
+    if (want.zoom === 'events' || want.zoom === 'run') state.zoom = want.zoom;
+    if (want.repeat && /^\d+$/.test(want.repeat)) state.repeat = Number(want.repeat);
     try {
       state.overview = await getJSON('/api/run');
     } catch (err) {
@@ -195,19 +226,22 @@
       $('main').replaceChildren(h('p', { class: 'notice', text: `No scenario directories (with result.json, home.json or scenario.json) in ${state.overview.root}.` }));
       return;
     }
-    await select(names.includes(want.name) ? want.name : names[0], want.snap, want.card);
+    await select(names.includes(want.name) ? want.name : names[0], want.snap, want.card, state.repeat);
   }
 
-  async function select(name, snap, card) {
+  async function select(name, snap, card, repeat) {
     let data;
+    const k = repeat && repeat > 1 ? repeat : 1;
     try {
-      data = await getJSON(`/api/scenarios/${encodeURIComponent(name)}`);
+      data = await getJSON(`/api/scenarios/${encodeURIComponent(name)}${k > 1 ? '?repeat=' + k : ''}`);
     } catch (err) {
       $('main').replaceChildren(h('p', { class: 'empty', text: `Could not read scenario ${name}: ${err.message}` }));
       return;
     }
+    if (state.name !== name) state.zoom = null;  // a new scenario starts on the range that holds its Home moment
     state.name = name;
     state.data = data;
+    state.repeat = k;
     const primary = primaryBundle();
     const snaps = snapshotsOf(primary);
     state.snap = snap !== null && snap !== undefined && snaps[Number(snap)] ? Number(snap) : (snaps.length ? snaps.length - 1 : null);
@@ -262,9 +296,9 @@
     for (const name of o.scenarios) {
       const head = (o.sides[primarySide()] || {}).outcomes || {};
       const base = isCompare() ? ((o.sides.base || {}).outcomes || {})[name] : null;
-      const btn = h('button', { type: 'button', 'data-name': name, 'aria-current': 'false', onclick: () => select(name) },
+      const btn = h('button', { type: 'button', 'data-name': name, 'aria-current': 'false', title: name, onclick: () => select(name) },
         mark(head[name] || 'unknown'),
-        h('span', { class: 'rail-name' }, name,
+        h('span', { class: 'rail-text' }, h('span', { class: 'rail-name' }, breakable(name)),
           isCompare() ? h('span', { class: 'rail-sub', text: `base: ${outcomeOf(base || 'unknown').text.toLowerCase()}` }) : null));
       list.append(h('li', {}, btn));
     }
@@ -291,6 +325,7 @@
       parts.push(standInSection(b));
     }
     main.replaceChildren(...parts);
+    layoutLabels();
     syncSelection();
     writeHash();
   }
@@ -319,6 +354,23 @@
       const bo = ((state.overview.sides.base || {}).outcomes || {})[state.name];
       sec.append(h('p', { class: 'meta-line' }, 'base: ', base ? mark(bo || 'unknown') : 'not in base/', '  head: ', mark(outcome)));
     }
+    const repeats = b.repeats || [];
+    if (repeats.length > 1) {
+      const pick = h('div', { class: 'snap-pick', role: 'group', 'aria-label': 'Repeat shown' });
+      for (const rp of repeats) {
+        pick.append(h('button', { type: 'button', 'aria-pressed': String(rp.repeat === (b.repeat || 1)),
+          onclick: () => select(state.name, null, null, rp.repeat) }, mark(rp.outcome, ` · repeat ${rp.repeat}`)));
+      }
+      sec.append(h('p', { class: 'meta-line', text: `Ran ${repeats.length} times (--repeat ${repeats.length}); repeat 1 is ${state.name}/, repeat k is ${state.name}/repeat-k/.` }), pick);
+    }
+    const vrow = b.verdict;
+    if (vrow && vrow.outcome === 'nondeterministic') {
+      const diffs = vrow.differences || [];
+      sec.append(h('div', { class: 'notice nondet' }, h('b', { text: '≠ Nondeterministic: ' }),
+        `the repeats disagree after dropping wall-clock fields (determinism.SCENARIO_ARTIFACTS) at ${diffs.length} place${diffs.length === 1 ? '' : 's'}:`,
+        h('ul', { class: 'mono' }, diffs.slice(0, 20).map((d) => h('li', { text: d }))),
+        diffs.length > 20 ? h('p', { text: `and ${diffs.length - 20} more (verdict.json).` }) : null));
+    }
     if (!r) {
       sec.append(missingNote('result.json', b.dir, 'no checks to show.'));
       return sec;
@@ -335,7 +387,9 @@
         h('thead', {}, h('tr', {}, h('th', { text: 'Result' }), h('th', { text: 'Check' }), h('th', { text: 'Expected' }), h('th', { text: 'Actual' }))));
       const body = h('tbody');
       for (const { c, i, raw } of rows) {
-        const label = (raw && raw.label) || (String(c.check).match(/^\[([^\]]+)\]/) || [])[1] || `check ${i + 1}`;
+        // The check's own label; else its summary (never a bare "check N").
+        const summary = String(c.check || '').replace(/^\[[^\]]+\]\s*/, '').replace(/^@\+[\d.]+s\s*/, '');
+        const label = (raw && raw.label) || (String(c.check).match(/^\[([^\]]+)\]/) || [])[1] || summary || `check ${i + 1}`;
         const when = raw ? (raw.at !== undefined && raw.at !== null ? `at ${secs(raw.at)}` : 'end of run') : (String(c.check).match(/@\+([\d.]+)s/) ? `at +${String(c.check).match(/@\+([\d.]+)s/)[1]} s` : 'end of run');
         const expected = expectText(raw) || String(c.check).replace(/^\[[^\]]+\]\s*/, '').replace(/^@\+[\d.]+s\s*/, '');
         body.append(h('tr', { class: c.ok ? 'ok' : 'bad' },
@@ -348,6 +402,11 @@
       sec.append(table);
     } else {
       sec.append(h('p', { class: 'notice', text: 'This run has no checks.' }));
+    }
+    const sources = sourcesOf(b);
+    if (Object.keys(sources).length) {
+      sec.append(h('p', { class: 'meta-line' }, 'Transcripts: ',
+        Object.entries(sources).map(([label, src], i) => [i ? ' · ' : '', h('span', { class: 'chip' }, label, ' ', sourceTag(src))])));
     }
     if (r.finish_target !== undefined) sec.append(h('p', { class: 'meta-line', text: `Finish ended recording: ${r.finish_target ?? 'none'} · ran in ${r.seconds ?? '?'} s` }));
     return sec;
@@ -363,6 +422,7 @@
     const b = primaryBundle();
     const sec = h('section', { class: 'section', 'aria-labelledby': 'h-title' });
     sec.append(h('h2', { id: 'h-title' }, 'Home', h('span', { class: 'hint', text: 'what the product’s Home route returned, in its order' })));
+    sec.append(h('p', { class: 'home-note', text: 'This is what the server returned. The phone also hides some rows itself (short conversations, failed tiles, rows marked hidden); that filter is not modelled here.' }));
     const snaps = snapshotsOf(b);
     if (!b.home) {
       sec.append(missingNote('home.json', b.dir, 'Home cannot be shown. The lab’s own visibility rule is in the timeline below.'));
@@ -441,7 +501,7 @@
         h('span', { text: `${card.emoji ? card.emoji + ' ' : ''}${card.title}` })),
       h('div', { class: 'card-meta', text: `${span} · ${card.words ?? '?'} words` }),
       h('div', { class: 'chips' },
-        card.recordings.map((r) => h('span', { class: 'chip', text: r })),
+        card.recordings.map((r) => h('span', { class: 'chip' }, r, ' ', sourceTag(sourcesOf(b)[r] || 'scripted'))),
         card.live ? h('span', { class: 'chip live', text: 'in progress (live route)' }) : null,
         card.row && !card.row.visible ? h('span', { class: 'chip diff', text: '⚠ lab rule: hidden' }) : null,
         diff && diff.kind === 'only' ? h('span', { class: 'chip diff', text: `only in ${side}` }) : null,
@@ -477,22 +537,52 @@
     return out;
   }
 
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const cardName = (c) => (c.recordings.length ? c.recordings.join('+') : c.handle) + (c.title ? ` (“${c.title}”)` : '');
+  const valueText = (v) => (v === null || v === undefined ? '-' : Array.isArray(v) ? v.join('+') : v === true ? 'yes' : v === false ? 'no' : String(v));
+
+  // Plain sentences: the cards at this moment (from the two home.json files), then compare.json's final state.
   function compareSummary(diff) {
-    const box = h('div', { class: 'meta-line' });
+    const box = h('div', { class: 'compare-summary' });
     const changed = diff.rows.filter((r) => !r.base || !r.head || (r.fields && r.fields.length));
-    box.append(h('p', { text: changed.length ? `${changed.length} card(s) differ between base and head at this moment.` : 'Base and head show the same cards at this moment.' }));
-    const cmp = state.overview.compare;
-    if (cmp && typeof cmp === 'object') {
-      const entry = (cmp.scenarios && (Array.isArray(cmp.scenarios) ? cmp.scenarios.find((s) => s && (s.name === state.name || s.scenario === state.name)) : cmp.scenarios[state.name])) || null;
-      const src = entry || cmp;
-      const dl = h('dl', { class: 'kv' });
-      for (const [k, v] of Object.entries(src)) {
-        if (v !== null && typeof v === 'object') continue;
-        dl.append(h('dt', { text: k }), h('dd', { text: String(v) }));
+    if (!changed.length) {
+      box.append(h('p', { text: 'Base and head agree.' }));
+    } else {
+      const fields = [...new Set(changed.flatMap((r) => (r.base && r.head ? r.fields : ['present'])))];
+      const named = fields.map((f) => (f === 'present' ? 'on one side only' : f));
+      box.append(h('p', { text: `${plural(changed.length, 'card differs', 'cards differ')}: ${named.join(', ')}.` }));
+      const ul = h('ul');
+      for (const row of changed) {
+        if (!row.base) ul.append(h('li', { text: `${cardName(row.head)}: only in head.` }));
+        else if (!row.head) ul.append(h('li', { text: `${cardName(row.base)}: only in base.` }));
+        else {
+          const what = row.fields.map((f) => {
+            const pick = { title: 'title', words: 'words', 'tile state': 'tile' }[f];
+            return pick ? `${f} ${valueText(row.base[pick])} → ${valueText(row.head[pick])}` : f;
+          });
+          ul.append(h('li', { text: `${cardName(row.head)}: ${what.join('; ')}.` }));
+        }
       }
-      box.append(h('p', { text: entry ? 'compare.json for this scenario:' : 'compare.json:' }), dl);
-    } else if (isCompare()) {
-      box.append(missingNote('compare.json', state.overview.root, 'differences above are computed in the page from the two home.json files.'));
+      box.append(ul);
+    }
+    const cmp = state.overview.compare;
+    const entry = cmp && Array.isArray(cmp.scenarios) ? cmp.scenarios.find((x) => x && x.name === state.name) : null;
+    if (entry) {
+      const lines = [];
+      if (entry.base !== entry.head) lines.push(`The outcome differs: base ${outcomeOf(entry.base).text.toLowerCase()}, head ${outcomeOf(entry.head).text.toLowerCase()}.`);
+      const convs = entry.conversations || [];
+      if (!entry.differs) lines.push('At the end of the run, base and head agree on every conversation (compare.json).');
+      else if (convs.length) lines.push(`At the end of the run, ${plural(convs.length, 'conversation differs', 'conversations differ')} (compare.json):`);
+      box.append(...lines.map((t) => h('p', { text: t })));
+      if (convs.length) {
+        box.append(h('ul', {}, convs.map((c) => {
+          if (!c.base) return h('li', { text: `${c.key}: only in head.` });
+          if (!c.head) return h('li', { text: `${c.key}: only in base.` });
+          return h('li', { text: `${c.key}: ${c.fields.map((f) => `${f.replace(/_/g, ' ')} ${valueText(c.base[f])} → ${valueText(c.head[f])}`).join('; ')}.` });
+        })));
+      }
+    } else if (isCompare() && !cmp) {
+      box.append(missingNote('compare.json', state.overview.root, 'the sentence above is computed in the page from the two home.json files.'));
     }
     return box;
   }
@@ -506,11 +596,14 @@
 
   function timelineSection(b) {
     const sec = h('section', { class: 'section', 'aria-labelledby': 't-title' });
-    sec.append(h('h2', { id: 't-title' }, 'Timeline', h('span', { class: 'hint', text: 'seconds from t0; select a Home card to highlight its recordings' })));
     const r = b.result;
-    if (!r) { sec.append(missingNote('result.json', b.dir, 'no timeline to show.')); return sec; }
+    if (!r) {
+      sec.append(h('h2', { id: 't-title' }, 'Timeline'));
+      sec.append(missingNote('result.json', b.dir, 'no timeline to show.'));
+      return sec;
+    }
     const { recs, approx } = recordingsOf(b);
-    if (approx) sec.append(missingNote('scenario.json', b.dir, 'recording spans are approximated from the timeline events (first audio to seal).'));
+    const sources = sourcesOf(b);
     const tl = r.timeline || [];
     const snaps = snapshotsOf(b);
     const snap = snaps[state.snap];
@@ -524,30 +617,39 @@
       ...recs.flatMap((x) => [x.start, x.end, x.landed, x.arrives])]);
     const lo = Math.min(...times), runEnd = Math.max(...times), eventsEnd = Math.max(...eventTimes);
     const zoomable = eventsEnd < runEnd * 0.6;
-    const hi = zoomable && state.zoom === 'events' ? eventsEnd : runEnd;
+    // Default: the range that holds the Home moment shown (the smaller one when both do).
+    const auto = zoomable && snap && snap.at <= eventsEnd ? 'events' : 'run';
+    const zoom = zoomable ? (state.zoom || auto) : 'run';
+    const hi = zoom === 'events' ? eventsEnd : runEnd;
+    const span = Math.max(1, hi - lo) * 1.03;
+    const fmt = axisFormat(hi - lo);
+    sec.append(h('h2', { id: 't-title' }, 'Timeline', h('span', { class: 'hint', text: `${hi - lo > 120 ? 'm:ss' : 'seconds'} from t0; select a Home card to highlight its recordings` })));
+    if (approx) sec.append(missingNote('scenario.json', b.dir, 'recording spans are approximated from the timeline events (first audio to seal).'));
     if (zoomable) {
       const pick = h('div', { class: 'snap-pick', role: 'group', 'aria-label': 'Timeline range' });
-      for (const [k, label] of [['run', `Whole run (to ${secs(runEnd)})`], ['events', `Scripted events (to ${secs(eventsEnd)})`]]) {
-        pick.append(h('button', { type: 'button', 'aria-pressed': String(state.zoom === k), onclick: () => { state.zoom = k; render(); } }, label));
+      for (const [k, label] of [['run', `Whole run (to ${fmt(runEnd)})`], ['events', `Scripted events (to ${axisFormat(eventsEnd - lo)(eventsEnd)})`]]) {
+        pick.append(h('button', { type: 'button', 'aria-pressed': String(zoom === k), onclick: () => { state.zoom = k; render(); } }, label));
       }
       sec.append(pick);
     }
-    const span = Math.max(1, hi - lo) * 1.03;
     const pct = (t) => ((Math.min(t, hi + span * 0.02) - lo) / span) * 100;
     const x = (t) => `${pct(t)}%`;
     const w = (a, z) => `${Math.max(0, pct(z) - pct(a))}%`;
-    // A bar too narrow for its text gets the text beside it instead.
+    // A text label for a point in time. Labels are laid out after render (layoutLabels): beside their
+    // marker when there is room, else stacked on a row below with a leader line; the marker never moves.
+    const label = (t, text, cls, title) => h('span', { class: 'lbl' + (cls ? ' ' + cls : ''), 'data-pct': String(pct(t)), title, text });
+    // A bar too narrow for its text gets the text as a label instead.
     const bar = (cls, a, z, text, attrs) => {
       const narrow = pct(z) - pct(a) < 7;
       const el = h('span', { class: cls, style: { left: x(a), width: w(a, z) }, ...attrs, text: narrow ? '' : text });
-      return narrow ? [el, h('span', { class: 'pin side', style: { left: `calc(${x(z)} + 4px)` }, text })] : [el];
+      return narrow ? [el, label(z, text, 'beside', attrs && attrs.title)] : [el];
     };
     const box = h('div', { class: 'tl' + (state.card ? ' has-sel' : ''), id: 'timeline' });
 
     // axis
     const axis = h('div', { class: 'tl-track' });
     const step = niceStep(span);
-    for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) axis.append(h('span', { class: 'tick', style: { left: x(t) }, text: secs(t).replace('+', '') }));
+    for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) axis.append(h('span', { class: 'tick', style: { left: x(t) }, text: fmt(t) }));
     box.append(h('div', { class: 'tl-row tl-axis' }, h('span', { class: 'tl-label', text: 't0 = ' + clock(t0Of(b).toISOString()) }), axis));
 
     // markers row: Finish tap, checkpoints, the moment shown
@@ -555,8 +657,18 @@
     const finish = tl.find((e) => e.kind === 'finish');
     const checkpoints = tl.filter((e) => e.kind === 'checkpoint');
     const overlay = [];
-    if (finish) { overlay.push(['finish', finish.t]); marks.append(h('span', { class: 'vlabel finish', style: { left: x(finish.t) }, text: `▼ Finish ${secs(finish.t)}` })); }
-    for (const c of checkpoints) { overlay.push(['check', c.t]); marks.append(h('span', { class: 'vlabel', style: { left: x(c.t) }, text: `◆ check ${secs(c.t)}` })); }
+    const inRange = (t) => t <= hi;
+    if (finish && inRange(finish.t)) {
+      overlay.push(['finish', finish.t]);
+      marks.append(h('span', { class: 'pin mk finish', style: { left: x(finish.t) }, 'aria-hidden': 'true', text: '▼' }), label(finish.t, `Finish ${fmt(finish.t)}`, 'finish'));
+    }
+    const seenCheck = new Set();
+    for (const c of checkpoints.filter((e) => inRange(e.t))) {
+      overlay.push(['check', c.t]);
+      if (seenCheck.has(c.t)) continue;  // two checks at one instant: one marker
+      seenCheck.add(c.t);
+      marks.append(h('span', { class: 'pin mk', style: { left: x(c.t) }, 'aria-hidden': 'true', text: '◆' }), label(c.t, `check ${fmt(c.t)}`));
+    }
     if (snap) overlay.push(['snap', snap.at]);
     box.append(h('div', { class: 'tl-row' }, h('span', { class: 'tl-label', text: 'Taps, checks' }), marks));
 
@@ -573,14 +685,21 @@
       }
       for (const rec of recs.filter((q) => q.origin === origin)) {
         const sync = rec.lane === 'sync';
+        const src = sources[rec.label] || 'scripted';
         if (rec.start !== undefined && rec.end !== undefined) {
-          track.append(...bar('span rec' + (sync ? ' sync' : ''), rec.start, rec.end, rec.label,
-            { 'data-rec': rec.label, title: `${rec.label}: audio ${secs(rec.start)} to ${secs(rec.end)}${sync ? ', device sync' : ''}` }));
+          track.append(...bar('span rec' + (sync ? ' sync' : ''), rec.start, rec.end, `${rec.label} · ${src}`,
+            { 'data-rec': rec.label, title: `${rec.label}: audio ${fmt(rec.start)} to ${fmt(rec.end)}${sync ? ', device sync' : ''}, transcript ${src}` }));
         }
-        if (!sync && typeof rec.sealed === 'number') track.append(h('span', { class: 'pin seal', style: { left: x(rec.sealed) }, title: `${rec.label} sealed ${secs(rec.sealed)}`, text: '┃' }));
-        if (!sync && typeof rec.provisional === 'number' && (r.fast_finish || {})[rec.label]) track.append(h('span', { class: 'pin landed', style: { left: x(rec.provisional) }, title: `${rec.label} fast-finish provisional transcript ${secs(rec.provisional)} (${r.fast_finish[rec.label]})`, text: '◐' }));
-        if (!sync && typeof rec.landed === 'number') track.append(h('span', { class: 'pin landed', style: { left: x(rec.landed) }, title: `${rec.label} batch transcript landed ${secs(rec.landed)}`, text: '● ' + rec.label }));
-        if (sync && typeof rec.arrives === 'number') track.append(h('span', { class: 'pin arrive', style: { left: x(rec.arrives) }, title: `${rec.label} sync fragment arrived ${secs(rec.arrives)}`, text: `↓ ${rec.label}` }));
+        if (!sync && typeof rec.sealed === 'number' && inRange(rec.sealed)) track.append(h('span', { class: 'pin seal', style: { left: x(rec.sealed) }, title: `${rec.label} sealed ${fmt(rec.sealed)}`, text: '┃' }));
+        if (!sync && typeof rec.provisional === 'number' && (r.fast_finish || {})[rec.label] && inRange(rec.provisional)) track.append(h('span', { class: 'pin landed', style: { left: x(rec.provisional) }, title: `${rec.label} fast-finish provisional transcript ${fmt(rec.provisional)} (${r.fast_finish[rec.label]})`, text: '◐' }));
+        if (!sync && typeof rec.landed === 'number' && inRange(rec.landed)) {
+          const title = `${rec.label} batch transcript landed ${fmt(rec.landed)}`;
+          track.append(h('span', { class: 'pin landed', style: { left: x(rec.landed) }, title, text: '●' }), label(rec.landed, rec.label, 'landed', title));
+        }
+        if (sync && typeof rec.arrives === 'number' && inRange(rec.arrives)) {
+          const title = `${rec.label} sync fragment arrived ${fmt(rec.arrives)}`;
+          track.append(h('span', { class: 'pin arrive', style: { left: x(rec.arrives) }, title, text: '↓' }), label(rec.arrives, rec.label, 'arrive', title));
+        }
       }
       box.append(h('div', { class: 'tl-row' }, h('span', { class: 'tl-label', title: `origin ${origin}`, text: `Origin ${origin}` }), track));
     }
@@ -604,7 +723,7 @@
     // vertical lines across the rows (after the rows exist)
     const tracksLeft = 96;
     const lines = h('div', { style: { position: 'absolute', left: tracksLeft + 'px', right: '0', top: '22px', bottom: '0', pointerEvents: 'none' } });
-    if (snap && snap.at > hi) sec.append(h('p', { class: 'meta-line', text: `The moment shown in Home (${secs(snap.at)}) is past the end of this range.` }));
+    if (snap && snap.at > hi) sec.append(h('p', { class: 'meta-line', text: `The moment shown in Home (${fmt(snap.at)}) is past the end of this range.` }));
     for (const [kind, t] of overlay.filter(([, t]) => t <= hi)) lines.append(h('span', { class: `vline ${kind}`, style: { left: x(t) }, title: kind }));
     box.append(lines);
     sec.append(box);
@@ -614,9 +733,47 @@
       h('span', {}, h('i', { text: '↓' }), ' sync arrival'), h('span', {}, h('span', { class: 'sw gap' }), 'stream gap'),
       h('span', {}, h('span', { class: 'sw on' }), 'conversation on Home'), h('span', {}, h('span', { class: 'sw off' }), 'not on Home'),
       h('span', {}, h('i', { text: '▼' }), ' Finish tap'), h('span', {}, h('i', { text: '◆' }), ' checkpoint'),
-      h('span', {}, h('i', { style: { color: 'var(--warn)' }, text: '│' }), ' moment shown in Home')));
+      h('span', {}, h('i', { style: { color: 'var(--warn)' }, text: '│' }), ' moment shown in Home')),
+      h('div', { class: 'legend' }, h('span', {}, 'Transcript source of each recording: ', SOURCES.map((x, i) => [i ? ' ' : '', sourceTag(x)]),
+        ' (speech lines in the scenario; or an STT cassette for its audio file: the committed synthetic fixture, a local model, a vendor)')));
     return sec;
   }
+
+  // Place each track's labels (.lbl) without overlap: beside the marker on the first row that has room,
+  // rows below the track's bars getting a leader line back to the marker's true position.
+  const ROW = 14, FIRST = 9, BELOW = 30;
+  function layoutLabels() {
+    const tl = $('timeline');
+    if (!tl) return;
+    for (const track of tl.querySelectorAll('.tl-track')) {
+      for (const old of track.querySelectorAll('.leader')) old.remove();
+      const labels = [...track.querySelectorAll('.lbl')];
+      if (!labels.length) continue;
+      const width = track.clientWidth;
+      const placed = labels.map((el) => ({ el, at: (Number(el.dataset.pct) / 100) * width, w: el.offsetWidth }))
+        .sort((p, q) => p.at - q.at);
+      // Things already on row 0 that a label must not cover: bars' text and the point markers.
+      const taken = [[]];
+      for (const el of track.querySelectorAll('.span')) if (el.textContent) taken[0].push([el.offsetLeft, el.offsetLeft + el.offsetWidth]);
+      const fits = (row, a, z) => !(taken[row] || []).some(([p, q]) => a < q + 3 && z > p - 3);
+      let rows = 0;
+      for (const p of placed) {
+        let a = p.at + 6, z = a + p.w;
+        if (z > width) { z = p.at - 6; a = z - p.w; }  // no room on the right: put it on the left of the marker
+        let row = 0;
+        while (!fits(row, a, z)) row += 1;
+        (taken[row] = taken[row] || []).push([a, z]);
+        rows = Math.max(rows, row);
+        const top = row === 0 ? FIRST : BELOW + (row - 1) * ROW;
+        Object.assign(p.el.style, { left: `${a}px`, top: `${top}px` });
+        if (row > 0) {
+          track.append(h('span', { class: 'leader', style: { left: `${p.at}px`, top: `${FIRST + 12}px`, height: `${top - FIRST - 4}px` } }));
+        }
+      }
+      track.style.height = rows ? `${BELOW + rows * ROW + 2}px` : '';
+    }
+  }
+  window.addEventListener('resize', () => requestAnimationFrame(layoutLabels));
 
   // ---- stand-ins ------------------------------------------------------------------------------
   const STAND_INS = {
@@ -704,7 +861,7 @@
         h('dt', { text: 'Home position' }), h('dd', { text: card.live ? 'live (top of Today)' : String(card.pos) }),
         h('dt', { text: 'Time' }), h('dd', { text: `${clock(card.start)}–${clock(card.end)} (${secs(offsetOf(b, card.start))} to ${secs(offsetOf(b, card.end))})` }),
         h('dt', { text: 'Words' }), h('dd', { text: String(card.words ?? '?') }),
-        h('dt', { text: 'Recordings' }), h('dd', { text: card.recordings.join(' + ') || '-' }),
+        h('dt', { text: 'Recordings' }), h('dd', {}, card.recordings.length ? card.recordings.map((r, i) => [i ? ' + ' : '', r, ' ', sourceTag(sourcesOf(b)[r] || 'scripted')]) : '-'),
         h('dt', { text: 'Tile state' }), h('dd', { text: String(raw.tile_state ?? '-') }),
         h('dt', { text: 'Manual end' }), h('dd', { text: raw.manual_end ? 'yes' : 'no' }),
         h('dt', { text: 'Conversation' }), h('dd', { class: 'mono', text: String(raw.id || '') }),
@@ -726,7 +883,7 @@
     } else {
       $('drawer-title').textContent = `Not on Home · ${hidden.handle}`;
       parts.push(h('dl', { class: 'kv' },
-        h('dt', { text: 'Recordings' }), h('dd', { text: hidden.recordings.join(' + ') || '-' }),
+        h('dt', { text: 'Recordings' }), h('dd', {}, hidden.recordings.length ? hidden.recordings.map((r, i) => [i ? ' + ' : '', r, ' ', sourceTag(sourcesOf(b)[r] || 'scripted')]) : '-'),
         h('dt', { text: 'Words' }), h('dd', { text: String(hidden.words ?? '?') }),
         h('dt', { text: 'Status' }), h('dd', { text: String(hidden.row.status ?? '-') }),
         h('dt', { text: 'Manual end' }), h('dd', { text: hidden.row.manual_end ? 'yes' : 'no' }),

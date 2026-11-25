@@ -23,8 +23,8 @@ Everything else, product timestamps included (``created_at``, ``finished_at``, e
 under the simulated clock (``stack/clock.py``) those are the replay's own instants and must repeat.
 
 :func:`compare_runs` returns the differences as JSON paths. Callers print paths, never values: the
-values of an owner replay are owner data (lab ``AGENTS.md``, Privacy). ``scenario run --repeat`` can
-call :func:`semantic_diff` on two result payloads with its own drop list.
+values of an owner replay are owner data (lab ``AGENTS.md``, Privacy). ``scenario run --repeat`` calls
+:func:`compare_runs` with :data:`SCENARIO_ARTIFACTS` on each repeat's directory (``scenario/verdict.py``).
 """
 
 from __future__ import annotations
@@ -83,6 +83,21 @@ ARTIFACTS: tuple[Artifact, ...] = (
     # bookkeeping (a cache hit on the second run costs nothing and records what the first one paid).
     Artifact('llm_calls.jsonl', drop=frozenset({'at', 'id', 'usd', 'recorded_usd'}), unordered=True),
     # Orchestrator decisions are stamped with real time (``utc_iso``); the decision itself is semantic.
+    Artifact('decisions.jsonl', drop=frozenset({'at'}), unordered=True),
+)
+
+# A scenario run directory (``scenario run --repeat``, ``scenario/verdict.py``): the same rules applied to
+# the files one scenario run writes, so a repeat and a day replay agree on what "the same" means.
+SCENARIO_ARTIFACTS: tuple[Artifact, ...] = (
+    # ``log`` is the path of this run's own error log (it names the run directory), not a product output.
+    Artifact('result.json', drop=frozenset({'log'}), optional=False),
+    # The product's Home route bodies (scenario/home.py). ``updated_at`` is the Firestore document's
+    # ``update_time`` (database/conversations.py ``document_data_with_revision``): the emulator's real wall
+    # clock at the write, not the lab clock, so it differs on every run (seen with --repeat 3, 2026-11-25).
+    Artifact('home.json', drop=frozenset({'updated_at'})),
+    Artifact('v3_tasks.jsonl'),
+    Artifact('notifications.jsonl', unordered=True),
+    Artifact('sinks_telemetry.jsonl', unordered=True),
     Artifact('decisions.jsonl', drop=frozenset({'at'}), unordered=True),
 )
 

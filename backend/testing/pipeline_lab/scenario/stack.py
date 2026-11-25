@@ -669,7 +669,9 @@ def run_set(
         by_name[name] = repeats
         row = verdicts.scenario_verdict(name, repeats[0], scenario)
         if repeat > 1:
-            differences = verdicts.repeat_differences(repeats)
+            differences = verdicts.repeat_differences(
+                [_Job(scenarios[name][0], name, k).out(root) for k in range(1, repeat + 1)]
+            )
             outcomes = sorted({str(r.get('outcome')) for r in repeats})
             row['repeats'] = repeat
             row['differences'] = differences
@@ -747,7 +749,8 @@ def run_files(
         summary = ', '.join(f'{r["name"]}={r["outcome"]}' for r in done.verdict['scenarios'])
         for row in done.verdict['scenarios']:
             if row.get('differences'):
-                print(f'== {row["name"]}: result.json differs between repeats in: {", ".join(row["differences"])}')
+                shown = ', '.join(row['differences'][:10]) + (', ...' if len(row['differences']) > 10 else '')
+                print(f'== {row["name"]}: differs between repeats at: {shown}')
         print(
             f'== {len(done.verdict["scenarios"])} scenario(s) x{repeat} in {total:.1f} s, jobs {jobs} '
             f'(stack {peers.mode}, up {stack_seconds:.1f} s): {summary}'

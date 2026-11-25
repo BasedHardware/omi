@@ -11,22 +11,19 @@ Layout (a contract other tools read; ``schema`` bumps on any incompatible change
     DIR/<name>/v3_tasks.jsonl, decisions.jsonl
     DIR/<name>/repeat-<k>/...  repeats 2..N of ``--repeat N`` (repeat 1 is DIR/<name>/ itself)
 
-Wall-clock values live only in ``run.json`` and the ``seconds`` fields (and ``result.json``'s ``timings``),
-so everything else is comparable between runs.
+Repeats are compared by ``determinism.compare_runs`` over ``determinism.SCENARIO_ARTIFACTS`` (result.json,
+home.json, v3_tasks.jsonl, ...): one allowlist of wall-clock fields for repeats and day replays alike.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-import re
 from typing import Any, Mapping, Optional, Sequence
 
 from testing.pipeline_lab.scenario.checks import OUTCOMES, actual_of, expected_of
 
 SCHEMA = 1
-# result.json fields that measure wall time or name a path of this run; dropped before repeats are compared.
-WALL_CLOCK_FIELDS = ('seconds', 'timings', 'log')
 OVERALL = {0: 'passed', 1: 'failed', 2: 'error'}
 
 
@@ -72,6 +69,7 @@ def scenario_verdict(name: str, result: Mapping[str, Any], scenario: Any = None)
         'seconds': result.get('seconds', 0),
         'checks': checks,
         'stand_ins': sorted((result.get('stand_ins') or {}).keys()),
+        'transcripts': transcript_sources(result),
         'error': result.get('error'),
     }
 
@@ -82,36 +80,32 @@ def verdict(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 # ---- determinism ----------------------------------------------------------------------------------
 
-
-def _handles(result: Mapping[str, Any]) -> list[str]:
-    seen: list[str] = []
-    snapshots = [result.get('conversations') or []]
-    snapshots += [c.get('conversations') or [] for _, c in sorted((result.get('checkpoints') or {}).items())]
-    for snapshot in snapshots:
-        for conv in snapshot:
-            handle = conv.get('handle')
-            if handle and handle not in seen:
-                seen.append(handle)
-    return seen
+REPEAT_DIFFERENCE_LIMIT = 50
 
 
-def comparable(result: Mapping[str, Any]) -> str:
-    """``result.json`` as canonical text with wall-clock fields removed and conversation handles (prefixes
-    of random document ids) renamed ``conv1``, ``conv2``, ... in order of first appearance."""
-    text = json.dumps({k: v for k, v in result.items() if k not in WALL_CLOCK_FIELDS}, sort_keys=True, default=str)
-    for number, handle in enumerate(_handles(result), start=1):
-        text = re.sub(rf'\b{re.escape(handle)}\b', f'conv{number}', text)
-    return text
+def repeat_differences(run_dirs: Sequence[Path], limit: int = REPEAT_DIFFERENCE_LIMIT) -> list[str]:
+    """``<artifact> <json path>`` for each place a repeat's directory differs from the first's (paths only,
+    no values), by ``determinism.compare_runs`` over ``determinism.SCENARIO_ARTIFACTS``."""
+    from testing.pipeline_lab.determinism import SCENARIO_ARTIFACTS, compare_runs
+
+    out: list[str] = []
+    for other in run_dirs[1:]:
+        for difference in compare_runs(Path(run_dirs[0]), Path(other), SCENARIO_ARTIFACTS).differences:
+            text = f'{difference.artifact} {difference.path}'
+            if text not in out:
+                out.append(text)
+    return out[:limit]
 
 
-def repeat_differences(results: Sequence[Mapping[str, Any]]) -> list[str]:
-    """Top-level ``result.json`` keys whose comparable value differs between any repeat and the first."""
-    if len(results) < 2:
-        return []
-    parsed = [json.loads(comparable(r)) for r in results]
-    first = parsed[0]
-    keys = sorted({k for p in parsed for k in p})
-    return [k for k in keys if any(p.get(k) != first.get(k) for p in parsed[1:])]
+def transcript_sources(result: Mapping[str, Any]) -> dict[str, str]:
+    """Each recording's transcript source: ``scripted`` (speech lines in the scenario) or the cassette's
+    ``synthetic`` / ``local`` / ``vendor`` for an ``audio_file`` recording (``scenario/audio.py``)."""
+    audio = {row.get('label'): row.get('source') for row in (result.get('audio') or {}).get('recordings') or []}
+    out = {}
+    for row in result.get('recordings') or []:
+        label = row.get('label')
+        out[str(label)] = str(row.get('stt') or audio.get(label) or 'scripted')
+    return out
 
 
 # ---- files ----------------------------------------------------------------------------------------

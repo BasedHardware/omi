@@ -7,14 +7,18 @@ day-replay inspector's access policy (``inspector/server.py``), and it never wri
 
 A run directory is either
 
-- a run: ``run.json`` and ``verdict.json`` (optional) and one directory per scenario holding ``result.json``,
-  ``home.json`` and ``scenario.json`` (each optional; the page says which is missing), or
-- a compare run: ``base/`` and ``head/``, each a run as above, and ``compare.json`` (optional), or
+- a run (``scenario run --keep``, layout in ``scenario/verdict.py``): ``run.json``, ``verdict.json`` and one
+  directory per scenario holding ``result.json``, ``home.json`` and ``scenario.json``, and with ``--repeat N``
+  the repeats 2..N in ``<name>/repeat-<k>/`` (each file optional; the page says which is missing), or
+- a compare run (``scenario compare --keep``): ``base/`` and ``head/``, each a run as above, and
+  ``compare.json``, or
 - one scenario's directory (``result.json`` at its root).
 
 Routes (JSON unless noted):
     GET /api/run                      layout, run.json, verdict.json, compare.json, scenarios with outcomes
-    GET /api/scenarios/<name>         {sides: {"run"|"base"|"head": {result, home, scenario, missing}}}
+    GET /api/scenarios/<name>[?repeat=k]
+                                      {sides: {"run"|"base"|"head": {result, home, scenario, verdict, repeats,
+                                      repeat, missing}}}; ``verdict`` is the scenario's verdict.json row
     GET /, /static/<file>             the page (scenario.html, scenario.css, scenario.js)
 """
 
@@ -39,7 +43,8 @@ SINGLE = 'run'
 MAX_JSON_BYTES = 32 * 1024 * 1024
 _NAME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$')
 # Failures first: the rail and the default selection read this order.
-OUTCOME_ORDER = {'error': 0, 'failed': 1, 'xpass': 2, 'unknown': 3, 'xfail': 4, 'passed': 5}
+OUTCOME_ORDER = {'error': 0, 'failed': 1, 'nondeterministic': 1, 'xpass': 2, 'unknown': 3, 'xfail': 4, 'passed': 5}
+_REPEAT = re.compile(r'^repeat-([2-9]|[1-9][0-9]{1,3})$')
 
 
 def _read_json(path: Path) -> tuple[Any, Optional[str]]:
@@ -127,17 +132,37 @@ class RunDir:
                 out['missing'].append({'file': name, 'problem': problem})
         return out
 
-    def scenario_bundle(self, side: str, name: str) -> dict[str, Any]:
+    def repeats(self, folder: Path) -> list[int]:
+        """Repeat numbers present (1 is the scenario directory itself; 2..N are ``repeat-<k>/``)."""
+        found = [1]
+        for child in folder.iterdir() if folder.is_dir() else []:
+            match = _REPEAT.match(child.name)
+            if match and child.is_dir() and (child / 'result.json').is_file():
+                found.append(int(match.group(1)))
+        return sorted(found)
+
+    def scenario_bundle(self, side: str, name: str, repeat: int = 1) -> dict[str, Any]:
         folder = self.scenario_dir(side, name)
         if not folder.is_dir():
             raise NotFound(f'no scenario {name!r} in {side}')
-        bundle: dict[str, Any] = {'dir': str(folder), 'missing': []}
+        repeats = self.repeats(folder)
+        if repeat not in repeats:
+            raise NotFound(f'no repeat {repeat} of {name!r} in {side}')
+        # scenario.json is written once per scenario (repeats share it).
+        files = folder if repeat == 1 else self._inside(folder / f'repeat-{repeat}')
+        bundle: dict[str, Any] = {'dir': str(files), 'missing': [], 'repeat': repeat, 'repeats': []}
         for file in SCENARIO_FILES:
-            path = folder / file
+            path = (folder if file == 'scenario.json' else files) / file
             value, problem = _read_json(self._inside(path)) if path.exists() else (None, 'missing')
             bundle[file.split('.')[0]] = value
             if problem:
                 bundle['missing'].append({'file': file, 'problem': problem})
+        for k in repeats:
+            result, _ = _read_json(folder / 'result.json' if k == 1 else folder / f'repeat-{k}' / 'result.json')
+            outcome = result.get('outcome') if isinstance(result, dict) else None
+            bundle['repeats'].append({'repeat': k, 'outcome': outcome if outcome in OUTCOME_ORDER else 'unknown'})
+        verdict = self.run_files(side).get('verdict') if self.kind != 'scenario' else None
+        bundle['verdict'] = _verdict_row(verdict, name)
         return bundle
 
     def outcome(self, side: str, name: str, verdict: Any) -> str:
@@ -176,16 +201,26 @@ class RunDir:
         out['scenarios'] = sorted(names, key=rank)
         return out
 
-    def scenario(self, name: str) -> dict[str, Any]:
+    def scenario(self, name: str, repeat: int = 1) -> dict[str, Any]:
         sides = {}
         for side in self.sides():
             try:
-                sides[side] = self.scenario_bundle(side, name)
+                sides[side] = self.scenario_bundle(side, name, repeat)
             except NotFound:
                 sides[side] = None
         if not any(sides.values()):
             raise NotFound(f'no scenario {name!r}')
         return {'name': name, 'sides': sides}
+
+
+def _verdict_row(verdict: Any, name: str) -> Optional[dict[str, Any]]:
+    """The scenario's row of a ``scenario/verdict.py`` verdict (``{"scenarios": [{"name", ...}]}``), if any."""
+    rows = verdict.get('scenarios') if isinstance(verdict, dict) else None
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, dict) and name in (row.get('name'), row.get('scenario')):
+                return row
+    return None
 
 
 def _verdict_outcome(verdict: Any, name: str) -> Optional[str]:
@@ -244,7 +279,10 @@ class ScenarioViewHandler(InspectorHandler):
         if seg == ['api', 'run']:
             return self._json(run.overview())
         if len(seg) == 3 and seg[:2] == ['api', 'scenarios']:
-            return self._json(run.scenario(seg[2]))
+            raw = query.get('repeat') or '1'
+            if not raw.isdigit() or not 1 <= int(raw) <= 9999:
+                raise BadRequest('repeat is a number from 1')
+            return self._json(run.scenario(seg[2], int(raw)))
         raise NotFound('not found')
 
     def do_POST(self) -> None:  # noqa: N802 - http.server naming
