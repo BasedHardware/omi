@@ -74,6 +74,12 @@ class Ref:
         names = {p[len(prefix) :].split('/')[0] for p in self.store.rows if p.startswith(prefix)}
         return [self.collection(n) for n in names]
 
+    def list_documents(self):
+        # Firestore lists child references even when only their subcollections survive.
+        prefix = self.path + '/'
+        document_ids = {path[len(prefix) :].split('/', 1)[0] for path in self.store.rows if path.startswith(prefix)}
+        return [self.document(document_id) for document_id in sorted(document_ids)]
+
 
 def function(path, name, namespace):
     if path == 'routers/conversations.py' and name == 'delete_conversation':
