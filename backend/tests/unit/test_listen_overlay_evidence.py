@@ -64,7 +64,7 @@ def test_reference_render_proves_only_reconnect_without_exporting_references(dri
     main['image'] = image
     main['env'][1] = {
         'name': 'PRIVATE_TOKEN',
-        'valueFrom': {'secretKeyRef': {'name': 'test-secret', 'key': 'PRIVATE_TOKEN'}},
+        'valueFrom': {'secretKeyRef': {'name': 'test-secret', 'key': 'PRIVATE_TOKEN', 'optional': False}},
     }
     wanted, live, inverse = (copy.deepcopy(before) for _ in range(3))
     wanted_main = wanted['spec']['template']['spec']['containers'][0]
@@ -299,7 +299,7 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
         for row in primary['env']:
             key = row['name']
             row.clear()
-            row.update(name=key, valueFrom={'secretKeyRef': {'name': 'test-secret', 'key': key}})
+            row.update(name=key, valueFrom={'secretKeyRef': {'name': 'test-secret', 'key': key, 'optional': False}})
     candidate = copy.deepcopy(predecessor)
     candidate['spec']['template']['spec']['containers'][0]['env'].append(
         {'name': 'LISTEN_BATCH_RECONNECT_ENABLED', 'value': 'true'}

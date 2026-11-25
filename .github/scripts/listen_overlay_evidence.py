@@ -301,7 +301,9 @@ def compare_reference_render(desired, predecessor, inverse, live, private_keys, 
     private_env = env(observed[primary_name])
     for key in private_keys:
         require(isinstance(key, str) and KEY.fullmatch(key), 'reference_inventory')
-        require(private_env.get(key) == {'valueFrom': {'secretKeyRef': {'name': secret_name, 'key': key}}},
+        require(private_env.get(key) == {'valueFrom': {
+            'secretKeyRef': {'name': secret_name, 'key': key, 'optional': False}
+        }},
                 'reference_binding_changed')
     return primary['name']
 
