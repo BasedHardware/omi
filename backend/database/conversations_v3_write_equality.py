@@ -6,8 +6,14 @@ import zlib
 from typing import Any
 from uuid import UUID
 
-from google.cloud.firestore_v1._helpers import encode_value
-from google.cloud.firestore_v1.types import Value
+try:
+    from google.cloud.firestore_v1._helpers import encode_value
+    from google.cloud.firestore_v1.types import Value
+except ImportError:
+    # Some isolated backend entry points run with a file-less Firestore test stub.
+    # Without the SDK encoder there is no basis to call two values equal.
+    encode_value = None
+    Value = None
 
 from config.speaker_match_scores import FIELD as MATCH_SCORES
 from utils.conversations.speaker_grouping_storage import FIELD as SPEAKER_GROUPING
@@ -33,6 +39,8 @@ def same_value(left: Any, right: Any) -> bool:
 
     Unknown values and transforms have no literal Value encoding and must be written.
     """
+    if encode_value is None or Value is None:
+        return False
     try:
         return Value.pb(encode_value(left)).SerializeToString(deterministic=True) == Value.pb(
             encode_value(right)
