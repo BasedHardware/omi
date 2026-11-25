@@ -585,6 +585,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_MEMORY_INCREMENTAL_INDEX_WINDOWS_ENABLED` | Default on unless false; historical memory metadata expansions seek after snapshots instead of rereading prefixes | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `OMI_STAGED_PROMOTE_LONG_TTL_ENABLED` | Default on unless false; one-hour write-invalidated promote empty TTL; false restores 90 seconds | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED` | Default on unless false; Cache empty staged promote projections for one hour (90 seconds with long-TTL kill switch disabled) with UID generation and write-version fences | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
+| `OMI_SUPPORT_CORRECT_PLAN_ENABLED` | Default on for manual support plan correction applies. Set false, off, 0 or no in the operator command environment to block plan writes while keeping dry runs available. | backend | env | open | — | — | — | — | keep | keep | — | support-ops / SCA-3359 |
 | `OMI_USAGE_MONTH_TOTAL_SHADOW_ENABLED` | Default on; sample served monthly usage against hourly Firestore at the serving snapshot | backend | env | open | — | — | — | — | keep | keep | — | margin-lead |
 | `OPEN_LOOPS_ENABLED` | Default on; extract open-loop fields in the notes call, persist them server-only, and run the once-per-day open-loop daily pass | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `PARAKEET_STREAM_ALLOCATION_PERCENT` | Allocate streaming sessions to Parakeet | backend | env | closed | 100 | 100 (gke/parakeet, parakeet (chart)) | 100 (gke/parakeet, parakeet (chart)) | — | keep | keep | — | auditfix |
@@ -1482,6 +1483,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_ROLLOUT_MEMBERSHIP_SHARED_CACHE_ENABLED` — Default on; share encrypted cohort observations across replicas within the existing sixty-second source lease (fail: closed)
 - `OMI_STAGED_PROMOTE_LONG_TTL_ENABLED` — Default on unless false; one-hour write-invalidated promote empty TTL; false restores 90 seconds (fail: open)
 - `OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED` — Default on unless false; Cache empty staged promote projections for one hour (90 seconds with long-TTL kill switch disabled) with UID generation and write-version fences (fail: open)
+- `OMI_SUPPORT_CORRECT_PLAN_ENABLED` — Default on for manual support plan correction applies. Set false, off, 0 or no in the operator command environment to block plan writes while keeping dry runs available. (fail: open)
 - `OMI_TV_ROLLUP_ENABLED` — Default off; 1 prefers complete BigQuery daily rollup windows for TV history; missing coverage falls back to HogQL (fail: closed)
 - `OMI_USAGE_MONTH_TOTAL_SHADOW_ENABLED` — Default on; sample served monthly usage against hourly Firestore at the serving snapshot (fail: open)
 - `OMI_USAGE_MONTH_TOTAL_SHADOW_RATE` — Fraction of monthly usage reads selected for snapshot comparison, default 0.01 (fail: closed)
