@@ -245,47 +245,18 @@ def test_whole_native_completion_resolves_finish_on_redirect_donor(
 
 
 @pytest.mark.parametrize('outcome', ['silence', 'no_recoverable_speech'])
-def test_terminal_empty_recording_is_discarded_on_the_existing_finish_poll(owner, monkeypatch, outcome):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    from database import conversations
-    from routers import conversations as router
-
-    client, uid, _ = owner
-    complete, source, _, counter, enqueue = _pending_native_finish(
+def test_whole_native_completion_counts_async_empty_finish_once(owner, monkeypatch, outcome):
+    complete, source, ledger, counter, enqueue = _pending_native_finish(
         owner, monkeypatch, 2, receipt_id=None, outcome=outcome
     )
-    source.update({'has_content': False, 'record_projection_revision': 2, 'record_upload_revision': 1})
-    monkeypatch.setattr(conversations, 'db', client)
-    monkeypatch.setattr(conversations, 'indexed_list_reads_enabled', lambda: True)
-    monkeypatch.setattr(router.transcribing_hold, 'read_admissions', lambda *a, **kw: {})
-    monkeypatch.setattr(router, 'conversations_v3_enabled', lambda uid: False)
-    app = FastAPI()
-    app.include_router(router.router)
-    app.dependency_overrides[router.auth.get_current_user_uid] = lambda: uid
-
-    def rows(http, *, include_discarded):
-        response = http.get('/v1/conversations', params={'limit': 10, 'include_discarded': include_discarded})
-        assert response.status_code == 200, response.text
-        return response.json()
-
-    with TestClient(app) as http:
-        assert rows(http, include_discarded=True) == []
+    source.update({'has_content': False, 'record_projection_revision': 2})
+    for _ in range(2):
         assert complete() is not None
-        counter.labels.assert_called_once_with('whole_record_resolved_empty')
-        enqueue.assert_not_called()
-        [ack] = rows(http, include_discarded=True)
-        assert (ack['id'], ack['recording'], ack['discarded'], ack['status'], ack['tile_state']) == (
-            source.id,
-            True,
-            True,
-            'completed',
-            'done',
-        )
-        assert live.FINISH_EMPTY_FIELD not in ack
-        assert rows(http, include_discarded=False) == []
-        stored = source.get().to_dict()
-        assert stored['recording'] and not stored['discarded']
-        source.update({'record_upload_revision': 2})
-        assert rows(http, include_discarded=True) == []
+
+    assert ledger.get().to_dict()['status'] == 'completed'
+    stored = source.get().to_dict()
+    assert stored['v3_manual_end_requested'] is False
+    assert stored['recording'] and not stored['discarded'] and 'v3_manual_end' not in stored
+    counter.labels.assert_called_once_with('whole_record_resolved_empty')
+    counter.labels.return_value.inc.assert_called_once_with()
+    enqueue.assert_not_called()

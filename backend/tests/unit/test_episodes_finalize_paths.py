@@ -951,7 +951,6 @@ def test_empty_body_finish_before_first_window_resolves_at_whole_record_completi
         assert latest['v3_manual_end_requested'] is False and 'v3_manual_end' not in latest
         assert second.json()['conversation']['tile_state'] == 'done'
         assert second.json()['conversation']['discarded'] is True
-        assert v3_live.has_empty_finish_receipt(latest) and not latest.get('discarded')
         assert not enqueued
 
 

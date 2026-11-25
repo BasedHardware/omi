@@ -9,15 +9,6 @@ from config.conversations_v3 import SPEECH_LANDED_FIELD
 MAX_IDLE = timedelta(hours=2)
 FINISH_WINDOW_FIELD = 'v3_finish_no_pointer_window_id'
 FINISH_RECORDING_FIELD = 'v3_finish_no_pointer_recording'
-FINISH_EMPTY_FIELD = 'v3_finish_no_pointer_empty'
-FINISH_EMPTY_READ_FIELDS = (
-    FINISH_EMPTY_FIELD,
-    'record_projection_revision',
-    'record_upload_revision',
-    'has_content',
-    SPEECH_LANDED_FIELD,
-    'sync_merged_into',
-)
 FINISH_FIELDS = [
     'started_at',
     'finished_at',
@@ -62,24 +53,6 @@ def has_finish_content(row: Mapping[str, Any], window: Mapping[str, Any], record
         row.get('record_projection_revision') or row.get(SPEECH_LANDED_FIELD)
     )
     return bool(source_has_speech or any(rid != recording_id for rid in window.get('v3_recording_ids') or ()))
-
-
-def empty_finish_receipt(row: Mapping[str, Any]) -> dict[str, Any]:
-    return {
-        'projection_revision': row.get('record_projection_revision'),
-        'upload_revision': row.get('record_upload_revision'),
-    }
-
-
-def has_empty_finish_receipt(row: Mapping[str, Any]) -> bool:
-    return bool(
-        row.get('recording') is True
-        and row.get('status') == 'completed'
-        and not (row.get('deleted') or row.get('is_locked') or row.get('sync_merged_into'))
-        and row.get('data_protection_level') != 'private'
-        and row.get(FINISH_EMPTY_FIELD) == empty_finish_receipt(row)
-        and not has_finish_content(row, {}, '')
-    )
 
 
 def _aware(value: Any) -> Optional[datetime]:
