@@ -798,7 +798,7 @@ async def reconcile(
         if holds and not derive:
             # A held manual-end cut applies when its wait ends, even if no transcript lands.
             metrics.FINISH_HELD.inc()
-            await run_blocking(db_executor, enqueue, uid, at=max(min(holds), now + timedelta(minutes=1)))
+            await run_blocking(db_executor, enqueue, uid, at=min(holds), finish_hold_deadline=True)
         for row in rows:
             prior = existing.get(row['id']) or {}
             if (

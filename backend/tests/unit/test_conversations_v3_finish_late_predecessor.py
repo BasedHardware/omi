@@ -202,7 +202,7 @@ async def test_a_predecessor_that_never_lands_holds_the_cut_only_for_the_finish_
     (row,) = derived(strict)
     assert planner.is_unlocked(row) and sorted(row['v3_recording_ids']) == ['rec-b', 'rec-f']
     cut = strict.rows[path('rec-b')]['finished_at']
-    assert await reconcile_at(strict, monkeypatch, cut + policy.FINISH_WAIT) == 'committed'
+    assert await reconcile_at(strict, monkeypatch, cut + policy.FINISH_PREDECESSOR_WAIT) == 'committed'
     assert shape(derived(strict)) == [(['rec-b', 'rec-f'], True, False, 'manual_end')]
     assert not planner.is_unlocked(derived(strict)[0])
 
@@ -431,12 +431,13 @@ async def test_a_held_cut_never_joins_the_next_finish(strict, monkeypatch):
 
     save('A', 0, 60, 'device1', speech=False, cut=False, pending=False)
     save('B', 400, 20, 'device1', speech=True, cut=True, pending=True)
-    save('C', 470, 22, 'device2', speech=True, cut=True, pending=True)
-    assert await reconcile_loaded(strict, monkeypatch, T0 + timedelta(seconds=502)) == 'committed'
+    save('C', 425, 12, 'device2', speech=True, cut=True, pending=True)
+    assert await reconcile_loaded(strict, monkeypatch, T0 + timedelta(seconds=447)) == 'committed'
     (held,) = derived(strict)
     assert planner.is_unlocked(held) and held['v3_recording_ids'] == ['B']
     assert strict.rows[path('C')]['v3_pending'] is True  # C's speech waits for the next pass
-    assert await reconcile_loaded(strict, monkeypatch, T0 + timedelta(seconds=420) + policy.FINISH_WAIT) == 'committed'
+    expiry = T0 + timedelta(seconds=420) + policy.FINISH_PREDECESSOR_WAIT
+    assert await reconcile_loaded(strict, monkeypatch, expiry) == 'committed'
     assert shape(derived(strict)) == [(['B'], True, False, 'manual_end'), (['C'], True, False, 'manual_end')]
 
 
@@ -525,11 +526,11 @@ def test_the_cut_waits_for_a_predecessor_named_by_the_loader_or_loaded(loaded):
     cut = b['finished_at']
     (group,) = outline.stretches(members, cut + timedelta(seconds=20), continuity=True)
     assert not group['manual_end'] and not group['finished'] and not group['outline_ready']
-    assert group['finish_held_until'] == cut + policy.FINISH_WAIT
+    assert group['finish_held_until'] == cut + policy.FINISH_PREDECESSOR_WAIT
     finishing = next(m for m in members if m['id'] == 'b')
-    assert finishing[outline.HOLD_UNTIL] == cut + policy.FINISH_WAIT
-    assert preview_wakes([], {'b': finishing}) == {'b': cut + policy.FINISH_WAIT}
-    (group,) = outline.stretches(members, cut + policy.FINISH_WAIT, continuity=True)
+    assert finishing[outline.HOLD_UNTIL] == cut + policy.FINISH_PREDECESSOR_WAIT
+    assert preview_wakes([], {'b': finishing}) == {'b': cut + policy.FINISH_PREDECESSOR_WAIT}
+    (group,) = outline.stretches(members, cut + policy.FINISH_PREDECESSOR_WAIT, continuity=True)
     assert group['manual_end'] and group['locked'] and 'finish_held_until' not in group
     assert outline.HOLD_UNTIL not in finishing
 
@@ -591,12 +592,12 @@ def test_a_held_cut_stays_a_boundary_and_later_speech_waits():
     # P1: B's cut waits for A; C (another device) finishes after it. C never joins B's window.
     a = awaiting('a', T0, 60, sealed_at=T0 + timedelta(seconds=61))
     b = finish(T0 + timedelta(seconds=400), 20)
-    c = finish(T0 + timedelta(seconds=470), 22, origin='device2', rid='c')
+    c = finish(T0 + timedelta(seconds=425), 8, origin='device2', rid='c')
     now = c['finished_at'] + timedelta(seconds=10)
     (group,) = outline.stretches([a, b, c], now, continuity=True)
     assert outline.group_rids(group) == {'b'} and not group['locked'] and not group['manual_end']
-    assert b[outline.HOLD_UNTIL] == c[outline.HOLD_UNTIL] == b['finished_at'] + policy.FINISH_WAIT
-    after = outline.stretches([a, b, c], b['finished_at'] + policy.FINISH_WAIT, continuity=True)
+    assert b[outline.HOLD_UNTIL] == c[outline.HOLD_UNTIL] == b['finished_at'] + policy.FINISH_PREDECESSOR_WAIT
+    after = outline.stretches([a, b, c], b['finished_at'] + policy.FINISH_PREDECESSOR_WAIT, continuity=True)
     assert [(outline.group_rids(g), g['manual_end'], g['locked']) for g in after] == [
         ({'b'}, True, True),
         ({'c'}, True, True),
@@ -611,6 +612,28 @@ def test_the_finish_recording_waits_for_its_own_transcript():
     assert not group['manual_end'] and group['finish_held_until'] == b['finished_at'] + policy.FINISH_WAIT
     (group,) = outline.stretches([f, b], b['finished_at'] + timedelta(seconds=10), continuity=False)
     assert group['manual_end']
+
+
+def test_a_later_finish_without_lines_stays_pending_across_the_earlier_hold():
+    a = awaiting('a', T0, 64, sealed_at=T0 + timedelta(seconds=70))
+    b = finish(T0 + timedelta(seconds=80), 20)
+    c = {**finish(T0 + timedelta(seconds=102), 5, rid='c'), 'transcript_segments': []}
+    recordings = {row['id']: row for row in (a, b, c)}
+    outline.stretches(recordings.values(), c['finished_at'] + timedelta(seconds=10), continuity=True)
+    first_expiry = b['finished_at'] + policy.FINISH_PREDECESSOR_WAIT
+    assert preview_wakes([], recordings)['c'] == first_expiry
+    outline.stretches(recordings.values(), first_expiry, continuity=True)
+    assert preview_wakes([], recordings)['c'] == c['finished_at'] + policy.FINISH_WAIT
+
+
+def test_a_previous_finish_is_not_a_predecessor_of_a_later_finish():
+    a = awaiting('a', T0, 60, sealed_at=T0 + timedelta(seconds=61))
+    b = finish(T0 + timedelta(seconds=62), 6)
+    c = finish(T0 + timedelta(seconds=70), 20, rid='c')
+    # B's wait is over, while C is still within its predecessor budget.
+    now = b['finished_at'] + policy.FINISH_PREDECESSOR_WAIT
+    groups = outline.stretches([a, b, c], now, continuity=True)
+    assert [(outline.group_rids(group), group['manual_end']) for group in groups] == [({'b'}, True), ({'c'}, True)]
 
 
 def test_the_loader_reads_one_capture_origin_within_the_reconnect_bound(monkeypatch):
@@ -648,7 +671,9 @@ def test_the_loader_reads_one_capture_origin_within_the_reconnect_bound(monkeypa
     applied = {'x': {'id': 'x', 'v3_recording_ids': ['b'], 'manual_end': True, 'status': 'processing'}}
     assert reads({'b': dict(b)}, applied) == 0
     assert reads({'b': {**b, 'external_data': {}}}) == 0
-    monkeypatch.setattr(Clock, 'now', classmethod(lambda cls, tz=None: b['finished_at'] + policy.FINISH_WAIT))
+    monkeypatch.setattr(
+        Clock, 'now', classmethod(lambda cls, tz=None: b['finished_at'] + policy.FINISH_PREDECESSOR_WAIT)
+    )
     assert reads({'b': dict(b)}) == 0
     monkeypatch.setattr(Clock, 'now', classmethod(lambda cls, tz=None: b['finished_at']))
     assert reads({'b': dict(b)}) == 1
@@ -674,7 +699,7 @@ def test_awaited_speech_bridges_the_window_it_will_join():
     now = T0 + timedelta(seconds=465)
     (group,) = outline.stretches([a, b, f], now, continuity=True)
     assert outline.group_rids(group) == {'b', 'f'} and not group['locked']
-    assert group['finish_held_until'] == b['finished_at'] + policy.FINISH_WAIT
+    assert group['finish_held_until'] == b['finished_at'] + policy.FINISH_PREDECESSOR_WAIT
     assert group['end'] == b['finished_at']  # the awaited audio never stands in as speech
     landed = {**recording('a', T0, 64, device='phone-1'), 'record_projection_revision': 1}
     (group,) = outline.stretches([landed, b, f], now + timedelta(seconds=15), continuity=True)

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import pytest
 
 from database.batch_pipeline_intake import AdmissionDisabled, admit
+from config.batch_pipeline import Priority
 from config.record_audio import record_identity
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.contracts import ProjectionBinding
@@ -75,6 +76,57 @@ def test_legacy_owner_cannot_be_taken_even_when_redis_expired(cohort):
     store.rows['content', 'synthetic-owner/content'] = {'status': 'processing', 'job_id': 'legacy', 'updated_at': 0}
     assert submit(store, *proposal()) == {'outcome': 'busy', 'job_id': 'legacy'}
     assert not any(table == 'jobs' for table, _ in store.rows)
+
+
+@pytest.mark.parametrize('manual', [False, True])
+def test_new_native_finish_units_precede_existing_fresh_work_in_sibling_order(cohort, monkeypatch, manual):
+    monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    store = MemoryStore()
+    uid, capture_id = 'synthetic-owner', 'capture'
+    content, first = record_identity(uid, capture_id)
+    pending = {
+        'state': 'record_pending',
+        'owner_id': uid,
+        'conversation_id': capture_id,
+        'record_content_id': content,
+        'privacy_generation': 0,
+    }
+    store.rows['jobs', first] = pending
+    store.rows['conversations', f'{uid}/{capture_id}'] = {
+        'recording': True,
+        'record_lane_owner': 'batch_live_v1',
+        'record_audio_closed': True,
+        'status': 'completed',
+        'finished_at': datetime.fromtimestamp(99, timezone.utc),
+        'v3_manual_end_requested': manual,
+    }
+    older = replace(item('ordinary', owner=uid, priority=Priority.FRESH), privacy_generation=0)
+    assert submit(store, [older], ProjectionBinding(uid, 'bp_ordinary', 'ordinary-content', ('ordinary',)))
+    siblings = [
+        replace(
+            item(segment, owner=uid, capture=start, priority=Priority.FRESH),
+            conversation_id=capture_id,
+            privacy_generation=0,
+        )
+        for segment, start in ((first, 39), ('second', 69))
+    ]
+    binding = ProjectionBinding(
+        uid,
+        'bp_finish',
+        content,
+        (first, 'second'),
+        target_conversation_id=capture_id,
+        privacy_generation=0,
+        record_origin=True,
+        native_record=True,
+    )
+    for _ in range(2):
+        assert admit(store, siblings, binding, 100, namespace=NAMESPACE)['job_id'] == 'bp_finish'
+    queue = store.rows['queues', f'{int(Priority.FRESH)}_{owner_key(uid)}']
+    order = [first, 'second', 'ordinary'] if manual else ['ordinary', first, 'second']
+    assert queue['head'] == order[0] and queue['tail'] == order[-1]
+    assert [store.rows['jobs', segment]['next'] for segment in order] == [*order[1:], '']
+    assert bool(store.rows['jobs', first].get('record_notes_after_complete')) is manual
 
 
 @pytest.mark.parametrize('native_record', [False, True])

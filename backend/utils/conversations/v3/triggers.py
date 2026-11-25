@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import math
 import os
 import time
 from datetime import datetime, timezone
@@ -76,10 +77,12 @@ def task_base():
     return base
 
 
-def enqueue(uid, *, at=None, manual_end_id=None):
+def enqueue(uid, *, at=None, manual_end_id=None, finish_hold_deadline=False):
     instant = at or datetime.now(timezone.utc)
-    minute = int(instant.timestamp()) // 60
-    task_id = 'conversations-v3-' + hashlib.sha256(uid.encode()).hexdigest()[:32] + '-' + str(minute)
+    timestamp = instant.timestamp()
+    schedule_at = math.ceil(timestamp) if finish_hold_deadline else int(timestamp)
+    slot = f'hold-{schedule_at}' if finish_hold_deadline else str(schedule_at // 60)
+    task_id = 'conversations-v3-' + hashlib.sha256(uid.encode()).hexdigest()[:32] + '-' + slot
     if manual_end_id:
         # A live task may already have completed in this minute. Its retained
         # Cloud Tasks name must not swallow the user's later explicit close.
@@ -89,8 +92,8 @@ def enqueue(uid, *, at=None, manual_end_id=None):
         os.getenv('CONVERSATIONS_V3_TASKS_QUEUE', 'conversations-v3'),
         base + '/v1/conversations-v3/reconcile',
         task_id,
-        {'uid': uid},
-        schedule_at=int(instant.timestamp()),
+        {'uid': uid, **({'finish_hold_deadline': True} if finish_hold_deadline else {})},
+        schedule_at=schedule_at,
     )
 
 

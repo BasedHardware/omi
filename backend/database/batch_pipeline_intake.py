@@ -10,7 +10,7 @@ from typing import Callable
 import time
 
 from config.policy import BatchUnitPolicy, resolve_batch_policy
-from config.batch_pipeline import require_record_protocol_ready
+from config.batch_pipeline import Priority, require_record_protocol_ready
 from config.record_audio import record_identity, require_record_audio_barrier, restore_pending
 from config.record_seal_rules import token_lease_mode
 from config.record_latency import recent_record_end, record_fresh_merge_enabled, record_notes_eager_enabled
@@ -190,8 +190,18 @@ def admit(
             and allowance_hold.intake_enabled()
             and intake_refusal.current(tx.get(allowance_hold.OWNERS, owner_key(binding.owner_id)), time.time())
         )
+        finish_first = (
+            enqueue is None
+            and binding.native_record
+            and not binding.partial_record
+            and row.get('recording') is True
+            and (row.get('v3_manual_end_requested') is True or row.get('v3_manual_end') is True)
+            and recent_record_end(row.get('finished_at'), now)
+            and all(item.priority == Priority.FRESH for item in items)
+        )
         parked = 0
-        for item in items:
+        # Prepend from last to first so sibling units keep their capture order.
+        for item in reversed(items) if finish_first else items:
             if require_artifacts:
                 key = artifact_id(item.segment_id, item.audio_uri)
                 artifact = tx.get('artifacts', key)
@@ -212,11 +222,12 @@ def admit(
                 created = enqueue_alias(tx, item, now, policy=admission, proposal=proposal)
                 attach_alias_artifacts(tx, item, proposal)
             else:
-                created = (
-                    Scheduler.enqueue_in_transaction(tx, item, now, policy=admission, park_allowance=True)
-                    if park_allowance
-                    else enqueue_item(tx, item, now, policy=admission)
-                )
+                if finish_first or park_allowance:
+                    created = Scheduler.enqueue_in_transaction(
+                        tx, item, now, policy=admission, park_allowance=park_allowance, finish_first=finish_first
+                    )
+                else:
+                    created = enqueue_item(tx, item, now, policy=admission)
                 if getattr(item, 'source_reuse_key', None):
                     marked = tx.get('jobs', item.segment_id)
                     stamp(marked, 'source_reuse_version')
@@ -246,9 +257,9 @@ def admit(
                     job['record_finished_at'] = finished
                     # All siblings retain this dispatch owner even if the
                     # recording ages out or the urgency switch changes later.
-                    if not binding.partial_record and record_notes_eager_enabled():
+                    if not binding.partial_record and (finish_first or record_notes_eager_enabled()):
                         job['record_notes_after_complete'] = True
-                    if record_fresh_merge_enabled():
+                    if finish_first or record_fresh_merge_enabled():
                         # Seal/staging latency must not demote a new recording
                         # behind this owner's unresolved historical captures.
                         # All siblings use the recording end, not unit ends.

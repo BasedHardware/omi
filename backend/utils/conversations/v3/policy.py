@@ -14,9 +14,14 @@ LIVE_TITLE_STATE = 'v3_live_title_state'
 ROTATION_CAP_FIELD = 'v3_rotation_cap_seconds'
 # How long a sealed recording's pending transcript keeps the previous stretch open.
 TRANSCRIPT_WAIT = timedelta(minutes=15)
-# How long a manual-end cut waits for the batch transcript of its own or a preceding sealed recording.
-# Equal to the default lock delay: a Finish never settles later than the same speech would without one.
+# A Finish without its own transcript still needs time to avoid summarizing a fragment alone.
 FINISH_WAIT = timedelta(minutes=5)
+# Once the Finish has speech, leave part of its 60-second budget for outline and notes.
+FINISH_PREDECESSOR_WAIT = timedelta(seconds=45)
+
+
+def finish_wait(row):
+    return FINISH_WAIT if awaiting_batch_transcript(row) else FINISH_PREDECESSOR_WAIT
 
 
 def live_title_candidate(row):
