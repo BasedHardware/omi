@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from database import batch_pipeline_conversation_purge as purge
 from database import batch_pipeline_conversation_purge_scans as scans
 from database import conversation_batch_purge_jobs as jobs
+from database import conversation_purge_budget as purge_budget
 from database import legal_holds
 from tests.integration.test_conversation_batch_purge_emulator import plane  # noqa: F401
 
@@ -132,20 +133,33 @@ def test_real_route_six_members_one_traversal_both_namespaces(monkeypatch, world
 
     monkeypatch.setattr(purge.queries, 'owner_documents', counted)
     monkeypatch.setattr(purge.queries, 'artifacts_by_owner_id', counted_parked)
-    monkeypatch.setattr(purge, 'purge_jobstore_owner', lambda ns, uid: shadows.append(ns))
+
+    def no_configured_shadow(namespace, _uid, _after):
+        shadows.append(namespace)
+        return False, None
+
+    monkeypatch.setattr(purge, 'purge_owner_page', no_configured_shadow)
     monkeypatch.setattr(purge, 'conversation_objects', lambda uid, cid, **k: originals.append(cid) or [])
     monkeypatch.setattr(scans.jobs, 'UNIT_YIELD_SECONDS', 0)
     app = FastAPI()
     app.include_router(users.router)
     app.dependency_overrides[users.verify_conversation_batch_purge_cloud_tasks_oidc] = lambda: 0
     with TestClient(app) as client:
-        response = client.post(
-            '/v1/conversations/deletion-batch-purges/run', json={'job_id': leader, 'generation': generation}
-        )
-    assert response.status_code == 200 and response.json()['outcome'] == 'purged'
-    assert reads.count(('batch_pipeline_prod', 'results')) == 4
-    assert reads.count(('batch_pipeline_dev', 'results')) == 4
-    assert len(parked) == 4 and set(originals) == set(cids)
+        for _ in range(6):
+            response = client.post(
+                '/v1/conversations/deletion-batch-purges/run', json={'job_id': leader, 'generation': generation}
+            )
+            assert response.status_code == 200
+            outcome = response.json()['outcome']
+            if outcome == 'purged':
+                break
+            assert outcome == 'checkpointed'
+            generation = _dispatch(world, leader)
+        else:
+            pytest.fail('bounded route did not converge')
+    assert 4 <= reads.count(('batch_pipeline_prod', 'results')) <= 5
+    assert 4 <= reads.count(('batch_pipeline_dev', 'results')) <= 5
+    assert 4 <= len(parked) <= 6 and set(originals) == set(cids)
     assert shadows == list(purge.NAMESPACES)
     _assert_erased(world, cids)
     assert _run(world, leader, generation) == 'missing'
@@ -596,3 +610,43 @@ def test_pending_artifact_defers_group_until_parked_receipt_replays(world):
     leader_ref.update({'due_at': before})
     assert _run(world, leader, _dispatch(world, leader)) == 'purged'
     _assert_erased(world, ['one', 'two'])
+
+
+@pytest.mark.parametrize('shared', [False, True])
+def test_bounded_worker_redrives_both_cursor_types_after_ambiguous_checkpoint(monkeypatch, world, shared):
+    cids = ['one', 'two'] if shared else ['one']
+    leader, *_ = [world.arm(cid) for cid in cids]
+    _seed(world, cids, others=140)
+    if not shared:
+        monkeypatch.setenv(scans.SWITCH, 'false')
+    generation = _dispatch(world, leader)
+    progress_type = scans.ScanProgress if shared else jobs.RunProgress
+    checkpoint = progress_type.checkpoint
+
+    def lost_response(progress, *args, **kwargs):
+        checkpoint(progress, *args, **kwargs)
+        raise RuntimeError('synthetic commit reply lost')
+
+    with monkeypatch.context() as fault:
+        fault.setattr(progress_type, 'checkpoint', lost_response)
+        with purge_budget.activate(purge_budget.Dispatch(reads=1000)):
+            with pytest.raises(RuntimeError, match='commit reply lost'):
+                _run(world, leader, generation)
+
+    ref = world.client.collection(jobs.COLLECTION).document(leader)
+    pending = ref.get().to_dict()
+    cursor = pending['owner_scan']['position'] if shared else pending['progress']
+    assert cursor
+    for _ in range(20):
+        ref.update({'due_at': jobs._now()})
+        generation = _dispatch(world, leader)
+        with purge_budget.activate(purge_budget.Dispatch(reads=1000)):
+            outcome = _run(world, leader, generation)
+        if outcome == 'purged':
+            break
+        assert outcome == 'checkpointed'
+    else:
+        pytest.fail('purge did not reach completion from the saved cursor')
+    with purge_budget.activate(purge_budget.Dispatch(reads=1000)):
+        assert _run(world, leader, generation) == 'missing'
+    _assert_erased(world, cids)

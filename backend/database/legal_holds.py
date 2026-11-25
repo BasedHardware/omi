@@ -21,6 +21,7 @@ from uuid import uuid4
 from google.api_core.exceptions import Aborted
 from google.cloud.firestore_v1 import transactional
 
+from database import conversation_purge_budget as purge_budget
 from database import rpc_deadline
 from database.account_deletion_marker import account_deletion_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -200,6 +201,8 @@ def assert_account_deletion_permitted(uid: str, *, firestore_client: Any | None 
     if not uid:
         raise LegalHoldAuthorityUnavailable("account deletion legal-hold lookup requires a uid")
     client = account_deletion_firestore_client(firestore_client=firestore_client)
+    if purge_budget.current() is not None:
+        rpc_deadline.bind_firestore_client(client)
     try:
         snapshot = _document(client, f"{LEGAL_HOLDS_COLLECTION}/{uid}").get()
         _assert_hold_inactive(snapshot)
@@ -960,7 +963,12 @@ def bounded_destructive_unit(
     finally:
         _ACTIVE_GATE.reset(reset)
         if not authority.unresolved:
-            _release_bounded_unit(uid, kind, token, outcome, client, started + UNIT_HOLD_SECONDS)
+            budget = purge_budget.current()
+            if budget is not None and (budget.work_left <= 0 or budget.reads < 16):
+                with purge_budget.settling():
+                    _release_bounded_unit(uid, kind, token, outcome, client, started + UNIT_HOLD_SECONDS)
+            else:
+                _release_bounded_unit(uid, kind, token, outcome, client, started + UNIT_HOLD_SECONDS)
 
 
 def _release_bounded_unit(uid: str, kind: str, token: str, outcome: str, client: Any, deadline: float) -> None:

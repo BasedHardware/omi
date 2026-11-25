@@ -279,3 +279,48 @@ def test_cold_copy_erasure_ignores_mode_admission_and_write_switch(stores, monke
     assert not any(_postgres(shadow, table, name) for table, name, _ in rows)
     if not cached:
         cold_pool.close()
+
+
+@pytest.mark.parametrize('resume_previous_reader', [False, True])
+def test_bounded_shadow_pages_resume_and_preserve_unrelated_rows(stores, resume_previous_reader, monkeypatch):
+    from database import rpc_deadline
+    from database.jobstore import dual_store
+
+    customer, primary, shadow, dual = stores
+    gone, kept = 'synthetic-page-target', 'synthetic-page-retained'
+    for uid in (gone, kept):
+        customer.add_user(uid)
+    gone_key, kept_key = privacy_owner_key(gone), privacy_owner_key(kept)
+    stale = [('jobs', f'j{i:03}', {'owner_key': gone_key, 'owner_id': gone}) for i in range(80)]
+    retained = [('jobs', f'a{i:03}', {'owner_key': kept_key, 'owner_id': kept}) for i in range(130)]
+    fixture = retained + stale
+    for offset in range(0, len(fixture), 16):
+        _write(dual, fixture[offset : offset + 16])
+    before = {key: _postgres(shadow, table, key) for table, key, _ in retained}
+    assert all(before.values())
+    for table, key, _ in stale:
+        primary.delete(table, key)
+    monkeypatch.setattr(dual_store, 'PURGE_SETTLE_S', 0)
+
+    def page(after):
+        with rpc_deadline.rpc_deadline(rpc_deadline.now() + 4):
+            return dual.reconcile_owner_page(gone, after)
+
+    after = None
+    passes_to_model = 1 if resume_previous_reader else 2
+    for pass_number in range(passes_to_model):
+        for _ in range(20):
+            after = page(after)
+            if after is None:
+                break
+            if resume_previous_reader and after[0] == 'jobs' and after[2].startswith('j'):
+                break  # previous reader ignores the candidate's keyset and runs both passes
+        else:
+            pytest.fail('shadow pass did not converge')
+        if not resume_previous_reader and pass_number == 0:
+            with shadow.pool.connection() as conn:
+                shadow.write_doc(conn, *stale[0])  # pre-barrier writer reaches the mirror before pass two
+    if resume_previous_reader:
+        dual.purge_owner_now(gone)
+    assert not any(_postgres(shadow, table, key) for table, key, _ in stale)
+    assert {key: _postgres(shadow, table, key) for table, key, _ in retained} == before

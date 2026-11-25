@@ -166,18 +166,19 @@ BODY_DIGEST = {
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
     'database.conversations_v3.commit_projection': 'e8ef3b2c4e9a4bb6b88de62144d05e89115395fa07f29347aa38a3d5cb959d58',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
-    'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
+    'database.batch_pipeline_conversation_purge_scans.run_job': 'ec188e3d19d089bacb139c51207d7d2308fd8ddc3865dfea283c0bbb1dbb928b',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
     'database.batch_census_export._filtered': '6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',
     'database.batch_census_export._scope': '239ed05dc6fef88f4ed8a88b870867f37623329cb96d8b1131278a52a3652dc8',
     'database.batch_pipeline_allowance_migration.candidates': '04c9beae56ec6091544a2ec69a8ba170032dbe3670697b704db2f88d513bc5cb',
+    'database.conversation_batch_purge_jobs.RunProgress.matches_segment': 'bbd11b5f41e868ebc06e1b4ddc07c5f386172fa71541cff3234284032f0101fe',
     'database.conversation_batch_purge_jobs.RunProgress.pending_segments': '86b3d882fe3c575b3a540bb00d1845c941c5256d99848c4dc89917eb707ff3cc',
     'database.conversations._PageFill._run_lean': 'b63bc3c4fea800ebe132e510332c4ec503c854a560eb5b380bd7e1d2701cbfe3',
     'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
-    'database.conversation_batch_purge_jobs._drop_segment_records': '2db3123e6e11d177d434326668969249a7fd4e0aade9788d045056fbdefe8c9d',
+    'database.conversation_batch_purge_jobs._drop_segment_records': '8b89523bc147aa3aeaa733b990ceb7da77317a9f2183aef804c23d4d8f4d7aab',
     'database.conversation_batch_purge_jobs._owes_segments': '5945da3db3e539efafe6dbc95560280683ea863b77a8e7e720ee3c2902b59c68',
-    'database.conversation_batch_purge_jobs.run_job': '2c963aa7f8692928c6d1892b87992ea3b369bbb9547b71b48a4ddb21c35cd09b',
+    'database.conversation_batch_purge_jobs.run_job': '30cd55f5ff77512e4eb12a18fc4cee78c5e6be7fdd8e3f6ba083d3b9ca018cf3',
     'database.batch_pipeline_store.promote_record_recoveries': 'ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
     'database.record_custody_receipts.prune': 'a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
     'database.user_usage._s4_month_cache': '14a6b7d82ee83ec56f552ab798b0021e2342ffd920dcdbe2a8e851ec32029f28',
@@ -460,6 +461,21 @@ _add(
         'database.conversation_batch_purge_jobs.segment_records',
         base={'job': 'shape-job', 'namespace': 'batch_pipeline_prod'},
         domains={'limit': [None, 20]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.conversation_batch_purge_jobs._journal_matches',
+        base={'job': 'shape-job', 'namespace': 'batch_pipeline_prod', 'segment_ids': ['shape-segment']},
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.conversation_batch_purge_jobs.RunProgress.matches_segment',
+        covered_by=('database.conversation_batch_purge_jobs._journal_matches',),
+        reason='delegates exact segment membership to the per-job journal lookup',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversation_batch_purge_jobs.RunProgress.matches_segment'],
     )
 )
 _add(

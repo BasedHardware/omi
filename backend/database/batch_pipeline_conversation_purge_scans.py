@@ -22,6 +22,7 @@ from google.cloud import firestore
 
 from config.policy.kill_switches import kill_switch
 from database import conversation_batch_purge_jobs as jobs
+from database import conversation_purge_budget as purge_budget
 from database import legal_holds, rpc_deadline
 from database._client import get_firestore_client, run_transactional
 from database.batch_pipeline_conversation_purge import (
@@ -58,7 +59,8 @@ def _in_transaction(client: Any, body: Callable[[Any], Any]) -> Any:
     def run(transaction):
         return body(transaction)
 
-    return run_transactional(client, run, transient=True)
+    attempts = 1 if purge_budget.current() is not None else 3
+    return run_transactional(client, run, transient=True, attempts=attempts)
 
 
 def enabled() -> bool:
@@ -72,12 +74,8 @@ def owner_candidates(uid: str, *, firestore_client: Any = None) -> list[Any]:
     held in memory. Overflow is served by later deliveries/groups.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    return list(
-        client.collection(jobs.COLLECTION)
-        .where(filter=firestore.FieldFilter('uid', '==', uid))
-        .limit(MAX_MEMBERS)
-        .stream()
-    )
+    query = client.collection(jobs.COLLECTION).where(filter=firestore.FieldFilter('uid', '==', uid)).limit(MAX_MEMBERS)
+    return list(query.stream(**purge_budget.stream_options()))
 
 
 def _ref(client: Any, job: str) -> Any:
@@ -316,6 +314,8 @@ class ScanProgress(jobs.RunProgress):
             if not _delegated(row, self.scan, member) or not _same_arm(row, member):
                 raise jobs.RunSuperseded()
         leader = rows[self.job]
+        if purge_budget.current() is not None and not jobs.lease_held(leader, now=_now() + timedelta(seconds=5)):
+            raise jobs.RunSuperseded()
         if leader.get('lease_generation') != self.generation or leader.get('lease_until') is None:
             raise jobs.RunSuperseded()  # A paused run cannot keep checkpointing with its retained proof token.
         for member in self.scan['members'].values():
@@ -339,12 +339,14 @@ class ScanProgress(jobs.RunProgress):
             # Keep active groups out of the bounded due queue until then.
             transaction.update(_ref(self.client, job), {**renewal, 'due_at': renewal['lease_until']})
 
-    def checkpoint(self, position: dict[str, Any], *, add_segments=None) -> None:
+    def checkpoint(self, position: dict[str, Any], *, add_segments=None, fence=None) -> None:
         if add_segments is not None:
             raise ValueError('shared discoveries must be associated with individual members')
 
         def body(transaction):
             self._owned(transaction)
+            if fence is not None:
+                fence(transaction)
             self._renew_all(transaction)
             transaction.update(self._ref(), {'owner_scan.position': position})
 
@@ -375,6 +377,9 @@ class ScanProgress(jobs.RunProgress):
             for record in jobs.segment_records(job, namespace, firestore_client=self.client)
             if record.get('segment_id')
         }
+
+    def journal_jobs(self) -> Iterable[str]:
+        return self.scan['members']
 
     def pending_segments(self, namespace: str, limit: int) -> list[str]:
         found: set[str] = set()
@@ -410,7 +415,7 @@ class ScanProgress(jobs.RunProgress):
     @contextmanager
     def unit(self) -> Iterator[Any]:
         with legal_holds.bounded_destructive_unit(
-            self.uid, kind=jobs.GATE_KIND, wait_seconds=jobs.UNIT_GATE_WAIT_SECONDS
+            self.uid, kind=jobs.GATE_KIND, wait_seconds=purge_budget.start_unit(jobs.UNIT_GATE_WAIT_SECONDS)
         ) as authority:
 
             def renew(transaction):
@@ -478,6 +483,9 @@ def run_job(
 ) -> str:
     """Existing task consumer entrypoint; incompatible/partial work stays legacy."""
     started = clock()
+    budget = purge_budget.current()
+    if budget is not None:
+        budget.charge(0)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     rpc_deadline.bind_firestore_client(client)
     with rpc_deadline.rpc_deadline(rpc_deadline.now() + budget_seconds + jobs.RUN_FINALIZE_SECONDS):
@@ -499,9 +507,11 @@ def run_job(
 
         def hand_off(outcome: str) -> str:
             try:
-                progress.finish(outcome)
+                with purge_budget.settling():
+                    progress.finish(outcome)
             except jobs.RunSuperseded:
-                handback(client, job, scan['epoch'], scan['token'])
+                with purge_budget.settling():
+                    handback(client, job, scan['epoch'], scan['token'])
                 return 'superseded'
             return outcome
 
@@ -515,26 +525,33 @@ def run_job(
             purge_conversations(scan['uid'], members, progress, clock=clock, check_tombstones=False)
             if any(progress.pending_segments(namespace, 1) for namespace in NAMESPACES):
                 raise RuntimeError('owner scan finished with segment erasure still recorded')
-            if not progress.finish('completed'):
-                raise jobs.RunSuperseded()
+            with purge_budget.settling():
+                if not progress.finish('completed'):
+                    raise jobs.RunSuperseded()
         except (jobs.RunSuperseded, PurgeIntentMissing):
-            handback(client, job, scan['epoch'], scan['token'])
+            with purge_budget.settling():
+                handback(client, job, scan['epoch'], scan['token'])
             return 'superseded'
         except legal_holds.LegalHoldActive:
             return hand_off('held')
         except ArtifactUploadPending:
             return hand_off('artifact_pending')
-        except PurgeCheckpointed:
+        except (PurgeCheckpointed, purge_budget.WorkLimit):
+            if purge_budget.current() is not None and not progress._checkpointed:
+                hand_off('failed')
+                raise
             return hand_off('checkpointed')
         except BaseException as error:
             outcome = (
                 'busy' if isinstance(error, Exception) and jobs.lost_gate_to_peer(error, scan['uid']) else 'failed'
             )
             try:
-                progress.finish(outcome)
+                with purge_budget.settling():
+                    progress.finish(outcome)
             except jobs.RunSuperseded:
                 try:
-                    handback(client, job, scan['epoch'], scan['token'])
+                    with purge_budget.settling():
+                        handback(client, job, scan['epoch'], scan['token'])
                 except Exception:
                     pass  # Preserve the original failure; finite leases permit redrive.
             except Exception:
