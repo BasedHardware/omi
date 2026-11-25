@@ -61,7 +61,10 @@ def resolve_entity(uid: str, entity_id: str, *, budget: Optional[ListReadBudget]
     if workstream and workstream.get('status') not in {'deleted', 'cancelled'}:
         from database.task_intelligence_control import get_task_workflow_control
 
-        if workstream.get('account_generation', 0) != get_task_workflow_control(uid).account_generation:
+        if (
+            workstream.get('account_generation', 0)
+            != get_task_workflow_control(uid, **budget_kwargs).account_generation
+        ):
             raise store.ReviewNotFound('Project generation changed')
         return dict(
             node,

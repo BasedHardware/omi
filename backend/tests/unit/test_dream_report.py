@@ -303,3 +303,79 @@ def test_report_reads_each_edit_target_once_per_run(client, runtime, monkeypatch
     # One gate document and one state document; the run stream and the count
     # aggregation are index reads, and no run row or target is read twice.
     assert runtime.reads[len(before) :] == [('users', UID), ('dream_users', UID)]
+
+
+def test_stalled_task_control_read_truncates_action_item_target(client, runtime, monkeypatch):
+    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '0.3')
+    seed_owner(runtime, runs=[('action-run', datetime.now(timezone.utc), ['action_items/task-one'])])
+    original_get = dream_firestore.Document.get
+
+    def stalled_control(document, transaction=None, *, timeout=None, retry=None, **kwargs):
+        if document.path == ('users', UID, 'task_intelligence_control', 'state'):
+            assert retry is FIRESTORE_NO_RETRY
+            assert timeout is not None and 0 < timeout <= 0.3
+            raise DeadlineExceeded('simulated stalled task-control read')
+        return original_get(document, transaction=transaction, timeout=timeout, retry=retry, **kwargs)
+
+    monkeypatch.setattr(dream_firestore.Document, 'get', stalled_control)
+    response = client.get('/v1/dream/runs')
+
+    assert response.status_code == 200
+    assert response.headers['x-omi-list-truncated'] == 'true'
+    assert response.json()['runs'] == []
+
+
+def test_workstream_generation_read_uses_request_budget(runtime, monkeypatch):
+    from database import task_intelligence_control
+    from utils import entity_pages
+    from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
+
+    monkeypatch.setattr(entity_pages.knowledge_graph, 'get_knowledge_node', lambda *args, **kwargs: {})
+    runtime.rows[('users', UID, 'workstreams', 'stream-one')] = {
+        'title': 'Synthetic stream',
+        'account_generation': 0,
+    }
+    budget = ListReadBudget(deadline_monotonic=time.monotonic() + 1, route='GET /v1/dream/runs')
+    original_get = dream_firestore.Document.get
+
+    def stalled_control(document, transaction=None, *, timeout=None, retry=None, **kwargs):
+        if document.path == ('users', UID, 'task_intelligence_control', 'state'):
+            assert retry is FIRESTORE_NO_RETRY
+            assert timeout is not None and 0 < timeout <= 1
+            raise DeadlineExceeded('simulated stalled workstream-control read')
+        return original_get(document, transaction=transaction, timeout=timeout, retry=retry, **kwargs)
+
+    monkeypatch.setattr(dream_firestore.Document, 'get', stalled_control)
+    with pytest.raises(ListReadBudgetExhausted):
+        entity_pages.resolve_entity(UID, 'stream-one', budget=budget)
+    assert task_intelligence_control.get_firestore_client() is runtime
+
+
+def test_stalled_historical_memory_fallback_truncates_report(client, runtime, monkeypatch):
+    from utils.memory import canonical_memory_adapter
+    from utils.memory.memory_service import MemoryService
+
+    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '0.3')
+    seed_owner(runtime, runs=[('memory-run', datetime.now(timezone.utc), ['memory_items/legacy-one'])])
+    original_read = canonical_memory_adapter.read_canonical_memory_item
+
+    def read_runtime_memory(uid, memory_id, **kwargs):
+        return original_read(uid, memory_id, db_client=runtime, **kwargs)
+
+    monkeypatch.setattr(dream_report.dream_reads, 'read_canonical_memory_item', read_runtime_memory)
+    monkeypatch.setattr(dream_report.dream_reads, 'MemoryService', lambda: MemoryService(db_client=runtime))
+    original_get = dream_firestore.Document.get
+
+    def stalled_history(document, transaction=None, *, timeout=None, retry=None, **kwargs):
+        if document.path == ('users', UID, 'memories', 'legacy-one'):
+            assert retry is FIRESTORE_NO_RETRY
+            assert timeout is not None and 0 < timeout <= 0.3
+            raise DeadlineExceeded('simulated stalled historical-memory read')
+        return original_get(document, transaction=transaction, timeout=timeout, retry=retry, **kwargs)
+
+    monkeypatch.setattr(dream_firestore.Document, 'get', stalled_history)
+    response = client.get('/v1/dream/runs')
+
+    assert response.status_code == 200
+    assert response.headers['x-omi-list-truncated'] == 'true'
+    assert response.json()['runs'] == []

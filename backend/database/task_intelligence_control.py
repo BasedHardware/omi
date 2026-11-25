@@ -1,11 +1,14 @@
 """Firestore persistence for per-user task workflow migration controls."""
 
+from typing import Optional
+
 from google.api_core.exceptions import AlreadyExists, Conflict
 
 from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID, is_development_smoke_fixture
 from database._client import get_firestore_client
 from database.read_boundary import parse_snapshot_or_none
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from utils.other.list_budget import ListReadBudget, budgeted_document_get
 
 CONTROL_COLLECTION = 'task_intelligence_control'
 CONTROL_DOCUMENT = 'state'
@@ -21,9 +24,11 @@ def _control_ref(uid: str, *, firestore_client=None):
     return database.collection('users').document(uid).collection(CONTROL_COLLECTION).document(CONTROL_DOCUMENT)
 
 
-def get_task_workflow_control(uid: str, *, firestore_client=None) -> TaskWorkflowControl:
+def get_task_workflow_control(
+    uid: str, *, firestore_client=None, budget: Optional[ListReadBudget] = None
+) -> TaskWorkflowControl:
     ref = _control_ref(uid) if firestore_client is None else _control_ref(uid, firestore_client=firestore_client)
-    snapshot = ref.get()
+    snapshot = budgeted_document_get(ref, budget)
     if snapshot.exists is not True:
         return TaskWorkflowControl()
     return parse_snapshot_or_none(TaskWorkflowControl, snapshot) or TaskWorkflowControl()

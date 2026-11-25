@@ -126,7 +126,7 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None, require_avail
         return _read_memory_record(uid, key, require_available=require_available, **budget_kwargs)
     if collection in {'action_items', 'candidates'}:
         if 'generation' not in control_cache:
-            control_cache['generation'] = get_task_workflow_control(uid).account_generation
+            control_cache['generation'] = get_task_workflow_control(uid, **budget_kwargs).account_generation
     if collection == 'action_items':
         row = action_items.get_action_item(uid, key, **budget_kwargs)
         generation = control_cache['generation']
@@ -183,7 +183,7 @@ def _read_memory_record(uid, key, *, require_available=False, budget=None):
                 return None
         if budget_check is not None:
             budget_check()
-        row = memory_item_to_memorydb(canonical) if canonical else MemoryService().fetch(uid, key)
+        row = memory_item_to_memorydb(canonical) if canonical else MemoryService().fetch(uid, key, **budget_kwargs)
     except HTTPException as exc:
         if require_available and exc.status_code == 402:
             raise AgentRecordUnavailable('Dream memory locked') from exc

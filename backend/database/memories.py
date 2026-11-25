@@ -49,7 +49,7 @@ from database import short_term_memories as short_term_db
 from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
 from utils import encryption
-from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_document_get, budgeted_get_all
 from utils.other.portability_read import current_portability_read, verified_encrypted_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
@@ -1216,12 +1216,14 @@ def delete_memories(uid: str, *, firestore_client: Any = None) -> None:
 
 
 @prepare_for_read(decrypt_func=cast(_DecryptFunc, _prepare_memory_for_read))
-def get_memory(uid: str, memory_id: str, *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
+def get_memory(
+    uid: str, memory_id: str, *, firestore_client: Any = None, budget: Optional[ListReadBudget] = None
+) -> Optional[Dict[str, Any]]:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
-    snapshot = memory_ref.get()
+    snapshot = budgeted_document_get(memory_ref, budget)
     raw: object = snapshot.to_dict()
     memory_data: Optional[Dict[str, Any]] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
     return memory_data
