@@ -518,6 +518,7 @@ and an explicit empty literal renders as `''`.
 | `EXPLICIT_CALENDAR_REQUEST_KEEP` | Default on; preserve direct put-on-calendar and add-content-to-calendar requests through short-clip and relevance thinning | backend | env | open | — | — | — | — | keep | keep | — | quality-lead |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FAIR_USE_THROTTLE_DECAY_ENABLED` | Decay expired throttle and quiet warnings on read; set off to restore restrict-only decay | backend | env | open | — | — | — | — | keep | keep | — | backend |
+| `FIRESTORE_WRITE_PROBE_ENABLED` | Default on; count committed Firestore writes by collection, op, caller and origin at the GAPIC Commit/BatchWrite boundary | backend | env | open | — | — | — | — | keep | keep | — | fswrites |
 | `FSR_KG_CITATION_INDEX` | Default on; query native reverse citations for KG node pruning; off restores the node scan | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `FSR_MAINTENANCE_COORDINATION_ENABLED` | Default on in prod independently of read-lever rollback; explicit false restores per-replica maintenance | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `FSR_SMART_MERGE_PARTITION` | Default on; partition the unbounded smart-merge discarded-barrier scan by explicit device; off restores the original scan | backend | env | open | — | — | — | — | keep | keep | — | merge-desk |
@@ -584,7 +585,6 @@ and an explicit empty literal renders as `''`.
 | `OMI_EXTERNAL_LIST_CACHE_ENABLED` | Default on unless false; Encrypted authorized external list responses; ten seconds unless collection write coverage admits a versioned cache; expiry anchored before the origin query | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `OMI_EXTERNAL_LIST_METRICS_ENABLED` | Default on unless false; Count four external list GETs and staged promote POST including auth rate-limit validation and server errors | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `OMI_EXTERNAL_LIST_SINGLE_FLIGHT_ENABLED` | Default on; coalesce simultaneous identical external-list cache misses after each request passes authorization | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
-| `OMI_FIRESTORE_WRITE_PROBE_ENABLED` | Default on; count committed Firestore writes by collection, op, caller and origin at the GAPIC Commit/BatchWrite boundary | backend | env | open | — | — | — | — | keep | keep | — | fswrites |
 | `OMI_GEMINI_OVERFLOW_ENABLED` | Enable overflow routing to Gemini | backend, llm-gateway | env | open | — | — | — | — | keep | keep | — | unowned |
 | `OMI_LIST_LEAN_SKIP_ENABLED` | Default on; conversation list page refills through a run of hidden rows stream only visibility fields and read in full only rows that may be visible. Off restores full-document refills. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
 | `OMI_MCP_MEMORY_LIST_BUDGET_ENABLED` | Default on unless false; Single mixed-view MCP REST memory scan with shared request deadline and document budget | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
@@ -1396,6 +1396,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EXPLICIT_CALENDAR_REQUEST_KEEP` — Default on; preserve direct put-on-calendar and add-content-to-calendar requests through short-clip and relevance thinning (fail: open)
 - `FAIR_USE_THROTTLE_DECAY_ENABLED` — Decay expired throttle and quiet warnings on read; set off to restore restrict-only decay (fail: open)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
+- `FIRESTORE_WRITE_PROBE_ENABLED` — Default on; count committed Firestore writes by collection, op, caller and origin at the GAPIC Commit/BatchWrite boundary (fail: open)
 - `FSR_KG_CITATION_INDEX` — Default on; query native reverse citations for KG node pruning; off restores the node scan (fail: open)
 - `FSR_MAINTENANCE_COORDINATION_ENABLED` — Default on in prod independently of read-lever rollback; explicit false restores per-replica maintenance (fail: open)
 - `FSR_SMART_MERGE_PARTITION` — Default on; partition the unbounded smart-merge discarded-barrier scan by explicit device; off restores the original scan (fail: open)
@@ -1485,7 +1486,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_EXTERNAL_LIST_CACHE_ENABLED` — Default on unless false; Encrypted authorized external list responses; ten seconds unless collection write coverage admits a versioned cache; expiry anchored before the origin query (fail: open)
 - `OMI_EXTERNAL_LIST_METRICS_ENABLED` — Default on unless false; Count four external list GETs and staged promote POST including auth rate-limit validation and server errors (fail: open)
 - `OMI_EXTERNAL_LIST_SINGLE_FLIGHT_ENABLED` — Default on; coalesce simultaneous identical external-list cache misses after each request passes authorization (fail: open)
-- `OMI_FIRESTORE_WRITE_PROBE_ENABLED` — Default on; count committed Firestore writes by collection, op, caller and origin at the GAPIC Commit/BatchWrite boundary (fail: open)
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: open)
 - `OMI_HOME_VISIBILITY_INDEX_OWNERS` — Default empty. Admit named, reconciled v3 owners to the indexed default Home read. (fail: closed)
 - `OMI_IMESSAGE_CONTACT_CARD` — Default-off sharing of a preconfigured Linq contact card. (fail: closed)

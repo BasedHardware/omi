@@ -163,6 +163,7 @@ BODY_DIGEST = {
     'utils.support.holds._events': '360ff57663deaf3c17c934276f219cce74f4a468dc28c8a1145623524625927e',
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
+    'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
     'database.conversations_v3.commit_projection': 'a769b052eeebf263a286241e7f2ec26e0fe230b73fce7556038dcf52348f61c2',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
@@ -3679,6 +3680,16 @@ for entry in (
     *batch_privacy_entries(),
     *home_feed_entries(),
     *conversations_v3_entries(),
+    CoveredByEntry(
+        'database.conversations_v3_live._recent_window_query',
+        covered_by=(
+            'database.conversations_v3_live.recent_windows',
+            'database.conversations_v3_live.request_recording_finish',
+        ),
+        reason='Builds the indexed filters; live lookup and Finish execute the query with their own field masks.',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversations_v3_live._recent_window_query'],
+    ),
     CoveredByEntry(
         'database.conversations_v3.commit_projection',
         covered_by=(

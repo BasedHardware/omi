@@ -133,6 +133,11 @@ without waiting for the batch merge and delivery. The batch record projection la
 provisional segments; once `record_projection_revision` is set the fast write is refused. Recordings
 over 20 minutes, partial records, custom STT, locked rows and private rows are skipped. Read
 `omi_conversations_v3_fast_finish_total{outcome}` and `omi_conversations_v3_fast_finish_seconds{stage}`.
+A manual finish that never starts the pass is counted in
+`omi_conversations_v3_fast_finish_skipped_total{reason}`: `mode_off`, `already_started`, or the first
+failing `fast_finish.candidate_rejection` predicate (`not_recording`, `no_manual_end`,
+`status_in_progress`, `status_processing`, `status_other`, `no_private_cloud_sync`, `protection_level`,
+`projection_revision`, `audio_partial`, `deleted`, `discarded`, `locked`, `custom_stt`).
 Five minutes of placed-speech silence is a hard window boundary. An outline's
 `resumes_previous` may undo a topic split within that interval, never rejoin
 windows across the silence boundary, even with the same people. Short socket

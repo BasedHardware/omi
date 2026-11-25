@@ -1,9 +1,11 @@
 """Execute recording-builder and sweeper query shapes without external effects."""
 
 from datetime import timedelta
+from importlib import import_module
 from unittest.mock import patch
 
 from tests.support.firestore_query_drivers import (
+    CoveredByEntry,
     DriverEntry,
     SHAPE_UID,
     FROZEN_NOW,
@@ -33,12 +35,37 @@ def _pending_source(client, combo, trial):
     )
 
 
+def _finish_source(client, combo, trial):
+    client.queue_results(
+        [
+            client.snapshot(
+                f'users/{SHAPE_UID}/conversations/source',
+                {
+                    'source': 'omi',
+                    'recording': True,
+                    'created_at': FROZEN_NOW,
+                    'started_at': FROZEN_NOW,
+                    'finished_at': FROZEN_NOW,
+                    'status': 'completed',
+                    'external_data': {'recording_session_id': 'shape-session'},
+                },
+            )
+        ]
+    )
+
+
 def _pick_none(rows, now):
     return None
 
 
 def _decode(client):
     return patch('database.conversations_v3.decode_row', side_effect=lambda uid, snapshot, **_kwargs: snapshot.to_dict())
+
+
+def _transaction_without_rpc(client):
+    # The driver loads the target under its outbound-network guard.
+    target = import_module('database.conversations_v3_live')
+    return patch.object(target.firestore, 'transactional', side_effect=lambda fn: fn)
 
 
 def entries():
@@ -93,6 +120,17 @@ def entries():
             'database.conversations_v3_live.live_window',
             base={'uid': SHAPE_UID, 'now': FROZEN_NOW, 'max_idle': timedelta(hours=2)},
             neutrals={'pick': (_pick_none, 'row selection only; no window is live, so both bands read')},
+        ),
+        DriverEntry(
+            'database.conversations_v3_live.request_recording_finish',
+            base={'uid': SHAPE_UID, 'now': FROZEN_NOW},
+            setup=_finish_source,
+            patchers=(_transaction_without_rpc,),
+        ),
+        CoveredByEntry(
+            'database.conversations_v3_live._recent_finish_sources',
+            covered_by=('database.conversations_v3_live.request_recording_finish',),
+            reason='The Finish transaction scans the same bounded source query on every call.',
         ),
         DriverEntry(
             'database.conversations_v3.merge_donors_have_tasks',
