@@ -295,3 +295,27 @@ async def test_reconcile_counts_expected_task_retries(monkeypatch, reconcile_req
     with pytest.raises(type(error)):
         await route.reconcile(body, reconcile_request, _retry=1)
     assert count._value.get() == before + 1
+
+
+@pytest.mark.asyncio
+async def test_reconcile_preserves_processing_error_when_summary_lease_release_fails(monkeypatch, reconcile_request):
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+
+    row = {'id': 'c'}
+    failure = ValueError('unexpected processing failure')
+
+    async def run(_executor, func, *_args):
+        if func is service.pending_processing:
+            return [row]
+        if func is service.leases.acquire:
+            return 'token'
+        assert func is service.leases.release
+        raise FirestoreContentionExhausted('release contention')
+
+    monkeypatch.setattr(service, 'run_blocking', run)
+    monkeypatch.setattr(service, '_process_leased', AsyncMock(side_effect=failure))
+    monkeypatch.setattr(service, 'reconcile', service.drain_processing)
+
+    with pytest.raises(ValueError) as raised:
+        await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
+    assert raised.value is failure

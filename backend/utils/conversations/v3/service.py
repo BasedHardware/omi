@@ -18,6 +18,7 @@ import hashlib
 import json
 import logging
 import re
+from sys import exception
 import time
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -225,6 +226,16 @@ def historical_stretches(eligible, now, *, since, until, internal_end=False):
     if any(not group['locked'] for group in groups):
         raise Conflict('rederive_live_open')
     return groups
+
+
+async def _release_reconcile_lease(uid, key, token):
+    primary_failure = exception()
+    try:
+        await run_blocking(db_executor, leases.release, uid, key, token)
+    except Exception as error:
+        if primary_failure is None:
+            raise
+        logger.warning('v3 reconcile lease release failed exception_type=%s', type(error).__name__)
 
 
 async def reconcile(
@@ -814,7 +825,7 @@ async def reconcile(
         metrics.RECONCILES.labels('error').inc()
         raise
     finally:
-        await run_blocking(db_executor, leases.release, uid, key, token)
+        await _release_reconcile_lease(uid, key, token)
     if blocked is not None:
         if not derive and not on_open:
             # Windows earlier passes (or earlier batches) committed still owe their notes.
@@ -1110,7 +1121,7 @@ async def drain_processing(uid):
         except FinalizationOwnedElsewhere:
             continue
         finally:
-            await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
+            await _release_reconcile_lease(uid, 'summary-' + row['id'], token)
     # Settled notes arm the conversation-created obligation; deliver after every summary lease is released.
     # Imported here: the webhook fanout's LLM/app graph must not join process_conversation's import graph,
     # which loads this module at import time (listen, pusher and sync all import it).
