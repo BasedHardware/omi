@@ -41,6 +41,7 @@ from utils.conversations.v3.triggers import enqueue, changed
 from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from database import batch_pipeline_purge, conversation_batch_purge_jobs as batch_purge_jobs, legal_holds
+from database.firestore_write_probe import suspend_committed_write_count
 from utils import cloud_tasks
 from utils.other import storage
 from models.conversation import Conversation
@@ -288,7 +289,8 @@ async def reconcile(
         if backoff and backoff > datetime.now(timezone.utc):
             metrics.RECONCILES.labels('backoff').inc()
             # Rows earlier passes committed still owe notes while the builder is parked.
-            await _drain_blocked(uid, parked)
+            with suspend_committed_write_count():
+                await _drain_blocked(uid, parked)
             return 'backoff'
     token = await run_blocking(db_executor, leases.acquire, uid, key)
     if token is None:
@@ -856,7 +858,8 @@ async def reconcile(
     if blocked is not None:
         if not derive and not on_open:
             # Windows earlier passes (or earlier batches) committed still owe their notes.
-            await _drain_blocked(uid, blocked)
+            with suspend_committed_write_count():
+                await _drain_blocked(uid, blocked)
         return 'blocked'
     if on_open:
         await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
@@ -864,7 +867,8 @@ async def reconcile(
     if derive:
         # The backfill task drains its own notes marker within its deadline.
         return 'committed'
-    await drain_processing(uid)
+    with suspend_committed_write_count():
+        await drain_processing(uid)
     if moved:
         return 'committed'
     pending = (

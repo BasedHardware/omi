@@ -156,7 +156,7 @@ def projection_writes(caller, written, skipped):
 
 RECONCILE_BILLED_WRITES = Histogram(
     'omi_conversations_v3_reconcile_billed_writes',
-    'Confirmed Firestore writes per reconcile pass including commit-hook writes',
+    'Confirmed Firestore writes per builder pass including leases and commit-hook writes',
     ['caller'],
     buckets=(0, 1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 90, 128, 256, 500),
 )

@@ -360,6 +360,16 @@ def count_committed_writes():
         _committed_writes.reset(token)
 
 
+@contextmanager
+def suspend_committed_write_count():
+    """Exclude work owned by a different stage from the current count."""
+    token = _committed_writes.set(None)
+    try:
+        yield
+    finally:
+        _committed_writes.reset(token)
+
+
 def _after(writes: list, response: Any, partial: bool) -> None:
     if partial:
         writes = _applied(writes, response)

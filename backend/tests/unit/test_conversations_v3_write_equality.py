@@ -12,6 +12,7 @@ import yaml
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 from google.cloud import firestore
 
+from config.conversations_v3 import skip_unchanged_writes_enabled
 from database import conversations_v3_write_equality as equality
 from utils.encryption import encrypt
 
@@ -48,6 +49,7 @@ def test_missing_fields_and_transforms_are_not_equal_patches():
     assert not equality.same_patch({}, {'a': firestore.DELETE_FIELD})
     assert not equality.same_patch({'a': None}, {'a': firestore.SERVER_TIMESTAMP})
     assert equality.same_patch({'a': None, 'other': 12}, {'a': None})
+    assert not equality.same_patch({'a.b': 1, 'a': {'b': 2}}, {'a.b': 1})
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
@@ -88,3 +90,9 @@ def test_sync_scrape_keeps_projection_histograms():
             assert any(
                 rule['action'] == 'keep' and re.fullmatch(rule['regex'], f'{metric}_{suffix}') for rule in relabeling
             )
+
+
+@pytest.mark.parametrize('value', ['off', 'false', 'no', '0'])
+def test_write_elision_uses_standard_kill_switch_values(monkeypatch, value):
+    monkeypatch.setenv('CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES', value)
+    assert not skip_unchanged_writes_enabled()

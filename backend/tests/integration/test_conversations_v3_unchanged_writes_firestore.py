@@ -316,3 +316,28 @@ def test_privacy_filter_change_is_persisted_before_equality(owner, confirmed_pat
     stored = card.get().to_dict()
     segments = conversations.decode_transcript_segments_blob(user.id, stored['transcript_segments'], True)
     assert 'recurring_voice_id' not in segments[0]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_histogram_excludes_notes_followup(owner, confirmed_paths):
+    client, user = owner
+    projection_pass(owner, [], [])
+    followup = user.collection('test_followup').document('notes')
+    before = metrics.RECONCILE_BILLED_WRITES.labels('builder')._sum.get()
+    confirmed_paths.clear()
+
+    async def drain(uid):
+        assert uid == user.id
+        await service.run_blocking(service.db_executor, followup.set, {'processed': True})
+
+    with (
+        patch.object(store, 'get_firestore_client', return_value=client),
+        patch.object(leases, 'get_firestore_client', return_value=client),
+        patch.object(store, 'load', return_value=({}, {}, [])),
+        patch.object(service, 'has_pending', return_value=False),
+        patch.object(service, 'drain_processing', side_effect=drain),
+    ):
+        assert await service.reconcile(user.id) == 'committed'
+
+    assert confirmed_paths == ['conversation_v3_leases/builder'] * 3 + ['test_followup/notes']
+    assert metrics.RECONCILE_BILLED_WRITES.labels('builder')._sum.get() - before == 3

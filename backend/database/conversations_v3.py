@@ -43,7 +43,7 @@ from config.record_wal_duplicate import (
     SETTLED_FIELD,
     has_retained_custody,
 )
-from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
+from config.conversations_v3 import boundary_seconds, skip_unchanged_writes_enabled, stretch_cohesion_enabled
 from utils.conversations import terminal_settled
 from utils.conversations.v3 import Conflict, metrics, policy, preview_wakes, request_log_trace_id
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
@@ -582,7 +582,7 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
     client = firestore_client or get_firestore_client()
     ref = user_conversations(client, uid).document(cid)
 
-    skip_unchanged = write_equality.enabled()
+    skip_unchanged = skip_unchanged_writes_enabled()
 
     @firestore.transactional
     def mark(tx):
@@ -741,7 +741,7 @@ def commit_projection(
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
     batch_reads = os.getenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'on').strip().lower() != 'off'
     settle_enabled = terminal_settled.serving(uid)
-    skip_unchanged = write_equality.enabled()
+    skip_unchanged = skip_unchanged_writes_enabled()
     written_count = skipped_count = 0
     # What the current transaction attempt writes, kept by reference and sized only after a failure.
     staged = {}

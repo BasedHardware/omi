@@ -1,7 +1,6 @@
 """Storage equality for the v3 projection's already-fenced snapshots."""
 
 import json
-import os
 import zlib
 from typing import Any
 from uuid import UUID
@@ -28,10 +27,6 @@ _COMPRESSED_FIELDS = {
     OPEN_LOOP_EXTRACTIONS_FIELD: OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD,
     MATCH_SCORES: None,  # This codec always compresses.
 }
-
-
-def enabled() -> bool:
-    return os.getenv('CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES', 'on').strip().lower() != 'off'
 
 
 def same_value(left: Any, right: Any) -> bool:

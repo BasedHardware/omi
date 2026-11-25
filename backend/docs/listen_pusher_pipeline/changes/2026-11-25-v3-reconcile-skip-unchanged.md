@@ -14,4 +14,5 @@ can recover a pending marker when a minute task has already completed.
 Set `CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES=off` to restore unconditional writes.
 `omi_conversations_v3_projection_rows` records written and skipped rows before commit hooks by
 caller. `omi_conversations_v3_reconcile_billed_writes` records confirmed writes after those hooks,
-including lease writes, when the Firestore write probe is enabled.
+including lease writes, when the Firestore write probe is enabled. Downstream notes processing
+uses separate write attribution.
