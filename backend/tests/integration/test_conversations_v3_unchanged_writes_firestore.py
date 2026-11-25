@@ -371,17 +371,18 @@ async def test_reconcile_histogram_counts_one_recursive_chain_and_excludes_notes
     observe.assert_called_once_with(6)
 
 
-def test_reconcile_repairs_equal_but_unreadable_home_display(owner, confirmed_paths):
+@pytest.mark.parametrize('legacy_plaintext', [False, True], ids=['oversized', 'legacy-plaintext'])
+def test_reconcile_rewrites_display_that_cannot_be_elided(owner, confirmed_paths, legacy_plaintext):
     _, user = owner
     rows = projection_rows(1)
     projection_pass(owner, rows, [])
     card = user.collection('conversations').document('card-0')
     display = reveal_display(user.id, card.get().to_dict()[DISPLAY])
     assert display is not None
-    oversized = encrypt(' ' * 7000 + json.dumps(display), user.id)
-    assert len(oversized) > 8192
-    assert reveal_display(user.id, oversized) is None
-    card.update({DISPLAY: oversized})
+    plaintext = json.dumps(display)
+    stored = plaintext if legacy_plaintext else encrypt(' ' * 7000 + plaintext, user.id)
+    assert reveal_display(user.id, stored) == (display if legacy_plaintext else None)
+    card.update({DISPLAY: stored})
     control = user.collection('episode_links').document(CONTROL)
     control.set({'ready': True}, merge=True)
     generation = control.get().to_dict()['generation']
@@ -389,7 +390,12 @@ def test_reconcile_repairs_equal_but_unreadable_home_display(owner, confirmed_pa
 
     projection_pass(owner, rows, [])
 
-    assert reveal_display(user.id, card.get().to_dict()[DISPLAY]) == display
+    rewritten = card.get().to_dict()[DISPLAY]
+    assert rewritten != stored
+    decrypted = decrypt(rewritten, user.id)
+    assert decrypted != rewritten
+    assert json.loads(decrypted) == display
+    assert reveal_display(user.id, rewritten) == display
     assert 'conversations/card-0' in confirmed_paths
     assert 'episode_links/card-0' in confirmed_paths
     assert control.get().to_dict()['ready'] is False

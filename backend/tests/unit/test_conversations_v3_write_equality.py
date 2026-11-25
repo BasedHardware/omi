@@ -114,11 +114,19 @@ def test_home_display_must_be_servable_even_when_the_stored_field_matches():
     oversized = encrypt(' ' * 7000 + json.dumps(display), uid)
 
     assert reveal_display(uid, planned['home_display']) == display
-    for unreadable in (oversized, json.dumps(display)):
-        assert reveal_display(uid, unreadable) is None
-        stored = {'home_display': unreadable}
-        assert not equality.same_conversation(uid, stored, planned)
-        assert not equality.same_conversation(uid, stored, stored)
+    assert reveal_display(uid, oversized) is None
+    stored = {'home_display': oversized}
+    assert not equality.same_conversation(uid, stored, planned)
+    assert not equality.same_conversation(uid, stored, stored)
+
+
+def test_home_reader_serves_legacy_plaintext_that_reconcile_must_rewrite():
+    uid = 'synthetic'
+    display = {'schema': SCHEMA, 'title': 'same'}
+    plaintext = json.dumps(display)
+    ciphertext = encrypt(plaintext, uid)
+    assert reveal_display(uid, plaintext) == reveal_display(uid, ciphertext) == display
+    assert not equality.same_conversation(uid, {'home_display': plaintext}, {'home_display': ciphertext})
 
 
 @pytest.mark.parametrize(

@@ -180,6 +180,14 @@ def _generated_version(value: Any) -> bool:
         return False
 
 
+def _display_accepted_for_skip(uid: str, blob: Any) -> dict | None:
+    display = reveal_display(uid, blob)
+    # Serving accepts legacy plaintext JSON. Reconcile should replace it with ciphertext.
+    if display is None or not isinstance(blob, str) or decrypt(blob, uid) == blob:
+        return None
+    return display
+
+
 def same_conversation(uid: str, stored: dict, planned: dict) -> bool:
     # The commit hook generates a new version only when a conversation write occurs.
     # Its invalidation bit is meaningful and must still match what that write would produce.
@@ -193,8 +201,8 @@ def same_conversation(uid: str, stored: dict, planned: dict) -> bool:
     if before.keys() != after.keys():
         return False
     if DISPLAY in after:
-        stored_display = reveal_display(uid, before[DISPLAY])
-        planned_display = reveal_display(uid, after[DISPLAY])
+        stored_display = _display_accepted_for_skip(uid, before[DISPLAY])
+        planned_display = _display_accepted_for_skip(uid, after[DISPLAY])
         if stored_display is None or planned_display is None:
             return _write_on_uncertainty()
         if not same_value(stored_display, planned_display):
