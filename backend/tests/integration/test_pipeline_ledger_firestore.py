@@ -142,7 +142,7 @@ def test_delete_conversation_removes_the_sibling_ledger_row(client, monkeypatch)
 def test_account_erasure_removes_the_pipeline_ledger(client, monkeypatch):
     from types import SimpleNamespace
 
-    from database import user_data_deletion
+    from database import conversation_finalization_jobs, conversation_quiet_checks, user_data_deletion
     from database._client import delete_collection_recursive
 
     monkeypatch.setenv('PIPELINE_LEDGER', 'on')
@@ -155,8 +155,14 @@ def test_account_erasure_removes_the_pipeline_ledger(client, monkeypatch):
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: client)
     monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda _uid, my_apps: [])
     monkeypatch.setattr(user_data_deletion, 'delete_generic_cache', lambda *_a, **_kw: None)
-    monkeypatch.setattr(user_data_deletion, 'stop_quiet_checks_for_account', lambda *_a, **_kw: None)
     monkeypatch.setattr(user_data_deletion, 'generation_ref', lambda _ref: SimpleNamespace(delete=lambda: None))
+
+    jobs = client.collection('conversation_finalization_jobs')
+    jobs.document('ordinary').set({'uid': uid, 'conversation_id': capture_id, 'status': 'pending'})
+    jobs.document('quiet').set({'uid': uid, 'kind': 'listen_quiet_check'})
+    jobs.document('merge').set({'uid': uid, 'kind': 'conversation_merge'})
+    jobs.document('unrelated').set({'uid': 'another-account'})
+    client.collection('account_deletions').document(uid).set({'wipe_status': 'wiping'})
 
     result = user_data_deletion.purge_user_subtree(
         uid, client, lambda sub, **kw: delete_collection_recursive(sub, client=client)
@@ -164,6 +170,23 @@ def test_account_erasure_removes_the_pipeline_ledger(client, monkeypatch):
 
     assert result['status'] == 'ok'
     assert _ledger(client, uid, capture_id) is None
+
+    assert [job.id for job in jobs.stream()] == ['unrelated']
+
+    # Model a stale upstream write recreating the conversation after the sweep.
+    _conversation_ref(client, uid, capture_id).set(
+        {'status': 'in_progress', 'source': 'omi', 'has_content': True, 'transcript_segments': [{'text': 'fixture'}]}
+    )
+    intent = conversation_finalization_jobs.create_or_get_finalization_intent(
+        uid,
+        capture_id,
+        requires_byok=False,
+        finalization_admission=lambda _: {'accepted': True, 'terminal': False, 'reason': 'fixture', 'fanout_key': 'f'},
+        firestore_client=client,
+    )
+    assert intent['status'] == 'refused_account_deleting'
+    assert conversation_quiet_checks.arm_quiet_check(uid, capture_id, 120, firestore_client=client) is None
+    assert [job.id for job in jobs.stream()] == ['unrelated']
 
 
 def test_delayed_ledger_write_does_not_recreate_after_source_delete(client, monkeypatch):
