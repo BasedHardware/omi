@@ -123,6 +123,18 @@ def test_deleted_account_declines(poll):
     assert client.get('/v2/sync-local-files/retired').status_code == 404
 
 
+@pytest.mark.parametrize('owner', ['owner', 'someone-else'])
+def test_metadata_skip_preserves_retired_handle_ownership(poll, monkeypatch, owner):
+    client, database = poll
+    custody(database, owner=owner)
+    if owner != 'owner':
+        database.collection('sync_retired_handle_owners').document('owner').create({'enabled': True})
+    database.collection('account_deletions').document('owner').create({'wipe_status': 'completed'})
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_content_free_status_skip":100}')
+    response = client.get('/v2/sync-local-files/retired')
+    assert response.status_code == (200 if owner == 'owner' else 404)
+
+
 def test_lookup_failure_fails_open_to_404(poll, monkeypatch):
     client, database = poll
     custody(database)

@@ -17,6 +17,7 @@ from database.batch_pipeline_privacy import (
     assert_batch_write_allowed,
     BatchPrivacyBlocked,
     privacy_owner_key,
+    skip_content_free_status_gate,
     read_batch_owner_snapshot,
 )
 from database.firestore_read_origin import read_origin
@@ -338,13 +339,14 @@ def read_status(client, namespace, uid, job_id):
             return None
         if receipt.get('schema') != SCHEMA or receipt.get('version') != VERSION:
             raise HandoffConflict('unsupported custody receipt schema')
-        assert_batch_write_allowed(
-            client,
-            tx,
-            uid,
-            conversation_ids=(receipt['conversation_id'],),
-            expected_generation=receipt['privacy_generation'],
-        )
+        if not skip_content_free_status_gate(uid):
+            assert_batch_write_allowed(
+                client,
+                tx,
+                uid,
+                conversation_ids=(receipt['conversation_id'],),
+                expected_generation=receipt['privacy_generation'],
+            )
         return status(receipt)
 
     return run_transactional(client, read)

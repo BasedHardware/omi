@@ -37,8 +37,13 @@ from typing import Any
 
 from google.cloud import firestore
 
+from database.privacy_check_metrics import BatchPrivacyPath, with_batch_privacy_path
 from database._client import get_firestore_client
-from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.batch_pipeline_privacy import (
+    BatchPrivacyBlocked,
+    assert_batch_write_allowed,
+    skip_content_free_status_gate,
+)
 from utils.observability.fallback import record_fallback
 from utils.sync.stage import collection_name
 
@@ -60,12 +65,13 @@ def _valid_id(value: object, limit: int) -> bool:
     return isinstance(value, str) and 0 < len(value) <= limit and '/' not in value and value.strip() == value
 
 
+@with_batch_privacy_path(BatchPrivacyPath.SYNC_STATUS)
 def get_retired_handle_ack(job_id: str, uid: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
     """Terminal archival status for an admitted owner's custody handle, else None.
 
     Called only when Redis has no job and no durable completion was proven.
-    Unknown handles, other owners, unadmitted owners, malformed records and
-    privacy-fenced accounts all decline, so the route keeps its 404.
+    Unknown handles, other owners, unadmitted owners and malformed records
+    all decline, so the route keeps its 404.
     """
     if not retired_handle_ack_enabled():
         return None
@@ -85,9 +91,8 @@ def get_retired_handle_ack(job_id: str, uid: str, *, firestore_client: Any = Non
         admitted = owner.to_dict() if getattr(owner, 'exists', False) else None
         if not isinstance(admitted, dict) or admitted.get('enabled') is not True:
             return None
-        # Same account fence as durable completion: a deleted or blocked
-        # account never receives a synthetic terminal status.
-        assert_batch_write_allowed(client, transaction, uid, conversation_ids=())
+        if not skip_content_free_status_gate(uid):
+            assert_batch_write_allowed(client, transaction, uid, conversation_ids=())
         return {
             'job_id': job_id,
             'status': 'completed',

@@ -120,6 +120,13 @@ def read_batch_owner_snapshot(
         )
 
 
+def skip_content_free_status_gate(uid: str) -> bool:
+    """Caller must have checked ownership and proven a metadata-only, read-only response."""
+    skipped = lever_enabled('bpp_content_free_status_skip', uid)
+    metrics.status_gate(skipped=skipped)
+    return skipped
+
+
 @metrics.with_batch_plan
 def assert_batch_write_allowed(
     client: Any,

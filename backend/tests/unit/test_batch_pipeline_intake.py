@@ -233,6 +233,55 @@ def test_status_is_durable_and_completed_result_is_authoritative(cohort):
     assert error.value.status_code == 403
 
 
+@pytest.mark.parametrize(
+    ('skip', 'state', 'with_result', 'allowed'),
+    [
+        (False, 'ready', False, False),
+        (True, 'ready', False, True),
+        (True, 'dead', False, False),
+        (True, 'committed', True, False),
+    ],
+)
+def test_privacy_skip_is_limited_to_read_only_metadata(cohort, monkeypatch, skip, state, with_result, allowed):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from tests.unit.test_batch_pipeline_scheduler import MemoryTransaction
+
+    store = MemoryStore()
+    submit(store, *proposal())
+    job = store.rows['jobs', 'segment']
+    job.update(state=state, merge_pending=True)
+    if with_result:
+        ledger = store.rows['content', 'synthetic-owner/content']
+        ledger.update(
+            status='completed',
+            result={
+                'new_memories': ['conversation'],
+                'updated_memories': [],
+                'failed_segments': 0,
+                'total_segments': 1,
+                'errors': [],
+            },
+        )
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', f'{{"bpp_content_free_status_skip":{100 if skip else 0}}}')
+
+    def account_deleted(*args, **kwargs):
+        raise BatchPrivacyBlocked('account_deleted')
+
+    monkeypatch.setattr(MemoryTransaction, 'check_privacy', account_deleted)
+    with pytest.raises(Exception) as foreign:
+        durable_status(store, 'foreign-owner', 'bp_first')
+    assert foreign.value.status_code == 403
+
+    if allowed:
+        status = durable_status(store, 'synthetic-owner', 'bp_first')
+        assert status['status'] == 'queued'
+        assert status['result'] is None
+    else:
+        with pytest.raises(BatchPrivacyBlocked, match='account_deleted'):
+            durable_status(store, 'synthetic-owner', 'bp_first')
+    assert store.rows['jobs', 'segment']['state'] == state
+
+
 def test_legacy_poll_has_no_new_store_or_stage_lookup(monkeypatch):
     def forbidden(*args):
         raise AssertionError('legacy poll touched durable batch store')

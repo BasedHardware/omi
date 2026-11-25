@@ -11,7 +11,11 @@ from google.api_core.exceptions import Aborted
 import pytest
 
 from config import firestore_read_levers as levers
-from database import batch_pipeline_privacy as privacy, batch_pipeline_store as storage
+from database import (
+    batch_pipeline_privacy as privacy,
+    batch_pipeline_store as storage,
+    privacy_check_metrics as metrics,
+)
 from database.batch_privacy_attempt import batch_privacy_attempt, current_attempt
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.sync import completed_status
@@ -54,6 +58,22 @@ def database():
             SOURCE_PATH: {'id': 'source', 'record_lane_owner': 'batch_live_v1', 'private_cloud_sync_enabled': True},
         }
     )
+
+
+def test_privacy_read_attribution_counts_collections_and_restores_entry_point():
+    client = database()
+    source = metrics.BatchPrivacyPath.PROJECTION_PREPARE
+    names = ('account_deletions', 'users', 'batch_pipeline_privacy', 'deleted_conversations', 'conversations')
+    labels = [(source, name, 'live') for name in names]
+    before = [metrics.BATCH_PATH_READS.labels(*label)._value.get() for label in labels]
+    checks = metrics.BATCH_PATH_CHECKS.labels(source, 'live')._value
+    previous_checks = checks.get()
+    with metrics.batch_privacy_path(source):
+        privacy.assert_batch_write_allowed(client, client.transaction(), UID, conversation_ids=('source',))
+    assert [metrics.BATCH_PATH_READS.labels(*label)._value.get() for label in labels] == [n + 1 for n in before]
+    assert checks.get() == previous_checks + 1
+    privacy.assert_batch_write_allowed(client, client.transaction(), UID)
+    assert checks.get() == previous_checks + 1
 
 
 def enabled(monkeypatch, on=True):
