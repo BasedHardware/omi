@@ -25,7 +25,11 @@ from config.batch_pipeline import (
 from config.policy import resolve_batch_policy
 from config.record_gap_fill import gap_fill_enabled
 from config.record_wal_duplicate import MERGE_TARGET_FIELD, RECEIPT_FIELD
-from config.batch_pipeline_coverage_wait import coverage_wait_memo_enabled, record_wait_memo_first_enabled
+from config.batch_pipeline_coverage_wait import (
+    coverage_wait_memo_enabled,
+    coverage_wait_retry_after_seconds,
+    record_wait_memo_first_enabled,
+)
 from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_store import FirestoreStore
@@ -111,7 +115,11 @@ def _pending(reason: RecordUploadWait, record: str | None = None, *, path: str =
         content={
             'code': 'record_capture_pending',
             'detail': 'Retain local audio until the registered record is complete',
-            'retry_after_seconds': RECORD_WAIT_CACHE_SECONDS,
+            'retry_after_seconds': (
+                coverage_wait_retry_after_seconds()
+                if path == 'coverage' and memo == 'hit'
+                else RECORD_WAIT_CACHE_SECONDS
+            ),
         },
     )
 
@@ -186,7 +194,10 @@ def _coverage_wait_key(uid, conversation_id, content_id, jobs, upload_identity):
     # content_id already hashes each uploaded basename (capture timestamp and
     # codec) plus its bytes, without decoding. record_identity is stable for the
     # conversation, NOT a revision: hash the current jobs too, so added units or
-    # changed artifact references/timing invalidate immediately. Existing reads
+    # changed artifact references/timing invalidate immediately. The audio_uri
+    # pins an immutable GCS generation. Its retained manifest, if any, also
+    # pins source generations and authenticates the decoded PCM by digest. A
+    # replacement at the same object name needs a new URI in the job. Existing reads
     # supply all inputs; no extra Firestore lookup or local file read is needed.
     # ``upload_identity`` keeps the key sensitive to the upload as well: a second,
     # different WAL for the same record must never inherit this one's miss.
