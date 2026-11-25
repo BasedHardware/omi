@@ -1917,17 +1917,11 @@ def test_backend_listen_rollout_wait_can_cover_a_real_rollout():
     )
 
 
-@pytest.mark.parametrize(
-    ('directory', 'pattern'),
-    [
-        pytest.param('backend/scripts', '*.py', marks=pytest.mark.slow),
-        ('infra/rollout', '**/*.py'),
-        ('.github/scripts', '**/*.py'),
-    ],
-)
-def test_deploy_script_argparse_percent_escapes(directory, pattern):
-    # Deploy run 42177595382: Python 3.14 rejects bare % while building the parser.
+@pytest.fixture(scope='module')
+def deploy_script_argparse_literals(request):
+    directory, pattern = request.param
     paths = sorted((REPOSITORY_ROOT / directory).glob(pattern))
+    literals = []
     for path in paths:
         source = path.read_text(encoding='utf-8')
         if '%' not in source:
@@ -1944,5 +1938,21 @@ def test_deploy_script_argparse_percent_escapes(directory, pattern):
                     continue
                 for value in ast.walk(keyword.value):
                     if isinstance(value, ast.Constant) and isinstance(value.value, str):
-                        remainder = re.sub(r'%%|%\([^)]+\)s', '', value.value)
-                        assert '%' not in remainder, f'{path}:{value.lineno}: escape literal percent as %%'
+                        literals.append((path, value.lineno, value.value))
+    return literals
+
+
+@pytest.mark.parametrize(
+    'deploy_script_argparse_literals',
+    [
+        pytest.param(('backend/scripts', '*.py'), marks=pytest.mark.slow, id='backend/scripts-*.py'),
+        pytest.param(('infra/rollout', '**/*.py'), id='infra/rollout-**/*.py'),
+        pytest.param(('.github/scripts', '**/*.py'), id='.github/scripts-**/*.py'),
+    ],
+    indirect=True,
+)
+def test_deploy_script_argparse_percent_escapes(deploy_script_argparse_literals):
+    # Deploy run 42177595382: Python 3.14 rejects bare % while building the parser.
+    for path, lineno, literal in deploy_script_argparse_literals:
+        remainder = re.sub(r'%%|%\([^)]+\)s', '', literal)
+        assert '%' not in remainder, f'{path}:{lineno}: escape literal percent as %%'
