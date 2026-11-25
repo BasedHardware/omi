@@ -1502,23 +1502,6 @@ _add(
         ),
     )
 )
-
-
-def _sync_stage(_fs: Any) -> Any:
-    # Ledger collections are stage-scoped; with no stage there is no ledger and no query.
-    import os
-
-    return unittest.mock.patch.dict(os.environ, {'OMI_ENV_STAGE': 'prod'})
-
-
-for _fn in ('uploads_for_conversations', 'staging_job_ids', 'owed_batch_segments'):
-    _add(
-        DriverEntry(
-            f'database.sync_ledger_sources.{_fn}',
-            base={'uid': UID, 'conversation_ids': ['conv-1']},
-            patchers=(_sync_stage,),
-        )
-    )
 _add(
     DriverEntry(
         'database.recording_speakers.scope_conversation_ids',

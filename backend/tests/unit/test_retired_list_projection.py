@@ -41,7 +41,11 @@ def test_account_erasure_clears_retired_list_data_even_when_user_root_is_missing
         'get_data_plane_firestore_client',
         lambda: SimpleNamespace(
             collection=lambda name: SimpleNamespace(
-                document=lambda key: SimpleNamespace(collections=lambda: [], delete=lambda: None)
+                document=lambda key: SimpleNamespace(
+                    collections=lambda: [],
+                    delete=lambda: None,
+                    collection=lambda _: SimpleNamespace(list_documents=lambda: []),
+                )
             )
         ),
     )
