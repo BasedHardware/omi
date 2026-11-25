@@ -13094,6 +13094,15 @@ export interface OmiApiPaths {
         "422": SyncRecoveryWindowExceededResponse | SyncRequestValidationErrorResponse;
       };
     };
+    put: {
+      operationId: "check_sync_retry_v2_sync_local_files_put";
+      responses: {
+        "204": void;
+        "401": void;
+        "422": HTTPValidationError;
+        "503": void;
+      };
+    };
   };
   "/v2/sync-local-files/{job_id}": {
     get: {
@@ -23940,6 +23949,28 @@ export async function sync_local_files_v2_v2_sync_local_files_post(query: { conv
   return;
 }
 
+export async function check_sync_retry_v2_sync_local_files_put(header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_Omi_Wal_Retry?: string | null, authorization?: string, X_App_Version?: string }, body: SyncCaptureManifestRequest, init?: OmiApiClientInit): Promise<void> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/sync-local-files`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PUT",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_Omi_Wal_Retry !== undefined ? { "X-Omi-Wal-Retry": String(header.X_Omi_Wal_Retry) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return;
+}
+
 export async function get_sync_job_status_v2_sync_local_files__job_id__get(path: { job_id: string }, query: { surface_open?: boolean }, header: { X_Omi_Custody_Repair_Protocol?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SyncJobStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-local-files/${path.job_id}`;
@@ -24556,4 +24587,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 559 client methods generated.
+// Total: 560 client methods generated.
