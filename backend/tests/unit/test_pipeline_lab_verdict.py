@@ -117,7 +117,7 @@ def fake_runs(monkeypatch):
     queue: list[dict] = []
     calls: list[dict] = []
 
-    def run_one(path, out, peers, *, timeout, clock='frozen', isolation=None, arm=None):
+    def run_one(path, out, peers, *, timeout, clock='frozen', isolation=None, arm=None, stt_args=()):
         row = queue.pop(0) if queue else result()
         calls.append({'out': out, 'isolation': isolation, 'arm': arm})
         (out / 'result.json').write_text(json.dumps(row))

@@ -190,9 +190,9 @@ def local_stack(work: Path) -> Iterator[Peers]:
 
 
 def stack_dir() -> Path:
-    from testing.pipeline_lab.stack.config import LabStackConfig
+    from testing.pipeline_lab.scenario.paths import scenario_lab_root
 
-    return LabStackConfig.from_env().lab_root / 'scenario-stack'
+    return scenario_lab_root() / 'scenario-stack'
 
 
 def _pid_command(pid: int) -> str:
@@ -430,9 +430,10 @@ def run_one(
     clock: str = 'frozen',
     isolation: Optional[Isolation] = None,
     arm: Optional[Arm] = None,
+    stt_args: Sequence[str] = (),
 ) -> dict[str, Any]:
     child = {**peers, **(isolation.env() if isolation else {})}
-    args = ['--file', str(path.resolve()), '--out', str(out), '--clock', clock]
+    args = ['--file', str(path.resolve()), '--out', str(out), '--clock', clock, *stt_args]
     if arm is None:
         env = {**os.environ, **child}
         command, cwd = [sys.executable, '-m', MODULE, *args], BACKEND
@@ -506,6 +507,14 @@ def format_report(result: dict[str, Any]) -> str:
         )
     if result.get('fast_finish'):
         lines.append('  fast finish: ' + ', '.join(f'{k}={v}' for k, v in result['fast_finish'].items()))
+    for row in (result.get('audio') or {}).get('recordings', []):
+        lines.append(
+            f'  audio {row["label"]}: {row["audio_file"]} {row["audio_seconds"]:g}s, {row["source"]} cassette '
+            f'{row["cassette"]} ({row["provider"]}/{row["model"]}, {row["origin"]}), {row["words"]} words, '
+            f'driver {row["driver"]}'
+        )
+        lines.append('    product: ' + ', '.join(row['product']))
+        lines.append('    stand-in: ' + ', '.join(row['simulated']))
     if result.get('stand_ins'):
         lines.append('  stand-ins used: ' + ', '.join(f'{k}x{v}' for k, v in result['stand_ins'].items()))
     if result.get('finish_target') is not None or result.get('checks'):
@@ -598,6 +607,7 @@ def run_set(
     arm: Optional[Arm] = None,
     identity: Optional[dict[str, Any]] = None,
     report=None,
+    stt_args: Sequence[str] = (),
 ) -> RunSet:
     """Run every scenario ``repeat`` times, ``jobs`` at a time, each isolated; write ``root``'s layout."""
     if jobs < 1 or repeat < 1:
@@ -624,7 +634,16 @@ def run_set(
         out = job.out(root)
         out.mkdir(parents=True, exist_ok=True, mode=0o700)
         with isolated_run(peers, slots, timeout + LEASE_GRACE) as isolation:
-            result = run_one(job.path, out, peers.env(), timeout=timeout, clock=clock, isolation=isolation, arm=arm)
+            result = run_one(
+                job.path,
+                out,
+                peers.env(),
+                timeout=timeout,
+                clock=clock,
+                isolation=isolation,
+                arm=arm,
+                stt_args=stt_args,
+            )
         with lock:
             results[(job.name, job.repeat)] = result
             runs.append(
@@ -670,6 +689,7 @@ def run_set(
         'jobs': jobs,
         'repeat': repeat,
         'clock': clock,
+        'stt': stt_args[1] if len(stt_args) > 1 else 'replay',
         'isolation': {
             'stack': peers.mode,
             'firestore': peers.firestore,
@@ -694,7 +714,10 @@ def run_files(
     clock: str = 'frozen',
     jobs: int = 1,
     repeat: int = 1,
+    stt: str = 'replay',
+    stt_budget_usd: Optional[float] = None,
 ) -> int:
+    stt_args = ['--stt', stt] + (['--stt-budget-usd', str(stt_budget_usd)] if stt_budget_usd is not None else [])
     paths = [resolve(name) for name in names]
     for path in paths:
         load_scenario(path)  # fail fast on a malformed file, before the stack starts
@@ -714,7 +737,9 @@ def run_files(
 
     with local_stack(root) as peers:
         stack_seconds = round(time.perf_counter() - started, 1)
-        done = run_set(paths, root, peers, timeout=timeout, clock=clock, jobs=jobs, repeat=repeat, report=report)
+        done = run_set(
+            paths, root, peers, timeout=timeout, clock=clock, jobs=jobs, repeat=repeat, report=report, stt_args=stt_args
+        )
     total = round(time.perf_counter() - started, 1)
     if as_json:
         print(json.dumps(done.verdict))

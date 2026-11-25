@@ -108,6 +108,7 @@ class ScenarioOps(ProductV3Ops):
         self.checkpoints: dict[int, dict[str, Any]] = {}
         self._transcribing: Optional[Recording] = None
         self.stand_ins: dict[str, int] = {}
+        self.stt_sources: dict[str, str] = {}  # label -> cassette source, for audio_file recordings
 
     # ---- seams installed for the run ----------------------------------------------------------
 
@@ -177,6 +178,9 @@ class ScenarioOps(ProductV3Ops):
                 },
             )
         return row
+
+    def _stt(self, rec: Recording) -> dict[str, str]:
+        return {'stt': self.stt_sources[rec.label]} if rec.label in self.stt_sources else {}
 
     def _wake(self, uid: str, rec: Recording) -> None:
         from utils.conversations.v3 import triggers
@@ -277,7 +281,7 @@ class ScenarioOps(ProductV3Ops):
             self._ref(uid, rec).update, {'record_projection_revision': PROJECTION_REVISION, 'has_content': True}
         )
         await asyncio.to_thread(self._wake, uid, rec)
-        return {'outcome': 'landed' if wrote is not False else 'refused', 'words': rec.words()}
+        return {'outcome': 'landed' if wrote is not False else 'refused', 'words': rec.words(), **self._stt(rec)}
 
     async def _on_sync(self, uid: str, rec: Recording) -> dict[str, Any]:
         self._stand_in(STAND_IN_SYNC)
@@ -287,7 +291,7 @@ class ScenarioOps(ProductV3Ops):
             self._ref(uid, rec).update, {'record_projection_revision': PROJECTION_REVISION, 'has_content': True}
         )
         await asyncio.to_thread(self._wake, uid, rec)
-        return {'outcome': 'recording' if recording else 'legacy', 'words': rec.words()}
+        return {'outcome': 'recording' if recording else 'legacy', 'words': rec.words(), **self._stt(rec)}
 
     async def _on_checkpoint(self, uid: str, event: ScenarioEvent) -> dict[str, Any]:
         check = self.scenario.checks[event.check_index or 0]
@@ -319,5 +323,6 @@ class ScenarioOps(ProductV3Ops):
             flags = self._flags(uid, rec)
             raw = self._raw(uid, rec)
             claims = raw.get('claims') or []
-            out.append({'label': rec.label, 'lane': rec.lane, 'words': rec.words(), 'claims': len(claims), **flags})
+            row = {'label': rec.label, 'lane': rec.lane, 'words': rec.words(), 'claims': len(claims), **flags}
+            out.append({**row, **self._stt(rec)})
         return out

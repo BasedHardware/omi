@@ -59,7 +59,7 @@ def fake_sides(monkeypatch, tmp_path):
     heads: dict[str, list] = {'base': [], 'head': []}
     seen_arms = []
 
-    def run_one(path, out, peers, *, timeout, clock='frozen', isolation=None, arm=None):
+    def run_one(path, out, peers, *, timeout, clock='frozen', isolation=None, arm=None, stt_args=()):
         side = out.relative_to(out.parents[1]).parts[0]
         seen_arms.append((side, arm))
         conv = heads[side].pop(0) if heads[side] else CONV

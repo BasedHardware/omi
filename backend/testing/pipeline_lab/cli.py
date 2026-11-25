@@ -184,6 +184,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         help='run each scenario N times; outcome nondeterministic (exit 1) when result.json differs',
     )
+    scenario_run.add_argument(
+        '--stt',
+        choices=('replay', 'record-vendor', 'record-local'),
+        default='replay',
+        help='audio_file words: replay cassettes only (default); on a miss record from the vendor or a local model',
+    )
+    scenario_run.add_argument('--stt-budget-usd', type=float, help='spend cap for --stt record-vendor')
     scenario_check = scenario_sub.add_parser('check', parents=[common], help='validate files, print planned timelines')
     scenario_check.add_argument('files', nargs='+')
     scenario_stack = scenario_sub.add_parser(
@@ -554,6 +561,8 @@ def _scenario(args: argparse.Namespace, as_json: bool) -> int:
             clock=args.clock,
             jobs=args.jobs,
             repeat=args.repeat,
+            stt=args.stt,
+            stt_budget_usd=args.stt_budget_usd,
         )
     except (ScenarioError, RuntimeError) as error:
         if as_json:
