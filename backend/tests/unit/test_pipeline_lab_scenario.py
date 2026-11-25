@@ -87,9 +87,9 @@ def test_incident_scenario_keeps_the_sca_4385_shape_and_expected_failure():
 
 def test_long_gap_scenario_is_longer_than_the_silence_gap_and_reconnects_one_capture():
     parsed = load_scenario(stack.SCENARIO_DIR / 'finish_after_long_reconnect_gap.json')
-    a, b, f = (parsed.recording(x) for x in 'ABF')
+    a, b = (parsed.recording(x) for x in 'AB')
     assert parsed.gaps[0]['seconds'] == 360 > 300  # the ordinary v3 silence gap
-    assert a.origin == b.origin == f.origin and a.session != b.session
+    assert a.origin == b.origin and a.session != b.session
     assert a.sealed_at < parsed.finish.at < admission_offset(parsed, b) < a.transcript_at
     assert parsed.expected_failure['strict'] is True
 

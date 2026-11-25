@@ -1,6 +1,6 @@
 {
   "name": "finish_after_long_reconnect_gap",
-  "description": "SCA-4385 variant, synthetic. Same capture as finish_after_reconnect_late_transcript, but the stream gap between A (0-64 s) and B (424-449 s) lasts 360 s, longer than the ordinary 300 s silence gap. Only the reconnect rule (same origin and device, new session) joins A and B. A seals at 404 s, when listen gives up on the lost stream. The user taps Finish at 447 s; B's fast-finish transcript lands at 464 s and A's batch transcript at 479 s. The Finish conversation should hold A, B and F and be visible on Home.",
+  "description": "SCA-4385 variant, synthetic. The incident's capture without the sync fragment, and with a 360 s stream gap between A (0-64 s) and B (424-449 s), longer than the ordinary 300 s silence gap: only the reconnect rule (same origin and device, new session) joins A and B. A seals at 404 s, when listen gives up on the lost stream. The user taps Finish at 447 s; B's fast-finish transcript lands at 464 s and A's batch transcript at 479 s. The Finish conversation should hold A and B and be visible on Home.",
   "origins": [
     {
       "id": "O",
@@ -68,26 +68,6 @@
       "reason": "reconnect"
     }
   ],
-  "sync": [
-    {
-      "id": "F",
-      "origin": "O",
-      "audio": [
-        1.5,
-        2.7
-      ],
-      "arrives_at": 457,
-      "speech": [
-        {
-          "at": 1.5,
-          "end": 2.7,
-          "text": "Lantern harbor maple.",
-          "speaker": "SPEAKER_00",
-          "is_user": true
-        }
-      ]
-    }
-  ],
   "finish": {
     "at": 447,
     "fast_finish": true,
@@ -98,8 +78,7 @@
       "conversation_of": "@finish",
       "recordings": [
         "A",
-        "B",
-        "F"
+        "B"
       ]
     },
     {
