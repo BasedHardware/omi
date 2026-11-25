@@ -10,6 +10,7 @@ import subprocess
 
 import pytest
 
+from deploy.compose_runtime_env import compose_manifest
 from scripts import activation_check as check
 from scripts import activation_collect as collect
 
@@ -70,6 +71,28 @@ def test_correct_state_passes(manifest):
     assert not _by_status(verdict, check.MISSING) and not _by_status(verdict, check.UNKNOWN)
     # Firestore indexes are named as owned elsewhere: always unknown here, never blocking.
     assert _by_status(verdict, check.UNKNOWN, controlled=False) == {'external:firestore-indexes'}
+
+
+def test_composed_prod_stages_pass_activation_with_desktop(manifest):
+    state = _state('state-ready.json')
+    prod = compose_manifest()['environments']['prod']
+    stage = 'CONVERSATIONS_V3_STAGE'
+    requirement = next(rule for rule in manifest['env'] if rule['id'] == 'v3-stage')
+    assert 'desktop-backend' in requirement['runtimes']
+    for runtime in requirement['runtimes']:
+        if runtime == 'desktop-backend':
+            binding = prod['desktop_backend']['env'][stage]
+        elif runtime in prod['gke']:
+            key = prod['gke'][runtime]['env'][stage]['config_map']['key']
+            binding = prod['gke']['config_map']['entries'][key]
+        else:
+            binding = prod['cloud_run']['services'][runtime]['env'][stage]
+        for unit in state['services'][runtime]['serving']:
+            unit['env'][stage] = {'value': binding['value']}
+
+    verdict = check.evaluate(manifest, state)
+    assert f'env-equal:v3-stage:{stage}' in _by_status(verdict, check.SATISFIED)
+    assert verdict.verdict == check.READY and verdict.exit_code == 0
 
 
 def test_cli_exit_codes_and_text(capsys):

@@ -1,9 +1,9 @@
 # Recording-derived conversations v3
 
-The code default is `CONVERSATIONS_V3_STAGE=beta`, and the deployed source (`runtime_env/_base.yaml`)
-is `beta` again since 2026-11-18 (it held at `cohort` on 2026-11-17 while reconcile commit
-conflicts were fixed). Change the stage only there, never by a live-only env edit, which the next
-workflow deploy would revert. `CONVERSATIONS_V3=off`
+The shared source (`backend/deploy/runtime_env/_base.yaml`) sets `CONVERSATIONS_V3_STAGE=all`.
+The code default remains `beta`. Change the stage in the shared source, regenerate the runtime
+manifest, and deploy every participating runtime, including a separate desktop-backend production
+run. `CONVERSATIONS_V3=off`
 stops marking new mobile pendant documents. Stages are `cohort`, `beta`, `all`;
 `rollout_cohorts/conversations-v3` is for named qualification accounts. Admission
 needs a v3-capable app: only those builds call `GET /v1/conversations/live`, on any
