@@ -276,8 +276,35 @@ async def test_summary_route_returns_409_before_streaming_response(monkeypatch):
     monkeypatch.setattr(leases, 'acquire', lambda *a, **kw: None)
     monkeypatch.setattr(routes, 'StreamingResponse', lambda *a, **kw: pytest.fail('headers already sent'))
     with pytest.raises(HTTPException) as error:
-        await routes.conversation_summary_stream('c', 'u')
+        await routes.conversation_summary_stream(
+            'c', 'u', request=SimpleNamespace(headers={'X-Omi-Recording-Detail': '1'})
+        )
     assert error.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_summary_read_without_detail_open_serves_stored_row_without_paid_work(monkeypatch):
+    row = {
+        'id': 'c',
+        'finished_at': AT,
+        'summary_covers_through': AT - timedelta(minutes=10),
+        'structured': {'title': 'Stored'},
+    }
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(routes, 'run_blocking', blocking)
+    monkeypatch.setattr(summary, 'run_blocking', blocking)
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: row)
+    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
+    monkeypatch.setattr(service, 'reconcile', lambda *a, **kw: pytest.fail('ordinary read reconciled'))
+    monkeypatch.setattr(summary, 'prepare', lambda *a, **kw: pytest.fail('ordinary read prepared paid work'))
+
+    response = await routes.conversation_summary_stream('c', 'u')
+    (frame,) = [event async for event in response.body_iterator]
+    payload = json.loads(base64.b64decode(frame[6:].strip()))
+    assert payload['structured']['title'] == 'Stored'
 
 
 @pytest.mark.asyncio
@@ -340,11 +367,17 @@ async def test_legacy_summary_reconciles_other_v3_rows_and_rechecks_live_admissi
     monkeypatch.setattr(summary, 'prepare', prepare)
     if becomes_live:
         with pytest.raises(HTTPException) as error:
-            await routes.conversation_summary_stream('c', 'u')
+            await routes.conversation_summary_stream(
+                'c', 'u', request=SimpleNamespace(headers={'X-Omi-Recording-Detail': '1'})
+            )
         assert (error.value.status_code, error.value.detail) == (404, 'live_recap_unavailable')
         assert not prepares
     else:
-        assert (await routes.conversation_summary_stream('c', 'u')).status_code == 200
+        assert (
+            await routes.conversation_summary_stream(
+                'c', 'u', request=SimpleNamespace(headers={'X-Omi-Recording-Detail': '1'})
+            )
+        ).status_code == 200
         assert prepares == [('u', row)]
     assert reconciles == [('u', {'on_open': True, 'conversation_id': 'c'})]
 
@@ -1007,7 +1040,9 @@ async def test_explicit_summary_open_locks_configured_preview_with_live_recap_pr
     monkeypatch.setattr(service, 'reconcile', reconcile)
     monkeypatch.setattr(summary, 'prepare', prepare)
 
-    response = await routes.conversation_summary_stream('c', 'synthetic')
+    response = await routes.conversation_summary_stream(
+        'c', 'synthetic', request=SimpleNamespace(headers={'X-Omi-Recording-Detail': '1'})
+    )
     assert response.media_type == 'text/event-stream'
     assert reconciles == [(True, 'c')]
     assert prepared[0]['status'] == 'processing' and not prepared[0]['v3_unlocked']

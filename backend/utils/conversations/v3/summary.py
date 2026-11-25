@@ -132,6 +132,7 @@ async def stream(
     *,
     token=None,
     live=False,
+    allow_generation=True,
     observation: recap_telemetry.RecapObservation | None = None
 ):
     async def cohort_revoked():
@@ -161,6 +162,11 @@ async def stream(
             yield _LIVE_UNAVAILABLE
             return
         _record(observation, 'cache_hit' if cached else 'no_eligible_input')
+        yield done((cached or {}) if live else row)
+        return
+    if not allow_generation:
+        # Ordinary reads may stream the stored projection, but cannot acquire
+        # a writer or start paid work. An explicit detail open opts in above.
         yield done((cached or {}) if live else row)
         return
     token = token or await prepare(uid, row)

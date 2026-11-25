@@ -239,7 +239,12 @@ def test_redirect_during_deferred_admission_reapplies_source_constraint(monkeypa
     with patch.object(conv_router, '_get_valid_conversation_by_id', side_effect=[donor, target]) as read:
         with pytest.raises(HTTPException) as error:
             conv_router.get_conversation_by_id(
-                'c1', source='omi', include_discarded=None, uid='u1', include_translations=False
+                'c1',
+                source='omi',
+                include_discarded=None,
+                uid='u1',
+                include_translations=False,
+                request=SimpleNamespace(headers={'X-Omi-Recording-Detail': '1'}, query_params={}),
             )
 
     assert error.value.status_code == 404
@@ -247,7 +252,8 @@ def test_redirect_during_deferred_admission_reapplies_source_constraint(monkeypa
 
 
 @pytest.mark.parametrize('polling', [False, True])
-def test_detail_poll_does_not_claim_rearmed_enrichment(monkeypatch, polling):
+@pytest.mark.parametrize('detail_open', [False, True])
+def test_detail_poll_does_not_claim_rearmed_enrichment(monkeypatch, polling, detail_open):
     parked = {
         'id': 'c1',
         'source': 'desktop',
@@ -259,6 +265,7 @@ def test_detail_poll_does_not_claim_rearmed_enrichment(monkeypatch, polling):
     monkeypatch.setattr(conv_router, '_get_valid_conversation_by_id', lambda *a, **k: dict(parked))
     monkeypatch.setattr(conv_router, 'live_recap_enabled', lambda *_args: False)
     query_params = {'status_poll': '1'} if polling else {}
+    headers = {'X-Omi-Recording-Detail': '1'} if detail_open else {}
 
     with patch.object(conv_router, '_enrich_deferred_conversation', return_value=admitted) as enrich:
         result = conv_router.get_conversation_by_id(
@@ -267,12 +274,13 @@ def test_detail_poll_does_not_claim_rearmed_enrichment(monkeypatch, polling):
             include_discarded=None,
             uid='u1',
             include_translations=False,
-            request=SimpleNamespace(headers={}, query_params=query_params),
+            request=SimpleNamespace(headers=headers, query_params=query_params),
         )
 
-    assert result['status'] == ('completed' if polling else 'processing')
-    assert result['deferred'] is polling
-    assert enrich.call_count == (0 if polling else 1)
+    should_enrich = detail_open and not polling
+    assert result['status'] == ('processing' if should_enrich else 'completed')
+    assert result['deferred'] is not should_enrich
+    assert enrich.call_count == int(should_enrich)
 
 
 def test_successful_reprocess_schedules_durable_learning():

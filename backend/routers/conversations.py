@@ -1453,9 +1453,11 @@ def get_conversation_by_id(
     if request is not None and request.headers.get('X-Omi-Recording-Detail') == '1':
         open_recording(uid, conversation)
     # A desktop conversation stored raw (deferred) for a freemium/Neo user is
-    # enriched on first open. Other conversations are returned unchanged.
+    # enriched only on an explicit detail-page open. Lifecycle probes and API
+    # reads must not claim the first-open work.
     polling = request is not None and request.query_params.get('status_poll') == '1'
-    if not polling and conversation.get('deferred') and not conversation.get('processing_deferred'):
+    detail_open = request is not None and request.headers.get('X-Omi-Recording-Detail') == '1'
+    if detail_open and not polling and conversation.get('deferred') and not conversation.get('processing_deferred'):
         conversation = _enrich_deferred_conversation(uid, conversation, include_discarded=include_discarded)
         if source is not None and conversation.get('source') != source:
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -3131,7 +3133,11 @@ def open_historical_summary(
         },
     },
 )
-async def conversation_summary_stream(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def conversation_summary_stream(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    request: Request = cast(Request, None),
+):
     def reject_live_target(conversation):
         if v3_policy.live_summary_target(conversation) and not conversation.get('v3_unlocked'):
             detail = 'use_live_recap_stream' if live_recap_enabled(uid) else 'live_recap_unavailable'
@@ -3140,7 +3146,8 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
     conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
     reject_live_target(conversation)
     await run_blocking(db_executor, require_generated_compute, uid, 'conversation_v3_summary_open')
-    if v3_summary.needs_open_reconcile(conversation):
+    detail_open = request is not None and request.headers.get('X-Omi-Recording-Detail') == '1'
+    if detail_open and v3_summary.needs_open_reconcile(conversation):
         from utils.conversations.v3.service import reconcile
 
         try:
@@ -3156,9 +3163,9 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
             logger.warning('event=v3_on_open_reconcile outcome=stored exception_type=%s', type(exc).__name__)
         conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
         reject_live_target(conversation)
-    token = await v3_summary.prepare(uid, conversation)
+    token = await v3_summary.prepare(uid, conversation) if detail_open else None
     return StreamingResponse(
-        v3_summary.stream(uid, conversation, token=token),
+        v3_summary.stream(uid, conversation, token=token, allow_generation=detail_open),
         media_type='text/event-stream',
         headers={'Cache-Control': 'no-cache'},
     )
