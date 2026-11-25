@@ -259,28 +259,29 @@ def _count_write_request(state, request, response=None, *, partial=False):
         return
     deletes = sum(_delete_write(write) for write in writes)
     privacy_writes = privacy_deletes = 0
-    statuses = _field(response, 'status', ()) if partial else None
+    statuses = _field(response, 'status') or ()
     results = _field(response, 'write_results', ()) or ()
     for index, write in enumerate(writes):
         name = _write_document_name(write)
         update = _field(write, 'update', {}) or {}
         fields = _field(update, 'fields', {}) or {}
-        if statuses is None or (index < len(statuses) and statuses[index].code == 0):
+        deleted = _delete_write(write)
+        if not partial or (index < len(statuses) and _field(statuses[index], 'code') == 0):
             _capture_parity_write(
                 state,
                 name,
                 fields,
                 committed_at=_field(results[index], 'update_time') if index < len(results) else None,
-                deleted=_delete_write(write),
+                deleted=deleted,
                 paths=_field(_field(write, 'update_mask'), 'field_paths', ()) or (),
             )
-        if _delete_write(write):
-            if _matches_home_dirty_receipt(state, name):
-                state.record_home_dirty_receipt_write('deleted')
-        else:
-            _record_home_receipt_write(state, name, fields)
+            if deleted:
+                if _matches_home_dirty_receipt(state, name):
+                    state.record_home_dirty_receipt_write('deleted')
+            else:
+                _record_home_receipt_write(state, name, fields)
         if _matches_batch_privacy_document(state, name):
-            if _delete_write(write):
+            if deleted:
                 privacy_deletes += 1
             else:
                 privacy_writes += 1

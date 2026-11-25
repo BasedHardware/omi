@@ -9,14 +9,23 @@ import tempfile
 from threading import Lock
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+from google.auth.credentials import AnonymousCredentials
+from google.cloud.firestore_v1.services.firestore.client import FirestoreClient
 from google.cloud.firestore_v1.types import firestore
 
 from testing.finalization_replay.candidate import _Handler, replay_database
 from testing.finalization_replay.driver import _observe
 from testing.finalization_replay.firestore_proxy import FirestoreProxy
-from testing.finalization_replay.metrics import _delete_write, _invoke_rpc, _wrap_stream, prompt_token_estimate
+from testing.finalization_replay.metrics import (
+    _delete_write,
+    _invoke_rpc,
+    _wrap_stream,
+    install_firestore_meter,
+    measure,
+    prompt_token_estimate,
+)
 from testing.finalization_replay.state import (
     CaseState,
     episode_attach_memo_failure_reason,
@@ -38,6 +47,37 @@ VERIFY_SPEC.loader.exec_module(verify)
 
 
 class ReplayContractTests(unittest.TestCase):
+    def test_sdk_batch_write_requires_explicit_success_for_committed_evidence(self):
+        root = 'projects/demo-replay/databases/(default)/documents'
+        home = f'{root}/users/u/episode_links/c'
+        update = {'update': {'name': home, 'fields': {'home_dirty': {'boolean_value': True}}}}
+        delete = {'delete': home}
+        profile = {'update': {'name': f'{root}/users/u', 'fields': {'ai_user_profile': {'map_value': {}}}}}
+        item = {'update': {'name': f'{root}/users/u/action_items/task'}}
+        statuses = (('failed', [{'code': 7}] * 3, 0), ('missing', [], 0), ('successful', [{}, {}, {}], 1))
+
+        install_firestore_meter()
+        with FirestoreClient(credentials=AnonymousCredentials()) as client:
+            transport = client.transport
+            for bucket, home_write in (('set_true', update), ('deleted', delete)):
+                request = firestore.BatchWriteRequest(
+                    database=root.removesuffix('/documents'), writes=[home_write, profile, item]
+                )
+                for label, entries, expected in statuses:
+                    with self.subTest(home_operation=bucket, status=label):
+                        state = CaseState(Mock(), {'name': 'c', 'uid': 'u'})
+                        response = firestore.BatchWriteResponse(status=entries)
+                        rpc = Mock(return_value=response)
+                        with patch.dict(transport._wrapped_methods, {transport.batch_write: rpc}), measure(state):
+                            self.assertEqual(client.batch_write(request=request), response)
+                        rpc.assert_called_once()
+                        self.assertEqual(state.home_dirty_receipt_trace[bucket], expected)
+                        self.assertEqual(sum(state.home_dirty_receipt_trace.values()), expected)
+                        self.assertEqual(len(state.profile_writes), expected)
+                        self.assertEqual(state.task_writes, ['users/u/action_items/task'] if expected else [])
+                        self.assertEqual(state.firestore_operations['writes'], 2 if bucket == 'deleted' else 3)
+                        self.assertEqual(state.firestore_operations['deletes'], int(bucket == 'deleted'))
+
     def test_approved_coordination_stamp_rule_requires_exact_name_and_direction(self):
         for field in (
             'go_sync_inline_fanout_epoch',

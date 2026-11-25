@@ -143,9 +143,8 @@ class FirestoreProxyTests(unittest.TestCase):
         self.assertEqual({k: v for k, v in proxy.counts().items() if v}, {'rpc_calls': 2})
         self.assertEqual(proxy.operation_sources(), {})
 
-    def test_batch_write_attributes_transforms_and_deletes_without_certifying_failed_entries(self):
+    def test_batch_write_attributes_transform_and_delete_attempts(self):
         proxy = meter_proxy()
-        home = f'{ROOT}/users/u/episode_links/c'
         request = firestore.BatchWriteRequest(
             writes=[
                 {
@@ -155,27 +154,31 @@ class FirestoreProxyTests(unittest.TestCase):
                     }
                 },
                 {'delete': PRIVACY_NAME},
-                {'update': {'name': home, 'fields': {'home_dirty': {'boolean_value': True}}}},
             ]
         )
         proxy._record_request('batch_write', request)
-        proxy._record_committed_home_writes(
-            'batch_write',
-            request,
-            firestore.BatchWriteResponse.serialize(firestore.BatchWriteResponse(status=[{}, {}])),
-        )
-        self.assertEqual(proxy.counts()['writes'], 2)
+        self.assertEqual(proxy.counts()['writes'], 1)
         self.assertEqual(proxy.counts()['deletes'], 1)
         self.assertEqual(proxy.counts()['batch_pipeline_privacy_document_writes'], 1)
         self.assertEqual(proxy.counts()['batch_pipeline_privacy_document_deletes'], 1)
         self.assertEqual(proxy.operation_sources()[PRIVACY_PATH], {'reads': 0, 'writes': 1, 'deletes': 1})
-        self.assertEqual(proxy.home_receipt_trace()['set_true'], 0)
-        for code, expected in ((10, 0), (0, 1)):
-            response = firestore.BatchWriteResponse(status=[{}, {}, {'code': code}])
-            proxy._record_committed_home_writes(
-                'batch_write', request, firestore.BatchWriteResponse.serialize(response)
-            )
-            self.assertEqual(proxy.home_receipt_trace()['set_true'], expected)
+
+    def test_batch_write_requires_explicit_success_for_home_receipts(self):
+        home = f'{ROOT}/users/u/episode_links/c'
+        update = {'update': {'name': home, 'fields': {'home_dirty': {'boolean_value': True}}}}
+        delete = {'delete': home}
+        statuses = (('failed', [{}, {'code': 7}], 0), ('missing', [{}], 0), ('successful', [{}, {}], 1))
+        for bucket, home_write in (('set_true', update), ('deleted', delete)):
+            request = firestore.BatchWriteRequest(writes=[{'delete': PRIVACY_NAME}, home_write])
+            for label, entries, expected in statuses:
+                with self.subTest(home_operation=bucket, status=label):
+                    proxy = meter_proxy()
+                    response = firestore.BatchWriteResponse(status=entries)
+                    proxy._record_committed_home_writes(
+                        'batch_write', request, firestore.BatchWriteResponse.serialize(response)
+                    )
+                    self.assertEqual(proxy.home_receipt_trace()[bucket], expected)
+                    self.assertEqual(sum(proxy.home_receipt_trace().values()), expected)
 
     def test_direct_writes_attribute_the_document_name(self):
         proxy = meter_proxy()
