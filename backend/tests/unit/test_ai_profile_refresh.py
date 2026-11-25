@@ -418,8 +418,19 @@ REAL_LOCK = refresh.redis_db.try_acquire_ai_profile_refresh_lock
 REAL_UNLOCK = refresh.redis_db.release_ai_profile_refresh_lock
 
 
-@pytest.mark.parametrize('source_fenced', [True, False])
-def test_independent_refresh_survives_a_cross_instance_cooldown(wired, monkeypatch, source_fenced):
+@pytest.mark.parametrize(
+    ('source_fenced', 'independent_fences', 'expected'),
+    [
+        (False, 0, 'written'),
+        (True, 0, 'written'),
+        (True, 1, 'written'),
+        (True, 3, 'source_fence_retry_exhausted'),
+    ],
+    ids=['conversation_writes', 'independent_writes', 'independent_refetches', 'independent_exhausts'],
+)
+def test_independent_refresh_survives_a_cross_instance_cooldown(
+    wired, monkeypatch, source_fenced, independent_fences, expected
+):
     store, _, _ = wired
     spec = spec_from_file_location('profile_refresh_other_instance', refresh.__file__)
     assert spec is not None and spec.loader is not None
@@ -439,11 +450,22 @@ def test_independent_refresh_survives_a_cross_instance_cooldown(wired, monkeypat
     monkeypatch.setattr(other, 'submit_with_context', lambda executor, fn, *args: queued.append((fn, args)))
 
     attempts = []
+    collected = []
+    collect_sources = refresh.collect_sources
     cooldown_key = f'users:{UID}:ai_profile_auto_cooldown'
     source = refresh.ConversationEffectSource('trigger', 3, None)
+    exhausted = refresh.SOURCE_FENCE_RETRY_EXHAUSTED
+    count_before = exhausted.collect()[0].samples[0].value
 
-    def write(uid, expected_text, profile, *, effect_source, **kwargs):
+    def collect(uid, now):
+        sources, _ = collect_sources(uid, now)
+        sampled = refresh.ProfileConversationInput('sampled', len(collected), NOW)
+        collected.append(sampled)
+        return sources, (sampled,)
+
+    def write(uid, expected_text, profile, *, effect_source, conversation_inputs):
         attempts.append(effect_source)
+        assert conversation_inputs == (collected[len(attempts) - 1],)
         if effect_source is not None:
             # Finish the other instance's queued job before the first reaches
             # its Firestore refusal. No process-local state crosses this seam.
@@ -457,18 +479,27 @@ def test_independent_refresh_survives_a_cross_instance_cooldown(wired, monkeypat
             if source_fenced:
                 raise refresh.ConversationEffectSourceChanged('fixture trigger changed while generating')
         else:
-            # The handoff reserved the cooldown. A newer conversation cannot
-            # claim it in the gap before this independent attempt commits.
-            assert first.get(cooldown_key) == b'1'
+            # The reservation survives a fenced retry and excludes new work
+            # while the next attempt reads fresh inputs.
+            assert first.get(cooldown_key).endswith(b':independent')
             assert not REAL_ADMIT(uid, token='abcdef')
+            if len(attempts) - 1 <= independent_fences:
+                raise refresh.ConversationEffectSourceChanged('fixture sampled input changed while generating')
         return store.write_if_unchanged(uid, expected_text, profile)
 
+    monkeypatch.setattr(refresh, 'collect_sources', collect)
     monkeypatch.setattr(refresh.users_db, 'write_ai_user_profile_if_unchanged', write)
-    assert refresh.refresh_if_stale(UID, effect_source=source) == 'written'
+    assert refresh.refresh_if_stale(UID, effect_source=source) == expected
     assert queued == []
-    assert attempts == ([source, None] if source_fenced else [source])
-    assert first.get(cooldown_key) == b'1'
-    assert len(store.writes) == 1
+    exhausted_retry = expected == 'source_fence_retry_exhausted'
+    independent_attempts = independent_fences + (source_fenced and not exhausted_retry)
+    assert attempts == [source] + [None] * independent_attempts
+    assert len(collected) == len(attempts)
+    assert first.get(cooldown_key) == (None if source_fenced else b'1')
+    assert len(store.writes) == (0 if exhausted_retry else 1)
+    count = exhausted.collect()[0].samples[0]
+    assert count.value - count_before == int(exhausted_retry)
+    assert count.labels == {}
 
 
 def test_stale_profile_cooldown_token_cannot_consume_new_owner_demand(monkeypatch):
@@ -482,4 +513,8 @@ def test_stale_profile_cooldown_token_cannot_consume_new_owner_demand(monkeypatc
     assert REAL_SETTLE(UID, 'aaaa', source_fenced=True) is False
     assert client.get(key) == b'conversation:bbbb:pending'
     assert REAL_SETTLE(UID, 'bbbb', source_fenced=True) is True
-    assert client.get(key) == b'1'
+    assert client.get(key) == b'conversation:bbbb:independent'
+    refresh.redis_db.finish_ai_profile_auto_retry(UID, 'aaaa', clear=True)
+    assert client.get(key) == b'conversation:bbbb:independent'
+    refresh.redis_db.finish_ai_profile_auto_retry(UID, 'bbbb', clear=True)
+    assert client.get(key) is None

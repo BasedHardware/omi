@@ -46,6 +46,7 @@ from utils.executors import postprocess_executor, submit_with_context
 from utils.generated_compute import generated_compute_allowed
 from utils.llm import ai_user_profile as profile_llm
 from utils.memory.memory_service import MemoryService
+from utils.observability.ai_profile import SOURCE_FENCE_RETRY_EXHAUSTED
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ SOURCE_USER_EDIT = 'user_edit'
 IN_PROGRESS_TTL_SECONDS = 10 * 60
 AUTOMATIC_COOLDOWN_SECONDS = 60 * 60
 MAX_CONCURRENT_AUTOMATIC = 2
+MAX_INDEPENDENT_ATTEMPTS = 3
 
 _automatic_slots = threading.BoundedSemaphore(MAX_CONCURRENT_AUTOMATIC)
 
@@ -267,6 +269,25 @@ def _refresh_under_cooldown(uid: str, effect_source: ConversationEffectSource | 
         _release_in_progress(uid)
 
 
+def _retry_independent_refresh(uid: str, token: str) -> str:
+    clear_cooldown = False
+    try:
+        # Keep the same Redis reservation across fences. Each attempt reads the
+        # current inputs and uses the ordinary lock, cadence and compute guards.
+        for _ in range(MAX_INDEPENDENT_ATTEMPTS):
+            try:
+                outcome = _refresh_under_cooldown(uid, None)
+            except ConversationEffectSourceChanged:
+                continue
+            clear_cooldown = outcome == 'written'
+            return outcome
+        SOURCE_FENCE_RETRY_EXHAUSTED.inc()
+        clear_cooldown = True
+        return 'source_fence_retry_exhausted'
+    finally:
+        redis_db.finish_ai_profile_auto_retry(uid, token, clear=clear_cooldown)
+
+
 def refresh_if_stale(uid: str, *, effect_source: ConversationEffectSource | None = None) -> str:
     """Automatic refresh; returns an outcome label and never raises."""
     try:
@@ -291,10 +312,8 @@ def refresh_if_stale(uid: str, *, effect_source: ConversationEffectSource | None
         finally:
             if token is not None:
                 retry_independently = redis_db.settle_ai_profile_auto_cooldown(uid, token, source_fenced=source_fenced)
-        if retry_independently:
-            # Redis transferred the cooldown to independent demand. Start over
-            # with fresh inputs and the usual account, lock and compute guards.
-            return _refresh_under_cooldown(uid, None)
+        if token is not None and retry_independently:
+            return _retry_independent_refresh(uid, token)
         return outcome
     except ConversationEffectSourceChanged:
         return 'source_fenced'

@@ -1468,9 +1468,11 @@ if owner ~= ARGV[1] and not pending then
 end
 if ARGV[2] == 'source_fenced' then
     if pending then
-        redis.call('SET', KEYS[1], '1', 'KEEPTTL')
+        redis.call('SET', KEYS[1], ARGV[1] .. ':independent', 'KEEPTTL')
         return 1
     end
+    redis.call('DEL', KEYS[1])
+elseif ARGV[2] == 'clear' then
     redis.call('DEL', KEYS[1])
 else
     redis.call('SET', KEYS[1], '1', 'KEEPTTL')
@@ -1491,6 +1493,12 @@ def settle_ai_profile_auto_cooldown(uid: str, token: str, *, source_fenced: bool
     return bool(
         r.eval(_AI_PROFILE_SETTLE, 1, f'users:{uid}:ai_profile_auto_cooldown', f'conversation:{token}', outcome)
     )
+
+
+def finish_ai_profile_auto_retry(uid: str, token: str, *, clear: bool) -> None:
+    """Release or settle the handoff only while it still owns the cooldown."""
+    outcome = 'clear' if clear else 'settled'
+    r.eval(_AI_PROFILE_SETTLE, 1, f'users:{uid}:ai_profile_auto_cooldown', f'conversation:{token}:independent', outcome)
 
 
 def release_ai_profile_refresh_lock(uid: str) -> None:
