@@ -215,14 +215,22 @@ def effect(old, new):
     return 'same' if old == new else 'added' if old is None else 'removed' if new is None else 'changed'
 
 
-def env(container):
+def env(container, *, normalize_fieldrefs=False):
     result = {}
     require(isinstance(container.get('env', []), list), 'env_invalid')
     for row in container.get('env', []):
         name = row.get('name')
         require(isinstance(name, str) and KEY.fullmatch(name) and name not in result, 'env_invalid')
         require(set(row) <= {'name', 'value', 'valueFrom'} and not ('value' in row and 'valueFrom' in row), 'env_invalid')
-        result[name] = {k: v for k, v in row.items() if k != 'name'} or {'value': ''}
+        value = {k: v for k, v in row.items() if k != 'name'} or {'value': ''}
+        if normalize_fieldrefs:
+            source = value.get('valueFrom')
+            if isinstance(source, dict) and set(source) == {'fieldRef'}:
+                field = source['fieldRef']
+                if isinstance(field, dict) and field.get('apiVersion') == 'v1':
+                    # ObjectFieldSelector defaults apiVersion to v1 at the API boundary.
+                    value = {'valueFrom': {'fieldRef': {k: v for k, v in field.items() if k != 'apiVersion'}}}
+        result[name] = value
     return result
 
 
@@ -273,7 +281,8 @@ def compare(desired, live, baseline, private_names, *, references=False):
     require(without_env(desired[ident]) == without_env(baseline[ident]), 'overlay_non_env_effect')
     rows = []
     for c in sorted(want):
-        have_env, want_env = env(before[c]), env(want[c])
+        have_env = env(before[c], normalize_fieldrefs=references)
+        want_env = env(want[c], normalize_fieldrefs=references)
         names = sorted(set(have_env) | set(want_env))
         for name in names:
             rows.append({'container': c, 'key': name, 'effect': effect(have_env.get(name), want_env.get(name)),
@@ -319,7 +328,8 @@ def compare_reference_render(desired, predecessor, inverse, live, private_keys, 
     expected = containers(predecessor[target])
     observed = containers(live[target])
     require(expected.keys() == observed.keys(), 'container_set_changed')
-    require(all(env(expected[name]) == env(observed[name]) for name in expected), 'reference_live_env_drift')
+    require(all(env(expected[name], normalize_fieldrefs=True) == env(observed[name], normalize_fieldrefs=True)
+                for name in expected), 'reference_live_env_drift')
     require(expected[primary_name]['image'] == observed[primary_name]['image'] == image, 'reference_image_changed')
     require(all(reconnect not in env(container) for container in observed.values()), 'reference_reconnect_present')
 

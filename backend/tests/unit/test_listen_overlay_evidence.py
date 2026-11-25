@@ -56,7 +56,9 @@ def indexed(doc):
     return evidence.documents(yaml.safe_dump(doc))
 
 
-@pytest.mark.parametrize('drift', [None, 'second-key', 'secret', 'live-env', 'image', 'inverse', 'missing'])
+@pytest.mark.parametrize(
+    'drift', [None, 'second-key', 'secret', 'live-env', 'field-path', 'field-version', 'image', 'inverse', 'missing']
+)
 def test_reference_render_proves_only_reconnect_without_exporting_references(drift):
     image = 'gcr.io/based-hardware/backend:96f0631'
     before = deployment()
@@ -66,7 +68,22 @@ def test_reference_render_proves_only_reconnect_without_exporting_references(dri
         'name': 'PRIVATE_TOKEN',
         'valueFrom': {'secretKeyRef': {'name': 'test-secret', 'key': 'PRIVATE_TOKEN', 'optional': False}},
     }
+    policy = main['env'][0]['name']
+    main['env'][0] = {
+        'name': policy,
+        'valueFrom': {'secretKeyRef': {'name': 'test-secret', 'key': policy, 'optional': False}},
+    }
+    main['env'].append(
+        {
+            'name': 'ROLLOUT_POD_TEMPLATE_HASH',
+            'valueFrom': {'fieldRef': {'fieldPath': "metadata.labels['pod-template-hash']"}},
+        }
+    )
     wanted, live, inverse = (copy.deepcopy(before) for _ in range(3))
+    field = live['spec']['template']['spec']['containers'][0]['env'][-1]['valueFrom']['fieldRef']
+    field['apiVersion'] = 'v2' if drift == 'field-version' else 'v1'
+    if drift == 'field-path':
+        field['fieldPath'] = 'metadata.name'
     wanted_main = wanted['spec']['template']['spec']['containers'][0]
     wanted_main['env'].append({'name': 'LISTEN_BATCH_RECONNECT_ENABLED', 'value': 'true'})
     if drift == 'second-key':
@@ -74,15 +91,20 @@ def test_reference_render_proves_only_reconnect_without_exporting_references(dri
     elif drift == 'secret':
         wanted_main['env'][1]['valueFrom']['secretKeyRef']['name'] = 'other-secret'
     elif drift == 'live-env':
-        live['spec']['template']['spec']['containers'][0]['env'][0]['value'] = 'false'
+        live['spec']['template']['spec']['initContainers'][0]['env'][0]['value'] = 'false'
     elif drift == 'image':
         wanted_main['image'] = 'gcr.io/based-hardware/backend:1234567'
     elif drift == 'inverse':
         inverse['spec']['replicas'] += 1
     observed = indexed(live) if drift != 'missing' else {}
-    args = (indexed(wanted), indexed(before), indexed(inverse), observed, ['PRIVATE_TOKEN'], 'test-secret', image)
+    private_keys = [policy, 'PRIVATE_TOKEN']
+    args = (indexed(wanted), indexed(before), indexed(inverse), observed, private_keys, 'test-secret', image)
     if drift is None:
         assert evidence.compare_reference_render(*args) == 'listen'
+        coverage = evidence.compare(args[0], args[3], args[0], set(private_keys), references=True)
+        assert [(row['key'], row['effect']) for row in coverage['env'] if row['effect'] != 'same'] == [
+            ('LISTEN_BATCH_RECONNECT_ENABLED', 'added')
+        ]
     else:
         with pytest.raises(evidence.Refused):
             evidence.compare_reference_render(*args)
