@@ -25,6 +25,7 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/ui/ui.dart';
 import '../helpers/sfpro_font_fixtures.dart';
+import '../support/local_day.dart';
 
 class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _Sync(this.wals, {this.state = const SyncState()});
@@ -199,15 +200,22 @@ Future<void> _capture(WidgetTester tester, String name) async {
 
 void main() {
   final now = DateTime.now();
-  List<Wal> rows() {
+  // On the Way groups rows by local day. A wall-clock `now` puts the 10- and 30-minute-old
+  // rows on yesterday between 00:00 and 00:30, folding them into the uploaded row's day
+  // (#26275). The page takes an injected clock, so pin it to the most recent local noon.
+  final noon = now.hour >= 12
+      ? localCalendarDay(now.year, now.month, now.day)
+      : localCalendarDay(now.year, now.month, now.day - 1);
+  List<Wal> rows({DateTime? at}) {
+    final base = at ?? now;
     Wal row(int ago, int seconds, WalStatus status, {WalStorage storage = WalStorage.disk}) => Wal(
-          timerStart: now.subtract(Duration(seconds: ago)).millisecondsSinceEpoch ~/ 1000,
+          timerStart: base.subtract(Duration(seconds: ago)).millisecondsSinceEpoch ~/ 1000,
           codec: BleAudioCodec.opus,
           seconds: seconds,
           status: status,
           storage: storage,
           device: 'synthetic',
-          uploadedAt: now.millisecondsSinceEpoch ~/ 1000,
+          uploadedAt: base.millisecondsSinceEpoch ~/ 1000,
         );
     return [
       row(600, 74, WalStatus.miss, storage: WalStorage.sdcard),
@@ -226,14 +234,14 @@ void main() {
                 kind: 'recording',
                 state: 'transcribing',
                 conversationIds: const [],
-                startedAt: now.subtract(const Duration(days: 2)),
+                startedAt: noon.subtract(const Duration(days: 2)),
                 durationSeconds: 720,
               )
             ])));
     addTearDown(store.dispose);
     await store.refresh();
-    await _pump(tester, OnTheWayPage(clock: () => now, pendingWork: store, multiFileSync: true), WalStatus.uploaded,
-        recordings: rows());
+    await _pump(tester, OnTheWayPage(clock: () => noon, pendingWork: store, multiFileSync: true), WalStatus.uploaded,
+        recordings: rows(at: noon));
     expect(find.text('Uploaded, awaiting server'), findsWidgets);
     expect(find.text('Your audio is safe on your device or phone'), findsOneWidget);
     expect(find.text('Server-reported work'), findsOneWidget);
