@@ -829,6 +829,23 @@ void main() {
       expect(FinishedCapturePage.match(rows, 'rec-3'), isNull);
     });
 
+    test('matches a derived conversation by source recording ID without audio pieces', () {
+      final row = _conversation('derived', extra: {
+        'v3_recording_ids': ['rec-1'],
+      });
+
+      expect(row.v3!.recordingPieces, isEmpty);
+      expect(FinishedCapturePage.match([row], 'rec-1'), same(row));
+    });
+
+    test('ignores a derived conversation with unrelated source recording IDs', () {
+      final row = _conversation('derived', extra: {
+        'v3_recording_ids': ['rec-2'],
+      });
+
+      expect(FinishedCapturePage.match([row], 'rec-1'), isNull);
+    });
+
     test('of several conversations from one recording it opens the newest, the top Home row', () {
       final rows = [
         _derived('first', 'rec-1', createdAt: '2026-11-18T22:00:09Z'),
