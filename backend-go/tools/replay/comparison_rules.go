@@ -37,19 +37,28 @@ func generatedHomeTokenCounts(cases []replayCase, goSide bool) map[string]int {
 		if goSide {
 			run = c.Go
 		}
-		if run == nil {
-			continue
-		}
-		for _, slot := range homeTokenSlots(run) {
-			if homeTokenPreserved(run, slot) {
-				continue
-			}
-			if value, ok := slot.value.(string); ok {
-				counts[value]++
-			}
-		}
+		addHomeTokenCounts(counts, run, 1)
 	}
 	return counts
+}
+
+func homeTokenCountsForView(counts map[string]int, post, pre *observation) map[string]int {
+	viewCounts := make(map[string]int, len(counts))
+	maps.Copy(viewCounts, counts)
+	addHomeTokenCounts(viewCounts, post, -1)
+	addHomeTokenCounts(viewCounts, pre, 1)
+	return viewCounts
+}
+
+func addHomeTokenCounts(counts map[string]int, run *observation, delta int) {
+	for _, slot := range homeTokenSlots(run) {
+		if homeTokenPreserved(run, slot) {
+			continue
+		}
+		if value, ok := slot.value.(string); ok {
+			counts[value] += delta
+		}
+	}
 }
 
 func homeTokenSlots(run *observation) []tokenSlot {

@@ -3,15 +3,19 @@ package main
 import "time"
 
 type beforeErasure struct {
-	Document     any                  `json:"conversation"`
-	Derived      map[string]any       `json:"derived_documents"`
-	BatchPrivacy batchPrivacySnapshot `json:"batch_pipeline_privacy"`
-	Cost         replayCost           `json:"cost"`
-	Finished     time.Time            `json:"finished_at"`
+	Document                       any                  `json:"conversation"`
+	Derived                        map[string]any       `json:"derived_documents"`
+	BatchPrivacy                   batchPrivacySnapshot `json:"batch_pipeline_privacy"`
+	Cost                           replayCost           `json:"cost"`
+	UpdatedAtChanged               bool                 `json:"updated_at_changed"`
+	PreservedFields                map[string][]string  `json:"preserved_fields"`
+	EpisodeAttachMemoValid         bool                 `json:"episode_attach_memo_valid"`
+	EpisodeAttachMemoExpected      bool                 `json:"episode_attach_memo_expected"`
+	EpisodeAttachMemoFailureReason string               `json:"episode_attach_memo_failure_reason"`
+	Finished                       time.Time            `json:"finished_at"`
 }
 
-// The finalization witnesses belong to the phase before the wipe. The main
-// comparison still uses the post-erase documents and effects.
+// Select the finalization snapshots only for a proved, paired erasure.
 func finalizationBeforeErasure(diffs *[]difference, python, goRun *observation) (*observation, *observation) {
 	if python.BeforeErasure == nil && goRun.BeforeErasure == nil &&
 		python.Effects["erasure"] == nil && goRun.Effects["erasure"] == nil {
@@ -50,6 +54,11 @@ func beforeErasureView(diffs *[]difference, side string, run *observation) *obse
 	view.Derived = pre.Derived
 	view.BatchPrivacy = &batchPrivacyEvidence{Seed: run.BatchPrivacy.Seed, Final: pre.BatchPrivacy}
 	view.Cost = pre.Cost
+	view.UpdatedAtChanged = pre.UpdatedAtChanged
+	view.PreservedFields = pre.PreservedFields
+	view.EpisodeAttachMemoValid = pre.EpisodeAttachMemoValid
+	view.EpisodeAttachMemoExpected = pre.EpisodeAttachMemoExpected
+	view.EpisodeAttachMemoFailureReason = pre.EpisodeAttachMemoFailureReason
 	view.Finished = pre.Finished
 	return &view
 }

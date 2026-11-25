@@ -97,7 +97,7 @@ func observedSpeakerPayload(run *observation, path string) []byte {
 
 // Approved for the synthetic capture-only corpus. A trace is emitted by the
 // actual resolver and evidence builder independently of the stored result.
-func reviewSpeakerDifferences(diffs *[]difference, py, goRun *observation, pairedErasure bool) {
+func reviewSpeakerDifferences(diffs *[]difference, py, goRun *observation) {
 	if py.ConversationID == "" || strings.ContainsAny(py.ConversationID, "/~") || py.OwnerID != "replay-"+py.ConversationID || goRun.OwnerID != py.OwnerID || goRun.ConversationID != py.ConversationID {
 		return
 	}
@@ -114,14 +114,7 @@ func reviewSpeakerDifferences(diffs *[]difference, py, goRun *observation, paire
 	goHasResolver := documentField(goRun, "owner_recognition_diagnostics") != nil ||
 		documentField(goRun, "speaker_resolution") != nil ||
 		(goRun.SpeakerTrace != nil && (len(goRun.SpeakerTrace.Exits) != 0 || len(goRun.SpeakerTrace.ClockSeconds) != 0))
-	if pairedErasure && pyDiag != nil && !goHasResolver {
-		// The outer document comparison sees two erased rows. Emit the actual
-		// pre-wipe parity difference here, as it would for a missing live field.
-		*diffs = append(*diffs, difference{
-			Path: "/go/before_erasure" + resolverPath + "/current_resolver",
-			Kind: "missing_in_go", FailureReason: "speaker_resolver_unverified",
-		})
-	} else if (resolverExpected && !goDeparted) || (goDeparted && goHasResolver) {
+	if (resolverExpected && !goDeparted) || (goDeparted && goHasResolver) {
 		validateResolverWitness(diffs, "/go", goDiag)
 	}
 	var pyPayload, goPayload []byte

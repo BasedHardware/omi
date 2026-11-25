@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"maps"
+	"strings"
 	"testing"
 	"time"
 )
@@ -12,21 +13,25 @@ func pairedErasureRuns(t *testing.T) (*observation, *observation, string) {
 	const fixture = "erase-removes-owner-and-jobs"
 	const owner = "replay-" + fixture
 	path := batchPrivacyDocumentPath(owner)
-	py := captureRun(t, "0.2", 1)
-	exit := py.SpeakerTrace.Exits[0]
-	exit["uid"], exit["conversation"] = owner, fixture
-	diag := mustMap(documentField(py, "owner_recognition_diagnostics"))
-	diag["first_resolver"], diag["current_resolver"] = maps.Clone(exit), maps.Clone(exit)
-	goRun := ruleRun()
-	goRun.Document = maps.Clone(mustMap(py.Document))
-	goRun.SpeakerTrace = py.SpeakerTrace
+	py, goRun := captureRun(t, "0.2", 1), captureRun(t, "0.2", 2)
+	speakerPath := "users/" + owner + "/conversations/" + fixture + "/speaker_evidence/current"
 	for i, run := range []*observation{py, goRun} {
+		exit := run.SpeakerTrace.Exits[0]
+		exit["uid"], exit["conversation"] = owner, fixture
+		diag := mustMap(documentField(run, "owner_recognition_diagnostics"))
+		diag["first_resolver"], diag["current_resolver"] = exit, exit
+		mustMap(run.Document)["structured"] = map[string]any{"title": "Captured title"}
+		mustMap(documentField(run, "speaker_resolution"))["assignments"] = []any{"capture"}
+		setEvidence(t, run, owner, "capture", byte(i+1))
 		memo := batchPrivacyRun([]string{pyMemoToken, goMemoToken}[i])
 		run.OwnerID, run.ConversationID = owner, fixture
 		run.SeededTokenHashes = memo.SeededTokenHashes
 		run.BeforeErasure = &beforeErasure{
-			Document:     run.Document,
-			Derived:      map[string]any{path: maps.Clone(memo.BatchPrivacy.Final.Fields)},
+			Document: run.Document,
+			Derived: map[string]any{
+				path:        maps.Clone(memo.BatchPrivacy.Final.Fields),
+				speakerPath: run.Derived[speakerDoc],
+			},
 			BatchPrivacy: memo.BatchPrivacy.Final,
 			Cost:         memo.Cost, Finished: run.Finished.Add(-time.Second),
 		}
@@ -52,6 +57,8 @@ func pairedErasureRuns(t *testing.T) (*observation, *observation, string) {
 
 func TestPairedErasureValidatesFinalizationBeforeTheWipe(t *testing.T) {
 	py, goRun, path := pairedErasureRuns(t)
+	goRun.SpeakerTrace.Exits[0]["elapsed_seconds"] = json.Number("0.3")
+	goRun.SpeakerTrace.ClockSeconds[1] = json.Number("10.3")
 	diffs := compareObservations(py, goRun)
 	for _, diff := range diffs {
 		if diff.Kind == "invalid_binding" || diff.Kind == "invalid_operations" || diff.Path == "/conversation" {
@@ -63,6 +70,55 @@ func TestPairedErasureValidatesFinalizationBeforeTheWipe(t *testing.T) {
 			t.Fatalf("post-erase difference at %s disappeared: %+v", path, diffs)
 		}
 	}
+	speakerPath := "/derived_documents/" + escapePointer("users/"+py.OwnerID+"/conversations/"+py.ConversationID+"/speaker_evidence/current")
+	for path, reason := range map[string]string{clockPath: "replay_clock", speakerPath + "/payload": "encrypted_envelope"} {
+		found := false
+		for _, diff := range diffs {
+			found = found || diff.Path == "/before_erasure"+path && diff.Reason == reason
+		}
+		if !found {
+			t.Fatalf("missing %s approval for %s: %+v", reason, path, diffs)
+		}
+	}
+}
+
+func TestPairedErasureComparesConversationFields(t *testing.T) {
+	for _, test := range []struct {
+		object, field string
+		value         any
+	}{
+		{"speaker_resolution", "assignments", []any{"different speaker"}},
+		{"structured", "title", "Different title"},
+	} {
+		t.Run(test.field, func(t *testing.T) {
+			py, goRun, _ := pairedErasureRuns(t)
+			mustMap(objectField(goRun.BeforeErasure.Document, test.object))[test.field] = test.value
+			diffs := compareObservations(py, goRun)
+			path := "/before_erasure/conversation/" + test.object + "/" + test.field
+			if test.field == "assignments" {
+				path += "/0"
+			}
+			if !hasKindPath(diffs, "different_value", path) {
+				t.Fatalf("pre-wipe mutation at %s was lost: %+v", path, diffs)
+			}
+		})
+	}
+}
+
+func TestPairedErasureComparesAuthenticatedSpeakerPayloads(t *testing.T) {
+	py, goRun, _ := pairedErasureRuns(t)
+	doc := "users/" + goRun.OwnerID + "/conversations/" + goRun.ConversationID + "/speaker_evidence/current"
+	setEvidence(t, goRun, goRun.OwnerID, "different capture", 2)
+	goRun.BeforeErasure.Derived[doc] = goRun.Derived[speakerDoc]
+	delete(goRun.Derived, speakerDoc)
+	diffs := compareObservations(py, goRun)
+	for _, diff := range diffs {
+		if diff.Path == "/before_erasure/derived_documents/"+escapePointer(doc)+"/payload" &&
+			diff.Kind == "different_value" && diff.Reason == "" {
+			return
+		}
+	}
+	t.Fatalf("different authenticated speaker payloads escaped comparison: %+v", diffs)
 }
 
 func TestPairedErasureRejectsUnverifiedGoSpeakerResults(t *testing.T) {
@@ -70,7 +126,7 @@ func TestPairedErasureRejectsUnverifiedGoSpeakerResults(t *testing.T) {
 		py, goRun, _ := pairedErasureRuns(t)
 		goRun.SpeakerTrace = nil
 		diffs := compareObservations(py, goRun)
-		if !hasKindPath(diffs, "invalid_binding", "/go"+clockPath) {
+		if !hasKindPath(diffs, "invalid_binding", "/before_erasure/go"+clockPath) {
 			t.Fatalf("proved erasure excused a pre-wipe Go result without a trace: %+v", diffs)
 		}
 	})
@@ -81,9 +137,18 @@ func TestPairedErasureRejectsUnverifiedGoSpeakerResults(t *testing.T) {
 		delete(doc, "owner_recognition_diagnostics")
 		goRun.SpeakerTrace = &speakerTrace{}
 		diffs := compareObservations(py, goRun)
-		path := "/go/before_erasure" + resolverPath + "/current_resolver"
-		if !hasKindPath(diffs, "missing_in_go", path) {
-			t.Fatalf("proved erasure hid the missing pre-wipe Go resolver result: %+v", diffs)
+		resolverRows := 0
+		for _, diff := range diffs {
+			if strings.Contains(diff.Path, resolverPath) {
+				resolverRows++
+				if diff.Path != "/before_erasure"+resolverPath || diff.Kind != "missing_in_go" ||
+					diff.FailureReason != "speaker_resolver_unverified" {
+					t.Fatalf("unexpected resolver finding: %+v", diff)
+				}
+			}
+		}
+		if resolverRows != 1 {
+			t.Fatalf("expected one missing resolver finding, got %+v", diffs)
 		}
 	})
 	t.Run("invalid stored envelope", func(t *testing.T) {
@@ -91,9 +156,13 @@ func TestPairedErasureRejectsUnverifiedGoSpeakerResults(t *testing.T) {
 		doc := "users/" + goRun.OwnerID + "/conversations/" + goRun.ConversationID + "/speaker_evidence/current"
 		goRun.BeforeErasure.Derived[doc] = map[string]any{"version": json.Number("1"), "payload": "invalid"}
 		diffs := compareObservations(py, goRun)
-		if !hasKindPath(diffs, "invalid_binding", "/go/derived_documents/"+escapePointer(doc)+"/payload") {
-			t.Fatalf("proved erasure excused a pre-wipe invalid Go speaker envelope: %+v", diffs)
+		want := "/before_erasure/derived_documents/" + escapePointer(doc) + "/payload"
+		for _, diff := range diffs {
+			if diff.Path == want && diff.Kind == "different_value" && diff.FailureReason == "speaker_envelope_unverified" {
+				return
+			}
 		}
+		t.Fatalf("proved erasure excused a pre-wipe invalid Go speaker envelope: %+v", diffs)
 	})
 }
 
@@ -109,7 +178,7 @@ func TestPairedErasureStillRejectsBadFinalizationWitnesses(t *testing.T) {
 		{"invalid phase clock", func(py, _ *observation, _ string) { py.BeforeErasure.Finished = py.Finished.Add(time.Second) },
 			func(string) string { return "/python/before_erasure" }, "invalid_binding"},
 		{"invalid resolver trace", func(py, _ *observation, _ string) { py.SpeakerTrace.ClockSeconds = nil },
-			func(string) string { return "/python" + clockPath }, "invalid_binding"},
+			func(string) string { return "/before_erasure/python" + clockPath }, "invalid_binding"},
 		{"state drift before erase", func(py, _ *observation, path string) {
 			py.BeforeErasure.BatchPrivacy.Fields["generation"] = json.Number("8")
 			mustMap(py.BeforeErasure.Derived[path])["generation"] = json.Number("8")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from hashlib import sha256
+import importlib
 import re
 from threading import Lock
 
@@ -14,6 +15,10 @@ from testing.finalization_replay.metrics import embedding_token_estimate, prompt
 # the queue in Postgres. The disposition is compared separately from these rows.
 QUEUE_COLLECTIONS = {'conversation_finalization_jobs', 'conversation_finalization_projection_shards'}
 TOKEN_HEX = re.compile(r'[0-9a-f]{32}')
+
+
+def load_memo_bindings():
+    return importlib.import_module('testing.finalization_replay.memo_bindings')
 
 
 def _seeded_tokens(value):
@@ -342,21 +347,24 @@ class CaseState:
         return {'exists': snapshot.exists, 'fields': pack(snapshot.to_dict() or {})}
 
     def capture_before_erasure(self):
-        conversation = self.conversation.get().to_dict()
-        if conversation is None:
+        snapshot = self.observe('completed', self.initial_documents, load_memo_bindings=load_memo_bindings)
+        if snapshot['conversation'] is None:
             raise RuntimeError('replay conversation missing before erasure')
-        references = (
-            self.client.document(self.batch_privacy_document_path),
-            self.conversation.collection('speaker_evidence').document('current'),
-        )
-        derived = {ref.path: pack(row) for ref in references if (row := ref.get().to_dict()) is not None}
         self.before_erasure = {
-            'conversation': pack(conversation),
-            'derived_documents': derived,
-            'batch_pipeline_privacy': self.batch_privacy_snapshot(),
-            'cost': self.cost(),
-            'finished_at': datetime.now(timezone.utc).isoformat(),
+            field: snapshot[field]
+            for field in (
+                'conversation',
+                'derived_documents',
+                'cost',
+                'finished_at',
+                'updated_at_changed',
+                'preserved_fields',
+                'episode_attach_memo_valid',
+                'episode_attach_memo_expected',
+                'episode_attach_memo_failure_reason',
+            )
         }
+        self.before_erasure['batch_pipeline_privacy'] = snapshot['batch_pipeline_privacy']['final']
 
     def observe(self, status, before, *, load_memo_bindings=None):
         after = self.documents()
