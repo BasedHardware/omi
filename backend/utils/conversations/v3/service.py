@@ -230,6 +230,15 @@ def historical_stretches(eligible, now, *, since, until, internal_end=False):
     return groups
 
 
+async def _release_reconcile_lease(uid, key, token, *, primary_failed):
+    try:
+        await run_blocking(db_executor, leases.release, uid, key, token)
+    except Exception as error:
+        if not primary_failed:
+            raise
+        logger.warning('v3 reconcile lease release failed exception_type=%s', type(error).__name__)
+
+
 async def reconcile(
     uid,
     *,
@@ -273,6 +282,7 @@ async def reconcile(
     if token is None:
         metrics.RECONCILES.labels('busy').inc()
         return 'busy'
+    primary_failed = False
     try:
         cohesion = stretch_cohesion_enabled()
         silence_seconds, lock_seconds = boundary_seconds(cohesion=cohesion and not derive)
@@ -643,6 +653,7 @@ async def reconcile(
                     and (not was_ended or rewrite or promoted or (prior or {}).get('tile_state') == 'transcribing')
                 ):
                     row['v3_process_pending'] = True
+                    row.pop('v3_process_retry_after', None)
                     row['v3_rewrites'] = int((prior or {}).get('v3_rewrites') or 0) + int(rewrite)
                 if (
                     prior
@@ -782,6 +793,7 @@ async def reconcile(
         metrics.RECONCILES.labels('committed').inc()
         deferred = preview_wakes(rows, recordings)
     except Conflict as error:
+        primary_failed = True
         reason = str(error)
         if reason in RACES and not derive:
             # Nothing committed, so every pending marker is still owed. Answer the task and wake the
@@ -797,6 +809,7 @@ async def reconcile(
             metrics.RECONCILES.labels('raced').inc()
             metrics.RACES.labels(reason).inc()
             logger.info('v3 reconcile raced reason=%s', reason)
+            primary_failed = False
             return 'raced'
         if reason not in BLOCKED:
             metrics.RECONCILES.labels('error').inc()
@@ -813,11 +826,14 @@ async def reconcile(
             # A backfill conflict must not park the owner's live builder.
             await run_blocking(db_executor, store.record_blocked, uid, token, reason)
         blocked = reason
-    except Exception:
-        metrics.RECONCILES.labels('error').inc()
+        primary_failed = False
+    except BaseException as error:
+        primary_failed = True
+        if isinstance(error, Exception):
+            metrics.RECONCILES.labels('error').inc()
         raise
     finally:
-        await run_blocking(db_executor, leases.release, uid, key, token)
+        await _release_reconcile_lease(uid, key, token, primary_failed=primary_failed)
     if blocked is not None:
         if not derive and not on_open:
             # Windows earlier passes (or earlier batches) committed still owe their notes.
@@ -1108,12 +1124,16 @@ async def drain_processing(uid):
         if token is None:
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
             continue
+        primary_failed = False
         try:
             await _process_leased(uid, row, token)
         except FinalizationOwnedElsewhere:
             continue
+        except BaseException:
+            primary_failed = True
+            raise
         finally:
-            await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
+            await _release_reconcile_lease(uid, 'summary-' + row['id'], token, primary_failed=primary_failed)
     # Settled notes arm the conversation-created obligation; deliver after every summary lease is released.
     # Imported here: the webhook fanout's LLM/app graph must not join process_conversation's import graph,
     # which loads this module at import time (listen, pusher and sync all import it).
@@ -1122,15 +1142,33 @@ async def drain_processing(uid):
     await created.deliver(uid)
 
 
+PROCESSING_SCAN_MAX_PAGES = 4
+
+
 def pending_processing(uid):
     client = store.get_firestore_client()
-    return [
-        store.decode_row(uid, doc)
-        for doc in store.user_conversations(client, uid)
+    now = datetime.now(timezone.utc)
+    query = (
+        store.user_conversations(client, uid)
         .where(filter=FieldFilter('v3_process_pending', '==', True))
+        .order_by('__name__')
         .limit(store.LIMIT)
-        .stream()
-    ]
+    )
+    due = []
+    page = query
+    # At most four pages (512 document reads), and at most 128 decoded results.
+    for _ in range(PROCESSING_SCAN_MAX_PAGES):
+        snapshots = list(page.stream())
+        for doc in snapshots:
+            data = doc.to_dict() or {}
+            if policy.processing_due(data, now):
+                due.append(store.decode_row(uid, doc, data=data))
+                if len(due) == store.LIMIT:
+                    return due
+        if len(snapshots) < store.LIMIT:
+            break
+        page = query.start_after(snapshots[-1])
+    return due
 
 
 def _process(uid, row, token):
@@ -1175,6 +1213,12 @@ def _process(uid, row, token):
                 # short-clip floor match live notes; process_conversation withholds their derived effects.
                 trigger=ProcessingTrigger.CAPTURE_END,
             )
+            decline = fence.persistence_declined()
+        if decline is not None:
+            writers.settle_processing(
+                uid, row['id'], token, row.get('sync_content_revision'), None, skipped=True, decline=decline
+            )
+            return
         if getattr(result.status, 'value', result.status) == 'failed':
             writers.fail_processing(
                 uid, row['id'], token, row.get('sync_content_revision'), content_hash=writers.processing_hash(row)
@@ -1243,7 +1287,8 @@ async def sweep():
             query = query.start_after(cursor)
         processing = await run_blocking(db_executor, lambda: list(query.stream()))
         for doc in processing:
-            if not python_owns_finalization(doc.to_dict() or {}):
+            row = doc.to_dict() or {}
+            if not python_owns_finalization(row) or not policy.processing_due(row, now):
                 continue
             parts = doc.reference.path.split('/')
             if len(parts) == 4 and parts[0] == 'users' and parts[1] not in users:

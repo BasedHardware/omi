@@ -1,6 +1,7 @@
 """Strict read-before-write contracts using synthetic document boundaries."""
 
 from database import conversations_v3_leases as leases
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 
 from database import conversations_v3_processing as writers
 
@@ -112,8 +113,8 @@ def test_atomic_projection_and_claim(strict, monkeypatch, mode):
     }
     store.commit_projection('synthetic', token, {'r': source}, {}, [row], [], firestore_client=strict)
     if mode == 'default':
-        batch_get.assert_called_once()
-        assert batch_get.call_args.kwargs['transaction'] is strict.transactions[-1]
+        assert batch_get.call_count == 3  # inputs, tombstone, and new target
+        assert all(call.kwargs['transaction'] is strict.transactions[-1] for call in batch_get.call_args_list)
     else:
         batch_get.assert_not_called()
     assert strict.rows[R]['v3_pending'] is False
@@ -884,7 +885,7 @@ def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(
     if abort_second_batch:
         trace_id = 'a' * 32
         with bind_request_log_trace({b'x-cloud-trace-context': (trace_id + '/42').encode()}):
-            with pytest.raises(Aborted):
+            with pytest.raises(FirestoreContentionExhausted):
                 commit()
         assert observations == [True]
         assert strict.rows[R]['v3_pending'] is True

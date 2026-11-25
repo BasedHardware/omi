@@ -106,9 +106,18 @@ segments counted once. Its durable claim limits it to one title-only provider
 attempt. The builder publishes the preview through `structured.title` while the
 row is live. User titles and the final outline take precedence.
 
-`CONVERSATIONS_V3_BATCH_COMMIT_READS=on` is the default. The projection commit reads its
-recordings and existing derived rows with one transactional BatchGet per chunk. Set it to `off`
-to restore serial per-document reads.
+`CONVERSATIONS_V3_BATCH_COMMIT_READS=on` is the default. The projection commit uses
+transactional BatchGet chunks for input revisions, tombstones, and new-target existence
+checks. Set it to `off` to restore serial point reads.
+
+`POST /v1/conversations-v3/reconcile` returns HTTP 409 with
+`{"status":"retry","reason":"dependency_warming"}` for exhausted Firestore contention,
+expiry, or retry deadlines. Confirmed processing fences use `persistence_fenced` in the
+same response. `CONVERSATIONS_V3_RECONCILE_RETRY_RESPONSE` defaults to on. Set it to
+`off` on backend-sync to restore the prior HTTP error mapping. See the
+[reconcile retry change note](./listen_pusher_pipeline/changes/2026-11-25-v3-reconcile-retry-contract.md)
+for retry metrics and processing settlement.
+
 
 ## Pre-recorded Modulate credit-refusal failover
 
