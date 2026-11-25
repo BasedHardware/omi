@@ -77,6 +77,18 @@ def manual_end_home_visible_enabled() -> bool:
     }
 
 
+def capture_continuity_enabled() -> bool:
+    """Default on. A stream gap inside one capture origin is not silence, and a manual-end cut waits
+    (bounded) for the batch transcript of its own or a preceding sealed recording. Off restores the
+    previous cut and gap rules and skips the predecessor read."""
+    return os.getenv('CONVERSATIONS_V3_CAPTURE_CONTINUITY', 'on').strip().lower() not in {
+        'off',
+        'false',
+        '0',
+        'no',
+    }
+
+
 def stretch_cohesion_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_STRETCH_COHESION', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 

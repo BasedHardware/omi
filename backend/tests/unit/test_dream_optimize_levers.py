@@ -4,12 +4,11 @@ import asyncio
 import json
 import logging
 import uuid
-from copy import deepcopy
 
 import pytest
 
 from config import dream_levers
-from config.dream_session import HEAVY_TOKENS, LIGHT_TOKENS, MEDIUM_TOKENS, SessionLimits
+from config.dream_session import SessionLimits
 from database import dream_feedback
 from models.agent_tools import DEFECT_TOOL, ReportDefect, tool_schemas
 from tests.unit.test_dream_cleanup_edits import records, UID
@@ -25,39 +24,24 @@ from utils.llm.shaped_agent import LoopStop, Turn
 # --- lever arms ---------------------------------------------------------------------------------
 
 
-def test_levers_default_to_shadow_and_serve_only_a_cohort(monkeypatch):
+def test_verify_hold_defaults_to_serve_and_honors_shadow_cohorts(monkeypatch):
     for name in dream_levers.PER_OWNER:
         monkeypatch.delenv(name, raising=False)
         monkeypatch.delenv(name + '_SERVE_PERCENT', raising=False)
-    # Idle skip remains off; the no-progress lever has been retired.
+        monkeypatch.delenv(name + '_SERVE_UID_SHA256S', raising=False)
     assert dream_levers.arms('owner-a') == {
-        'idle_skip': 'off',
-        'material_budget': 'shadow',
-        'hunt_backoff': 'shadow',
-        'prescan': 'shadow',
         # The verify hold only moves budget from searching to verifying, so it serves.
         'verify_hold': 'serve',
     }
-    monkeypatch.setenv(dream_levers.IDLE_SKIP_MODE_ENV, 'shadow')
-    monkeypatch.setenv(dream_levers.IDLE_SKIP_SERVE_PERCENT_ENV, '100')
-    assert dream_levers.arm(dream_levers.IDLE_SKIP_MODE_ENV, 'owner-a') == 'serve'
-    monkeypatch.setenv(dream_levers.IDLE_SKIP_SERVE_PERCENT_ENV, '0')
-    assert dream_levers.arm(dream_levers.IDLE_SKIP_MODE_ENV, 'owner-a') == 'shadow'
-    monkeypatch.setenv(dream_levers.IDLE_SKIP_MODE_ENV, 'off')
-    assert dream_levers.arm(dream_levers.IDLE_SKIP_MODE_ENV, 'owner-a') == 'off'
-    monkeypatch.setenv(dream_levers.IDLE_SKIP_MODE_ENV, 'serve')
-    assert dream_levers.arm(dream_levers.IDLE_SKIP_MODE_ENV, 'owner-a') == 'serve'
-
-
-def test_lever_cohorts_are_salted_per_lever(monkeypatch):
-    monkeypatch.setenv(dream_levers.IDLE_SKIP_MODE_ENV, 'shadow')
-    monkeypatch.setenv(dream_levers.IDLE_SKIP_SERVE_PERCENT_ENV, '50')
-    monkeypatch.setenv(dream_levers.MATERIAL_BUDGET_SERVE_PERCENT_ENV, '50')
-    owners = [f'owner-{index}' for index in range(400)]
-    idle = {uid for uid in owners if dream_levers.arm(dream_levers.IDLE_SKIP_MODE_ENV, uid) == 'serve'}
-    budget = {uid for uid in owners if dream_levers.arm(dream_levers.MATERIAL_BUDGET_MODE_ENV, uid) == 'serve'}
-    assert 120 < len(idle) < 280 and 120 < len(budget) < 280
-    assert idle != budget
+    monkeypatch.setenv(dream_levers.VERIFY_HOLD_MODE_ENV, 'shadow')
+    monkeypatch.setenv(dream_levers.VERIFY_HOLD_SERVE_PERCENT_ENV, '100')
+    assert dream_levers.arm(dream_levers.VERIFY_HOLD_MODE_ENV, 'owner-a') == 'serve'
+    monkeypatch.setenv(dream_levers.VERIFY_HOLD_SERVE_PERCENT_ENV, '0')
+    assert dream_levers.arm(dream_levers.VERIFY_HOLD_MODE_ENV, 'owner-a') == 'shadow'
+    monkeypatch.setenv(dream_levers.VERIFY_HOLD_MODE_ENV, 'off')
+    assert dream_levers.arm(dream_levers.VERIFY_HOLD_MODE_ENV, 'owner-a') == 'off'
+    monkeypatch.setenv(dream_levers.VERIFY_HOLD_MODE_ENV, 'serve')
+    assert dream_levers.arm(dream_levers.VERIFY_HOLD_MODE_ENV, 'owner-a') == 'serve'
 
 
 def test_lever_errors_fail_open_to_off(monkeypatch):
@@ -65,7 +49,7 @@ def test_lever_errors_fail_open_to_off(monkeypatch):
         raise RuntimeError('parse')
 
     monkeypatch.setattr(dream_levers.refactor_modes, 'mode', broken)
-    assert dream_levers.arm(dream_levers.IDLE_SKIP_MODE_ENV, 'owner-a') == 'off'
+    assert dream_levers.arm(dream_levers.VERIFY_HOLD_MODE_ENV, 'owner-a') == 'off'
     assert dream_levers.arm(dream_levers.PAYOFF_ORDER_MODE_ENV, None) == 'off'
 
 
@@ -77,18 +61,6 @@ def test_payoff_order_is_global_mode_only(monkeypatch):
     monkeypatch.delenv(dream_levers.PAYOFF_ORDER_MODE_ENV)
     # David 2026-10-30: payoff first.
     assert dream_levers.arm(dream_levers.PAYOFF_ORDER_MODE_ENV, None) == 'serve'
-
-
-def test_material_budget_never_raises_the_ceiling():
-    assert dream_agent.material_tokens(0, HEAVY_TOKENS) == LIGHT_TOKENS
-    assert dream_agent.material_tokens(4, HEAVY_TOKENS) == LIGHT_TOKENS
-    assert dream_agent.material_tokens(5, HEAVY_TOKENS) == MEDIUM_TOKENS
-    assert dream_agent.material_tokens(16, HEAVY_TOKENS) == HEAVY_TOKENS
-    assert dream_agent.material_tokens(40, MEDIUM_TOKENS) == MEDIUM_TOKENS
-    assert dream_agent.material_tokens(0, 20000) == 20000
-
-
-# --- telemetry ----------------------------------------------------------------------------------
 
 
 def _pass_report(**extra):
@@ -106,7 +78,7 @@ def _pass_report(**extra):
             {'key': 'k2', 'kind': 'spelling', 'status': 'verifier_disagree'},
         ],
         'timing': {'wait_ms': 1500, 'waits': 2},
-        'levers': {'idle_skip': {'arm': 'shadow', 'would_skip': True}},
+        'levers': {'verify_hold': {'arm': 'serve', 'verify_used': 42}},
         'defect_reports': {'attempt': 1, 'rejected_feedback_input_overlap': 1},
         **extra,
     }
@@ -126,7 +98,7 @@ def test_pass_record_carries_counts_and_never_free_text(caplog):
     assert payload['reason'] == 'other' and payload['error_type'] == 'other' and payload['stop_reason'] == 'other'
     assert payload['applied'] == {'retire_memory': 1}
     assert payload['outcomes'] == {'applied': 1, 'verifier_disagree': 1}
-    assert payload['wait_ms'] == 1500 and payload['levers']['idle_skip'] == {'arm': 'shadow', 'would_skip': True}
+    assert payload['wait_ms'] == 1500 and payload['levers']['verify_hold'] == {'arm': 'serve', 'verify_used': 42}
     assert 'jane' not in caplog.text and 'abc123' not in caplog.text
 
 
@@ -168,7 +140,7 @@ def test_telemetry_kill_switch_and_errors_never_raise(monkeypatch, caplog):
 
 def test_sweep_record_counts_owners_not_retry_attempts(caplog):
     done = {'status': 'complete', 'outcomes': [{'status': 'applied', 'kind': 'spelling'}], 'tokens': 10}
-    idle = {'status': 'not_admitted', 'reason': 'idle_no_material'}
+    idle = {'status': 'not_admitted', 'reason': 'ineligible'}
     starved = {'status': 'waiting', 'reason': 'reserved_capacity'}
     reports = [
         {'status': 'waiting', 'reason': 'reserved_capacity'},
@@ -191,7 +163,7 @@ def test_sweep_record_counts_owners_not_retry_attempts(caplog):
     payload = json.loads(caplog.records[-1].getMessage())
     assert payload['attempts'] == 5
     assert payload['final_status'] == {'complete': 1, 'not_admitted': 1, 'waiting': 1}
-    assert payload['not_admitted'] == {'idle_no_material': 1}
+    assert payload['not_admitted'] == {'ineligible': 1}
     assert payload['waiting_attempts'] == {'reserved_capacity': 3}
     assert payload['applied'] == 1 and payload['owners_unreached'] == 2
     assert payload['scheduled_at'] == '2026-10-28T09:00:00+00:00'
@@ -386,61 +358,27 @@ def test_no_progress_retirement_keeps_normal_completion(runtime, monkeypatch):
     assert 'no_progress_stop' not in report['levers']
 
 
-def test_material_budget_serve_shrinks_limits(runtime, monkeypatch):
-    monkeypatch.setenv(dream_levers.MATERIAL_BUDGET_MODE_ENV, 'serve')
-    limits = SessionLimits(
-        bucket='heavy', turns=16, tools=16, read_bytes=640000, read_call_bytes=64000, tokens=HEAVY_TOKENS
-    )
-    owner_records = EvidenceRecords(records(runtime))
-    _scripted(owner_records, limits, monkeypatch)
+def test_early_loop_stop_without_finish_payload_completes_the_pass(runtime, monkeypatch):
+    limits = SessionLimits(bucket='light', turns=32, tools=32, tokens=400000)
+    _scripted(EvidenceRecords(records(runtime)), limits, monkeypatch)
+    run = Session.run
+
+    async def stop_after_read(session):
+        return True
+
+    async def run_with_early_finish(session, *args, **kwargs):
+        # Inject an early loop stop before the finish tool sets a payload.
+        session.after_execute = stop_after_read
+        return await run(session, *args, **kwargs)
+
+    monkeypatch.setattr(Session, 'run', run_with_early_finish)
     count = []
     report = asyncio.run(dream_agent.run_pass(UID, turn=_idle_reader(count), dry_run=True))
-    lever = report['levers']['material_budget']
-    assert lever == {'arm': 'serve', 'tokens_before': HEAVY_TOKENS, 'tokens_after': LIGHT_TOKENS}
-    assert report['token_limit'] == LIGHT_TOKENS
-    assert report['material'] == 0
 
-
-def test_material_budget_shadow_counts_the_tail_a_cap_would_cut(runtime, monkeypatch):
-    monkeypatch.setenv(dream_levers.MATERIAL_BUDGET_MODE_ENV, 'shadow')
-    monkeypatch.setattr(dream_agent, 'material_tokens', lambda material, current: 100000)
-    limits = SessionLimits(
-        bucket='heavy', turns=16, tools=16, read_bytes=640000, read_call_bytes=64000, tokens=HEAVY_TOKENS
-    )
-    owner_records = EvidenceRecords(records(runtime))
-    _scripted(owner_records, limits, monkeypatch)
-    count = []
-    report = asyncio.run(dream_agent.run_pass(UID, turn=_idle_reader(count), dry_run=True))
-    lever = report['levers']['material_budget']
-    assert report['token_limit'] == HEAVY_TOKENS and len(count) == 13
-    assert lever == {
-        'arm': 'shadow',
-        'tokens_before': HEAVY_TOKENS,
-        'tokens_after': 100000,
-        'crossed': True,
-        'staged_after_cap': 0,
-        'applied_after_cap': 0,
-    }
-
-
-def test_cap_tail_counts_only_work_staged_after_the_crossing():
-    staged = {'early': 1, 'late-applied': 2, 'late-rejected': 3}
-    outcomes = [
-        {'key': 'early', 'status': 'applied'},
-        {'key': 'late-applied', 'status': 'applied'},
-        {'key': 'late-rejected', 'status': 'verifier_disagree'},
-        'malformed',
-    ]
-    assert dream_agent.cap_tail(staged, {'early'}, outcomes) == {
-        'crossed': True,
-        'staged_after_cap': 2,
-        'applied_after_cap': 1,
-    }
-    assert dream_agent.cap_tail(staged, None, outcomes) == {
-        'crossed': False,
-        'staged_after_cap': 0,
-        'applied_after_cap': 0,
-    }
+    assert count == [1]
+    assert report['status'] == 'complete', report
+    assert report['stop_reason'] == 'finished'
+    assert report['summary'] == report['notes'] == ''
 
 
 # --- admission, parking and ordering (Firestore fake) -------------------------------------------
@@ -449,24 +387,10 @@ from datetime import datetime, timedelta, timezone  # noqa: E402
 
 from config.dream_agent import Caps  # noqa: E402
 from database import dream_scheduler, dream_store  # noqa: E402
-from tests.unit.test_dream_queue import queue, seed, UID as QUEUE_UID, NOW  # noqa: E402,F401
+from tests.unit.test_dream_queue import queue, UID as QUEUE_UID, NOW  # noqa: E402,F401
 
 
-def test_skip_idle_parks_a_hunt_with_no_material(queue):
-    queue.rows[('dream_due', QUEUE_UID)] = {'due_at': NOW}
-    denied = {}
-    assert dream_store.acquire(QUEUE_UID, Caps(), now=NOW, denial_sink=denied, skip_idle=True) is None
-    assert denied == {'reason': 'idle_no_material'}
-    assert ('dream_due', QUEUE_UID) not in queue.rows
-
-
-def test_skip_idle_still_admits_owners_with_dirty_work(queue):
-    seed(queue, 2)
-    lease = dream_store.acquire(QUEUE_UID, Caps(), now=NOW, skip_idle=True)
-    assert lease is not None and lease['hunt'] is False
-
-
-def test_hunt_lease_marks_would_skip_in_shadow(queue):
+def test_hunt_lease_admits_an_owner_without_dirty_work(queue):
     lease = dream_store.acquire(QUEUE_UID, Caps(), now=NOW)
     assert lease is not None and lease['hunt'] is True
 
@@ -481,110 +405,28 @@ def test_denial_reasons_are_named(queue):
     assert denied['reason'] == 'not_due'
 
 
-def test_park_if_idle_keeps_owners_with_a_pending_score(queue):
-    queue.rows[('dream_due', QUEUE_UID)] = {'due_at': NOW}
-    queue.rows[('dream_users', QUEUE_UID)] = {'score': 2}
-    assert dream_store.park_if_idle(QUEUE_UID) is False
-    assert ('dream_due', QUEUE_UID) in queue.rows
-
-
-def test_park_if_idle_is_transactional_with_the_dirty_count(queue):
-    queue.rows[('dream_due', QUEUE_UID)] = {'due_at': NOW}
-    seed(queue, 1)
-    assert dream_store.park_if_idle(QUEUE_UID) is False
-    assert ('dream_due', QUEUE_UID) in queue.rows
-    for key in [key for key in queue.rows if key[:3] == ('dream_users', QUEUE_UID, 'dirty')]:
-        del queue.rows[key]
-    queue.rows[('dream_users', QUEUE_UID)] = {'score': 0}
-    assert dream_store.park_if_idle(QUEUE_UID) is True
-    assert ('dream_due', QUEUE_UID) not in queue.rows
-
-
-def test_finish_parks_an_idle_owner_and_records_yield(queue):
+def test_finish_reschedules_an_idle_owner_and_records_yield(queue):
     lease = dream_store.acquire(QUEUE_UID, Caps(), now=NOW)
     report = {'tokens': 5, 'outcomes': [{'key': 'a', 'kind': 'spelling', 'status': 'applied'}]}
-    dream_store.finish(QUEUE_UID, lease, report, success=True, park_when_idle=True, now=NOW)
-    assert ('dream_due', QUEUE_UID) not in queue.rows
+    dream_store.finish(QUEUE_UID, lease, report, success=True, now=NOW)
+    assert queue.rows[('dream_due', QUEUE_UID)]['due_at'] == NOW + timedelta(hours=24)
     assert queue.rows[('dream_users', QUEUE_UID)]['last_yield'] == 1
 
 
-def test_hunt_backoff_doubles_per_dry_hunt_and_caps():
-    from config.dream_agent import backed_off_hunt_interval, hunt_interval
-
-    base = hunt_interval('light')
-    assert [backed_off_hunt_interval('light', n) for n in (0, 1, 2, 3, 9)] == [
-        base,
-        2 * base,
-        4 * base,
-        8 * base,
-        8 * base,
-    ]
-    assert backed_off_hunt_interval('light', 'junk') == base
-    assert backed_off_hunt_interval('heavy', 1) == 2 * hunt_interval('heavy')
-
-
-def test_finish_counts_dry_hunts_and_yield_resets_them(queue):
-    queue.rows[('dream_users', QUEUE_UID)] = {'score': 0, 'dry_hunts': 2}
-    lease = dream_store.acquire(QUEUE_UID, Caps(), now=NOW)
-    assert lease['hunt'] and lease['dry_hunts'] == 2
-    dream_store.finish(QUEUE_UID, lease, {'tokens': 5}, success=True, now=NOW)
-    assert queue.rows[('dream_users', QUEUE_UID)]['dry_hunts'] == 3
-    later = NOW + timedelta(days=9)
-    lease = dream_store.acquire(QUEUE_UID, Caps(), now=later)
-    report = {'tokens': 5, 'outcomes': [{'key': 'a', 'kind': 'dismiss_person', 'status': 'applied'}]}
-    dream_store.finish(QUEUE_UID, lease, report, success=True, now=later)
-    assert queue.rows[('dream_users', QUEUE_UID)]['dry_hunts'] == 0
-
-
-def test_serve_dry_hunt_due_row_uses_the_incremented_streak(queue, monkeypatch):
+def test_existing_dry_hunt_streak_does_not_delay_a_timed_hunt(queue):
     from config.dream_agent import hunt_interval
 
-    monkeypatch.setenv(dream_levers.HUNT_BACKOFF_MODE_ENV, 'serve')
-    queue.rows[('dream_users', QUEUE_UID)] = {'score': 0, 'dry_hunts': 1, 'size_bucket': 'light'}
+    interval = hunt_interval('light')
+    queue.rows[('dream_users', QUEUE_UID)] = {
+        'score': 0,
+        'dry_hunts': 15,
+        'size_bucket': 'light',
+        'last_attempt_at': NOW - interval,
+    }
     lease = dream_store.acquire(QUEUE_UID, Caps(), now=NOW)
-    dream_store.finish(QUEUE_UID, lease, {'tokens': 5, 'size_bucket': 'light'}, success=True, now=NOW)
-    assert queue.rows[('dream_users', QUEUE_UID)]['dry_hunts'] == 2
-    assert queue.rows[('dream_due', QUEUE_UID)]['due_at'] == NOW + 4 * hunt_interval('light')
-
-
-@pytest.mark.parametrize('case', ['failed', 'manual', 'canary'])
-def test_dry_hunts_ignore_failed_manual_and_canary_passes(queue, case):
-    queue.rows[('dream_users', QUEUE_UID)] = {'score': 0, 'dry_hunts': 1}
-    lease = dream_store.acquire(QUEUE_UID, Caps(), now=NOW)
-    if case == 'manual':
-        lease = {**lease, 'trigger': 'manual'}
-    if case == 'canary':
-        lease = {**lease, 'canary': True}
-    dream_store.finish(QUEUE_UID, lease, {'tokens': 5}, success=case != 'failed', now=NOW)
-    assert queue.rows[('dream_users', QUEUE_UID)].get('dry_hunts', 1) == 1
-
-
-def test_hunt_backoff_serve_delays_the_next_hunt_and_shadow_only_records(queue, monkeypatch):
-    from config.dream_agent import hunt_interval
-
-    state = {'score': 0, 'dry_hunts': 2, 'size_bucket': 'light', 'last_pass_at': NOW}
-    monkeypatch.setenv(dream_levers.HUNT_BACKOFF_MODE_ENV, 'shadow')
-    assert dream_scheduler.due_time(state, NOW, QUEUE_UID) == NOW + hunt_interval('light')
-    monkeypatch.setenv(dream_levers.HUNT_BACKOFF_MODE_ENV, 'serve')
-    assert dream_scheduler.due_time(state, NOW, QUEUE_UID) == NOW + 4 * hunt_interval('light')
-    assert dream_scheduler.due_time(state, NOW) == NOW + hunt_interval('light')
-    # Dirty work is never backed off.
-    assert dream_scheduler.due_time({**state, 'score': 3}, NOW, QUEUE_UID) < NOW
-
-    queue.rows[('dream_users', QUEUE_UID)] = {**state, 'last_attempt_at': NOW}
-    denied = {}
-    when = NOW + 2 * hunt_interval('light')
-    assert dream_store.acquire(QUEUE_UID, Caps(), now=when, denial_sink=denied) is None
-    assert denied['reason'] == 'not_due'
-    monkeypatch.setenv(dream_levers.HUNT_BACKOFF_MODE_ENV, 'shadow')
-    lease = dream_store.acquire(QUEUE_UID, Caps(), now=when)
-    assert lease['hunt'] and lease['backoff_would_defer'] is True
-
-
-def test_finish_without_parking_keeps_the_timed_hunt(queue):
-    lease = dream_store.acquire(QUEUE_UID, Caps(), now=NOW)
+    assert lease is not None and lease['hunt']
     dream_store.finish(QUEUE_UID, lease, {'tokens': 5}, success=True, now=NOW)
-    assert ('dream_due', QUEUE_UID) in queue.rows
+    assert queue.rows[('dream_due', QUEUE_UID)]['due_at'] == NOW + interval
 
 
 def test_payoff_order_prefers_material_and_yield_but_ages_first(queue):
@@ -736,18 +578,6 @@ def test_payoff_read_error_fails_open(queue, monkeypatch, arm):
     rows = [('first', NOW), ('second', NOW)]
     page = [uid for uid, _ in rows]
     assert asyncio.run(dream_agent._payoff_order(rows, page, {})) == page
-
-
-def test_discovery_parking_fails_open(monkeypatch):
-    def broken(*args, **kwargs):
-        raise RuntimeError('cohort')
-
-    monkeypatch.setattr(dream_scheduler.dream_levers, 'arm', broken)
-    assert dream_scheduler._parked('owner', {'score': 0}) is False
-    monkeypatch.setattr(dream_scheduler.dream_levers, 'arm', lambda name, uid: 'serve')
-    monkeypatch.setattr(dream_scheduler, '_backlog_owed', lambda uid: False)
-    assert dream_scheduler._parked('owner', {'score': 0}) is True
-    assert dream_scheduler._parked('owner', {'score': 3}) is False
 
 
 def test_defect_kill_switch_reads_only_false_words_as_off(monkeypatch):

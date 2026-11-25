@@ -3,9 +3,6 @@ package main
 import (
 	"bytes"
 	"compress/zlib"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/hkdf"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -19,6 +16,7 @@ import (
 )
 
 const maxCorpusBytes = 16 * 1024 * 1024
+const maxObservationBytes = 128 * 1024 * 1024
 
 type replayInput struct {
 	backend    string
@@ -143,6 +141,37 @@ func loadCorpus(path string) (data []byte, err error) {
 	data, err = io.ReadAll(io.LimitReader(file, maxCorpusBytes+1))
 	if len(data) > maxCorpusBytes {
 		return nil, errors.New("replay corpus exceeds 16 MiB")
+	}
+	return data, err
+}
+
+func loadObservationFile(path string) (data []byte, resultErr error) {
+	canonical, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve diagnostic observations: %w", err)
+	}
+	canonical, err = filepath.Abs(canonical)
+	if err != nil {
+		return nil, fmt.Errorf("resolve diagnostic observation path: %w", err)
+	}
+	if _, validationErr := outsideWorktree(canonical); validationErr != nil {
+		return nil, errors.New("diagnostic observations must be outside Git worktrees")
+	}
+	file, err := os.Open(canonical)
+	if err != nil {
+		return nil, fmt.Errorf("open diagnostic observations: %w", err)
+	}
+	defer func() { resultErr = errors.Join(resultErr, file.Close()) }()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("inspect diagnostic observations: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxObservationBytes {
+		return nil, errors.New("diagnostic observations must be a regular file of at most 128 MiB")
+	}
+	data, err = io.ReadAll(io.LimitReader(file, maxObservationBytes+1))
+	if len(data) > maxObservationBytes {
+		return nil, errors.New("diagnostic observations exceed 128 MiB")
 	}
 	return data, err
 }
@@ -346,23 +375,7 @@ func readOwnerTestKey(path string) (key string, err error) {
 // internal/platform/crypt. Tools stay standard-library-only, so the Python-generated
 // known-answer test keeps this small compatibility reader tied to that contract.
 func decryptOwnerTranscript(uid, envelope string, compressed bool, secret string) error {
-	sealed, err := base64.StdEncoding.Strict().DecodeString(envelope)
-	if err != nil {
-		return errors.New("invalid base64 envelope")
-	}
-	key, err := hkdf.Key(sha256.New, []byte(secret), []byte(uid), "user-data-encryption", 32)
-	if err != nil {
-		return err
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return err
-	}
-	aead, err := cipher.NewGCM(block)
-	if err != nil || len(sealed) < aead.NonceSize()+aead.Overhead() {
-		return errors.New("invalid encrypted envelope")
-	}
-	plain, err := aead.Open(nil, sealed[:aead.NonceSize()], sealed[aead.NonceSize():], nil)
+	plain, err := decryptReplayEnvelope(uid, envelope, secret)
 	if err != nil {
 		return errors.New("encrypted envelope authentication failed")
 	}
@@ -463,7 +476,7 @@ func syntheticDigests() map[string]string {
 	// as synthetic, including the decoded contents of encrypted fixture records.
 	return map[string]string{
 		"admission-parity.json": "3d9d4ffec0a1053bbca24f481f0c776d5c5acc97ebc3b18020b369e7b313e9ab",
-		"conformance-gaps.json": "63c7b644b63985ae1f9434f7c0d6e6730fbb52b388572a56235e479aab53a160",
+		"conformance-gaps.json": "0164e17d82dc267a33f9a0dce768d5cf573527a8e873ad6026f6be8b42cdc161",
 		"held-out.json":         "a1ae0f2357f1f4debc04be7fb09487da966c8660e90738ae4b225f4948193ce9",
 	}
 }

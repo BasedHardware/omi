@@ -432,7 +432,14 @@ async def _manual_finish_admitted(
             v3_metrics.BATCH_MANUAL_END.labels('promoted' if promoted else 'not_promoted').inc()
         # ``current`` is a raw row: its stored transcript is opaque here, so this only screens on
         # clear fields. The pass decides on a decoded row.
-        if fast_finish.mode() == 'off' or not fast_finish.candidate(current) or conversation_id in _FAST_FINISH_STARTED:
+        if fast_finish.mode() == 'off':
+            skipped = 'mode_off'
+        else:
+            skipped = fast_finish.candidate_rejection(current)
+            if skipped is None and conversation_id in _FAST_FINISH_STARTED:
+                skipped = 'already_started'
+        if skipped is not None:
+            fast_finish.SKIPPED.labels(skipped).inc()
             if not single:
                 v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
             return
