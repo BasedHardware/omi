@@ -25,6 +25,7 @@ from database.conversation_payload import (
 )
 from utils.conversation_payload import PAYLOAD_FIELD, ConversationProjectionTooLarge, InvalidConversationPayload
 from utils.conversations.v3 import Conflict
+from utils.firestore_document_size import estimate_firestore_document_bytes
 
 COLLECTION = 'conversations_v3_backfill_runs'
 # The run mode whose ledger keeps undo priors (utils.conversations.v3.backfill.LIVE_MODE).
@@ -263,7 +264,8 @@ def _prior_children_for_cleanup(tx, snapshots):
     children, size = [], 0
     for snapshot in snapshots:
         data = snapshot.to_dict() or {}
-        size += len(json.dumps(data, default=str).encode())
+        path = getattr(getattr(snapshot, 'reference', None), 'path', None)
+        size += estimate_firestore_document_bytes(data, path if isinstance(path, str) else None)
         if PAYLOAD_FIELD in data:
             refs, cost = read_payload_children_for_delete(tx, snapshot.reference)
             children.extend(refs)
