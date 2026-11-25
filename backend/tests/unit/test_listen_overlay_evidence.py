@@ -56,6 +56,136 @@ def indexed(doc):
     return evidence.documents(yaml.safe_dump(doc))
 
 
+@pytest.mark.parametrize(
+    'drift', [None, 'second-key', 'secret', 'live-env', 'field-path', 'field-version', 'image', 'inverse', 'missing']
+)
+def test_reference_render_proves_only_reconnect_without_exporting_references(drift):
+    image = 'gcr.io/based-hardware/backend:96f0631'
+    before = deployment()
+    main = before['spec']['template']['spec']['containers'][0]
+    main['image'] = image
+    main['env'][1] = {
+        'name': 'PRIVATE_TOKEN',
+        'valueFrom': {'secretKeyRef': {'name': 'test-secret', 'key': 'PRIVATE_TOKEN', 'optional': False}},
+    }
+    policy = main['env'][0]['name']
+    main['env'][0] = {
+        'name': policy,
+        'valueFrom': {'secretKeyRef': {'name': 'test-secret', 'key': policy, 'optional': False}},
+    }
+    main['env'].append(
+        {
+            'name': 'ROLLOUT_POD_TEMPLATE_HASH',
+            'valueFrom': {'fieldRef': {'fieldPath': "metadata.labels['pod-template-hash']"}},
+        }
+    )
+    wanted, live, inverse = (copy.deepcopy(before) for _ in range(3))
+    field = live['spec']['template']['spec']['containers'][0]['env'][-1]['valueFrom']['fieldRef']
+    field['apiVersion'] = 'v2' if drift == 'field-version' else 'v1'
+    if drift == 'field-path':
+        field['fieldPath'] = 'metadata.name'
+    wanted_main = wanted['spec']['template']['spec']['containers'][0]
+    wanted_main['env'].append({'name': 'LISTEN_BATCH_RECONNECT_ENABLED', 'value': 'true'})
+    if drift == 'second-key':
+        wanted_main['env'].append({'name': 'EXTRA', 'value': 'true'})
+    elif drift == 'secret':
+        wanted_main['env'][1]['valueFrom']['secretKeyRef']['name'] = 'other-secret'
+    elif drift == 'live-env':
+        live['spec']['template']['spec']['initContainers'][0]['env'][0]['value'] = 'false'
+    elif drift == 'image':
+        wanted_main['image'] = 'gcr.io/based-hardware/backend:1234567'
+    elif drift == 'inverse':
+        inverse['spec']['replicas'] += 1
+    observed = indexed(live) if drift != 'missing' else {}
+    private_keys = [policy, 'PRIVATE_TOKEN']
+    args = (indexed(wanted), indexed(before), indexed(inverse), observed, private_keys, 'test-secret', image)
+    if drift is None:
+        assert evidence.compare_reference_render(*args) == 'listen'
+        coverage = evidence.compare(args[0], args[3], args[0], set(private_keys), references=True)
+        assert [(row['key'], row['effect']) for row in coverage['env'] if row['effect'] != 'same'] == [
+            ('LISTEN_BATCH_RECONNECT_ENABLED', 'added')
+        ]
+    else:
+        with pytest.raises(evidence.Refused):
+            evidence.compare_reference_render(*args)
+
+
+@pytest.mark.parametrize('fault', [None, 'shadow-pod', 'digest', 'foreign-owner', 'not-ready'])
+def test_reference_image_must_be_running_on_all_ready_pods(fault):
+    image = 'gcr.io/based-hardware/backend@sha256:' + 'a' * 64
+    live = deployment()
+    live['spec'].update(replicas=1, selector={'matchLabels': {'app': 'listen'}})
+    live['status'] = {
+        'observedGeneration': 3,
+        'replicas': 1,
+        'updatedReplicas': 1,
+        'readyReplicas': 1,
+        'availableReplicas': 1,
+    }
+    pod = {
+        'metadata': {
+            'name': 'listen-pod',
+            'uid': 'pod-uid',
+            'resourceVersion': '12',
+            'ownerReferences': [{'kind': 'ReplicaSet', 'name': 'listen-rs', 'uid': 'rs-uid', 'controller': True}],
+        },
+        'status': {
+            'conditions': [{'type': 'Ready', 'status': 'False' if fault == 'not-ready' else 'True'}],
+            'containerStatuses': [
+                {'name': 'listen', 'ready': True, 'imageID': image if fault != 'digest' else image[:-1] + 'b'}
+            ],
+        },
+    }
+    replica_set = {
+        'metadata': {
+            'uid': 'rs-uid',
+            'ownerReferences': [
+                {'kind': 'Deployment', 'controller': True, 'uid': 'foreign' if fault == 'foreign-owner' else 'uid'}
+            ],
+        }
+    }
+    with patch.object(
+        evidence.Reader,
+        'run',
+        side_effect=[
+            json.dumps({'items': [pod, pod] if fault == 'shadow-pod' else [pod]}).encode(),
+            json.dumps(replica_set).encode(),
+        ],
+    ):
+        if fault is None:
+            assert evidence.serving_pods(evidence.Reader(), live, 'listen', image) == {
+                'listen-pod': {'uid': 'pod-uid', 'generation': None, 'resourceVersion': '12'}
+            }
+        else:
+            with pytest.raises(evidence.Refused):
+                evidence.serving_pods(evidence.Reader(), live, 'listen', image)
+
+
+def test_reference_snapshot_batches_durable_objects_without_widening_scope():
+    docs = [
+        {'apiVersion': 'v1', 'kind': 'Service', 'metadata': {'name': 'listen', 'namespace': evidence.NS}},
+        deployment(),
+    ]
+    keys = [(doc['apiVersion'], doc['kind'], evidence.NS, doc['metadata']['name']) for doc in docs]
+    with patch.object(evidence.Reader, 'run', return_value=json.dumps({'kind': 'List', 'items': docs}).encode()) as run:
+        assert evidence.Reader().reference_objects(keys) == dict(zip(keys, docs))
+        run.assert_called_once_with(
+            [
+                'kubectl',
+                '-n',
+                evidence.NS,
+                'get',
+                'Service/listen',
+                'Deployment.v1.apps/' + evidence.TARGET,
+                '-o',
+                'json',
+            ]
+        )
+    with patch.object(evidence.Reader, 'run', return_value=json.dumps(docs[0]).encode()):
+        with pytest.raises(evidence.Refused, match='reference_live_document_missing'):
+            evidence.Reader().reference_objects(keys)
+
+
 def test_private_value_never_leaves_complete_comparison():
     before = deployment('old-private-value')
     wanted = deployment('new-private-value')
@@ -155,10 +285,11 @@ def test_rendered_key_union_includes_removed_and_added_keys():
     assert ('ADDED', 'added') in {(r['key'], r['effect']) for r in result['env']}
 
 
+@pytest.mark.parametrize('references', [False, True])
 @pytest.mark.parametrize(
     'fault', [None, 'live-movement', 'wrong-source', 'wrong-image', 'wrong-attempt', 'helm-movement', 'missing-runtime']
 )
-def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(tmp_path, fault):
+def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(tmp_path, fault, references):
     private_file = tmp_path / 'private.yaml'
     private_file.write_text('privateEnv:\n  PRIVATE_TOKEN: "never-publish-this-value"\n')
     event_file = tmp_path / 'event.json'
@@ -206,6 +337,21 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
         'GITHUB_RUN_ATTEMPT': '2' if fault == 'wrong-attempt' else '1',
     }
 
+    predecessor = deployment('prior-private-value')
+    if references:
+        req.update(reference_helm_revision=1, overlay_updated_at='', overlay_state='references')
+        private_file.write_text('')
+        primary = predecessor['spec']['template']['spec']['containers'][0]
+        primary['image'] = 'gcr.io/based-hardware/backend:' + req['image_tag']
+        for row in primary['env']:
+            key = row['name']
+            row.clear()
+            row.update(name=key, valueFrom={'secretKeyRef': {'name': 'test-secret', 'key': key, 'optional': False}})
+    candidate = copy.deepcopy(predecessor)
+    candidate['spec']['template']['spec']['containers'][0]['env'].append(
+        {'name': 'LISTEN_BATCH_RECONNECT_ENABLED', 'value': 'true'}
+    )
+
     class Fake:
         calls = 0
         bytes = 0
@@ -230,12 +376,14 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
                     [{'status': 'deployed', 'revision': 2 if fault == 'helm-movement' and n > 1 else 1}]
                 ).encode()
             if 'get' in args:
-                return yaml.safe_dump(deployment('prior-private-value')).encode()
+                if 'hooks' in args:
+                    return b''
+                return yaml.safe_dump(predecessor).encode()
             assert args[0] == 'helm' and args[-2:] == ['--dry-run=client', '--output=json']
             value = 'never-publish-this-value' if '-f' in args[-4:] else 'chart-private-default'
             return json.dumps(
                 {
-                    'manifest': yaml.safe_dump(deployment(value)),
+                    'manifest': yaml.safe_dump(candidate if references else deployment(value)),
                     'hooks': [],
                     'info': {'notes': 'never-publish-notes'},
                     'ignored': 'never-publish-extra',
@@ -244,9 +392,13 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
 
         def obj(self, *args):
             self.objects += 1
-            return deployment(
-                'prior-private-value', resource_version='11' if fault == 'live-movement' and self.objects > 1 else '10'
-            )
+            observed = copy.deepcopy(predecessor)
+            if fault == 'live-movement' and self.objects > 1:
+                observed['metadata']['resourceVersion'] = '11'
+            return observed
+
+        def reference_objects(self, keys):
+            return {key: self.obj() for key in keys}
 
     req['helm_args'] = evidence.helm_args(
         '<candidate>/backend/charts/backend-listen',
@@ -254,22 +406,44 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
         'b' * 7,
         'based-hardware',
         'based-hardware',
-        ['-f', '<private-overlay>'],
+        [] if references else ['-f', '<private-overlay>'],
     )
     if fault == 'missing-runtime':
         del req['bindings']['runtime_manifest_sha256']
     values = tmp_path / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml'
     values.parent.mkdir(parents=True)
-    values.write_text('privateEnv: {}\nenv: []\n')  # a pre-privateSecretEnv candidate
+    values.write_text(
+        'privateSecretEnv:\n  secretName: test-secret\n'
+        '  keys: [STT_CAP_DISPATCH_ENFORCEMENT, PRIVATE_TOKEN]\nenv: []\n'
+        if references
+        else 'privateEnv: {}\nenv: []\n'
+    )
     reader = Fake()
-    with patch.object(evidence, 'bindings', return_value=req['bindings']):
+    overrides = [] if references else ['-f', str(private_file)]
+    with patch.object(evidence, 'bindings', return_value=req['bindings']), patch.object(
+        evidence, 'serving_pods', return_value={'pod': 'bound'}
+    ) as pods:
         if fault:
             with pytest.raises(evidence.Refused):
-                evidence.produce(req, reader, environment, tmp_path, private_file, ['-f', str(private_file)], 200)
+                evidence.produce(req, reader, environment, tmp_path, private_file, overrides, 200)
         else:
-            result = evidence.produce(req, reader, environment, tmp_path, private_file, ['-f', str(private_file)], 200)
+            result = evidence.produce(req, reader, environment, tmp_path, private_file, overrides, 200)
             assert result['run_attempt'] == '1'
-            assert result['coverage']['env_key_count'] == 3
+            assert result['coverage']['env_key_count'] == (4 if references else 3)
+            if references:
+                assert pods.call_count == 2
+                assert result['inverse'] == [
+                    'helm',
+                    '-n',
+                    evidence.NS,
+                    'rollback',
+                    evidence.TARGET,
+                    '1',
+                    '--wait',
+                    '--timeout',
+                    '70m',
+                ]
+                assert 'test-secret' not in json.dumps(result)
             assert 'never-publish-this-value' not in json.dumps(result)
             assert 'prior-private-value' not in json.dumps(result)
             assert 'never-publish-notes' not in json.dumps(result)
