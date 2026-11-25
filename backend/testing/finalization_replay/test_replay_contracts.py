@@ -399,8 +399,15 @@ class ReplayContractTests(unittest.TestCase):
                 return Snapshot()
 
         state.conversation = Conversation()
-        observation = state.observe('completed', {'derived/doc': {'enabled': True}})
+
+        def unavailable_memo_bindings():
+            raise ValueError('candidate has no serving environment')
+
+        observation = state.observe(
+            'completed', {'derived/doc': {'enabled': True}}, load_memo_bindings=unavailable_memo_bindings
+        )
         self.assertEqual(observation['derived_documents'], {'derived/doc': {'enabled': 1}})
+        self.assertEqual(observation['episode_attach_memo_failure_reason'], 'check_failed')
 
     def test_embedding_meter_counts_pretokenized_batches(self):
         state = CaseState.__new__(CaseState)

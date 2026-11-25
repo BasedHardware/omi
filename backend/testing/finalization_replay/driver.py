@@ -35,8 +35,7 @@ def _observe(state, run, output, side, *, setup=None):
                     setup(state)
             status = run(state)
         with suspend_meter():
-            bindings = importlib.import_module('testing.finalization_replay.memo_bindings')
-            output[side] = state.observe(status, before, memo_bindings=bindings)
+            output[side] = state.observe(status, before, load_memo_bindings=_memo_bindings)
     except Exception as error:
         output['errors'][side] = type(error).__name__
         finished = datetime.now(timezone.utc)
@@ -58,6 +57,10 @@ def _observe(state, run, output, side, *, setup=None):
             'cost': state.cost(),
             'go_evidence': state.go_evidence,
         }
+
+
+def _memo_bindings():
+    return importlib.import_module('testing.finalization_replay.memo_bindings')
 
 
 def _clear(client):

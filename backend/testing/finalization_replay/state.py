@@ -75,10 +75,14 @@ def _documents(collection):
 
 
 def _episode_attach_memo_failure_reason(
-    uid, cid, conversation, derived_documents, *, transcript_decoder=None, content_key_fn=None
+    uid, cid, conversation, derived_documents, *, transcript_decoder=None, content_key_fn=None, load_bindings=None
 ):
     """Return a value-free failure code when this side's attach memo check fails."""
     try:
+        if load_bindings is not None:
+            bindings = load_bindings()
+            transcript_decoder = bindings.decode_transcript_segments_verified
+            content_key_fn = bindings.content_key
         link_path = f'users/{uid}/episode_links/{cid}'
         link = derived_documents.get(link_path)
         if not isinstance(link, dict):
@@ -336,7 +340,7 @@ class CaseState:
         snapshot = self.client.collection(collection).document(document).get()
         return {'exists': snapshot.exists, 'fields': pack(snapshot.to_dict() or {})}
 
-    def observe(self, status, before, *, memo_bindings=None):
+    def observe(self, status, before, *, load_memo_bindings=None):
         after = self.documents()
         changed_documents = {
             path: after.get(path)
@@ -363,6 +367,7 @@ class CaseState:
         memo_expected = False
         side = getattr(self, 'replay_side', None)
         if side in {'python', 'go'}:
+            memo_bindings = load_memo_bindings()
             stored = document or {}
             memo_failure_reason = ordinary_sync_attach_memo_failure_reason(
                 self.uid,
@@ -384,13 +389,12 @@ class CaseState:
                     )
                 )
         else:
-            memo_failure_reason = episode_attach_memo_failure_reason(
+            memo_failure_reason = _episode_attach_memo_failure_reason(
                 getattr(self, 'uid', ''),
                 getattr(self, 'cid', ''),
                 document or {},
                 derived_documents,
-                transcript_decoder=memo_bindings.decode_transcript_segments_verified if memo_bindings else None,
-                content_key_fn=memo_bindings.content_key if memo_bindings else None,
+                load_bindings=load_memo_bindings,
             )
         empty_privacy = {'exists': False, 'fields': {}}
         privacy_seed = getattr(self, 'batch_privacy_seed', None) or empty_privacy
