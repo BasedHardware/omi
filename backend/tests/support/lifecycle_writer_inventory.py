@@ -3469,6 +3469,10 @@ FIELD_SITES = {
         ('stamp_projection_debt', 'summary_due_at', 'accepted + deadline_seconds()', ('summary_due_at',)),
         ('stamp_projection_debt', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
     ],
+    # The one settled stamp every completed-status writer splats or applies (not the claim's family).
+    'utils/conversations/terminal_settled.py': [
+        ('settle', 'terminal_family_at', 'now', ('terminal_family_at',)),
+    ],
     'utils/conversations/transcript_for_llm.py': [
         ('render_cluster_transcript', 'status', "'resolved' if resolution_available else 'unavailable'", ('status',))
     ],
