@@ -45,6 +45,7 @@ class FakeCloud:
         self.writes = []
         self.polls = 0
         self.reads = 0
+        self.baseline_requests = 0
         self.traffic = [
             {'type': promotion.REVISION, 'revision': OLD, 'tag': 'stable', 'percent': 100},
             {'type': promotion.LATEST, 'tag': 'latest-probe'},
@@ -56,14 +57,16 @@ class FakeCloud:
 
     def service(self):
         latest_ready = NEW
-        if not self.writes or self.scenario == 'latest_ready_did_not_advance':
+        if not self.writes or self.scenario in ('pointer_stays_on_inverse', 'candidate_loses_readiness'):
+            latest_ready = OLD
+        if self.scenario == 'pointer_advances_late' and len(self.writes) == 1:
             latest_ready = OLD
         if self.scenario == 'unrelated_latest_ready':
             latest_ready = 'backend-other'
         observed = copy.deepcopy(self.traffic)
         for row in observed:
             if row['type'] == promotion.LATEST:
-                row['revision'] = NEW
+                row['revision'] = 'backend-other' if self.scenario == 'latest_tag_drift' else latest_ready
         if self.writes and self.scenario == 'wrong_weight':
             observed[0]['percent'] = 11
             observed[1]['percent'] = 89
@@ -90,7 +93,6 @@ class FakeCloud:
             doc = self.service()
         elif url == f'{promotion.RUN_API}{promotion.SERVICE}/revisions/{NEW}':
             assert method == 'GET'
-            assert not self.writes
             name = f'{promotion.SERVICE}/revisions/{NEW}'
             if self.scenario == 'wrong_candidate_revision':
                 name = f'{promotion.SERVICE}/revisions/{OLD}'
@@ -104,6 +106,10 @@ class FakeCloud:
             }
             if self.scenario == 'candidate_missing_ready':
                 doc['conditions'].pop()
+            if self.scenario == 'candidate_loses_readiness' and self.writes:
+                doc['conditions'][-1]['state'] = 'CONDITION_FAILED'
+            if not self.writes:
+                doc['conditions'][-1]['revisionReason'] = 'RETIRED'
         elif url == promotion.RUN_API + promotion.SERVICE + '?updateMask=traffic':
             assert method == 'PATCH'
             assert set(body) == {'etag', 'traffic'}
@@ -140,6 +146,10 @@ class FakeCloud:
 
     def metrics(self, query, metric, candidate, ingress):
         end = query['interval.endTime'][0]
+        if not self.writes and not ingress and metric == 'request_count':
+            self.baseline_requests += 1
+            if self.scenario == 'baseline_missing' and self.baseline_requests == 1:
+                return {}
         if candidate and self.scenario == 'missing':
             return {}
         if candidate and self.scenario == 'retry' and self.batches == 1 and metric == 'request_count':
@@ -208,6 +218,8 @@ def controller(tmp_path, monkeypatch, scenario, *, scope='backend'):
         control='b' * 40,
         snapshot=snapshot,
         receipt=tmp_path / 'receipt.json',
+        workflow_started=0,
+        workflow_timeout_minutes=90,
     )
     clock = Clock()
     return promotion.Promotion(FakeCloud(scenario, clock), clock, args)
@@ -248,7 +260,7 @@ def test_promote_records_verified_stages_and_total_duration(tmp_path, monkeypatc
         ('foreign_generation', 'generation_drift'),
         ('wrong_weight', 'observed_traffic_drift'),
         ('operation_failure', 'traffic_operation_failed'),
-        ('latest_ready_did_not_advance', 'candidate_not_latest_ready'),
+        ('candidate_loses_readiness', 'candidate_revision_not_ready'),
     ],
 )
 def test_stage_refusals_do_not_advance_or_retry_a_write(tmp_path, monkeypatch, scenario, error):
@@ -385,6 +397,7 @@ def test_live_traffic_must_match_the_captured_inverse_before_any_write(tmp_path,
         ('candidate_missing_ready', 'candidate_revision_not_ready'),
         ('wrong_candidate_revision', 'candidate_revision_identity_invalid'),
         ('unrelated_latest_ready', 'candidate_not_latest_ready'),
+        ('latest_tag_drift', 'observed_traffic_drift'),
     ],
 )
 def test_zero_traffic_candidate_must_be_exact_and_ready_before_first_write(tmp_path, monkeypatch, scenario, error):
@@ -408,3 +421,34 @@ def test_workflow_keeps_staged_failures_and_cancellation_on_the_snapshot_restore
     assert "steps.shift-cloud-run-traffic.outcome == 'failure'" in restore
     assert "steps.shift-cloud-run-traffic.outcome == 'cancelled'" in restore
     assert 'artifacts/backend-promotion-stages.json' in workflow
+
+
+@pytest.mark.parametrize(
+    ('scenario', 'latest'),
+    [('pointer_advances_late', [OLD, NEW, NEW, NEW]), ('pointer_stays_on_inverse', [OLD] * 4)],
+)
+def test_lagging_pointer_preserves_latest_alias_and_records_exact_convergence(tmp_path, monkeypatch, scenario, latest):
+    rollout = controller(tmp_path, monkeypatch, scenario)
+    rollout.run()
+    receipt = json.loads(rollout.path.read_text())
+    assert [row['latest_ready_revision'] for row in receipt['stages']] == latest
+    assert [row['weights'][NEW] for row in receipt['stages']] == [10, 50, 90, 100]
+    assert all(
+        {'type': promotion.LATEST, 'tag': 'latest-probe'} in patch['traffic'] for patch in rollout.transport.writes
+    )
+
+
+def test_promotion_refuses_before_write_without_time_for_rollback(tmp_path, monkeypatch):
+    rollout = controller(tmp_path, monkeypatch, 'pass')
+    rollout.workflow_deadline = 44 * 60
+    with pytest.raises(promotion.Refused, match='workflow_headroom'):
+        rollout.run()
+    assert not rollout.transport.writes
+
+
+def test_baseline_retries_the_same_bucket_once(tmp_path, monkeypatch):
+    rollout = controller(tmp_path, monkeypatch, 'baseline_missing')
+    rollout.run()
+    receipt = json.loads(rollout.path.read_text())
+    assert rollout.transport.baseline_requests == 2
+    assert receipt['baseline']['sample_end'] == promotion.iso(1_799_999_760)

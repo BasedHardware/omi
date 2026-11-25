@@ -50,6 +50,9 @@ REVISION_NAME = re.compile(r'backend-[a-z0-9](?:[a-z0-9-]{0,53}[a-z0-9])?')
 STAGES = (10, 50, 90, 100)
 ROUTING_SECONDS = 120
 STAGE_SECONDS = 360
+BASELINE_SECONDS = 60
+# Reserve time for sibling moves, serving verification, smoke and snapshot restore.
+WORKFLOW_TAIL_SECONDS = 18 * 60
 # Global external load-balancer metrics can take 210 seconds to publish.
 METRIC_LAG = 210
 METRIC_COLLECTION_SECONDS = 10
@@ -65,7 +68,7 @@ def routing(rows, latest=None):
         require(type(percent) is int and 0 <= percent <= 100, 'traffic_weight_invalid')
         kind = row.get('type')
         require(kind in (LATEST, REVISION), 'traffic_target_type_invalid')
-        revision = row.get('revision') or (latest if kind == LATEST else None)
+        revision = (latest or row.get('revision')) if kind == LATEST else row.get('revision')
         require(
             isinstance(revision, str) and bool(re.fullmatch(r'backend-[a-z0-9-]+', revision)), 'traffic_target_invalid'
         )
@@ -79,7 +82,13 @@ def routing(rows, latest=None):
     return weights, tags
 
 
-def verify_service(doc, candidate, expected, tags, uid=None, generation=None, *, idle_inverse=None):
+def tag_targets(rows):
+    return {
+        row['tag']: (row['type'], row['revision'] if row['type'] == REVISION else None) for row in rows if 'tag' in row
+    }
+
+
+def verify_service(doc, candidate, inverse, expected, tags, uid=None, generation=None):
     require(doc.get('name') == SERVICE and bool(doc.get('uid')), 'service_identity_invalid')
     require(uid is None or doc['uid'] == uid, 'service_replaced')
     actual_generation = doc.get('generation', '')
@@ -88,16 +97,20 @@ def verify_service(doc, candidate, expected, tags, uid=None, generation=None, *,
     require(actual_generation == doc.get('observedGeneration') and not doc.get('reconciling'), 'generation_unobserved')
     require(doc.get('terminalCondition', {}).get('state') == 'CONDITION_SUCCEEDED', 'service_not_ready')
     require(isinstance(doc.get('etag'), str) and bool(doc['etag']), 'etag_missing')
-    full_name = f'{SERVICE}/revisions/{candidate}'
-    ready_names = {full_name}
-    if idle_inverse is not None:
-        ready_names.add(f'{SERVICE}/revisions/{idle_inverse}')
+    prefix = f'{SERVICE}/revisions/'
+    latest_ready = doc.get('latestReadyRevision')
     require(
-        doc.get('latestCreatedRevision') == full_name and doc.get('latestReadyRevision') in ready_names,
+        doc.get('latestCreatedRevision') == prefix + candidate
+        and latest_ready in (prefix + candidate, prefix + inverse),
         'candidate_not_latest_ready',
     )
-    require(routing(doc.get('traffic'), candidate) == (expected, tags), 'requested_traffic_drift')
-    require(routing(doc.get('trafficStatuses')) == (expected, tags), 'observed_traffic_drift')
+    latest = latest_ready.removeprefix(prefix)
+    desired = doc.get('traffic')
+    weights, resolved_tags = routing(desired, latest)
+    current_tags = tag_targets(desired)
+    require(weights == expected and (tags is None or current_tags == tags), 'requested_traffic_drift')
+    require(routing(doc.get('trafficStatuses')) == (expected, resolved_tags), 'observed_traffic_drift')
+    return latest, current_tags
 
 
 def verify_snapshot(path, candidate, inverse, scope):
@@ -150,6 +163,7 @@ class Promotion:
         self.scope = args.scope
         self.path = args.receipt
         self.start = clock.monotonic()
+        self.workflow_deadline = args.workflow_started + args.workflow_timeout_minutes * 60
         self.receipt = {
             'schema': 1,
             'service': 'backend',
@@ -194,9 +208,11 @@ class Promotion:
 
     def move(self, current, weights, tags, deadline):
         traffic = [{'type': REVISION, 'revision': rev, 'percent': weight} for rev, weight in weights.items()]
-        for row in current['traffic']:
-            if 'tag' in row:
-                traffic.append({key: row[key] for key in ('type', 'revision', 'tag') if key in row})
+        for tag, (kind, revision) in tags.items():
+            alias = {'type': kind, 'tag': tag}
+            if revision is not None:
+                alias['revision'] = revision
+            traffic.append(alias)
         operation = self.request(
             'PATCH', RUN_API + SERVICE + '?updateMask=traffic', deadline, {'etag': current['etag'], 'traffic': traffic}
         )
@@ -215,7 +231,13 @@ class Promotion:
             operation = self.request('GET', RUN_API + name, deadline)
         require('error' not in operation and isinstance(operation.get('response'), dict), 'traffic_operation_failed')
         landed = self.service(deadline)
-        verify_service(landed, self.candidate, weights, tags, current['uid'], str(int(current['generation']) + 1))
+        latest, _ = verify_service(
+            landed, self.candidate, self.inverse, weights, tags, current['uid'], str(int(current['generation']) + 1)
+        )
+        # The aggregate can lag even after the exact traffic vector has converged.
+        # The workflow's final serving-vector check still requires it to advance.
+        if latest == self.inverse:
+            self.verify_candidate_revision(deadline)
         return landed
 
     def metric(self, revision, metric, end, deadline):
@@ -359,35 +381,37 @@ class Promotion:
     def run(self):
         try:
             self.record()
+            required = BASELINE_SECONDS + len(STAGES) * ROUTING_SECONDS + (len(STAGES) - 1) * STAGE_SECONDS
+            require(self.workflow_deadline - self.start >= required + WORKFLOW_TAIL_SECONDS, 'workflow_headroom')
             self.inverse = verify_snapshot(self.snapshot, self.candidate, self.inverse, self.scope)
             self.receipt['inverse'] = self.inverse
-            deadline = self.clock.monotonic() + 60
+            deadline = self.clock.monotonic() + BASELINE_SECONDS
             expected = {self.inverse: 100}
             initial = self.service(deadline)
-            _, tags = routing(initial.get('traffic'), self.candidate)
-            verify_service(initial, self.candidate, expected, tags, idle_inverse=self.inverse)
+            _, tags = verify_service(initial, self.candidate, self.inverse, expected, None)
             # Select a fresh bucket at the start of the bounded batch. Transport
             # time does not age out a bucket selected near a minute boundary.
             baseline_end = int((self.clock.time() - METRIC_LAG) // 60) * 60
-            baseline, ingress_baseline = self.collect_health((self.inverse, None), baseline_end, deadline)
+            try:
+                baseline, ingress_baseline = self.collect_health((self.inverse, None), baseline_end, deadline)
+            except MissingSample:
+                self.pause(MISSING_SAMPLE_RETRY_SECONDS, deadline)
+                baseline, ingress_baseline = self.collect_health((self.inverse, None), baseline_end, deadline)
             self.receipt['baseline'] = {'sample_end': iso(baseline_end), **baseline}
             self.receipt['ingress_baseline'] = {'sample_end': iso(baseline_end), **ingress_baseline}
             current = initial
             for percent in STAGES:
                 deadline = self.clock.monotonic() + ROUTING_SECONDS
-                # Cloud Run may keep latestReady on the inverse until the candidate receives traffic.
-                idle_inverse = self.inverse if expected == {self.inverse: 100} else None
-                if idle_inverse is not None:
-                    self.verify_candidate_revision(deadline)
+                self.verify_candidate_revision(deadline)
                 before = self.service(deadline)
                 verify_service(
                     before,
                     self.candidate,
+                    self.inverse,
                     expected,
                     tags,
                     initial['uid'],
                     current['generation'],
-                    idle_inverse=idle_inverse,
                 )
                 expected = {self.candidate: percent}
                 if percent < 100:
@@ -400,7 +424,11 @@ class Promotion:
                 require(self.clock.monotonic() <= deadline, 'routing_deadline')
                 deadline = self.clock.monotonic() + STAGE_SECONDS
                 convergence = self.clock.time()
-                row.update(verified_at=iso(convergence), generation=current['generation'])
+                row.update(
+                    verified_at=iso(convergence),
+                    generation=current['generation'],
+                    latest_ready_revision=current['latestReadyRevision'].rsplit('/', 1)[-1],
+                )
                 self.record()
                 if percent < 100:
                     self.guard(row, convergence, baseline, ingress_baseline, deadline)
@@ -428,6 +456,8 @@ def main():
     parser.add_argument('--region', required=True, choices=(REGION,))
     parser.add_argument('--scope', choices=('backend', 'all'), default='backend')
     parser.add_argument('--inverse')
+    parser.add_argument('--workflow-started', required=True, type=float)
+    parser.add_argument('--workflow-timeout-minutes', required=True, type=int, choices=(90, 360))
     for field in ('candidate', 'source', 'control'):
         parser.add_argument(f'--{field}', required=True)
     for field in ('snapshot', 'receipt'):
@@ -443,6 +473,7 @@ def main():
         for sha in (args.source, args.control):
             require(bool(re.fullmatch(r'[0-9a-f]{40}', sha)), 'invalid_release_sha')
         clock = Clock()
+        require(0 < args.workflow_started <= clock.monotonic(), 'workflow_start_invalid')
         Promotion(Transport(clock), clock, args).run()
     except Refused as exc:
         raise SystemExit(f'Selected backend promotion refused: {exc}') from None

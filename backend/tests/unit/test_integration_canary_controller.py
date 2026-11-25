@@ -1347,7 +1347,21 @@ def test_real_transport_authentication_redirect_and_byte_bounds(monkeypatch):
     with pytest.raises(m.Refused):
         transport.request('GET', 'https://gcr.io/v2/based-hardware/backend/blobs/sha256:x', registry_blob=True)
     assert len(calls) == 3  # Even a Google storage target never receives bearer credentials.
+    service = 'https://us-central1-run.googleapis.com/v2/projects/based-hardware/locations/us-central1/services/backend'
     statuses[:] = [200]
+    body = b'{}'
+    transport.request('PATCH', service + '?updateMask=traffic', body={'traffic': []})
+    assert calls[-1] == (
+        'PATCH',
+        'us-central1-run.googleapis.com',
+        '/v2/projects/based-hardware/locations/us-central1/services/backend?updateMask=traffic',
+    )
+    for url in (service + '?updateMask=traffic,labels', service + '-sync?updateMask=traffic'):
+        with pytest.raises(m.Refused, match='transport_origin_refused'):
+            transport.request('PATCH', url)
+    assert len(calls) == 4
+    statuses[:] = [200]
+    body = b'{"config":{}}'
     monkeypatch.setattr(m, 'MAX_BYTES', 8)
     with pytest.raises(m.Refused):
         transport.request('GET', 'https://monitoring.googleapis.com/v3/projects/based-hardware/timeSeries')

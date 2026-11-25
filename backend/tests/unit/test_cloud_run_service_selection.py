@@ -138,6 +138,8 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
             PROMOTION_INVERSE='backend-old',
             PROMOTION_SOURCE='a' * 40,
             PROMOTION_CONTROL='b' * 40,
+            DEPLOY_STACK_STARTED='10000',
+            DEPLOY_STACK_TIMEOUT_MINUTES='90',
             GMP_CANDIDATE_TAG='',
             RUNNER_TEMP=str(tmp_path),
         ),
@@ -154,6 +156,7 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
             f'/controls/promote_selected_backend.py --scope {service}{inverse} '
             '--project based-hardware --region us-central1 '
             f"--candidate backend-new --source {'a' * 40} --control {'b' * 40} "
+            '--workflow-started 10000 --workflow-timeout-minutes 90 '
             '--snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json '
             '--receipt artifacts/backend-promotion-stages.json'
         )
@@ -366,7 +369,9 @@ def test_selected_workflow_binds_admitted_inverse(tmp_path, service, inverse_kin
         assert 'inputs.selected_rollback_revision' in workflow['run-name']
         assert (
             'needs.validate-production-boundary.outputs.rollback_revision'
-            in jobs['deploy']['steps'][1]['with']['rollback_revision']
+            in next(step for step in jobs['deploy']['steps'] if step['name'] == 'Deploy backend stack')['with'][
+                'rollback_revision'
+            ]
         )
         boundary = subprocess.run(
             ['bash', '-c', render(step('Validate deploy profile boundary')['run'])],

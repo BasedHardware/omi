@@ -1755,6 +1755,8 @@ runs:
               --project "$PROMOTION_PROJECT" --region "$PROMOTION_REGION" \
               --candidate "$PROMOTION_CANDIDATE" \
               --source "$PROMOTION_SOURCE" --control "$PROMOTION_CONTROL" \
+              --workflow-started "$DEPLOY_STACK_STARTED" \
+              --workflow-timeout-minutes "$DEPLOY_STACK_TIMEOUT_MINUTES" \
               --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \
               --receipt artifacts/backend-promotion-stages.json
           else
