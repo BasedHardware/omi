@@ -28,6 +28,13 @@ attempt also prevents an operator from buying Soniox again for the same unit.
   buys neither call.
 - A full positive VAD frame, unknown/invalid VAD, provider failure or malformed
   response cannot authorize this silence disposition. Keep custody held.
+- `BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED` (default **off**) adds
+  one disposition: two **validated empty** recognizers on a unit with a full
+  positive VAD frame settle `no_recoverable_speech` with both receipts and the
+  language-guard evidence, instead of staying held. It is not a silence
+  verdict: the result keeps the measured spans and speech seconds. A refused
+  or failed Soniox call (including units above the 60-second ceiling) still
+  holds. Off restores the hold for new settlements.
 - The job's `recovery.recognizers` / `speech_redrive.recognizers` stores provider,
   outcome, word count (null means unobserved), and measured VAD seconds. The job's
   `measured_held_vad_speech_seconds` remains the T2 census value. `refused` means

@@ -339,5 +339,6 @@ def test_v3_lanes_preserve_legacy_catalog_and_separate_foreground_tier():
         assert route.primary.model == LUNA_MODEL
         assert route.provider_options['reasoning_effort'] == effort
         assert lane.capabilities.structured_output != StructuredOutputMode.NONE
-    assert 'omi:auto:conversation-v3-summary' in DEFAULT_FLEX_FIRST_LANES
+    # Neither summary lane tries Flex first; both stay separate lanes so background and on-open usage are metered apart.
+    assert 'omi:auto:conversation-v3-summary' not in DEFAULT_FLEX_FIRST_LANES
     assert 'omi:auto:conversation-v3-summary-open' not in DEFAULT_FLEX_FIRST_LANES

@@ -15332,9 +15332,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get stopThese => 'Zastaviť tieto';
 
   @override
-  String get meetingActionItemsTitle => 'Akčné položky';
-
-  @override
   String get addToTasks => 'Pridať do úloh';
 
   @override
@@ -15818,5 +15815,16 @@ class AppLocalizationsSk extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Účtované cez omi.me. Zrušiť môžete kedykoľvek tu.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Účtované cez omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Váš plán $plan je pozastavený.';
   }
 }

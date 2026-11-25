@@ -196,7 +196,7 @@ void main() {
     });
   });
 
-  test("End's ownership rule: a shared captured segment, nothing else", () {
+  test('ownsCapture detects overlapping locally received segment IDs', () {
     ServerConversation window(List<String> ids) => ServerConversation(
           id: 'w1',
           createdAt: DateTime(2026, 11, 16, 9),
@@ -503,7 +503,7 @@ void main() {
         conversation = _conversation(
           state: ConversationTileState.live,
           latestSpeech: through,
-          speech: '${enoughSpeech} corrected',
+          speech: '$enoughSpeech corrected',
         );
       });
       await tester.pump();

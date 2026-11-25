@@ -24,6 +24,7 @@ import 'package:omi/services/billing/play_billing.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import '../support/fake_play_billing.dart';
+import '../support/surface_render.dart';
 import '../support/test_browser.dart';
 
 class _FakeAppProvider extends AppProvider {
@@ -96,8 +97,13 @@ final class _EnvFields implements EnvFields {
   bool? get useWebAuth => false;
 }
 
-UserSubscriptionResponse _response({PlayBillingConfig? play}) => UserSubscriptionResponse(
-      subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.active),
+UserSubscriptionResponse _response({PlayBillingConfig? play, PlanType plan = PlanType.basic}) =>
+    UserSubscriptionResponse(
+      subscription: Subscription(
+        plan: plan,
+        status: SubscriptionStatus.active,
+        stripeSubscriptionId: plan.isPaid ? 'sub_1' : null,
+      ),
       transcriptionSecondsUsed: 0,
       transcriptionSecondsLimit: 0,
       wordsTranscribedUsed: 0,
@@ -109,7 +115,8 @@ UserSubscriptionResponse _response({PlayBillingConfig? play}) => UserSubscriptio
 
 void main() {
   late TestBrowser browser;
-  setUpAll(() {
+  setUpAll(() async {
+    await loadSurfaceRenderFonts();
     Env.init(const _EnvFields());
     PlatformManager.initializeForLocalHarness();
   });
@@ -124,14 +131,15 @@ void main() {
 
   tearDown(() => browser.dispose());
 
-  Future<Completer<UserSubscriptionResponse?>> pumpPaidApp(WidgetTester tester) async {
+  Future<Completer<UserSubscriptionResponse?>> pumpPaidApp(WidgetTester tester,
+      {String? paymentLink = 'https://pay.example.com/app'}) async {
     final gate = Completer<UserSubscriptionResponse?>();
     final platform = FakePlayPlatform();
     final billing = PlayBilling(platform: () => platform, verify: FakePlayServer().call, store: MemoryTokenStore());
     addTearDown(billing.dispose);
     final usage = UsageProvider(subscriptionRequest: () => gate.future, playBilling: billing);
     addTearDown(usage.dispose);
-    final app = _app(paid: true, paymentLink: 'https://pay.example.com/app');
+    final app = _app(paid: true, paymentLink: paymentLink);
     await tester.pumpWidget(
       MultiProvider(
         providers: [
@@ -186,6 +194,49 @@ void main() {
     expect(find.byKey(const Key('app_detail_paid_pending')), findsNothing);
     expect(find.byKey(const Key('app_detail_paid_unavailable')), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  for (final scale in [1.0, 3.2]) {
+    testWidgets('a Stripe subscriber on a Play build cannot start a Stripe purchase for an app (text x$scale)',
+        (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final gate = await pumpPaidApp(tester);
+      gate.complete(_response(play: playConfig, plan: PlanType.unlimitedV2));
+      await settle(tester);
+      expect(find.byKey(const Key('app_detail_paid_unavailable')), findsOneWidget);
+      expect(find.text('Not available on Android'), findsOneWidget);
+      expect(find.text('Subscribe'), findsNothing);
+      await writeSurfaceRender(tester, 'app-detail-paid-play-${scale == 1 ? 'default' : 'xxxl'}');
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  }
+
+  for (final play in [playConfig, null]) {
+    testWidgets('a paid app with no payment link shows "Not available on Android" (Play setup: ${play != null})',
+        (tester) async {
+      final gate = await pumpPaidApp(tester, paymentLink: null);
+      gate.complete(_response(play: play));
+      await settle(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('app_detail_paid_unavailable')), findsOneWidget);
+      expect(find.text('Subscribe'), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  }
+
+  testWidgets('a Stripe subscriber on Android without Play setup keeps Subscribe', (tester) async {
+    final gate = await pumpPaidApp(tester);
+    gate.complete(_response(plan: PlanType.unlimitedV2));
+    await settle(tester);
+    expect(find.byKey(const Key('app_detail_paid_unavailable')), findsNothing);
+    expect(find.text('Subscribe'), findsWidgets);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('a Stripe subscriber on iOS keeps Subscribe even when the response carries Play setup', (tester) async {
+    final gate = await pumpPaidApp(tester);
+    gate.complete(_response(play: playConfig, plan: PlanType.unlimitedV2));
+    await settle(tester);
+    expect(find.byKey(const Key('app_detail_paid_unavailable')), findsNothing);
+    expect(find.text('Subscribe'), findsWidgets);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('a failed subscription read ends on "Not available", never a spinner or the payment link',
       (tester) async {

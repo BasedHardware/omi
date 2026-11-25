@@ -666,7 +666,8 @@ class StaleSystemSurfaceTarget {
 /// `finishCapture`: stop and process the phone conversation before a pendant
 /// it took over from resumes.
 class FinishRequested extends CaptureEvent {
-  const FinishRequested({this.target});
+  const FinishRequested({this.target, this.liveConversationId});
+  final String? liveConversationId;
 
   /// Set by a Live Activity tap; see [SystemSurfaceTarget].
   final SystemSurfaceTarget? target;
@@ -1090,7 +1091,8 @@ class DeviceStopTelemetryStage extends CaptureStage {
 
 /// `forceProcessingCurrentConversation` plus the in-flight join.
 class ProcessConversationStage extends CaptureStage {
-  const ProcessConversationStage();
+  const ProcessConversationStage({this.liveConversationId});
+  final String? liveConversationId;
 }
 
 class SocketClosedStage extends CaptureStage {
@@ -1918,7 +1920,8 @@ CaptureTransition _transitionCapture(CaptureCoordinatorState state, CaptureEvent
       PhoneStartRequested() => _reducePhoneStart(state, event, env),
       PhoneStopRequested() => _reducePhoneStop(state, event),
       PhoneDiscardRequested() => _reducePhoneDiscard(state),
-      FinishRequested() => _rejectStaleTarget(state, event.target, env) ?? _reduceFinish(state),
+      FinishRequested() =>
+        _rejectStaleTarget(state, event.target, env) ?? _reduceFinish(state, event.liveConversationId),
       PauseCaptureRequested() => _rejectStaleTarget(state, event.target, env) ?? _reducePause(state, env),
       ResumeCaptureRequested() => _rejectStaleTarget(state, event.target, env) ?? _reduceResume(state, env),
       OfflineMuteToggled() => _reduceOfflineMuteToggle(state, env),
@@ -2250,11 +2253,12 @@ CaptureTransition _reducePhoneStop(CaptureCoordinatorState state, PhoneStopReque
   );
 }
 
-CaptureTransition _reduceFinish(CaptureCoordinatorState state) {
+CaptureTransition _reduceFinish(CaptureCoordinatorState state, String? liveConversationId) {
+  final process = RunStage(ProcessConversationStage(liveConversationId: liveConversationId));
   if (!state.phoneOwns) {
     final debt = state.pendantSuspension;
     if (!state.awaitingPhoneResume || debt?.reason != SuspendReason.phone) {
-      return CaptureTransition(state, const [RunStage(ProcessConversationStage())]);
+      return CaptureTransition(state, [process]);
     }
     if (state.callActive) {
       final suspended = List<SuspendedCapture>.of(state.suspended);
@@ -2267,12 +2271,10 @@ CaptureTransition _reduceFinish(CaptureCoordinatorState state) {
         deviceId: debt.deviceId ?? state.connectedDevice?.id,
         deviceType: debt.deviceType ?? state.connectedDevice?.type,
       );
-      return CaptureTransition(state.copyWith(suspended: suspended, awaitingPhoneResume: false), const [
-        RunStage(ProcessConversationStage()),
-      ]);
+      return CaptureTransition(state.copyWith(suspended: suspended, awaitingPhoneResume: false), [process]);
     }
     final suspended = List<SuspendedCapture>.of(state.suspended)..remove(debt);
-    final effects = <CaptureEffect>[const RunStage(ProcessConversationStage())];
+    final effects = <CaptureEffect>[process];
     if (state.connectedDevice == null) {
       effects
         ..add(PolicyWrite(debt!.wasPaused))
@@ -2322,7 +2324,7 @@ CaptureTransition _reduceFinish(CaptureCoordinatorState state) {
 
   if (pendantSuspension?.reason == SuspendReason.phone) {
     suspended.remove(pendantSuspension);
-    if (!wasBatch) effects.add(const RunStage(ProcessConversationStage()));
+    if (!wasBatch) effects.add(process);
     if (state.callActive) {
       // Same rule as a phone stop mid-call: the call keeps the channel, the
       // pendant's conversation already ended, so only its pre-handoff identity
@@ -2395,7 +2397,7 @@ CaptureTransition _reduceFinish(CaptureCoordinatorState state) {
     );
   }
 
-  if (!wasBatch) effects.add(const RunStage(ProcessConversationStage()));
+  if (!wasBatch) effects.add(process);
   if (state.callActive) {
     return CaptureTransition(
       state.copyWith(

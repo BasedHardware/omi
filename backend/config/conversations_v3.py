@@ -24,6 +24,10 @@ def conversations_v3_enabled(uid: str) -> bool:
     return in_rollout_cohort(uid, 'conversations-v3')
 
 
+def finish_no_pointer_enabled() -> bool:
+    return os.getenv('CONVERSATIONS_V3_FINISH_NO_POINTER', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
+
+
 def live_recap_enabled(uid: str) -> bool:
     """Only explicit authenticated testers. Empty or invalid config closes the whole cohort."""
     raw = os.getenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT', '')

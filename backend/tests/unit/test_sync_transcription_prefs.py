@@ -199,6 +199,7 @@ def _build_fakes() -> dict:
     fakes['utils.stt.speaker_embedding'] = speaker_embedding
 
     cloud_tasks = ModuleType('utils.cloud_tasks')
+    cloud_tasks.enqueue_named_task = MagicMock()
     cloud_tasks.enqueue_audio_merge_job = MagicMock()
     cloud_tasks.enqueue_audio_merge_job_deferred = MagicMock()
     cloud_tasks.enqueue_sync_job = MagicMock()
