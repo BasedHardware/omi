@@ -258,7 +258,7 @@ def _accept_candidate(uid: str, candidate: CandidateRecord, *, account_generatio
         raise HTTPException(status_code=409, detail='Accepted staged Candidate has no task')
     task = action_items_db.get_action_item(uid, task_id)
     if task is not None and task.get('deleted') is True:
-        task = None
+        raise HTTPException(status_code=404, detail='Staged task not found or already closed')
     return task or {
         'id': task_id,
         'candidate_id': candidate.candidate_id,

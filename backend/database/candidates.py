@@ -900,6 +900,10 @@ def resolve_task_candidate(
             if summary_row.item.target_task_id not in {None, expected_task_id}:
                 raise CandidateConflictError('Summary action item is linked to another task')
         if candidate.status == CandidateStatus.accepted:
+            if candidate.result_task_id is not None:
+                task_snapshot = _task_ref(uid, cast(str, candidate.result_task_id)).get(transaction=write_transaction)
+                if task_snapshot.exists and _snapshot_dict(task_snapshot).get('deleted') is True:
+                    raise CandidateNotFoundError('Linked task not found')
             if summary_row is not None:
                 task_snapshot = _task_ref(uid, cast(str, candidate.result_task_id)).get(transaction=write_transaction)
                 if not task_snapshot.exists:
@@ -968,6 +972,8 @@ def resolve_task_candidate(
                 existing_task = _snapshot_dict(task_snapshot)
                 if existing_task.get('candidate_id') != candidate_id:
                     raise CandidateConflictError('deterministic task id collision')
+                if existing_task.get('deleted') is True:
+                    raise CandidateNotFoundError(f'task:{task_id}')
             else:
                 write_transaction.set(task_ref, task_data)
         else:

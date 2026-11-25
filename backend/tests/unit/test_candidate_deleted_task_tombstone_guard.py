@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from fastapi import HTTPException
 import pytest
 
 import database.action_items as action_items_db
@@ -173,7 +174,7 @@ def test_prepare_summary_task_rejects_soft_deleted_linked_task_tombstone(fake_db
         )
 
 
-def test_staged_tasks_accept_candidate_does_not_return_soft_deleted_tombstone(monkeypatch):
+def test_staged_tasks_accept_candidate_rejects_soft_deleted_tombstone(monkeypatch):
     monkeypatch.setattr(
         action_items_db,
         'get_action_item',
@@ -185,10 +186,10 @@ def test_staged_tasks_accept_candidate_does_not_return_soft_deleted_tombstone(mo
         result_task_id='task-deleted-5',
     )
 
-    result = staged_tasks_router._accept_candidate('user-1', accepted_candidate, account_generation=3)
+    with pytest.raises(HTTPException) as exc_info:
+        staged_tasks_router._accept_candidate('user-1', accepted_candidate, account_generation=3)
 
-    assert result == {'id': 'task-deleted-5', 'candidate_id': 'cand-staged-1'}
-    assert 'deleted' not in result
+    assert exc_info.value.status_code == 404
 
 
 def test_resolve_task_candidate_accepted_summary_replay_rejects_soft_deleted_tombstone(fake_db, monkeypatch):
