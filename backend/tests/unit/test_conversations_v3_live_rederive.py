@@ -353,7 +353,7 @@ async def test_rederive_preserves_cards_with_owner_events(owner, strict, set_eve
 
 @pytest.mark.asyncio
 async def test_hidden_topic_pieces_of_one_stretch_become_one_visible_card(owner, strict, monkeypatch):
-    # Eight 50-word captures over eight minutes; the pre-fix planner hid each topic piece (< 300 words).
+    # Eight 50-word captures over eight minutes; the pre-fix planner hid each topic piece (under the Home word minimum).
     sources = [source(f'r{i}', AT + timedelta(minutes=i), words=50) for i in range(8)]
     rows = [
         fragment(f'c{i}', src, manual_end=False, home_hidden=True, home_hidden_reason='below_word_minimum')
