@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-release-train-busy-main-starvation",
+  "family": "ci-merge-integrity",
   "violated_contract": "Each green macOS update must enter an immutable candidate no more than once per hour; later main merges must queue for the next train instead of invalidating or starving the current candidate.",
   "canonical_prevention": "Bind the candidate to the exact green planner source or a mechanically verified changelog-only child, require that candidate to be reachable from authoritative main, recover stale changelog branches without terminal retries, and age freshness from the oldest unshipped update.",
   "canonical_prevention_artifact": [

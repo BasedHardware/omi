@@ -562,11 +562,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get hardwareSection => 'Phần cứng';
 
   @override
-  String get v2Undetected => 'Không phát hiện V2';
+  String get v2Undetected => 'Đồng bộ ngoại tuyến không khả dụng';
 
   @override
   String get v2UndetectedMessage =>
-      'Chúng tôi thấy rằng bạn có thiết bị V1 hoặc thiết bị của bạn chưa được kết nối. Chức năng thẻ SD chỉ khả dụng cho thiết bị V2.';
+      'Đồng bộ ngoại tuyến cần thiết bị Omi đã kết nối có bộ nhớ thẻ SD. Thiết bị hiện tại của bạn không hỗ trợ tính năng này.';
 
   @override
   String get endConversation => 'Kết thúc cuộc trò chuyện';
@@ -7063,6 +7063,26 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'Lỗi không mong muốn';
+
+  @override
+  String get accountSignInMethods => 'Phương thức đăng nhập';
+
+  @override
+  String get accountAddSignInMethod => 'Thêm phương thức đăng nhập';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Thêm cách đăng nhập vào tài khoản Omi này. Gói dịch vụ, bản ghi và các tích hợp của bạn vẫn thuộc tài khoản này.';
+
+  @override
+  String get accountSignInConflictTitle => 'Phương thức đăng nhập này thuộc tài khoản khác';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Bạn vẫn đang đăng nhập vào tài khoản hiện tại. Mỗi tài khoản Omi giữ gói dịch vụ, bản ghi và các tích hợp riêng.';
+
+  @override
+  String get accountSignInMethodAdded => 'Đã thêm phương thức đăng nhập';
 
   @override
   String get authFailedToLinkGoogle => 'Không thể liên kết tài khoản Google';
@@ -14360,6 +14380,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get processingProgress => 'Đang xử lý các bản ghi đang chờ của bạn…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Đang chờ hạn mức chép lời khả dụng';
+
+  @override
   String get processingDeferred => 'Đang chờ xử lý';
 
   @override
@@ -15314,9 +15337,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get stopThese => 'Dừng Loại Này';
 
   @override
-  String get meetingActionItemsTitle => 'Việc cần làm';
-
-  @override
   String get addToTasks => 'Thêm vào Công việc';
 
   @override
@@ -15723,10 +15743,94 @@ class AppLocalizationsVi extends AppLocalizations {
   String get stillWorkingOnIt => 'Vẫn đang xử lý.';
 
   @override
+  String get deviceReadyToUse => 'Sẵn sàng để sử dụng';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmware trên thiết bị của bạn quá cũ để cài đặt bản cập nhật này. Hãy liên hệ bộ phận hỗ trợ để được giúp cập nhật thiết bị.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Bản cập nhật firmware này yêu cầu phiên bản ứng dụng Omi mới hơn. Hãy cập nhật ứng dụng từ cửa hàng ứng dụng của bạn, rồi kiểm tra lại.';
+
+  @override
+  String get quietPayerTitle => 'Không có bản ghi nào trong 5 ngày';
+
+  @override
+  String get quietPayerMessage => 'Hãy kiểm tra Omi của bạn.';
+
+  @override
+  String get quietPayerCheck => 'Kiểm tra';
+
+  @override
+  String get playManageSubscription => 'Quản lý gói đăng ký';
+
+  @override
+  String get playBilledByGoogle => 'Thanh toán qua Google Play';
+
+  @override
+  String get playPurchasePending => 'Thanh toán đang chờ xử lý. Omi Pro bắt đầu ngay khi Google Play xác nhận.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Giao dịch Google Play này thuộc về một tài khoản Omi khác.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Chưa thể xác nhận giao dịch. Chúng tôi sẽ tự động thử lại.';
+
+  @override
+  String get playRenewalTerms =>
+      'Tự động gia hạn theo giá hiển thị cho đến khi bạn hủy. Quản lý hoặc hủy bất cứ lúc nào trong Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Không có trên Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Trang này không khả dụng trong ứng dụng.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Đã đặt hàng. Kiểm tra email để xem xác nhận.';
+
+  @override
+  String get prepaidCodeEntry => 'Bạn có mã?';
+
+  @override
+  String get prepaidCodeTitle => 'Đổi mã';
+
+  @override
+  String get prepaidCodeFieldHint => 'Nhập mã của bạn';
+
+  @override
+  String get prepaidCodeRedeem => 'Đổi';
+
+  @override
+  String get prepaidCodeRedeemed => 'Đã đổi mã';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Mã này không hợp lệ. Hãy kiểm tra và thử lại.',
+        'used': 'Mã này đã được sử dụng.',
+        'expired': 'Mã này đã hết hạn.',
+        'hasPlan': 'Bạn đã có gói. Mã của bạn chưa được sử dụng. Hãy đổi mã sau khi gói của bạn kết thúc.',
+        'notPrepaid': 'Không thể đổi mã này tại đây. Hãy dùng khi bạn chọn gói.',
+        'notEligible': 'Không thể dùng mã này cho tài khoản này.',
+        'rateLimited': 'Quá nhiều lần thử. Hãy thử lại sau.',
+        'other': 'Đã xảy ra lỗi. Vui lòng thử lại.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Thanh toán qua omi.me. Hủy tại đây bất cứ lúc nào.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Thanh toán qua omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Gói $plan của bạn đang tạm dừng.';
+  }
 }

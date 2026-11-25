@@ -48,11 +48,6 @@ def _phase_enabled(phase: str) -> bool:
         )
     if phase == 'COALESCE':
         return True
-    if phase == 'SEPARATE_MERGE':
-        return rollout_default_off(
-            'AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED',
-            os.getenv('AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED', 'false').lower() == 'true',
-        )
     return False
 
 

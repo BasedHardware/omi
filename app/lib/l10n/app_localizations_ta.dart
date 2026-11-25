@@ -564,11 +564,11 @@ class AppLocalizationsTa extends AppLocalizations {
   String get hardwareSection => 'ஹார்ட்வேர்';
 
   @override
-  String get v2Undetected => 'V2 கண்டுபிடிக்கப்படவில்லை';
+  String get v2Undetected => 'ஆஃப்லைன் ஒத்திசைவு கிடைக்கவில்லை';
 
   @override
   String get v2UndetectedMessage =>
-      'உங்களுக்கு V1 சாதனம் அல்லது உங்கள் சாதனம் இணைக்கப்படவில்லை என்பதைக் கண்டோம். SD கார்ட் செயல்பாடு V2 சாதனங்களுக்கு மட்டுமே கிடைக்கிறது.';
+      'ஆஃப்லைன் ஒத்திசைவுக்கு SD கார்டு சேமிப்பகத்துடன் இணைக்கப்பட்ட Omi சாதனம் தேவை. உங்கள் தற்போதைய சாதனம் இதை ஆதரிக்கவில்லை.';
 
   @override
   String get endConversation => 'உரையாடல் முடிக்கவும்';
@@ -7114,6 +7114,26 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'உள்நுழைய அப்பாவமற்ற பிழை, மீண்டும் முயற்சிக்கவும்';
+
+  @override
+  String get accountSignInMethods => 'உள்நுழைவு முறைகள்';
+
+  @override
+  String get accountAddSignInMethod => 'உள்நுழைவு முறையைச் சேர்';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'இந்த Omi கணக்கில் உள்நுழைய மற்றொரு முறையைச் சேர்க்கவும். உங்கள் திட்டம், பதிவுகள் மற்றும் ஒருங்கிணைப்புகள் இந்தக் கணக்கிலேயே இருக்கும்.';
+
+  @override
+  String get accountSignInConflictTitle => 'இந்த உள்நுழைவு முறை வேறொரு கணக்குடன் இணைக்கப்பட்டுள்ளது';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'நீங்கள் இன்னும் இந்தக் கணக்கில்தான் உள்நுழைந்துள்ளீர்கள். ஒவ்வொரு Omi கணக்கிலும் அதற்குரிய திட்டம், பதிவுகள் மற்றும் ஒருங்கிணைப்புகள் இருக்கும்.';
+
+  @override
+  String get accountSignInMethodAdded => 'உள்நுழைவு முறை சேர்க்கப்பட்டது';
 
   @override
   String get authFailedToLinkGoogle => 'Google உடன் இணைக்க தோல்வியுற்றது, மீண்டும் முயற்சிக்கவும்.';
@@ -14459,6 +14479,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get processingProgress => 'உங்கள் காத்திருக்கும் பதிவுகள் செயலாக்கப்படுகின்றன…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'ஒலியை எழுத்தாக்குவதற்கான ஒதுக்கீட்டுக்காகக் காத்திருக்கிறது';
+
+  @override
   String get processingDeferred => 'செயலாக்கத்திற்குக் காத்திருக்கிறது';
 
   @override
@@ -15416,9 +15439,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get stopThese => 'இவற்றை நிறுத்து';
 
   @override
-  String get meetingActionItemsTitle => 'செயல் உருப்படிகள்';
-
-  @override
   String get addToTasks => 'பணிகளில் சேர்க்கவும்';
 
   @override
@@ -15827,10 +15847,96 @@ class AppLocalizationsTa extends AppLocalizations {
   String get stillWorkingOnIt => 'இன்னும் அதில் வேலை செய்யப்படுகிறது.';
 
   @override
+  String get deviceReadyToUse => 'பயன்படுத்தத் தயாராக உள்ளது';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'உங்கள் சாதனத்தின் ஃபர்ம்வேர் இந்தப் புதுப்பிப்புக்கு மிகவும் பழையதாக உள்ளது. சாதனத்தைப் புதுப்பிக்க உதவி பெற ஆதரவைத் தொடர்புகொள்ளவும்.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'இந்த ஃபர்ம்வேர் புதுப்பிப்புக்கு Omi ஆப்பின் புதிய பதிப்பு தேவை. உங்கள் ஆப் ஸ்டோரிலிருந்து ஆப்பைப் புதுப்பித்து, மீண்டும் சரிபார்க்கவும்.';
+
+  @override
+  String get quietPayerTitle => '5 நாட்களாக பதிவுகள் இல்லை';
+
+  @override
+  String get quietPayerMessage => 'உங்கள் Omi-ஐ சரிபார்க்கவும்.';
+
+  @override
+  String get quietPayerCheck => 'சரிபார்';
+
+  @override
+  String get playManageSubscription => 'சந்தாவை நிர்வகி';
+
+  @override
+  String get playBilledByGoogle => 'Google Play மூலம் கட்டணம் வசூலிக்கப்படும்';
+
+  @override
+  String get playPurchasePending => 'உங்கள் கட்டணம் நிலுவையில் உள்ளது. Google Play உறுதிசெய்ததும் Omi Pro தொடங்கும்.';
+
+  @override
+  String get playPurchaseOtherAccount => 'இந்த Google Play வாங்குதல் வேறொரு Omi கணக்கைச் சேர்ந்தது.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'உங்கள் வாங்குதலை இன்னும் உறுதிசெய்ய முடியவில்லை. தானாக மீண்டும் முயல்வோம்.';
+
+  @override
+  String get playRenewalTerms =>
+      'நீங்கள் ரத்து செய்யும் வரை காட்டப்பட்ட விலையில் தானாகப் புதுப்பிக்கப்படும். Google Play இல் எப்போது வேண்டுமானாலும் நிர்வகிக்கலாம் அல்லது ரத்து செய்யலாம்.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android இல் கிடைக்காது';
+
+  @override
+  String get pageNotAvailableInApp => 'இந்தப் பக்கம் ஆப்பில் கிடைக்காது.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ஆர்டர் செய்யப்பட்டது. உறுதிப்படுத்தலுக்கு உங்கள் மின்னஞ்சலைப் பாருங்கள்.';
+
+  @override
+  String get prepaidCodeEntry => 'குறியீடு உள்ளதா?';
+
+  @override
+  String get prepaidCodeTitle => 'குறியீட்டைப் பயன்படுத்து';
+
+  @override
+  String get prepaidCodeFieldHint => 'உங்கள் குறியீட்டை உள்ளிடவும்';
+
+  @override
+  String get prepaidCodeRedeem => 'பயன்படுத்து';
+
+  @override
+  String get prepaidCodeRedeemed => 'குறியீடு பயன்படுத்தப்பட்டது';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'இந்தக் குறியீடு செல்லாது. சரிபார்த்து மீண்டும் முயலவும்.',
+        'used': 'இந்தக் குறியீடு ஏற்கனவே பயன்படுத்தப்பட்டது.',
+        'expired': 'இந்தக் குறியீடு காலாவதியானது.',
+        'hasPlan':
+            'உங்களிடம் ஏற்கனவே ஒரு திட்டம் உள்ளது. உங்கள் குறியீடு பயன்படுத்தப்படவில்லை. திட்டம் முடிந்ததும் அதைப் பயன்படுத்தவும்.',
+        'notPrepaid': 'இந்தக் குறியீட்டை இங்கே பயன்படுத்த முடியாது. திட்டத்தைத் தேர்ந்தெடுக்கும்போது பயன்படுத்தவும்.',
+        'notEligible': 'இந்தக் கணக்கில் இந்தக் குறியீட்டைப் பயன்படுத்த முடியாது.',
+        'rateLimited': 'அதிக முயற்சிகள். பின்னர் மீண்டும் முயலவும்.',
+        'other': 'ஏதோ தவறு நடந்தது. மீண்டும் முயலவும்.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb =>
+      'omi.me மூலம் கட்டணம் வசூலிக்கப்படுகிறது. எப்போது வேண்டுமானாலும் இங்கே ரத்து செய்யலாம்.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me மூலம் கட்டணம் வசூலிக்கப்படுகிறது.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'உங்கள் $plan திட்டம் இடைநிறுத்தப்பட்டுள்ளது.';
+  }
 }

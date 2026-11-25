@@ -158,6 +158,32 @@ def test_stale_outbox_owner_or_token_cannot_record_anything(store, field, value)
     assert store.rows == before
 
 
+def test_strike_is_fenced_to_the_claimed_content_version(store):
+    """A sync append bumps ``version`` without rotating the token; the strike must not follow it."""
+    store.rows[OUTBOX].update(dormant=False, summary_empty_failures=0, version=2)
+    store.rows[CONVERSATION].update(summary_blocked_reason=None, summary_due_at=220)
+    before = deepcopy(store.rows)
+    assert (
+        summary_processing.record_empty_failure(
+            store, outbox.COLLECTION, KEY, 'worker', 'old-token', expected_version=1
+        )
+        is summary_processing.EmptyFailureOutcome.SUPERSEDED
+    )
+    assert store.rows == before
+
+
+def test_strike_records_the_version_it_was_charged_against(store):
+    store.rows[OUTBOX].update(dormant=False, summary_empty_failures=0, version=4)
+    store.rows[CONVERSATION].update(summary_blocked_reason=None, summary_due_at=220)
+    assert (
+        summary_processing.record_empty_failure(
+            store, outbox.COLLECTION, KEY, 'worker', 'old-token', expected_version=4
+        )
+        is summary_processing.EmptyFailureOutcome.RETRY
+    )
+    assert store.rows[OUTBOX]['summary_empty_version'] == 4
+
+
 def test_three_owned_empty_outputs_exhaust_once_and_preserve_structured_content(store):
     store.rows[OUTBOX].update(dormant=False, summary_empty_failures=0)
     store.rows[CONVERSATION].update(summary_blocked_reason=None, summary_due_at=220)

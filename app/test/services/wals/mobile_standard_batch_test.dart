@@ -14,6 +14,7 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_frame_encoder.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/capture/capture_end.dart';
+import 'package:omi/services/experiments/mobile_batch_file_cap_gate.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import '../../support/on_device_fakes.dart';
@@ -209,6 +210,55 @@ void main() {
     expect(published.single.seconds, 60);
     expect(File('${directory.path}/${published.single.filePath}').readAsBytesSync(),
         encodeWalFrames(List.generate(6000, (_) => [0])));
+  });
+
+  test('a 15-second cap seals four files where the default seals one, losing no frame', () async {
+    buffer.maxFileSeconds = MobileBatchFileCapGate.shortFileSeconds;
+    await enable();
+    for (var i = 0; i < 6000; i++) {
+      expect(route(i % 251), true);
+      await lane.pendingInference;
+    }
+    await buffer.pending;
+    expect(published.map((wal) => wal.seconds), [15, 15, 15, 15]);
+    expect(published.expand((wal) => readFrames(File('${directory.path}/${wal.filePath}'))).toList(),
+        List.generate(6000, (i) => [i % 251]));
+  });
+
+  test('lowering the cap seals an open file that is already longer, and an invalid cap is ignored', () async {
+    await enable();
+    for (var i = 0; i < 2000; i++) {
+      expect(route(0), true);
+      await lane.pendingInference;
+    }
+    buffer.maxFileSeconds = 0;
+    buffer.maxFileSeconds = 61;
+    expect(buffer.maxFileSeconds, MobileBatchBuffer.defaultMaxFileSeconds);
+    buffer.maxFileSeconds = 15;
+    expect(route(0), true);
+    await lane.pendingInference;
+    await buffer.pending;
+    expect(published.single.totalFrames, 2001);
+  });
+
+  test('the file limit scales with a shorter cap so the same span of capture is admitted', () async {
+    final small = MobileBatchBuffer(directory: directory, maxFiles: 1, publish: (wal) async => published.add(wal));
+    await small.initialize();
+    small.maxFileSeconds = 15;
+    for (var file = 0; file < 4; file++) {
+      for (var i = 0; i < 1500; i++) {
+        expect(small.append([file], uid: uid, codec: BleAudioCodec.opus, now: clock), true);
+      }
+    }
+    expect(small.append([9], uid: uid, codec: BleAudioCodec.opus, now: clock), false);
+    await small.close();
+    expect(published.map((wal) => wal.seconds), [15, 15, 15, 15]);
+  });
+
+  test('only an explicit true shortens the file cap', () async {
+    expect(await MobileBatchFileCapGate.maxFileSeconds(readFlag: (_) async => true), 15);
+    expect(await MobileBatchFileCapGate.maxFileSeconds(readFlag: (_) async => false), 60);
+    expect(await MobileBatchFileCapGate.maxFileSeconds(readFlag: (_) async => throw StateError('offline')), 60);
   });
 
   test('VAD hangover prioritizes speech at two seconds without discarding padding', () async {

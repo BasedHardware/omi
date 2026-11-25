@@ -36,6 +36,7 @@ void main() {
     onMuteWrite = null;
     world = await CaptureReplayWorld.boot(
       tempDir: directory,
+      startTime: DateTime.utc(2026, 3, 1, 12),
       pendantCodec: BleAudioCodec.opus,
       initialPrefs: {...persistedMute, if (batchMode) 'batchModeEnabled': true},
       deviceMuteReader: (_) async => reportedMute,
@@ -159,6 +160,15 @@ void main() {
     onMuteWrite = (muted) {
       if (!muted) scope = SyncWakeScope.run(() => pass.future);
     };
+    final replayCommitted = Completer<void>();
+    void onCaptureChanged() {
+      if (!replayCommitted.isCompleted && world.controller.liveCaptureSource != null) {
+        replayCommitted.complete();
+      }
+    }
+
+    world.controller.addListener(onCaptureChanged);
+    addTearDown(() => world.controller.removeListener(onCaptureChanged));
     try {
       await world.controller.resumeCapture();
       await world.settle();
@@ -169,13 +179,17 @@ void main() {
       pass.complete();
       await scope;
     }
-    // The replay is unawaited background work: settle until it commits.
-    for (var i = 0; i < 20 && world.controller.liveCaptureSource == null; i++) {
-      await world.settle();
-    }
+    // The scope can finish before the deferred start reaches the coordinator.
+    // Ownership is published only after the coordinator persists the snapshot.
+    await replayCommitted.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () => fail('the deferred pendant start never committed'),
+    );
+    await world.controller.pendingSourceSwitch;
 
     expect(world.controller.isPaused, isFalse);
     expect(world.controller.liveCaptureSource, 'omi');
+    expect(snapshotPhase(), 'pendantLive');
     expect(world.deviceConnection!.openAudioSubscriptions, 1, reason: 'the deferred start replays after the pass');
   });
 

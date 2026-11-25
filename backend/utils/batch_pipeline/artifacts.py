@@ -18,12 +18,14 @@ from uuid import uuid4
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from google.cloud.storage.retry import DEFAULT_RETRY
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import NotFound, PreconditionFailed
 
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline import leaf_timings
 from utils.batch_pipeline import voice_centroids
 from utils.batch_pipeline.source_audio import MAGIC as RECORD_MAGIC, materialize, read_reference
+from config.refactor_modes import default_on
+from utils.other.gcs_read_reuse import ReadMemo, REPLACEMENT_CALLS, avoided
 from utils.batch_pipeline.upload_policy import (
     UPLOAD_CHUNK_BYTES,
     UPLOAD_TIMEOUT,
@@ -213,7 +215,7 @@ class ArtifactStore:
         self._unchanged(item, context)
         return None
 
-    def _read(self, item: WorkItem, uri: str, kind: str, limit: int, *, read_budget=None) -> bytes:
+    def _read(self, item: WorkItem, uri: str, kind: str, limit: int, *, read_budget=None, observed=None) -> bytes:
         context = self._authorize(item, read_budget)
         if item.privacy_generation is None or context.generation != item.privacy_generation:
             raise PermissionError('batch artifacts require the admitted privacy generation')
@@ -221,24 +223,50 @@ class ArtifactStore:
         blob = self.bucket.blob(name, generation=generation)
         if read_budget is not None:
             read_budget.begin()
-        leaf_timings.call(
-            'download_metadata',
-            blob.reload,
-            if_generation_match=generation,
-            timeout=read_budget.timeout(30) if read_budget is not None else 30,
-            retry=None,
-        )
-        if not blob.size or not 0 < blob.size <= limit + len(MAGIC) + 28:
-            raise ValueError('stored batch artifact exceeds bounded payload size')
-        if read_budget is not None:
-            read_budget.reserve(blob.size)
-        sealed = leaf_timings.call(
-            'download',
-            blob.download_as_bytes,
-            if_generation_match=generation,
-            timeout=read_budget.timeout(60) if read_budget is not None else 60,
-            retry=None,
-        )
+
+        def reload_size():
+            leaf_timings.call(
+                'download_metadata',
+                blob.reload,
+                if_generation_match=generation,
+                timeout=read_budget.timeout(30) if read_budget is not None else 30,
+                retry=None,
+            )
+            return blob.size
+
+        def download(size, metageneration=None):
+            if not size or not 0 < size <= limit + len(MAGIC) + 28:
+                raise ValueError('stored batch artifact exceeds bounded payload size')
+            if read_budget is not None:
+                read_budget.reserve(size)
+            return leaf_timings.call(
+                'download',
+                blob.download_as_bytes,
+                if_generation_match=generation,
+                **({'if_metageneration_match': metageneration} if metageneration else {}),
+                timeout=read_budget.timeout(60) if read_budget is not None else 60,
+                retry=None,
+            )
+
+        metageneration = getattr(observed, 'metageneration', None)
+        if (
+            default_on('BATCH_ARTIFACT_METADATA_REUSE_ENABLED')
+            and observed is not None
+            and type(metageneration) is int
+            and metageneration > 0
+            and observed.name == name
+            and observed.generation == generation
+            and observed.size is not None
+        ):
+            try:
+                sealed = download(observed.size, metageneration)
+            except PreconditionFailed:
+                REPLACEMENT_CALLS.labels('staging_metadata', 'payload').inc()
+                sealed = download(reload_size())
+            else:
+                avoided('staging_metadata', 'metadata')
+        else:
+            sealed = download(reload_size())
         if read_budget is not None:
             read_budget.received_bytes += len(sealed)
             read_budget.timeout(60)
@@ -323,7 +351,17 @@ class ArtifactStore:
                 os.getenv('BUCKET_AUDIO_DERIVED', '').strip(),
             }
 
-            def fetch(ref):
+            memo = ReadMemo()
+
+            def fetch(ref, *, fresh=False):
+                listing = None
+                if not fresh and default_on('BATCH_SOURCE_VERIFIED_METADATA_REUSE_ENABLED') and 'metadata' in ref:
+                    listing = {
+                        'size': ref.get('source_size'),
+                        'metageneration': ref.get('source_metageneration'),
+                        'metadata': ref['metadata'],
+                        'source_metadata_reuse': True,
+                    }
                 return read_reference(
                     self.client,
                     ref,
@@ -333,13 +371,17 @@ class ArtifactStore:
                     self.key_for_owner(item.owner_id),
                     source_metadata=True,
                     read_budget=read_budget,
+                    listed_source=listing,
+                    report_payload_bytes=True,
+                    retry_stale_metadata=not fresh,
+                    memo=None if fresh else memo,
                 )
 
             def confirm_mismatch(ref):
                 # The same privacy/ownership fence as the post-materialize check,
                 # applied before the single confirmation read of the same pinned ref.
                 self._authorize(item, read_budget)
-                return fetch(ref)
+                return fetch(ref, fresh=True)
 
             wav = materialize(
                 body,
@@ -383,11 +425,13 @@ class ArtifactStore:
         uri = f'gs://{self.bucket_name}/{name}#{int(blob.generation)}'
         # Authenticate the owner, admitted clocks, generation and encrypted body
         # before acknowledging an upload whose successful reply was lost.
-        self.load_result(item, uri)
+        self.load_result(item, uri, _observed=blob)
         return uri
 
-    def load_result(self, item: WorkItem, uri: str, *, read_budget=None) -> dict[str, Any]:
-        payload = json.loads(self._read(item, uri, 'results', RESULT_LIMIT, read_budget=read_budget))
+    def load_result(self, item: WorkItem, uri: str, *, read_budget=None, _observed=None) -> dict[str, Any]:
+        payload = json.loads(
+            self._read(item, uri, 'results', RESULT_LIMIT, read_budget=read_budget, observed=_observed)
+        )
         if not isinstance(payload, dict):
             raise ValueError('batch result must be a JSON object')
         return payload

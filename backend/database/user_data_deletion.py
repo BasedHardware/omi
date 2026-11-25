@@ -17,7 +17,6 @@ from database.batch_account_authority import account_authority_writer_enabled, m
 from database.memory_collections import RELEASED_MEMORY_CHANGE_HEAD
 from database.people_generation import generation_ref
 from database.staged_promote_cache import invalidate_around_write
-from config.list_projection import STATE_COLLECTION, ROW_COLLECTIONS
 from database.apps import apps_collection, PUBLIC_APPROVED_APPS_CACHE_KEY, search_apps_db
 from database.redis_db import delete_app_cache_by_id, delete_generic_cache
 
@@ -36,7 +35,12 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     # lives in the customer data plane (which can differ from this compute
     # client's project). A failed delete must propagate so the account wipe
     # retries it.
-    get_data_plane_firestore_client().collection('rollout_cohorts').document(uid).delete()
+    data_plane = get_data_plane_firestore_client()
+    cohort_ref = data_plane.collection('rollout_cohorts').document(uid)
+    # Child audit rows (go_finalization_audit) survive a parent delete, so erase them first.
+    for sub in cohort_ref.collections():
+        delete_collection(sub, client=data_plane)
+    cohort_ref.delete()
     # Creator-owned marketplace apps live outside users/{uid}; remove their
     # nested API keys/reviews too so final and immediate erasure share parity.
     delete_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY)
@@ -71,10 +75,10 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     # Atomic source deletes also maintain this derived head. Erase it after
     # every source collection, including when memory_state was visited first.
     user_ref.collection('memory_state').document(RELEASED_MEMORY_CHANGE_HEAD).delete()
-    # Source deletes can rotate these content-free heads after their collection
-    # was walked, including a retry whose root user document is already absent.
-    for family in ROW_COLLECTIONS:
-        user_ref.collection(STATE_COLLECTION).document(family).delete()
+    # Explicitly erase historical heads as part of account deletion, including
+    # a retry whose root user document is already absent.
+    for family in ('conversations', 'action_items'):
+        user_ref.collection('list_serving_versions').document(family).delete()
 
     # People deletes can recreate their content-free generation head after
     # people_meta was enumerated. Missing metadata never authorizes memo reuse.
@@ -93,5 +97,11 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     elif root_exists:
         logger.info(f"Deleting user document: {uid}")
         user_ref.delete()
+    # A child can arrive after its conversation's first sweep but before the
+    # parent delete. list_documents also sees missing parents with descendants,
+    # including on retry after the user root has already been removed.
+    evidence_owner = data_plane.collection('users').document(uid)
+    for conversation in evidence_owner.collection('conversations').list_documents():
+        delete_collection(conversation.collection('speaker_evidence'), client=data_plane)
     stop_quiet_checks_for_account(uid, firestore_client=client)
     return {'status': 'ok', 'message': 'Account deleted successfully'}

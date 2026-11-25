@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-recovery-target-hardcoded-instead-of-saved",
+  "family": "state-single-owner",
   "violated_contract": "A staged release must bind preparation, continuation, traffic and recovery to the same explicitly saved named predecessor. A historical hard-coded revision rejects a valid newer serving predecessor or directs later recovery at a different release generation.",
   "canonical_prevention": "Validate the explicit predecessor against the actual serving revision and retained inverse before preparing. Persist that exact identity with the original snapshot, reject mismatched continuation state, and use the saved value for every traffic plan, retained read, adapter preflight, rollback and handoff. Never resolve a latest alias or silently change predecessors during continuation.",
   "canonical_prevention_artifact": [

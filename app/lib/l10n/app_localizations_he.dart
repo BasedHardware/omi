@@ -556,11 +556,11 @@ class AppLocalizationsHe extends AppLocalizations {
   String get hardwareSection => 'חומרה';
 
   @override
-  String get v2Undetected => 'V2 לא זוהה';
+  String get v2Undetected => 'סנכרון לא מקוון אינו זמין';
 
   @override
   String get v2UndetectedMessage =>
-      'אנו רואים שיש לך מכשיר V1 או שהמכשיר שלך לא מחובר. פונקציונליות כרטיס SD זמינה רק למכשירי V2.';
+      'סנכרון לא מקוון דורש מכשיר Omi מחובר עם אחסון בכרטיס SD. המכשיר הנוכחי שלך אינו תומך בכך.';
 
   @override
   String get endConversation => 'סיים שיחה';
@@ -7000,6 +7000,26 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'שגיאה בלתי צפויה בעת הכניסה, אנא נסה שוב';
+
+  @override
+  String get accountSignInMethods => 'דרכי כניסה';
+
+  @override
+  String get accountAddSignInMethod => 'הוספת דרך כניסה';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'אפשר להוסיף דרך כניסה לחשבון Omi הזה. התוכנית, ההקלטות והאינטגרציות יישארו בחשבון הזה.';
+
+  @override
+  String get accountSignInConflictTitle => 'דרך הכניסה הזו משויכת לחשבון אחר';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'החיבור לחשבון הזה נשאר פעיל. כל חשבון Omi שומר על התוכנית, ההקלטות והאינטגרציות שלו.';
+
+  @override
+  String get accountSignInMethodAdded => 'דרך הכניסה נוספה';
 
   @override
   String get authFailedToLinkGoogle => 'כישלון בקישור עם Google, אנא נסה שוב.';
@@ -14254,6 +14274,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get processingProgress => 'ההקלטות הממתינות שלך בעיבוד…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'בהמתנה למכסת תמלול זמינה';
+
+  @override
   String get processingDeferred => 'ממתין לעיבוד';
 
   @override
@@ -15201,9 +15224,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get stopThese => 'הפסקת אלה';
 
   @override
-  String get meetingActionItemsTitle => 'משימות לביצוע';
-
-  @override
   String get addToTasks => 'הוספה למשימות';
 
   @override
@@ -15609,10 +15629,93 @@ class AppLocalizationsHe extends AppLocalizations {
   String get stillWorkingOnIt => 'עדיין עובדים על זה.';
 
   @override
+  String get deviceReadyToUse => 'מוכן לשימוש';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'הקושחה של המכשיר שלך ישנה מדי לעדכון הזה. יש לפנות לתמיכה לקבלת עזרה בעדכון המכשיר.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'עדכון הקושחה הזה דורש גרסה חדשה יותר של אפליקציית Omi. יש לעדכן את האפליקציה מחנות האפליקציות שלך, ואז לבדוק שוב.';
+
+  @override
+  String get quietPayerTitle => 'אין הקלטות כבר 5 ימים';
+
+  @override
+  String get quietPayerMessage => 'בדקו את ה-Omi שלכם.';
+
+  @override
+  String get quietPayerCheck => 'בדיקה';
+
+  @override
+  String get playManageSubscription => 'ניהול המינוי';
+
+  @override
+  String get playBilledByGoogle => 'החיוב דרך Google Play';
+
+  @override
+  String get playPurchasePending => 'התשלום ממתין. Omi Pro יתחיל ברגע ש-Google Play יאשר אותו.';
+
+  @override
+  String get playPurchaseOtherAccount => 'הרכישה הזו ב-Google Play שייכת לחשבון Omi אחר.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'עדיין לא הצלחנו לאשר את הרכישה. ננסה שוב אוטומטית.';
+
+  @override
+  String get playRenewalTerms => 'מתחדש אוטומטית במחיר המוצג עד שתבטלו. ניתן לנהל או לבטל בכל עת ב-Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'לא זמין ב-Android';
+
+  @override
+  String get pageNotAvailableInApp => 'הדף הזה לא זמין באפליקציה.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ההזמנה בוצעה. האישור נשלח לאימייל שלך.';
+
+  @override
+  String get prepaidCodeEntry => 'יש לך קוד?';
+
+  @override
+  String get prepaidCodeTitle => 'מימוש קוד';
+
+  @override
+  String get prepaidCodeFieldHint => 'הזינו את הקוד שלכם';
+
+  @override
+  String get prepaidCodeRedeem => 'מימוש';
+
+  @override
+  String get prepaidCodeRedeemed => 'הקוד מומש';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'הקוד הזה אינו תקף. בדקו אותו ונסו שוב.',
+        'used': 'הקוד הזה כבר נוצל.',
+        'expired': 'תוקף הקוד הזה פג.',
+        'hasPlan': 'כבר יש לכם תוכנית. הקוד שלכם לא נוצל. ממשו אותו כשהתוכנית שלכם תסתיים.',
+        'notPrepaid': 'לא ניתן לממש את הקוד הזה כאן. השתמשו בו כשתבחרו תוכנית.',
+        'notEligible': 'לא ניתן להשתמש בקוד הזה בחשבון הזה.',
+        'rateLimited': 'יותר מדי ניסיונות. נסו שוב מאוחר יותר.',
+        'other': 'משהו השתבש. נסו שוב.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'החיוב מתבצע דרך omi.me. אפשר לבטל כאן בכל עת.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'החיוב מתבצע דרך omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'התוכנית $plan שלך מושהית.';
+  }
 }

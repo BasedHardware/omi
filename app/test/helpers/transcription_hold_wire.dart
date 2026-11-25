@@ -17,7 +17,7 @@ import 'home_fixture_env.dart';
 ///   `transcribing_hold.project(home_step.project(row))` to list-field rows (no transcript).
 ///   Past the deadline `home_step.classify` says `failed`, and `transcribing_hold.project` keeps
 ///   `status: completed`, writes the `transcription_presentation` title "Couldn't transcribe" and
-///   `summary_retryable: false`.
+///   `summary_retryable: false`, and with no failure receipt `transcription_wait: overdue`.
 /// - (b) Detail: `get_conversation_by_id` returns `transcribing_hold.project(conversation)` on the
 ///   hydrated row: the same status, title and `summary_retryable`, an empty transcript, and no
 ///   `home_step` (only list reads run `home_step.project`).
@@ -50,6 +50,7 @@ Map<String, dynamic> heldListRowJson() => {
       'status': 'completed',
       'home_step': 'failed',
       'summary_retryable': false,
+      'transcription_wait': 'overdue',
     };
 
 /// (b) The detail copy of the same recording.
@@ -57,6 +58,7 @@ Map<String, dynamic> heldDetailJson() => {
       ..._titled(_stored(), "Couldn't transcribe"),
       'status': 'completed',
       'summary_retryable': false,
+      'transcription_wait': 'overdue',
       'transcript_segments': <Object>[],
     };
 

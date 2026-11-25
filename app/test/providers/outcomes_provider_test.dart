@@ -1,5 +1,5 @@
 // ux-contract §17 Outcomes, audit 2026-11-19: a failure is never a value, and a write that fails
-// says so. Provider- and helper-level cases for P1, G3, G4, T1, T4, T5, H2, D4, V1/V5 and C6.
+// says so. Provider- and helper-level cases for P1, G3, G4, T1, T4, T5, H2, V1/V5 and C6.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,7 +10,6 @@ import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/conversation_detail/share_flow.dart';
 import 'package:omi/pages/episodes/finished_capture_page.dart';
-import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -259,12 +258,6 @@ void main() {
     expect(provider.isReplyFailed(reply), isTrue);
     expect(reply.text, contains('The first half of the answer'));
     expect(provider.canRetryReply(reply), isTrue);
-  });
-
-  test('D4: a disconnected device is never "unsupported" for Offline Sync', () {
-    expect(offlineSyncEntry(connected: false, storageSupported: false), OfflineSyncEntry.connectFirst);
-    expect(offlineSyncEntry(connected: true, storageSupported: false), OfflineSyncEntry.unsupported);
-    expect(offlineSyncEntry(connected: true, storageSupported: true), OfflineSyncEntry.open);
   });
 
   group('V1/V5 share', () {

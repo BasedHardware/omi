@@ -7,6 +7,7 @@ from config.episodes import episodes_enabled, episode_compose_transcript_ready_e
 import math
 
 from config.record_audio import restore_pending
+from config.server_batch import manual_end_marker_enabled
 from utils.batch_pipeline import empty_transcription
 from utils.conversations.final_pass_remap import remap_final_record
 from utils.conversations.fragment_visibility import is_automatic_discard
@@ -138,6 +139,21 @@ def replace_record(
         has_content=bool(segments),
         sync_live_target=True,
     )
+    # A no-pointer Finish can arrive after the admission worker read its snapshot.
+    # The single-unit transcript commit is the other safe place to honor that marker.
+    if (
+        new
+        and span.get('whole_native_record')
+        and current.get('recording')
+        and current.get('v3_manual_end_requested')
+        and not current.get('v3_manual_end')
+        and manual_end_marker_enabled()
+    ):
+        result.update(
+            v3_manual_end=True,
+            v3_pending=True,
+            v3_pending_since=current.get('v3_pending_since') or datetime.now(timezone.utc),
+        )
     empty_transcription.stamp(current, result, span)
     if new and is_automatic_discard(current) and not restore_pending(current, *obligations):
         # Later speech supersedes an ordinary automatic verdict. A pending

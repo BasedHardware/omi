@@ -1,14 +1,17 @@
 // The End action on a v3 conversation in progress; owns only when it shows and what it calls.
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/home/home_navigation.dart';
+import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -16,12 +19,8 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// (`CaptureProvider.forceProcessingCurrentConversation`). It sits in the live conversation's detail
 /// bar beside Ask Omi, never on Home.
 ///
-/// It shows only when [conversation] is this phone's own capture: its transcript holds a segment
-/// this phone captured (a v3 window copies its recordings' segments, ids included). The live window
-/// on the page can belong to another device (a desktop capture) while this phone also records, and
-/// End would then finalize this phone's capture, not the one on screen; so with no shared segment,
-/// including before the window's transcript has loaded, End is hidden. [leadingGap] goes with it,
-/// so the Ask bar keeps the full width.
+/// An overlapping transcript segment or the verified source recording establishes ownership.
+/// A live window on another device must never end this phone's capture.
 ///
 /// One tap ends it. The capture keeps its segments until the WAL drain finishes (seconds), so the
 /// button is still on screen meanwhile; taps before that settles are ignored rather than starting a
@@ -41,18 +40,54 @@ class LiveConversationEndButton extends StatefulWidget {
     return conversation.transcriptSegments.any((segment) => captured.contains(segment.id));
   }
 
+  /// Whether the current capture can finish this window.
+  static bool phoneCaptures(ServerConversation conversation, CaptureProvider capture, {String? currentLiveId}) {
+    final verified = capture.verifiedLiveServerRecordingId;
+    final recordings = conversation.v3?.recordingIds ?? const <String>[];
+    if (verified != null && capture.hasClosedServerRecording(verified)) {
+      // Process Now can close the recording before Listen announces its replacement.
+      // The local close clears segment arrivals. Require a segment received since that
+      // cut in the current live window, and reject windows still listing the closed source.
+      return EpisodePresentation.streamingSource(capture) != null &&
+          conversation.id == currentLiveId &&
+          recordings.isNotEmpty &&
+          !recordings.contains(verified) &&
+          ownsCapture(conversation, capture.locallyReceivedSegmentIds);
+    }
+    // Listen may rotate while the client capture ID and earlier segments are still
+    // present. A window that names its sources must then list the verified recording.
+    if (verified != null && recordings.isNotEmpty) return recordings.contains(verified);
+    if (EpisodePresentation.streamingSource(capture) == null && verified == null) return false;
+    return recordings.contains(capture.activeRecordingId) ||
+        ownsCapture(conversation, capture.locallyReceivedSegmentIds);
+  }
+
   @override
   State<LiveConversationEndButton> createState() => _LiveConversationEndButtonState();
 }
 
 class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
   bool _ended = false;
+  // Failure count when a successful close latched End; a later unsuccessful settlement releases it.
+  int? _latchedFailures;
 
   @override
   Widget build(BuildContext context) {
     final conversation = widget.conversation;
-    final mine = context.select<CaptureProvider?, bool>((capture) =>
-        capture != null && LiveConversationEndButton.ownsCapture(conversation, capture.segments.map((s) => s.id)));
+    final currentLiveId = context.select<ConversationsV3Provider?, String?>((v3) => v3?.live?.id);
+    final mine = context.select<CaptureProvider?, bool>(
+      (capture) =>
+          capture != null &&
+          LiveConversationEndButton.phoneCaptures(conversation, capture, currentLiveId: currentLiveId),
+    );
+    final failures = context.select<ConversationsV3Provider?, int>((v3) => v3?.finishFailures ?? 0);
+    if (_ended && _latchedFailures != null && failures != _latchedFailures) {
+      _latchedFailures = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _ended = false;
+        if (mounted) widget.onEndSuppressionChanged?.call(false);
+      });
+    }
     if (!mine) return const SizedBox.shrink();
     final label = context.l10n.endConversation;
     return Padding(
@@ -73,23 +108,45 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
             ),
             child: InkWell(
               borderRadius: OmiRadius.pillAll,
-              onTap: () {
-                if (_ended) return;
-                HapticFeedback.mediumImpact();
+              onTap: () async {
                 final capture = context.read<CaptureProvider>();
                 // Checked again at the tap: the capture may have moved on since the last build.
-                if (!LiveConversationEndButton.ownsCapture(conversation, capture.segments.map((s) => s.id))) return;
+                final v3 = context.read<ConversationsV3Provider?>();
+                if (_ended ||
+                    !LiveConversationEndButton.phoneCaptures(conversation, capture, currentLiveId: v3?.live?.id)) {
+                  return;
+                }
                 _ended = true;
+                HapticFeedback.mediumImpact();
                 final setEndSuppressed = widget.onEndSuppressionChanged;
                 setEndSuppressed?.call(true);
-                // Settled: on success the capture has cleared and End is gone; after a failed drain the
-                // capture keeps its segments, and End works again.
-                unawaited(capture.forceProcessingCurrentConversation().whenComplete(() {
-                  _ended = false;
-                  if (LiveConversationEndButton.ownsCapture(conversation, capture.segments.map((s) => s.id))) {
+                final previousFinish = v3?.finishRow;
+                final failuresAtTap = v3?.finishFailures;
+                var started = false;
+                var closed = false;
+                try {
+                  final finish = capture.forceProcessingCurrentConversation(
+                      manualFinish: true, liveConversationId: conversation.id);
+                  started = v3?.finishRow != null && !identical(v3!.finishRow, previousFinish);
+                  await finish;
+                  closed = true;
+                } catch (_) {
+                  // The close kept the capture. End stays on detail so the user can retry it.
+                  return;
+                } finally {
+                  // A closed window with a published finish stays latched; only a failed close restores End.
+                  if (!(closed && started)) {
+                    _ended = false;
                     setEndSuppressed?.call(false);
+                  } else {
+                    _latchedFailures = failuresAtTap;
                   }
-                }));
+                }
+                if (!context.mounted || !started || ModalRoute.of(context)?.isCurrent != true) return;
+                // A filtered Home cannot show the Processing row; the result lands on this detail instead.
+                if (context.read<ConversationProvider?>()?.showsDefaultHome != true) return;
+                context.read<HomeProvider?>()?.showNewestOnHome();
+                HomeNavigation.returnHome(context);
               },
               // At most half the bar, so Ask Omi keeps its room; a long translation scales down on one
               // line, then ellipsizes, rather than overflowing a 320pt screen.

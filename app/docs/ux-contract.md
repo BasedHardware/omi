@@ -87,7 +87,7 @@ There are exactly two ways out, and they mean different things.
 
 | Need | Use | Not |
 |---|---|---|
-| Text action | `OmiButton` — `.primary` (white fill and black label in dark mode; inverse in light mode), `.secondary`, `.destructive`, `.tertiary`; size regular (48) or compact (36 visual, 44 target); `isLoading` | `ElevatedButton.styleFrom(...)` with a local colour, height or radius |
+| Text action | `OmiButton` — `.primary` (white fill and black label in dark mode; inverse in light mode), `.secondary`, `.destructive`, `.tertiary`; size regular (48) or compact (36 visual, 44 target); `isLoading`; `maxLines: null` on every variant lets a long label wrap at large text instead of cutting off | `ElevatedButton.styleFrom(...)` with a local colour, height or radius |
 | Icon-only action | `OmiIconButton(icon, label: …)` — `label` is required and is the tooltip and the screen-reader name | a bare `GestureDetector`/`InkWell` around an `Icon`, an `IconButton` with no tooltip |
 | Header circle button | `OmiIconButton` filled-circle style (`HeaderCircleButton` is an alias) | a 36 pt circle with a 36 pt target |
 | On/off setting | `OmiSwitch` in an `OmiSettingsRow` | a checkbox, a purple/green/indigo switch |
@@ -352,9 +352,10 @@ rules cover what happens after it is tapped. Guards: `silent-catch`, `generic-er
 primary action (Finish: `test/widgets/finish_outcome_test.dart`).
 
 1. **A finishing action lands on its result.** Finish, Save, Submit and Import open the thing they
-   made, in a processing state until it is ready. The app never sends the reader Home as the
-   answer; Home is their choice. Finish from every entry point (the live page, Home's Wrap Up, the
-   record button) returns one typed `FinishOutcome` (`lib/services/capture/finish_outcome.dart`)
+   made, in a processing state until it is ready. On Home v3, the Processing row under Today
+   is the visible result of a manual finish until the conversation card takes its place. For
+   other finishing actions, opening Home is the reader's choice. Finish from the live page,
+   Home's Wrap Up or the record button returns one typed `FinishOutcome` (`lib/services/capture/finish_outcome.dart`)
    and is presented by `presentFinishOutcome`, so no caller can receive a bare null.
 2. **A failure is never a value.** A request that failed is not "empty", "up to date", "Free plan"
    or "no change". A function a page calls separates *nothing there* from *could not find out*,

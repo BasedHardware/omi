@@ -11,9 +11,12 @@ import importlib
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from google.api_core.exceptions import Aborted
 
+
+from config.record_wal_duplicate import SETTLED_FIELD
 from database import conversations_v3 as store
-from utils.conversations.v3 import service, summary
+from utils.conversations.v3 import bind_request_log_trace, service, summary
 from utils.conversations import (
     lifecycle,
 )  # noqa: F401 -- the commit path's import graph is paid at collection, not in a test's CPU budget
@@ -75,7 +78,13 @@ def test_expired_worker_cannot_release_successor(strict):
     assert strict.rows[L]['token'] == new
 
 
-def test_atomic_projection_and_claim(strict):
+@pytest.mark.parametrize('mode', ['default', 'off'])
+def test_atomic_projection_and_claim(strict, monkeypatch, mode):
+    monkeypatch.delenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', raising=False)
+    if mode == 'off':
+        monkeypatch.setenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'off')
+    batch_get = Mock(wraps=strict.get_all)
+    monkeypatch.setattr(strict, 'get_all', batch_get)
     strict.rows[R] = {'recording': True, 'v3_pending': True}
     token = leases.acquire('synthetic', 'builder', firestore_client=strict)
     source = {'id': 'r', 'recording': True, '_v3_revision': 1}
@@ -89,9 +98,55 @@ def test_atomic_projection_and_claim(strict):
         'structured': {},
     }
     store.commit_projection('synthetic', token, {'r': source}, {}, [row], [], firestore_client=strict)
+    if mode == 'default':
+        batch_get.assert_called_once()
+        assert batch_get.call_args.kwargs['transaction'] is strict.transactions[-1]
+    else:
+        batch_get.assert_not_called()
     assert strict.rows[R]['v3_pending'] is False
     assert strict.rows[R]['claims'] == [{'conversation_id': 'c', 'start': AT, 'end': AT}]
     assert strict.rows[('users', 'synthetic', 'conversations', 'c')]['id'] == 'c'
+
+
+@pytest.mark.parametrize('missing', [False, True])
+def test_projection_reads_unordered_chunks_and_prefers_existing_row(strict, monkeypatch, missing):
+    monkeypatch.delenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', raising=False)
+    strict.rows[R] = {'recording': True, 'v3_pending': True}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    existing = {'r': {'_v3_revision': 1}}
+    for index in range(100):
+        cid = f'c{index}'
+        existing[cid] = {'_v3_revision': 1}
+        if not (missing and index == 99):
+            strict.rows[(*R[:-1], cid)] = {'_test_revision': 1}
+    batch_get = Mock(wraps=strict.get_all)
+    monkeypatch.setattr(strict, 'get_all', batch_get)
+
+    def commit():
+        return store.commit_projection(
+            'synthetic', token, {'r': {'_v3_revision': 2}}, existing, [], [], firestore_client=strict
+        )
+
+    if missing:
+        with pytest.raises(store.Conflict, match='source_changed'):
+            commit()
+    else:
+        assert commit() == set()
+    assert strict.rows[R]['v3_pending'] is missing
+    assert [len(call.args[0]) for call in batch_get.call_args_list] == [100, 1]
+    assert all(call.kwargs['transaction'] is strict.transactions[-1] for call in batch_get.call_args_list)
+
+
+def test_projection_defers_full_row_replacement_of_settled_wal(strict):
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    path = ('users', 'synthetic', 'conversations', 'c')
+    row = {'id': 'c', 'status': 'completed', 'started_at': AT, 'finished_at': AT, 'v3_recording_ids': []}
+    strict.rows[path] = {**row, SETTLED_FIELD: True}
+    existing = {**strict.rows[path], '_v3_revision': 1}
+    before = deepcopy(strict.rows)
+    with pytest.raises(store.Conflict, match='source_changed'):
+        store.commit_projection('synthetic', token, {}, {'c': existing}, [row], [], firestore_client=strict)
+    assert strict.rows == before
 
 
 def test_new_speech_preserves_pending_on_conflict(strict):
@@ -329,7 +384,10 @@ def test_projection_allows_transcript_offload(strict, monkeypatch):
     assert calls[0]['allow_offload'] is True
 
 
-def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(strict, monkeypatch):
+@pytest.mark.parametrize('abort_second_batch', [False, True])
+def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(
+    strict, monkeypatch, caplog, abort_second_batch
+):
     strict.rows[R] = {'id': 'r', 'recording': True, 'v3_pending': True, 'status': 'completed'}
     token = leases.acquire('synthetic', 'builder', firestore_client=strict)
     original = store.firestore.transactional
@@ -339,6 +397,8 @@ def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(strict, 
         wrapped = original(body)
 
         def run(tx, *args):
+            if abort_second_batch and len(observations) == 1:
+                raise Aborted('cross-transaction contention')
             result = wrapped(tx, *args)
             observations.append(strict.rows[R]['v3_pending'])
             return result
@@ -357,9 +417,24 @@ def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(strict, 
         }
         for i in range(128)
     ]
-    store.commit_projection(
-        'synthetic', token, {'r': {**strict.rows[R], '_v3_revision': 1}}, {}, rows, [], firestore_client=strict
-    )
+
+    def commit():
+        store.commit_projection(
+            'synthetic', token, {'r': {**strict.rows[R], '_v3_revision': 1}}, {}, rows, [], firestore_client=strict
+        )
+
+    if abort_second_batch:
+        trace_id = 'a' * 32
+        with bind_request_log_trace({b'x-cloud-trace-context': (trace_id + '/42').encode()}):
+            with pytest.raises(Aborted):
+                commit()
+        assert observations == [True]
+        assert strict.rows[R]['v3_pending'] is True
+        assert 0 < len(strict.rows[R]['claims']) < len(rows)
+        assert f'stage=projection_commit outcome=contention trace_id={trace_id}' in caplog.text
+        return
+
+    commit()
     assert len(observations) >= 4
     assert all(observations[:-1]) and observations[-1] is False
     assert len(strict.rows[R]['claims']) == 128
@@ -802,3 +877,124 @@ async def test_queued_processing_skips_foreign_candidate_before_lease(monkeypatc
     pending.assert_called_once_with('synthetic')
     acquire.assert_not_called()
     created_delivery.assert_awaited_once_with('synthetic')
+
+
+def _processed(basis):
+    from prometheus_client import REGISTRY
+
+    return REGISTRY.get_sample_value('omi_conversation_processed_seconds_count', {'lane': 'live', 'basis': basis}) or 0
+
+
+def _unsummarized(reason):
+    from prometheus_client import REGISTRY
+
+    labels = {'lane': 'live', 'reason': reason}
+    return REGISTRY.get_sample_value('omi_conversation_settled_unsummarized_total', labels) or 0
+
+
+def _retried(strict, monkeypatch):
+    """Run each transaction body twice: the first attempt aborts before commit, as a Firestore retry does."""
+
+    def transactional(body):
+        def run(tx, *args, **kwargs):
+            with strict.lock:
+                saved = deepcopy(strict.rows)
+                body(strict.transaction(), *args, **kwargs)
+                strict.rows.clear()
+                strict.rows.update(saved)
+                return body(tx, *args, **kwargs)
+
+        return run
+
+    monkeypatch.setattr(store.firestore, 'transactional', transactional)
+
+
+@pytest.fixture
+def live_lane(monkeypatch):
+    monkeypatch.delenv('K_SERVICE', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_ENABLED', raising=False)
+    monkeypatch.delenv('CONVERSATION_TERMINAL_FAMILY_MODE', raising=False)
+
+
+def test_first_notes_settle_observes_both_bases_once_across_a_retry(strict, monkeypatch, live_lane):
+    path = ('users', 'synthetic', 'conversations', 'c')
+    finished = datetime.now(timezone.utc) - timedelta(minutes=5)
+    row = {'id': 'c', 'v3_derived': True, 'finished_at': finished, 'transcript_segments': [{'text': 'speech'}]}
+    strict.rows[path] = dict(row)
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    assert writers.begin_processing('synthetic', row, token, firestore_client=strict)
+    _retried(strict, monkeypatch)
+    before = _processed('finished'), _processed('end_or_sync')
+    writers.settle_processing('synthetic', 'c', token, None, AT, notes=True, firestore_client=strict)
+    assert (_processed('finished'), _processed('end_or_sync')) == (before[0] + 1, before[1] + 1)
+    assert strict.rows[path]['v3_notes_written']
+    # A late rewrite of a row that already has notes is not a first summary.
+    assert writers.begin_processing('synthetic', row, token, force=True, firestore_client=strict)
+    writers.settle_processing('synthetic', 'c', token, None, AT, notes=True, firestore_client=strict)
+    assert _processed('finished') == before[0] + 1
+
+
+def test_a_settle_without_notes_counts_the_unsummarized_denominator(strict, live_lane):
+    path = ('users', 'synthetic', 'conversations', 'c')
+    strict.rows[path] = {'id': 'c', 'v3_derived': True, 'status': 'completed', 'v3_process_pending': True}
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    before = _unsummarized('no_notes'), _processed('finished')
+    writers.settle_processing('synthetic', 'c', token, None, AT, notes=False, firestore_client=strict)
+    assert _unsummarized('no_notes') == before[0] + 1 and _processed('finished') == before[1]
+
+
+def test_open_notes_commit_observes_once_and_stamps_the_settle(strict, live_lane):
+    card = R[:-1] + ('card',)
+    strict.rows[card] = {
+        'id': 'card',
+        'v3_derived': True,
+        'v3_unlocked': True,
+        'status': 'in_progress',
+        'finished_at': AT - timedelta(minutes=2),
+    }
+    token = leases.acquire('synthetic', 'summary-card', firestore_client=strict)
+    before = _processed('finished')
+    writers.store_summary('synthetic', 'card', token, 1, {'title': 'Synthetic'}, AT, firestore_client=strict)
+    stamped = strict.rows[card]['terminal_family_at']
+    assert strict.rows[card]['status'] == 'completed' and isinstance(stamped, datetime)
+    assert _processed('finished') == before + 1
+    writers.store_summary('synthetic', 'card', token, 1, {'title': 'Synthetic'}, AT, firestore_client=strict)
+    assert _processed('finished') == before + 1 and strict.rows[card]['terminal_family_at'] == stamped
+
+
+def test_failed_processing_stamps_once_and_counts_once(strict, live_lane):
+    path = ('users', 'synthetic', 'conversations', 'c')
+    row = {'id': 'c', 'v3_derived': True, 'status': 'processing', 'sync_content_revision': 1}
+    strict.rows[path] = dict(row, transcript_segments=[{'text': 'speech'}])
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    before = _unsummarized('failed')
+    assert writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
+    stamped = strict.rows[path]['terminal_family_at']
+    assert strict.rows[path]['status'] == 'completed' and 'terminal_family' not in strict.rows[path]
+    assert not writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
+    assert strict.rows[path]['terminal_family_at'] == stamped
+    assert _unsummarized('failed') == before + 1
+
+
+@pytest.mark.parametrize('prior', [None, 'processing', 'completed'])
+def test_projection_stamps_only_rows_it_moves_onto_completed(strict, prior, live_lane):
+    cid_path = ('users', 'synthetic', 'conversations', 'c')
+    existing = {}
+    if prior is not None:
+        stored = {'id': 'c', 'status': prior, **({'terminal_family_at': AT} if prior == 'completed' else {})}
+        strict.rows[cid_path] = stored
+        existing = {'c': {**stored, '_v3_revision': 1}}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    row = {
+        **(existing.get('c') or {}),
+        **writers.failure_patch(reason='outline'),
+        'id': 'c',
+        'started_at': AT,
+        'finished_at': AT,
+        'v3_recording_ids': [],
+        'transcript_segments': [],
+        'structured': {},
+    }
+    store.commit_projection('synthetic', token, {}, existing, [row], [], firestore_client=strict)
+    written = strict.rows[cid_path]['terminal_family_at']
+    assert written == AT if prior == 'completed' else written != AT

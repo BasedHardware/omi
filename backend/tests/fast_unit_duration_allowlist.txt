@@ -1,16 +1,11 @@
 # Backend unit-test node IDs grandfathered against BACKEND_FAST_UNIT_FAIL_SECONDS (default 1.0s, local and CI).
 #
-# The duration guard measures per-test CPU time (call phase). CPU time is load-independent, so the
-# guard is deterministic regardless of parallelism. The entries below are genuine unit tests whose
-# measured CPU exceeds the failure threshold. The dominant cause is the file-isolation
-# runner model: each test file runs in its own pytest process, so the first test of a file/class
-# amortizes that process's module import (FastAPI app / router / database graph) into its call.
-# This is structural, not a per-test regression. They STAY in the PR unit lane; this file only
-# suppresses the duration guard for these baseline node IDs. NEW slow tests are still flagged.
-# To shrink this list: (a) migrate the runner to a single pytest session (BACKEND_PYTEST_FILE_ISOLATION=0)
-# so imports are paid once per worker instead of per file, or (b) raise BACKEND_FAST_UNIT_FAIL_SECONDS.
-# Genuinely non-unit tests (real asyncio sleeps, network, stress, codebase greps, full-app wiring,
-# per-test fresh module reload) are marked `slow`/`integration` and are NOT listed here.
+# The guard measures per-test call-phase CPU after subtracting cold module execution.
+# CPU time is less sensitive to load than wall time, but memory contention can still
+# roughly double measured CPU on a saturated runner. CI confirms overruns in isolation.
+# Many entries predate import accounting and reflect the first test paying for the
+# process's cold import graph. The listed tests stay in the PR unit lane with a
+# timing exemption. Genuinely slow or integration tests are marked separately.
 # One full _proxy round trip (metering -> sanitize -> dispatch -> terminal telemetry) with an
 # in-process capturing client; hermetic, but the end-to-end path costs ~0.15-0.19s CPU.
 tests/unit/test_desktop_proxy.py::test_proxy_dispatches_server_paid_bodies_with_the_2048_cap
@@ -590,3 +585,6 @@ tests/unit/test_pipeline_lab_chain_vector_product.py::test_without_a_lab_index_t
 tests/unit/test_pipeline_lab_ingest_cassette.py::test_prerecorded_adapter_calls_product_entry_point_with_wav
 tests/unit/test_pipeline_lab_ingest_lanes.py::test_record_lane_runs_real_worker_and_projection
 tests/unit/test_pipeline_lab_ingest_lanes.py::test_sync_lane_records_exact_segments_then_replays_them
+# The first outline-stream case pays the event loop, httpx mock transport and SSE parsing in its call;
+# CI measured 1.13-1.56s CPU on PR #26115 (0.3s locally).
+tests/unit/test_conversations_v3_stream.py::test_paid_outline_stream_deadline_discards_partial_reply_and_closes_stream[False]

@@ -24,16 +24,39 @@ type Service struct {
 	Keys     Keys
 }
 
+// Entitlement reads the owner-wide funding fact for notifications and safety checks.
+func (s *Service) Entitlement(ctx context.Context, a queue.Admitting, owner string) (queue.EntitlementSnapshot, error) {
+	funding, err := s.Accounts.Admissible(ctx, a, owner)
+	if err != nil {
+		return queue.EntitlementSnapshot{}, err
+	}
+	return funding.entitlement(false)
+}
+
 // Admit enqueues a unit for an owner. Admitting the same unit again returns the first job.
 func (s *Service) Admit(ctx context.Context, owner string, unit Unit) (queue.Job, error) {
-	job, err := NewJob(s.Keys(owner, unit.ID), owner, unit)
-	if err != nil {
+	if err := unit.Validate(); err != nil {
 		return queue.Job{}, err
 	}
 	var admitted queue.Job
-	err = s.Queue.Tenant(ctx, owner, func(sc *queue.Scope) error {
-		if admitErr := s.Accounts.Admissible(ctx, sc.Admitting(), owner); admitErr != nil {
+	err := s.Queue.Tenant(ctx, owner, func(sc *queue.Scope) error {
+		funding, admitErr := s.Accounts.Admissible(ctx, sc.Admitting(), owner)
+		if admitErr != nil {
 			return fmt.Errorf("admit unit: %w", admitErr)
+		}
+		unit.BYOK = unit.BYOK || funding.OwnKey
+		job, err := NewJob(s.Keys(owner, unit.ID), owner, unit)
+		if err != nil {
+			return err
+		}
+		fact, err := funding.entitlement(job.FundingExempt)
+		if err != nil {
+			return err
+		}
+		if fact.Generation > 0 {
+			if observeErr := sc.ObserveEntitlement(ctx, fact); observeErr != nil {
+				return observeErr
+			}
 		}
 		enqueued, inserted, enqueueErr := sc.Enqueue(ctx, job)
 		if enqueueErr != nil {
@@ -54,17 +77,29 @@ func (s *Service) Work(ctx context.Context, r *queue.Run) queue.Outcome {
 		s.Observer.Transcribed(true)
 		return queue.Done()
 	}
-	source, err := Input(job.Meta)
+	input, err := processingInput(job.Meta)
 	if err != nil {
 		return queue.Fail(CauseInputUnreadable)
 	}
 	var receipt Receipt
 	err = r.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
-		if runErr := s.Accounts.Runnable(ctx, g, job.Tenant); runErr != nil {
+		funding, runErr := s.Accounts.Runnable(ctx, g, job.Tenant)
+		if runErr != nil {
 			return runErr
 		}
-		req := request(g, job, source)
-		transcript, callErr := s.Speech.Transcribe(ctx, g, req)
+		fact, runErr := funding.entitlement(input.BYOK || input.AlreadyPaid)
+		if runErr != nil {
+			return runErr
+		}
+		if fundErr := r.AuthorizeTimedFunding(ctx, fact); fundErr != nil {
+			return fundErr
+		}
+		req := request(g, job, input)
+		transcribe := s.Speech.Transcribe
+		if input.AlreadyPaid {
+			transcribe = s.Speech.Recover
+		}
+		transcript, callErr := transcribe(ctx, g, req)
 		if callErr != nil {
 			return callErr
 		}
@@ -97,13 +132,13 @@ func (s *Service) Exhausted(ctx context.Context, r *queue.Reconcile) queue.Resol
 		s.Observer.Transcribed(true)
 		return queue.Resolved()
 	}
-	source, err := Input(job.Meta)
+	input, err := processingInput(job.Meta)
 	if err != nil {
 		return queue.Park()
 	}
 	var receipt Receipt
 	err = r.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
-		req := request(g, job, source)
+		req := request(g, job, input)
 		transcript, callErr := s.Speech.Recover(ctx, g, req)
 		if callErr != nil {
 			return callErr
@@ -128,6 +163,6 @@ func (s *Service) Exhausted(ctx context.Context, r *queue.Reconcile) queue.Resol
 	return queue.Resolved()
 }
 
-func request(g queue.Guarded, job queue.Job, source Source) Request {
-	return Request{Operation: g.Operation(StepSpeech), Owner: job.Tenant, UnitID: job.Subject, Source: source}
+func request(g queue.Guarded, job queue.Job, input routedInput) Request {
+	return Request{CaptureAt: job.CaptureAt, LateCapture: job.LateCapture, Operation: g.Operation(StepSpeech), Owner: job.Tenant, UnitID: job.Subject, Route: input.Route, BYOK: input.BYOK, Source: Source(input.stored)}
 }

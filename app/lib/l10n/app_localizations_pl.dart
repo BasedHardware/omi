@@ -560,11 +560,11 @@ class AppLocalizationsPl extends AppLocalizations {
   String get hardwareSection => 'Sprzęt';
 
   @override
-  String get v2Undetected => 'Nie wykryto V2';
+  String get v2Undetected => 'Synchronizacja offline jest niedostępna';
 
   @override
   String get v2UndetectedMessage =>
-      'Widzimy, że masz urządzenie V1 lub Twoje urządzenie nie jest podłączone. Funkcja karty SD jest dostępna tylko dla urządzeń V2.';
+      'Synchronizacja offline wymaga połączonego urządzenia Omi z pamięcią na karcie SD. Twoje obecne urządzenie tego nie obsługuje.';
 
   @override
   String get endConversation => 'Zakończ rozmowę';
@@ -7068,6 +7068,26 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'Nieoczekiwany błąd podczas logowania, spróbuj ponownie';
+
+  @override
+  String get accountSignInMethods => 'Metody logowania';
+
+  @override
+  String get accountAddSignInMethod => 'Dodaj metodę logowania';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Dodaj sposób logowania do tego konta Omi. Twój plan, nagrania i integracje pozostaną na tym koncie.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ta metoda logowania należy do innego konta';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Nadal korzystasz z bieżącego konta. Każde konto Omi zachowuje swój plan, nagrania i integracje.';
+
+  @override
+  String get accountSignInMethodAdded => 'Dodano metodę logowania';
 
   @override
   String get authFailedToLinkGoogle => 'Nie udało się połączyć z Google, spróbuj ponownie.';
@@ -14404,6 +14424,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get processingProgress => 'Przetwarzanie oczekujących nagrań…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Oczekiwanie na dostępny limit transkrypcji';
+
+  @override
   String get processingDeferred => 'Oczekuje na przetworzenie';
 
   @override
@@ -15358,9 +15381,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get stopThese => 'Zatrzymaj te';
 
   @override
-  String get meetingActionItemsTitle => 'Zadania do wykonania';
-
-  @override
   String get addToTasks => 'Dodaj do zadań';
 
   @override
@@ -15767,10 +15787,94 @@ class AppLocalizationsPl extends AppLocalizations {
   String get stillWorkingOnIt => 'Nadal pracujemy nad tym.';
 
   @override
+  String get deviceReadyToUse => 'Gotowe do użycia';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Oprogramowanie układowe Twojego urządzenia jest zbyt stare dla tej aktualizacji. Skontaktuj się z pomocą techniczną, aby uzyskać pomoc w aktualizacji urządzenia.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Ta aktualizacja oprogramowania układowego wymaga nowszej aplikacji Omi. Zaktualizuj aplikację w sklepie z aplikacjami, a następnie sprawdź ponownie.';
+
+  @override
+  String get quietPayerTitle => 'Brak nagrań od 5 dni';
+
+  @override
+  String get quietPayerMessage => 'Sprawdź swoje Omi.';
+
+  @override
+  String get quietPayerCheck => 'Sprawdź';
+
+  @override
+  String get playManageSubscription => 'Zarządzaj subskrypcją';
+
+  @override
+  String get playBilledByGoogle => 'Rozliczane przez Google Play';
+
+  @override
+  String get playPurchasePending => 'Płatność oczekuje. Omi Pro zacznie działać, gdy Google Play ją potwierdzi.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ten zakup w Google Play należy do innego konta Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Nie udało się jeszcze potwierdzić zakupu. Spróbujemy ponownie automatycznie.';
+
+  @override
+  String get playRenewalTerms =>
+      'Odnawia się automatycznie w podanej cenie, dopóki nie anulujesz. Zarządzaj lub anuluj w dowolnym momencie w Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Niedostępne na Androidzie';
+
+  @override
+  String get pageNotAvailableInApp => 'Ta strona nie jest dostępna w aplikacji.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Zamówienie złożone. Potwierdzenie znajdziesz w e-mailu.';
+
+  @override
+  String get prepaidCodeEntry => 'Masz kod?';
+
+  @override
+  String get prepaidCodeTitle => 'Wykorzystaj kod';
+
+  @override
+  String get prepaidCodeFieldHint => 'Wpisz swój kod';
+
+  @override
+  String get prepaidCodeRedeem => 'Wykorzystaj';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kod wykorzystany';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Ten kod jest nieprawidłowy. Sprawdź go i spróbuj ponownie.',
+        'used': 'Ten kod został już wykorzystany.',
+        'expired': 'Ten kod wygasł.',
+        'hasPlan': 'Masz już plan. Twój kod nie został wykorzystany. Wykorzystaj go, gdy Twój plan się skończy.',
+        'notPrepaid': 'Tego kodu nie można tu wykorzystać. Użyj go przy wyborze planu.',
+        'notEligible': 'Tego kodu nie można użyć na tym koncie.',
+        'rateLimited': 'Zbyt wiele prób. Spróbuj później.',
+        'other': 'Coś poszło nie tak. Spróbuj ponownie.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Rozliczane przez omi.me. Anuluj tutaj w dowolnym momencie.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Rozliczane przez omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Twój plan $plan jest wstrzymany.';
+  }
 }
