@@ -2107,7 +2107,7 @@ def _reprocess_merged_conversations(
     from config.sync_reprocess import coalesce_enabled
 
     from config.demand_processing import enabled as demand_enabled
-    from utils.enrichment.outbox import FirstSummaryCallbackPending, mark
+    from utils.enrichment.outbox import FirstSummaryCallbackPending, TranscriptUnreadable, mark
 
     hold = processing_hold.scheduling_enabled()
     coalescing = (hold or coalesce_enabled() or demand_enabled(uid)) and not user_selected
@@ -2146,7 +2146,7 @@ def _reprocess_merged_conversations(
                     from utils.conversations.demand_processing import promote_conversation_effects
 
                     promote_conversation_effects(uid, conversation_id)
-        except FirstSummaryCallbackPending:
+        except (FirstSummaryCallbackPending, TranscriptUnreadable):
             if coalescing or user_selected:
                 raise
             mark(uid, conversation_id, language, sync_hold=hold)

@@ -83,6 +83,14 @@ V3_CUSTODY_MAX_DEFERS = 2
 # ``record_empty_failure``; the row is re-armed for its bounded retry under this cause
 # instead of letting ``SummaryOutputUnavailable`` escape the request as a 500.
 EMPTY_OUTPUT_DEFER_REASON = 'empty_output'
+# A stored transcript that cannot be decrypted will not decrypt on the next delivery
+# either (SCA-4178). The obligation parks dormant on its first delivery with this
+# counted reason instead of re-raising a pending callback until the 72 h age gate.
+TRANSCRIPT_UNREADABLE_REASON = 'transcript_unreadable'
+# Holds a new content revision must be able to clear: ``mark`` reopens the row and only
+# the newest bytes are classified. ``HELD_DOCUMENT_SIZE_LIMIT`` keeps its existing
+# rollover semantics and is deliberately not listed here.
+TERMINAL_HOLD_REASONS = frozenset({TRANSCRIPT_UNREADABLE_REASON})
 
 
 def custody_deferred_since(row: Row, reason: str, now: float) -> float:
@@ -116,6 +124,20 @@ def _is_document_size_limit(error: BaseException) -> bool:
 
 class FirstSummaryCallbackPending(RuntimeError):
     """No processing output exists yet; retain the lease/debt without empty-result spend."""
+
+
+class TranscriptUnreadable(RuntimeError):
+    """The stored transcript cannot be decrypted; the same bytes cannot succeed on a retry.
+
+    Permanent classification, never a pending callback: the delivery keeps the stored
+    ciphertext and any delivered summary untouched, makes no provider call, and parks
+    the obligation dormant with ``TRANSCRIPT_UNREADABLE_REASON`` on its first delivery.
+    """
+
+
+def terminal_hold(reason: object) -> bool:
+    """Whether an outbox settlement reason is a terminal hold that keeps the row dormant."""
+    return isinstance(reason, str) and reason in TERMINAL_HOLD_REASONS
 
 
 def key(uid: str, conversation_id: str) -> str:
@@ -560,6 +582,12 @@ def mark_update(
         if old and old.get('dormant'):
             row.pop('merge_hold', None)
             row.pop('sync_hold_requested', None)
+            if old.get('held_reason') in TERMINAL_HOLD_REASONS:
+                # A producer admitted new work, so the newest bytes get their own
+                # classification; a terminal hold is never a receipt for them. The CAS
+                # write is a field merge, so clear by value instead of dropping the key.
+                row['held_reason'] = None
+                row['held_at'] = None
             if old.get('held_reason') == V3_CUSTODY_DEFER_REASON:
                 # A producer admitted new work. Give it a fresh custody budget.
                 for field in ('held_reason', 'held_at', 'v3_custody_defers', 'deferred_reason', 'deferred_since'):
@@ -834,6 +862,12 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             if not _is_document_size_limit(error):
                 raise
             held_reason = HELD_DOCUMENT_SIZE_LIMIT
+        except TranscriptUnreadable:
+            # Permanent classification (SCA-4178): the stored bytes cannot decrypt, so
+            # no retry of this delivery can produce a summary. The held block below
+            # parks the obligation dormant with its counted reason and leaves the
+            # conversation's ciphertext untouched.
+            held_reason = TRANSCRIPT_UNREADABLE_REASON
         except summary_delivery.SummaryOutputUnavailable:
             # An already-enriched row (no ``PROCESS_CONTEXT``) has no delivery failure to
             # record: settle the empty reprocess like a completed one instead of failing

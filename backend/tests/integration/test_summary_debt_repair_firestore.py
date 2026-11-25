@@ -91,6 +91,33 @@ def test_repair_preserves_v3_custody_settlement(debt_store, terminal):
     assert len(tasks) == 1
 
 
+def test_repair_never_reopens_an_unreadable_transcript_park(debt_store):
+    """SCA-4178: the terminal park is a receipt. Re-admitting it every repair tick would restart the loop."""
+    client, uid, tasks, _ref, _row = debt_store
+    assert repair.redrive(client, uid, 'c', now=220)
+    outbox = client.collection(reprocess.COLLECTION).document(reprocess.key(uid, 'c'))
+    outbox.update(
+        {
+            'dormant': True,
+            'due_at': None,
+            'task_due_at': None,
+            'lease_until': 0,
+            'owner': None,
+            'held_reason': 'transcript_unreadable',
+            'held_at': 230,
+        }
+    )
+    settled = outbox.get()
+    assert not repair.redrive(client, uid, 'c', now=300)
+    assert outbox.get().update_time == settled.update_time
+    assert len(tasks) == 1
+    # New content reopens the same obligation through ``mark``; the park is never permanent data loss.
+    reprocess.mark(uid, 'c', 'en', now=310)
+    reopened = outbox.get().to_dict()
+    assert not reopened['dormant'] and reopened.get('held_reason') is None
+    assert reopened['due_at'] is not None
+
+
 @pytest.mark.parametrize(
     'field,value',
     [

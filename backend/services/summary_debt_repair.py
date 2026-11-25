@@ -76,6 +76,11 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
             if old and reprocess.V3_CUSTODY_DEFER_REASON in (old.get('deferred_reason'), old.get('held_reason')):
                 # The outbox owns the custody backoff and retains the terminal receipt.
                 return {}, True
+            if old and reprocess.terminal_hold(old.get('held_reason')):
+                # SCA-4178: an unreadable stored transcript is parked dormant with its counted
+                # reason. Re-admitting it here would restart the same delivery every repair tick;
+                # a new content revision reopens the row through ``mark`` instead.
+                return {}, True
             if old and (old.get('lease_until', 0) > now or old.get('summary_seen')):
                 return {}, True
             if old and old.get('summary_blocked_reason') == 'empty_output_exhausted':

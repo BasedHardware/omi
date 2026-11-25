@@ -113,6 +113,7 @@ SYNC_EXCEPTION_CLASSES = frozenset(
         'FirestoreContentionExhausted',
         'SyncConversationPersistenceFenced',
         'FirstSummaryCallbackPending',
+        'TranscriptUnreadable',
         'SummaryOutputUnavailable',
         'SyncJobRunLeaseLost',
         'TranscriptionFailure',
