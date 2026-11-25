@@ -41,8 +41,11 @@ Server-authored `upload_arrived_at` and `upload_entitlement` survive original
 intakes and merged completion. Entitlement labels are only paid/trial/free/unknown.
 `omi_batch_pipeline_created_units_total` counts first non-shadow unit admission;
 `omi_batch_pipeline_upload_to_transcript_seconds` measures each accepted original
-request through first durable transcript publication, not pre-accept retries,
-client receipt or notes. `omi_batch_pipeline_inter_upload_gap_seconds` records
+request through first durable transcript publication, not time on the phone,
+pre-accept retries, client receipt or notes. Its bounded `hold_state` label is
+`none|bg300|fg_preview300|fg60|unknown`, with absent or unrecognized headers
+reported as `unknown`. It covers ordinary and server-coalesced uploads.
+`omi_batch_pipeline_inter_upload_gap_seconds` records
 request-arrival gaps between accepted originals sharing the exact owner/session/
 coalescing key, using already-read predecessor rows. Its closed labels are
 `entitlement=paid|trial|free|unknown`, `freshness=fresh|backlog` and

@@ -1225,7 +1225,7 @@ def test_committed_transcript_signals_episode_before_playback_or_enrichment(bind
     assert events == ['commit', 'signal', 'finish']
 
 
-def native_finish_completion(monkeypatch, db, uid, cid, unit_count, *, empty_outcome=None):
+def native_finish_completion(monkeypatch, db, uid, cid, unit_count, *, empty_outcome=None, native_record=True):
     """Supply ready sibling fixtures; use the real completion transaction and ledger writer."""
     from contextlib import nullcontext
 
@@ -1243,8 +1243,8 @@ def native_finish_completion(monkeypatch, db, uid, cid, unit_count, *, empty_out
         content,
         (first, *(f'second-{i}' for i in range(unit_count - 1))),
         target_conversation_id=cid,
-        record_origin=True,
-        native_record=True,
+        record_origin=native_record,
+        native_record=native_record,
     )
     ledger = sync_content_ledger_ref(db, uid, content)
     db.rows[ledger.path] = {
@@ -1278,6 +1278,23 @@ def native_finish_completion(monkeypatch, db, uid, cid, unit_count, *, empty_out
         return store.complete(first, binding, now, accounting)
 
     return complete, ledger.path, [db.rows[f'{namespace}_results', sid]['projection'] for sid in binding.segment_ids]
+
+
+def test_ordinary_upload_observes_first_durable_transcript_only(monkeypatch):
+    from database import batch_pipeline_upload_metrics as metrics
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    uid, cid = 'synthetic-owner', 'synthetic-conversation'
+    db = StrictFirestore({('users', uid, 'conversations', cid): {'status': 'completed'}})
+    complete, ledger_path, _ = native_finish_completion(monkeypatch, db, uid, cid, 2, native_record=False)
+    db.rows[ledger_path].update(upload_arrived_at=100.0, upload_entitlement='free', upload_hold_state='bg300')
+    delivered = Mock()
+    monkeypatch.setattr(metrics, 'DELIVERED', delivered)
+
+    assert complete(172.0) is not None
+    assert complete(200.0) is not None
+    delivered.labels.assert_called_once_with('free', 'bg300')
+    delivered.labels.return_value.observe.assert_called_once_with(72.0)
 
 
 @pytest.mark.parametrize('marker_mode', ['on', 'off'])

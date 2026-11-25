@@ -10,6 +10,7 @@ from prometheus_client import CollectorRegistry, generate_latest
 import yaml
 
 from database import batch_pipeline_upload_metrics as upload_metrics
+from config.request_clock import HOLD_STATES
 from diarizer import batch_pipeline_runtime as runtime
 from diarizer.batch_pipeline_runtime import merge_metrics
 from utils.batch_pipeline import upload_entitlement
@@ -64,11 +65,17 @@ def test_invalid_clocks_never_create_latency_observations(monkeypatch, clock):
     delivered.labels.assert_not_called()
 
 
-def test_hold_time_included_and_labels_closed(monkeypatch):
+@pytest.mark.parametrize(
+    'state,expected',
+    [(state, state) for state in sorted(HOLD_STATES)] + [(None, 'unknown'), ('synthetic-private-user', 'unknown')],
+)
+def test_upload_latency_labels_are_closed(monkeypatch, state, expected):
     delivered = Mock()
     monkeypatch.setattr(upload_metrics, 'DELIVERED', delivered)
-    upload_metrics.observe_delivery({'upload_arrived_at': 10, 'upload_entitlement': 'free'}, 370)
-    delivered.labels.assert_called_once_with('free')
+    upload_metrics.observe_delivery(
+        {'upload_arrived_at': 10, 'upload_entitlement': 'free', 'upload_hold_state': state}, 370
+    )
+    delivered.labels.assert_called_once_with('free', expected)
     delivered.labels.return_value.observe.assert_called_once_with(360)
     assert upload_metrics.bounded_class('synthetic-private-user') == 'unknown'
 
@@ -80,7 +87,7 @@ def test_completion_latency_counts_originals_not_merged_units_or_replays(monkeyp
     members = [{'upload_arrived_at': stamp, 'upload_entitlement': 'free'} for stamp in (20, 50, 100)]
     upload_metrics.observe_completion(ordinary, members, merged=True, changed=True, result={}, now=400)
     assert [call.args for call in delivered.labels.return_value.observe.call_args_list] == [(380,), (350,), (300,)]
-    delivered.labels.assert_called_with('free')
+    delivered.labels.assert_called_with('free', 'unknown')
     delivered.reset_mock()
     upload_metrics.observe_completion(ordinary, [], merged=True, changed=False, result={}, now=500)
     upload_metrics.observe_completion(ordinary, [], merged=False, changed=False, result={}, now=500)
@@ -90,7 +97,7 @@ def test_completion_latency_counts_originals_not_merged_units_or_replays(monkeyp
     upload_metrics.observe_completion(ordinary, members, merged=True, changed=False, result=None, now=500)
     delivered.labels.assert_not_called()
     upload_metrics.observe_completion(ordinary, [], merged=False, changed=True, result={}, now=400)
-    delivered.labels.assert_called_once_with('paid')
+    delivered.labels.assert_called_once_with('paid', 'unknown')
     delivered.labels.return_value.observe.assert_called_once_with(390)
 
 
@@ -99,7 +106,7 @@ def test_upload_metrics_forward_through_worker_multiprocess_exposition():
     for collector in upload_metrics.COLLECTORS:
         registry.register(collector)
     upload_metrics.CREATED.labels('free').inc()
-    upload_metrics.DELIVERED.labels('free').observe(360)
+    upload_metrics.DELIVERED.labels('free', 'fg60').observe(360)
     upload_metrics.INTER_UPLOAD_GAP.labels('paid', 'fresh', 'within_group').observe(65)
     page = generate_latest(registry)
     merged = merge_metrics([(0, page), (1, page)])
@@ -109,7 +116,9 @@ def test_upload_metrics_forward_through_worker_multiprocess_exposition():
     assert b'worker_process="1"' in merged
 
 
-@pytest.mark.parametrize('profile', ['cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'])
+@pytest.mark.parametrize(
+    'profile', ['cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml', 'cloud_run_gmp_projection_pump.yaml']
+)
 @pytest.mark.parametrize(
     'metric',
     [

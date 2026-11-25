@@ -63,7 +63,10 @@ def main_endpoint():
 
 @pytest.mark.parametrize('future_enabled', [False, True])
 @pytest.mark.parametrize('mixed', [False, True])
-def test_early_upload_job_and_context_documents_equal_main(client, monkeypatch, tmp_path, future_enabled, mixed):
+@pytest.mark.parametrize('hold,expected_hold', [(None, None), ('bg300', 'bg300'), ('private', 'unknown')])
+def test_early_upload_job_and_context_documents_equal_main(
+    client, monkeypatch, tmp_path, future_enabled, mixed, hold, expected_hold
+):
     monkeypatch.setattr(upload_entitlement, 'classify', lambda _uid: 'unknown')
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', str(future_enabled).lower())
     monkeypatch.setenv('BATCH_PIPELINE_PACKING_SAMPLE_RATE', '0.001')
@@ -149,10 +152,11 @@ def test_early_upload_job_and_context_documents_equal_main(client, monkeypatch, 
         if mixed:
             paths.append(pcm(tmp_path, int(NOW) - 10, 16000))
         files = [('files', (Path(path).name, Path(path).read_bytes(), 'application/octet-stream')) for path in paths]
+        headers = {'X-App-Platform': 'ios', 'X-Device-Id-Hash': 'abcd1234'}
+        if hold is not None:
+            headers['X-Omi-Upload-Hold'] = hold
         with TestClient(app, raise_server_exceptions=False) as routed:
-            response = routed.post(
-                '/v2/sync-local-files', headers={'X-App-Platform': 'ios', 'X-Device-Id-Hash': 'abcd1234'}, files=files
-            )
+            response = routed.post('/v2/sync-local-files', headers=headers, files=files)
         assert response.status_code == 202, response.text
         jobs = {key: row for (table, key), row in store.rows.items() if table == 'jobs'}
         assert jobs and all('capture_time_trust' not in row for row in jobs.values())
@@ -162,6 +166,7 @@ def test_early_upload_job_and_context_documents_equal_main(client, monkeypatch, 
                 'jobs': jobs,
                 'contexts': contexts,
                 'intakes': {key: row for (table, key), row in store.rows.items() if table == 'intakes'},
+                'ledgers': {key: row for (table, key), row in store.rows.items() if table == 'content'},
             }
         )
     # Preserve exact parity for every old field; assert the two approved server
@@ -171,6 +176,11 @@ def test_early_upload_job_and_context_documents_equal_main(client, monkeypatch, 
         context.update(upload_arrived_at=NOW, upload_entitlement='unknown')
     for receipt in expected['intakes'].values():
         receipt.update(upload_arrived_at=NOW, upload_entitlement='unknown')
+    for ledger in expected['ledgers'].values():
+        ledger.update(upload_arrived_at=NOW, upload_entitlement='unknown')
+    if expected_hold is not None:
+        for row in [*expected['contexts'], *expected['intakes'].values(), *expected['ledgers'].values()]:
+            row['upload_hold_state'] = expected_hold
     assert expected == records[1]
 
 
