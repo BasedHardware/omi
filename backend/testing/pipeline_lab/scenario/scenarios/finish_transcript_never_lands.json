@@ -1,0 +1,110 @@
+{
+  "name": "finish_transcript_never_lands",
+  "description": "SCA-4385 variant, synthetic (from the review of #26304). The incident's capture with fast finish off, and B's batch transcript never lands. A lands inside the Finish wait. The cut must survive the wait: the Finish conversation holds A and F, is a manual end and is visible on Home.",
+  "origins": [
+    {
+      "id": "O",
+      "source": "omi"
+    }
+  ],
+  "recordings": [
+    {
+      "id": "A",
+      "origin": "O",
+      "session": "S1",
+      "audio": [
+        0,
+        64
+      ],
+      "sealed_at": 109,
+      "transcript_at": 184,
+      "speech": [
+        {
+          "fill": [
+            3,
+            64
+          ],
+          "every": 4,
+          "words": 10,
+          "speakers": [
+            "SPEAKER_00",
+            "SPEAKER_01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "B",
+      "origin": "O",
+      "session": "S2",
+      "audio": [
+        129,
+        154
+      ],
+      "transcript_at": null,
+      "speech": [
+        {
+          "fill": [
+            129.5,
+            154
+          ],
+          "every": 4,
+          "words": 10,
+          "speakers": [
+            "SPEAKER_00",
+            "SPEAKER_01"
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps": [
+    {
+      "origin": "O",
+      "between": [
+        "A",
+        "B"
+      ],
+      "reason": "reconnect"
+    }
+  ],
+  "sync": [
+    {
+      "id": "F",
+      "origin": "O",
+      "audio": [
+        1.5,
+        2.7
+      ],
+      "arrives_at": 162,
+      "speech": [
+        {
+          "at": 1.5,
+          "end": 2.7,
+          "text": "Lantern harbor maple.",
+          "speaker": "SPEAKER_00",
+          "is_user": true
+        }
+      ]
+    }
+  ],
+  "finish": {
+    "at": 152,
+    "fast_finish": false
+  },
+  "expect": [
+    {
+      "conversation_of": "A",
+      "recordings": [
+        "A",
+        "F"
+      ],
+      "visible": true,
+      "manual_end": true
+    }
+  ],
+  "expected_failure": {
+    "reason": "SCA-4385: on origin/main a manual-end cut does not wait for its capture's pending batch transcript (review of #26304). The planner fix (lane v3-finish-late-predecessor) should flip this to a pass and delete this block.",
+    "strict": true
+  }
+}

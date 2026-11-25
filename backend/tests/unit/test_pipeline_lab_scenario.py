@@ -85,6 +85,27 @@ def test_incident_scenario_keeps_the_sca_4385_shape_and_expected_failure():
     assert {'conversation_of': '@finish', 'recordings': ['A', 'B', 'F']} in [c.raw for c in parsed.checks]
 
 
+def test_long_gap_scenario_is_longer_than_the_silence_gap_and_reconnects_one_capture():
+    parsed = load_scenario(stack.SCENARIO_DIR / 'finish_after_long_reconnect_gap.json')
+    a, b, f = (parsed.recording(x) for x in 'ABF')
+    assert parsed.gaps[0]['seconds'] == 360 > 300  # the ordinary v3 silence gap
+    assert a.origin == b.origin == f.origin and a.session != b.session
+    assert a.sealed_at < parsed.finish.at < admission_offset(parsed, b) < a.transcript_at
+    assert parsed.expected_failure['strict'] is True
+
+
+def test_batch_rows_name_their_capture_origin_and_session():
+    from testing.pipeline_lab.scenario.ops import ScenarioOps
+
+    parsed = load_scenario(stack.SCENARIO_DIR / 'finish_after_reconnect_late_transcript.json')
+    ops = ScenarioOps.__new__(ScenarioOps)
+    ops.scenario = parsed
+    a, b = (ops._row(parsed.recording(x), created=0, status='completed') for x in 'AB')
+    assert a['external_data']['recording_origin_id'] == b['external_data']['recording_origin_id']
+    assert a['external_data']['recording_session_id'] != b['external_data']['recording_session_id']
+    assert a['client_device_id'] == b['client_device_id']
+
+
 def test_scenario_text_is_synthetic_placeholder_text():
     for path in COMMITTED:
         for rec in load_scenario(path).recordings:
