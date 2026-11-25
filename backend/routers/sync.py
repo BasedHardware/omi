@@ -16,6 +16,7 @@ from utils.sync.future_capture_request import Outcome as FutureCaptureOutcome
 from utils.other.playback_identity import PlaybackSourceChanged
 from utils.capture.coverage_endpoint import router as coverage_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
+from utils.observability.sync_upload import observe_hold_age
 import asyncio
 import json
 import logging
@@ -30,7 +31,6 @@ from typing import Any, Dict, List, Optional
 
 from utils.sync.detached_tasks import consume_detached_outcome as _consume_detached_outcome
 from config.request_clock import bounded_hold_state, started_at
-from database.batch_pipeline_upload_metrics import observe_hold_age
 from utils.batch_pipeline import upload_entitlement
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request, Response, Header
 from fastapi.responses import JSONResponse, StreamingResponse

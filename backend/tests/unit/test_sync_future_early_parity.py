@@ -18,7 +18,7 @@ from google.api_core.exceptions import Aborted
 from prometheus_client import Counter, CollectorRegistry
 
 from config.policy import BatchUnitPolicy
-from database import batch_pipeline_upload_metrics as metrics
+from utils.observability import sync_upload
 from database.batch_pipeline_staging import artifact_id
 from tests.unit.test_batch_pipeline_audio import pcm
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
@@ -69,7 +69,7 @@ def test_early_upload_job_and_context_documents_equal_main(
     client, monkeypatch, tmp_path, future_enabled, mixed, hold, expected_hold
 ):
     histogram = Mock()
-    monkeypatch.setattr(metrics, 'HOLD_AGE', histogram)
+    monkeypatch.setattr(sync_upload, 'HOLD_AGE', histogram)
     monkeypatch.setattr(upload_entitlement, 'classify', lambda _uid: 'unknown')
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', str(future_enabled).lower())
     monkeypatch.setenv('BATCH_PIPELINE_PACKING_SAMPLE_RATE', '0.001')

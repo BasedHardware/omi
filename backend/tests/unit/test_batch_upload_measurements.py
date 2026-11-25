@@ -15,6 +15,7 @@ from diarizer import batch_pipeline_runtime as runtime
 from diarizer.batch_pipeline_runtime import merge_metrics
 from utils.batch_pipeline import upload_entitlement
 from utils.metrics import metrics_response
+from utils.observability import sync_upload
 from tests.unit.test_batch_pipeline_intake import proposal, submit, cohort  # noqa: F401
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
@@ -95,8 +96,8 @@ def test_upload_latency_labels_are_closed(monkeypatch, state, expected):
 )
 def test_hold_age_observes_bounded_milliseconds(monkeypatch, age_ms, state, expected_label, seconds):
     histogram = Mock()
-    monkeypatch.setattr(upload_metrics, 'HOLD_AGE', histogram)
-    upload_metrics.observe_hold_age(age_ms, state)
+    monkeypatch.setattr(sync_upload, 'HOLD_AGE', histogram)
+    sync_upload.observe_hold_age(age_ms, state)
     histogram.labels.assert_called_once_with(expected_label)
     histogram.labels.return_value.observe.assert_called_once_with(seconds)
 
@@ -104,13 +105,13 @@ def test_hold_age_observes_bounded_milliseconds(monkeypatch, age_ms, state, expe
 @pytest.mark.parametrize('age_ms', [None, '', '1.5', ' 10', '-1', '+1', '١', '86400001', '1' * 100, 1000])
 def test_malformed_hold_age_is_not_observed(monkeypatch, age_ms):
     histogram = Mock()
-    monkeypatch.setattr(upload_metrics, 'HOLD_AGE', histogram)
-    upload_metrics.observe_hold_age(age_ms, 'bg300')
+    monkeypatch.setattr(sync_upload, 'HOLD_AGE', histogram)
+    sync_upload.observe_hold_age(age_ms, 'bg300')
     histogram.labels.assert_not_called()
 
 
 def test_hold_age_is_exported_from_sync_with_guard_buckets():
-    upload_metrics.observe_hold_age('60000', 'fg60')
+    sync_upload.observe_hold_age('60000', 'fg60')
     samples = metrics_response().body
     for boundary in ('60.0', '300.0', '360.0', '600.0', '900.0', '1800.0'):
         assert (
