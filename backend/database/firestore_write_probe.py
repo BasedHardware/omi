@@ -142,6 +142,9 @@ _WRITE_PLUMBING_MODULES = frozenset(
         # retry helper would otherwise be the first frame for every caller of it
         # (~50% of Cloud Run writes on 2026-11-01).
         'database.firestore_transaction_retry',
+        # bind_firestore_client swaps the shared client's API methods for `bounded`,
+        # so it was the first frame for ~42M writes/day (most of backend-sync) on 2026-11-25.
+        'database.rpc_deadline',
     }
 )
 # Generic write helpers inside product modules: name the function that called them.
@@ -153,6 +156,9 @@ _WRITE_PLUMBING_FUNCTIONS = frozenset(
         ('utils.enrichment.outbox', 'mutate_row'),
         # FirestoreEnrichmentOutbox's adapter in front of mutate_row.
         ('database.outbox_firestore', '_mutate'),
+        # ProjectionStore's transaction runner: name the store method (ready, complete,
+        # acknowledge, ...) instead of `run` (~32M writes/day on 2026-11-25).
+        ('database.batch_pipeline_projection', 'run'),
     }
 )
 _OTHER = 'other'
