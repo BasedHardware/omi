@@ -816,7 +816,7 @@ class ProjectionStore:
         sealed_proofs: list[str] = []
         delivered_uploads = []
         completion_upload = {}
-        finish_resolution: list[tuple[str, str]] = []
+        finish_resolution: list[tuple[str, bool]] = []
 
         @firestore.transactional
         def commit(transaction):
@@ -1019,7 +1019,6 @@ class ProjectionStore:
                 cid
                 and binding.native_record
                 and not binding.partial_record
-                and (silent or len(binding.segment_ids) > 1)
                 and not (result.get('reason_code') or erased_count or superseded_count or deleted_output_count)
                 and manual_end_marker_enabled()
             ):
@@ -1030,9 +1029,10 @@ class ProjectionStore:
                     row = conversation_rows.get(cid)
                     if row is None and silent:
                         row = recording_ref.get(transaction=transaction).to_dict()
-                    finish_update = self._v3_finish_update(
-                        transaction, collection, cid, row or {}, silent, session, now
-                    )
+                    if silent or len(binding.segment_ids) > 1 or (row or {}).get(FINISH_RECORDING_FIELD):
+                        finish_update = self._v3_finish_update(
+                            transaction, collection, cid, row or {}, silent, session, now
+                        )
             if (
                 record_notes_eager_enabled()
                 and not source_deleted
@@ -1159,9 +1159,7 @@ class ProjectionStore:
                     transaction.set(ref, data)
             if finish_update and recording_ref is not None:
                 transaction.update(recording_ref, finish_update)
-                finish_resolution.append(
-                    (recording_ref.id, 'consumed' if finish_update.get('v3_manual_end') else 'resolved_empty')
-                )
+                finish_resolution.append((recording_ref.id, bool(finish_update.get('v3_manual_end'))))
             if not source_deleted:
                 self._commit_usage(
                     transaction, session.ledger_ref, session.ledger, binding, completion_accounting, seconds, now
@@ -1202,9 +1200,9 @@ class ProjectionStore:
         ):
             result, changed, seconds = self.run(commit, policy=policy)
         if finish_resolution:
-            recording_id, outcome = finish_resolution[0]
-            v3_metrics.FINISH_NO_POINTER.labels(outcome).inc()
-            if outcome == 'consumed':
+            recording_id, cut = finish_resolution[0]
+            v3_metrics.FINISH_NO_POINTER.labels('whole_record_consumed' if cut else 'whole_record_resolved_empty').inc()
+            if cut:
                 v3_triggers.enqueue_pending(binding.owner_id, manual_end_id=recording_id)
         if changed:
             # Before any notes wake: the woken callback's seal proof reads this stage.

@@ -11,7 +11,9 @@ from utils.conversations.v3 import live, metrics, triggers
 from utils.observability.fallback import record_fallback
 
 
-def finish_live_window(uid: str, window_id: str | None = None) -> CreateConversationResponse | None:
+def finish_live_window(
+    uid: str, window_id: str | None = None, *, allow_recording_fallback: bool = False
+) -> CreateConversationResponse | None:
     if not finish_no_pointer_enabled():
         metrics.FINISH_NO_POINTER.labels('disabled').inc()
         return None
@@ -28,7 +30,7 @@ def finish_live_window(uid: str, window_id: str | None = None) -> CreateConversa
                 return _acknowledge(uid, window, outcome, recording_id)
     window = conversations_v3_live.live_window(uid, now=now, max_idle=live.MAX_IDLE, pick=live.active)
     if window is None:
-        if window_id:
+        if window_id or not allow_recording_fallback:
             metrics.FINISH_NO_POINTER.labels('no_live_window').inc()
             return None
         outcome, recording = conversations_v3_live.request_recording_finish(uid, now=now)

@@ -34,6 +34,25 @@ def _pending_source(client, combo, trial):
     )
 
 
+def _finish_source(client, combo, trial):
+    client.queue_results(
+        [
+            client.snapshot(
+                f'users/{SHAPE_UID}/conversations/source',
+                {
+                    'source': 'omi',
+                    'recording': True,
+                    'created_at': FROZEN_NOW,
+                    'started_at': FROZEN_NOW,
+                    'finished_at': FROZEN_NOW,
+                    'status': 'completed',
+                    'external_data': {'recording_session_id': 'shape-session'},
+                },
+            )
+        ]
+    )
+
+
 def _pick_none(rows, now):
     return None
 
@@ -102,6 +121,7 @@ def entries():
         DriverEntry(
             'database.conversations_v3_live.request_recording_finish',
             base={'uid': SHAPE_UID, 'now': FROZEN_NOW},
+            setup=_finish_source,
             patchers=(_transaction_without_rpc,),
         ),
         CoveredByEntry(

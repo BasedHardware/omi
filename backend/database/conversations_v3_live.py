@@ -24,6 +24,7 @@ from utils.conversations.v3.live import (
     FINISH_FIELDS,
     FINISH_RECORDING_FIELD,
     FINISH_WINDOW_FIELD,
+    MAX_IDLE,
     active,
     has_finish_content,
 )
@@ -61,6 +62,14 @@ READ_CAP = 200
 START_SKEW = timedelta(minutes=5)
 
 
+def _recent_window_query(collection, now, max_idle):
+    return (
+        collection.where(filter=FieldFilter('v3_derived', '==', True))
+        .where(filter=FieldFilter('finished_at', '>=', now - max_idle))
+        .where(filter=FieldFilter('started_at', '<=', now + START_SKEW))
+    )
+
+
 def recent_windows(
     uid: str,
     *,
@@ -77,14 +86,8 @@ def recent_windows(
     documents read (at most ``max_rows``).
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    query = (
-        client.collection('users')
-        .document(uid)
-        .collection(conversations_collection)
-        .where(filter=FieldFilter('v3_derived', '==', True))
-        .where(filter=FieldFilter('finished_at', '>=', now - max_idle))
-        .where(filter=FieldFilter('started_at', '<=', now + START_SKEW))
-    )
+    collection = client.collection('users').document(uid).collection(conversations_collection)
+    query = _recent_window_query(collection, now, max_idle)
     if finished_before is not None:
         query = query.where(filter=FieldFilter('finished_at', '<', finished_before))
     # Explicit, so pages run oldest to newest whatever the implicit order of the two range
@@ -310,8 +313,6 @@ RECENT_FINISH_FIELDS = [
     'recording',
     'data_protection_level',
     'v3_derived',
-    'tile_state',
-    'home_hidden',
     'deleted',
     'discarded',
     'is_locked',
@@ -358,8 +359,6 @@ def request_recording_finish(uid: str, *, now: datetime, firestore_client: Any =
         if len(docs) >= RECENT_FINISH_LIMIT:
             return 'recording_lookup_capped', None
         rows = [(doc.id, doc.to_dict() or {}) for doc in docs]
-        if any(_is_finishable_window(row, now) for _, row in rows):
-            return 'no_live_window', None  # The live row appeared during the fallback.
         captures = [
             (cid, row)
             for cid, row in rows
@@ -394,6 +393,17 @@ def request_recording_finish(uid: str, *, now: datetime, firestore_client: Any =
             )
         ):
             return 'recording_ineligible', None
+        windows = list(
+            _recent_window_query(collection, now, MAX_IDLE)
+            .order_by('finished_at')
+            .select(FINISH_FIELDS)
+            .limit(READ_CAP)
+            .stream(transaction=tx)
+        )
+        if len(windows) >= READ_CAP:
+            return 'window_lookup_capped', None
+        if any(_is_finishable_window(window.to_dict() or {}, now) for window in windows):
+            return 'no_live_window', None  # A live window appeared before the recording cut.
         marker = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         if account_deletion_marker_blocks_access(
             marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')

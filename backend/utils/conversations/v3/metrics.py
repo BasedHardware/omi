@@ -38,7 +38,7 @@ for outcome in ('visible', 'hidden'):
 
 FINISH_NO_POINTER = Counter(
     'omi_conversations_v3_finish_no_pointer_total',
-    'Finish outcomes after both existing in-progress recording lookups miss',
+    'No-pointer Finish API outcomes, whole-record batch resolution, and first settlement',
     ['outcome'],
 )
 for outcome in (
@@ -53,6 +53,7 @@ for outcome in (
     'disabled',
     'owner_not_enabled',
     'recording_lookup_capped',
+    'window_lookup_capped',
     'recording_ambiguous',
     'recording_ineligible',
     'recording_requested',
@@ -61,6 +62,8 @@ for outcome in (
     'batch_disabled',
     'batch_unavailable',
     'consumed',
+    'whole_record_consumed',
+    'whole_record_resolved_empty',
     'settled',
 ):
     FINISH_NO_POINTER.labels(outcome)

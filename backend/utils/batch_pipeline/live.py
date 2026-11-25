@@ -422,8 +422,9 @@ async def _manual_finish_admitted(
         if not manual_end_marker_enabled():
             return
         single = len(units) == 1
+        recording_finish = bool(current.get(FINISH_RECORDING_FIELD))
         promoted = False
-        if single and not current.get(FINISH_RECORDING_FIELD):
+        if single and not recording_finish:
             # Stored before any detached work, so losing the process cannot lose a single-unit cut.
             promoted = await run_blocking(
                 db_executor, conversations_v3.promote_manual_end, uid, conversation_id, firestore_client=store.client
@@ -502,7 +503,8 @@ async def _manual_finish_admitted(
                         # promoted single unit already holds its cut, but still gets its own
                         # manual-end wake after the write: the writer's plain wake shares the owner's
                         # per-minute task name and is skipped when a reconcile already ran that minute.
-                        cut=cut if not single or promoted else None,
+                        # Recording-scoped intent is consumed by the native completion transaction.
+                        cut=cut if not recording_finish and (not single or promoted) else None,
                         privacy=privacy,
                         fence=fence,
                     )

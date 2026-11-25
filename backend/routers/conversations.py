@@ -678,7 +678,11 @@ def process_in_progress_conversation(
 ):
     conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
-        response = finish_live_window(uid, request.live_conversation_id if request else None)
+        response = finish_live_window(
+            uid,
+            request.live_conversation_id if request else None,
+            allow_recording_fallback=request is None or request.empty_body,
+        )
         if response is not None:
             return response
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
