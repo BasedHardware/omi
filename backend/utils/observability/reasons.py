@@ -596,6 +596,17 @@ class CaptureCoverageOutcome(StrEnum):
     WOULD_SKIP = 'would_skip'
 
 
+class MonthlyUsageShadowOutcome(StrEnum):
+    """Closed outcomes for the monthly usage snapshot comparison."""
+
+    UNKNOWN = 'unknown'
+    MATCH = 'match'
+    MISMATCH = 'mismatch'
+    RACE = 'race'
+    SKIPPED = 'skipped'
+    ERROR = 'error'
+
+
 class ShadowParityOutcome(StrEnum):
     """`omi_jobstore_shadow_parity_total{outcome}` (lane 12, Postgres shadow-write parity)."""
 
