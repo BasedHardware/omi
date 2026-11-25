@@ -325,6 +325,15 @@ sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_
 auth_deadline_executor = MonitoredThreadPoolExecutor(
     name="auth_deadline", max_workers=16, max_queue_size=64, thread_name_prefix="auth-deadline"
 )
+# The HTTP waiter can leave while an admitted segment upload finishes. Keep
+# those workers bounded and isolated from completed retries on the DB pool.
+from_segments_executor = MonitoredThreadPoolExecutor(
+    name="from_segments",
+    max_workers=8,
+    max_queue_size=4,
+    wait_on_saturation=True,
+    thread_name_prefix="from-segments",
+)
 # Optional per-window LID must not hold the shared sync coordination pool.
 # Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
 record_language_executor = MonitoredThreadPoolExecutor(
@@ -400,6 +409,7 @@ _ALL_EXECUTORS = [
     admission_executor,
     sync_executor,
     auth_deadline_executor,
+    from_segments_executor,
     record_language_executor,
     postprocess_executor,
     cleanup_executor,
