@@ -83,7 +83,7 @@ void main() {
   });
 
   for (final status in [HttpStatus.serviceUnavailable, HttpStatus.forbidden]) {
-    test('failed canonical read $status cannot trigger a legacy rebuild', () async {
+    test('canonical error $status without a graph state header propagates', () async {
       serve((request) {
         if (request.uri.path.endsWith('/canonical')) {
           request.response.statusCode = status;
@@ -129,26 +129,52 @@ void main() {
     expect(requests, ['GET /v1/knowledge-graph']);
   });
 
-  for (final status in [HttpStatus.notFound, HttpStatus.serviceUnavailable]) {
-    test('positively absent canonical state $status permits legacy rebuild, then 409 stops polling', () async {
-      serve((request) {
-        if (request.uri.path.endsWith('/canonical')) {
-          request.response.statusCode = status;
-          if (status == HttpStatus.serviceUnavailable) {
-            request.response.headers.set('x-omi-knowledge-graph-state', 'unestablished');
-          }
-        } else if (request.method == 'GET') {
-          request.response.write(jsonEncode(_empty));
-        }
-      });
-      await KnowledgeGraphApi.prebuildForOnboarding();
-      expect(requests, [
-        'GET /v1/knowledge-graph',
-        'GET /v1/knowledge-graph/canonical',
-        'POST /v1/knowledge-graph/rebuild',
-      ]);
+  test('unestablished canonical state ends prebuild after one canonical read', () async {
+    serve((request) {
+      if (request.uri.path.endsWith('/canonical')) {
+        request.response.statusCode = HttpStatus.serviceUnavailable;
+        request.response.headers.set('x-omi-knowledge-graph-state', 'unestablished');
+      } else if (request.method == 'GET') {
+        request.response.write(jsonEncode(_empty));
+      }
     });
-  }
+    await KnowledgeGraphApi.prebuildForOnboarding();
+    expect(requests, ['GET /v1/knowledge-graph', 'GET /v1/knowledge-graph/canonical']);
+  });
+
+  test('legacy rebuild conflict after a canonical 404 stops polling', () async {
+    serve((request) {
+      if (request.uri.path.endsWith('/canonical')) {
+        request.response.statusCode = HttpStatus.notFound;
+      } else if (request.method == 'GET') {
+        request.response.write(jsonEncode(_empty));
+      }
+    });
+    await KnowledgeGraphApi.prebuildForOnboarding();
+    expect(requests, [
+      'GET /v1/knowledge-graph',
+      'GET /v1/knowledge-graph/canonical',
+      'POST /v1/knowledge-graph/rebuild',
+    ]);
+  });
+
+  test('stability polling returns after two consecutive empty graph reads', () async {
+    serve((request) => request.response.write(jsonEncode({
+          ..._empty,
+          if (request.uri.path.endsWith('/canonical')) 'has_more': false,
+        })));
+    final graph = await KnowledgeGraphApi.waitForGraphStability(
+      timeout: const Duration(seconds: 25),
+      interval: const Duration(milliseconds: 10),
+    );
+    expect(graph['nodes'], isEmpty);
+    expect(requests, [
+      'GET /v1/knowledge-graph',
+      'GET /v1/knowledge-graph/canonical',
+      'GET /v1/knowledge-graph',
+      'GET /v1/knowledge-graph/canonical',
+    ]);
+  }, timeout: const Timeout(Duration(seconds: 10)));
 
   test('queued legacy rebuild retains bounded stability polling', () async {
     var queued = false;

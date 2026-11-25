@@ -71,7 +71,7 @@ class KnowledgeGraphApi {
       // Recover a successfully read empty view, not a failed expensive read.
       // A gateway failure must not fan out into another graph request.
       if (compatibility == null || compatibility.statusCode != 200) {
-        _throwHttpFailure(action: 'load', statusCode: compatibility?.statusCode, body: compatibility?.body);
+        _throwHttpFailure(action: 'load', statusCode: compatibility?.statusCode);
       }
       legacy = wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(compatibility.body) as Map<String, dynamic>)
           .toJson();
@@ -113,26 +113,27 @@ class KnowledgeGraphApi {
     }
     // The existing compatibility route serves legacy-only accounts. An empty
     // compatibility response during a canonical outage cannot prove emptiness.
-    if (cursor == null &&
-        legacy != null &&
-        (response?.statusCode == 404 ||
-            (response?.statusCode == 503 && response?.headers['x-omi-knowledge-graph-state'] == 'unestablished'))) {
+    final canonicalUnestablished =
+        response?.statusCode == 503 && response?.headers['x-omi-knowledge-graph-state'] == 'unestablished';
+    if (cursor == null && legacy != null && (response?.statusCode == 404 || canonicalUnestablished)) {
       return {
         ...legacy,
+        if (canonicalUnestablished) '_canonical_unestablished': true,
         '_backend_origin': baseUrl,
         '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}'
       };
     }
-    _throwHttpFailure(action: 'load', statusCode: response?.statusCode, body: response?.body);
+    _throwHttpFailure(action: 'load', statusCode: response?.statusCode);
   }
 
   /// Optional onboarding warm-up. Only a successfully read empty legacy graph
-  /// may schedule a rebuild; canonical graphs are derived on read.
+  /// with a missing canonical route may schedule a rebuild.
   /// Read failures (including a replaced session) propagate to onboarding's
   /// best-effort boundary. They are not evidence that legacy recovery is safe.
   static Future<void> prebuildForOnboarding() async {
     final current = await getKnowledgeGraph();
     if (current['canonical'] == true) return;
+    if (current['_canonical_unestablished'] == true) return;
     final nodes = current['nodes'] as List<dynamic>? ?? const [];
     final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
     if (hasGraph) return;
@@ -186,7 +187,8 @@ class KnowledgeGraphApi {
     _throwHttpFailure(action: 'rebuild', statusCode: response?.statusCode, body: response?.body);
   }
 
-  /// Polls the graph endpoint until the node count stabilizes or timeout is reached.
+  /// Polls until the node count stabilizes, two consecutive reads are empty,
+  /// or the timeout is reached.
   /// Returns the final graph data.
   static Future<Map<String, dynamic>> waitForGraphStability({
     Duration timeout = const Duration(seconds: 45),
@@ -194,6 +196,7 @@ class KnowledgeGraphApi {
     int stabilityChecks = 2,
   }) async {
     int stableCount = 0;
+    int consecutiveEmptyReads = 0;
     int lastCount = -1;
     final stopwatch = Stopwatch()..start();
 
@@ -204,6 +207,8 @@ class KnowledgeGraphApi {
         final data = await getKnowledgeGraph();
         final nodes = data['nodes'] as List<dynamic>? ?? [];
         final count = nodes.length;
+        consecutiveEmptyReads = count == 0 ? consecutiveEmptyReads + 1 : 0;
+        if (consecutiveEmptyReads == 2) return data;
 
         // Reset stability count if node count changes
         if (count > 0 && count == lastCount) {
@@ -218,9 +223,9 @@ class KnowledgeGraphApi {
         if (stableCount >= stabilityChecks && count > 0) {
           return data;
         }
-      } catch (e) {
-        // Silently ignore temporary fetch errors during polling
-        print('Polling error: $e');
+      } catch (_) {
+        // A failed response breaks the run of empty reads.
+        consecutiveEmptyReads = 0;
       }
     }
 
