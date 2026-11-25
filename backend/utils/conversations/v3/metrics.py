@@ -8,7 +8,7 @@ BLOCKED = Counter(
 )
 RACES = Counter(
     'omi_conversations_v3_races_total',
-    'Retryable reconcile races answered with a coalesced follow-up wake instead of a task retry',
+    'Retryable reconcile outcomes answered with a coalesced wake or a task retry',
     ['reason'],
 )
 CREATED_DELIVERIES = Counter(

@@ -16,6 +16,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database import home_visibility_index
+from database.transcript_pointer import run_preloaded_transaction_with_contention_retry
 from database._client import firestore_failure_reason, get_firestore_client
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from database import conversations, conversations_v3_leases as leases
@@ -216,7 +217,7 @@ def save_outline(uid, token, fingerprint, entries, *, key='builder', preview=Non
         cache.append({'fingerprint': fingerprint, 'entries': entries, **(preview or {})})
         tx.update(ref, {'outline_cache': encrypt(json.dumps(cache[-128:], default=str), uid)})
 
-    save(client.transaction())
+    run_preloaded_transaction_with_contention_retry(client, save)
 
 
 BLOCKED_BACKOFF_MAX = timedelta(hours=1)
@@ -241,7 +242,7 @@ def record_blocked(uid, token, reason, *, firestore_client=None):
         tx.update(ref, {'v3_blocked_count': count, 'v3_blocked_reason': reason, 'v3_backoff_until': now + delay})
         return True
 
-    return park(client.transaction())
+    return run_preloaded_transaction_with_contention_retry(client, park)
 
 
 def backoff_until(uid, *, firestore_client=None):
@@ -716,6 +717,7 @@ def commit_projection(
     @firestore.transactional
     def commit(tx, batch_rows, batch_prepared, final):
         observed = {}
+        batch_moved = set()
         staged.clear()
         staged.update(
             rows=[row for raw, row in zip(batch_rows, batch_prepared) if not raw.get('deleted')], recordings={}
@@ -737,7 +739,7 @@ def commit_projection(
             if not snapshot.exists or snapshot.update_time != row['_v3_revision']:
                 if rid in existing or rid not in recordings or not speech_moved(row, current):
                     raise Conflict('source_changed')
-                moved.add(rid)
+                batch_moved.add(rid)
             observed[rid] = current or {}
         absorbed = {cid: row['id'] for row in batch_rows for cid in row.get('_v3_absorbed', ())}
         touched = {*(row['id'] for row in batch_rows), *absorbed}
@@ -749,20 +751,18 @@ def commit_projection(
             raise Conflict('source_changed')
         if retired and merge_donors_have_tasks(uid, retired, firestore_client=client, transaction=tx):
             raise Conflict('rederive_live_donor_tasks')
-        for cid in [*(row['id'] for row in batch_rows), *absorbed, *(retire if final else ())]:
-            tombstone = (
-                client.collection('users')
-                .document(uid)
-                .collection('deleted_conversations')
-                .document(cid)
-                .get(transaction=tx)
-            )
-            if tombstone.exists:
-                raise Conflict('target_deleted')
-        new_ids = {r['id'] for r in batch_rows} - existing.keys()
-        for cid in new_ids:
-            if coll.document(cid).get(transaction=tx).exists:
-                raise Conflict('target_exists')
+        tombstones = client.collection('users').document(uid).collection('deleted_conversations')
+        tombstone_ids = list(dict.fromkeys([*(row['id'] for row in batch_rows), *absorbed, *(retire if final else ())]))
+        if any(
+            snapshot.exists
+            for _, snapshot in _projection_snapshots(client, tombstones, tx, tombstone_ids, batch_reads=batch_reads)
+        ):
+            raise Conflict('target_deleted')
+        new_ids = sorted({r['id'] for r in batch_rows} - existing.keys())
+        if any(
+            snapshot.exists for _, snapshot in _projection_snapshots(client, coll, tx, new_ids, batch_reads=batch_reads)
+        ):
+            raise Conflict('target_exists')
         if final:
             for cid in remove:
                 # Only a backfill re-derive retires a copy, and only its own backfilled rows.
@@ -771,6 +771,8 @@ def commit_projection(
         from database.recurring_voice_privacy import filter_processing_write
 
         user = client.collection('users').document(uid)
+        # Filtering can mutate the encoded payload; every attempt needs its original input.
+        batch_prepared = [dict(row) for row in batch_prepared]
         for row in batch_prepared:
             filter_processing_write(tx, user, row)
         for raw, row in zip(batch_rows, batch_prepared):
@@ -812,7 +814,7 @@ def commit_projection(
             if recording.get('deleted') or recording.get('sync_merged_into'):
                 tx.update(coll.document(rid), {'v3_pending': False, 'v3_pending_since': None})
                 continue
-            if rid in moved:
+            if rid in batch_moved or rid in moved:
                 # Merge onto the re-read document; never write the stale snapshot's view of a live source.
                 claims = [c for c in observed[rid].get('claims') or [] if c['conversation_id'] not in replaced]
                 for row in batch_rows:
@@ -896,7 +898,7 @@ def commit_projection(
                 lease_update['unlocked_ids'] = sorted(previous_unlocked | unlocked)
         staged['lease'] = (lease, lease_update)
         tx.update(held, lease_update)
-        return observed
+        return observed, batch_moved, batch_prepared
 
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
     # Reserve space for all donor writes, including the task-link fences in the survivor's batch.
@@ -918,8 +920,8 @@ def commit_projection(
         batches.append(current)
     for index, batch in enumerate(batches):
         try:
-            observed = commit(
-                client.transaction(), [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
+            observed, batch_moved, committed_prepared = run_preloaded_transaction_with_contention_retry(
+                client, commit, [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
             )
         except Conflict:
             raise
@@ -934,6 +936,7 @@ def commit_projection(
                 len(batches),
             )
             raise
+        moved.update(batch_moved)
         from utils.conversations.v3 import metrics
 
         for row, _encoded in batch:
@@ -982,7 +985,7 @@ def commit_projection(
                     '_v3_revision': snapshot.update_time,
                     **({'_v3_fence': source_fence(current)} if recordings[rid].get('_v3_fence') is not None else {}),
                 }
-            for raw, encoded in batch:
+            for (raw, _), encoded in zip(batch, committed_prepared):
                 snapshot = coll.document(raw['id']).get()
                 if snapshot.exists:
                     current = snapshot.to_dict() or {}
@@ -1467,7 +1470,7 @@ def outline_attempt(uid, token, fingerprint, *, key='builder', firestore_client=
         tx.update(ref, {'outline_attempts': dict(list(attempts.items())[-128:])})
         return True
 
-    return begin(client.transaction())
+    return run_preloaded_transaction_with_contention_retry(client, begin)
 
 
 def write_live_title_preview(uid, token, cid, revision, *, title=None, firestore_client=None):
@@ -1503,4 +1506,4 @@ def write_live_title_preview(uid, token, cid, revision, *, title=None, firestore
             return True
         return False
 
-    return write(client.transaction())
+    return run_preloaded_transaction_with_contention_retry(client, write)

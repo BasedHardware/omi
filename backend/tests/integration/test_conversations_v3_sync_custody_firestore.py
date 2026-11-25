@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
+from google.cloud.firestore_v1.types import BeginTransactionRequest
 import pytest
 
 from database import conversations_v3 as v3, conversations_v3_leases as leases
@@ -148,3 +149,49 @@ def test_historical_repair_preview_retry_rollback_and_races(owner):
     user.collection('deleted_conversations').document('card').set({'conversation_id': 'card'})
     assert run('rollback', receipt) == {'outcome': 'skipped', 'reason': 'tombstoned'}
     assert early.get().to_dict()['claims'] == claims
+
+
+@pytest.mark.parametrize('failure', ['expired_read', 'aborted_commit'])
+def test_projection_restarts_with_fresh_transaction(owner, monkeypatch, failure):
+    from google.api_core.exceptions import Aborted, InvalidArgument
+
+    client, user, coll = owner
+    seed(owner)
+    token = leases.acquire(user.id, 'builder', firestore_client=client)
+    source_snapshot = coll.document('early').get()
+    recording = v3.recording_input(user.id, source_snapshot)
+    api = client._firestore_api
+    original_begin = api.begin_transaction
+    began = []
+    retry_ids = []
+
+    def begin(*args, **kwargs):
+        request = BeginTransactionRequest(kwargs['request'])
+        retry_ids.append(request.options.read_write.retry_transaction)
+        result = original_begin(*args, **kwargs)
+        began.append(result.transaction)
+        return result
+
+    monkeypatch.setattr(api, 'begin_transaction', begin)
+    method = 'batch_get_documents' if failure == 'expired_read' else 'commit'
+    original = getattr(api, method)
+
+    def fail_once(*args, **kwargs):
+        if len(began) == 1:
+            if failure == 'expired_read':
+                raise InvalidArgument('The referenced transaction has expired or is no longer valid')
+            raise Aborted('cross-transaction contention')
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(api, method, fail_once)
+    original_rollback = api.rollback
+
+    def rollback(*args, **kwargs):
+        original_rollback(*args, **kwargs)
+        raise InvalidArgument('The referenced transaction has expired or is no longer valid')
+
+    monkeypatch.setattr(api, 'rollback', rollback)
+    assert v3.commit_projection(user.id, token, {'early': recording}, {}, [], [], firestore_client=client) == set()
+    assert len(began) == 2 and began[0] != began[1]
+    assert retry_ids == [b'', b'']
+    assert coll.document('early').get().to_dict()['v3_pending'] is False

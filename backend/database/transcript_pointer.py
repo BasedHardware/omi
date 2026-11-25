@@ -18,6 +18,7 @@ import logging
 from itertools import chain
 import sys
 import threading
+from time import monotonic
 from typing import Any, Callable, List, Mapping
 import zlib
 
@@ -393,6 +394,26 @@ def run_preloaded_operation(operation, *args, **kwargs):
 
 def run_preloaded_transactional(client, fn, *args, **kwargs):
     return run_preloaded_operation(_client.run_transactional, client, fn, *args, **kwargs)
+
+
+def run_preloaded_transaction_with_contention_retry(client, operation, *args):
+    """Load transcript blobs between attempts and start each contention retry with a new ID."""
+    from database.firestore_transaction_retry import run_with_transaction_contention_retry
+
+    # Use the shared duration reserve to avoid starting another long chain after
+    # a slow failure. The budget does not abort an in-flight transaction.
+    retry_deadline = monotonic() + 45.0
+
+    def run():
+        return run_with_transaction_contention_retry(
+            lambda: client.transaction(max_attempts=1),
+            lambda tx: operation(tx, *args),
+            operation_name=getattr(operation, 'to_wrap', operation).__name__,
+            max_attempts=3,
+            deadline=retry_deadline,
+        )
+
+    return run_preloaded_operation(run)
 
 
 def offload_inline_transcript(uid, conversation_id, *, firestore_client=None, expected_sha256=None) -> bool:

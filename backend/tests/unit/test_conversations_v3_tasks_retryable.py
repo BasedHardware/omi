@@ -254,3 +254,44 @@ async def test_opted_in_background_task_keeps_a_non_provider_failure_loud(caplog
     assert any(
         record.levelno == logging.ERROR and 'background_task failed' in record.getMessage() for record in caplog.records
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'kind,reason',
+    [
+        ('transaction_contention', 'dependency_warming'),
+        ('transaction_expired', 'dependency_warming'),
+        ('processing_source_changed', 'persistence_fenced'),
+        ('v3_processing_not_completed', 'persistence_fenced'),
+    ],
+)
+async def test_reconcile_counts_expected_task_retries(monkeypatch, reconcile_request, kind, reason):
+    from google.api_core.exceptions import Aborted, InvalidArgument
+
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+    from utils.conversations.v3 import Conflict, ProcessingPersistenceFenced, metrics
+
+    if kind.startswith('transaction_'):
+        error = FirestoreContentionExhausted('retry budget exhausted')
+        error.__cause__ = (
+            Aborted('cross-transaction contention')
+            if kind == 'transaction_contention'
+            else InvalidArgument('The referenced transaction has expired or is no longer valid')
+        )
+    else:
+        error = Conflict(kind) if kind == 'processing_source_changed' else ProcessingPersistenceFenced(kind)
+    monkeypatch.setattr(service, 'reconcile', AsyncMock(side_effect=error))
+    count = metrics.RACES.labels(kind)
+    before = count._value.get()
+    body = route.ReconcileRequest(uid='u')
+
+    response = await route.reconcile(body, reconcile_request, _retry=1)
+    assert response.status_code == 409
+    assert response.body == b'{"status":"retry","reason":"' + reason.encode() + b'"}'
+    assert count._value.get() == before + 1
+
+    monkeypatch.setenv('CONVERSATIONS_V3_RECONCILE_RETRY_RESPONSE', 'off')
+    with pytest.raises(type(error)):
+        await route.reconcile(body, reconcile_request, _retry=1)
+    assert count._value.get() == before + 1

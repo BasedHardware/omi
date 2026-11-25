@@ -1958,8 +1958,15 @@ def persist_processing_result_with_lifecycle(
         ) and write_status in (ConversationStatus.completed, ConversationStatus.completed.value)
         return True
 
+    from database.conversations_v3_fence import current as v3_writer
+    from database.transcript_pointer import run_preloaded_transaction_with_contention_retry
+
+    v3_processing = v3_writer() is not None
     try:
-        persisted = run_preloaded_transactional(db, _persist)
+        if v3_processing:
+            persisted = run_preloaded_transaction_with_contention_retry(db, _persist)
+        else:
+            persisted = run_preloaded_transactional(db, _persist)
     except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
         return False
     if persisted and ledger_stages:
@@ -1990,6 +1997,10 @@ def persist_processing_result_with_lifecycle(
             on_first_completion()
         except Exception:
             pass
+    if v3_processing and not persisted:
+        from utils.conversations.v3 import ProcessingPersistenceFenced
+
+        raise ProcessingPersistenceFenced('v3_processing_not_completed')
     return persisted
 
 

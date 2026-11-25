@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from database import conversations, conversations_v3 as store
+from database.transcript_pointer import run_preloaded_transaction_with_contention_retry
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from models.finalization_owner import python_owns_finalization
@@ -231,7 +232,7 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
         )
         return armed
 
-    armed = persist(client.transaction())
+    armed = run_preloaded_transaction_with_contention_retry(client, persist)
     if first_notes:
         _observe_first_notes(first_notes)
     return armed
@@ -331,7 +332,9 @@ def settle_processing(
             (first, row) if first else None,
         )
 
-    armed, settled, manual_visibility, finish_settled, outcome = settle(client.transaction())
+    armed, settled, manual_visibility, finish_settled, outcome = run_preloaded_transaction_with_contention_retry(
+        client, settle
+    )
     if outcome is not None:
         first, row = outcome
         if first == 'notes':
@@ -398,7 +401,7 @@ def claim_created(uid, cid, *, firestore_client=None):
         tx.update(ref, {'v3_created_attempts': attempt, 'v3_created_claim_until': now + CREATED_CLAIM})
         return attempt
 
-    return claim(client.transaction())
+    return run_preloaded_transaction_with_contention_retry(client, claim)
 
 
 def finish_created(uid, cid, attempt, *, delivered, dropped=False, firestore_client=None):
@@ -434,7 +437,7 @@ def finish_created(uid, cid, attempt, *, delivered, dropped=False, firestore_cli
             tx.update(ref, {'v3_created_claim_until': None})
         return True
 
-    return finish(client.transaction())
+    return run_preloaded_transaction_with_contention_retry(client, finish)
 
 
 def processing_hash(row):
@@ -510,7 +513,7 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
         )
         return True
 
-    result = begin(client.transaction())
+    result = run_preloaded_transaction_with_contention_retry(client, begin)
     if result == 'failed':
         metrics.terminal_failure('attempts_exhausted')
     if result in ('failed', 'terminal'):
@@ -563,7 +566,7 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
             failed_row.update(row)
         return not row.get('v3_process_failed')
 
-    changed = fail(client.transaction())
+    changed = run_preloaded_transaction_with_contention_retry(client, fail)
     if changed:
         metrics.terminal_failure('processing')
         if failed_row:
@@ -604,4 +607,4 @@ def settle_backfill_processing(uid, cid, *, failed, max_attempts, firestore_clie
         tx.update(ref, {'v3_process_pending': False, 'v3_backfill_attempts': attempts})
         return 'retry'
 
-    return settle(client.transaction())
+    return run_preloaded_transaction_with_contention_retry(client, settle)
