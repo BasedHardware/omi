@@ -118,6 +118,13 @@ row is live. User titles and the final outline take precedence.
 transactional BatchGet chunks for input revisions, tombstones, and new-target existence
 checks. Set it to `off` to restore serial point reads.
 
+`CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES` defaults to on. The builder compares its final
+payloads against existing transaction snapshots before writing. Set it to `off` to
+restore unconditional projection and pending writes. `omi_conversations_v3_projection_rows`
+measures skipped and written rows by caller. `omi_conversations_v3_reconcile_billed_writes`
+measures confirmed builder writes, including leases and Home feed writes. Downstream notes
+processing has separate write attribution.
+
 `POST /v1/conversations-v3/reconcile` returns HTTP 409 with
 `{"status":"retry","reason":"dependency_warming"}` for exhausted Firestore contention,
 expiry, or retry deadlines. Confirmed processing fences use `persistence_fenced` in the

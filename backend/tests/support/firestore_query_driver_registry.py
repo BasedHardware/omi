@@ -164,7 +164,7 @@ BODY_DIGEST = {
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
-    'database.conversations_v3.commit_projection': '91b5270321f6c924d8b098674dc712e059c3921512fce8c88b1373139819f350',
+    'database.conversations_v3.commit_projection': '69bf5cafb3178ba2544c2f40dba701fa3cbc91465372985d5948062608ccd8c4',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -3697,7 +3697,8 @@ for entry in (
         covered_by=('database.conversations_v3.merge_donors_have_tasks',),
         reason='Refinement and live repair use the same bounded donor-task query and write point markers with donor redirects. '
         'The WAL custody guard uses the existing observation rows before donor-task queries or projection writes. '
-        'The Home index bit is derived from the flags already present in those writes.',
+        'The Home index bit is derived from the flags already present in those writes. '
+        'Write elision uses only the projection snapshots already read under revision fences.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),
