@@ -81,8 +81,11 @@ def test_account_erasure_sweeps_late_evidence(client, monkeypatch, retry_with_pa
             injected = True
 
     monkeypatch.setattr(firestore.DocumentReference, 'collections', collections)
+    checked = user_data_deletion.metrics.SWEEP_CHECKED
+    before = checked._value.get()
     result = user_data_deletion.purge_user_subtree(uid, client, delete_collection_recursive)
     assert result['status'] == 'ok'
+    assert checked._value.get() == before + 1
     assert injected == (not retry_with_parents_missing)
     assert not root.get().exists and not parent.get().exists
     assert not child.get().exists and other.get().exists
