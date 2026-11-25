@@ -58,6 +58,7 @@ from utils.conversations.v3 import (
     context,
 )
 from utils.conversations.v3 import refinement, preview_wakes
+from utils.conversations.v3.budget import BudgetYield, Stage, measure_stage, require_headroom
 from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
@@ -127,11 +128,13 @@ def redacted_cause(error):
     return f'{type(cause).__name__} limit={kind} bytes={sizes}'
 
 
-async def _drain_blocked(uid, reason):
+async def _drain_blocked(uid, reason, **budget_kwargs):
     if reason in NO_DRAIN:
         return
     try:
-        await drain_processing(uid)
+        await drain_processing(uid, **budget_kwargs)
+    except BudgetYield:
+        raise
     except Exception as error:
         logger.warning('v3 reconcile blocked drain failed exception_type=%s', type(error).__name__)
 
@@ -253,6 +256,126 @@ def _measure_reconcile_writes(run):
     return measured
 
 
+async def _build_outlines(
+    uid,
+    key,
+    token,
+    groups,
+    cached,
+    cohesion,
+    silence_gap,
+    silence_seconds,
+    custom_timing,
+    on_open,
+    keyed,
+    report,
+    budget,
+):
+    # Keep a bounded cache; every fingerprint is checked even for finished stretches.
+    saved = {row['fingerprint']: row for row in cached}
+    preview_prefix = f'{silence_seconds}:'
+    scoped_preview_keys = {f"{preview_prefix}{group['key']}" for group in groups} if custom_timing else set()
+    previews = {row['preview_key']: row for row in cached if row.get('preview_key', '').startswith(preview_prefix)}
+    unmatched_previews = {key: row for key, row in previews.items() if key not in scoped_preview_keys}
+    consumed_previews = set()
+    outlines, cache = [], []
+    background = await run_blocking(db_executor, context.outline_sources, uid, groups)
+    for group in groups:
+        await run_blocking(db_executor, leases.renew, uid, key, token)
+        messages = outline.messages(group, timezone.utc, cohesion=cohesion, silence_gap=silence_gap)
+        messages.append(
+            (
+                'human',
+                context.outline_block(group, background, [entry['title'] for entries in outlines for entry in entries]),
+            )
+        )
+        # Resume evidence is part of the cache key too.
+        if outlines:
+            previous = outlines[-1][-1]
+            messages.append(('human', 'Preceding conversation: ' + previous['title'] + '\n' + previous['line']))
+        fingerprint = context.cache_key(group, messages)
+        hit = saved.get(fingerprint)
+        preview_key = f"{preview_prefix}{group['key']}" if custom_timing else None
+        preview = previews.get(preview_key) if preview_key else None
+        if preview_key and preview is None and hit is None:
+            matched_key = outline.matching_preview(group, unmatched_previews)
+            if matched_key is not None:
+                preview = unmatched_previews.pop(matched_key)
+                consumed_previews.add(matched_key)
+        preview_fields = {}
+        if hit:
+            entries = hit['entries']
+            report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
+        elif preview is not None:
+            entries = outline.reuse_preview(group, preview)
+            report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
+        elif group['outline_ready'] or on_open:
+            require_headroom(budget, Stage.OUTLINE)
+            if await run_blocking(db_executor, store.outline_attempt, uid, token, fingerprint, **keyed):
+                metrics.MODEL_CALLS.labels('outline').inc()
+                report['outline_calls'] = report.get('outline_calls', 0) + 1
+                try:
+                    with measure_stage(budget, Stage.OUTLINE):
+                        content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
+                except RuntimeError as error:
+                    if str(error) != 'v3_lease_lifetime_exhausted':
+                        raise
+                    content = ''
+                try:
+                    entries = outline.parse(content, group)
+                    if preview_key and not group['locked']:
+                        preview_fields = {
+                            'preview_key': preview_key,
+                            'anchors': outline.preview_anchors(group, entries),
+                        }
+                        await run_blocking(
+                            db_executor,
+                            store.save_outline,
+                            uid,
+                            token,
+                            fingerprint,
+                            entries,
+                            key=key,
+                            preview=preview_fields,
+                        )
+                    else:
+                        await run_blocking(db_executor, store.save_outline, uid, token, fingerprint, entries, **keyed)
+                except (ValueError, KeyError, TypeError):
+                    entries = outline.fallback(group)
+                    entries = [{**entry, '_outline_failed': True} for entry in entries]
+                    metrics.RECONCILES.labels('outline_fallback').inc()
+            else:
+                entries = [{**entry, '_outline_failed': True} for entry in outline.fallback(group)]
+        else:
+            # First speech is visible before either the title preview or the outline is ready.
+            entries = [
+                {
+                    'first_line': 1,
+                    'title': '',
+                    'line': '',
+                    'kind': 'conversation',
+                    'people': [],
+                    'sections': [],
+                    'emoji': '💬',
+                }
+            ]
+        outlines.append(entries)
+        if group['outline_ready'] or on_open or preview is not None:
+            if preview_key and not group['locked'] and not any(e.get('_outline_failed') for e in entries):
+                preview_fields = {'preview_key': preview_key, 'anchors': outline.preview_anchors(group, entries)}
+            cache.append({'fingerprint': fingerprint, 'entries': entries, **preview_fields})
+
+    if custom_timing and on_open:
+        replaced = {row['fingerprint'] for row in cache}
+        replaced_previews = scoped_preview_keys | consumed_previews
+        cache = [
+            row
+            for row in cached
+            if row.get('preview_key') not in replaced_previews and row['fingerprint'] not in replaced
+        ] + cache
+    return outlines, cache
+
+
 @_measure_reconcile_writes
 async def reconcile(
     uid,
@@ -269,6 +392,7 @@ async def reconcile(
     internal_end=False,
     report=None,
     _pass=0,
+    budget=None,
 ):
     """One builder pass. ``derive`` is one planned backfill partition ([since, until), one owner).
 
@@ -279,6 +403,7 @@ async def reconcile(
     see rederive_store.load_live_rederive and _live_outcome. An explicit historical timing
     receipt opts that repair into the serving sit-down profile.
     """
+    budget_kwargs = {} if budget is None else {'budget': budget}
     report = {} if report is None else report
     key = store.BACKFILL_LEASE if derive else 'builder'
     blocked = None
@@ -292,7 +417,7 @@ async def reconcile(
             metrics.RECONCILES.labels('backoff').inc()
             # Rows earlier passes committed still owe notes while the builder is parked.
             with suspend_committed_write_count():
-                await _drain_blocked(uid, parked)
+                await _drain_blocked(uid, parked, **budget_kwargs)
             return 'backoff'
     token = await run_blocking(db_executor, leases.acquire, uid, key)
     if token is None:
@@ -373,110 +498,21 @@ async def reconcile(
             ]
             if not groups:
                 return 'stored'
-        # Keep a bounded cache; every fingerprint is checked even for finished stretches.
-        saved = {row['fingerprint']: row for row in cached}
-        preview_prefix = f'{silence_seconds}:'
-        scoped_preview_keys = {f"{preview_prefix}{group['key']}" for group in groups} if custom_timing else set()
-        previews = {row['preview_key']: row for row in cached if row.get('preview_key', '').startswith(preview_prefix)}
-        unmatched_previews = {key: row for key, row in previews.items() if key not in scoped_preview_keys}
-        consumed_previews = set()
-        outlines, cache = [], []
-        background = await run_blocking(db_executor, context.outline_sources, uid, groups)
-        for group in groups:
-            await run_blocking(db_executor, leases.renew, uid, key, token)
-            messages = outline.messages(group, timezone.utc, cohesion=cohesion, silence_gap=silence_gap)
-            messages.append(
-                (
-                    'human',
-                    context.outline_block(
-                        group, background, [entry['title'] for entries in outlines for entry in entries]
-                    ),
-                )
-            )
-            # Resume evidence is part of the cache key too.
-            if outlines:
-                previous = outlines[-1][-1]
-                messages.append(('human', 'Preceding conversation: ' + previous['title'] + '\n' + previous['line']))
-            fingerprint = context.cache_key(group, messages)
-            hit = saved.get(fingerprint)
-            preview_key = f"{preview_prefix}{group['key']}" if custom_timing else None
-            preview = previews.get(preview_key) if preview_key else None
-            if preview_key and preview is None and hit is None:
-                matched_key = outline.matching_preview(group, unmatched_previews)
-                if matched_key is not None:
-                    preview = unmatched_previews.pop(matched_key)
-                    consumed_previews.add(matched_key)
-            preview_fields = {}
-            if hit:
-                entries = hit['entries']
-                report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
-            elif preview is not None:
-                entries = outline.reuse_preview(group, preview)
-                report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
-            elif group['outline_ready'] or on_open:
-                if await run_blocking(db_executor, store.outline_attempt, uid, token, fingerprint, **keyed):
-                    metrics.MODEL_CALLS.labels('outline').inc()
-                    report['outline_calls'] = report.get('outline_calls', 0) + 1
-                    try:
-                        content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
-                    except RuntimeError as error:
-                        if str(error) != 'v3_lease_lifetime_exhausted':
-                            raise
-                        content = ''
-                    try:
-                        entries = outline.parse(content, group)
-                        if preview_key and not group['locked']:
-                            preview_fields = {
-                                'preview_key': preview_key,
-                                'anchors': outline.preview_anchors(group, entries),
-                            }
-                            await run_blocking(
-                                db_executor,
-                                store.save_outline,
-                                uid,
-                                token,
-                                fingerprint,
-                                entries,
-                                key=key,
-                                preview=preview_fields,
-                            )
-                        else:
-                            await run_blocking(
-                                db_executor, store.save_outline, uid, token, fingerprint, entries, **keyed
-                            )
-                    except (ValueError, KeyError, TypeError):
-                        entries = outline.fallback(group)
-                        entries = [{**entry, '_outline_failed': True} for entry in entries]
-                        metrics.RECONCILES.labels('outline_fallback').inc()
-                else:
-                    entries = [{**entry, '_outline_failed': True} for entry in outline.fallback(group)]
-            else:
-                # First speech is visible before either the title preview or the outline is ready.
-                entries = [
-                    {
-                        'first_line': 1,
-                        'title': '',
-                        'line': '',
-                        'kind': 'conversation',
-                        'people': [],
-                        'sections': [],
-                        'emoji': '💬',
-                    }
-                ]
-            outlines.append(entries)
-            if group['outline_ready'] or on_open or preview is not None:
-                if preview_key and not group['locked'] and not any(e.get('_outline_failed') for e in entries):
-                    preview_fields = {'preview_key': preview_key, 'anchors': outline.preview_anchors(group, entries)}
-                cache.append({'fingerprint': fingerprint, 'entries': entries, **preview_fields})
-
-        if custom_timing and on_open:
-            replaced = {row['fingerprint'] for row in cache}
-            replaced_previews = scoped_preview_keys | consumed_previews
-            cache = [
-                row
-                for row in cached
-                if row.get('preview_key') not in replaced_previews and row['fingerprint'] not in replaced
-            ] + cache
+        outlines, cache = await _build_outlines(
+            uid,
+            key,
+            token,
+            groups,
+            cached,
+            cohesion,
+            silence_gap,
+            silence_seconds,
+            custom_timing,
+            on_open,
+            keyed,
+            report,
+            budget,
+        )
 
         preferred = conversation_id if on_open and custom_timing else None
         refine_locked = (
@@ -747,20 +783,21 @@ async def reconcile(
                 await run_blocking(db_executor, rederive_store.drop_stale_priors, uid, run_id, stale)
                 await run_blocking(db_executor, backfill_runs.save_priors, uid, run_id, priors)
             await run_blocking(db_executor, leases.renew, uid, key, token)
-            moved = await run_blocking(
-                db_executor,
-                _commit,
-                uid,
-                token,
-                commit_recordings,
-                commit_existing,
-                rows,
-                cache[-128:],
-                clear_pending=not on_open,
-                remove=remove,
-                retire=retire,
-                key=key,
-            )
+            with measure_stage(budget, Stage.COMMIT):
+                moved = await run_blocking(
+                    db_executor,
+                    _commit,
+                    uid,
+                    token,
+                    commit_recordings,
+                    commit_existing,
+                    rows,
+                    cache[-128:],
+                    clear_pending=not on_open,
+                    remove=remove,
+                    retire=retire,
+                    key=key,
+                )
         except Exception:
             if live:
                 # Copies of rows this attempt did not write go, whatever failed; a resume records them
@@ -812,7 +849,7 @@ async def reconcile(
         if not derive and not on_open and live_title_enabled():
             for row in rows:
                 if policy.live_title_candidate(row) and not row.get(policy.LIVE_TITLE_STATE):
-                    await _maybe_publish_live_title(uid, key, token, row)
+                    await _maybe_publish_live_title(uid, key, token, row, **budget_kwargs)
         metrics.RECONCILES.labels('committed').inc()
         deferred = preview_wakes(rows, recordings)
     except Conflict as error:
@@ -850,6 +887,8 @@ async def reconcile(
             await run_blocking(db_executor, store.record_blocked, uid, token, reason)
         blocked = reason
         primary_failed = False
+    except BudgetYield:
+        raise
     except BaseException as error:
         primary_failed = True
         if isinstance(error, Exception):
@@ -861,7 +900,7 @@ async def reconcile(
         if not derive and not on_open:
             # Windows earlier passes (or earlier batches) committed still owe their notes.
             with suspend_committed_write_count():
-                await _drain_blocked(uid, blocked)
+                await _drain_blocked(uid, blocked, **budget_kwargs)
         return 'blocked'
     if on_open:
         await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
@@ -870,7 +909,7 @@ async def reconcile(
         # The backfill task drains its own notes marker within its deadline.
         return 'committed'
     with suspend_committed_write_count():
-        await drain_processing(uid)
+        await drain_processing(uid, **budget_kwargs)
     if moved:
         return 'committed'
     pending = (
@@ -880,23 +919,28 @@ async def reconcile(
     )
     if pending:
         if _pass < 2:
-            return await reconcile(uid, _pass=_pass + 1)
+            require_headroom(budget, Stage.RECURSE)
+            return await reconcile(uid, _pass=_pass + 1, **budget_kwargs)
         else:
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
     return 'committed'
 
 
-async def _maybe_publish_live_title(uid, key, token, row):
+async def _maybe_publish_live_title(uid, key, token, row, *, budget=None):
     try:
         revision = row.get('sync_content_revision')
         segments = row.get('transcript_segments') or []
         if revision is None or deduplicated_transcribed_speech_seconds(segments) < 180:
             return
+        require_headroom(budget, Stage.LIVE_TITLE)
         args = (uid, token, row['id'], revision)
         if await run_blocking(db_executor, store.write_live_title_preview, *args):
-            title = await leased_work(uid, key, token, llm_executor, models.live_title, uid, segments)
+            with measure_stage(budget, Stage.LIVE_TITLE):
+                title = await leased_work(uid, key, token, llm_executor, models.live_title, uid, segments)
             if title and live_title_enabled():
                 await run_blocking(db_executor, store.write_live_title_preview, *args, title=title)
+    except BudgetYield:
+        raise
     except Exception as error:
         logger.warning('event=v3_live_title exception_type=%s', type(error).__name__)
         record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
@@ -1140,18 +1184,20 @@ async def _process_leased(uid, row, token):
     await keeper
 
 
-async def drain_processing(uid):
+async def drain_processing(uid, *, budget=None):
     rows = await run_blocking(db_executor, pending_processing, uid)
     for row in rows:
         if row is None or not python_owns_finalization(row):
             continue
+        require_headroom(budget, Stage.FINALIZE)
         token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'])
         if token is None:
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
             continue
         primary_failed = False
         try:
-            await _process_leased(uid, row, token)
+            with measure_stage(budget, Stage.FINALIZE):
+                await _process_leased(uid, row, token)
         except FinalizationOwnedElsewhere:
             continue
         except BaseException:
@@ -1164,7 +1210,7 @@ async def drain_processing(uid):
     # which loads this module at import time (listen, pusher and sync all import it).
     from utils.conversations.v3 import created
 
-    await created.deliver(uid)
+    await created.deliver(uid, **({} if budget is None else {'budget': budget}))
 
 
 PROCESSING_SCAN_MAX_PAGES = 4

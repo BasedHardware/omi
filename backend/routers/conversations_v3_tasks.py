@@ -15,6 +15,7 @@ from utils.conversations.v3 import (
     metrics,
     service,
 )
+from utils.conversations.v3.budget import BudgetYield, ReconcileBudget
 from utils.observability.reasons import RetryReason
 from utils.workers.retry import exhausted_transaction_retry_class, retry_response
 from utils.llm.gateway_error_contract import retryable_provider_failure_http_exception
@@ -31,7 +32,10 @@ class ReconcileRequest(BaseModel):
 async def reconcile(body: ReconcileRequest, request: Request, _retry: int = Depends(verify_cloud_tasks_oidc)):
     try:
         with bind_request_log_trace(dict(request.headers.raw)):
-            return {'outcome': await service.reconcile(body.uid)}
+            budget = ReconcileBudget.for_delivery()
+            return {'outcome': await service.reconcile(body.uid, budget=budget)}
+    except BudgetYield:
+        return retry_response(RetryReason.POLICY_DEFER)
     except Exception as error:
         # The composition boundary may already have answered a provider fault
         # with the typed retryable contract (and recorded its metric). Re-raise

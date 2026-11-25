@@ -137,6 +137,16 @@ same response. `CONVERSATIONS_V3_RECONCILE_RETRY_RESPONSE` defaults to on. Set i
 for retry metrics and processing settlement.
 
 
+### Conversations v3 reconcile task deadline
+
+`CONVERSATIONS_V3_RECONCILE_DEADLINE` defaults on. Each Cloud Tasks delivery
+shares one monotonic budget across all builder passes. Set
+`CONVERSATIONS_V3_RECONCILE_BUDGET_SECONDS` to an integer from 300 to 480
+(default 480). Invalid values use the default. Insufficient time to start the
+next unit returns HTTP 409 with `{"status":"retry","reason":"policy_defer"}`
+after normal lease cleanup. Set the deadline flag to `off` to restore
+unbudgeted reconciliation.
+
 ## Pre-recorded Modulate credit-refusal failover
 
 `PRERECORDED_SONIOX_FAILOVER_ENABLED` defaults to `true` and is explicitly declared

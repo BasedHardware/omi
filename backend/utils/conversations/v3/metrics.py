@@ -214,3 +214,10 @@ def measure_reconcile_writes(caller):
             yield
         finally:
             safe_metric(lambda: RECONCILE_BILLED_WRITES.labels(caller).observe(writes.total))
+
+
+RECONCILE_BUDGET_YIELDS = Counter(
+    'omi_conversations_v3_reconcile_budget_yields_total',
+    'Reconcile deliveries that yielded before starting the next unit.',
+    ['stage'],
+)

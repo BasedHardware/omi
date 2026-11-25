@@ -110,7 +110,7 @@ def reconcile_request():
 
 @pytest.mark.asyncio
 async def test_reconcile_route_answers_provider_5xx_as_retryable(monkeypatch, reconcile_request):
-    async def fail(_uid):
+    async def fail(_uid, **_kwargs):
         assert request_log_trace_id() == 'a' * 32
         raise provider_502()
 
@@ -331,3 +331,36 @@ async def test_summary_lease_release_preserves_only_propagating_failure(monkeypa
         with pytest.raises(ValueError) as raised:
             await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
         assert raised.value is failure
+
+
+@pytest.mark.asyncio
+async def test_recursive_passes_share_delivery_deadline(monkeypatch, reconcile_request, caplog):
+    from utils.conversations.v3 import budget
+
+    clock = [0]
+    deadlines = []
+    monkeypatch.setenv('CONVERSATIONS_V3_RECONCILE_DEADLINE', 'on')
+    monkeypatch.setenv('CONVERSATIONS_V3_RECONCILE_BUDGET_SECONDS', '480')
+    monkeypatch.setattr(budget, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(service.store, 'backoff_state', lambda uid: (None, None))
+    monkeypatch.setattr(service.leases, 'acquire', lambda uid, key: 'token')
+    monkeypatch.setattr(service.leases, 'renew', lambda *args: None)
+    monkeypatch.setattr(service.leases, 'release', lambda *args: None)
+    monkeypatch.setattr(service.store, 'load', lambda uid: ({}, {}, []))
+    monkeypatch.setattr(service.context, 'outline_sources', lambda *args: ({}, [], []))
+    monkeypatch.setattr(service, '_commit', lambda *args, **kwargs: [])
+    monkeypatch.setattr(service, 'has_pending', lambda *args: True)
+
+    async def drain(uid, *, budget):
+        deadlines.append(budget)
+        clock[0] += 210
+
+    monkeypatch.setattr(service, 'drain_processing', drain)
+    with caplog.at_level(logging.INFO, logger=budget.__name__):
+        result = await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
+
+    assert result.status_code == 409
+    assert len(deadlines) == 2
+    assert deadlines[0] is deadlines[1]
+    assert deadlines[0].deadline == 480
+    assert 'stage=commit event=end duration_seconds=0.000 trace_id=' + 'a' * 32 in caplog.text
