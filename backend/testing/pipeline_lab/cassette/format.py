@@ -12,7 +12,17 @@ the vendor's own clocks so production post-processing runs on play, not here.
 
 Location: ``$ROOT/cache/stt_cassette/<kk>/<key>.json`` (the DESIGN cache layout
 with ``stt_cassette`` as the stage name). Cassettes hold transcripts, so they
-live only under the private lab root, never in git.
+live only under the private lab root, never in git. The one exception is a
+``synthetic`` cassette for a committed synthetic fixture (``scenario/fixtures/``).
+
+``source`` says who produced the words: ``vendor`` (a real provider, through
+``record-stt`` or a scenario's ``--stt record-vendor``), ``local`` (a model on
+this machine, ``cassette/local.py``) or ``synthetic`` (hand-written or generated
+for a fixture). A cassette written before the field existed reads as ``vendor``.
+
+``$ROOT/cache/stt_cassette/by_audio/<aa>/<audio_sha256>.jsonl`` indexes every
+cassette saved for one stretch of audio (any provider), so a scenario that does
+not pin a provider can find what was recorded for its file.
 """
 
 from __future__ import annotations
@@ -23,12 +33,15 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-from testing.pipeline_lab.store import atomic_write_json, lab_root, read_json
+from testing.pipeline_lab.store import append_jsonl, atomic_write_json, lab_root, read_json, read_jsonl
 
 SCHEMA = 'pipeline_lab.stt_cassette/v1'
 STAGE_DIR = 'stt_cassette'
 SAMPLE_RATE = 16000
 BYTES_PER_SECOND = SAMPLE_RATE * 2
+SOURCES = ('vendor', 'local', 'synthetic')
+DEFAULT_SOURCE = 'vendor'  # cassettes recorded before ``source`` existed came from a vendor
+INDEX_DIR = 'by_audio'
 
 
 def audio_sha256(pcm16: bytes) -> str:
@@ -71,9 +84,10 @@ class Word:
     end: float
     text: str
     speaker: str | None = None
+    confidence: float | None = None
 
     def shifted(self, offset: float) -> 'Word':
-        return Word(self.start + offset, self.end + offset, self.text, self.speaker)
+        return Word(self.start + offset, self.end + offset, self.text, self.speaker, self.confidence)
 
     @property
     def midpoint(self) -> float:
@@ -92,6 +106,11 @@ class Cassette:
     recorded_at: str = ''
     usd: float = 0.0
     segments: list[dict] = field(default_factory=list)
+    source: str = DEFAULT_SOURCE
+
+    def __post_init__(self) -> None:
+        if self.source not in SOURCES:
+            raise ValueError(f'cassette source must be one of {SOURCES}, not {self.source!r}')
 
     def to_json(self) -> dict:
         return {
@@ -100,11 +119,12 @@ class Cassette:
             'key_digest': self.key.digest,
             'audio': {'seconds': self.audio_seconds, 'sample_rate': SAMPLE_RATE, 'format': 'pcm16le_mono'},
             'adapter': self.adapter,
+            'source': self.source,
             'recorded_at': self.recorded_at,
             'served': {'provider': self.served_provider, 'model': self.served_model},
             'detected_language': self.detected_language,
             'usd': self.usd,
-            'words': [asdict(w) for w in self.words],
+            'words': [word_json(w) for w in self.words],
             'segments': self.segments or derive_segments(self.words),
         }
 
@@ -127,19 +147,59 @@ class Cassette:
             recorded_at=value.get('recorded_at') or '',
             usd=float(value.get('usd') or 0.0),
             segments=list(value.get('segments') or []),
+            source=value.get('source') or DEFAULT_SOURCE,
         )
 
     def save(self, root=None) -> Path:
-        return atomic_write_json(self.key.path(root), self.to_json())
+        path = atomic_write_json(self.key.path(root), self.to_json())
+        append_jsonl(index_path(self.key.audio_sha256, root), [self.index_row()])
+        return path
+
+    def index_row(self) -> dict:
+        """The by-audio index entry: the key and who produced it (no words)."""
+        return {
+            **asdict(self.key),
+            'key_digest': self.key.digest,
+            'source': self.source,
+            'recorded_at': self.recorded_at,
+        }
 
     def words_between(self, start: float, end: float) -> list[Word]:
         """Words whose midpoint lies in [start, end), shifted to start at 0."""
         return [w.shifted(-start) for w in self.words if start <= w.midpoint < end]
 
 
+def word_json(word: Word) -> dict:
+    """A word as stored; ``confidence`` only when the producer gave one."""
+    value = asdict(word)
+    if value['confidence'] is None:
+        del value['confidence']
+    return value
+
+
 def load(key: CassetteKey, root=None) -> Cassette | None:
     value = read_json(key.path(root))
     return Cassette.from_json(value) if value is not None else None
+
+
+def index_path(audio: str, root=None) -> Path:
+    return lab_root(root) / 'cache' / STAGE_DIR / INDEX_DIR / audio[:2] / f'{audio}.jsonl'
+
+
+def recorded_for_audio(audio: str, root=None) -> list[Cassette]:
+    """Every indexed cassette of this audio hash under ``root`` that is still on disk, oldest first."""
+    seen: dict[str, Cassette] = {}
+    for row in read_jsonl(index_path(audio, root)):
+        try:
+            key = CassetteKey(**{k: row[k] for k in CassetteKey.__dataclass_fields__})
+        except (KeyError, TypeError):
+            continue
+        if key.audio_sha256 != audio or key.digest in seen:
+            continue
+        cassette = load(key, root)
+        if cassette is not None:
+            seen[key.digest] = cassette
+    return list(seen.values())
 
 
 def derive_segments(words: Iterable[Word], *, max_pause: float = 1.0) -> list[dict]:
