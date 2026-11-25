@@ -19,8 +19,17 @@ BACKEND = REPO / 'backend'
 
 
 @pytest.fixture(scope='module')
-def report():
-    stage_map = affected.StageMap(affected.DiskSource(REPO))  # closures are computed once per module
+def stage_map():
+    """One map for the module: the product import closures (~1,400 files parsed) are built here, once."""
+    built = affected.StageMap(affected.DiskSource(REPO))
+    for stage in STAGES:
+        built.reach(stage)
+    built.in_scenarios('backend/utils/llm/goals.py')
+    return built
+
+
+@pytest.fixture(scope='module')
+def report(stage_map):
 
     def classify(*paths):
         out = affected.affected(REPO, 'HEAD', paths=list(paths), stage_map=stage_map)
@@ -112,9 +121,11 @@ def test_removed_file_is_looked_up_on_the_base_side():
         def exists(self, rel):
             return rel != 'backend/testing/pipeline_lab/lanes/batch.py' and super().exists(rel)
 
-    stage_map = affected.StageMap(Head(REPO), affected.DiskSource(REPO))
-    assert stage_map.earliest_reach('backend/testing/pipeline_lab/lanes/batch.py') == 'transcribe'
-    assert affected.StageMap(Head(REPO)).earliest_reach('backend/testing/pipeline_lab/lanes/batch.py') is None
+    rel = 'backend/testing/pipeline_lab/lanes/batch.py'
+    head = Head(REPO)
+    assert affected.StageMap(head, affected.DiskSource(REPO)).earliest_reach(rel) == 'transcribe'
+    alone = affected.StageMap(head)  # without the base side, the head's lab closures do not hold it
+    assert not any(alone.in_reach(head, stage, rel) for stage in ('ingest', 'transcribe'))
 
 
 def test_cli_affected_json_for_an_empty_range(tmp_path, capsys):
