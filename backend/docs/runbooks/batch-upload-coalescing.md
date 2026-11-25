@@ -93,9 +93,12 @@ For the SCA-4372 mobile ramp, read p90 per `hold_state`. The explicit states are
 and unrecognized values. During the backend roll, filter the guard query to
 explicit states. Older revisions lack the label and the new 360-second bucket,
 so their samples would mix bucket layouts in an aggregate. A ramp cohort
-without measurements for its expected state leaves the guard blind. Use
-`omi_sync_seal_to_accept_seconds` and local WAL age to check on-device wait
-separately. The server p90 starts at request arrival.
+without measurements for its expected state leaves the guard blind. The
+rollback expression per state is
+`p90(omi_batch_pipeline_upload_hold_age_seconds) + p90(omi_batch_pipeline_upload_to_transcript_seconds) > H + 300 s`.
+The phone histogram captures age through send, including time spent suspended.
+The server histogram starts at request arrival. The sum of their p90s is the
+rollout guard and is not a directly measured end-to-end p90.
 
 Both collectors live in the default Cloud Run registry and the worker private
 registry/multiprocess forwarding. Existing `batch_pipeline_.*` and `omi_.*`

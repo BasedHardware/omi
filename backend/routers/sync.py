@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Optional
 
 from utils.sync.detached_tasks import consume_detached_outcome as _consume_detached_outcome
 from config.request_clock import bounded_hold_state, started_at
+from database.batch_pipeline_upload_metrics import observe_hold_age
 from utils.batch_pipeline import upload_entitlement
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request, Response, Header
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -742,6 +743,7 @@ async def sync_local_files_v2(
     x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
     x_omi_upload_trace: Optional[str] = Header(None, alias='X-Omi-Upload-Trace', include_in_schema=False),
     x_omi_upload_hold: Optional[str] = Header(None, alias='X-Omi-Upload-Hold', include_in_schema=False),
+    x_omi_upload_hold_age_ms: Optional[str] = Header(None, alias='X-Omi-Upload-Hold-Age-Ms', include_in_schema=False),
 ):
     """
     Async version of sync-local-files. Saves raw files and returns 202
@@ -773,6 +775,7 @@ async def sync_local_files_v2(
                 },
             )
         return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
+    observe_hold_age(x_omi_upload_hold_age_ms, x_omi_upload_hold)
     clamp_enabled = future_capture_clamp_enabled()
     if clamp_enabled:
         future_capture_request.classify_upload((file.filename or '' for file in files), capture_received_at)

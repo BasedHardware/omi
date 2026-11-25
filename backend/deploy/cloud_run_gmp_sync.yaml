@@ -74,6 +74,7 @@ spec:
         # SCA-3024: the manual-finish marker and fast first transcript run in record admission on
         # backend-integration; their outcome counters and stage histogram are the ramp's readback.
         # SCA-2918: v3 builder outcomes, pending age and model/write counts.
+        # SCA-4372: batch_pipeline_.* keeps upload_hold_age_seconds for the phone hold guard.
         - action: keep
           sourceLabels:
             - __name__

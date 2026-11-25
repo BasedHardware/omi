@@ -89,6 +89,36 @@ def test_upload_latency_labels_are_closed(monkeypatch, state, expected):
     assert upload_metrics.bounded_class('synthetic-private-user') == 'unknown'
 
 
+@pytest.mark.parametrize(
+    'age_ms,state,expected_label,seconds',
+    [('0', 'fg60', 'fg60', 0), ('360123', 'bg300', 'bg300', 360.123), ('86400000', 'invalid', 'unknown', 86400)],
+)
+def test_hold_age_observes_bounded_milliseconds(monkeypatch, age_ms, state, expected_label, seconds):
+    histogram = Mock()
+    monkeypatch.setattr(upload_metrics, 'HOLD_AGE', histogram)
+    upload_metrics.observe_hold_age(age_ms, state)
+    histogram.labels.assert_called_once_with(expected_label)
+    histogram.labels.return_value.observe.assert_called_once_with(seconds)
+
+
+@pytest.mark.parametrize('age_ms', [None, '', '1.5', ' 10', '-1', '+1', '١', '86400001', '1' * 100, 1000])
+def test_malformed_hold_age_is_not_observed(monkeypatch, age_ms):
+    histogram = Mock()
+    monkeypatch.setattr(upload_metrics, 'HOLD_AGE', histogram)
+    upload_metrics.observe_hold_age(age_ms, 'bg300')
+    histogram.labels.assert_not_called()
+
+
+def test_hold_age_is_exported_from_sync_with_guard_buckets():
+    upload_metrics.observe_hold_age('60000', 'fg60')
+    samples = metrics_response().body
+    for boundary in ('60.0', '300.0', '360.0', '600.0', '900.0', '1800.0'):
+        assert (
+            f'omi_batch_pipeline_upload_hold_age_seconds_bucket{{hold_state="fg60",le="{boundary}"}}'.encode()
+            in samples
+        )
+
+
 def test_completion_latency_counts_originals_not_merged_units_or_replays(monkeypatch):
     delivered = Mock()
     monkeypatch.setattr(upload_metrics, 'DELIVERED', delivered)
@@ -135,6 +165,9 @@ def test_upload_metrics_forward_through_worker_multiprocess_exposition():
         'omi_batch_pipeline_upload_to_transcript_seconds_bucket',
         'omi_batch_pipeline_upload_to_transcript_seconds_sum',
         'omi_batch_pipeline_upload_to_transcript_seconds_count',
+        'omi_batch_pipeline_upload_hold_age_seconds_bucket',
+        'omi_batch_pipeline_upload_hold_age_seconds_sum',
+        'omi_batch_pipeline_upload_hold_age_seconds_count',
         'omi_batch_pipeline_inter_upload_gap_seconds_bucket',
         'omi_batch_pipeline_inter_upload_gap_seconds_sum',
         'omi_batch_pipeline_inter_upload_gap_seconds_count',

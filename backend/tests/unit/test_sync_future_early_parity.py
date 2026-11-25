@@ -18,6 +18,7 @@ from google.api_core.exceptions import Aborted
 from prometheus_client import Counter, CollectorRegistry
 
 from config.policy import BatchUnitPolicy
+from database import batch_pipeline_upload_metrics as metrics
 from database.batch_pipeline_staging import artifact_id
 from tests.unit.test_batch_pipeline_audio import pcm
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
@@ -67,6 +68,8 @@ def main_endpoint():
 def test_early_upload_job_and_context_documents_equal_main(
     client, monkeypatch, tmp_path, future_enabled, mixed, hold, expected_hold
 ):
+    histogram = Mock()
+    monkeypatch.setattr(metrics, 'HOLD_AGE', histogram)
     monkeypatch.setattr(upload_entitlement, 'classify', lambda _uid: 'unknown')
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', str(future_enabled).lower())
     monkeypatch.setenv('BATCH_PIPELINE_PACKING_SAMPLE_RATE', '0.001')
@@ -155,6 +158,7 @@ def test_early_upload_job_and_context_documents_equal_main(
         headers = {'X-App-Platform': 'ios', 'X-Device-Id-Hash': 'abcd1234'}
         if hold is not None:
             headers['X-Omi-Upload-Hold'] = hold
+            headers['X-Omi-Upload-Hold-Age-Ms'] = '300500' if hold == 'bg300' else 'invalid'
         with TestClient(app, raise_server_exceptions=False) as routed:
             response = routed.post('/v2/sync-local-files', headers=headers, files=files)
         assert response.status_code == 202, response.text
@@ -182,6 +186,11 @@ def test_early_upload_job_and_context_documents_equal_main(
         for row in [*expected['contexts'], *expected['intakes'].values(), *expected['ledgers'].values()]:
             row['upload_hold_state'] = expected_hold
     assert expected == records[1]
+    if hold == 'bg300':
+        histogram.labels.assert_called_once_with('bg300')
+        histogram.labels.return_value.observe.assert_called_once_with(300.5)
+    else:
+        histogram.labels.assert_not_called()
 
 
 def test_early_placement_and_coverage_implementations_are_main_bytes():
