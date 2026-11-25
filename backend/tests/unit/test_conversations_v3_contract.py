@@ -43,6 +43,19 @@ def test_manual_end_wake_survives_a_completed_live_task_in_same_minute(monkeypat
     assert all(kw['schedule_at'] == int(fixed.timestamp()) for _, kw in tasks.values())
 
 
+def test_finish_hold_wake_has_its_own_name_at_the_deadline(monkeypatch):
+    enqueue = MagicMock()
+    monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://test.invalid')
+    monkeypatch.setattr(triggers, 'enqueue_named_task', enqueue)
+    deadline = datetime(2026, 11, 16, 12, 0, 45, 125000, tzinfo=timezone.utc)
+    triggers.enqueue('owner', at=deadline)
+    triggers.enqueue('owner', at=deadline, finish_hold_deadline=True)
+    triggers.enqueue('owner', at=deadline, finish_hold_deadline=True)
+    ordinary, expiry, retry = enqueue.call_args_list
+    assert ordinary.args[2] != expiry.args[2] == retry.args[2]
+    assert expiry.kwargs['schedule_at'] == int(deadline.timestamp()) + 1
+
+
 @pytest.mark.parametrize(
     'stage,seen,capable,cohort,expected',
     [

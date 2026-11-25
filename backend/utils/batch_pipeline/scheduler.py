@@ -76,24 +76,28 @@ def owner_key(owner_id: str) -> str:
     return hashlib.sha256(owner_id.encode()).hexdigest()
 
 
-def _append(tx: Transaction, control: dict, job: dict) -> None:
+def _append(tx: Transaction, control: dict, job: dict, *, front: bool = False) -> None:
     queue_key = f"{job['priority']}_{job['owner_key']}"
     queue = tx.get('queues', queue_key) or {'head': '', 'tail': '', 'deficit': 0.0, 'continuing': False}
     ring = control['rings'][str(job['priority'])]
     tail = None
+    job['next'] = ''
     if not queue['head']:
         if len(ring) >= MAX_ACTIVE_OWNERS:
             raise RuntimeError('active owner capacity exceeded; admission must retry')
         if queue_key not in ring:
             ring.append(queue_key)
         queue['head'] = job['segment_id']
+        queue['tail'] = job['segment_id']
         queue['deficit'] = 0.0
         queue['continuing'] = False
+    elif front:
+        job['next'] = queue['head']
+        queue['head'] = job['segment_id']
     else:
         tail = tx.get('jobs', queue['tail'])
         tail['next'] = job['segment_id']
-    queue['tail'] = job['segment_id']
-    job['next'] = ''
+        queue['tail'] = job['segment_id']
     control_key = scheduler_control_key(job['owner_key'])
     activate(tx, control, job['priority'], job['available_at'], control_key)
     # An owner already in the ring, on an active shard with no pull backoff to clear, leaves
@@ -365,7 +369,7 @@ class Scheduler:
 
     @staticmethod
     def enqueue_in_transaction(
-        tx: Transaction, item: WorkItem, now: float, *, policy=None, park_allowance: bool = False
+        tx: Transaction, item: WorkItem, now: float, *, policy=None, park_allowance: bool = False, finish_first=False
     ) -> bool:
         if getattr(item, 'source_alias_of', None):
             raise ValueError('source aliases cannot enter paid queues')
@@ -428,7 +432,9 @@ class Scheduler:
         )
         if not parked:
             control = read_control(tx, scheduler_control_key(key))
-            _append(tx, control, job)
+            if finish_first:
+                job['manual_finish_first'] = True
+            _append(tx, control, job, front=finish_first)
             tx.put('jobs', item.segment_id, job)
         # Admission and merge serialize through this fence even for different classes.
         owner['revision'] = owner.get('revision', 0) + 1
@@ -822,7 +828,11 @@ class Scheduler:
                         policy = stage_in_transaction(
                             tx, job, 'scheduler', observations=observations, candidates=candidates
                         )
-                        if policy.head_priority and not protected_phase:
+                        if (
+                            policy.head_priority
+                            and not protected_phase
+                            and not (job.get('manual_finish_first') and job['attempt'] == 0)
+                        ):
                             job = _prefer_merge_head(
                                 tx,
                                 queue,

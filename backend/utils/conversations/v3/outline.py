@@ -150,23 +150,28 @@ def _held_cuts(members, lines, now, silence_gap, continuity):
     Finish means "finish what I was just saying". The cut waits while speech that would join the
     finished window has not landed: the finishing recording's own transcript, or that of a recording
     that starts before it, was sealed by the Finish, and joins its speech (within the silence gap of
-    it, or as the capture it reconnects). Bounded by ``policy.FINISH_WAIT`` after the cut.
+    it, or as the capture it reconnects). The wait depends on whether its own speech has landed.
     """
     if not continuity:
         return {}
     by_id = {row['id']: row for row in members}
+    cuts = sorted(utc(row['finished_at']) for row in members if row.get('v3_manual_end') and row.get('finished_at'))
     held = {}
     for row in members:
         cut = utc(row.get('finished_at')) if row.get('v3_manual_end') else None
         begin = _bounds(row)[0]
-        if cut is None or begin is None or now - cut >= policy.FINISH_WAIT:
+        if cut is None or begin is None:
             continue
+        until = cut + policy.finish_wait(row)
+        if now >= until:
+            continue
+        previous_cut = next((earlier for earlier in reversed(cuts) if earlier <= begin and earlier < cut), None)
         sealed = row.get('record_sealed_at')
         awaited = [row] if policy.awaiting_batch_transcript(row) else []
         # Where the finished speech starts: walk back from this recording while speech stays within the gap.
         chain = begin
         for line in reversed([line for line in lines if line['start'] < cut]):
-            if line['end'] + silence_gap < chain:
+            if (previous_cut is not None and line['start'] < previous_cut) or line['end'] + silence_gap < chain:
                 break
             chain = min(chain, line['start'])
         candidates = {r['id']: r for r in row.get(FINISH_PREDECESSORS) or ()}
@@ -174,6 +179,8 @@ def _held_cuts(members, lines, now, silence_gap, continuity):
         for other in candidates.values():
             start, end = _bounds(other)
             if start is None or end is None or not start < begin or not policy.awaiting_batch_transcript(other):
+                continue
+            if previous_cut is not None and end <= previous_cut:
                 continue
             other_sealed = other.get('record_sealed_at')
             if not isinstance(other_sealed, (int, float)) or (
@@ -183,7 +190,7 @@ def _held_cuts(members, lines, now, silence_gap, continuity):
             if end + silence_gap >= chain or stream_gap(other, row) is not None:
                 awaited.append(other)
         if awaited:
-            held[cut] = (cut + policy.FINISH_WAIT, row['id'], awaited)
+            held[cut] = (until, row['id'], awaited)
     return held
 
 
@@ -262,7 +269,15 @@ def stretches(
         # pending), so the window it closes is the last one and can stay open without joining later speech.
         first = min(held)
         until, finishing, awaited = held[first]
-        waiting = {finishing} | {line['conversation_id'] for line in lines if line['start'] >= first}
+        waiting = (
+            {finishing}
+            | {line['conversation_id'] for line in lines if line['start'] >= first}
+            | {
+                row['id']
+                for row in members
+                if row.get('v3_manual_end') and row.get('finished_at') and utc(row['finished_at']) > first
+            }
+        )
         lines = [line for line in lines if line['start'] < first]
         hold = first, until
         for rid in waiting:

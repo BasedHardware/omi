@@ -80,16 +80,19 @@ on subsequent projections. The manual-end marker and classification remain store
 `CONVERSATIONS_V3_BATCH_MANUAL_END` defaults to `on`. A user finish of an audio-only
 v3 recording (server-batch capture, no transcript yet) stores `v3_manual_end_requested` in the
 terminal transaction. Record admission promotes it to `v3_manual_end` for a single-unit
-recording, or when the fast first transcript covers the whole recording. Set it to `off` on
+recording, or when the fast first transcript covers the whole recording. Newly admitted full native
+recordings with a Finish marker can move ahead of queued work for the same owner in the fresh GPU
+queue. The units of a single recording keep their capture order. Set the manual-end marker switch to `off` on
 `backend` and `backend-integration` to restore the silence and lock timers for later finishes.
 
 `CONVERSATIONS_V3_CAPTURE_CONTINUITY` defaults to `on`. When two recordings prove a reconnect (same
 capture origin `external_data.recording_origin_id`, a new `recording_session_id`, same device when both
 name one), the stream gap between them, up to 10 minutes, is missing audio, not silence, for v3 grouping.
-A manual-end cut waits, at most 5 minutes after the cut, while its own recording or a preceding batch
-recording sealed by the Finish that joins the finished speech has no transcript yet. A held cut stays a
-boundary: its window stays open and unlocked, and later speech waits. Set it to `off` on the v3 builder
-to restore the previous cut and silence rules; rows already written keep their boundaries.
+A manual-end cut waits up to 5 minutes for its own transcript. Once that transcript has landed, the
+cut waits for eligible predecessor speech only within 45 seconds of the cut. A held cut keeps its
+window open and unlocked and defers later speech and cuts until the next pass. The builder schedules
+a wake at the hold deadline. Set the switch to `off` on the v3 builder to restore the previous cut and
+silence rules. Rows already written keep their boundaries.
 
 `CONVERSATIONS_V3_FINISH_NO_POINTER` defaults to `on`. When the existing in-progress
 recording lookup misses, an authenticated v3 owner's Finish can acknowledge the

@@ -50,7 +50,7 @@ def attach(coll, recordings, existing):
     """Name the earlier generations of a fresh Finish's capture whose batch transcript has not landed.
 
     Runs only for a loaded manual-end recording that has a capture origin, whose cut is within
-    ``policy.FINISH_WAIT`` and not yet settled into a locked conversation: one read of at most
+    its applicable wait and not yet settled into a locked conversation: one read of at most
     ``FINISH_PREDECESSOR_LIMIT`` metadata-only documents per such recording and pass. The planner holds
     the cut only for those that join the finished speech (``outline._held_cuts``); they never become
     sources here.
@@ -65,7 +65,7 @@ def attach(coll, recordings, existing):
             or not cut
             or not start
             or origin is None
-            or now - cut >= policy.FINISH_WAIT
+            or now - cut >= policy.finish_wait(row)
             or _cut_applied(row, existing)
         ):
             continue
