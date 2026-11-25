@@ -150,11 +150,27 @@ async function evaluateHead({github, context, headSha}) {
       ...repo,state:'open',base:'main',per_page:100,
     })).filter(p => p.head.sha === sha);
     const prs = await sameHead();
-    let allowed = prs.length > 0;
-    for (const summary of prs) {
+    // An issue-comment run can be for a stacked PR. Its lane base is not
+    // release scope: compare main to the locked head so inherited UI changes
+    // and authors still count. Existing main-target PRs always take precedence.
+    const stack = prs.length === 0 && trigger.state === 'open'
+      && trigger.base.ref !== 'main' && trigger.head.sha === sha;
+    const readMain = async () => {
+      const {data} = await github.rest.git.getRef({...repo,ref:'heads/main'});
+      if (!/^[a-f0-9]{40}$/.test(data.object?.sha || '')) throw new Error('Invalid main snapshot');
+      return data.object.sha;
+    };
+    const main = stack ? await readMain() : null;
+    const candidates = stack ? [trigger] : prs;
+    let allowed = candidates.length > 0;
+    for (const summary of candidates) {
       const pr = (await github.rest.pulls.get({...repo,pull_number:summary.number})).data;
-      if (pr.head.sha !== sha || pr.base.ref !== 'main') throw new Error('PR snapshot changed');
-      const {files,commits} = await evidence(github,repo,pr);
+      if (pr.state !== 'open' || pr.head.sha !== sha || pr.base.ref !== summary.base.ref
+        || pr.base.sha !== summary.base.sha || (!stack && pr.base.ref !== 'main')) {
+        throw new Error('PR snapshot changed');
+      }
+      const target = stack ? {...pr,base:{ref:'main',sha:main}} : pr;
+      const {files,commits} = await evidence(github,repo,target);
       const comments = await github.paginate(github.rest.issues.listComments, {
         ...repo,issue_number:pr.number,per_page:100,
       });
@@ -175,11 +191,19 @@ async function evaluateHead({github, context, headSha}) {
           + 'Non-UI work and unrelated access are unaffected.'});
       }
     }
+    if (stack) {
+      const current = (await github.rest.pulls.get({...repo,pull_number})).data;
+      if (current.state !== 'open' || current.head.sha !== sha || current.base.ref !== trigger.base.ref
+        || current.base.sha !== trigger.base.sha || await readMain() !== main) {
+        throw new Error('Stack or main moved during verification');
+      }
+    }
     const latest = await sameHead();
     const signature = list => list.map(p => `${p.number}:${p.base.sha}`).sort().join(',');
     if (signature(latest) !== signature(prs)) throw new Error('PR set changed during verification');
     await status(allowed ? 'success' : 'failure',allowed
-      ? 'UI approval satisfied or not required on all same-head PRs'
+      ? stack ? 'UI approval satisfied or not required for stacked PR compared with main'
+        : 'UI approval satisfied or not required on all same-head PRs'
       : 'Waiting for Nik or David approval on affected same-head PRs');
   } catch (error) {
     await status('failure','Unable to verify UI approval; see workflow logs');

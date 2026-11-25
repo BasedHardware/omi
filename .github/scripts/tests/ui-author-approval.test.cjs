@@ -87,6 +87,67 @@ test('another opener sharing SHA cannot clear the actor PR requirement', async (
   f.comments[1].push(approve);
   await run(f); assert.equal(f.statuses.at(-1).state,'success');
 });
+function stackFixture() {
+  const f = fixture();
+  f.p.base = {ref:'lane/firestore',sha:'b'.repeat(40)};
+  f.context.payload = {issue:{number:1,pull_request:{}}};
+  const main = 'c'.repeat(40);
+  f.github.rest.git = {getRef:async ({ref}) => {
+    assert.equal(ref,'heads/main');
+    return {data:{object:{sha:main}}};
+  }};
+  const paginate = f.github.paginate;
+  f.github.paginate = (method,args) => method === 'prs'
+    ? Promise.resolve(f.prs.filter(p => p.base.ref === args.base).map(p => ({...p})))
+    : paginate(method,args);
+  return {...f,main,headSha:f.p.head.sha};
+}
+test('stacked non-UI PR clears approval using the immutable diff against main', async () => {
+  const f = stackFixture();
+  f.github.rest.repos.compareCommitsWithBasehead = async args => {
+    f.calls.push(args);
+    return {data:{files:[{filename:'backend/router.py'}],commits:[],total_commits:0}};
+  };
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'success');
+  assert.equal(f.calls[0].basehead,`${f.main}...${f.headSha}`);
+  assert.equal(f.comments[1].length,0);
+});
+test('stacked UI inherited from the lane still requires approval at the exact head', async () => {
+  const f = stackFixture();
+  await run(f);
+  assert.equal(f.calls[0].basehead,`${f.main}...${f.headSha}`);
+  assert.equal(f.statuses.at(-1).state,'failure');
+  f.comments[1].push(approve);
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'success');
+});
+test('a main-target PR sharing the stack head takes precedence over stack approval', async () => {
+  const f = stackFixture();
+  f.prs.push({...f.p,number:2,base:{ref:'main',sha:f.main}});
+  f.comments[1].push(approve);
+  f.comments[2] = [];
+  f.github.rest.git.getRef = async () => assert.fail('stack fallback used despite a main PR');
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'failure');
+});
+test('stack approval refuses if main or the lane moves during verification', async () => {
+  for (const moved of ['main','lane']) {
+    const f = stackFixture();
+    f.comments[1].push(approve);
+    const compare = f.github.rest.repos.compareCommitsWithBasehead;
+    f.github.rest.repos.compareCommitsWithBasehead = args => {
+      if (moved === 'main') {
+        f.github.rest.git.getRef = async () => ({data:{object:{sha:'d'.repeat(40)}}});
+      } else {
+        f.prs[0] = {...f.p,base:{...f.p.base,sha:'d'.repeat(40)}};
+      }
+      return compare(args);
+    };
+    await assert.rejects(run(f),/moved during verification/);
+    assert.equal(f.statuses.at(-1).state,'failure');
+  }
+});
 test('all evidence is immutable across H -> B -> H movement', async () => {
   const f = fixture();
   f.github.rest.pulls.listFiles = () => {throw new Error('mutable files forbidden');};
