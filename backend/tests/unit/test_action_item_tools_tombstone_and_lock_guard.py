@@ -194,17 +194,21 @@ class TestActionItemsToolServiceLockAndTombstoneGuards:
         assert 'Locked page 1 item A' not in out
         assert [s['source_id'] for s in source_sink] == ['active-1', 'active-2']
 
-    def test_get_action_items_text_returns_fixed_message_on_db_error(self, patched_env, monkeypatch):
+    def test_get_action_items_text_returns_fixed_message_on_db_error(self, patched_env, monkeypatch, caplog):
         def failing_get_action_items(**kwargs):
             raise RuntimeError('internal firestore detail: projects/secret-project/databases/(default)')
 
         monkeypatch.setattr(service.action_items_db, 'get_action_items', failing_get_action_items)
 
-        out = service.get_action_items_text('uid-1')
+        with caplog.at_level('ERROR'):
+            out = service.get_action_items_text('uid-1')
 
         assert out == 'Error retrieving action items. Please try again.'
         assert 'secret-project' not in out
         assert 'internal firestore detail' not in out
+        assert 'secret-project' not in caplog.text
+        assert 'internal firestore detail' not in caplog.text
+        assert 'RuntimeError' in caplog.text
 
     def test_update_action_item_text_rejects_deleted_tombstone(self, patched_env, monkeypatch):
         monkeypatch.setattr(

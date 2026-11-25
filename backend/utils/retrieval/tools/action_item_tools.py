@@ -307,7 +307,7 @@ def get_action_items_tool(
 
         logger.info(f"🔍 Database call completed - received {len(action_items)} visible items")
     except Exception as e:
-        logger.error(f"❌ Error getting action items: {e}", exc_info=True)
+        logger.error("get_action_items_tool failed uid=%s (error_type=%s)", uid, type(e).__name__)
         return "Error retrieving action items. Please try again."
 
     overflow_visible = len(action_items) > limit

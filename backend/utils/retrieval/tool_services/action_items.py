@@ -112,7 +112,7 @@ def get_action_items_text(
                 break
             scan_offset += len(raw_page)
     except Exception as e:
-        logger.error(f"get_action_items_text error: {e}", exc_info=True)
+        logger.error("get_action_items_text failed uid=%s (error_type=%s)", uid, type(e).__name__)
         return "Error retrieving action items. Please try again."
 
     action_items = action_items[:limit]
@@ -229,17 +229,17 @@ def create_action_item_text(
                     deleted=bool(created_item.get('deleted')),
                 )
             except Exception as notif_error:
-                logger.error(f"Failed to send notification: {notif_error}")
+                logger.error("Failed to send notification (error_type=%s)", type(notif_error).__name__)
 
         try:
             send_action_item_created_notification(uid, task_desc)
         except Exception as notif_error:
-            logger.error(f"Failed to send creation notification: {notif_error}")
+            logger.error("Failed to send creation notification (error_type=%s)", type(notif_error).__name__)
 
         return result
 
     except Exception as e:
-        logger.error(f"create_action_item_text error: {e}")
+        logger.error("create_action_item_text failed uid=%s (error_type=%s)", uid, type(e).__name__)
         return f"Error creating action item: {e}"
 
 
@@ -310,7 +310,7 @@ def update_action_item_text(
             try:
                 send_action_item_completed_notification(uid, updated_item.get('description', 'Task'))
             except Exception as notif_error:
-                logger.error(f"Failed to send completion notification: {notif_error}")
+                logger.error("Failed to send completion notification (error_type=%s)", type(notif_error).__name__)
 
         # Reconcile the scheduled reminder to match the new state — cancel on completion, (re)schedule
         # only for an open task with a due date (#5085). A rename re-arms it with the new title.
@@ -326,11 +326,11 @@ def update_action_item_text(
                     deleted=bool(updated_item.get('deleted')),
                 )
             except Exception as notif_error:
-                logger.error(f"Failed to sync action item reminder: {notif_error}")
+                logger.error("Failed to sync action item reminder (error_type=%s)", type(notif_error).__name__)
 
         task_desc = update_data.get('description', existing.get('description', 'Task'))
         return f"✅ Updated '{task_desc}': {', '.join(changes)}"
 
     except Exception as e:
-        logger.error(f"update_action_item_text error: {e}")
+        logger.error("update_action_item_text failed uid=%s (error_type=%s)", uid, type(e).__name__)
         return f"Error updating action item: {e}"
