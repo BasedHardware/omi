@@ -2,6 +2,7 @@
 
 from config import record_partial
 import hashlib
+import os
 
 BARRIER_NOT_CLOSED = 'capture upload/finalization barrier not closed'
 
@@ -16,6 +17,11 @@ def record_identity(uid: str, conversation_id: str) -> tuple[str, str]:
 def restore_pending(row: dict, *obligations: dict) -> bool:
     """Registration precedes restore metadata; only that origin fences revival."""
     return bool(row.get('discarded') and any(job.get('registration_origin') == 'restore' for job in obligations))
+
+
+def barrier_cause_metrics_enabled() -> bool:
+    """RECORD_BARRIER_CAUSE_METRICS kill switch: the cause counters only, never admission."""
+    return os.getenv('RECORD_BARRIER_CAUSE_METRICS', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
 
 
 BARRIER_BLOCKERS = (

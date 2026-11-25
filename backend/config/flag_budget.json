@@ -26,11 +26,6 @@
   "seed_review_by": "2026-11-15",
   "budget": 159,
   "names": {
-    "RECORD_BARRIER_CAUSE_METRICS": {
-      "owner": "barrier-lead / SCA-3748",
-      "review_by": "2026-12-23",
-      "reason": "Metrics-only kill switch for barrier cause counters; Goal: Pipeline DESIGN review 2026-11-25"
-    },
     "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED": {
       "owner": "batch-custody / lead2",
       "review_by": "2026-12-16",

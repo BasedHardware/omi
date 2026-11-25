@@ -28,6 +28,7 @@ from config.record_audio import (
     BARRIER_BLOCKERS,
     BARRIER_NOT_CLOSED,
     TOKEN_KINDS,
+    barrier_cause_metrics_enabled,
     record_identity,
     require_record_audio_barrier,
 )
@@ -111,11 +112,6 @@ _RETRY_REASONS = frozenset(
         'work identity must match projection binding',
     }
 )
-
-
-def barrier_cause_metrics_enabled() -> bool:
-    """Kill switch for the cause counter only; admission is never affected."""
-    return os.getenv('RECORD_BARRIER_CAUSE_METRICS', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
 
 
 def _observe_barrier_refusal(counter, error) -> None:
