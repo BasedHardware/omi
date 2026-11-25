@@ -45,6 +45,7 @@ class FakeCloud:
         self.writes = []
         self.polls = 0
         self.reads = 0
+        self.stale_readbacks = 0
         self.baseline_requests = 0
         self.traffic = [
             {'type': promotion.REVISION, 'revision': OLD, 'tag': 'stable', 'percent': 100},
@@ -91,6 +92,19 @@ class FakeCloud:
             if self.scenario == 'foreign_generation' and self.reads == 4:
                 self.generation += 1
             doc = self.service()
+            if len(self.writes) == 1 and (
+                self.scenario == 'readback_stuck' or (self.scenario == 'readback_settles' and self.stale_readbacks < 2)
+            ):
+                self.stale_readbacks += 1
+                doc['observedGeneration'] = '1'
+                doc['reconciling'] = True
+                doc['terminalCondition']['state'] = 'CONDITION_RECONCILING'
+                doc['trafficStatuses'] = [
+                    {'type': promotion.REVISION, 'revision': OLD, 'tag': 'stable', 'percent': 100},
+                    {'type': promotion.LATEST, 'revision': OLD, 'tag': 'latest-probe'},
+                ]
+            if self.writes and self.scenario == 'terminal_reconciliation_failure':
+                doc['terminalCondition']['state'] = 'CONDITION_FAILED'
         elif url == f'{promotion.RUN_API}{promotion.SERVICE}/revisions/{NEW}':
             assert method == 'GET'
             name = f'{promotion.SERVICE}/revisions/{NEW}'
@@ -261,6 +275,8 @@ def test_promote_records_verified_stages_and_total_duration(tmp_path, monkeypatc
         ('wrong_weight', 'observed_traffic_drift'),
         ('operation_failure', 'traffic_operation_failed'),
         ('candidate_loses_readiness', 'candidate_revision_not_ready'),
+        ('terminal_reconciliation_failure', 'service_not_ready'),
+        ('readback_stuck', 'traffic_readback_timeout'),
     ],
 )
 def test_stage_refusals_do_not_advance_or_retry_a_write(tmp_path, monkeypatch, scenario, error):
@@ -285,6 +301,35 @@ def test_slow_healthy_metrics_fit_under_stage_deadline(tmp_path, monkeypatch):
     # First bucket is ready at 330s. Eight serial 9s calls would miss 360s.
     assert receipt['stages'][0]['health_verified_at'] == promotion.iso(1_800_000_339)
     assert [row['weights'][NEW] for row in receipt['stages']] == [10, 50, 90, 100]
+
+
+def test_read_only_poll_waits_for_exact_convergence_without_repeating_patch(tmp_path, monkeypatch):
+    rollout = controller(tmp_path, monkeypatch, 'readback_settles')
+    rollout.run()
+
+    receipt = json.loads(rollout.path.read_text())
+    assert rollout.transport.stale_readbacks == 2
+    assert len(rollout.transport.writes) == 4
+    assert receipt['stages'][0]['verified_at'] == promotion.iso(1_800_000_015)
+    assert receipt['outcome'] == 'promoted'
+
+
+def test_guard_keeps_bucket_selected_before_freshness_boundary(tmp_path, monkeypatch):
+    rollout = controller(tmp_path, monkeypatch, 'pass')
+    rollout.clock.sleep(269)
+    healthy = {'requests': 500, 'errors': 0, 'p95_ms': 100}
+
+    def slow_collection(revisions, end, deadline, *, include_capacity):
+        assert end == 1_800_000_000
+        assert include_capacity
+        rollout.clock.sleep(9)
+        return healthy, healthy, healthy
+
+    monkeypatch.setattr(rollout, 'collect_health', slow_collection)
+    row = {}
+    rollout.guard(row, 1_799_999_880, healthy, healthy, rollout.clock.monotonic() + 20)
+    assert row['sample_end'] == promotion.iso(1_800_000_000)
+    assert row['health_verified_at'] == promotion.iso(1_800_000_278)
 
 
 def test_metric_collection_timeout_cannot_advance_stage(tmp_path, monkeypatch):

@@ -232,6 +232,20 @@ def test_global_lock_and_closed_default_remain_unchanged():
     assert selected() == SERVICES
 
 
+def test_production_promotion_budget_uses_the_same_timeout_as_the_runner_step():
+    workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend.yml').read_text())
+    deploy = workflow['jobs']['deploy']
+    start, _, stack, *_ = deploy['steps']
+    assert start['id'] == 'deploy-start'
+    assert 'time.monotonic()' in start['run']
+    assert '&& 90 || 360' in deploy['env']['DEPLOY_STACK_TIMEOUT_MINUTES']
+    assert stack['timeout-minutes'] == '${{ fromJSON(env.DEPLOY_STACK_TIMEOUT_MINUTES) }}'
+    assert stack['env']['DEPLOY_STACK_STARTED'] == '${{ steps.deploy-start.outputs.monotonic }}'
+    shift = step('Shift Cloud Run traffic to validated revisions')['run']
+    assert '--workflow-started "$DEPLOY_STACK_STARTED"' in shift
+    assert '--workflow-timeout-minutes "$DEPLOY_STACK_TIMEOUT_MINUTES"' in shift
+
+
 def test_step_census_refuses_an_unclassified_new_step():
     import hashlib
 

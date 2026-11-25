@@ -49,6 +49,7 @@ LATEST = 'TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST'
 REVISION_NAME = re.compile(r'backend-[a-z0-9](?:[a-z0-9-]{0,53}[a-z0-9])?')
 STAGES = (10, 50, 90, 100)
 ROUTING_SECONDS = 120
+ROUTING_POLL_SECONDS = 5
 STAGE_SECONDS = 360
 BASELINE_SECONDS = 60
 # Reserve time for sibling moves, serving verification, smoke and snapshot restore.
@@ -88,14 +89,20 @@ def tag_targets(rows):
     }
 
 
-def verify_service(doc, candidate, inverse, expected, tags, uid=None, generation=None):
+def verify_service(doc, candidate, inverse, expected, tags, uid=None, generation=None, *, previous=None):
     require(doc.get('name') == SERVICE and bool(doc.get('uid')), 'service_identity_invalid')
     require(uid is None or doc['uid'] == uid, 'service_replaced')
     actual_generation = doc.get('generation', '')
     require(isinstance(actual_generation, str) and actual_generation.isdigit(), 'generation_missing')
     require(generation is None or actual_generation == generation, 'generation_drift')
-    require(actual_generation == doc.get('observedGeneration') and not doc.get('reconciling'), 'generation_unobserved')
-    require(doc.get('terminalCondition', {}).get('state') == 'CONDITION_SUCCEEDED', 'service_not_ready')
+    observed_generation = doc.get('observedGeneration')
+    terminal = doc.get('terminalCondition', {}).get('state')
+    if previous is None:
+        require(actual_generation == observed_generation and not doc.get('reconciling'), 'generation_unobserved')
+        require(terminal == 'CONDITION_SUCCEEDED', 'service_not_ready')
+    else:
+        require(observed_generation in (actual_generation, previous['generation']), 'generation_unobserved')
+        require(terminal in ('CONDITION_SUCCEEDED', 'CONDITION_PENDING', 'CONDITION_RECONCILING'), 'service_not_ready')
     require(isinstance(doc.get('etag'), str) and bool(doc['etag']), 'etag_missing')
     prefix = f'{SERVICE}/revisions/'
     latest_ready = doc.get('latestReadyRevision')
@@ -109,8 +116,20 @@ def verify_service(doc, candidate, inverse, expected, tags, uid=None, generation
     weights, resolved_tags = routing(desired, latest)
     current_tags = tag_targets(desired)
     require(weights == expected and (tags is None or current_tags == tags), 'requested_traffic_drift')
-    require(routing(doc.get('trafficStatuses')) == (expected, resolved_tags), 'observed_traffic_drift')
-    return latest, current_tags
+    observed_weights, observed_tags = routing(doc.get('trafficStatuses'))
+    if previous is not None:
+        prior_weights, prior_tags = routing(previous['trafficStatuses'])
+        require(observed_weights in (expected, prior_weights), 'observed_traffic_drift')
+        require(observed_tags in (resolved_tags, prior_tags), 'observed_traffic_drift')
+    else:
+        require((observed_weights, observed_tags) == (expected, resolved_tags), 'observed_traffic_drift')
+    settled = (
+        observed_generation == actual_generation
+        and not doc.get('reconciling')
+        and terminal == 'CONDITION_SUCCEEDED'
+        and (observed_weights, observed_tags) == (expected, resolved_tags)
+    )
+    return latest, current_tags, settled
 
 
 def verify_snapshot(path, candidate, inverse, scope):
@@ -227,13 +246,20 @@ class Promotion:
             'operation_name_invalid',
         )
         while operation.get('done') is not True:
-            self.pause(5, deadline)
+            self.pause(ROUTING_POLL_SECONDS, deadline)
             operation = self.request('GET', RUN_API + name, deadline)
         require('error' not in operation and isinstance(operation.get('response'), dict), 'traffic_operation_failed')
-        landed = self.service(deadline)
-        latest, _ = verify_service(
-            landed, self.candidate, self.inverse, weights, tags, current['uid'], str(int(current['generation']) + 1)
-        )
+        generation = str(int(current['generation']) + 1)
+        while True:
+            landed = self.service(deadline)
+            latest, _, settled = verify_service(
+                landed, self.candidate, self.inverse, weights, tags, current['uid'], generation, previous=current
+            )
+            if settled:
+                break
+            # A completed write can precede serving convergence. Only re-read the service.
+            require(self.clock.monotonic() + ROUTING_POLL_SECONDS < deadline, 'traffic_readback_timeout')
+            self.clock.sleep(ROUTING_POLL_SECONDS)
         # The aggregate can lag even after the exact traffic vector has converged.
         # The workflow's final serving-vector check still requires it to advance.
         if latest == self.inverse:
@@ -361,6 +387,8 @@ class Promotion:
             delay = end + METRIC_LAG - self.clock.time()
             if delay > 0:
                 self.pause(delay, deadline)
+            # Bound freshness at selection. The exact bucket and collection deadline are checked separately.
+            require(METRIC_LAG <= self.clock.time() - end <= METRIC_LAG + 60, 'stale_health_sample')
             try:
                 candidate, inverse, ingress = self.collect_health(
                     (self.candidate, self.inverse, None), end, deadline, include_capacity=True
@@ -369,7 +397,6 @@ class Promotion:
                 self.pause(MISSING_SAMPLE_RETRY_SECONDS, deadline)
                 continue
             break
-        require(METRIC_LAG <= self.clock.time() - end <= METRIC_LAG + 60, 'stale_health_sample')
         row.update(sample_end=iso(end), candidate_health=candidate, inverse_health=inverse, ingress_health=ingress)
         self.record()
         self.check_health(inverse, baseline)
@@ -388,7 +415,7 @@ class Promotion:
             deadline = self.clock.monotonic() + BASELINE_SECONDS
             expected = {self.inverse: 100}
             initial = self.service(deadline)
-            _, tags = verify_service(initial, self.candidate, self.inverse, expected, None)
+            _, tags, _ = verify_service(initial, self.candidate, self.inverse, expected, None)
             # Select a fresh bucket at the start of the bounded batch. Transport
             # time does not age out a bucket selected near a minute boundary.
             baseline_end = int((self.clock.time() - METRIC_LAG) // 60) * 60
