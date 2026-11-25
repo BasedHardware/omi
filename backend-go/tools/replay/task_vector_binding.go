@@ -13,6 +13,8 @@ import (
 
 var replayTaskID = regexp.MustCompile(`^[a-zA-Z0-9]{20}$`)
 
+const notesOutputHashPath = "/conversation/notes_llm_output_hash"
+
 type taskBinding struct {
 	path                         string
 	item, task, vector, metadata map[string]any
@@ -138,15 +140,27 @@ func singleTaskBinding(run *observation) (taskBinding, bool) {
 // clock is already witnessed by the task and vector proof. Require complete
 // output parity after excluding only that clock, and independently recompute
 // both stored receipts using the serving Structured model before labeling.
+func notesOutputDigestMatches(run *observation) bool {
+	output, err := hex.DecodeString(run.ObservedNotesOutput)
+	return err == nil && len(output) == sha256.Size && documentField(run, "notes_llm_output_hash") == run.ObservedNotesOutput
+}
+
 func notesReceiptOutput(run *observation, itemWithoutClock map[string]any) map[string]any {
 	raw, ok := documentField(run, "structured").(map[string]any)
-	output, err := hex.DecodeString(run.ObservedNotesOutput)
-	if !ok || err != nil || len(output) != sha256.Size || documentField(run, "notes_llm_output_hash") != run.ObservedNotesOutput {
+	if !ok || !notesOutputDigestMatches(run) {
 		return nil
 	}
 	structured := maps.Clone(raw)
 	structured["action_items"] = []any{itemWithoutClock}
 	return structured
+}
+
+func validateNotesOutputDigest(diffs *[]difference, side string, run *observation) {
+	if !notesOutputDigestMatches(run) {
+		markSyncWriteFailure(diffs, "notes_output_digest_unverified", side+notesOutputHashPath, func(path string) bool {
+			return path == notesOutputHashPath || strings.HasPrefix(path, notesOutputHashPath+"/")
+		})
+	}
 }
 
 func sameNotesReceiptExceptTaskClock(py, goRun *observation, binding taskBinding) bool {
@@ -192,7 +206,7 @@ func reviewSingleTaskBinding(diffs []difference, python, goRun *observation) boo
 			diffs[i].Reason = "generated_identity"
 		case d.Kind == "different_value":
 			switch d.Path {
-			case "/conversation/notes_llm_output_hash":
+			case notesOutputHashPath:
 				if sameNotesReceiptExceptTaskClock(python, goRun, py) {
 					diffs[i].Reason = "replay_clock"
 				}

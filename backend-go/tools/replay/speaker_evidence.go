@@ -97,30 +97,76 @@ func observedSpeakerPayload(run *observation, path string) []byte {
 
 // Approved for the synthetic capture-only corpus. A trace is emitted by the
 // actual resolver and evidence builder independently of the stored result.
-func reviewSpeakerDifferences(diffs []difference, py, goRun *observation) {
+func reviewSpeakerDifferences(diffs *[]difference, py, goRun *observation) {
 	if py.ConversationID == "" || strings.ContainsAny(py.ConversationID, "/~") || py.OwnerID != "replay-"+py.ConversationID || goRun.OwnerID != py.OwnerID || goRun.ConversationID != py.ConversationID {
 		return
 	}
-	diag := measuredResolver(py)
-	equalTime := diag != nil && equalReplayValue(diag, measuredResolver(goRun))
+	pyDiag, goDiag := measuredResolver(py), measuredResolver(goRun)
 	doc := "users/" + py.OwnerID + "/conversations/" + py.ConversationID + "/speaker_evidence/current"
-	evidencePath := "/derived_documents/" + strings.ReplaceAll(doc, "/", "~1") + "/payload"
-	for i, d := range diffs {
+	docPath := "/derived_documents/" + escapePointer(doc)
+	if expectsResolverWitness(py) || expectsResolverWitness(goRun) {
+		validateResolverWitness(diffs, "/python", pyDiag)
+		validateResolverWitness(diffs, "/go", goDiag)
+	}
+	var pyPayload, goPayload []byte
+	_, pyStored := py.Derived[doc]
+	_, goStored := goRun.Derived[doc]
+	// Unsampled shadow processing can build evidence without persisting it.
+	if pyStored || goStored {
+		pyPayload, goPayload = observedSpeakerPayload(py, doc), observedSpeakerPayload(goRun, doc)
+		validateSpeakerEnvelope(diffs, "/python", docPath, pyPayload)
+		validateSpeakerEnvelope(diffs, "/go", docPath, goPayload)
+	}
+	for i, d := range *diffs {
 		if d.Kind != "different_value" || d.Reason != "" {
 			continue
 		}
 		switch d.Path {
-		case "/conversation/owner_recognition_diagnostics/first_resolver/elapsed_seconds", "/conversation/owner_recognition_diagnostics/current_resolver/elapsed_seconds":
-			if equalTime {
-				diffs[i].Reason = "replay_clock"
+		case resolverPath + "/first_resolver/elapsed_seconds", resolverPath + "/current_resolver/elapsed_seconds":
+			if pyDiag != nil && equalReplayValue(pyDiag, goDiag) {
+				(*diffs)[i].Reason = "replay_clock"
 			}
-		case evidencePath:
-			p := observedSpeakerPayload(py, doc)
-			if p != nil && bytes.Equal(p, observedSpeakerPayload(goRun, doc)) {
-				diffs[i].Reason = "encrypted_envelope"
+		case docPath + "/payload":
+			if pyPayload != nil && bytes.Equal(pyPayload, goPayload) {
+				(*diffs)[i].Reason = "encrypted_envelope"
 			} else {
-				diffs[i].FailureReason = "speaker_envelope_unverified"
+				(*diffs)[i].FailureReason = "speaker_envelope_unverified"
 			}
 		}
+	}
+}
+
+const resolverPath = "/conversation/owner_recognition_diagnostics"
+
+func expectsResolverWitness(run *observation) bool {
+	if documentField(run, "private_cloud_sync_enabled") == false &&
+		objectField(documentField(run, "speaker_resolution"), "status") == "capture" {
+		return true
+	}
+	diag := documentField(run, "owner_recognition_diagnostics")
+	for _, field := range []string{"first_resolver", "current_resolver"} {
+		reason := objectField(objectField(diag, field), "reason")
+		if reason == "private_cloud_disabled" || reason == "empty_transcript" {
+			return true
+		}
+	}
+	return false
+}
+
+func validateResolverWitness(diffs *[]difference, side string, diag map[string]any) {
+	if diag == nil {
+		markSyncWriteFailure(diffs, "speaker_resolver_unverified", side+resolverPath+"/current_resolver/elapsed_seconds", func(path string) bool {
+			return path == resolverPath || strings.HasPrefix(path, resolverPath+"/first_resolver/") ||
+				strings.HasPrefix(path, resolverPath+"/current_resolver/") ||
+				path == resolverPath+"/first_resolver" || path == resolverPath+"/current_resolver"
+		})
+	}
+}
+
+func validateSpeakerEnvelope(diffs *[]difference, side, docPath string, payload []byte) {
+	if payload == nil {
+		markSyncWriteFailure(diffs, "speaker_envelope_unverified", side+docPath+"/payload", func(path string) bool {
+			return path == docPath || strings.HasPrefix(path, docPath+"/")
+		})
 	}
 }

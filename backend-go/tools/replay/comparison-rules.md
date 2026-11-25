@@ -54,6 +54,9 @@ other task or vector write may be present in the evidence. Missing or
 contradictory evidence stays a Go gap. Negative checks cover multiple tasks,
 wrong vector-to-task binding, changed embedding input, and a missing vector.
 
+For the same fixture, each stored notes output digest must match that side's
+independently recomputed digest, including when the stored digests agree.
+
 ## Go coordination stamps
 
 The exact fields `go_sync_inline_fanout_epoch`, `go_sync_inline_fanout_revision`,
@@ -175,3 +178,8 @@ files a Python-bug issue with file-and-line evidence and a Done check.
 On the synthetic owner and conversation, compare both stored resolver snapshots to the single observed first-pass resolver exit on each side. The private-cloud flag must be false. A capture exit must refer to a capture resolution and the private-cloud-disabled reason. An empty exit must have absent resolution. Compare all other diagnostic fields and require each stored duration to match its own exit minus entry to within half a millisecond. The replay records the two monotonic clock reads in the resolver itself and rejects absent, duplicate or reversed readings. Only the two resolver elapsed fields can receive `replay_clock`.
 
 For `users/{owner}/conversations/{conversation}/speaker_evidence/current`, require exactly the version-1 envelope and payload fields. Authenticate each envelope using its fixture owner, decode the base64 and bounded complete zlib stream, and compare the plaintext byte for byte. Each plaintext SHA-256 must equal the single digest observed at that side's typed evidence builder. Only the ciphertext payload can receive `encrypted_envelope`. Missing documents, corrupt envelopes and divergent evidence stay open.
+
+Each side must provide its own resolver witness for the scoped capture and empty
+resolver results. When either side stored a speaker evidence document, both sides
+must provide authenticated builder evidence, including for equal ciphertext.
+Unsampled shadow processing can build evidence without storing an envelope.

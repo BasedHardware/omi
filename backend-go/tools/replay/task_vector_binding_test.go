@@ -119,3 +119,31 @@ func TestNotesReceiptClockNeedsBothDigestsAndWholeStructuredOutput(t *testing.T)
 		}
 	}
 }
+
+func TestCopiedNotesReceiptFailsWithValidTaskBinding(t *testing.T) {
+	py, g := taskProofRun(strings.Repeat("A", 20)), taskProofRun(strings.Repeat("B", 20))
+	g.Admitted = &admission{Engine: "go"}
+	py.ObservedNotesOutput = strings.Repeat("a", 64)
+	g.ObservedNotesOutput = strings.Repeat("b", 64)
+	for _, run := range []*observation{py, g} {
+		row := mustMap(run.Document)
+		row["notes_llm_input_hash"] = strings.Repeat("c", 64)
+		row["notes_llm_output_hash"] = py.ObservedNotesOutput
+	}
+	stamp := mustMap(singleObject(objectField(documentField(g, "structured"), "action_items"))["created_at"])
+	stamp["$timestamp"] = g.Started.Add(time.Second + time.Nanosecond).Format(time.RFC3339Nano)
+
+	diffs, _ := compareObservationsForRun(py, g, nil, nil)
+	var clockAllowed, hashReported bool
+	for _, d := range diffs {
+		switch d.Path {
+		case "/conversation/structured/action_items/0/created_at/$timestamp":
+			clockAllowed = d.Reason == "generated_identity"
+		case "/go/conversation/notes_llm_output_hash":
+			hashReported = d.Kind == "invalid_binding" && d.Reason == ""
+		}
+	}
+	if !clockAllowed || !hashReported {
+		t.Fatalf("expected accepted task clock and a stale Go notes hash finding, got %+v", diffs)
+	}
+}

@@ -79,7 +79,12 @@ func reviewRuledSyncWrites(diffs *[]difference, python, goRun *observation) {
 			})
 		}
 	}
-	if goRun.ConversationID == "kept-with-effects" && !reviewSingleTaskBinding(*diffs, python, goRun) {
+	if goRun.ConversationID != "kept-with-effects" {
+		return
+	}
+	validateNotesOutputDigest(diffs, "/python", python)
+	validateNotesOutputDigest(diffs, "/go", goRun)
+	if !reviewSingleTaskBinding(*diffs, python, goRun) {
 		prefix := "/derived_documents/" + strings.ReplaceAll("users/"+goRun.OwnerID+"/action_items/", "/", "~1")
 		markSyncWriteFailure(diffs, "task_vector_proof_failed", "/go/task_vector", func(path string) bool {
 			return strings.HasPrefix(path, prefix) || strings.HasPrefix(path, "/effects/other_vectors/") ||

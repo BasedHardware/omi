@@ -79,7 +79,7 @@ func TestSpeakerClockRequiresRunAndWriteWitness(t *testing.T) {
 				mutate(g)
 			}
 			diffs := []difference{{Kind: "different_value", Path: clockPath}, {Kind: "different_value", Path: strings.Replace(clockPath, "current", "first", 1)}, {Kind: "different_value", Path: "/other/elapsed_seconds"}, {Kind: "missing_in_go", Path: clockPath}}
-			reviewSpeakerDifferences(diffs, py, g)
+			reviewSpeakerDifferences(&diffs, py, g)
 			for i, d := range diffs {
 				want := mutate == nil && i < 2
 				if (d.Reason == "replay_clock") != want {
@@ -121,7 +121,7 @@ func TestSpeakerCiphertextRequiresEqualAuthenticatedBuilderBytes(t *testing.T) {
 			}
 			path := "/derived_documents/" + strings.ReplaceAll(speakerDoc, "/", "~1") + "/payload"
 			diffs := []difference{{Kind: "different_value", Path: path}, {Kind: "different_value", Path: path + "2"}, {Kind: "missing_in_go", Path: path}}
-			reviewSpeakerDifferences(diffs, py, g)
+			reviewSpeakerDifferences(&diffs, py, g)
 			for i, d := range diffs {
 				want := mutate == nil && i == 0
 				if i == 0 && mutate != nil && d.FailureReason != "speaker_envelope_unverified" {
@@ -139,9 +139,48 @@ func TestSpeakerClockAcceptsOnlyStoredRounding(t *testing.T) {
 	py, g := captureRun(t, "0.4", 1), captureRun(t, "0.2", 2)
 	g.SpeakerTrace.ClockSeconds = []json.Number{"10", "10.200499"}
 	diff := []difference{{Kind: "different_value", Path: clockPath}}
-	reviewSpeakerDifferences(diff, py, g)
+	reviewSpeakerDifferences(&diff, py, g)
 	if diff[0].Reason != "replay_clock" {
 		t.Fatalf("valid rounded duration refused: %+v", diff[0])
+	}
+}
+
+func TestEqualSpeakerValuesStillRequireBothWitnesses(t *testing.T) {
+	py, g := captureRun(t, "0.2", 1), captureRun(t, "0.2", 1)
+	if diffs, _ := compareObservationsForRun(py, g, nil, nil); len(diffs) != 0 {
+		t.Fatalf("equal, witnessed capture yielded findings: %+v", diffs)
+	}
+	g.SpeakerTrace = nil
+	diffs, _ := compareObservationsForRun(py, g, nil, nil)
+	var resolverReported, envelopeReported bool
+	for _, d := range diffs {
+		if d.Kind != "invalid_binding" || d.Reason != "" {
+			continue
+		}
+		switch d.Path {
+		case "/go" + clockPath:
+			resolverReported = true
+		case "/go/derived_documents/" + escapePointer(speakerDoc) + "/payload":
+			envelopeReported = true
+		}
+	}
+	if !resolverReported || !envelopeReported {
+		t.Fatalf("expected findings for both missing Go witnesses, got %+v", diffs)
+	}
+}
+
+func TestUnsampledSpeakerBuilderNeedsResolverWitnessWithoutAnEnvelope(t *testing.T) {
+	py, g := captureRun(t, "0.2", 1), captureRun(t, "0.2", 1)
+	delete(py.Derived, speakerDoc)
+	delete(g.Derived, speakerDoc)
+	g.SpeakerTrace.Evidence = nil
+	if diffs, _ := compareObservationsForRun(py, g, nil, nil); len(diffs) != 0 {
+		t.Fatalf("unsampled builder yielded findings: %+v", diffs)
+	}
+	g.SpeakerTrace = nil
+	diffs, _ := compareObservationsForRun(py, g, nil, nil)
+	if len(diffs) != 1 || diffs[0].Path != "/go"+clockPath || diffs[0].FailureReason != "speaker_resolver_unverified" {
+		t.Fatalf("expected only the missing Go resolver witness, got %+v", diffs)
 	}
 }
 
