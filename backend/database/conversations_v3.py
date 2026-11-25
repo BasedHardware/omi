@@ -1448,7 +1448,7 @@ def claim_audio_purge(uid, rid, *, defer_intake_purge=False, firestore_client=No
                 tombstone,
                 {'conversation_id': rid, 'deleted_at': datetime.now(timezone.utc), 'created_at': row.get('created_at')},
             )
-        updates = {'deleted': True, 'v3_audio_erased': True}
+        updates: dict[str, Any] = {'deleted': True, 'v3_audio_erased': True}
         donors = row.get(AUDIO_PURGE_DONORS_FIELD) or []
         if custody:
             updates.update({field: firestore.DELETE_FIELD for field in AUDIO_PURGE_CUSTODY_FIELDS if field in row})
