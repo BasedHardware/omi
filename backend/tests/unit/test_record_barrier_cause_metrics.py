@@ -61,6 +61,13 @@ def test_refusal_keeps_type_and_message_and_names_first_failing_clause(patch, bl
     assert blocker in record_audio.BARRIER_BLOCKERS and kind in record_audio.TOKEN_KINDS
 
 
+@pytest.mark.parametrize('owner', [['x'], {'a': 1}])
+def test_malformed_owner_keeps_the_original_value_error(owner):
+    error = refusal({**CLOSED, 'status': 'in_progress', 'record_lane_owner': owner})
+    assert type(error) is ValueError and str(error) == BARRIER_NOT_CLOSED
+    assert not hasattr(error, 'barrier_blocker')
+
+
 def test_staging_change_error_is_unchanged():
     with pytest.raises(ValueError, match='capture upload barrier changed during staging'):
         require_record_audio_barrier(CLOSED, expected={})

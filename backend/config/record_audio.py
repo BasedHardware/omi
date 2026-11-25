@@ -97,7 +97,12 @@ def require_record_audio_barrier(row, *, expected=None):
         error = ValueError(BARRIER_NOT_CLOSED)
         # Same type and message as before; the cause rides as attributes so
         # callers that compare str(error) or log type names are unchanged.
-        error.barrier_blocker, error.barrier_token_kind = barrier_blocker(row)
+        try:
+            error.barrier_blocker, error.barrier_token_kind = barrier_blocker(row)
+        except Exception:
+            # Malformed rows (e.g. an unhashable owner) must keep the exact
+            # refusal; counters report missing attributes as ``unknown``.
+            pass
         raise error
     if expected is not None and snapshot != expected:
         raise ValueError('capture upload barrier changed during staging')

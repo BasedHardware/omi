@@ -10,8 +10,10 @@ The barrier now attaches two closed-vocabulary attributes to the same plain
 `owner_other`, `status_not_completed`, `producer_tokens`, `upload_failed`,
 `partial_invalid`, `audio_not_closed`) and `barrier_token_kind` (the least
 releasable producer token in `record_upload_sessions`: `bare`, `podless`, `pod`,
-`abandoned`, `other`, or `none`). The decision, its clause order, the exception
-type and text, every catch site and every log line are unchanged.
+`abandoned`, `other`, or `none`). The blocker label uses its own fixed priority
+(owner first). The decision, the exception type and text, every catch site and
+every log line are unchanged. Classification never raises: on a malformed row the
+attributes are omitted and counted as `unknown`.
 
 The record drain counts them, from the row admission already read:
 
