@@ -54,13 +54,17 @@ void main() {
       r.headers.contentType = ContentType.json;
       if (request.uri.path.endsWith('/sync-capture-manifest')) {
         calls.add('manifest');
-        if (invite && request.headers.value('X-Omi-Wal-Retry') == handle) r.headers.set('X-Omi-Wal-Retry', 'check');
+        if (invite && request.headers.value('X-Omi-Wal-Retry') == handle) {
+          r.headers.set('X-Omi-Wal-Retry', 'check');
+        }
         r.write('{"manifest":"synthetic-manifest"}');
       } else if (request.method == 'PUT') {
         calls.add('probe');
         probeBytes.add(size);
         r.statusCode = probeStatus;
-        if (probeStatus != 204) r.write(probeBody);
+        if (probeStatus != 204) {
+          r.write(probeBody);
+        }
         probeMicros.add(timer.elapsedMicroseconds);
       } else {
         calls.add('multipart');
@@ -68,7 +72,9 @@ void main() {
         // Deterministic 2 MiB/s ingress service time for the synthetic replay.
         await Future<void>.delayed(Duration(microseconds: size * 1000000 ~/ (2 * 1024 * 1024)));
         r.statusCode = uploadStatus;
-        if (issueHandle) r.headers.set('X-Omi-Wal-Retry', handle);
+        if (issueHandle) {
+          r.headers.set('X-Omi-Wal-Retry', handle);
+        }
         r.write(switch (uploadStatus) {
           200 => '{"new_memories":[],"updated_memories":[]}',
           202 => '{"job_id":"queued-job","status":"queued","total_files":1,"total_segments":1,"poll_after_ms":20000}',
