@@ -2030,21 +2030,26 @@ class MemoryService:
         raise HTTPException(status_code=503, detail="Canonical memory unavailable")
 
     def _canonical_status(
-        self, uid: str, memory_id: str, *, budget: Optional[ListReadBudget] = None
+        self, uid: str, memory_id: str, *, budget: Optional[ListReadBudget] = None, canonical_absent: bool = False
     ) -> Optional[MemoryItemStatus]:
         """Read one canonical status to suppress historical identity collisions.
 
         A present item with a valid status is authority: do not read the override.
         A present but unparseable item or override is 503 (historical is never
         admitted). Both docs absent admits the historical row.
+
+        ``canonical_absent`` says the caller already observed the item document
+        absent under the same request budget, so this call skips the duplicate
+        read and resolves the receipt/override frontier directly.
         """
         client = self.db_client if self.db_client is not None else default_db_client
         try:
-            snapshot = budgeted_document_get(
-                client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"), budget
-            )
-            if getattr(snapshot, "exists", False) is True:
-                return self._present_item_status(snapshot)
+            if not canonical_absent:
+                snapshot = budgeted_document_get(
+                    client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"), budget
+                )
+                if getattr(snapshot, "exists", False) is True:
+                    return self._present_item_status(snapshot)
             receipt_id = privacy_deletion_receipt_id(uid, memory_id)
             receipt = budgeted_document_get(
                 client.document(f"{MemoryCollections(uid=uid).memory_deletion_receipts}/{receipt_id}"), budget
@@ -3436,14 +3441,17 @@ class MemoryService:
         *,
         device_scope_request: Optional[DeviceScopeRequest] = None,
         budget: Optional[ListReadBudget] = None,
+        canonical_absent: bool = False,
     ) -> MemoryDB:
         budget_kwargs: Dict[str, Any] = {"budget": budget} if budget is not None else {}
-        try:
-            item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client, **budget_kwargs)
-        except ListReadBudgetExhausted:
-            raise
-        except Exception as exc:
-            raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
+        item = None
+        if not canonical_absent:
+            try:
+                item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client, **budget_kwargs)
+            except ListReadBudgetExhausted:
+                raise
+            except Exception as exc:
+                raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
         if item is not None:
             if (
                 device_scope_request is not None
@@ -3455,7 +3463,7 @@ class MemoryService:
             if memory.is_locked:
                 raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
             return memory
-        status = self._canonical_status(uid, memory_id, **budget_kwargs)
+        status = self._canonical_status(uid, memory_id, canonical_absent=canonical_absent, **budget_kwargs)
         if status is not None:
             raise HTTPException(status_code=404, detail="Memory not found")
         record = self.history.get(uid, memory_id, **budget_kwargs)

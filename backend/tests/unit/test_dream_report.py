@@ -243,10 +243,10 @@ def test_spent_budget_stops_the_sequence_before_any_later_read(client, runtime, 
     assert elapsed < 5
 
 
-def test_stalled_eligibility_gate_answers_a_retryable_503(client, runtime, monkeypatch):
-    """Eligibility cannot be partially true, so a stalled gate is retryable, never 200/504."""
+def test_stalled_eligibility_gate_answers_a_truncated_200(client, runtime, monkeypatch):
+    """The gate is the path's first read: a budget trip answers 200 + header, never 504."""
     monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '0.25')
-    seed_owner(runtime, runs=[('only-run', datetime.now(timezone.utc), [])])
+    seed_owner(runtime, passes=2, dirty=1, runs=[('only-run', datetime.now(timezone.utc), [])])
     streams = []
     original_stream = dream_firestore.Query.stream
 
@@ -268,11 +268,71 @@ def test_stalled_eligibility_gate_answers_a_retryable_503(client, runtime, monke
     response = client.get('/v1/dream/runs')
     elapsed = time.monotonic() - started
 
-    assert response.status_code == 503
-    assert response.headers['retry-after'] == '5'
+    assert response.status_code == 200
+    assert response.headers['x-omi-list-truncated'] == 'true'
+    body = response.json()
+    # Nothing was projected past the stalled gate, and the truncated flag says so.
+    assert body['runs'] == [] and body['queued_changes'] == 0 and body['passes_today'] == 0
     # A stalled gate never starts the state read, run stream, or count.
     assert streams == []
     assert elapsed < 5
+
+
+def test_disabled_route_still_answers_404_before_any_read(client, runtime, monkeypatch):
+    """The truncation path must not turn a disabled route into an empty 200."""
+    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '0.25')
+    seed_owner(runtime)
+    monkeypatch.setattr(dream_report, 'mode', lambda: 'off')
+    response = client.get('/v1/dream/runs')
+    assert response.status_code == 404
+    assert 'x-omi-list-truncated' not in {key.lower() for key in response.headers}
+
+
+def test_memory_target_reads_the_canonical_document_once(client, runtime, monkeypatch):
+    """One canonical read decides the item and the fallback; no duplicate or third read."""
+    from utils.memory import canonical_memory_adapter
+    from utils.memory.memory_service import MemoryService
+    from database.memory_apply_store import privacy_deletion_receipt_id
+
+    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '2')
+    seed_owner(runtime, runs=[('memory-run', datetime.now(timezone.utc), ['memory_items/legacy-one'])])
+    original_read = canonical_memory_adapter.read_canonical_memory_item
+
+    def read_runtime_memory(uid, memory_id, **kwargs):
+        return original_read(uid, memory_id, db_client=runtime, **kwargs)
+
+    monkeypatch.setattr(dream_report.dream_reads, 'read_canonical_memory_item', read_runtime_memory)
+    monkeypatch.setattr(dream_report.dream_reads, 'MemoryService', lambda: MemoryService(db_client=runtime))
+
+    # The service reaches documents by string path; route those through the
+    # recording Document so the read count is the fake's real one.
+    def recording_document(path):
+        parts = path.split('/')
+        ref = runtime.collection(parts[0]).document(parts[1])
+        index = 2
+        while index < len(parts):
+            ref = ref.collection(parts[index]).document(parts[index + 1])
+            index += 2
+        return ref
+
+    monkeypatch.setattr(runtime, 'document', recording_document)
+    response = client.get('/v1/dream/runs')
+
+    assert response.status_code == 200
+    memory_collections = {'memory_items', 'memory_deletion_receipts', 'memory_historical_overrides', 'memories'}
+    memory_reads = [
+        path
+        for path in runtime.reads
+        if len(path) == 4 and path[:2] == ('users', UID) and path[2] in memory_collections
+    ]
+    # Exactly one canonical read, then the receipt/override frontier and the
+    # historical row — never a duplicate canonical get inside the fallback.
+    assert memory_reads == [
+        ('users', UID, 'memory_items', 'legacy-one'),
+        ('users', UID, 'memory_deletion_receipts', privacy_deletion_receipt_id(UID, 'legacy-one')),
+        ('users', UID, 'memory_historical_overrides', 'legacy-one'),
+        ('users', UID, 'memories', 'legacy-one'),
+    ]
 
 
 def test_report_reads_each_edit_target_once_per_run(client, runtime, monkeypatch):

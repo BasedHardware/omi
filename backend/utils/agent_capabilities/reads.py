@@ -153,19 +153,19 @@ def _read_memory_record(uid, key, *, require_available=False, budget=None):
 
     Under a request ``budget`` the canonical memory document — the one read a
     Dream-eligible owner's memory target takes — runs at the budget's per-RPC
-    timeout. The historical fallback used only for pre-canonical rows is gated
-    by the budget before it starts; its own adapter reads predate this seam.
+    timeout. The same read also decides whether the pre-canonical fallback is
+    admitted, so a canonical miss never re-reads the document; the fallback's
+    own receipt, override and historical reads take the budget too.
     """
     budget_check = budget.check if budget is not None else None
     budget_kwargs: dict[str, Any] = {'budget': budget} if budget is not None else {}
     try:
         if budget_check is not None:
             budget_check()
-        canonical = (
-            read_canonical_memory_item(uid, key, include_inactive=True, **budget_kwargs)
-            if require_available
-            else read_canonical_memory_item(uid, key, **budget_kwargs)
-        )
+        # One read serves both the item and the absence decision. The default
+        # visibility filter below already rejects a non-active row, so an
+        # inactive canonical item never admits the historical fallback.
+        canonical = read_canonical_memory_item(uid, key, include_inactive=True, **budget_kwargs)
         if canonical:
             # This is the complete terminal allowlist for canonical memory evidence.
             if require_available and (
@@ -183,7 +183,11 @@ def _read_memory_record(uid, key, *, require_available=False, budget=None):
                 return None
         if budget_check is not None:
             budget_check()
-        row = memory_item_to_memorydb(canonical) if canonical else MemoryService().fetch(uid, key, **budget_kwargs)
+        row = (
+            memory_item_to_memorydb(canonical)
+            if canonical
+            else MemoryService().fetch(uid, key, canonical_absent=True, **budget_kwargs)
+        )
     except HTTPException as exc:
         if require_available and exc.status_code == 402:
             raise AgentRecordUnavailable('Dream memory locked') from exc

@@ -155,6 +155,28 @@ def _bounded(budget, read, fallback, partial_attr='partial_snapshots'):
         return getattr(exc, partial_attr, fallback)
 
 
+def truncated_runs():
+    """The truncated response when the eligibility gate itself is cut short.
+
+    The gate is the first read on the path, so a stalled gate has no runs to
+    project. The route still answers 200 plus ``X-Omi-List-Truncated`` per the
+    contract; the feature/mode checks that disable the route run before any
+    read, so a disabled route still answers 404 rather than an empty list.
+    """
+    caps = Caps.from_env()
+    return DreamRunsResponse.model_validate(
+        dict(
+            mode=mode(),
+            passes_today=0,
+            passes_limit=caps.passes,
+            manual_runs_today=0,
+            manual_runs_limit=caps.manual_runs,
+            queued_changes=0,
+            runs=[],
+        )
+    )
+
+
 def list_runs(uid, limit, *, budget=None):
     """The owner's run history inside one request-scoped read budget.
 

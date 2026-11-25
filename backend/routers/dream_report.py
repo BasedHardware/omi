@@ -27,14 +27,17 @@ async def get_runs(
     # Every Firestore read on this path runs with the request budget's per-RPC
     # timeout and no retry, so one stalled op ends the list with the runs already
     # projected plus X-Omi-List-Truncated rather than a bodyless 90 s middleware
-    # 504. The eligibility gate cannot report partial eligibility, so its
-    # deadline is a retryable 503 instead. No docstring: the released OpenAPI
-    # description is pinned, and this route's wire contract does not change.
+    # 504. The eligibility gate is the path's first read, so a stalled gate is a
+    # budget trip with nothing projected: it answers the same truncated 200, not
+    # a 504. No docstring: the released OpenAPI description is pinned, and this
+    # route's wire contract does not change.
     budget = list_read_budget_for_request(request, route='GET /v1/dream/runs')
     try:
         await run_blocking(db_executor, dream_report.require_owner, uid, budget=budget)
     except ListReadBudgetExhausted:
-        raise HTTPException(503, detail='dream_report_unavailable', headers={'Retry-After': '5'}) from None
+        runs = dream_report.truncated_runs()
+        finish_list_budget(response, budget)
+        return runs
     runs = await run_blocking(db_executor, dream_report.list_runs, uid, limit, budget=budget)
     finish_list_budget(response, budget)
     return runs

@@ -217,9 +217,9 @@ async def test_read_reports_unavailable_and_keeps_the_sibling():
 
 
 def test_memory_http_exception_is_unavailable_and_visible_memory_remains(monkeypatch):
-    monkeypatch.setattr(reads, 'read_canonical_memory_item', lambda uid, key: None)
+    monkeypatch.setattr(reads, 'read_canonical_memory_item', lambda uid, key, **kwargs: None)
 
-    def fetch(self, uid, key):
+    def fetch(self, uid, key, **kwargs):
         raise HTTPException(404 if key == 'gone' else 503, 'Synthetic memory lifecycle')
 
     monkeypatch.setattr(reads.MemoryService, 'fetch', fetch)
@@ -242,16 +242,18 @@ def test_memory_http_exception_is_unavailable_and_visible_memory_remains(monkeyp
 
     monkeypatch.setattr(reads, 'filter_canonical_default_visible_items', lambda items, **kwargs: items)
     monkeypatch.setattr(reads, 'memory_item_to_memorydb', lambda item: Locked() if item == 'locked' else Visible())
-    monkeypatch.setattr(reads, 'read_canonical_memory_item', lambda uid, key: 'locked' if key == 'locked' else object())
+    monkeypatch.setattr(
+        reads, 'read_canonical_memory_item', lambda uid, key, **kwargs: 'locked' if key == 'locked' else object()
+    )
     assert reads.read_record('synthetic-search-owner', 'memory_items/visible')['content'] == 'Synthetic visible memory'
     assert reads.read_record('synthetic-search-owner', 'memory_items/locked') is None
 
 
 @pytest.mark.asyncio
 async def test_transient_memory_fault_stays_retryable_and_is_not_consumed(monkeypatch):
-    monkeypatch.setattr(reads, 'read_canonical_memory_item', lambda uid, key: None)
+    monkeypatch.setattr(reads, 'read_canonical_memory_item', lambda uid, key, **kwargs: None)
 
-    def fetch(self, uid, key):
+    def fetch(self, uid, key, **kwargs):
         raise HTTPException(404 if key == 'gone' else 503, 'Synthetic memory store')
 
     monkeypatch.setattr(reads.MemoryService, 'fetch', fetch)
