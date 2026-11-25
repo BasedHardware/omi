@@ -257,6 +257,7 @@ from utils.llm.chat import (
 from utils.llm.external_integrations import get_message_structure
 from utils.llm.clients import generate_embedding
 from utils.notifications import send_notification
+from utils.other.request_deadline import RequestDeadlineExceeded, require_request_budget
 from utils.other.hume import (
     get_hume,
     HumeJobCallbackModel,
@@ -406,6 +407,7 @@ def _get_structured(
     revision_checkpoint: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Structured, bool]:
     try:
+        require_request_budget()
         full_v3_notes = v3_policy.full_notes(conversation, trigger)
         user_kept = user_kept or v3_policy.manual_intent(conversation)
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
@@ -431,10 +433,13 @@ def _get_structured(
             if relevance_observer is not None:
                 relevance_observer(RelevanceDecision('discard' if hidden else 'keep', 'rule', 'content_kind', trigger))
             return media_minimum, hidden
+        require_request_budget()
         task_intelligence_capture = not live_recap and _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
+        require_request_budget()
         user_language = resolve_output_language(uid, language_code, getattr(conversation, 'transcript_segments', None))
+        require_request_budget()
         if not live_recap:
             summary_app_selected = selected_summary_app(uid, summary_app_selected, redis_db.get_user_preferred_app)
         minimum = (
@@ -662,6 +667,7 @@ def _get_structured(
             if jev_tier_applies(jev_transcript):
                 jev_discard = lambda: jev_discard_probability(jev_transcript, record_outcome=True)
 
+        require_request_budget()
         decision = decide_relevance(
             trigger=trigger,
             texts=[segment.text for segment in segments],
@@ -694,6 +700,7 @@ def _get_structured(
         if decision.discard:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
+        require_request_budget()
         if revision_checkpoint is not None:
             # A newer sync revision owns this conversation; stop before the notes agent (the dominant LLM call).
             revision_checkpoint('pre_notes')
@@ -704,7 +711,9 @@ def _get_structured(
             # model work. Finished notes use the full processing path.
             roster, meeting_context_block, desktop_capture, screen_frames, screen_frame_count = None, None, False, [], 0
         else:
+            require_request_budget()
             before_notes(uid, main_conv, trigger, finalization_fence=finalization_fence)
+            require_request_budget()
             roster, meeting_context_block, desktop_capture, screen_frames, screen_frame_count = rich_notes_inputs(
                 uid,
                 main_conv,
@@ -722,6 +731,7 @@ def _get_structured(
                 if isinstance(meeting_context_override, str)
                 else v3_context.summary(uid, conversation, user_language, tz_str)
             ) + corrections_block
+        require_request_budget()
         prefix = build_conversation_prompt_prefix(
             known_spellings=conversation_known_spellings(uid),
             uid=uid,
@@ -739,8 +749,10 @@ def _get_structured(
         )
         from utils.conversations import llm_input_dedupe
 
+        require_request_budget()
         if not live_recap:
             member_notes.before_model(uid, main_conv, trigger, finalization_fence=finalization_fence)
+        require_request_budget()
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
             structured = llm_input_dedupe.notes(
                 uid,
@@ -767,7 +779,12 @@ def _get_structured(
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
-    except (ConversationAbsorbed, SyncConversationPersistenceFenced, member_notes.LiveMemberNotesDeferred):
+    except (
+        ConversationAbsorbed,
+        SyncConversationPersistenceFenced,
+        member_notes.LiveMemberNotesDeferred,
+        RequestDeadlineExceeded,
+    ):
         raise
     except Exception as e:
         if funded_processing.enabled(uid, 'batch') and _is_funded_budget_denial(e):
@@ -2730,6 +2747,7 @@ def process_conversation(
     """
     if isinstance(conversation, Conversation) and not conversation.python_finalization_owned:
         raise FinalizationOwnedElsewhere()
+    require_request_budget()
     member_notes.before_notes(uid, conversation, trigger, finalization_fence=finalization_fence)
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     bind_generation(uid, generated_conversation_id)
@@ -2925,10 +2943,12 @@ def process_conversation(
         report_persistence(False)
         return cast(Conversation, conversation)
 
+    require_request_budget()
     meeting_context_override = None
     if not silent_backfill:
         meeting_context_override = _enrich_meeting_context(uid, conversation)
     # Everything below reads speaker_id as one voice; capture only guarantees that per piece.
+    require_request_budget()
     with identity_pass(None if already_observed else 'first'):
         speaker_receipt_applied = (
             False
@@ -2938,6 +2958,7 @@ def process_conversation(
     if speaker_receipt_observer is not None:
         speaker_receipt_observer(speaker_receipt_applied)
 
+    require_request_budget()
     person_ids = conversation.get_person_ids()
     people: List[Person] = []
     if person_ids:
@@ -2954,6 +2975,7 @@ def process_conversation(
         nonlocal recovery_minimum_fallback
         recovery_minimum_fallback = True
 
+    require_request_budget()
     revision_checkpoint = early_abort.checkpoint_for(uid, conversation)
     structured, discarded = _get_structured(
         uid,
@@ -2977,6 +2999,7 @@ def process_conversation(
         # The notes agent ran for minutes; a sync write that landed meanwhile makes the persist fence refuse
         # this result anyway. Stop before the persist and the apps/memories LLM work it would trigger.
         revision_checkpoint('pre_persist')
+    require_request_budget()
     if recovery_minimum_fallback:
         sys.stdout.write(
             json.dumps(

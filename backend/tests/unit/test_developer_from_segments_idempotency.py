@@ -1,4 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock
 
@@ -16,6 +18,7 @@ from models.conversation_enums import ConversationStatus
 from utils.conversations.meeting_treatment import meeting_treatment_verdict
 from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.other.raise_site import raise_site_of
+from utils.other import request_deadline
 from utils.other.request_deadline import RequestDeadlineExceeded
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 
@@ -781,6 +784,235 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch, st
     assert row['client_processing'] == stored_projection
     bind_projection.assert_not_called()
     event.assert_called_once_with('conversation_created', client_kind='ios', app_build='12574', uid='uid1')
+
+
+def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monkeypatch, segment_api_client, caplog):
+    row = {}
+    entered_notes = Event()
+    release_notes = Event()
+    delete = MagicMock()
+    event = MagicMock()
+    futures = []
+    monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, 'serve')
+    monkeypatch.setattr(request_deadline, 'FROM_SEGMENTS_REQUEST_BUDGET_SECONDS', 0.4)
+
+    def create(_uid, payload, *, idempotent):
+        assert idempotent and not row
+        row.update(payload)
+        return True
+
+    def process(_uid, _language, conversation, **kwargs):
+        # The actual notes mount uses this cap. The injected provider needs
+        # more time than the HTTP deadline, even for a replay of this request.
+        assert request_deadline.capped_deadline_seconds(180.0) == 180.0
+        assert conversation.transcript_segments[0].text == _segment()['text']
+        entered_notes.set()
+        assert release_notes.wait(5)
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    def persist(_uid, payload):
+        row.update(payload)
+
+    claim = MagicMock(side_effect=create)
+    processor = MagicMock(side_effect=process)
+    rollback = MagicMock()
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *_args, **_kwargs: dict(row) or None)
+    monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
+    monkeypatch.setattr(developer.lifecycle_service, 'rollback_processing_admission', rollback)
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persist)
+    monkeypatch.setattr(developer, 'process_conversation', processor)
+    monkeypatch.setattr(developer, 'record_product_event', event)
+    body = _request(source='phone', client_session_id='ondevice-test').model_dump(mode='json')
+    path = '/v1/conversations/from-segments'
+    headers = {'X-App-Platform': 'ios', 'X-App-Build': '12574'}
+
+    with ThreadPoolExecutor(max_workers=1) as worker:
+        submit = worker.submit
+
+        def track_future(*args, **kwargs):
+            future = submit(*args, **kwargs)
+            futures.append(future)
+            return future
+
+        monkeypatch.setattr(worker, 'submit', track_future)
+        monkeypatch.setattr(developer, 'from_segments_executor', worker)
+        try:
+            first = segment_api_client.post(path, headers=headers, json=body)
+            assert first.status_code == 503
+            assert first.headers['Retry-After'] == '2'
+            assert entered_notes.is_set()
+            assert row['status'] == ConversationStatus.processing
+            assert not futures[0].done()
+
+            active = segment_api_client.post(path, headers=headers, json=body)
+            assert active.status_code == 503
+            assert active.json() == first.json()
+            assert len(futures) == 1
+        finally:
+            release_notes.set()
+
+        completed = futures[0].result(timeout=3)
+        retry = segment_api_client.post(path, headers=headers, json=body)
+
+    assert retry.status_code == 200
+    assert retry.json() == completed.model_dump(mode='json')
+    assert retry.json()['status'] == 'completed'
+    assert retry.json()['id'] == row['id']
+    assert row['status'] == ConversationStatus.completed
+    assert len(futures) == 1
+    claim.assert_called_once()
+    processor.assert_called_once()
+    event.assert_called_once_with('conversation_created', client_kind='mobile_ios', app_build='12574', uid='uid1')
+    rollback.assert_not_called()
+    delete.assert_not_called()
+    assert [
+        record.raise_site for record in caplog.records if getattr(record, 'event', None) == 'from_segments_503'
+    ] == ['request_budget_exhausted', 'from_segments_processing_in_flight']
+
+
+def test_ios_provider_timeout_retains_claim_and_fast_retry_returns_completed(monkeypatch, segment_api_client, caplog):
+    row = {}
+    session = 'ondevice-provider-timeout'
+    monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, 'serve')
+
+    def create(_uid, payload, *, idempotent):
+        assert idempotent and not row
+        row.update(payload)
+        return True
+
+    def rollback(_uid, conversation_id):
+        assert row['status'] == ConversationStatus.processing
+        assert row['id'] == conversation_id
+        row['status'] = ConversationStatus.in_progress
+        return True
+
+    def admit(_uid, conversation_id, *, extra_updates):
+        assert row['status'] == ConversationStatus.in_progress
+        assert row['id'] == conversation_id
+        row['status'] = ConversationStatus.processing
+        row['external_data']['from_segments_claimed_at'] = extra_updates['external_data.from_segments_claimed_at']
+        return True
+
+    def process(_uid, _language, conversation, **kwargs):
+        if processor.call_count == 1:
+            raise TimeoutError('synthetic provider timeout')
+        assert conversation.transcript_segments[0].text == _segment()['text']
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    claim = MagicMock(side_effect=create)
+    processor = MagicMock(side_effect=process)
+    delete = MagicMock()
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *_args, **_kwargs: dict(row) or None)
+    monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
+    monkeypatch.setattr(developer.lifecycle_service, 'rollback_processing_admission', rollback)
+    monkeypatch.setattr(developer.lifecycle_service, 'admit_processing', admit)
+    monkeypatch.setattr(
+        developer.lifecycle_service, 'persist_processed_conversation', lambda _uid, row_data: row.update(row_data)
+    )
+    monkeypatch.setattr(developer, 'process_conversation', processor)
+
+    path = '/v1/conversations/from-segments'
+    headers = {'X-App-Platform': 'ios'}
+    first = segment_api_client.post(
+        path, headers=headers, json=_request(source='phone', client_session_id=session).model_dump(mode='json')
+    )
+    assert first.status_code == 503
+    assert first.headers['Retry-After'] == '2'
+    assert row['status'] == ConversationStatus.in_progress
+    assert [
+        record.raise_site for record in caplog.records if getattr(record, 'event', None) == 'from_segments_503'
+    ] == ['conversation_processing_retryable']
+
+    replay = _request(
+        source='phone', client_session_id=session, transcript_segments=[{**_segment(), 'text': 'retry payload'}]
+    )
+    retry = segment_api_client.post(path, headers=headers, json=replay.model_dump(mode='json'))
+    assert retry.status_code == 200
+    assert retry.json()['id'] == row['id']
+    assert retry.json()['status'] == 'completed'
+    claim.assert_called_once()
+    delete.assert_not_called()
+
+
+def test_ios_stale_claim_reuses_transcript_and_fences_takeover(monkeypatch, segment_api_client):
+    session = 'ondevice-stale-claim'
+    request = _request(source='phone', client_session_id=session)
+    conversation_id = developer._from_segments_conversation_id('uid1', session)
+    old = datetime.now(timezone.utc) - timedelta(minutes=25)
+    metadata = {'from_segments_client_session_id': session, 'from_segments_claimed_at': old}
+    row = {
+        'id': conversation_id,
+        'created_at': request.started_at,
+        'started_at': request.started_at,
+        'finished_at': request.finished_at,
+        'source': 'phone',
+        'status': 'processing',
+        'structured': {},
+        'transcript_segments': [_segment()],
+        'processing_admitted_at': old,
+        'external_data': metadata,
+    }
+    reclaim = MagicMock(return_value=False)
+    delete = MagicMock()
+    processor = MagicMock()
+    monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, 'serve')
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *_args, **_kwargs: dict(row))
+    monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
+    monkeypatch.setattr(developer.lifecycle_service, 'reclaim_stale_processing', reclaim)
+    monkeypatch.setattr(developer, 'process_conversation', processor)
+
+    def upload():
+        return segment_api_client.post(
+            '/v1/conversations/from-segments',
+            json=request.model_dump(mode='json'),
+            headers={'X-App-Platform': 'ios'},
+        )
+
+    assert upload().status_code == 503
+    reclaim.assert_called_once_with(
+        'uid1',
+        conversation_id,
+        expected_fields={'processing_admitted_at': old, 'external_data': metadata},
+        extra_updates={'external_data.from_segments_claimed_at': ANY},
+    )
+    processor.assert_not_called()
+    delete.assert_not_called()
+
+    row['processing_admitted_at'] = datetime.now(timezone.utc)
+    assert upload().status_code == 503
+    reclaim.assert_called_once()  # A fresh heartbeat wins even with an old claim timestamp.
+
+
+def test_slow_preflight_hits_http_budget_before_any_claim(monkeypatch, segment_api_client, caplog):
+    release = Event()
+    finished = Event()
+    create = MagicMock()
+
+    def lookup(*args, **kwargs):
+        try:
+            assert release.wait(5)
+        finally:
+            finished.set()
+        return None
+
+    monkeypatch.setattr(request_deadline, 'FROM_SEGMENTS_REQUEST_BUDGET_SECONDS', 0.4)
+    monkeypatch.setattr(conversations_db, 'get_conversation', lookup)
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', create)
+    try:
+        response = segment_api_client.post(
+            '/v1/conversations/from-segments', json=_request(client_session_id='slow-intake').model_dump(mode='json')
+        )
+        assert response.status_code == 503
+        assert not finished.is_set()
+    finally:
+        release.set()
+    assert finished.wait(3)
+    create.assert_not_called()
+    assert any(getattr(record, 'raise_site', None) == 'request_budget_exhausted' for record in caplog.records)
 
 
 def test_client_session_id_claim_is_released_when_processing_fails(monkeypatch):
