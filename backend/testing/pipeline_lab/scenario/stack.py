@@ -614,7 +614,7 @@ def run_set(
     for name, (path, _) in scenarios.items():
         (root / name).mkdir(parents=True, exist_ok=True, mode=0o700)
         shutil.copyfile(path, root / name / 'scenario.json')
-    todo = [_Job(path, name, k) for k in range(1, repeat + 1) for name, (path, _) in scenarios.items()]
+    queued = [_Job(path, name, k) for k in range(1, repeat + 1) for name, (path, _) in scenarios.items()]
     slots = RedisSlots(peers.redis)
     runs: list[dict[str, Any]] = []
     results: dict[tuple[str, int], dict[str, Any]] = {}
@@ -641,7 +641,7 @@ def run_set(
                 report(result, job)
 
     with ThreadPoolExecutor(max_workers=jobs) as pool:
-        for future in [pool.submit(one, job) for job in todo]:
+        for future in [pool.submit(one, job) for job in queued]:
             future.result()
 
     rows, by_name = [], {}
