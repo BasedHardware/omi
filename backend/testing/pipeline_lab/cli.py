@@ -161,6 +161,23 @@ def build_parser() -> argparse.ArgumentParser:
     live.add_argument('--out', required=True, help='write here (outside git)')
     live.add_argument('--owner-uid-file', required=True, help='0600 file holding the owner uid (scrubs uid lists)')
 
+    scenario = sub.add_parser('scenario', parents=[common], help='scripted capture -> Finish -> Home scenarios (v3)')
+    scenario_sub = scenario.add_subparsers(dest='scenario_command', required=True)
+    scenario_run = scenario_sub.add_parser(
+        'run', parents=[common], help='run scenario files on a local emulator + Redis (started here unless given)'
+    )
+    scenario_run.add_argument('files', nargs='+', help='scenario JSON files, or names under scenario/scenarios/')
+    scenario_run.add_argument('--keep', help='output directory (outside git; default a fresh temp dir)')
+    scenario_run.add_argument('--timeout', type=float, default=240.0, help='seconds per scenario')
+    scenario_run.add_argument(
+        '--clock',
+        choices=('frozen', 'tick'),
+        default='frozen',
+        help='frozen (default): each event runs at its scripted instant; tick: real elapsed time is added',
+    )
+    scenario_check = scenario_sub.add_parser('check', parents=[common], help='validate files, print planned timelines')
+    scenario_check.add_argument('files', nargs='+')
+
     sub.add_parser('stages', parents=[common], help='stages in order and their registered drivers')
     sub.add_parser('doctor', parents=[common], help='roots, permissions and plugins')
     return parser
@@ -465,6 +482,23 @@ def _llm_proxy(args: argparse.Namespace, store: Store) -> Any:
     return {'stopped': True, 'counters': proxy.counters, 'ledger': ledger.snapshot()}
 
 
+def _scenario(args: argparse.Namespace, as_json: bool) -> int:
+    """Scenarios need no run store: their output goes to ``--keep`` or a temp dir, never into git."""
+    from testing.pipeline_lab.scenario import stack
+    from testing.pipeline_lab.scenario.spec import ScenarioError
+
+    try:
+        if args.scenario_command == 'check':
+            return stack.check_files(args.files, as_json=as_json)
+        return stack.run_files(args.files, keep=args.keep, timeout=args.timeout, as_json=as_json, clock=args.clock)
+    except (ScenarioError, RuntimeError) as error:
+        if as_json:
+            print(json.dumps({'error': str(error), 'kind': type(error).__name__}))
+        else:
+            print(f'error: {error}', file=sys.stderr)
+        return orchestrator.EXIT_ERROR
+
+
 class _Raw(str):
     """Already-formatted output (verdict export) printed verbatim."""
 
@@ -494,6 +528,8 @@ def main(argv: Optional[Sequence[str]] = None, *, registry: Optional[Registry] =
         parser.error('unrecognized arguments: ' + ' '.join(unknown))
     args.rest = unknown
     as_json = bool(getattr(args, 'json', False))
+    if args.command == 'scenario':
+        return _scenario(args, as_json)
     try:
         store = Store.open(Path(args.root) if args.root else None, Path(args.verdicts) if args.verdicts else None)
         if registry is None:

@@ -37,6 +37,7 @@ synthetic uid `local-dev-user`.
 | `timeline/`, `cassette/`, `lanes/` | Day timeline and lanes; STT cassettes (vendor prerecorded and Parakeet batch adapters); record/batch and sync replay; `lanes/plugin.py`. |
 | `inspector/` | Stdlib server and static UI; `sample_run.py` (synthetic Lumen Bay day). |
 | `v3/` | Conversations v3 replay: `feed.py` (recordings, arrival instants), `tasks.py` (loopback Cloud Tasks), `driver.py` (event loop), `product.py` + `run.py` + `entry.py` (real v3 code), `export.py` (contract rows, pairing by recording), `corpus.py` (add-day ingest), `select.py` (pipeline choice), `fake.py`, `smoke.py`, `prod_export.py` (read-only v3 exporter). |
+| `scenario/` | Scripted capture -> Finish -> Home stories (see [Scenarios](#scenarios)): `spec.py` (file format, event plan), `checks.py` (expectations, outcomes), `ops.py` (events as product calls), `run.py` (one scenario in process), `stack.py` (command, emulator bring-up, report), `scenarios/` (committed synthetic scenarios), `IMPORTER.md` (slice 2 design). |
 | `ideal/` | Ideal days: `packet.py` (numbered lines), `schema.py` (validator), `score.py` (structure scoring), `runs.py` (score table and per-card diff across runs, no text), drafting passes. |
 | `sample.py` | Minimal synthetic run, used only when the inspector plugin is absent. |
 
@@ -131,6 +132,57 @@ lane adds survives another lane's round trip. Item `key`s come from
 `contracts.content_key(kind, content)`: a hash of normalized text (NFKC,
 casefold, collapsed whitespace, edge punctuation trimmed), so a verdict on a task
 or memory still matches after a re-run that produces the same text.
+
+## Scenarios
+
+A scenario reproduces one capture -> Finish -> Home incident from a small JSON file, through the real v3
+code, in under a minute. Change product code, run it again, read the conversations. No deploy, no
+production data: the text is synthetic placeholder words and the run uses the lab uid on a local emulator.
+
+```bash
+cd backend
+python -m testing.pipeline_lab scenario check finish_after_reconnect_late_transcript   # validate, print the plan
+<workspace>/bin/omi-heavy run -- python -m testing.pipeline_lab scenario run \
+    finish_after_reconnect_late_transcript finish_single_recording_fast [--keep DIR] [--json]
+```
+
+`run` starts a Firestore emulator and `redis-server` on free loopback ports (needs `firebase`, Java 21 and
+`redis-server`; a Homebrew `openjdk@21` is used when present), runs each scenario in a fresh process, prints
+a timeline, the resulting conversations (recordings, words, visible, hidden reason, manual end) and each
+check, then stops what it started. Given `FIRESTORE_EMULATOR_HOST` and `OMI_PIPELINE_LAB_REDIS`, it uses
+those instead. Both committed scenarios take about 55 s together, 4 s of it emulator start. Output
+(`result.json`, `v3_tasks.jsonl`, `decisions.jsonl`) goes to `--keep DIR` or a temp dir, never into git.
+Exit: 0 when every scenario passed or failed as expected, 1 on a failure or an unexpected pass, 2 on an error.
+
+The format is documented at the top of `scenario/spec.py`: origins, batch-lane recordings (audio span,
+recording session, seal, batch transcript landing, scripted lines with speaker and `is_user`), stream gaps,
+device-sync fragments with arrival instants, a Finish tap (fast finish on or off, provisional latency), an
+`env` overlay on top of this checkout's production `backend-sync` profile, and `expect` rows
+(`conversation_of` a label or `@finish`: `recordings`, `recordings_include`, `visible`, `manual_end`,
+`hidden_reason`, `min_words`, `kind`; or `no_hidden_with`), each optionally checked at an instant (`at`).
+`expected_failure: {"reason": "SCA-...", "strict": true}` marks a known bug: the run exits 0 while a check
+fails and 1 once they all pass, so the fix PR must delete the block. The clock is frozen per event by default
+(`--clock tick` adds real elapsed time, as day replays do), so a scenario gives the same result every run.
+
+The outline LLM is the lab's fake gateway: one conversation per stretch, and a new one at any line containing
+`switching topics`. Scenarios test the planner, cut and visibility logic, not a model's topic judgment.
+
+What runs as product code, and the stand-ins (counted per run under `stand-ins used`):
+
+| Step | Product code | Stand-in in slice 1, and its follow-up |
+|---|---|---|
+| Capture admission, recording rows | `triggers.mark_new`, `upsert_conversation_with_lifecycle` | none |
+| Finish tap | `retrieve_in_progress_conversation` picks the branch; with nothing in progress, `finish.finish_live_window` | Capture in progress: the finalization job's capture close (`_complete_server_batch_capture_txn`) is written as its outcome, `status: completed` plus `v3_manual_end_requested`, at the seal. Follow-up: run `finalize_conversation` and the job runner on the emulator. |
+| Record admission, promotion, fast finish | `batch_pipeline.live._manual_finish_admitted` -> `promote_manual_end` -> `fast_finish.run` (eligibility, refresh, the real in-transaction privacy fence, `update_conversation_segments`, `cut` -> `triggers.changed(manual_end=True)`) | `admit_recording` (archive listing, unit walk, staging, intake) is not run; the hook gets one unit over the whole audio and a store whose privacy check allows. STT is the scripted text and the funding gate is open. Follow-up: synthetic audio chunks in local storage, then the real `admit_recording` (and multi-unit captures). |
+| Batch transcript landing | `update_conversation_segments`, `triggers.committed_sync_assignment` | The projection transaction (`replace_record`, its own `_v3_finish_update` promotion, receipts) is not run; the writer stores the transcript and the stand-in stamps `record_projection_revision`. Follow-up: run the projection completion on the emulator. |
+| Device-sync fragment | `mark_new`, `upsert_conversation_with_lifecycle`, `committed_sync_assignment` | `/v2/sync-local-files` intake and the sync job are not run; the fragment lands as a completed recording. Follow-up: drive the sync job with scripted STT, including an append to an existing recording. |
+| Reconcile, planner, build, notes, Home visibility | `service.reconcile` (outline, plan, commit, notes drain), `service.sweep`, loopback named Cloud Tasks | Fake LLM gateway (above). |
+| Account | `users.set_user_private_cloud_sync_enabled` (the reset removes the account) | none |
+
+Not covered yet: a live (streaming) transcript lane in the format, a run-store entry the inspector can show
+(the output dir has the files, not a registered run), and CI (the scenarios need an emulator; the unit test
+`tests/unit/test_pipeline_lab_scenario.py` covers the format, plan, checks and outcomes). Turning a production
+incident into a scenario is slice 2: [scenario/IMPORTER.md](scenario/IMPORTER.md).
 
 ## Cache key
 
