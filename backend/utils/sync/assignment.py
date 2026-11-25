@@ -87,7 +87,7 @@ from utils.sync.live_overlap import (
     live_overlap_enabled,
     span_contained,
 )
-from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
+from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentErased, SyncAssignmentSuperseded
 from utils.sync.assignment_errors import SyncAssignmentConflictReason as Reason
 from models.conversation_continuity import intervals_connect
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
@@ -315,13 +315,13 @@ def assign_in_transaction(
 
     own = load(incoming['id'])
     if tombstoned(incoming['id']):
-        raise SyncAssignmentSuperseded('sync anchor was deleted')
+        raise SyncAssignmentErased('sync anchor was deleted')
     if own and own.get('deleted') and not own.get('sync_merged_into'):
         if flatten and (own.get('smart_merge') or {}).get('role') == 'donor':
             raise SyncAssignmentConflict(
                 'smart merge donor tombstone lacks a redirect', subtype=Reason.DONOR_TOMBSTONE_NO_REDIRECT
             )
-        raise SyncAssignmentSuperseded('sync anchor was deleted')
+        raise SyncAssignmentErased('sync anchor was deleted')
 
     def resolve(cid: str | None, *, one_hop: bool = False) -> tuple[str | None, dict | None]:
         row = load(cid) if cid else None
@@ -329,7 +329,7 @@ def assign_in_transaction(
         has_smart_state = False
         while row and row.get('sync_merged_into'):
             if tombstoned(row['id']):
-                raise SyncAssignmentSuperseded('sync capture lineage was deleted')
+                raise SyncAssignmentErased('sync capture lineage was deleted')
             if row['id'] in seen:
                 raise SyncAssignmentConflict('sync redirect cycle', subtype=Reason.REDIRECT_CYCLE)
             has_smart_state = has_smart_state or (one_hop and _smart_merge_lineage(row))
@@ -342,9 +342,9 @@ def assign_in_transaction(
                     'sync redirect chain exceeds one hop', subtype=Reason.REDIRECT_CHAIN_TOO_LONG
                 )
         if cid and tombstoned(cid):
-            raise SyncAssignmentSuperseded('sync capture lineage was deleted')
+            raise SyncAssignmentErased('sync capture lineage was deleted')
         if seen and (not row or row.get('deleted') or (has_smart_state and row.get('discarded'))):
-            raise SyncAssignmentSuperseded('sync capture lineage was deleted')
+            raise SyncAssignmentErased('sync capture lineage was deleted')
         return cid, row
 
     # Check retry lineage independently of client hints: changing a target must
@@ -352,7 +352,7 @@ def assign_in_transaction(
     own_id, own_anchor = resolve(incoming['id'], one_hop=flatten)
     target = load(target_id) if target_id else None
     if target_id and tombstoned(target_id):
-        raise SyncAssignmentSuperseded('sync target was deleted')
+        raise SyncAssignmentErased('sync target was deleted')
     if require_live_target and target_id and target is None:
         # WAL can finish before listen creates its explicitly named row. A new
         # timestamp anchor here becomes a twin when listen later persists. The
@@ -364,7 +364,7 @@ def assign_in_transaction(
         if not target:
             raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
         if target.get('deleted'):
-            raise SyncAssignmentSuperseded('sync target was deleted')
+            raise SyncAssignmentErased('sync target was deleted')
         if target.get('discarded') and (record_span is None or not is_automatic_discard(target)):
             raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
         if target.get('status') != 'completed':
@@ -430,7 +430,7 @@ def assign_in_transaction(
                         'sync redirect chain exceeds one hop', subtype=Reason.REDIRECT_CHAIN_TOO_LONG
                     )
                 if not nxt or nxt.get('deleted') or nxt.get('discarded'):
-                    raise SyncAssignmentSuperseded('sync target survivor was deleted')
+                    raise SyncAssignmentErased('sync target survivor was deleted')
                 target_id, target = redirect_id, nxt
                 redirected = True
             else:
@@ -457,7 +457,7 @@ def assign_in_transaction(
             target_id, target = live_id, load(live_id)
             temporal_live = True
     if target_id and tombstoned(target_id):
-        raise SyncAssignmentSuperseded('sync target survivor was deleted')
+        raise SyncAssignmentErased('sync target survivor was deleted')
     target_hint = target_id
     if target_id and own_anchor and own_id != target_id and own_anchor.get('manual_speaker_assignments'):
         raise SyncAssignmentSuperseded('sync anchor has manual speaker assignments')
@@ -522,7 +522,7 @@ def assign_in_transaction(
         # The independent retry-lineage check above still fences user deletion.
         # A hard-deleted target leaves no row; its tombstone is the user's word.
         if target_id and target is None and tombstoned(target_id):
-            raise SyncAssignmentSuperseded('sync target was deleted')
+            raise SyncAssignmentErased('sync target was deleted')
         target_id, target = None, None
     if target_hint and not target_id and lineage_eligible and sync_lineage_resolve_enabled():
         if discover_on_reroute:
@@ -718,7 +718,7 @@ def assign_in_transaction(
             # User deletion hard-deletes the row, so `own` cannot fence it. A
             # re-upload segmented like the original reproduces the deleted
             # conversation's deterministic ID; never recreate it.
-            raise SyncAssignmentSuperseded('sync anchor was deleted')
+            raise SyncAssignmentErased('sync anchor was deleted')
         records = [decode(raw) for _, raw in sorted(matched.items())]
         result = deepcopy(next((row for row in records if row['id'] == canonical), records[0] if records else incoming))
         if incoming.get('capture_time_trust') == 'untrusted':

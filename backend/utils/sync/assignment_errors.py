@@ -82,6 +82,10 @@ class SyncAssignmentSuperseded(RuntimeError):
     """Deleted or user-managed lineage must not be recreated by WAL retries."""
 
 
+class SyncAssignmentErased(SyncAssignmentSuperseded):
+    """A deleted or unavailable lineage needs input-specific erasure proof."""
+
+
 class SyncAssignmentConflict(RuntimeError):
     """A provenance mismatch or corrupt redirect requires visible investigation."""
 

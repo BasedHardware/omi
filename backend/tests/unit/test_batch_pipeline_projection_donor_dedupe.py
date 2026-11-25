@@ -455,7 +455,9 @@ def test_stamp_gap_reroute_reports_lineage_telemetry_after_batch_commit(batch_pr
     assert receipt['transcript_outputs'] == [
         {
             'conversation_id': destination,
-            'sync_content_revision': lane.client.rows[('users', 'u', 'conversations', destination)]['sync_content_revision'],
+            'sync_content_revision': lane.client.rows[('users', 'u', 'conversations', destination)][
+                'sync_content_revision'
+            ],
         }
     ]
     stamp = [r.message for r in caplog.records if 'event=sync_lineage_stamp_append' in r.message]
@@ -568,8 +570,12 @@ def test_joined_merge_waits_for_predecessor_and_publishes_atomically(batch_proje
     lane.client.rows[owner_path]['projection_watermark'] = 'previous'
     if mode == 'erased':
         lane.client.rows[('users', 'u', 'deleted_conversations', 'live')] = {'deleted': True}
+        receipt = lane.projector.commit_joined_merge(entry, plan)['projection']
+        assert receipt['privacy_reason'] == 'conversation_deleted'
+        assert receipt['conversation_id'] is None and 'transcript_outputs' not in receipt
+        owner = lane.client.rows[owner_path]
+        assert owner['watermark']['segment_id'] == owner['projection_watermark'] == 'segment'
         assert lane.projector.commit_joined_merge(entry, plan) is None
-        assert result_key not in lane.client.rows and 'watermark' not in lane.client.rows[owner_path]
         return
 
     get_all = lane.client.get_all
@@ -621,13 +627,18 @@ def test_joined_merge_waits_for_predecessor_and_publishes_atomically(batch_proje
 
 
 def test_joined_commit_budget_counts_native_firestore_writes():
-    from google.cloud.firestore_v1.types import Write
+    from google.cloud.firestore_v1.types import Document, Write
     from database.batch_pipeline_store import FirestoreTransaction
 
     transaction = SimpleNamespace(_write_pbs=[Write(delete='test-document')])
     view = FirestoreTransaction(None, 'test', transaction)
     view.check_joined_commit_budget()
     transaction._write_pbs *= 441
+    with pytest.raises(projection.ProjectionBlocked, match='commit budget'):
+        view.check_joined_commit_budget()
+    transaction._write_pbs = [
+        Write(update=Document(name='projects/p/databases/(default)/documents/users/u/conversations/c'))
+    ] + [Write(delete='test-document')] * 439
     with pytest.raises(projection.ProjectionBlocked, match='commit budget'):
         view.check_joined_commit_budget()
     transaction._write_pbs = [Write(delete='x' * (1024 * 1024))] * 8

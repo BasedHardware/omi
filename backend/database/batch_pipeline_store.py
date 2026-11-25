@@ -261,7 +261,7 @@ class FirestoreTransaction:
             **options,
         )
 
-    def validate_writes(self):
+    def validate_writes(self, *, proven_deleted_segment=None):
         # Conversation patches set record_lane_owner, a batch-privacy authority
         # field, so the commit-boundary fence appends one token write per owner.
         fence_tokens = len({key.split('/', 1)[0] for table, key in self.patches if table == 'conversations'})
@@ -277,15 +277,19 @@ class FirestoreTransaction:
                 job.get('conversation_id'),
                 job.get('capture_source_conversation_id'),
                 job.get('privacy_generation'),
+                key == proven_deleted_segment and table in {'jobs', 'results'},
             )
             if identity in guarded:
                 continue
             guarded.add(identity)
+            ids = tuple(cid for cid in (job.get('conversation_id'), job.get('capture_source_conversation_id')) if cid)
+            # The joined session has already proved deletion for these precise
+            # input IDs. Only its no-text job/result writes may drop that fence.
+            if key == proven_deleted_segment and table in {'jobs', 'results'}:
+                ids = ()
             generation = self.check_privacy(
                 job['owner_id'],
-                conversation_ids=tuple(
-                    value for value in (job.get('conversation_id'), job.get('capture_source_conversation_id')) if value
-                ),
+                conversation_ids=ids,
                 expected_generation=job.get('privacy_generation'),
             )
             if table == 'jobs' and value.get('privacy_generation') is None:
@@ -301,11 +305,15 @@ class FirestoreTransaction:
             writer.set(ref, value)
 
     def check_joined_commit_budget(self):
-        from google.cloud.firestore_v1.types import Write
+        from google.cloud.firestore_v1.types import CommitRequest, Write
 
-        # Reserve headroom for commit framing, index overhead, and privacy
-        # fence writes appended by the Firestore commit hook.
-        writes = self.transaction._write_pbs
+        from database.batch_privacy_write_fence import augment_commit
+
+        # Count the same hook-generated writes as the actual commit. The hook
+        # regenerates tokens of the same serialized size. The remaining
+        # headroom covers request framing and index overhead.
+        request, _ = augment_commit(CommitRequest(writes=self.transaction._write_pbs))
+        writes = request.writes
         if (
             len(writes) > self.JOINED_MAX_WRITES
             or sum(len(Write.serialize(write)) for write in writes) > self.JOINED_MAX_WRITE_BYTES

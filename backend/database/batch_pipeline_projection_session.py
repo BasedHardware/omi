@@ -215,13 +215,13 @@ class ProjectionSession:
         transaction.update(self.result_ref, changes)
         return False
 
-    def guard(self, transaction, conversation_ids=()):
+    def guard(self, transaction, conversation_ids=(), *, include_capture_source=True):
         # Decision-only: the fence budget counts the distinct documents this
         # prepare actually verified, including every redirect hop the walk read
         # (plus any refusing id below). No full-row export, so a certified memo
         # decision can serve the check with one live token read.
         checked: set[str] = set()
-        if self.job.get('capture_source_conversation_id'):
+        if include_capture_source and self.job.get('capture_source_conversation_id'):
             conversation_ids = (*conversation_ids, self.job['capture_source_conversation_id'])
         versions = [] if self.capture_followup_privacy and not self._followup_privacy_failed else None
         expires_at = monotonic() + ttl_seconds() if versions is not None else 0.0
@@ -334,10 +334,10 @@ class ProjectionSession:
             # A no-text deletion receipt may advance the owner chain, but must
             # still pass the account/protection/generation fence. Ordinary
             # assignment never enters this branch or skips a source fence.
-            self.guard(transaction)
+            self.guard(transaction, include_capture_source=False)
             for conversation_id in sorted(set(ids)):
                 try:
-                    self.guard(transaction, [conversation_id])
+                    self.guard(transaction, [conversation_id], include_capture_source=False)
                 except BatchPrivacyBlocked as source_error:
                     if source_error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
                         raise

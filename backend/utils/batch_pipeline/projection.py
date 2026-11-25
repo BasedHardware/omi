@@ -69,12 +69,14 @@ from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidenc
 from utils.batch_pipeline.projection_segments import projection_segments
 from utils.sync.assignment_errors import (
     SyncAssignmentConflict,
+    SyncAssignmentErased,
     SyncAssignmentSuperseded,
 )
 from utils.stt.transcript_admission import filter_admission
 from utils.episodes import transcript_receipts
 
 if TYPE_CHECKING:
+    from database.batch_pipeline_projection_session import ProjectionSession
     from asyncio import Semaphore
     from utils.batch_pipeline.projection_prefetch import Prefetched
 
@@ -192,6 +194,13 @@ def projection_exception_transient(error: BaseException) -> bool:
         return True
     # google-cloud-firestore's exhausted commit retry: contention, not content.
     return type(error) is ValueError and isinstance(error.__cause__, api_exceptions.Aborted)
+
+
+class JoinedPart(NamedTuple):
+    session: 'ProjectionSession'
+    assignment: tuple | None = None
+    finish_assignment: Callable | None = None
+    prove_disposition: Callable | None = None
 
 
 def payload_contract_violation(error: BaseException) -> bool:
@@ -1042,39 +1051,79 @@ class Projector:
         return False
 
     def commit_joined_merge(self, entry, merge_plan):
-        """Assign a staged speech result using the same Firestore commit as ordered merge."""
+        """Assign a staged result using the same Firestore commit as ordered merge."""
         segment_id = entry['segment_id']
         job = self.store.ref('jobs', segment_id).get().to_dict() or {}
+        outcome = entry['result']['outcome']
         if (
             job.get('state') != 'result_ready'
             or job.get('result') != entry['result']
             or job.get('shadow')
             or not job.get('projection_binding')
-            or entry['result'].get('outcome') != 'success'
+            or outcome not in {'success', 'silence', 'no_recoverable_speech'}
         ):
             return None
         try:
-            if (job.get('policy_parts') or {}).get('projection') is None:
-                self.store.policy(segment_id)
-                job = self.store.ref('jobs', segment_id).get().to_dict() or {}
-            if job.get('state') != 'result_ready' or job.get('result') != entry['result']:
-                return None
             binding = normalized_binding(job['projection_binding'])
-            item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
-            policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
-            preflight = self.store.session(segment_id, binding, self.clock(), policy=policy)
-            self.store.check(preflight, staged_merge=entry)
+            try:
+                if (job.get('policy_parts') or {}).get('projection') is None:
+                    self.store.policy(segment_id)
+                    job = self.store.ref('jobs', segment_id).get().to_dict() or {}
+                if (
+                    job.get('state') != 'result_ready'
+                    or job.get('result') != entry['result']
+                    or normalized_binding(job['projection_binding']) != binding
+                ):
+                    return None
+                policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
+                preflight = self.store.session(segment_id, binding, self.clock(), policy=policy)
+                self.store.check(preflight, staged_merge=entry)
+            except BatchPrivacyBlocked as error:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                    raise
+                # Like legacy deletion settlement, never pin policy across a
+                # deletion. Code defaults may only drive a no-text receipt.
+                raw_policy = (job.get('policy_parts') or {}).get('projection')
+                policy = ProjectionPolicy.from_dict(raw_policy) if raw_policy is not None else ProjectionPolicy()
+                session = self.store.session(segment_id, binding, self.clock(), policy=policy)
+                return self._commit_joined_parts(
+                    entry, merge_plan, job, policy, [JoinedPart(session)], privacy_deleted=True
+                )
             if preflight.job != job:
                 return None
-            return self.assign_parts(item, entry, binding, finish=False, policy=policy, job=job, merge_plan=merge_plan)
-        except (
-            ProjectionBlocked,
-            ProjectionPredecessorPending,
-            BatchPrivacyBlocked,
-            SyncAssignmentConflict,
-            SyncAssignmentSuperseded,
-        ):
+            item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
+            if outcome == 'success':
+                return self.assign_parts(
+                    item, entry, binding, finish=False, policy=policy, job=job, merge_plan=merge_plan
+                )
+            if binding.record_origin:
+                return None
+
+            # Authenticate and fetch the pinned artifact outside Firestore. Its
+            # evidence is checked again against the staged job inside the commit.
+            payload = self._payload(item, entry, None)
+
+            def prove_empty():
+                seconds = payload.get('audio_seconds')
+                if (
+                    type(seconds) not in (int, float)
+                    or not math.isfinite(seconds)
+                    or abs(seconds - item.duration_seconds) > 0.1
+                    or result_outcome(payload) != outcome
+                    or (outcome == 'no_recoverable_speech' and entry.get('recovery_version') != 1)
+                ):
+                    raise ProjectionBlocked('terminal empty result evidence required')
+                return {'silence': outcome == 'silence' and silence_read_skip_enabled() and not binding.native_record}
+
+            return self._commit_joined_parts(
+                entry, merge_plan, job, policy, [JoinedPart(preflight, prove_disposition=prove_empty)]
+            )
+        except (ProjectionBlocked, BatchPrivacyBlocked, SyncAssignmentConflict, SyncAssignmentSuperseded, NotFound):
             return None
+        except PAYLOAD_CONTRACT_ERRORS as error:
+            if payload_contract_violation(error):
+                return None
+            raise
         except Exception as error:
             from database._client import is_document_size_limit_error
 
@@ -1082,49 +1131,89 @@ class Projector:
                 return None
             raise
 
-    def _commit_joined_parts(self, entry, merge_plan, job, policy, parts, assignment_plans):
+    def _commit_joined_parts(self, entry, merge_plan, job, policy, parts, *, privacy_deleted=False):
         from database.batch_pipeline_joined_assignment import JoinedAssignmentWrites
         from database.batch_pipeline_store import FirestoreTransaction
         from database.sync_assignment import run_sync_assignment
-        from utils.sync.assignment import SyncAssignmentDiscoveryRequired
+        from utils.sync.assignment import SyncAssignmentDiscoveryRequired, run_with_size_limit_backstop
 
         client = self.store.client
         namespace = self.store.store.namespace
+        segment_id = entry['segment_id']
         needs_discovery = None
         retried_discovery = set()
 
         @firestore.transactional
         def commit(transaction, full_ids):
             nonlocal needs_discovery
-            writes = JoinedAssignmentWrites(client, transaction)
+            writes = JoinedAssignmentWrites(transaction)
             view = FirestoreTransaction(client, namespace, transaction)
             if merge_plan(view) != entry:
                 raise ProjectionBlocked('ordered merge plan changed')
-            view.validate_writes()
+            if privacy_deleted:
+                # Only this single no-text disposition can relax the merge
+                # input fence, after proving the original input's deletion.
+                session = parts[0].session
+                session.prepare(transaction, staged_merge=entry, privacy_deleted=True)
+                if session.job != job:
+                    raise ProjectionBlocked('staged job changed during deletion proof')
+                view.validate_writes(proven_deleted_segment=segment_id)
+            else:
+                view.validate_writes()
             view.write_validated(write_view=writes)
             assignments = []
-            for (session, _), (plan, _, discover) in zip(parts, assignment_plans, strict=True):
+            for session, assignment, _, prove_disposition in parts:
                 staged = writes.read_assignment_document(session.result_ref)
-                session.prepare(transaction, staged_merge=staged)
-                if session.job != job:
-                    raise ProjectionBlocked('staged job changed during artifact preparation')
+                if not privacy_deleted:
+                    session.prepare(transaction, staged_merge=staged)
+                    if session.job != job:
+                        raise ProjectionBlocked('staged job changed during artifact preparation')
+                if assignment is None:
+                    disposition = (
+                        {'superseded': True, 'privacy_deleted': True} if privacy_deleted else prove_disposition()
+                    )
+                    session.persist(transaction, write_view=writes, **disposition)
+                    assignments.append(None)
+                    continue
+
+                plan, _, discover, _ = assignment
+                checkpoint = len(writes.operations)
                 try:
                     assigned = plan(transaction, full_ids, write_view=writes)
                 except SyncAssignmentDiscoveryRequired:
                     needs_discovery = discover
                     raise
-                receipt = session.persist(transaction, assigned, write_view=writes)
-                if not receipt.get('transcript_outputs'):
-                    raise ProjectionBlocked('joined merge lacks a transcript publication')
+                except SyncAssignmentErased:
+                    # Derived targets are outside the original-input deletion
+                    # proof. Keep the whole result staged for reconciliation.
+                    raise
+                except SyncAssignmentSuperseded:
+                    writes.discard_since(checkpoint)
+                    session.persist(transaction, superseded=True, write_view=writes)
+                    assigned = None
+                except SyncAssignmentConflict as error:
+                    if not quarantines_assignment_conflict(error, session.job, now=session.now):
+                        raise
+                    writes.discard_since(checkpoint)
+                    session.persist(transaction, quarantined=True, write_view=writes)
+                    assigned = None
+                else:
+                    receipt = session.persist(transaction, assigned, write_view=writes)
+                    if not receipt.get('transcript_outputs'):
+                        raise ProjectionBlocked('joined merge lacks a transcript publication')
                 assignments.append(assigned)
-            result = writes.read_assignment_document(parts[-1][0].result_ref)
+            result = writes.read_assignment_document(parts[-1].session.result_ref)
             writes.flush(client, namespace)
             return result, assignments
 
+        def run(full_ids):
+            return run_sync_assignment(client, commit, full_ids, retry_contention=policy.projection_contention)
+
+        single_plan = parts[0].assignment if len(parts) == 1 else None
         while True:
             try:
-                result, assignments = run_sync_assignment(
-                    client, commit, frozenset(), retry_contention=policy.projection_contention
+                result, assignments = (
+                    run_with_size_limit_backstop(run, single_plan[3]) if single_plan else run(frozenset())
                 )
                 break
             except SyncAssignmentDiscoveryRequired:
@@ -1132,12 +1221,11 @@ class Projector:
                     raise ProjectionBlocked('joined assignment discovery did not resolve the target')
                 retried_discovery.add(needs_discovery)
                 needs_discovery()
-        for (session, finish_assignment), (_, after_commit, _), assigned in zip(
-            parts, assignment_plans, assignments, strict=True
-        ):
+        for (session, assignment, finish_assignment, _), assigned in zip(parts, assignments, strict=True):
             self._mirror_assignment(session)
-            after_commit(assigned)
-            finish_assignment(assigned)
+            if assigned is not None:
+                assignment[1](assigned)
+                finish_assignment(assigned)
         return result
 
     def assign_parts(self, item, entry, binding, *, finish=True, policy=None, hint=None, job=None, merge_plan=None):
@@ -1146,13 +1234,8 @@ class Projector:
         from utils.batch_pipeline.context import ResolvedContext, resolve_context, require_repair_manifest
         from utils.batch_pipeline.projection_parts import split_result
 
-        try:
-            with projection_phase('load_result', policy):
-                payload = self._payload(item, entry, hint)
+        def validate_parts(payload):
             if not isinstance(payload, dict):
-                # load_result is json.loads over the committed artifact: a
-                # valid non-object body must take the contract disposition,
-                # not an AttributeError that wedges the chain head.
                 raise ValueError('batch result must be a JSON object')
             if payload.get('recovery_version') == 1 and entry.get('recovery_version') != 1:
                 raise ProjectionBlocked('recovery result requires recovery handoff')
@@ -1166,7 +1249,31 @@ class Projector:
                 raise ProjectionBlocked('validated VAD speech accounting required')
             if binding.record_origin:
                 projection_speech_spans(payload, item.duration_seconds)
-            parts = [(item, payload)] if binding.record_origin else split_result(item, payload)
+                return [(item, payload)]
+            return split_result(item, payload)
+
+        def prove_payload_quarantine():
+            try:
+                validate_parts(payload)
+            except ValueError:
+                # The bytes were authenticated by the loader and the job still
+                # references that exact generation. Re-run only pure checks.
+                return {'quarantined': True}
+            raise ProjectionBlocked('joined payload quarantine proof changed')
+
+        try:
+            with projection_phase('load_result', policy):
+                payload = self._payload(item, entry, hint)
+            try:
+                parts = validate_parts(payload)
+            except ValueError:
+                if merge_plan is None:
+                    raise
+                session = self.store.session(item.segment_id, binding, self.clock(), policy=policy)
+                return self._commit_joined_parts(
+                    entry, merge_plan, job, policy, [JoinedPart(session, prove_disposition=prove_payload_quarantine)]
+                )
+            speech = payload['speech_seconds']
             from utils.capture.batch_coverage import optional_manifest
 
             manifest = None if item.requires_compute_admission else optional_manifest(self, item, hint)
@@ -1197,8 +1304,7 @@ class Projector:
             self._quarantine_payload_contract(item, binding, policy, error)
             return
         receipts = entry.get('projection_parts') or {}
-        multipart_joined = merge_plan is not None and len(parts) > 1
-        assignment_plans, joined_parts = [], []
+        joined_parts = []
         for index, (part, part_payload) in enumerate(parts):
             if index and hint is not None and hint.deadline is not None and time.monotonic() >= hint.deadline:
                 raise StepDeadline()
@@ -1240,7 +1346,16 @@ class Projector:
                         )
                 if not part_payload['words']:
                     if merge_plan is not None:
-                        return None
+
+                        def prove_empty_part(part_payload=part_payload):
+                            # Part geometry and words come from the pinned
+                            # artifact whose job binding prepare just verified.
+                            if part_payload['words']:
+                                raise ProjectionBlocked('joined empty part contains words')
+                            return {}
+
+                        joined_parts.append(JoinedPart(session, prove_disposition=prove_empty_part))
+                        continue
                     receipt = session.persist_empty()
                 else:
                     with projection_phase('build', policy):
@@ -1274,31 +1389,9 @@ class Projector:
                     session.incoming_segment_count = len(incoming['transcript_segments'])
                     session.recording_target_id = context.target_id
                     receipt_box = []
-                    merge_views = []
-
-                    def prepare(transaction):
-                        if merge_plan is None:
-                            session.prepare(transaction)
-                            return
-                        from database.batch_pipeline_store import FirestoreTransaction
-
-                        view = FirestoreTransaction(self.store.client, self.store.store.namespace, transaction)
-                        if merge_plan(view) != entry:
-                            raise ProjectionBlocked('ordered merge plan changed')
-                        view.validate_writes()
-                        session.prepare(transaction, staged_merge=entry)
-                        if session.job != job:
-                            raise ProjectionBlocked('staged job changed during artifact preparation')
-                        merge_views[:] = [view]
 
                     def persisted(transaction, planned):
-                        if merge_views:
-                            merge_views[0].write_validated()
                         receipt_box[:] = [session.persist(transaction, planned)]
-                        if merge_views:
-                            if not receipt_box[0].get('transcript_outputs'):
-                                raise ProjectionBlocked('joined merge lacks a transcript publication')
-                            merge_views[0].check_joined_commit_budget()
 
                     candidate = None
                     if (
@@ -1348,15 +1441,17 @@ class Projector:
                             timing=policy.projection_timing,
                             **self._index_options(hint),
                         )
-                        if multipart_joined:
-                            assign(binding.owner_id, incoming, assignment_plans=assignment_plans, **options)
-                            joined_parts.append((session, partial(finish_assignment, incoming)))
+                        if merge_plan is not None:
+                            plans = []
+                            assign(binding.owner_id, incoming, assignment_plans=plans, **options)
+                            (assignment,) = plans
+                            joined_parts.append(JoinedPart(session, assignment, partial(finish_assignment, incoming)))
                             continue
                         try:
                             assigned = assign(
                                 binding.owner_id,
                                 incoming,
-                                before_assign=prepare if merge_plan is not None else session.prepare,
+                                before_assign=session.prepare,
                                 after_assign=persisted,
                                 **options,
                             )
@@ -1364,8 +1459,6 @@ class Projector:
                             self._mirror_assignment(session)
                         finish_assignment(incoming, assigned)
                         receipt = receipt_box[0]
-                        if merge_plan is not None:
-                            return {**entry, 'projection': dict(receipt), 'projection_state': receipt['state']}
             except ProjectionReplay as replay:
                 if merge_plan is not None:
                     return None
@@ -1414,8 +1507,8 @@ class Projector:
                 raise
             if finish:
                 self.finish_part(item, binding, receipt, index, policy=policy)
-        if multipart_joined:
-            return self._commit_joined_parts(entry, merge_plan, job, policy, joined_parts, assignment_plans)
+        if merge_plan is not None:
+            return self._commit_joined_parts(entry, merge_plan, job, policy, joined_parts)
 
     def _quarantine_payload_contract(self, item, binding, policy, error, *, session=None):
         """Hold a committed payload that can never validate: the walk retries a

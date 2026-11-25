@@ -1519,6 +1519,176 @@ def test_joined_multipart_updates_shared_row_and_indexes_once(lane, monkeypatch)
     assert {snap.id: snap.to_dict() for snap in indexes.stream()} == indexed
 
 
+@pytest.mark.parametrize('empty_index', [0, 1])
+def test_joined_mixed_empty_part_replays_without_republishing(lane, monkeypatch, empty_index):
+    from utils.batch_pipeline.merge import OrderedMerge
+    from utils.batch_pipeline.scheduler import owner_key
+
+    monkeypatch.setenv('BATCH_PIPELINE_JOINED_MERGE_ENABLED', 'true')
+    batch = multipart(lane, 2, merge=False)
+    lane.payload['words'].pop(empty_index)
+    sid = batch.ids[0]
+    assert lane.queue.complete(lane.WorkResult(sid, f'gs://synthetic/results/{sid}#1'), batch.leases[sid].token, 1)
+
+    merge = OrderedMerge(lane.store, joined_writer=lane.projector.commit_joined_merge)
+    merge.commit_next(lane.uid, 2)  # Simulate restart without receiving the commit result.
+    result = lane.projector.store.ref('results', sid)
+    entry = result.get().to_dict()
+    empty = entry['projection_parts'][str(empty_index)]
+    assert empty['state'] == 'persisted' and empty['conversation_id'] is None
+    assert 'transcript_outputs' not in empty
+    (output,) = entry['projection_parts'][str(1 - empty_index)]['transcript_outputs']
+    (row,) = active_rows(lane)
+    assert output == {'conversation_id': row['id'], 'sync_content_revision': row['sync_content_revision']}
+    owner = lane.projector.store.ref('owners', owner_key(lane.uid))
+    cursor = owner.get().to_dict()
+    assert cursor['watermark']['segment_id'] == cursor['projection_watermark'] == sid
+    assert OrderedMerge(lane.store, joined_writer=lane.projector.commit_joined_merge).commit_next(lane.uid, 3) is None
+    assert result.get().to_dict() == entry
+    assert owner.get().to_dict() == cursor
+    assert active_rows(lane) == [row]
+    assert lane.loads == [sid]
+
+
+@pytest.mark.parametrize('case', ['silence', 'terminal_empty', 'superseded', 'deleted', 'quarantine', 'conflict'])
+def test_joined_terminal_dispositions(lane, monkeypatch, case):
+    from utils.batch_pipeline.merge import OrderedMerge
+    from utils.batch_pipeline.scheduler import owner_key
+    from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
+
+    monkeypatch.setenv('BATCH_PIPELINE_JOINED_MERGE_ENABLED', 'true')
+    batch = lane.seed()
+    sid = batch.ids[0]
+    job_ref = lane.projector.store.ref('jobs', sid)
+    rows = lane.user.collection('conversations')
+    cid = batch.items[0].conversation_id
+    outcome = 'success'
+    if case == 'silence':
+        outcome = 'silence'
+        lane.payload.update(
+            outcome=outcome, words=[], speech_spans=[], speech_seconds=0, words_provider='strict_local_vad'
+        )
+    elif case == 'terminal_empty':
+        from utils.batch_pipeline.recovery_disposition import terminal_empty_payload
+
+        outcome = 'no_recoverable_speech'
+        # Replay an artifact already produced under the former recovery policy.
+        with monkeypatch.context() as recovery:
+            recovery.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
+            lane.payload.update(terminal_empty_payload(30, [{'start': 0, 'end': 1}]))
+    elif case == 'superseded':
+        rows.document(cid).set({'id': cid, 'source': 'omi', 'user_title': True, 'data_protection_level': 'standard'})
+    elif case == 'deleted':
+        job_ref.update({'capture_source_conversation_id': cid})
+    elif case == 'quarantine':
+        lane.payload['audio_seconds'] = 29  # Authenticated payload fails the admitted-duration contract.
+    elif case == 'conflict':
+        from utils.sync import assignment
+
+        def structural_conflict(writer, user_ref, incoming, **options):
+            writer.set(rows.document('abandoned-plan'), {'id': 'abandoned-plan'})
+            raise SyncAssignmentConflict(
+                'synthetic correction conflict', subtype=SyncAssignmentConflictReason.CORRECTED_SPEECH_CHANGED
+            )
+
+        monkeypatch.setattr(assignment, 'assign_in_transaction', structural_conflict)
+
+    result = lane.WorkResult(sid, f'gs://synthetic/results/{sid}#1', outcome)
+    assert lane.queue.complete(result, batch.leases[sid].token, 1)
+    if case == 'terminal_empty':
+        job_ref.update({'recovery_state': 'recovered'})
+    if case == 'deleted':
+        lane.user.collection('deleted_conversations').document(cid).set({'deleted': True})
+    before_rows = {snap.id: snap.to_dict() for snap in rows.stream()}
+    merge = OrderedMerge(lane.store, joined_writer=lane.projector.commit_joined_merge)
+    entry = merge.commit_next(lane.uid, 2)
+    assert entry is not None
+    receipt = entry['projection_parts']['0'] if case in {'superseded', 'conflict'} else entry['projection']
+    assert not receipt.get('transcript_outputs') and receipt['conversation_id'] is None
+    job = job_ref.get().to_dict()
+    assert job['state'] == 'committed' and not job['merge_pending']
+    assert job['result'] == result.to_dict()
+    assert {snap.id: snap.to_dict() for snap in rows.stream()} == before_rows
+    owner = lane.projector.store.ref('owners', owner_key(lane.uid)).get().to_dict()
+    assert owner['watermark']['segment_id'] == owner['projection_watermark'] == sid
+    if case in {'quarantine', 'conflict'}:
+        assert receipt['state'] == 'quarantined'
+        assert entry['projection_state'] == 'quarantine_held'
+        assert job['recovery_state'] == 'held' and job['audio_uri'] == batch.items[0].audio_uri
+        assert batch.ledger.get().to_dict()['quarantined_segment_ids'] == [sid]
+    else:
+        expected_state = 'persisted' if case == 'terminal_empty' else 'ready'
+        assert receipt['state'] == expected_state
+        assert batch.ledger.get().to_dict()['processed_segment_ids'] == [sid]
+    if case == 'superseded':
+        assert receipt['disposition'] == 'superseded'
+    if case == 'deleted':
+        assert receipt['privacy_reason'] == 'conversation_deleted'
+        assert not lane.loads
+    assert merge.commit_next(lane.uid, 3) is None
+    assert lane.projector.store.ref('results', sid).get().to_dict() == entry
+
+
+@pytest.mark.parametrize('case', ['retryable', 'invalid_silence', 'deletion_race', 'writes', 'bytes'])
+def test_joined_unproven_or_over_budget_disposition_remains_staged(lane, monkeypatch, case):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from database.batch_pipeline_store import FirestoreTransaction
+    from utils.batch_pipeline.merge import OrderedMerge
+    from utils.batch_pipeline.scheduler import owner_key
+    from utils.sync import assignment
+    from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
+
+    monkeypatch.setenv('BATCH_PIPELINE_JOINED_MERGE_ENABLED', 'true')
+    batch = lane.seed()
+    sid = batch.ids[0]
+    outcome = 'success' if case in {'retryable', 'deletion_race'} else 'silence'
+    if outcome == 'silence' and case != 'invalid_silence':
+        lane.payload.update(
+            outcome=outcome, words=[], speech_spans=[], speech_seconds=0, words_provider='strict_local_vad'
+        )
+    result = lane.WorkResult(sid, f'gs://synthetic/results/{sid}#1', outcome)
+    assert lane.queue.complete(result, batch.leases[sid].token, 1)
+    if case == 'retryable':
+
+        def writer_not_ready(*args, **kwargs):
+            raise SyncAssignmentConflict(
+                'wait for writer', subtype=SyncAssignmentConflictReason.LIVE_TARGET_NOT_PERSISTED
+            )
+
+        monkeypatch.setattr(assignment, 'assign_in_transaction', writer_not_ready)
+        lane.projector.store.ref('jobs', sid).update({'fresh_capture': True, 'late_upload': False})
+    elif case == 'deletion_race':
+        lane.projector.store.policy(sid)
+        marker = lane.user.collection('deleted_conversations').document(batch.items[0].conversation_id)
+        marker.set({'deleted': True})
+        check = lane.projector.store.check
+
+        def stale_deletion(*args, **kwargs):
+            try:
+                check(*args, **kwargs)
+            except BatchPrivacyBlocked:
+                marker.delete()
+                raise
+
+        monkeypatch.setattr(lane.projector.store, 'check', stale_deletion)
+    elif case == 'writes':
+        monkeypatch.setattr(FirestoreTransaction, 'JOINED_MAX_WRITES', 4)
+    elif case == 'bytes':
+        monkeypatch.setattr(FirestoreTransaction, 'JOINED_MAX_WRITE_BYTES', 128)
+
+    if case != 'deletion_race':
+        lane.projector.store.policy(sid)
+    owner_ref = lane.projector.store.ref('owners', owner_key(lane.uid))
+    job_ref = lane.projector.store.ref('jobs', sid)
+    before = [ref.get().to_dict() for ref in (owner_ref, job_ref, batch.ledger)]
+    assert before[1]['state'] == 'result_ready' and before[1]['merge_pending']
+    merge = OrderedMerge(lane.store, joined_writer=lane.projector.commit_joined_merge)
+    assert merge.commit_next(lane.uid, 2) is None
+    assert [ref.get().to_dict() for ref in (owner_ref, job_ref, batch.ledger)] == before
+    assert not lane.projector.store.ref('results', sid).get().exists
+    assert not active_rows(lane)
+
+
 @pytest.mark.parametrize('refusal', ['erased', 'oversized'])
 def test_joined_merge_keeps_all_multipart_outputs_staged_on_refusal(lane, monkeypatch, refusal):
     from database.batch_pipeline_projection_session import ProjectionSession

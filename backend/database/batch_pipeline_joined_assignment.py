@@ -1,4 +1,4 @@
-"""Transaction-local assignment writes for a joined multipart publication."""
+"""Transaction-local assignment writes for a joined publication."""
 
 from collections import defaultdict
 from copy import deepcopy
@@ -11,9 +11,8 @@ from database.batch_pipeline_store import FirestoreTransaction
 
 
 class JoinedAssignmentWrites:
-    def __init__(self, client, transaction):
+    def __init__(self, transaction):
         self.read_transaction = transaction
-        self.batch = client.batch()
         self.operations = []
         self.by_path = defaultdict(list)
         self.originals = {}
@@ -25,9 +24,13 @@ class JoinedAssignmentWrites:
         self._stage('update', ref, value)
 
     def _stage(self, operation, ref, value):
-        getattr(self.batch, operation)(ref, value)
         self.operations.append((operation, ref, value))
         self.by_path[ref.path].append((operation, value))
+
+    def discard_since(self, checkpoint):
+        for _, ref, _ in reversed(self.operations[checkpoint:]):
+            self.by_path[ref.path].pop()
+        del self.operations[checkpoint:]
 
     def read_assignment_document(self, ref):
         if ref.path not in self.originals:
@@ -58,6 +61,6 @@ class JoinedAssignmentWrites:
         return row
 
     def flush(self, client, namespace):
-        FirestoreTransaction(client, namespace, self.batch).check_joined_commit_budget()
         for operation, ref, value in self.operations:
             getattr(self.read_transaction, operation)(ref, value)
+        FirestoreTransaction(client, namespace, self.read_transaction).check_joined_commit_budget()

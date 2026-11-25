@@ -5095,7 +5095,7 @@ def assign_sync_conversation(
     ``defer_index`` takes the post-commit search/people-stats step off this
     call: it receives the canonical and its donor lineage, and the caller
     converges each conversation once later (``index_sync_assignment``).
-    Joined multipart projection supplies ``assignment_plans`` to collect the
+    Joined projection supplies ``assignment_plans`` to collect the
     transaction body, post-commit callback and discovery retry for each part.
     """
     from utils.conversations.recorded_time import write_span
@@ -5147,6 +5147,7 @@ def assign_sync_conversation(
     def plan(transaction, full_ids=frozenset(), *, write_view=None):
         clock.attempt()
         score_snapshots.clear()
+        attempted.clear()
         # Projection guards only read; after_assign only writes in this transaction.
         if before_assign is not None:
             with clock.timed('fence'):
@@ -5224,7 +5225,7 @@ def assign_sync_conversation(
 
     if assignment_plans is not None:
         discover()
-        assignment_plans.append((plan, after_commit, discover_live_candidates))
+        assignment_plans.append((plan, after_commit, discover_live_candidates, lambda: attempted.get('canonical')))
         return None
 
     with clock.call():
