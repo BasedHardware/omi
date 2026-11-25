@@ -1,6 +1,6 @@
 """Execute recording-builder and sweeper query shapes without external effects."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from importlib import import_module
 from unittest.mock import patch
 
@@ -54,6 +54,17 @@ def _finish_source(client, combo, trial):
     )
 
 
+def _finish_clock(client):
+    """The cut is fresh, so the predecessor read runs."""
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return FROZEN_NOW
+
+    return patch('database.conversations_v3_finish_predecessors.datetime', Clock)
+
+
 def _pick_none(rows, now):
     return None
 
@@ -81,6 +92,23 @@ def entries():
             domains={'conversation_id': [None, 'source']},
             setup=_pending_source,
             patchers=(_decode,),
+        ),
+        DriverEntry(
+            'database.conversations_v3_finish_predecessors.attach',
+            base={
+                'coll': ref_collection(f'users/{SHAPE_UID}/conversations'),
+                'recordings': {
+                    'finish': {
+                        'id': 'finish',
+                        'started_at': FROZEN_NOW,
+                        'finished_at': FROZEN_NOW,
+                        'v3_manual_end': True,
+                        'external_data': {'recording_origin_id': 'shape-origin'},
+                    }
+                },
+                'existing': {},
+            },
+            patchers=(_finish_clock,),
         ),
         DriverEntry(
             'database.conversations_v3._mark_successor_pending',

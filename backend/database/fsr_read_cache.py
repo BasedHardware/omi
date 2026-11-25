@@ -279,6 +279,8 @@ def cached_read(
     validate=lambda value: True,
     shadow=False,
     on_hit=None,
+    metadata=None,
+    on_hit_with_metadata=None,
 ):
     """CAS publication prevents a read started before a write from repopulating."""
     if _bypass.get() or family in _fresh_families.get() or (not shadow and not lever_enabled(family, uid)):
@@ -298,11 +300,13 @@ def cached_read(
                 and validate(envelope['payload'])
             ):
                 _event(family, 'hit')
-                if on_hit is not None:
-                    try:
+                try:
+                    if on_hit is not None:
                         on_hit(envelope['payload'])
-                    except Exception:
-                        pass  # Observation cannot turn a hit into a durable read.
+                    if on_hit_with_metadata is not None:
+                        on_hit_with_metadata(envelope['payload'], envelope.get('metadata'))
+                except Exception:
+                    pass  # Observation cannot turn a hit into a durable read.
                 return copy.deepcopy(envelope['payload'])
     except Exception:
         _failure(family, 'read')
@@ -317,7 +321,10 @@ def cached_read(
     remaining_ms = int((seconds - (time.monotonic() - started)) * 1000)
     if remaining_ms > 0 and cacheable(value):
         try:
-            encoded = json.dumps({'generation': generation, 'payload': value}, default=_json_default)
+            envelope = {'generation': generation, 'payload': value}
+            if metadata:
+                envelope['metadata'] = metadata
+            encoded = json.dumps(envelope, default=_json_default)
             # Redis time anchors expiry before the durable read: neither client clock
             # skew nor delayed serialization/network publication can extend the bound.
             deadline_ms = int(observed_ms or 0) + int(seconds * 1000)

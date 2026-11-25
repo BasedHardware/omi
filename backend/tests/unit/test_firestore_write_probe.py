@@ -212,6 +212,25 @@ def test_generic_write_helper_names_its_caller(client, transport):
     assert _by_caller('users/memories', 'set', caller) == before + 2
 
 
+def test_deadline_and_projection_runners_name_caller(client, transport):
+    # rpc_deadline.bounded wraps every client API call; ProjectionStore.run wraps every
+    # projection transaction. Neither may become the caller label.
+    def bounded(ref):
+        ref.set({'x': 1})
+
+    wrapper = types.FunctionType(bounded.__code__, {'__name__': 'database.rpc_deadline'}, 'bounded')
+
+    def run(write, ref):
+        write(ref)
+
+    runner = types.FunctionType(run.__code__, {'__name__': 'database.batch_pipeline_projection'}, 'run')
+    caller = f'{__name__}:test_deadline_and_projection_runners_name_caller'
+    before = _by_caller('users/memories', 'set', caller)
+    wrapper(client.collection('users').document('u1').collection('memories').document('m1'))
+    runner(wrapper, client.collection('users').document('u1').collection('memories').document('m2'))
+    assert _by_caller('users/memories', 'set', caller) == before + 2
+
+
 def test_batch_counts_each_write_and_failed_commit_counts_nothing(client, transport):
     before = _billed('users/memories', 'set')
     batch = client.batch()

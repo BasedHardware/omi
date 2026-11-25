@@ -31,6 +31,7 @@ from config.conversations_v3 import (
     HISTORICAL_SITDOWN_TIMING,
     SPEECH_LANDED_FIELD,
     boundary_seconds,
+    capture_continuity_enabled,
     live_title_enabled,
     manual_end_home_visible_enabled,
     max_window_seconds,
@@ -39,6 +40,9 @@ from config.conversations_v3 import (
 from utils.conversations.v3.triggers import enqueue, changed
 from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
+from database import batch_pipeline_purge, conversation_batch_purge_jobs as batch_purge_jobs, legal_holds
+from utils import cloud_tasks
+from utils.other import storage
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
@@ -227,6 +231,15 @@ def historical_stretches(eligible, now, *, since, until, internal_end=False):
     return groups
 
 
+async def _release_reconcile_lease(uid, key, token, *, primary_failed):
+    try:
+        await run_blocking(db_executor, leases.release, uid, key, token)
+    except Exception as error:
+        if not primary_failed:
+            raise
+        logger.warning('v3 reconcile lease release failed exception_type=%s', type(error).__name__)
+
+
 async def reconcile(
     uid,
     *,
@@ -270,6 +283,7 @@ async def reconcile(
     if token is None:
         metrics.RECONCILES.labels('busy').inc()
         return 'busy'
+    primary_failed = False
     try:
         cohesion = stretch_cohesion_enabled()
         silence_seconds, lock_seconds = boundary_seconds(cohesion=cohesion and not derive)
@@ -318,6 +332,8 @@ async def reconcile(
                 lock_delay=lock_delay,
                 settle_on_landing=custom_timing,
                 max_window=timedelta(seconds=max_window_seconds()),
+                # Live passes only: backfill and re-derive keep their windowing (cuts there are long settled).
+                continuity=capture_continuity_enabled() and not derive,
             )
         if live and any(not g['finished'] or (g.get('window_cap_end') and not g['locked']) for g in groups):
             # Speech within five minutes of now is still the live builder's; refuse before any paid call.
@@ -640,6 +656,7 @@ async def reconcile(
                     and (not was_ended or rewrite or promoted or (prior or {}).get('tile_state') == 'transcribing')
                 ):
                     row['v3_process_pending'] = True
+                    row.pop('v3_process_retry_after', None)
                     row['v3_rewrites'] = int((prior or {}).get('v3_rewrites') or 0) + int(rewrite)
                 if (
                     prior
@@ -762,6 +779,11 @@ async def reconcile(
                 delay = lock_delay if group['outline_ready'] else min(silence_gap, lock_delay)
                 settle_from = group.get('settle_from', group['end'])
                 await run_blocking(db_executor, enqueue, uid, at=max(settle_from + delay, now + timedelta(minutes=1)))
+        holds = [r[outline.HOLD_UNTIL] for r in recordings.values() if r.get(outline.HOLD_UNTIL) is not None]
+        if holds and not derive:
+            # A held manual-end cut applies when its wait ends, even if no transcript lands.
+            metrics.FINISH_HELD.inc()
+            await run_blocking(db_executor, enqueue, uid, at=max(min(holds), now + timedelta(minutes=1)))
         for row in rows:
             prior = existing.get(row['id']) or {}
             if (
@@ -779,6 +801,7 @@ async def reconcile(
         metrics.RECONCILES.labels('committed').inc()
         deferred = preview_wakes(rows, recordings)
     except Conflict as error:
+        primary_failed = True
         reason = str(error)
         if reason in RACES and not derive:
             # Nothing committed, so every pending marker is still owed. Answer the task and wake the
@@ -794,6 +817,7 @@ async def reconcile(
             metrics.RECONCILES.labels('raced').inc()
             metrics.RACES.labels(reason).inc()
             logger.info('v3 reconcile raced reason=%s', reason)
+            primary_failed = False
             return 'raced'
         if reason not in BLOCKED:
             metrics.RECONCILES.labels('error').inc()
@@ -810,11 +834,14 @@ async def reconcile(
             # A backfill conflict must not park the owner's live builder.
             await run_blocking(db_executor, store.record_blocked, uid, token, reason)
         blocked = reason
-    except Exception:
-        metrics.RECONCILES.labels('error').inc()
+        primary_failed = False
+    except BaseException as error:
+        primary_failed = True
+        if isinstance(error, Exception):
+            metrics.RECONCILES.labels('error').inc()
         raise
     finally:
-        await run_blocking(db_executor, leases.release, uid, key, token)
+        await _release_reconcile_lease(uid, key, token, primary_failed=primary_failed)
     if blocked is not None:
         if not derive and not on_open:
             # Windows earlier passes (or earlier batches) committed still owe their notes.
@@ -1107,12 +1134,16 @@ async def drain_processing(uid):
         if token is None:
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
             continue
+        primary_failed = False
         try:
             await _process_leased(uid, row, token)
         except FinalizationOwnedElsewhere:
             continue
+        except BaseException:
+            primary_failed = True
+            raise
         finally:
-            await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
+            await _release_reconcile_lease(uid, 'summary-' + row['id'], token, primary_failed=primary_failed)
     # Settled notes arm the conversation-created obligation; deliver after every summary lease is released.
     # Imported here: the webhook fanout's LLM/app graph must not join process_conversation's import graph,
     # which loads this module at import time (listen, pusher and sync all import it).
@@ -1121,15 +1152,33 @@ async def drain_processing(uid):
     await created.deliver(uid)
 
 
+PROCESSING_SCAN_MAX_PAGES = 4
+
+
 def pending_processing(uid):
     client = store.get_firestore_client()
-    return [
-        store.decode_row(uid, doc, firestore_client=client)
-        for doc in store.user_conversations(client, uid)
+    now = datetime.now(timezone.utc)
+    query = (
+        store.user_conversations(client, uid)
         .where(filter=FieldFilter('v3_process_pending', '==', True))
+        .order_by('__name__')
         .limit(store.LIMIT)
-        .stream()
-    ]
+    )
+    due = []
+    page = query
+    # At most four pages (512 document reads), and at most 128 decoded results.
+    for _ in range(PROCESSING_SCAN_MAX_PAGES):
+        snapshots = list(page.stream())
+        for doc in snapshots:
+            data = doc.to_dict() or {}
+            if policy.processing_due(data, now):
+                due.append(store.decode_row(uid, doc, data=data, firestore_client=client))
+                if len(due) == store.LIMIT:
+                    return due
+        if len(snapshots) < store.LIMIT:
+            break
+        page = query.start_after(snapshots[-1])
+    return due
 
 
 def _process(uid, row, token):
@@ -1174,6 +1223,12 @@ def _process(uid, row, token):
                 # short-clip floor match live notes; process_conversation withholds their derived effects.
                 trigger=ProcessingTrigger.CAPTURE_END,
             )
+            decline = fence.persistence_declined()
+        if decline is not None:
+            writers.settle_processing(
+                uid, row['id'], token, row.get('sync_content_revision'), None, skipped=True, decline=decline
+            )
+            return
         if getattr(result.status, 'value', result.status) == 'failed':
             writers.fail_processing(
                 uid, row['id'], token, row.get('sync_content_revision'), content_hash=writers.processing_hash(row)
@@ -1242,7 +1297,8 @@ async def sweep():
             query = query.start_after(cursor)
         processing = await run_blocking(db_executor, lambda: list(query.stream()))
         for doc in processing:
-            if not python_owns_finalization(doc.to_dict() or {}):
+            row = doc.to_dict() or {}
+            if not python_owns_finalization(row) or not policy.processing_due(row, now):
                 continue
             parts = doc.reference.path.split('/')
             if len(parts) == 4 and parts[0] == 'users' and parts[1] not in users:
@@ -1381,12 +1437,79 @@ async def drain_backfill(uid, *, deadline, after=None, keep_going=None, concurre
     return counts
 
 
-def purge_audio(uid, rid):
-    from utils.other.storage import delete_privacy_conversation_audio
+# The account gate kind storage's audio-deletion helpers take; held here, theirs nests in it.
+AUDIO_GATE_KIND = 'audio_conversation_deletion'
 
-    if store.claim_audio_purge(uid, rid):
-        delete_privacy_conversation_audio(uid, rid)
-        conversations_db.update_conversation(uid, rid, {'v3_audio_purge_pending': False, 'audio_files': []})
+
+class AudioPurgeIntakesPending(RuntimeError):
+    """The recording's batch-intake purge obligation has not run yet; the blobs wait for it."""
+
+
+def _assert_erasure_permitted(uid):
+    """The obligation runner's hold preflight; a held purge stays owed and the sweep re-checks it."""
+    try:
+        legal_holds.assert_account_deletion_permitted(uid)
+    except legal_holds.LegalHoldActive:
+        metrics.AUDIO_PURGES.labels('held').inc()
+        raise
+
+
+def purge_audio(uid, rid):
+    """Erase a released recording. Custody intakes go before the blobs; any failure raises for the retry.
+
+    Nothing is deleted under an active legal hold: the hold is checked before the
+    claim, the inline intake purge runs under the account gate a synchronous user
+    delete holds (its acquisition re-checks the hold), and every blob deletion runs
+    under one audio-deletion gate, which a hold cannot overtake. Each step is
+    idempotent and the pending bit clears last.
+    """
+    _assert_erasure_permitted(uid)
+    claim = store.claim_audio_purge(
+        uid, rid, defer_intake_purge=cloud_tasks.is_conversation_batch_purge_dispatch_configured()
+    )
+    if not claim:
+        return
+    if claim.custody_invalidated:
+        metrics.AUDIO_PURGES.labels('custody_invalidated').inc()
+    if claim.intakes == 'pending':
+        metrics.AUDIO_PURGES.labels('intakes_pending').inc()
+        raise AudioPurgeIntakesPending('record WAL intake purge obligation still armed')
+    if claim.intakes == 'inline':
+        # The same per-conversation purge a user delete runs (record_deletion) under the same gate,
+        # for the recording and each retained donor; the claim wrote their tombstones.
+        try:
+            with legal_holds.destructive_operation_gate(uid, kind=batch_purge_jobs.GATE_KIND):
+                for owner in (rid, *claim.donor_ids):
+                    batch_pipeline_purge.purge_batch_owner(uid, conversation_id=owner)
+        except legal_holds.LegalHoldActive:
+            metrics.AUDIO_PURGES.labels('held').inc()
+            raise
+        except Exception:
+            metrics.AUDIO_PURGES.labels('intakes_failed').inc()
+            raise
+    # One account gate spans every irreversible blob deletion: canonical packs, the recording's raw
+    # prefixes and each donor's. Its acquisition re-checks the hold transactionally, and while it runs
+    # place_legal_hold refuses, so no hold can land between the canonical and the prefix deletes.
+    # The storage helpers' own audio gate nests in this one (same uid and kind) rather than releasing it.
+    try:
+        with legal_holds.destructive_operation_gate(uid, kind=AUDIO_GATE_KIND):
+            if claim.donor_ids:
+                # A merge target's retained donors served only this recording, as a user delete erases them:
+                # their canonical packs with the recording's, then each donor's own prefixes.
+                storage.delete_privacy_conversation_audio(uid, rid, source_ids=list(claim.donor_ids))
+                for donor in claim.donor_ids:
+                    storage.delete_conversation_audio_files(uid, donor)
+            else:
+                storage.delete_privacy_conversation_audio(uid, rid)
+    except legal_holds.LegalHoldActive:
+        metrics.AUDIO_PURGES.labels('held').inc()
+        raise
+    done = {'v3_audio_purge_pending': False, 'audio_files': []}
+    if claim.donor_ids:
+        # The donor list is the last identifier the erase needed; it goes with the pending bit.
+        done[store.AUDIO_PURGE_DONORS_FIELD] = []
+    conversations_db.update_conversation(uid, rid, done)
+    metrics.AUDIO_PURGES.labels('erased').inc()
 
 
 async def measure_legacy_users():

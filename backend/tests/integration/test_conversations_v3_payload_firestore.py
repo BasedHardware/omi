@@ -275,6 +275,40 @@ def test_home_list_does_not_return_chunks_from_a_replaced_parent_revision(row, m
     assert conversations.get_conversations_without_photos(uid, limit=1, list_fields_only=True) == []
 
 
+def test_home_cursor_resumes_at_the_chunked_row_after_budget_exhaustion(row, monkeypatch):
+    client, uid, ref = row
+    inline = ref.parent.document('synthetic-inline')
+    monkeypatch.setattr(conversations, 'db', client)
+    monkeypatch.setattr(conversations, 'indexed_list_reads_enabled', lambda: True)
+    monkeypatch.setattr(conversations, '_conversation_list_cursor_enabled', lambda _: True)
+    publish(row, fields={'transcript_segments', 'structured'})
+    ref.update({'discarded': False})
+    inline.create(
+        {
+            'id': inline.id,
+            'created_at': AT + timedelta(minutes=1),
+            'status': 'completed',
+            'discarded': False,
+            'structured': {'title': 'Inline title'},
+        }
+    )
+    try:
+        page = {}
+        budget = ListReadBudget(deadline_monotonic=time.monotonic() + 10, max_documents=3, strict_documents=True)
+        rows = conversations.get_conversations_without_photos(
+            uid, limit=2, list_fields_only=True, budget=budget, cursor_page=page
+        )
+        assert [card['id'] for card in rows] == [inline.id]
+        assert budget.truncated and page['storage_rows'] == 1 and page['next_cursor']
+        retry = ListReadBudget(deadline_monotonic=time.monotonic() + 10, max_documents=10, strict_documents=True)
+        [card] = conversations.get_conversations_without_photos(
+            uid, limit=2, list_fields_only=True, budget=retry, cursor=page['next_cursor']
+        )
+        assert card['id'] == ref.id and card['structured']['title'] == 'Locked title'
+    finally:
+        inline.delete()
+
+
 def test_lean_home_refill_skips_hidden_chunks_and_hydrates_the_visible_card(row, monkeypatch):
     client, uid, ref = row
     hidden = ref.parent.document('synthetic-hidden')

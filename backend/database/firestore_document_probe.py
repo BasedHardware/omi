@@ -185,7 +185,7 @@ _caller_lock = threading.Lock()
 
 # The in-process bill ledger is deliberately independent of caller attribution.
 # It reuses _record's already-computed amount and never walks the stack.
-def _ledger_service_name() -> str:
+def firestore_metrics_service_name() -> str:
     """Name this process on the bill.
 
     An explicit setting wins. Cloud Run injects ``K_SERVICE`` or
@@ -207,7 +207,7 @@ def _ledger_service_name() -> str:
 
 _LEDGER_ENABLED = os.environ.get('FIRESTORE_READ_LEDGER') == '1'
 _LEDGER_EPOCH = secrets.token_hex(8)
-_LEDGER_SERVICE = _ledger_service_name()
+_LEDGER_SERVICE = firestore_metrics_service_name()
 _LEDGER_LOCK = threading.Lock()
 _ledger_day: str | None = None
 _ledger_counts = {'lookup': 0, 'not_found': 0, 'query': 0}
@@ -888,24 +888,28 @@ class _ObservedAsync:
             return
 
 
+def observe_query_stream(query: Any, inner: Any, *, caller: str) -> Any:
+    """Attribute a synchronous query, including a GAPIC query with a read_time."""
+    path = _parent_path(query)
+    offset = _offset_of(query)
+    yielded = 0
+
+    def on_item(snapshot: Any) -> None:
+        nonlocal yielded
+        if _counts_as_document(snapshot):
+            yielded += 1
+            _record(_snapshot_path(snapshot, path), True, kind='query', caller=caller, sdk_object=query)
+
+    def on_finish() -> None:
+        _finish_query(path, caller, yielded, offset, query)
+
+    return _ObservedSync(inner, on_item, on_finish)
+
+
 def _wrap_query_stream(original: Any) -> Any:
     def stream(self: Any, *args: Any, **kwargs: Any) -> Any:
         caller = call_site()
-        path = _parent_path(self)
-        offset = _offset_of(self)
-        inner = original(self, *args, **kwargs)
-        yielded = 0
-
-        def on_item(snapshot: Any) -> None:
-            nonlocal yielded
-            if _counts_as_document(snapshot):
-                yielded += 1
-                _record(_snapshot_path(snapshot, path), True, kind='query', caller=caller, sdk_object=self)
-
-        def on_finish() -> None:
-            _finish_query(path, caller, yielded, offset, self)
-
-        return _ObservedSync(inner, on_item, on_finish)
+        return observe_query_stream(self, original(self, *args, **kwargs), caller=caller)
 
     return stream
 
