@@ -165,6 +165,33 @@ class Reader:
         data = self.run(args)
         return json_read(data) if data.strip() else None
 
+    def reference_objects(self, keys):
+        """Snapshot only named release resources in at most two bounded calls."""
+        result = {}
+        for cluster_scoped in (False, True):
+            group = [key for key in keys if (key[1] in {'ClusterRole', 'ClusterRoleBinding'}) == cluster_scoped]
+            if not group:
+                continue
+            resources = []
+            for api, kind, namespace, name in group:
+                require(kind in ALLOWED_KINDS and re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}', name)
+                        and re.fullmatch(r'(?:[a-z0-9][a-z0-9.-]*/)?v[a-z0-9]+', api)
+                        and namespace == NS, 'live_target')
+                parts = api.split('/')
+                suffix = '.' + parts[1] + '.' + parts[0] if len(parts) == 2 else ''
+                resources.append(kind + suffix + '/' + name)
+            scope = [] if cluster_scoped else ['-n', NS]
+            data = json_read(self.run(['kubectl', *scope, 'get', *resources, '-o', 'json']))
+            docs = data['items'] if data.get('kind') == 'List' else [data]
+            for doc in docs:
+                meta = doc['metadata']
+                key = (doc['apiVersion'], doc['kind'], meta.get('namespace', NS) if cluster_scoped else meta['namespace'],
+                       meta['name'])
+                require(key in group and key not in result, 'reference_live_document')
+                result[key] = doc
+        require(result.keys() == set(keys), 'reference_live_document_missing')
+        return result
+
 
 def version(doc):
     if doc is None:
@@ -516,7 +543,7 @@ def produce(request, reader, environ, root, private_file, overrides, now):
         base = json_read(reader.run([*base_args, '--dry-run=client', '--output=json']))
         baseline = documents(base['manifest'] + ''.join('\n---\n' + h['manifest'] for h in base.get('hooks', [])))
     keys = sorted(set(baseline) | set(current))
-    live = {k: reader.obj(k[1], k[3], k[2]) for k in keys}
+    live = reader.reference_objects(keys) if reference_revision else {k: reader.obj(k[1], k[3], k[2]) for k in keys}
     before = {k: version(v) for k, v in live.items()}
     full = json_read(reader.run([*args, '--dry-run=client', '--output=json']))
     require(isinstance(full.get('manifest'), str) and isinstance(full.get('hooks', []), list), 'partial_render')
@@ -541,8 +568,11 @@ def produce(request, reader, environ, root, private_file, overrides, now):
     else:
         desired = documents(full['manifest'] + rendered_hooks)
         coverage = compare(desired, live, baseline, set(private))
-    for k in keys:
-        require(version(reader.obj(k[1], k[3], k[2])) == before[k], 'live_moved')
+    if reference_revision:
+        require({k: version(doc) for k, doc in reader.reference_objects(keys).items()} == before, 'live_moved')
+    else:
+        for k in keys:
+            require(version(reader.obj(k[1], k[3], k[2])) == before[k], 'live_moved')
     require(release_revision(reader) == helm_revision, 'release_revision_moved')
     receipt = {'schema': 1, 'request_id': request['request_id'], 'created': now, 'expires': request['expires'],
                'candidate_sha': request['candidate_sha'], 'control_sha': request['control_sha'],

@@ -139,6 +139,31 @@ def test_reference_image_must_be_running_on_all_ready_pods(fault):
                 evidence.serving_pods(evidence.Reader(), live, 'listen', image)
 
 
+def test_reference_snapshot_batches_durable_objects_without_widening_scope():
+    docs = [
+        {'apiVersion': 'v1', 'kind': 'Service', 'metadata': {'name': 'listen', 'namespace': evidence.NS}},
+        deployment(),
+    ]
+    keys = [(doc['apiVersion'], doc['kind'], evidence.NS, doc['metadata']['name']) for doc in docs]
+    with patch.object(evidence.Reader, 'run', return_value=json.dumps({'kind': 'List', 'items': docs}).encode()) as run:
+        assert evidence.Reader().reference_objects(keys) == dict(zip(keys, docs))
+        run.assert_called_once_with(
+            [
+                'kubectl',
+                '-n',
+                evidence.NS,
+                'get',
+                'Service/listen',
+                'Deployment.v1.apps/' + evidence.TARGET,
+                '-o',
+                'json',
+            ]
+        )
+    with patch.object(evidence.Reader, 'run', return_value=json.dumps(docs[0]).encode()):
+        with pytest.raises(evidence.Refused, match='reference_live_document_missing'):
+            evidence.Reader().reference_objects(keys)
+
+
 def test_private_value_never_leaves_complete_comparison():
     before = deployment('old-private-value')
     wanted = deployment('new-private-value')
@@ -349,6 +374,9 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
             if fault == 'live-movement' and self.objects > 1:
                 observed['metadata']['resourceVersion'] = '11'
             return observed
+
+        def reference_objects(self, keys):
+            return {key: self.obj() for key in keys}
 
     req['helm_args'] = evidence.helm_args(
         '<candidate>/backend/charts/backend-listen',
