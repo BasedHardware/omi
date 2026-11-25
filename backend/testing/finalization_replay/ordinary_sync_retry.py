@@ -5,6 +5,7 @@ from collections import Counter
 import json
 import os
 from pathlib import Path
+import sys
 import time
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -43,6 +44,7 @@ def retry_to_park(state, worker_backend):
     handler_url = 'https://replay.invalid/v2/enrichment/run'
     queues = yaml.safe_load((Path(worker_backend) / 'deploy/ops/prod.yaml').read_text())['cloud_tasks']
     config = queues[queue_name]
+    max_attempts = config['max_attempts']
     policies = Counter()
     payloads = {}
 
@@ -64,7 +66,9 @@ def retry_to_park(state, worker_backend):
     queue = CloudTasksQueue(
         deliver,
         QueueConfig(
-            max_attempts=config['max_attempts'],
+            # The shared fake takes a positive cap. The replay's age gate bounds
+            # the simulation for a deployed queue with unlimited attempts.
+            max_attempts=sys.maxsize if max_attempts == -1 else max_attempts,
             min_backoff_s=float(config['min_backoff'].removesuffix('s')),
             max_backoff_s=float(config['max_backoff'].removesuffix('s')),
         ),
@@ -130,5 +134,5 @@ def retry_to_park(state, worker_backend):
         'callback_pending_attempts': policies['callback_pending'],
         'elapsed_seconds': task.done_at,
         'max_age_seconds': max_age,
-        'queue_max_attempts': queue.config.max_attempts,
+        'queue_max_attempts': max_attempts,
     }
