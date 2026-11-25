@@ -144,33 +144,33 @@ async function evaluateHead({github, context, headSha}) {
   });
   await status('pending','Checking account-scoped UI approval');
   try {
-    // Commit statuses are shared by SHA, so every open main PR sharing this
-    // SHA must satisfy its own requirements before any run may write success.
-    const sameHead = async () => (await github.paginate(github.rest.pulls.list, {
-      ...repo,state:'open',base:'main',per_page:100,
-    })).filter(p => p.head.sha === sha);
-    const prs = await sameHead();
-    // An issue-comment run can be for a stacked PR. Its lane base is not
-    // release scope: compare main to the locked head so inherited UI changes
-    // and authors still count. Existing main-target PRs always take precedence.
-    const stack = prs.length === 0 && trigger.state === 'open'
-      && trigger.base.ref !== 'main' && trigger.head.sha === sha;
+    // A commit status is shared by head SHA. Main-target PRs take precedence.
+    // Without one, reconcile every open stack on that SHA.
+    const sameHeadCandidates = async () => {
+      const open = await github.paginate(github.rest.pulls.list, {...repo,state:'open',per_page:100});
+      const sameHead = open.filter(pr => pr.head.sha === sha);
+      const mainTargets = sameHead.filter(pr => pr.base.ref === 'main');
+      return mainTargets.length ? mainTargets : sameHead;
+    };
+    const candidates = await sameHeadCandidates();
+    const stack = candidates.length > 0 && candidates[0].base.ref !== 'main';
     const readMain = async () => {
       const {data} = await github.rest.git.getRef({...repo,ref:'heads/main'});
       if (!/^[a-f0-9]{40}$/.test(data.object?.sha || '')) throw new Error('Invalid main snapshot');
       return data.object.sha;
     };
     const main = stack ? await readMain() : null;
-    const candidates = stack ? [trigger] : prs;
+    // All stacks use the same immutable main comparison so inherited UI
+    // changes and authors count. Approval comments remain scoped to each PR.
+    const stackEvidence = stack ? await evidence(github,repo,{base:{sha:main},head:{sha}}) : null;
     let allowed = candidates.length > 0;
     for (const summary of candidates) {
       const pr = (await github.rest.pulls.get({...repo,pull_number:summary.number})).data;
       if (pr.state !== 'open' || pr.head.sha !== sha || pr.base.ref !== summary.base.ref
-        || pr.base.sha !== summary.base.sha || (!stack && pr.base.ref !== 'main')) {
+        || pr.base.sha !== summary.base.sha) {
         throw new Error('PR snapshot changed');
       }
-      const target = stack ? {...pr,base:{ref:'main',sha:main}} : pr;
-      const {files,commits} = await evidence(github,repo,target);
+      const {files,commits} = stackEvidence || await evidence(github,repo,pr);
       const comments = await github.paginate(github.rest.issues.listComments, {
         ...repo,issue_number:pr.number,per_page:100,
       });
@@ -191,16 +191,11 @@ async function evaluateHead({github, context, headSha}) {
           + 'Non-UI work and unrelated access are unaffected.'});
       }
     }
-    if (stack) {
-      const current = (await github.rest.pulls.get({...repo,pull_number})).data;
-      if (current.state !== 'open' || current.head.sha !== sha || current.base.ref !== trigger.base.ref
-        || current.base.sha !== trigger.base.sha || await readMain() !== main) {
-        throw new Error('Stack or main moved during verification');
-      }
+    const latest = await sameHeadCandidates();
+    const signature = list => list.map(pr => JSON.stringify([pr.number,pr.base.ref,pr.base.sha])).sort().join(',');
+    if (signature(latest) !== signature(candidates) || (stack && await readMain() !== main)) {
+      throw new Error('PR set or main moved during verification');
     }
-    const latest = await sameHead();
-    const signature = list => list.map(p => `${p.number}:${p.base.sha}`).sort().join(',');
-    if (signature(latest) !== signature(prs)) throw new Error('PR set changed during verification');
     await status(allowed ? 'success' : 'failure',allowed
       ? stack ? 'UI approval satisfied or not required for stacked PR compared with main'
         : 'UI approval satisfied or not required on all same-head PRs'

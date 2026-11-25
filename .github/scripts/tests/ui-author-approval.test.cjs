@@ -96,10 +96,6 @@ function stackFixture() {
     assert.equal(ref,'heads/main');
     return {data:{object:{sha:main}}};
   }};
-  const paginate = f.github.paginate;
-  f.github.paginate = (method,args) => method === 'prs'
-    ? Promise.resolve(f.prs.filter(p => p.base.ref === args.base).map(p => ({...p})))
-    : paginate(method,args);
   return {...f,main,headSha:f.p.head.sha};
 }
 test('stacked non-UI PR clears approval using the immutable diff against main', async () => {
@@ -131,18 +127,32 @@ test('a main-target PR sharing the stack head takes precedence over stack approv
   await run(f);
   assert.equal(f.statuses.at(-1).state,'failure');
 });
+test('same-head stacks require an approval on each affected PR', async () => {
+  const f = stackFixture();
+  f.prs.push({...f.p,number:2,base:{ref:'lane/batch',sha:'e'.repeat(40)}});
+  f.comments[1].push(approve);
+  f.comments[2] = [];
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'failure');
+  assert.equal(f.calls.length,1);
+  f.comments[2].push(approve);
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'success');
+});
 test('stack approval refuses if main or the lane moves during verification', async () => {
   for (const moved of ['main','lane']) {
     const f = stackFixture();
     f.comments[1].push(approve);
-    const compare = f.github.rest.repos.compareCommitsWithBasehead;
-    f.github.rest.repos.compareCommitsWithBasehead = args => {
-      if (moved === 'main') {
-        f.github.rest.git.getRef = async () => ({data:{object:{sha:'d'.repeat(40)}}});
-      } else {
-        f.prs[0] = {...f.p,base:{...f.p.base,sha:'d'.repeat(40)}};
+    const paginate = f.github.paginate;
+    f.github.paginate = (method,args) => {
+      if (method === 'comments') {
+        if (moved === 'main') {
+          f.github.rest.git.getRef = async () => ({data:{object:{sha:'d'.repeat(40)}}});
+        } else {
+          f.prs[0] = {...f.p,base:{...f.p.base,sha:'d'.repeat(40)}};
+        }
       }
-      return compare(args);
+      return paginate(method,args);
     };
     await assert.rejects(run(f),/moved during verification/);
     assert.equal(f.statuses.at(-1).state,'failure');
