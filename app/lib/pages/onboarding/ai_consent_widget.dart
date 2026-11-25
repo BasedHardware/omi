@@ -84,6 +84,7 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
             key: const Key('ai_consent_agree'),
             label: context.l10n.agreeAndContinue,
             expand: true,
+            maxLines: null,
             onPressed: () {
               OmiHaptics.selection();
               widget.onAgree();
@@ -94,6 +95,7 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
             key: const Key('ai_consent_use_different_account'),
             label: context.l10n.useDifferentAccount,
             expand: true,
+            maxLines: null,
             onPressed: _confirmUseDifferentAccount,
           ),
         ],

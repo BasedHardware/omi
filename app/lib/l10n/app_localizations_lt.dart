@@ -7061,6 +7061,26 @@ class AppLocalizationsLt extends AppLocalizations {
   String get authUnexpectedError => 'Netikėta klaida prisijungiant, bandykite dar kartą';
 
   @override
+  String get accountSignInMethods => 'Prisijungimo būdai';
+
+  @override
+  String get accountAddSignInMethod => 'Pridėti prisijungimo būdą';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Pridėkite prisijungimo prie šios Omi paskyros būdą. Jūsų planas, įrašai ir integracijos liks šioje paskyroje.';
+
+  @override
+  String get accountSignInConflictTitle => 'Šis prisijungimo būdas susietas su kita paskyra';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Vis dar esate prisijungę prie šios paskyros. Kiekvienoje Omi paskyroje lieka jos planas, įrašai ir integracijos.';
+
+  @override
+  String get accountSignInMethodAdded => 'Prisijungimo būdas pridėtas';
+
+  @override
   String get authFailedToLinkGoogle => 'Nepavyko susieti su Google, bandykite dar kartą.';
 
   @override
@@ -14382,6 +14402,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get processingProgress => 'Apdorojami laukiantys įrašai…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Laukiama, kol bus prieinama transkribavimo kvota';
+
+  @override
   String get processingDeferred => 'Laukia apdorojimo';
 
   @override
@@ -15337,9 +15360,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get stopThese => 'Sustabdyti šiuos';
 
   @override
-  String get meetingActionItemsTitle => 'Veiksmai';
-
-  @override
   String get addToTasks => 'Pridėti prie užduočių';
 
   @override
@@ -15764,4 +15784,76 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Patikrinti';
+
+  @override
+  String get playManageSubscription => 'Tvarkyti prenumeratą';
+
+  @override
+  String get playBilledByGoogle => 'Mokestis per Google Play';
+
+  @override
+  String get playPurchasePending => 'Mokėjimas laukia. Omi Pro prasidės, kai Google Play jį patvirtins.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Šis Google Play pirkinys priklauso kitai Omi paskyrai.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Pirkinio dar nepavyko patvirtinti. Bandysime dar kartą automatiškai.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automatiškai atnaujinama nurodyta kaina, kol atšauksite. Tvarkykite ar atšaukite bet kada Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android nepasiekiama';
+
+  @override
+  String get pageNotAvailableInApp => 'Šis puslapis programėlėje nepasiekiamas.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Užsakymas pateiktas. Patvirtinimą rasite el. pašte.';
+
+  @override
+  String get prepaidCodeEntry => 'Turite kodą?';
+
+  @override
+  String get prepaidCodeTitle => 'Panaudoti kodą';
+
+  @override
+  String get prepaidCodeFieldHint => 'Įveskite savo kodą';
+
+  @override
+  String get prepaidCodeRedeem => 'Panaudoti';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kodas panaudotas';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Šis kodas negalioja. Patikrinkite jį ir bandykite dar kartą.',
+        'used': 'Šis kodas jau panaudotas.',
+        'expired': 'Šio kodo galiojimas baigėsi.',
+        'hasPlan': 'Jau turite planą. Jūsų kodas nepanaudotas. Panaudokite jį, kai baigsis jūsų planas.',
+        'notPrepaid': 'Šio kodo čia panaudoti negalima. Panaudokite jį rinkdamiesi planą.',
+        'notEligible': 'Šio kodo negalima naudoti šioje paskyroje.',
+        'rateLimited': 'Per daug bandymų. Bandykite vėliau.',
+        'other': 'Kažkas nepavyko. Bandykite dar kartą.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Mokama per omi.me. Atšaukite čia bet kada.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Mokama per omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Jūsų $plan planas pristabdytas.';
+  }
 }

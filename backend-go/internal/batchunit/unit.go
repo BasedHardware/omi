@@ -26,6 +26,8 @@ const Kind = "batch_unit"
 // is a new format, declared beside the old one until no old job remains.
 const Format = 1
 
+const routedFormat = 2
+
 // The kind's steps.
 const (
 	// StepSpeech means the transcription has not been stored yet.
@@ -48,7 +50,7 @@ const (
 // adapters passed to Service can return; the binary supplies them when it wires the kind.
 func Declaration(adapterCauses ...queue.Cause) queue.Kind {
 	return queue.Kind{
-		Name: Kind, Formats: []int{Format}, Steps: []string{StepSpeech, StepStored},
+		Name: Kind, PaidProcessing: true, Formats: []int{Format, routedFormat}, Steps: []string{StepSpeech, StepStored},
 		Causes: slices.Concat([]queue.Cause{CauseInputUnreadable, CauseStepFailed}, adapterCauses),
 	}
 }
@@ -66,6 +68,15 @@ type Source struct {
 	Version int64
 }
 
+// Route selects the speech adapter after funding admission. Empty is the legacy default.
+type Route string
+
+// Batch transcription routes.
+const (
+	Parakeet Route = "parakeet"
+	Provider Route = "provider"
+)
+
 // Unit is one piece of an owner's batch.
 type Unit struct {
 	// ID identifies the unit within its owner.
@@ -74,13 +85,19 @@ type Unit struct {
 	Source Source
 	// OrderAt places the unit in the owner's order.
 	OrderAt time.Time
+	// BYOK and AlreadyPaid describe whether this unit needs platform-funded compute.
+	BYOK, AlreadyPaid bool
+	Route             Route
+	// CustodyDeadline is supplied by intake from the existing retention clock.
+	CustodyDeadline time.Time
+	AudioDuration   time.Duration
 	// RunAt optionally delays the unit.
 	RunAt time.Time
 }
 
 // Validate reports whether the unit can be admitted.
 func (u Unit) Validate() error {
-	if u.ID == "" || u.Source.Ref == "" || u.OrderAt.IsZero() {
+	if u.ID == "" || u.Source.Ref == "" || u.OrderAt.IsZero() || (u.Route != "" && u.Route != Provider && u.Route != Parakeet) || u.AudioDuration < 0 {
 		return ErrInvalid
 	}
 	return nil
@@ -93,6 +110,13 @@ type stored struct {
 	Version int64  `json:"version"`
 }
 
+type routedInput struct {
+	stored
+	Route       Route `json:"route,omitempty"`
+	BYOK        bool  `json:"byok,omitempty"`
+	AlreadyPaid bool  `json:"already_paid,omitempty"`
+}
+
 // NewJob builds the queue job for a unit. key is the job's globally unique identity.
 // The owner is both the tenant and the ordered lane, so an owner's units run one at a time,
 // by OrderAt and then by unit id.
@@ -100,12 +124,19 @@ func NewJob(key, owner string, u Unit) (queue.NewJob, error) {
 	if err := u.Validate(); err != nil {
 		return queue.NewJob{}, err
 	}
-	meta, err := json.Marshal(stored(u.Source))
+	format := Format
+	var input any = stored(u.Source)
+	if u.Route != "" || u.BYOK || u.AlreadyPaid || !u.CustodyDeadline.IsZero() {
+		format = routedFormat
+		input = routedInput{stored: stored(u.Source), Route: u.Route, BYOK: u.BYOK, AlreadyPaid: u.AlreadyPaid}
+	}
+	meta, err := json.Marshal(input)
 	if err != nil {
 		return queue.NewJob{}, errors.Join(ErrInvalid, err)
 	}
 	return queue.NewJob{
-		Key: key, Tenant: owner, Kind: Kind, Format: Format, Subject: u.ID, Step: StepSpeech, Meta: meta,
+		Key: key, Tenant: owner, Kind: Kind, Format: format, Subject: u.ID, Step: StepSpeech, Meta: meta,
+		FundingExempt: u.BYOK || u.AlreadyPaid, CustodyDeadline: u.CustodyDeadline, AudioDuration: u.AudioDuration,
 		OrderKey: &owner, SortKey: u.ID, OrderAt: u.OrderAt, RunAt: u.RunAt,
 	}, nil
 }
@@ -113,14 +144,8 @@ func NewJob(key, owner string, u Unit) (queue.NewJob, error) {
 // Input decodes a job's stored input. Anything but a source with a reference is rejected:
 // JSON null, an empty object and a value of another type are all unreadable.
 func Input(meta json.RawMessage) (Source, error) {
-	var in stored
-	if err := json.Unmarshal(meta, &in); err != nil {
-		return Source{}, errors.Join(ErrInvalid, err)
-	}
-	if in.Ref == "" {
-		return Source{}, ErrInvalid
-	}
-	return Source(in), nil
+	in, err := processingInput(meta)
+	return Source(in.stored), err
 }
 
 // Receipt proves a unit's transcription is stored. It is the whole checkpoint: where the
@@ -149,4 +174,12 @@ func Stored(checkpoint json.RawMessage) (Receipt, bool) {
 		return Receipt{}, false
 	}
 	return r, true
+}
+
+func processingInput(meta json.RawMessage) (routedInput, error) {
+	var input routedInput
+	if err := json.Unmarshal(meta, &input); err != nil || input.Ref == "" {
+		return routedInput{}, ErrInvalid
+	}
+	return input, nil
 }

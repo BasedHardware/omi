@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-serial-projection-transaction-reads",
+  "family": "work-bounded-resumable",
+  "violated_contract": "Validating a planned projection should avoid one serial network round trip per known document while holding a transaction open on live, concurrently updated sources.",
+  "canonical_prevention": "Read known revision-fenced input references in bounded BatchGet requests using the same transaction. Verify each snapshot against its own reference and keep all revision, lease, deletion, and retry fences in force.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_conversations_v3_transactions.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/conversations_v3.py"
+  ],
+  "status": "open"
+}

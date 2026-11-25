@@ -382,19 +382,25 @@ def budgeted_stream_list(query: Any, budget: Optional[ListReadBudget]) -> List[A
     return docs
 
 
-def budgeted_get_all(client: Any, refs: Iterable[Any], budget: Optional[ListReadBudget]) -> List[Any]:
-    """Materialize ``client.get_all(refs)`` under the budget."""
+def budgeted_get_all(
+    client: Any, refs: Iterable[Any], budget: Optional[ListReadBudget], *, field_paths: Optional[List[str]] = None
+) -> List[Any]:
+    """Materialize ``client.get_all(refs)`` under the budget.
+
+    ``field_paths`` (when given) is the read's projection, as on a query's ``select``.
+    """
     ref_list = list(refs)
+    projection = {'field_paths': field_paths} if field_paths else {}
     if budget is None:
-        return list(client.get_all(ref_list))
+        return list(client.get_all(ref_list, **projection))
     timeout = budget.rpc_timeout()
     if _strict_document_budget(budget) and len(ref_list) > budget.remaining_documents:
         budget.mark_exhausted('documents')
         raise ListReadBudgetExhausted('documents')
     try:
-        snapshots = list(client.get_all(ref_list, timeout=timeout, retry=FIRESTORE_NO_RETRY))
+        snapshots = list(client.get_all(ref_list, timeout=timeout, retry=FIRESTORE_NO_RETRY, **projection))
     except TypeError:
-        snapshots = list(client.get_all(ref_list))
+        snapshots = list(client.get_all(ref_list, **projection))
     except _FirestoreDeadlineExceeded as exc:
         budget.mark_exhausted('deadline')
         raise ListReadBudgetExhausted('deadline') from exc

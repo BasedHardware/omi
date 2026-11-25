@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "דרכי כניסה",
+    "accountAddSignInMethod": "הוספת דרך כניסה",
+    "accountAddSignInMethodDetails": "אפשר להוסיף דרך כניסה לחשבון Omi הזה. התוכנית, ההקלטות והאינטגרציות יישארו בחשבון הזה.",
+    "accountSignInConflictTitle": "דרך הכניסה הזו משויכת לחשבון אחר",
+    "accountSignInConflictDetails": "החיבור לחשבון הזה נשאר פעיל. כל חשבון Omi שומר על התוכנית, ההקלטות והאינטגרציות שלו.",
+    "accountSignInMethodAdded": "דרך הכניסה נוספה",
     "authFailedToLinkGoogle": "כישלון בקישור עם Google, אנא נסה שוב.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "נעבד תחילה את ההקלטות החדשות ביותר עד לגבול המכסה הזמינה. השאר יישארו בהמתנה.",
     "processingAction": "עיבוד הקלטות ממתינות",
     "processingProgress": "ההקלטות הממתינות שלך בעיבוד…",
+    "waitingForTranscriptionAllowance": "בהמתנה למכסת תמלול זמינה",
     "processingDeferred": "ממתין לעיבוד",
     "processingCount": "{count, plural, =1{שיחה אחת בהמתנה} other{{count} שיחות בהמתנה}}",
     "playbackPartialAudioSaved": "נשמרו {saved} מתוך {total} של אודיו",
@@ -12172,7 +12179,6 @@
     "capturePendantDisconnectedShort": "Omi יתחבר מחדש מעצמו",
     "forYou": "בשבילך",
     "stopThese": "הפסקת אלה",
-    "meetingActionItemsTitle": "משימות לביצוע",
     "addToTasks": "הוספה למשימות",
     "showInTranscript": "הצגה בתמלול",
     "tentativeTaskDueDate": "מועד יעד משוער {date}",
@@ -12298,5 +12304,23 @@
     "firmwareUpdateAppRequired": "עדכון הקושחה הזה דורש גרסה חדשה יותר של אפליקציית Omi. יש לעדכן את האפליקציה מחנות האפליקציות שלך, ואז לבדוק שוב.",
     "quietPayerTitle": "אין הקלטות כבר 5 ימים",
     "quietPayerMessage": "בדקו את ה-Omi שלכם.",
-    "quietPayerCheck": "בדיקה"
+    "quietPayerCheck": "בדיקה",
+    "playManageSubscription": "ניהול המינוי",
+    "playBilledByGoogle": "החיוב דרך Google Play",
+    "playPurchasePending": "התשלום ממתין. Omi Pro יתחיל ברגע ש-Google Play יאשר אותו.",
+    "playPurchaseOtherAccount": "הרכישה הזו ב-Google Play שייכת לחשבון Omi אחר.",
+    "playPurchaseNotConfirmed": "עדיין לא הצלחנו לאשר את הרכישה. ננסה שוב אוטומטית.",
+    "playRenewalTerms": "מתחדש אוטומטית במחיר המוצג עד שתבטלו. ניתן לנהל או לבטל בכל עת ב-Google Play.",
+    "playPaidAppUnavailable": "לא זמין ב-Android",
+    "pageNotAvailableInApp": "הדף הזה לא זמין באפליקציה.",
+    "shopOrderPlacedCheckEmail": "ההזמנה בוצעה. האישור נשלח לאימייל שלך.",
+    "prepaidCodeEntry": "יש לך קוד?",
+    "prepaidCodeTitle": "מימוש קוד",
+    "prepaidCodeFieldHint": "הזינו את הקוד שלכם",
+    "prepaidCodeRedeem": "מימוש",
+    "prepaidCodeRedeemed": "הקוד מומש",
+    "prepaidCodeResult": "{reason, select, invalid{הקוד הזה אינו תקף. בדקו אותו ונסו שוב.} used{הקוד הזה כבר נוצל.} expired{תוקף הקוד הזה פג.} hasPlan{כבר יש לכם תוכנית. הקוד שלכם לא נוצל. ממשו אותו כשהתוכנית שלכם תסתיים.} notPrepaid{לא ניתן לממש את הקוד הזה כאן. השתמשו בו כשתבחרו תוכנית.} notEligible{לא ניתן להשתמש בקוד הזה בחשבון הזה.} rateLimited{יותר מדי ניסיונות. נסו שוב מאוחר יותר.} other{משהו השתבש. נסו שוב.}}",
+    "playStripeBilledOnWeb": "החיוב מתבצע דרך omi.me. אפשר לבטל כאן בכל עת.",
+    "playStripeBilledOnWebShort": "החיוב מתבצע דרך omi.me.",
+    "playStripePlanPaused": "התוכנית {plan} שלך מושהית."
 }

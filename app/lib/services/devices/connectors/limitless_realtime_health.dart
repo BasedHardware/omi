@@ -31,6 +31,8 @@ class LimitlessRealtimeHealth {
   bool _attempted = false;
   bool _closed = false;
 
+  bool get isClosed => _closed;
+
   static Duration Function() _monotonicClock() {
     final clock = Stopwatch()..start();
     return () => clock.elapsed;

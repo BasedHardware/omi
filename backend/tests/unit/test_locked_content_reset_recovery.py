@@ -90,7 +90,7 @@ def env(monkeypatch):
     fakes['database.memories'].unlock_all_memories = unlock('memories')
     fakes['database.action_items'].unlock_all_action_items = unlock('actions')
     fakes['database.conversations'].unlock_all_conversations = unlock('conversations')
-    fakes['database.redis_db'].r = redis
+    fakes['database.redis_db'].request_deadline_redis_client = lambda: redis
     fakes['database.redis_db'].release_token_lock = lambda key, token: redis.release(keys=[key], args=[token])
     fakes['database.redis_db'].set_credits_invalidation_signal = signal
     fakes['database._client'].db = db

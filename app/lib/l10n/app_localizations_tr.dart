@@ -7066,6 +7066,26 @@ class AppLocalizationsTr extends AppLocalizations {
   String get authUnexpectedError => 'Giriş yaparken beklenmeyen hata, lütfen tekrar deneyin';
 
   @override
+  String get accountSignInMethods => 'Oturum açma yöntemleri';
+
+  @override
+  String get accountAddSignInMethod => 'Oturum açma yöntemi ekle';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Bu Omi hesabına giriş yapmak için bir yöntem ekleyin. Planınız, kayıtlarınız ve entegrasyonlarınız bu hesapta kalır.';
+
+  @override
+  String get accountSignInConflictTitle => 'Bu oturum açma yöntemi başka bir hesaba ait';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Bu hesapta oturumunuz açık kalır. Her Omi hesabı kendi planını, kayıtlarını ve entegrasyonlarını korur.';
+
+  @override
+  String get accountSignInMethodAdded => 'Oturum açma yöntemi eklendi';
+
+  @override
   String get authFailedToLinkGoogle => 'Google ile bağlantı kurulamadı, lütfen tekrar deneyin.';
 
   @override
@@ -14372,6 +14392,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get processingProgress => 'Bekleyen kayıtlarınız işleniyor…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Kullanılabilir deşifre kotası bekleniyor';
+
+  @override
   String get processingDeferred => 'İşlenmeyi bekliyor';
 
   @override
@@ -15324,9 +15347,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get stopThese => 'Bunları Durdur';
 
   @override
-  String get meetingActionItemsTitle => 'Eylem öğeleri';
-
-  @override
   String get addToTasks => 'Görevlere Ekle';
 
   @override
@@ -15750,4 +15770,76 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Kontrol Et';
+
+  @override
+  String get playManageSubscription => 'Aboneliği yönet';
+
+  @override
+  String get playBilledByGoogle => 'Google Play üzerinden faturalandırılır';
+
+  @override
+  String get playPurchasePending => 'Ödemeniz beklemede. Google Play onayladığında Omi Pro başlar.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Bu Google Play satın alımı başka bir Omi hesabına ait.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Satın alımınızı henüz doğrulayamadık. Otomatik olarak yeniden deneyeceğiz.';
+
+  @override
+  String get playRenewalTerms =>
+      'İptal edene kadar gösterilen fiyattan otomatik olarak yenilenir. Google Play\'den istediğiniz zaman yönetin veya iptal edin.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android\'de kullanılamaz';
+
+  @override
+  String get pageNotAvailableInApp => 'Bu sayfa uygulamada kullanılamıyor.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Sipariş verildi. Onay için e-postanızı kontrol edin.';
+
+  @override
+  String get prepaidCodeEntry => 'Kodunuz var mı?';
+
+  @override
+  String get prepaidCodeTitle => 'Kod kullan';
+
+  @override
+  String get prepaidCodeFieldHint => 'Kodunuzu girin';
+
+  @override
+  String get prepaidCodeRedeem => 'Kullan';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kod kullanıldı';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Bu kod geçerli değil. Kontrol edip tekrar deneyin.',
+        'used': 'Bu kod zaten kullanılmış.',
+        'expired': 'Bu kodun süresi dolmuş.',
+        'hasPlan': 'Zaten bir planınız var. Kodunuz kullanılmadı. Planınız bittikten sonra kullanın.',
+        'notPrepaid': 'Bu kod burada kullanılamaz. Bir plan seçerken kullanın.',
+        'notEligible': 'Bu kod bu hesapta kullanılamaz.',
+        'rateLimited': 'Çok fazla deneme. Daha sonra tekrar deneyin.',
+        'other': 'Bir sorun oluştu. Lütfen tekrar deneyin.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me üzerinden faturalandırılır. İstediğin zaman buradan iptal et.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me üzerinden faturalandırılır.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return '$plan planın duraklatıldı.';
+  }
 }

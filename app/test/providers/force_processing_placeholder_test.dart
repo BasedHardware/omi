@@ -2,16 +2,21 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_seams.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
@@ -20,6 +25,23 @@ import '../support/crashlytics_recorder.dart';
 class _RecordingActions extends NoopCaptureExternalActions {
   final processing = <ServerConversation>[];
   final upserted = <ServerConversation>[];
+  ServerConversation? manualFinishRow;
+  bool? manualFinishFailed;
+  ProcessAbsence? manualFinishAbsence;
+
+  @override
+  void onManualFinishStarted(ServerConversation placeholder, String? recordingId,
+      {String? liveConversationId, String? captureId}) {
+    manualFinishRow = placeholder;
+  }
+
+  @override
+  void onManualFinishSettled(ServerConversation placeholder, InProgressProcessOutcome? outcome,
+      {required bool showFailure}) {
+    if (!identical(placeholder, manualFinishRow)) return;
+    manualFinishFailed = outcome?.response?.conversation == null && showFailure;
+    manualFinishAbsence = outcome?.absence;
+  }
 
   @override
   void addProcessingConversation(ServerConversation conversation) {
@@ -122,7 +144,8 @@ Future<({List<Object> unhandled, Object? harnessError})> _runInGuardedZone(Futur
 CaptureProvider _provider({
   required _RecordingActions actions,
   required Completer<void> finalizeGate,
-  required Future<CreateConversationResponse?> Function() process,
+  Future<CreateConversationResponse?> Function()? process,
+  InProgressConversationRequestSender? processRequestSender,
   List<Completer<void>> laterFinalizeGates = const [],
   _GatedPhoneSync? phone,
 }) {
@@ -131,6 +154,7 @@ CaptureProvider _provider({
     externalActions: actions,
     walService: _GatedWal(resolvedPhone),
     processInProgressConversation: process,
+    processRequestSender: processRequestSender,
     connectivity: CaptureConnectivityBoundary(
       initiallyConnected: true,
       changes: const Stream.empty(),
@@ -178,6 +202,37 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
+  test('manual Finish serializes its optional window in the outbound POST', () async {
+    Env.overrideApiBaseUrl('https://finish.test/');
+    addTearDown(Env.clearApiBaseUrlOverride);
+    final requests = <ApiRequest>[];
+    final actions = _RecordingActions();
+    final provider = _provider(
+      actions: actions,
+      finalizeGate: Completer<void>()..complete(),
+      processRequestSender: (request) async {
+        requests.add(request);
+        return http.Response('', 404);
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await provider.forceProcessingCurrentConversation(manualFinish: true, liveConversationId: 'window-1');
+    await _flushEventQueue();
+    await provider.forceProcessingCurrentConversation(manualFinish: true);
+    await _flushEventQueue();
+    final result = await provider.finishCaptureWithOutcome(liveConversationId: 'window-2');
+
+    expect(requests.map((request) => request.method), ['POST', 'POST', 'POST']);
+    expect(requests.map((request) => request.url).toSet(), {'https://finish.test/v1/conversations'});
+    expect(requests.map((request) => request.body), [
+      '{"live_conversation_id":"window-1"}',
+      '{}',
+      '{"live_conversation_id":"window-2"}',
+    ]);
+    expect(result.absence, ProcessAbsence.notFound);
+  });
+
   test('adds the processing placeholder before finalizeCurrentSession completes', () async {
     final finalize = Completer<void>();
     final actions = _RecordingActions();
@@ -196,6 +251,7 @@ void main() {
 
     expect(actions.processing.map((conversation) => conversation.id), ['0']);
     expect(actions.processing.single.status, ConversationStatus.processing);
+    expect(actions.manualFinishRow, isNull, reason: 'a coordinator close must remain silent');
     expect(finalize.isCompleted, isFalse);
     expect(processStarted.isCompleted, isFalse);
 
@@ -218,6 +274,46 @@ void main() {
 
     expect(actions.processing, isEmpty);
     expect(actions.upserted, isEmpty);
+  });
+
+  for (final status in [ConversationStatus.processing, ConversationStatus.in_progress]) {
+    test('Process Now tracks an exact recording as closed only after acceptance (${status.name})', () async {
+      final provider = _provider(
+        actions: _RecordingActions(),
+        finalizeGate: Completer<void>()..complete(),
+        process: () async => CreateConversationResponse(
+          messages: [],
+          conversation: _conversation(id: 'recording-1', status: status),
+        ),
+      );
+      addTearDown(provider.dispose);
+
+      expect(provider.hasClosedServerRecording('recording-1'), isFalse);
+      await provider.forceProcessingCurrentConversation(manualFinish: true);
+      await _flushEventQueue();
+
+      expect(provider.hasClosedServerRecording('recording-1'), status == ConversationStatus.processing);
+      expect(provider.hasClosedServerRecording('recording-2'), isFalse);
+    });
+  }
+
+  test('pendant double tap publishes manual finish before the drain and reports an unanswered request', () async {
+    final finalize = Completer<void>();
+    final actions = _RecordingActions();
+    final provider = _provider(actions: actions, finalizeGate: finalize, process: () async => null);
+    addTearDown(provider.dispose);
+    SharedPreferencesUtil().omiButtonActionsEnabled = true;
+    SharedPreferencesUtil().doubleTapAction = 0;
+
+    provider.handleButtonEventForTesting('synthetic-pendant', 2);
+    expect(actions.manualFinishRow, same(actions.processing.single));
+    expect(actions.manualFinishFailed, isNull);
+
+    finalize.complete();
+    await _flushEventQueue();
+    expect(actions.manualFinishFailed, isTrue);
+    expect(actions.manualFinishAbsence, ProcessAbsence.transport);
+    expect(actions.processing, isEmpty);
   });
 
   test('a conversation that changes during the drain removes the skeleton without processing', () async {

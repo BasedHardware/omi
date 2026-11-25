@@ -22,7 +22,7 @@ from database.batch_pipeline_staging import artifact_id
 from tests.unit.test_batch_pipeline_audio import pcm
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from tests.unit.test_sync_capture_time_skew import client, _default_skew
-from utils.batch_pipeline import intake, contracts, upload_coalescing
+from utils.batch_pipeline import intake, contracts, upload_coalescing, upload_entitlement
 from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.stt import batch_language
 from utils.sync import legacy_dark, receipt_clock
@@ -64,6 +64,7 @@ def main_endpoint():
 @pytest.mark.parametrize('future_enabled', [False, True])
 @pytest.mark.parametrize('mixed', [False, True])
 def test_early_upload_job_and_context_documents_equal_main(client, monkeypatch, tmp_path, future_enabled, mixed):
+    monkeypatch.setattr(upload_entitlement, 'classify', lambda _uid: 'unknown')
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', str(future_enabled).lower())
     monkeypatch.setenv('BATCH_PIPELINE_PACKING_SAMPLE_RATE', '0.001')
     monkeypatch.setenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', 'false')
@@ -163,7 +164,14 @@ def test_early_upload_job_and_context_documents_equal_main(client, monkeypatch, 
                 'intakes': {key: row for (table, key), row in store.rows.items() if table == 'intakes'},
             }
         )
-    assert records[0] == records[1]
+    # Preserve exact parity for every old field; assert the two approved server
+    # measurement fields explicitly instead of discarding them from actual data.
+    expected = deepcopy(records[0])
+    for context in expected['contexts']:
+        context.update(upload_arrived_at=NOW, upload_entitlement='unknown')
+    for receipt in expected['intakes'].values():
+        receipt.update(upload_arrived_at=NOW, upload_entitlement='unknown')
+    assert expected == records[1]
 
 
 def test_early_placement_and_coverage_implementations_are_main_bytes():
@@ -196,10 +204,17 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
                 # process_segment lost the backfill day cap (#25677).
                 # The legacy reprocess callback runs after placement and has
                 # its own body parity check in test_enrichment_callback_parity.
+                # Its coordinator also runs after placement. Enrichment route
+                # tests cover the SCA-3874 retry enrollment there.
                 names = (
                     {'apply_wal_audio_coverage'}
                     if path.endswith('/wal_audio_coverage.py')
-                    else {'_retrieve_file_paths_v2', 'process_segment', '_reprocess_conversation_after_update'}
+                    else {
+                        '_retrieve_file_paths_v2',
+                        'process_segment',
+                        '_reprocess_conversation_after_update',
+                        '_reprocess_merged_conversations',
+                    }
                 )
                 lines = text.splitlines(keepends=True)
                 for node in sorted(
@@ -209,7 +224,11 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
                 ):
                     start = min([node.lineno] + [d.lineno for d in node.decorator_list])
                     lines = lines[: start - 1] + lines[node.end_lineno :]
-                return ''.join(lines).replace('from utils import backfill_hours_cap\n', '')
+                return (
+                    ''.join(lines)
+                    .replace('from utils import backfill_hours_cap\n', '')
+                    .replace('from utils.enrichment.admission import require_transcript_decoded\n', '')
+                )
 
             if path.endswith('/wal_audio_coverage.py'):
                 actual = actual.replace(

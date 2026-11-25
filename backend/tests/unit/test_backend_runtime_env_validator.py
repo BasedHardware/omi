@@ -403,8 +403,7 @@ def with_audio_timeline_span_env(payload: str) -> str:
         '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_UNION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS", "value": "false"},\n'
         '        {"name": "SONIOX_CAPTURE_AXIS_DIAGNOSTICS", "value": "false"},\n'
-        '        {"name": "SONIOX_WIRE_LEDGER", "value": "false"},\n'
-        '        {"name": "SONIOX_ORDERED_FINALIZE", "value": "false"},',
+        '        {"name": "SONIOX_WIRE_LEDGER", "value": "false"},',
     )
 
 
@@ -2024,6 +2023,7 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
+        {"name": "PREPAID_CODE_REDEEM", "value": "off"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -2350,6 +2350,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
+        {"name": "PREPAID_CODE_REDEEM", "value": "off"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -2435,6 +2436,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
+        {"name": "PREPAID_CODE_REDEEM", "value": "off"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},

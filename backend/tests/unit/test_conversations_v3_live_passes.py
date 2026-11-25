@@ -9,15 +9,22 @@ cap and preservation paths, not the loader's query plan.
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from database import conversations_v3 as store
-from utils.conversations.v3 import service
+from utils.conversations.v3 import policy, service
+from utils.home_feed.projection import reveal_display
 from tests.unit.test_conversations_v3_claim_growth import strict, owners_import, path, UID  # noqa: F401
 
 T0 = datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc)
 LOCK_ENV = ('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', 'CONVERSATIONS_V3_LOCK_SECONDS')
+
+
+@pytest.fixture(autouse=True)
+def disable_live_title_unless_test_opts_in(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_LIVE_TITLE', 'off')
 
 
 def speech(count, step=30.0):
@@ -131,6 +138,9 @@ def timing(monkeypatch, gap, lock):
 async def test_live_recording_inside_the_lock_delay_keeps_one_open_card(strict, monkeypatch):
     # (a) A ten-minute recording arrives a minute at a time; its latest speech stays inside the lock delay.
     timing(monkeypatch, 900, 900)
+    monkeypatch.setenv('CONVERSATIONS_V3_LIVE_TITLE', 'off')
+    calls = []
+    monkeypatch.setattr(service.models, 'live_title', lambda *args: calls.append(args))
     ids = set()
     for minute in range(1, 11):
         segments = speech(minute * 2)
@@ -141,6 +151,127 @@ async def test_live_recording_inside_the_lock_delay_keeps_one_open_card(strict, 
         assert len(rows) == 1 and planner_open(rows[0]), [(r['started_at'], r['status']) for r in rows]
         ids.add(rows[0]['id'])
     assert len(ids) == 1
+    assert calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('gap', [300, 900])
+@pytest.mark.parametrize('provider_fails', [False, True])
+async def test_live_title_is_attempted_once_and_final_outline_wins(strict, monkeypatch, gap, provider_fails):
+    timing(monkeypatch, gap, gap)
+    monkeypatch.delenv('CONVERSATIONS_V3_LIVE_TITLE', raising=False)
+    calls = []
+
+    def live_title(uid, segments):
+        calls.append(uid)
+        assert derived(strict)[0]['status'] == 'in_progress'
+        if provider_fails:
+            raise TimeoutError()
+        return 'Planning the fall release'
+
+    monkeypatch.setattr(service.models, 'live_title', live_title)
+    for count in (6, 7, 8):
+        segments = speech(count)
+        now = T0 + timedelta(seconds=segments[-1]['end'] + 1)
+        put_recording(strict, segments, status='in_progress', landed=now)
+        assert await reconcile_at(strict, monkeypatch, now) == 'committed'
+        (row,) = derived(strict)
+        assert row['status'] == 'in_progress' and not row['title_locked']
+        assert len(calls) == int(count >= 7)
+        expected = '' if count == 6 or provider_fails else 'Planning the fall release'
+        assert row['structured']['title'] == expected
+        if count == 7 and not provider_fails:
+            assert reveal_display(UID, row['home_display'])['title'] == expected
+
+    put_recording(strict, segments, status='completed', landed=now)
+    assert await reconcile_at(strict, monkeypatch, now + timedelta(seconds=gap + 1)) == 'committed'
+    (row,) = derived(strict)
+    assert not planner_open(row)
+    assert row['structured']['title'] == 'Talk'
+    assert calls == [UID]
+
+
+@pytest.mark.parametrize(
+    'exclusion',
+    [
+        {'data_protection_level': 'private'},
+        {'data_protection_level': 'e2ee'},
+        {'is_locked': True},
+        {'backfilled': True},
+        {'title_locked': True},
+        {'home_content_invalidated': True},
+        {'home_hidden': True},
+    ],
+)
+def test_live_title_excludes_protected_or_hidden_rows(exclusion):
+    row = {'v3_derived': True, 'status': 'in_progress', 'tile_state': 'live'}
+    assert policy.live_title_candidate(row)
+    assert not policy.live_title_candidate({**row, **exclusion})
+
+
+@pytest.mark.parametrize('protection', ['private', 'e2ee'])
+def test_live_title_claim_rechecks_current_privacy(strict, protection):
+    cid = 'protected'
+    row = {
+        'v3_derived': True,
+        'status': 'in_progress',
+        'tile_state': 'live',
+        'sync_content_revision': 1,
+        'data_protection_level': protection,
+    }
+    strict.rows[path(cid)] = row
+    token = store.leases.acquire(UID, 'builder', firestore_client=strict)
+    assert token
+    assert not store.write_live_title_preview(UID, token, cid, 1, firestore_client=strict)
+    assert policy.LIVE_TITLE_STATE not in strict.rows[path(cid)]
+
+
+@pytest.mark.asyncio
+async def test_live_title_skips_legacy_row_without_content_revision(monkeypatch):
+    def unexpected_store_call(*args):
+        pytest.fail('A row without a content revision must not claim a title attempt')
+
+    monkeypatch.setattr(service, 'run_blocking', unexpected_store_call)
+    await service._maybe_publish_live_title(UID, 'builder', 'token', {'id': 'legacy', 'transcript_segments': speech(8)})
+
+
+def test_live_title_model_caps_multibyte_input_and_output(monkeypatch):
+    class Model:
+        def bind(self, **options):
+            assert options == {'reasoning_effort': 'none', 'max_completion_tokens': 32}
+            return self
+
+        def invoke(self, messages):
+            prompt, transcript = (message.encode('utf-8') for _, message in messages)
+            assert len(prompt) + len(transcript) <= 1024 - 64
+            assert transcript.decode('utf-8').startswith('秋')
+            return SimpleNamespace(content=' 秋のリリース計画 ', response_metadata={'finish_reason': 'stop'})
+
+    def gateway(lane, *, options, feature):
+        assert lane == 'omi:auto:conversation-v3-live-title'
+        assert options['max_retries'] == 0
+        assert feature == 'conversation_v3_live_title'
+        return Model()
+
+    monkeypatch.setattr(service.models, 'get_or_create_omi_gateway_llm', gateway)
+    assert service.models.live_title(UID, [{'text': '秋' * 1500}]) == '秋のリリース計画'
+
+
+@pytest.mark.asyncio
+async def test_live_title_does_not_overwrite_a_concurrent_user_rename(strict, monkeypatch):
+    def live_title(uid, segments):
+        (row,) = derived(strict)
+        row['user_title'] = row['structured']['title'] = 'My own title'
+        return 'Planning the fall release'
+
+    monkeypatch.setenv('CONVERSATIONS_V3_LIVE_TITLE', 'on')
+    monkeypatch.setattr(service.models, 'live_title', live_title)
+    segments = speech(7)
+    now = T0 + timedelta(seconds=segments[-1]['end'] + 1)
+    put_recording(strict, segments, status='in_progress', landed=now)
+    assert await reconcile_at(strict, monkeypatch, now) == 'committed'
+    (row,) = derived(strict)
+    assert row['structured']['title'] == 'My own title'
 
 
 def planner_open(row):
@@ -170,6 +301,44 @@ async def test_offline_batches_of_old_speech_do_not_lock_on_arrival(strict, monk
     assert await reconcile_at(strict, monkeypatch, arrival + timedelta(minutes=4, seconds=lock + 60)) == 'committed'
     rows = derived(strict)
     assert len(rows) == 1 and not planner_open(rows[0])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('gap, lock', [(300, 300), (900, 3600)])
+@pytest.mark.parametrize('switch', [None, 'off'])
+async def test_live_window_cap_settles_prefix_and_preserves_successor(strict, monkeypatch, gap, lock, switch):
+    timing(monkeypatch, gap, lock)
+    key = 'CONVERSATIONS_V3_MAX_WINDOW_SECONDS'
+    if switch is None:
+        monkeypatch.delenv(key, raising=False)
+    else:
+        monkeypatch.setenv(key, switch)
+    cut = T0 + timedelta(hours=3)
+    cuts = service.metrics.WINDOW_CAP_CUTS
+    initial_count = cuts._value.get()
+
+    for count in (360, 362, 366):
+        now = T0 + timedelta(seconds=count * 30)
+        put_recording(strict, speech(count), status='in_progress', landed=now)
+        assert await reconcile_at(strict, monkeypatch, now) == 'committed'
+        rows = derived(strict)
+        (live_row,) = [row for row in rows if row['status'] == 'in_progress']
+        if count == 360:
+            tail_id = live_row['id']
+        elif switch is None:
+            assert live_row['started_at'] == cut
+            tail = next(row for row in rows if row['id'] == tail_id)
+            assert not planner_open(tail)
+            assert tail['v3_process_pending']
+            assert not tail['manual_end']
+            if count == 362:
+                successor_id = live_row['id']
+            else:
+                assert live_row['id'] == successor_id
+        else:
+            assert live_row['id'] == tail_id
+
+    assert cuts._value.get() == initial_count + (switch is None)
 
 
 @pytest.mark.asyncio

@@ -480,6 +480,14 @@ def test_boolean_wrapper_resolves_constant_env_key(tmp_path: Path, helper: str) 
     assert reads['SYNTHETIC_WRAPPED_SWITCH_ENABLED'].modules == {rel}
 
 
+def test_kill_switch_logger_mapping_read_is_in_inventory() -> None:
+    key = 'BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED'
+    reads = contract.scan_env_reads(contract.Source(), ['backend/config/policy/kill_switches.py'])
+
+    assert key in reads
+    assert 'backend/config/policy/kill_switches.py' in reads[key].modules
+
+
 def test_ops_kill_without_reader_still_fails(results: Results) -> None:
     key = 'SYNTHETIC_UNREAD_SWITCH_ENABLED'
     # This check reads manifest entries and the reader inventory only; reuse

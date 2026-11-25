@@ -226,6 +226,7 @@
             "omi:auto:chat-agent",
             "omi:auto:conv-action-items",
             "omi:auto:public-shared-conversation-chat",
+            "omi:auto:conversation-v3-live-title",
             "omi:auto:conversation-v3-outline",
             "omi:auto:conversation-v3-summary",
             "omi:auto:conversation-v3-summary-open"

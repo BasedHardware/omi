@@ -58,7 +58,7 @@ const candidate = `
 // direct selects one job by key for a resume, with whether its gate wait has run out. The
 // database's clock decides that, in the same statement that locks the row, so a resume can
 // never win after the timeout just because the watcher has not reached the row yet.
-const direct = "SELECT " + columns + `,(j.ready_at <= clock_timestamp())
+const direct = "SELECT " + columns + `,COALESCE(j.ready_at <= clock_timestamp(),false)
  FROM queue_jobs j WHERE j.job_key=$1 FOR UPDATE OF j`
 
 // tryClaimLocks takes the tenant lock before the job lock and never waits: a claim must
@@ -257,21 +257,26 @@ updated_at=clock_timestamp() WHERE job_key=$1`, key, s.cfg.GateTimeout.Microseco
 // one statement, so a claim by a worker that later dies has already been charged.
 func (s *Store) lease(ctx context.Context, tx pgx.Tx, req claimRequest, job Job, action rules.Claim) (Job, error) {
 	intent, transient := s.intent(job, action)
+	var subMicro time.Duration
 	err := tx.QueryRow(ctx, `WITH turn AS (
  UPDATE queue_tenants SET last_claim=clock_timestamp() WHERE uid=$7 AND $8
 )
-UPDATE queue_jobs SET state='leased',
+UPDATE queue_jobs AS j SET state='leased',
 lease_token=nextval('queue_lease_token'),lease_until=clock_timestamp()+$2*interval '1 microsecond',
 ready_at=clock_timestamp()+$2*interval '1 microsecond',
 attempts=$3+1,deterministic_attempts=$4,reason=NULL,updated_at=clock_timestamp(),
 lane_head=(order_key IS NOT NULL),intent=$5,intent_transient=$6
-WHERE job_key=$1 RETURNING lease_token,attempts`,
+WHERE job_key=$1 RETURNING lease_token,attempts,order_at,order_sub_us,timed_generation,
+$9 AND EXISTS (SELECT 1 FROM queue_jobs c WHERE c.uid=j.uid AND c.kind=j.kind AND c.order_key=j.order_key
+AND c.outcome='success' AND (c.order_at,c.order_sub_us,c.order_sort,c.job_key)>
+(j.order_at,j.order_sub_us,j.order_sort,j.job_key))`,
 		job.Key, s.cfg.Lease.Microseconds(), job.Attempts, job.DeterministicAttempts, intent, transient,
-		job.Tenant, !req.direct(),
-	).Scan(&job.Token, &job.Attempts)
+		job.Tenant, !req.direct(), s.kinds.kinds[job.Kind].paidProcessing,
+	).Scan(&job.Token, &job.Attempts, &job.CaptureAt, &subMicro, &job.timedGeneration, &job.LateCapture)
 	if err != nil {
 		return Job{}, fmt.Errorf("lease: %w", err)
 	}
+	job.CaptureAt = job.CaptureAt.Add(subMicro)
 	job.State = StateLeased
 	job.Reason = nil
 	job.intent = intent

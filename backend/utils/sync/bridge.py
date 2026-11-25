@@ -424,7 +424,7 @@ def resume_pending(uid: str, conversation_id: str, row: dict, context: dict | No
             context['redirect_to'] = canonical
             return canonical, None
         conversation_id = canonical
-        current = conversations_db.get_conversation(uid, canonical)
+        current = conversations_db.get_conversation(uid, canonical, include_transcript_decode_status=True)
         if not current or current.get('deleted'):
             return canonical, None
         row = current

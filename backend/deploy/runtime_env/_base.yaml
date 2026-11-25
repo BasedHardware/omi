@@ -468,9 +468,6 @@ environment_shared:
         PROACTIVITY_V2_POSTHOG_HOST:
           value: https://us.posthog.com
           category: rollout
-        SONIOX_ORDERED_FINALIZE:
-          value: 'false'
-          category: rollout
         BUCKET_OBJECT_LAKE:
           category: storage_retention
         OBJECT_LAKE_KMS_KEY:
@@ -697,9 +694,6 @@ environment_shared:
           category: rollout
         PROACTIVITY_V2_POSTHOG_HOST:
           value: https://us.posthog.com
-          category: rollout
-        SONIOX_ORDERED_FINALIZE:
-          value: 'false'
           category: rollout
         BUCKET_OBJECT_LAKE:
           category: storage_retention
@@ -1298,9 +1292,6 @@ environment_shared:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
-            category: rollout
           REVIEW_SURFACE_MODE:
             value: 'on'
             category: rollout
@@ -1694,9 +1685,6 @@ environment_shared:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
-            category: rollout
           BUCKET_OBJECT_LAKE:
             category: storage_retention
           OBJECT_LAKE_KMS_KEY:
@@ -2071,9 +2059,6 @@ environment_shared:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
-            category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
@@ -2392,9 +2377,6 @@ environment_shared:
             category: rollout
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
-            category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
             category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
@@ -2729,148 +2711,148 @@ firestore_read_lever_policy:
     base/gke/backend-listen:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     base/gke/pusher:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     base/desktop_backend:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     base/cloud_run/services/backend:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     base/cloud_run/services/backend-sync:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     base/cloud_run/services/backend-sync-backfill:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     base/cloud_run/services/backend-integration:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     base/cloud_run/jobs/notifications-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     base/cloud_run/jobs/x-connector-sync-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     base/cloud_run/jobs/frame-request-retention-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     base/cloud_run/jobs/day3-reengagement-email-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/dev/gke/backend-listen:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/dev/gke/pusher:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/dev/desktop_backend:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/dev/cloud_run/services/backend:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/dev/cloud_run/services/backend-sync:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/dev/cloud_run/services/backend-sync-backfill:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/dev/cloud_run/services/backend-integration:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/dev/cloud_run/jobs/notifications-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/dev/cloud_run/jobs/x-connector-sync-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/dev/cloud_run/jobs/frame-request-retention-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/dev/cloud_run/jobs/day3-reengagement-email-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     overlay/prod/cloud_run/services/backend-sync-backfill:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
       privacy_checks_shadow:
         value: 10
         # Margin-40 panel F3: retain excluded backfill/worker shadow scope; no rollout expansion.
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/prod/gke/backend-listen:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/prod/gke/pusher:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/prod/desktop_backend:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/prod/cloud_run/services/backend-sync-backfill:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
       privacy_checks_shadow:
         value: 10
         # Margin-40 panel F3: retain excluded backfill/worker shadow scope; no rollout expansion.
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/prod/cloud_run/jobs/notifications-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/prod/cloud_run/jobs/x-connector-sync-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/prod/cloud_run/jobs/frame-request-retention-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     runtime/prod/cloud_run/jobs/day3-reengagement-email-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     chart/dev/backend-listen:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     chart/prod/backend-listen:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     chart/dev/pusher:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'
     chart/prod/pusher:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-24'
+        expires: '2026-12-01'

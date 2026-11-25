@@ -166,8 +166,16 @@ def _seed_conversation(store: _FakeFirestore) -> _FakeDocumentReference:
 
 @pytest.fixture
 def store(monkeypatch) -> _FakeFirestore:
+    from database import batch_pipeline_purge
+
     fake = _FakeFirestore()
     monkeypatch.setattr(conversations_db, 'db', fake)
+
+    def purge_batch(uid, *, conversation_id):
+        owner = fake.collection('users').document(uid)
+        assert owner.collection('deleted_conversations').document(conversation_id).exists
+
+    monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', purge_batch)
     return fake
 
 

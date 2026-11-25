@@ -9,7 +9,7 @@ from google.api_core.exceptions import GoogleAPICallError
 from database import conversation_batch_purge_jobs as jobs
 from database.batch_pipeline_privacy import privacy_owner_key
 from database.batch_pipeline_purge import row_references
-from database.batch_pipeline_reads import ReadOnlySnapshot
+from database.batch_pipeline_reads import BudgetedSnapshot
 from utils.batch_pipeline.retention import BATCH_OBJECT_BUCKET_ENV, batch_object_address, delete_batch_object
 
 START = datetime(2026, 10, 15, tzinfo=timezone.utc)
@@ -94,7 +94,7 @@ def erase(client, receipt, tombstone_version, storage_client):
     api = client._firestore_api
     database = client._database_string
     metadata = client._rpc_metadata
-    transaction = ReadOnlySnapshot(client, max_attempts=1)
+    transaction = BudgetedSnapshot(client, max_attempts=1)
     response = api.begin_transaction(request={'database': database}, metadata=metadata, **RPC)
     transaction.bind_snapshot(response.transaction)
     committed = False

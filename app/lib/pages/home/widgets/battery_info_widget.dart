@@ -365,7 +365,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     if (captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused) {
       // The phone recording is this button's own: finish it (processed, except Transcribe Later,
       // whose local file is finalized on stop), then any pendant it paused resumes.
-      final outcome = await finishLiveCapture(captureProvider, episodes: context.read<EpisodeProvider?>());
+      final outcome = await finishLiveCapture(context, captureProvider, episodes: context.read<EpisodeProvider?>());
       if (outcome is! FinishFailed) PlatformManager.instance.analytics.phoneMicRecordingStopped();
       if (!context.mounted) return;
       presentFinishOutcome(

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-provider-link-conflict-switches-account",
+  "family": "security-privacy-boundary",
+  "violated_contract": "Adding a sign-in method authorizes a change to the active account. An occupied provider identity does not authorize signing into a separate established account or moving account data.",
+  "canonical_prevention": "Bind the link to the confirmed account and session generation. Return the established-account conflict before performing a sign-out, sign-in or data migration. Exercise both provider directions and successful same-account linking.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/auth_provider_link_session_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/auth_service.dart",
+    "app/lib/providers/auth_provider.dart"
+  ],
+  "status": "open"
+}
