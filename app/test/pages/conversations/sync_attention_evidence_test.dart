@@ -51,6 +51,8 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   int get batteryLevel => 72;
   @override
+  int get settingsBatteryLevel => batteryLevel;
+  @override
   bool get isCharging => false;
   @override
   bool get havingNewFirmware => false;
@@ -335,14 +337,14 @@ void main() {
     await writeFrame(tester, '002-mobile-ios-device-nothing-pending');
   });
 
-  testWidgets('Device settings keeps expired upload details reachable', (tester) async {
+  testWidgets('Device Settings leaves expired uploads in custody without showing an upload card', (tester) async {
     final wal = _wal(_at(40, 10, 0), 60, WalStatus.uploaded)..uploadedAt = 0;
     await pumpDevice(tester, _FakeSync([wal]));
-    expect(find.byKey(const Key('device_stalled_upload_details')), findsOneWidget);
-    expect(find.text('Transcription unavailable'), findsOneWidget);
+    expect(find.text('Uploads waiting on the server'), findsNothing);
+    expect(find.text('Transcription unavailable'), findsNothing);
     expect(wal.status, WalStatus.uploaded);
     expect(walDeletionAllowed(wal), isFalse);
-    await writeFrame(tester, '004-mobile-ios-stalled-upload-details');
+    await writeFrame(tester, '004-mobile-ios-device-settings-with-expired-uploads');
   });
 
   testWidgets('On the Way with mixed days', (tester) async {

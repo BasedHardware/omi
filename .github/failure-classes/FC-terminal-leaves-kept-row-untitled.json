@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-terminal-leaves-kept-row-untitled",
+  "family": "projection-contract",
   "violated_contract": "A server terminal that moves a conversation into the default list must leave it carrying something useful (a title), and a failure affordance may be offered only when the server knows a retry can succeed. The finalization dead-letter, BYOK abandonment and orphan recovery closed still-processing rows as visible completed conversations with an empty structured.title, so clients rendered a bare \"Untitled Conversation\"; the client then guessed a \"Title didn't generate · Reprocess\" affordance from transcript length, offering a retry even where the model had already run and found nothing to summarize.",
   "canonical_prevention": "Every terminal that keeps a processing row replaces an empty generated title with the model-free deterministic_minimum_title computed from the transactional snapshot, and the server alone decides retryability with an explicit additive marker (summary_retryable) written only for transient failure codes and cleared by the next processing persist. Clients render the marker instead of inferring it, fall back to transcript text for legacy rows, and report any remaining bare untitled render as a bounded event.",
   "canonical_prevention_artifact": [

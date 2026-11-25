@@ -103,6 +103,70 @@ def test_deleting_parked_jobs_retires_hold_owner_exactly_once(plane):
         assert holds.get().to_dict()['held_count'] == 1 - index
 
 
+def test_purge_erases_intake_parked_unit_and_debits_owner_once(plane, monkeypatch):
+    from config.policy import BatchUnitPolicy
+    from database.batch_pipeline_allowance_hold import IntakeRefusal
+    from database.batch_pipeline_intake import admit
+    from database import batch_pipeline_purge
+    from database.batch_pipeline_store import FirestoreStore
+    from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv('BATCH_ALLOWANCE_PARK_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_ALLOWANCE_INTAKE_PARK_ENABLED', raising=False)
+    namespace = 'batch_pipeline_test_allowance_purge'
+    store = FirestoreStore(namespace, firestore_client=plane.client)
+    now = time.time()
+    cid = 'intake-capture'
+    _conversation(plane, cid)
+    item = WorkItem(
+        'held',
+        plane.uid,
+        now - 30,
+        'gs://synthetic/held',
+        30,
+        Priority.FRESH,
+        conversation_id=cid,
+        privacy_generation=0,
+        requires_compute_admission=True,
+    )
+    binding = ProjectionBinding(plane.uid, 'bp_held', 'intake-content', ('held',))
+    assert (
+        admit(
+            store,
+            [item],
+            binding,
+            now,
+            namespace=namespace,
+            policy=BatchUnitPolicy(batch_enabled=True),
+            intake={'lane': 'fresh', 'owner_id': plane.uid, 'owner_key': plane.key, 'segment_ids': ['held']},
+            intake_refusal=IntakeRefusal(now, (None, None)),
+        )['outcome']
+        == 'batch'
+    )
+    job = plane.client.collection(f'{namespace}_jobs').document('held')
+    held = plane.client.collection(f'{namespace}_allowance_holds').document(plane.key)
+    snapshot = job.get()
+    assert snapshot.to_dict()['state'] == 'allowance_held'
+    assert held.get().to_dict()['held_count'] == 1
+
+    plane.client.document(f'users/{plane.uid}/deleted_conversations/{cid}').set({'deleted': True})
+    monkeypatch.setattr(batch_pipeline_purge, 'purge_jobstore_owner', MagicMock())
+    delete_uri = MagicMock()
+    for _ in range(2):
+        batch_pipeline_purge.purge_batch_owner(
+            plane.uid,
+            firestore_client=plane.client,
+            conversation_id=cid,
+            namespaces=(namespace,),
+            delete_uri=delete_uri,
+        )
+        owner = held.get().to_dict()
+        assert owner['held_count'] == 0 and not owner['active']
+        assert not job.get().exists
+    delete_uri.assert_called_once_with(plane.uid, item.audio_uri)
+
+
 def _exists(plane, *path):
     return plane.client.document('/'.join(path)).get().exists
 

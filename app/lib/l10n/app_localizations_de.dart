@@ -566,11 +566,11 @@ class AppLocalizationsDe extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 nicht erkannt';
+  String get v2Undetected => 'Offline-Synchronisierung nicht verfügbar';
 
   @override
   String get v2UndetectedMessage =>
-      'Wir sehen, dass Sie entweder ein V1-Gerät haben oder Ihr Gerät nicht verbunden ist. Die SD-Karten-Funktionalität ist nur für V2-Geräte verfügbar.';
+      'Für die Offline-Synchronisierung ist ein verbundenes Omi-Gerät mit SD-Kartenspeicher erforderlich. Dein aktuelles Gerät unterstützt dies nicht.';
 
   @override
   String get endConversation => 'Unterhaltung beenden';
@@ -1131,6 +1131,11 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get nameUpdatedSuccessfully => 'Name erfolgreich aktualisiert!';
+
+  @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Ausgewählte Kalender lesen. Neue Termine verwenden $calendar.';
+  }
 
   @override
   String get calendarSettings => 'Kalendereinstellungen';
@@ -7107,6 +7112,26 @@ class AppLocalizationsDe extends AppLocalizations {
   String get authUnexpectedError => 'Unerwarteter Fehler bei der Anmeldung, bitte versuchen Sie es erneut';
 
   @override
+  String get accountSignInMethods => 'Anmeldemethoden';
+
+  @override
+  String get accountAddSignInMethod => 'Anmeldemethode hinzufügen';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Füge eine Anmeldemethode für dieses Omi-Konto hinzu. Dein Tarif, deine Aufnahmen und deine Integrationen bleiben bei diesem Konto.';
+
+  @override
+  String get accountSignInConflictTitle => 'Diese Anmeldemethode ist mit einem anderen Konto verknüpft';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Du bist weiterhin bei diesem Konto angemeldet. Jedes Omi-Konto behält seinen Tarif, seine Aufnahmen und seine Integrationen.';
+
+  @override
+  String get accountSignInMethodAdded => 'Anmeldemethode hinzugefügt';
+
+  @override
   String get authFailedToLinkGoogle => 'Verknüpfung mit Google fehlgeschlagen, bitte versuchen Sie es erneut.';
 
   @override
@@ -9154,7 +9179,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Diese Aufnahme wurde hochgeladen, aber Omi erstellt die Konversation noch. Wenn du sie jetzt löschst und die Verarbeitung fehlschlägt, kann sie nicht wiederhergestellt werden. Trotzdem löschen?';
+      'Diese Aufnahme ist bereits hochgeladen und wird von Omi verarbeitet. Löschen entfernt hier die Kopie auf dem Telefon. Wenn die Verarbeitung fehlschlägt, kann Omi es von diesem Telefon aus nicht erneut versuchen.';
 
   @override
   String get syncCardAllBackedUp => 'Alle Aufnahmen synchronisiert';
@@ -14464,6 +14489,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get processingProgress => 'Deine wartenden Aufnahmen werden verarbeitet…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Warten auf verfügbares Transkriptionskontingent';
+
+  @override
   String get processingDeferred => 'Wartet auf Verarbeitung';
 
   @override
@@ -14593,14 +14621,6 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done von $total Min.';
-  }
-
-  @override
-  String get deviceRecently => 'Kürzlich';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration getrennt';
   }
 
   @override
@@ -15430,9 +15450,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get stopThese => 'Diese stoppen';
 
   @override
-  String get meetingActionItemsTitle => 'Aktionspunkte';
-
-  @override
   String get addToTasks => 'Zu Aufgaben hinzufügen';
 
   @override
@@ -15544,6 +15561,11 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Das Update wurde nicht installiert. Dein Anhänger funktioniert weiter mit der aktuellen Firmware ($version). Bitte wende dich an den Support, statt das Update erneut zu versuchen.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15586,7 +15608,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15670,4 +15692,260 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Vom Server gemeldete Arbeit';
+
+  @override
+  String get finishNothingToProcess => 'Noch nichts zu verarbeiten.';
+
+  @override
+  String get finishStillProcessing => 'Wird noch verarbeitet. Es erscheint auf der Startseite.';
+
+  @override
+  String get finishBackToHome => 'Zur Startseite';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Zusammenfassung, wenn dieses Gespräch endet';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uploads, die auf dem Server warten';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Ihr Audio ist auf Ihrem Gerät oder Telefon sicher';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Zusammenfassung bis $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Neuestes Transkript';
+
+  @override
+  String get finishAlreadySaved => 'Bereits gespeichert. Du findest sie unter Start.';
+
+  @override
+  String get finishAudioNotReceived => 'Das Audio ist noch unterwegs.';
+
+  @override
+  String get finishFailedOffline => 'Das hat nicht geklappt. Dein Audio ist sicher.';
+
+  @override
+  String get finishFailed => 'Das hat nicht geklappt. Dein Audio ist sicher.';
+
+  @override
+  String get micBlockedCannotRecord => 'Erlaube den Mikrofonzugriff für Aufnahmen.';
+
+  @override
+  String get couldNotStartRecording => 'Die Aufnahme konnte nicht gestartet werden.';
+
+  @override
+  String get restorePurchasesFailed => 'Dein Plan konnte nicht überprüft werden.';
+
+  @override
+  String get firmwareCheckFailed => 'Updates konnten nicht überprüft werden.';
+
+  @override
+  String get conversationStillPublic => 'Sie ist noch per Link geteilt.';
+
+  @override
+  String get goalSaveFailed => 'Dein Ziel konnte nicht gespeichert werden.';
+
+  @override
+  String get goalDeleteFailed => 'Löschen fehlgeschlagen. Dein Ziel wurde wiederhergestellt.';
+
+  @override
+  String get goalsLoadFailed => 'Deine Ziele konnten nicht geladen werden.';
+
+  @override
+  String get missingTargetEndedRecording => 'Diese Aufnahme ist beendet.';
+
+  @override
+  String get missingTargetMemory => 'Diese Erinnerung ist weg.';
+
+  @override
+  String get missingTargetTask => 'Diese Aufgabe ist weg.';
+
+  @override
+  String get missingTargetConversation => 'Diese Unterhaltung konnte nicht geöffnet werden.';
+
+  @override
+  String get couldNotRefreshConversations => 'Konnte nicht aktualisiert werden.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Verbinde dein Omi, um zu synchronisieren.';
+
+  @override
+  String get useDifferentAccountMessage =>
+      'Du wirst abgemeldet, und die Omi-Einstellungen auf diesem Telefon werden zurückgesetzt.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Brille nicht gefunden. Ist sie eingeschaltet?';
+
+  @override
+  String get couldNotMoveTask => 'Die Aufgabe konnte nicht verschoben werden.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Gelöscht. $count gesperrte Aufgaben wurden beibehalten.',
+      one: 'Gelöscht. 1 gesperrte Aufgabe wurde beibehalten.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Die Änderung konnte nicht gespeichert werden.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Deine Einstellungen konnten nicht geladen werden.';
+
+  @override
+  String get waitForOmiToFinish => 'Warte, bis Omi fertig ist.';
+
+  @override
+  String get voiceNoteTooShort => 'Zu kurz. Zum Aufnehmen gedrückt halten.';
+
+  @override
+  String get submitAppMissingFields => 'Füge Name, Beschreibung, Bild, Kategorie und Fähigkeit hinzu, um einzureichen.';
+
+  @override
+  String get appSetupNotFinished => 'Die Einrichtung ist noch nicht abgeschlossen.';
+
+  @override
+  String get finishNothingKeptTitle => 'Nichts zu behalten';
+
+  @override
+  String get submitAppFinishDetails => 'Vervollständige oben die Angaben zur Fähigkeit und zum Preis, um einzureichen.';
+
+  @override
+  String get finishNothingNew => 'Noch nichts Neues.';
+
+  @override
+  String get takingLongerThanUsual => 'Dauert länger als üblich. Du findest sie gleich unter Start.';
+
+  @override
+  String get couldNotCheckOnIt => 'Konnte nicht nachsehen. Versuch es erneut.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Führe ein Upgrade durch, um diese zu öffnen.';
+
+  @override
+  String get missingTargetConversationGone => 'Diese Unterhaltung wurde gelöscht.';
+
+  @override
+  String get cantConnectRightNow => 'Gerade keine Verbindung möglich.';
+
+  @override
+  String get loadOlderFailed => 'Ältere Einträge konnten nicht geladen werden. Zum Wiederholen tippen.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Hört zu · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Warte bis zum Ende, um sie zu ändern.';
+
+  @override
+  String get finishedSummaryReady => 'Zusammenfassung bereit';
+
+  @override
+  String get writingSummaryStatus => 'Zusammenfassung wird erstellt…';
+
+  @override
+  String get stillWorkingOnIt => 'Wir arbeiten noch daran.';
+
+  @override
+  String get deviceReadyToUse => 'Einsatzbereit';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Die Firmware deines Geräts ist zu alt für dieses Update. Wende dich an den Support, um Hilfe beim Aktualisieren deines Geräts zu erhalten.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Dieses Firmware-Update benötigt eine neuere Version der Omi-App. Aktualisiere die App in deinem App-Store und suche dann erneut nach Updates.';
+
+  @override
+  String get quietPayerTitle => 'Seit 5 Tagen keine Aufnahmen';
+
+  @override
+  String get quietPayerMessage => 'Prüfe dein Omi.';
+
+  @override
+  String get quietPayerCheck => 'Prüfen';
+
+  @override
+  String get playManageSubscription => 'Abo verwalten';
+
+  @override
+  String get playBilledByGoogle => 'Abrechnung über Google Play';
+
+  @override
+  String get playPurchasePending => 'Deine Zahlung ist ausstehend. Omi Pro startet, sobald Google Play sie bestätigt.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Dieser Google-Play-Kauf gehört zu einem anderen Omi-Konto.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Wir konnten den Kauf noch nicht bestätigen. Wir versuchen es automatisch erneut.';
+
+  @override
+  String get playRenewalTerms =>
+      'Verlängert sich automatisch zum angezeigten Preis, bis du kündigst. Verwalten oder kündigen jederzeit in Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Auf Android nicht verfügbar';
+
+  @override
+  String get pageNotAvailableInApp => 'Diese Seite ist in der App nicht verfügbar.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Bestellung aufgegeben. Die Bestätigung findest du in deinen E-Mails.';
+
+  @override
+  String get prepaidCodeEntry => 'Hast du einen Code?';
+
+  @override
+  String get prepaidCodeTitle => 'Code einlösen';
+
+  @override
+  String get prepaidCodeFieldHint => 'Code eingeben';
+
+  @override
+  String get prepaidCodeRedeem => 'Einlösen';
+
+  @override
+  String get prepaidCodeRedeemed => 'Code eingelöst';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Dieser Code ist ungültig. Prüfe ihn und versuche es erneut.',
+        'used': 'Dieser Code wurde bereits verwendet.',
+        'expired': 'Dieser Code ist abgelaufen.',
+        'hasPlan': 'Du hast bereits einen Plan. Dein Code wurde nicht verwendet. Löse ihn ein, wenn dein Plan endet.',
+        'notPrepaid': 'Dieser Code kann hier nicht eingelöst werden. Verwende ihn, wenn du einen Plan wählst.',
+        'notEligible': 'Dieser Code kann für dieses Konto nicht verwendet werden.',
+        'rateLimited': 'Zu viele Versuche. Versuche es später erneut.',
+        'other': 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Abgerechnet über omi.me. Hier jederzeit kündbar.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Abgerechnet über omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Dein $plan-Tarif ist pausiert.';
+  }
 }

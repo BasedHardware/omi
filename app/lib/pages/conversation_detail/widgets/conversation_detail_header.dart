@@ -6,10 +6,12 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_meta.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/share.dart';
+import 'package:omi/pages/conversation_detail/share_flow.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/calendar_event_sheets.dart';
 import 'package:omi/pages/conversation_detail/widgets/capture_recordings.dart';
@@ -17,6 +19,7 @@ import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.d
 import 'package:omi/pages/conversation_detail/widgets/conversation_entity_chips.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
@@ -108,29 +111,48 @@ class ConversationDetailHeader extends StatelessWidget {
   Widget _titleRow(BuildContext context, ConversationDetailProvider provider, ServerConversation conversation) {
     final titleStyle = OmiType.title1.copyWith(height: 1.15, letterSpacing: -0.4);
     if (conversation.discarded) return Text(context.l10n.discardedConversation, style: titleStyle);
-    // Once the server says the audio is still waiting for a transcript, its "Couldn't transcribe"
-    // stand-in title would contradict the Summary tab, so the page shows the untitled fallback.
+    // The title field falls back to the recording date when an older status placeholder would
+    // contradict the current admission shown in Summary.
     return ValueListenableBuilder<Map<String, DateTime>>(
       valueListenable: TranscriptionPendingConversations.ids,
       builder: (context, _, __) {
-        final waiting = TranscriptionPendingConversations.replacesTitle(conversation);
         return ConversationTitleField(
           focusNode: provider.titleFocusNode,
           controller: provider.titleController,
           style: titleStyle,
-          displayText: (stored) => waiting && stored.trim() == TranscriptionPendingConversations.serverHoldTitle
+          displayText: (stored) => TranscriptionPendingConversations.replacesTitle(conversation, title: stored)
               ? ''
               : presentableConversationTitle(conversation, title: stored),
-          hintText: transcriptFallbackTitle(conversation) ??
-              recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
+          // A hint shows only while the field is empty, so a live conversation's empty field reads
+          // Listening even if the server named it during an edit that skipped the server title.
+          hintText: conversation.v3?.tileState == ConversationTileState.live
+              ? context.l10n.listening
+              : transcriptFallbackTitle(conversation) ??
+                  recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
         );
       },
     );
   }
 
   /// "Today 12:40 PM · 14m": when it started and how long it ran, the list row's length rule. A
-  /// linked calendar event shows its logo and opens the event.
+  /// linked calendar event shows its logo and opens the event. A v3 conversation still in progress
+  /// shows "● Live · 11m" instead: the speech so far, the same length its Home row shows.
   Widget _whenChip(BuildContext context, ServerConversation conversation) {
+    final live = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false) &&
+        conversation.v3?.tileState == ConversationTileState.live;
+    if (live) {
+      final duration = conversationDurationLabel(conversation, context.l10n);
+      final label = [context.l10n.live, if (duration.isNotEmpty) duration].join(' · ');
+      return Semantics(
+        label: label,
+        excludeSemantics: true,
+        child: ConversationDetailChip(
+          key: const Key('conversation_when_live'),
+          icon: const OmiBreathingDot(),
+          label: label,
+        ),
+      );
+    }
     final dates = OmiDateFormat.of(context);
     final start = conversation.startedAt ?? conversation.createdAt;
     final duration = conversationDurationLabel(conversation, context.l10n);
@@ -338,12 +360,43 @@ abstract final class ConversationVisibilitySheet {
   static void show(BuildContext context, ServerConversation conversation) {
     final provider = context.read<ConversationDetailProvider>();
 
+    Future<void> makePrivate() async {
+      final ok = await setConversationVisibility(conversation.id, visibility: ConversationVisibility.private_.value);
+      if (ok) provider.updateVisibilityLocally(ConversationVisibility.private_);
+      if (!ok && context.mounted) showShareFlowEnd(context, ShareFlowEnd.stillPublic, makePrivate: makePrivate);
+    }
+
     Future<void> choose(BuildContext sheetContext, ConversationVisibility target) async {
       if (conversation.visibility == target) {
         Navigator.pop(sheetContext);
         return;
       }
       final previousVisibility = conversation.visibility;
+      if (target == ConversationVisibility.shared) {
+        // Making it shared is Share: the same consent step, sheet and revert (ux-contract §17.7).
+        Navigator.pop(sheetContext); // omi-ux-allow: pop-before-await -- the next step is the share consent dialog
+        final end = await runConversationShare(
+          wasPrivate: true,
+          confirm: () => showOmiConfirm(
+            context,
+            title: context.l10n.shareConversationQuestion,
+            message: context.l10n.anyoneWithLinkCanView,
+            confirmLabel: context.l10n.share,
+          ),
+          setVisibility: (visibility) => setConversationVisibility(conversation.id, visibility: visibility.value),
+          onVisibility: provider.updateVisibilityLocally,
+          openSheet: () async => (await shareConversationLink(conversation)).status,
+        );
+        if (end == ShareFlowEnd.shared) {
+          PlatformManager.instance.analytics.conversationVisibilityChanged(
+            conversationId: conversation.id,
+            fromVisibility: previousVisibility.value,
+            toVisibility: target.value,
+          );
+        }
+        if (context.mounted) showShareFlowEnd(context, end, makePrivate: makePrivate);
+        return;
+      }
       provider.updateVisibilityLocally(target);
       Navigator.pop(sheetContext);
       final success = await setConversationVisibility(conversation.id, visibility: target.value);
@@ -357,7 +410,6 @@ abstract final class ConversationVisibilitySheet {
         fromVisibility: previousVisibility.value,
         toVisibility: target.value,
       );
-      if (target == ConversationVisibility.shared && context.mounted) shareConversationLink(conversation);
     }
 
     showOmiSheet<void>(

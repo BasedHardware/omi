@@ -563,11 +563,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 nedetectat';
+  String get v2Undetected => 'Sincronizarea offline nu este disponibilă';
 
   @override
   String get v2UndetectedMessage =>
-      'Vedem că ai fie un dispozitiv V1, fie dispozitivul tău nu este conectat. Funcționalitatea card SD este disponibilă doar pentru dispozitivele V2.';
+      'Sincronizarea offline necesită un dispozitiv Omi conectat cu stocare pe card SD. Dispozitivul tău actual nu o acceptă.';
 
   @override
   String get endConversation => 'Încheie conversația';
@@ -1127,6 +1127,11 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get nameUpdatedSuccessfully => 'Nume actualizat cu succes!';
+
+  @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Citește calendarele selectate. Evenimentele noi folosesc $calendar.';
+  }
 
   @override
   String get calendarSettings => 'Setări calendar';
@@ -7086,6 +7091,26 @@ class AppLocalizationsRo extends AppLocalizations {
   String get authUnexpectedError => 'Eroare neașteptată la autentificare, vă rugăm încercați din nou';
 
   @override
+  String get accountSignInMethods => 'Metode de conectare';
+
+  @override
+  String get accountAddSignInMethod => 'Adaugă o metodă de conectare';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Adaugă o modalitate de conectare la acest cont Omi. Planul, înregistrările și integrările tale rămân în acest cont.';
+
+  @override
+  String get accountSignInConflictTitle => 'Această metodă de conectare aparține altui cont';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Ești încă în acest cont. Fiecare cont Omi își păstrează propriul plan, propriile înregistrări și integrări.';
+
+  @override
+  String get accountSignInMethodAdded => 'Metoda de conectare a fost adăugată';
+
+  @override
   String get authFailedToLinkGoogle => 'Nu s-a putut conecta cu Google, vă rugăm încercați din nou.';
 
   @override
@@ -9122,7 +9147,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Această înregistrare a fost încărcată, dar Omi încă creează conversația. Dacă o ștergi acum și procesarea eșuează, nu poate fi recuperată. Ștergi oricum?';
+      'Această înregistrare este deja încărcată și Omi o procesează. Ștergerea de aici elimină copia de pe telefon. Dacă procesarea eșuează, Omi nu va putea reîncerca de pe acest telefon.';
 
   @override
   String get syncCardAllBackedUp => 'Toate înregistrările sincronizate';
@@ -14418,6 +14443,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get processingProgress => 'Se procesează înregistrările în așteptare…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'În așteptarea cotei disponibile pentru transcriere';
+
+  @override
   String get processingDeferred => 'În așteptarea procesării';
 
   @override
@@ -14546,14 +14574,6 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done din $total min';
-  }
-
-  @override
-  String get deviceRecently => 'Recent';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Deconectat timp de $duration';
   }
 
   @override
@@ -15381,9 +15401,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get stopThese => 'Oprește acestea';
 
   @override
-  String get meetingActionItemsTitle => 'Elemente de acțiune';
-
-  @override
   String get addToTasks => 'Adaugă la Sarcini';
 
   @override
@@ -15495,6 +15512,11 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Actualizarea nu s-a instalat. Pandantivul tău funcționează în continuare cu firmware-ul actual ($version). Te rugăm să contactezi asistența în loc să reîncerci actualizarea.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15536,7 +15558,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15620,4 +15642,259 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'Activitate raportată de server';
+
+  @override
+  String get finishNothingToProcess => 'Încă nu este nimic de procesat.';
+
+  @override
+  String get finishStillProcessing => 'Încă se procesează. Va apărea pe pagina principală.';
+
+  @override
+  String get finishBackToHome => 'Înapoi la pagina principală';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Rezumat când se încheie această conversație';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Încărcări în așteptare pe server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Audioul tău este în siguranță pe dispozitiv sau pe telefon';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Rezumat până la $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Transcriere recentă';
+
+  @override
+  String get finishAlreadySaved => 'Salvată deja. Este în secțiunea Acasă.';
+
+  @override
+  String get finishAudioNotReceived => 'Fișierul audio este încă pe drum.';
+
+  @override
+  String get finishFailedOffline => 'Nu a funcționat. Fișierul tău audio este în siguranță.';
+
+  @override
+  String get finishFailed => 'Nu a funcționat. Fișierul tău audio este în siguranță.';
+
+  @override
+  String get micBlockedCannotRecord => 'Permite accesul la microfon pentru a înregistra.';
+
+  @override
+  String get couldNotStartRecording => 'Nu s-a putut porni înregistrarea.';
+
+  @override
+  String get restorePurchasesFailed => 'Nu am putut verifica planul tău.';
+
+  @override
+  String get firmwareCheckFailed => 'Nu s-a putut verifica dacă există actualizări.';
+
+  @override
+  String get conversationStillPublic => 'Este încă partajată prin link.';
+
+  @override
+  String get goalSaveFailed => 'Nu s-a putut salva obiectivul tău.';
+
+  @override
+  String get goalDeleteFailed => 'Nu s-a putut șterge. Obiectivul a fost restaurat.';
+
+  @override
+  String get goalsLoadFailed => 'Nu s-au putut încărca obiectivele tale.';
+
+  @override
+  String get missingTargetEndedRecording => 'Înregistrarea aceasta s-a încheiat.';
+
+  @override
+  String get missingTargetMemory => 'Această amintire nu mai există.';
+
+  @override
+  String get missingTargetTask => 'Această sarcină nu mai există.';
+
+  @override
+  String get missingTargetConversation => 'Nu s-a putut deschide această conversație.';
+
+  @override
+  String get couldNotRefreshConversations => 'Nu s-a putut actualiza.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Conectează-ți Omi pentru a sincroniza.';
+
+  @override
+  String get useDifferentAccountMessage =>
+      'Sesiunea va fi închisă, iar setările Omi de pe acest telefon vor fi resetate.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Nu s-au găsit ochelarii. Sunt porniți?';
+
+  @override
+  String get couldNotMoveTask => 'Nu s-a putut muta sarcina.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Șters. Sarcinile blocate ($count) au fost păstrate.',
+      one: 'Șters. 1 sarcină blocată a fost păstrată.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Nu s-a putut salva această modificare.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Nu s-au putut încărca setările tale.';
+
+  @override
+  String get waitForOmiToFinish => 'Așteaptă ca Omi să termine.';
+
+  @override
+  String get voiceNoteTooShort => 'Prea scurt. Ține apăsat pentru a înregistra.';
+
+  @override
+  String get submitAppMissingFields => 'Adaugă nume, descriere, imagine, categorie și capacitate pentru a trimite.';
+
+  @override
+  String get appSetupNotFinished => 'Configurarea nu este încă finalizată.';
+
+  @override
+  String get finishNothingKeptTitle => 'Nimic de păstrat';
+
+  @override
+  String get submitAppFinishDetails => 'Completează detaliile de capacitate și preț de mai sus pentru a trimite.';
+
+  @override
+  String get finishNothingNew => 'Nimic nou deocamdată.';
+
+  @override
+  String get takingLongerThanUsual => 'Durează mai mult decât de obicei. Va apărea în secțiunea Acasă.';
+
+  @override
+  String get couldNotCheckOnIt => 'Nu am putut verifica. Încearcă din nou.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Fă upgrade pentru a o deschide.';
+
+  @override
+  String get missingTargetConversationGone => 'Această conversație a fost ștearsă.';
+
+  @override
+  String get cantConnectRightNow => 'Nu se poate conecta momentan.';
+
+  @override
+  String get loadOlderFailed => 'Nu s-au putut încărca cele mai vechi. Atinge pentru a reîncerca.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Ascultare · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Așteaptă să se încheie pentru a o modifica.';
+
+  @override
+  String get finishedSummaryReady => 'Rezumat gata';
+
+  @override
+  String get writingSummaryStatus => 'Se scrie rezumatul…';
+
+  @override
+  String get stillWorkingOnIt => 'Încă lucrăm la asta.';
+
+  @override
+  String get deviceReadyToUse => 'Pregătit pentru utilizare';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmware-ul dispozitivului tău este prea vechi pentru această actualizare. Contactează echipa de asistență pentru ajutor la actualizarea dispozitivului.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Această actualizare de firmware necesită o versiune mai nouă a aplicației Omi. Actualizează aplicația din magazinul de aplicații, apoi verifică din nou.';
+
+  @override
+  String get quietPayerTitle => 'Nicio înregistrare de 5 zile';
+
+  @override
+  String get quietPayerMessage => 'Verifică-ți Omi.';
+
+  @override
+  String get quietPayerCheck => 'Verifică';
+
+  @override
+  String get playManageSubscription => 'Gestionează abonamentul';
+
+  @override
+  String get playBilledByGoogle => 'Facturat prin Google Play';
+
+  @override
+  String get playPurchasePending => 'Plata este în așteptare. Omi Pro începe imediat ce Google Play o confirmă.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Această achiziție Google Play aparține altui cont Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Nu am putut confirma încă achiziția. Vom reîncerca automat.';
+
+  @override
+  String get playRenewalTerms =>
+      'Se reînnoiește automat la prețul afișat până când anulezi. Gestionează sau anulează oricând din Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Indisponibil pe Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Această pagină nu este disponibilă în aplicație.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Comanda a fost plasată. Verifică e-mailul pentru confirmare.';
+
+  @override
+  String get prepaidCodeEntry => 'Ai un cod?';
+
+  @override
+  String get prepaidCodeTitle => 'Folosește un cod';
+
+  @override
+  String get prepaidCodeFieldHint => 'Introdu codul tău';
+
+  @override
+  String get prepaidCodeRedeem => 'Folosește';
+
+  @override
+  String get prepaidCodeRedeemed => 'Cod folosit';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Acest cod nu este valid. Verifică-l și încearcă din nou.',
+        'used': 'Acest cod a fost deja folosit.',
+        'expired': 'Acest cod a expirat.',
+        'hasPlan': 'Ai deja un plan. Codul tău nu a fost folosit. Folosește-l după ce planul tău se încheie.',
+        'notPrepaid': 'Acest cod nu poate fi folosit aici. Folosește-l când alegi un plan.',
+        'notEligible': 'Acest cod nu poate fi folosit în acest cont.',
+        'rateLimited': 'Prea multe încercări. Încearcă mai târziu.',
+        'other': 'Ceva nu a funcționat. Încearcă din nou.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Facturat prin omi.me. Anulează aici oricând.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Facturat prin omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Planul tău $plan este întrerupt.';
+  }
 }

@@ -157,7 +157,7 @@ def test_home_presents_a_stamped_capture_as_transcribing_not_as_a_finished_row()
     before = deepcopy(row)
     assert transcribing_hold.applies(row)
     assert home_step.classify(row) == home_step.TRANSCRIBING
-    wire = transcribing_hold.project(home_step.project(row))
+    wire = transcribing_hold.project(home_step.project(row), home_list=True)
     assert wire['structured']['title'] == 'Transcribing…'
     assert wire['status'] == 'processing' and wire['home_step'] == home_step.TRANSCRIBING
     assert row == before  # presentation only
@@ -207,6 +207,50 @@ def test_wire_serves_a_bare_placeholder_as_untitled_on_live_rows():
 def test_wire_rule_touches_nothing_else(changes):
     row = stub(**changes)
     assert home_titles.placeholder_title_wire(row) is row
+
+
+@pytest.mark.parametrize('fallback', [FALLBACK, 'Discussion 3'])
+def test_list_wire_labels_ready_captures_with_projection_receipt(fallback):
+    row = capture(record_projection_revision=2, structured={'title': fallback, 'overview': ''})
+    before = deepcopy(row)
+    wire = transcribing_hold.project(home_step.project(row), home_list=True)
+    assert wire['home_step'] == home_step.READY
+    assert wire['structured']['title'] == 'Recording'
+    assert wire['structured']['overview'] == ''
+    assert wire['status'] == 'completed'
+    assert row == before
+
+
+def test_list_wire_does_not_label_a_ready_capture_without_a_receipt():
+    row = capture(structured={'title': FALLBACK})
+    row.pop('home_transcription_deadline_at', None)
+    wire = transcribing_hold.project(home_step.project(row), home_list=True)
+    assert wire['home_step'] == home_step.READY
+    assert wire['structured']['title'] == ''
+
+
+def test_list_wire_does_not_label_a_processing_capture_with_a_receipt():
+    row = capture(status='processing', record_projection_revision=2, structured={'title': FALLBACK})
+    wire = transcribing_hold.project(home_step.project(row), home_list=True)
+    assert wire['home_step'] == home_step.TRANSCRIBING
+    assert wire['structured']['title'] == ''
+
+
+def test_list_wire_does_not_label_a_locked_capture():
+    row = capture(record_projection_revision=2, is_locked=True, structured={'title': FALLBACK})
+    wire = transcribing_hold.project(home_step.project(row), home_list=True)
+    assert wire['structured']['title'] == ''
+
+
+def test_other_reader_cannot_label_a_row_with_a_saved_ready_step():
+    row = capture(record_projection_revision=2, home_step='ready', structured={'title': FALLBACK})
+    assert transcribing_hold.project(row)['structured']['title'] == ''
+
+
+def test_list_with_home_projection_off_ignores_a_saved_ready_step(monkeypatch):
+    monkeypatch.setenv('HOME_STEP_PROJECTION', 'off')
+    row = capture(record_projection_revision=2, home_step='ready', structured={'title': FALLBACK})
+    assert transcribing_hold.project(home_step.project(row), home_list=True)['structured']['title'] == ''
 
 
 def test_expired_empty_capture_is_noise_even_when_stamped():
@@ -266,6 +310,73 @@ def test_placeholder_title_beside_real_notes_is_a_finished_row_not_a_transcripti
     row = capture(structured=notes)
     assert not transcribing_hold.applies(row)
     assert home_step.classify(row) == home_step.READY
-    wire = transcribing_hold.project(home_step.project(row))
+    wire = transcribing_hold.project(home_step.project(row), home_list=True)
     assert wire['structured'] == notes and wire['status'] == 'completed'
     assert home_step.classify(capture(status='processing', structured=notes)) == home_step.WRITING_NOTES
+
+
+@pytest.mark.parametrize(
+    'structured,protected',
+    [
+        ({'title': FALLBACK}, False),
+        ({'title': 'Discussion 3'}, False),
+        ({'title': 'Transcribing…'}, False),
+        ({'title': ''}, False),
+        ({'title': 'Pilot budget'}, True),
+        ({'title': FALLBACK, 'overview': 'Approval is due Friday.'}, True),
+        ({'title': FALLBACK, 'overview': 'The transcript is unavailable.'}, True),
+        # A gist is content the minimum would drop, so it protects the row.
+        ({'title': FALLBACK, 'gist': 'Pilot budget approval'}, True),
+        ({'title': FALLBACK, 'participants': [{'name': 'Alex'}]}, False),
+        ({'title': FALLBACK, 'insights': [{'text': 'The budget is tight.'}]}, False),
+        ({'title': FALLBACK, 'meeting_type': 'meeting'}, False),
+        ({'title': FALLBACK, 'salience': 'highlight'}, False),
+    ],
+)
+def test_protected_content_does_not_count_a_placeholder_as_a_title(structured, protected):
+    """Recovery may replace a row that only carries the fallback label, never a real title."""
+    from utils.conversations.recovery import structured_has_protected_content
+
+    assert structured_has_protected_content(structured) is protected
+    assert structured_has_protected_content(structured, user_title='My chat') is True
+
+
+@pytest.mark.parametrize(
+    'structured,replaceable',
+    [
+        ({'title': FALLBACK}, True),
+        ({'title': 'Discussion 3'}, True),
+        ({'title': 'Transcribing…'}, True),
+        ({'title': ''}, True),
+        ({'title': 'Recording · 3:00 PM', 'title_provenance': 'server_minimum'}, True),
+        ({'title': 'Pilot budget'}, False),
+        ({'title': FALLBACK, 'overview': 'Approval is due Friday.'}, False),
+        ({'title': FALLBACK, 'gist': 'Pilot budget approval'}, False),
+        ({'title': FALLBACK, 'sections': [{'heading': '', 'body_markdown': 'Approval is due Friday.'}]}, False),
+        ({'title': FALLBACK, 'action_items': [{'description': 'Send the budget'}]}, False),
+        # Enrichment-only fields are not part of the protected set: a row that
+        # carries only those is still replaceable.
+        ({'title': FALLBACK, 'participants': [{'name': 'Alex'}]}, True),
+        ({'title': FALLBACK, 'insights': [{'text': 'The budget is tight.'}]}, True),
+        ({'title': FALLBACK, 'meeting_type': 'meeting'}, True),
+        ({'title': FALLBACK, 'salience': 'highlight'}, True),
+        ({'title': FALLBACK, 'category': 'business'}, True),
+        ({'title': FALLBACK, 'emoji': '🚀'}, True),
+    ],
+)
+def test_stored_structure_is_replaceable_only_without_a_real_title_or_notes(structured, replaceable):
+    """The recovery guard and the post-enrichment eligibility share this one rule."""
+    from utils.conversations.recovery import stored_structure_is_replaceable
+
+    assert stored_structure_is_replaceable(structured) is replaceable
+
+
+def test_stored_structure_is_replaceable_reads_sections_on_the_model():
+    """Both call sites pass a Structured model, not a dict; sections must still count."""
+    from models.structured import Structured
+    from utils.conversations.recovery import stored_structure_is_replaceable
+
+    with_sections = Structured(title=FALLBACK, sections=[{'heading': 'Plan', 'body_markdown': 'Ship it Friday.'}])
+    assert stored_structure_is_replaceable(with_sections) is False
+    without_sections = Structured(title=FALLBACK)
+    assert stored_structure_is_replaceable(without_sections) is True

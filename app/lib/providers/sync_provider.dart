@@ -93,14 +93,17 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   int _derivedLength = -1;
   WalDerivedViews get derivedWals {
     final source = allWals;
-    if (_derived == null || !identical(source, _derivedSource) || source.length != _derivedLength) {
-      _derived?.dispose();
-      _derivedSource = source;
-      _derivedLength = source.length;
+    if (_derived == null) {
       _derived = WalDerivedViews(source, onPendingWorkExpired: () {
         if (!_isDisposed) notifyListeners();
       });
+    } else if (!identical(source, _derivedSource) || source.length != _derivedLength) {
+      // A new inventory snapshot usually differs by a row or two; adopt it
+      // incrementally instead of re-deriving the whole synced history.
+      _derived!.sync(source);
     }
+    _derivedSource = source;
+    _derivedLength = source.length;
     _derived!.refresh();
     return _derived!;
   }
@@ -1378,6 +1381,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       throw Exception('This recording is already on phone');
     }
 
+    _admittedWorkGeneration = generation;
     _updateSyncState(_syncState.toSyncing(), generation);
 
     await _keepAlive.acquire();

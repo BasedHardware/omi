@@ -53,13 +53,28 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   int get needsAttentionWalsCount => wals.where((w) => w.status == WalStatus.corrupted).length;
   @override
-  int get clearableWalsCount => 0;
+  int get clearableWalsCount => wals.length;
+  @override
+  List<Wal> get syncedWals => wals.where((wal) => wal.status == WalStatus.synced).toList();
+  @override
+  List<Wal> get pendingDeletableWals => missingWals;
+
   @override
   List<Wal> get retryableAttentionWals => derivedWals.retryable;
   @override
   bool get syncCompleted => false;
   @override
   WalStatusFilter get statusFilter => WalStatusFilter.pending;
+  String? retainedPendingId;
+  List<Wal>? discoveredWals;
+
+  @override
+  Future<void> deleteAllPendingWals() async {
+    final targets = pendingDeletableWals.map((wal) => wal.id).toSet();
+    wals.removeWhere((wal) => targets.contains(wal.id) && wal.id != retainedPendingId);
+    notifyListeners();
+  }
+
   @override
   int get pendingStatusCount => missingWals.length + uploadedWals.length;
   @override
@@ -95,14 +110,14 @@ class _User extends ChangeNotifier implements UserProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal>? recordings}) async {
+Future<_Sync> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal>? recordings}) async {
   SharedPreferences.setMockInitialValues({});
   await SharedPreferencesUtil.init();
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final sync = _Sync(recordings ??
+  final sync = _SyncWithDiscovery(recordings ??
       [
         Wal(
             timerStart: 1790730000,
@@ -141,6 +156,9 @@ Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal
   final baseTheme = buildOmiTheme();
   final theme = baseTheme.copyWith(
     platform: TargetPlatform.iOS,
+    snackBarTheme: baseTheme.snackBarTheme.copyWith(
+      contentTextStyle: baseTheme.snackBarTheme.contentTextStyle?.copyWith(fontFamily: 'SF Pro Display'),
+    ),
     textTheme: baseTheme.textTheme.apply(fontFamily: 'SF Pro Display'),
     primaryTextTheme: baseTheme.primaryTextTheme.apply(fontFamily: 'SF Pro Display'),
     appBarTheme: baseTheme.appBarTheme
@@ -168,6 +186,7 @@ Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal
   } else {
     await tester.pumpAndSettle();
   }
+  return sync;
 }
 
 Future<void> _capture(WidgetTester tester, String name) async {
@@ -181,6 +200,18 @@ Future<void> _capture(WidgetTester tester, String name) async {
     await File('${dir.path}/$name').writeAsBytes(bytes!.buffer.asUint8List());
     image.dispose();
   });
+}
+
+Future<AppLocalizations> _clearPending(WidgetTester tester) async {
+  final l = AppLocalizations.of(tester.element(find.byType(SyncPage)));
+  await tester.tap(find.byTooltip(l.manageStorage));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(l.clear));
+  await tester.pumpAndSettle();
+  expect(find.text(l.deletePendingFiles), findsOneWidget);
+  await tester.tap(find.text(l.clear));
+  await tester.pumpAndSettle();
+  return l;
 }
 
 void main() {
@@ -221,7 +252,8 @@ void main() {
               : '005-mobile-ios-sync-ready-with-stalled-upload.png');
     });
 
-    testWidgets('expired uploads are unavailable without a processing spinner (legacy=$legacy)', (tester) async {
+    testWidgets('expired uploads wait on the server calmly, without a processing spinner (legacy=$legacy)',
+        (tester) async {
       final wal = Wal(
           timerStart: DateTime.now().subtract(const Duration(days: 40)).millisecondsSinceEpoch ~/ 1000,
           codec: BleAudioCodec.opus,
@@ -229,7 +261,10 @@ void main() {
           status: WalStatus.uploaded,
           storage: WalStorage.disk);
       await _pump(tester, legacy ? const SyncPage() : const AutoSyncPage(), WalStatus.uploaded, recordings: [wal]);
-      expect(find.text('Transcription unavailable'), findsWidgets);
+      // Card header and per-row label share one predicate (stalledUploadsAt), so they share one meaning.
+      expect(find.text('Uploads waiting on the server'), findsOneWidget);
+      expect(find.text('Uploaded, awaiting server'), findsWidgets);
+      expect(find.text('Transcription unavailable'), findsNothing);
       expect(find.byType(OmiSpinner), findsNothing);
       expect(find.textContaining('Turning'), findsNothing);
       expect(wal.status, WalStatus.uploaded);
@@ -288,4 +323,68 @@ void main() {
     expect(tester.takeException(), isNull);
     await _capture(tester, '005-mobile-ios-sync-pending-backlog.png');
   });
+
+  for (final retainOne in [true, false]) {
+    testWidgets('Classic Clear Pending reports the actual result (retained: $retainOne)', (tester) async {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final pending = [
+        for (final secondsAgo in [30, 60])
+          Wal(
+              timerStart: now - secondsAgo,
+              codec: BleAudioCodec.opus,
+              seconds: 30,
+              storage: WalStorage.disk,
+              status: WalStatus.miss),
+      ];
+      final retained = pending.first;
+      final sync = await _pump(tester, const SyncPage(), WalStatus.miss, recordings: pending);
+      if (retainOne) sync.retainedPendingId = retained.id;
+      final l = await _clearPending(tester);
+
+      expect(sync.allWals, retainOne ? [retained] : isEmpty);
+      expect(find.text(l.failedToDeleteSomeItems), retainOne ? findsOneWidget : findsNothing);
+      expect(find.text(l.pendingFilesDeleted), retainOne ? findsNothing : findsOneWidget);
+      await _capture(tester, retainOne ? '001-mobile-ios-pending-retained.png' : '002-mobile-ios-pending-cleared.png');
+    });
+  }
+
+  testWidgets('Classic Clear Pending reports a retained ring after its virtual row is rebuilt', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    Wal ring(int start) => Wal(
+          timerStart: start,
+          codec: BleAudioCodec.opus,
+          seconds: 30,
+          storage: WalStorage.sdcard,
+          status: WalStatus.miss,
+          device: 'synthetic-pendant',
+          fileNum: -1,
+        );
+
+    final original = ring(now - 30);
+    final rediscovered = ring(now - 29);
+    final sync = await _pump(tester, const SyncPage(), WalStatus.miss, recordings: [original]);
+    sync.retainedPendingId = original.id;
+    sync.discoveredWals = [rediscovered];
+    expect(rediscovered.id, isNot(original.id));
+
+    final l = await _clearPending(tester);
+
+    expect(sync.allWals, [rediscovered]);
+    expect(find.text(l.failedToDeleteSomeItems), findsOneWidget);
+    expect(find.text(l.pendingFilesDeleted), findsNothing);
+  });
+}
+
+class _SyncWithDiscovery extends _Sync {
+  _SyncWithDiscovery(super.wals);
+
+  @override
+  Future<void> discoverDeviceWals({String? firmwareVersion}) async {
+    final refreshed = discoveredWals;
+    if (refreshed == null) return;
+    wals
+      ..clear()
+      ..addAll(refreshed);
+    notifyListeners();
+  }
 }

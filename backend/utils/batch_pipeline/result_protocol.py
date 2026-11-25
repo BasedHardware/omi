@@ -36,12 +36,51 @@ def stamp(job: dict, marker: str) -> None:
     job[REQUIRED] = {**required, **{field: job[field] for field in SOURCE_MARKERS if field in job}}
 
 
+def _witnesses_own_audio_fallback(job: dict, fallback: dict, slot: dict) -> bool:
+    """Match the preserved log position and original result to the same job."""
+    segment_id = job.get('segment_id')
+    source_segment_id = fallback.get('source_segment_id')
+    original_result = slot.get('result')
+    current_result = job.get('result')
+    route = job.get('stt_route')
+    generation = job.get('privacy_generation')
+    return (
+        isinstance(source_segment_id, str)
+        and bool(source_segment_id)
+        and source_segment_id != segment_id
+        and 'source_alias' not in job
+        and 'source_alias_of' not in job
+        and bool(job.get('owner_id'))
+        and bool(job.get('owner_key'))
+        and job.get('capture_at') is not None
+        and job.get('requires_compute_admission') is False
+        and isinstance(route, dict)
+        and route.get('stt_route') == 'provider'
+        and all(slot.get(field) == job.get(field) for field in ('owner_id', 'owner_key', 'capture_at'))
+        and type(generation) is int
+        and generation >= 0
+        and type(slot.get('privacy_generation')) is int
+        and slot['privacy_generation'] == generation
+        # A previously projected alias can still have an active content ledger.
+        and slot.get('projection_state') in ('pending', 'ready')
+        and not slot.get('projection')
+        and 'previous_segment_id' in slot
+        and isinstance(original_result, dict)
+        and original_result.get('segment_id') == segment_id
+        and isinstance(current_result, dict)
+        and current_result.get('segment_id') == segment_id
+        and bool(original_result.get('result_uri'))
+        and bool(current_result.get('result_uri'))
+        and current_result['result_uri'] != original_result['result_uri']
+    )
+
+
 def requirements(job: dict):
     """Interpret registered requirements preserved by older job mutators.
 
-    Pre-registry projectors convert an accepted alias to own-audio work while
-    retaining unknown fields. Its suspended log slot witnesses that transition;
-    only the exact registered alias -> reuse marker change is recoverable.
+    Older projectors can convert an accepted alias to own-audio work while
+    leaving a stale alias requirement behind. The suspended log slot witnesses
+    the exact registered alias-to-reuse transition.
     """
     markers = {field: job[field] for field in SOURCE_MARKERS if field in job}
     required = job.get(REQUIRED, markers)
@@ -59,16 +98,23 @@ def requirements(job: dict):
     fallback = job.get('source_alias_fallback') or {}
     slot = fallback.get('log_slot') if isinstance(fallback, dict) else None
     if (
-        required == {'source_alias_version': 1}
-        and type(required['source_alias_version']) is int
-        and markers == {'source_reuse_version': 1}
+        markers == {'source_reuse_version': 1}
         and isinstance(slot, dict)
         and bool(job.get('segment_id'))
         and slot.get('segment_id') == job['segment_id']
         and bool(fallback.get('source_segment_id'))
         and not job.get('source_alias')
     ):
-        return markers
+        if required == {'source_alias_version': 1} and type(required['source_alias_version']) is int:
+            return markers
+        # The registry-era fallback writer stamped before removing alias fields.
+        # Its dual envelope is recoverable only with a matching dormant log slot.
+        if (
+            required == SOURCE_MARKERS
+            and all(type(value) is int for value in required.values())
+            and _witnesses_own_audio_fallback(job, fallback, slot)
+        ):
+            return markers
     return required
 
 

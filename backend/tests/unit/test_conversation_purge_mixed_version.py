@@ -77,7 +77,7 @@ def test_old_takeover_ignores_shared_cursor_and_handback_retains_legacy_progress
     assert not row.get('scan_epoch') and row.get('run_token') is None
 
 
-def test_old_completion_has_no_rearm_fence_so_readiness_is_required(versions):
+def test_legacy_completion_succeeds_after_rearm_with_same_dispatch_generation(versions):
     v = versions
     row = v.client.rows[(jobs.COLLECTION, v.leader)]
     row['lease_until'] = jobs._now() - timedelta(seconds=1)
@@ -87,41 +87,10 @@ def test_old_completion_has_no_rearm_fence_so_readiness_is_required(versions):
     # dispatch generation. The old binary cannot compare that arm at completion.
     row.update(jobs.arm_fields('owner', 'one'))
     assert v.old.jobs.finish_run(v.leader, 2, token, 'completed', firestore_client=v.client)
-    # This is the frozen binary's limitation, not a supported mixed-group mode.
-    # New enrollment must refuse absent readiness even though its switch is on.
-    v.client.rows[(jobs.COLLECTION, v.leader)] = jobs.arm_fields('owner', 'one') | {'generation': 2}
-    assert scans.enabled()
-    assert scans._claim(v.client, v.leader, 2) == ('legacy', None)
-
-
-@pytest.mark.parametrize(
-    'marker', [None, {}, {'all_consumers_new': 'true'}, {'all_consumers_new': False}, 'expired', 'naive', 'unbounded']
-)
-def test_missing_stale_or_malformed_readiness_never_coalesces(monkeypatch, versions, marker):
-    v = versions
-    now = jobs._now()
-    if isinstance(marker, dict) and 'all_consumers_new' in marker:
-        marker = {**marker, 'valid_until': now + timedelta(hours=1)}
-    if isinstance(marker, str):
-        until = {
-            'expired': now - timedelta(seconds=1),
-            'naive': now.replace(tzinfo=None) + timedelta(hours=1),
-            'unbounded': now + timedelta(days=2),
-        }[marker]
-        marker = {'all_consumers_new': True, 'valid_until': until}
-    if marker is not None:
-        v.client.collection(scans.READINESS_COLLECTION).document(scans.READINESS_DOCUMENT).create(marker)
-    candidates = Mock(side_effect=AssertionError('mixed roll attempted enrollment'))
-    monkeypatch.setattr(scans, 'owner_candidates', candidates)
-    before = deepcopy(v.client.rows)
-    assert scans._claim(v.client, v.leader, 2) == ('legacy', None)
-    assert all(v.client.rows[key].get('progress') == value.get('progress') for key, value in before.items())
-    assert all(v.client.rows[key].get('generation') == value.get('generation') for key, value in before.items())
-    candidates.assert_not_called()
 
 
 @pytest.mark.parametrize('mode', ['seal', 'resume'])
-def test_readiness_rechecked_inside_seal_and_resume_transaction(monkeypatch, versions, mode):
+def test_switch_rechecked_inside_seal_and_resume_transaction(monkeypatch, versions, mode):
     v = versions
     if mode == 'seal':
         for job in (v.leader, v.follower):
@@ -130,8 +99,6 @@ def test_readiness_rechecked_inside_seal_and_resume_transaction(monkeypatch, ver
                 row.pop(key, None)
     else:
         v.client.rows[(jobs.COLLECTION, v.leader)]['lease_until'] = None
-    marker = (scans.READINESS_COLLECTION, scans.READINESS_DOCUMENT)
-    v.client.rows[marker] = {'all_consumers_new': True, 'valid_until': jobs._now() + timedelta(hours=1)}
     monkeypatch.setattr(
         scans,
         'owner_candidates',
@@ -140,25 +107,9 @@ def test_readiness_rechecked_inside_seal_and_resume_transaction(monkeypatch, ver
             for job in (v.leader, v.follower)
         ],
     )
-    ready = scans.consumers_ready
-
-    def revoke(client, transaction=None):
-        if transaction is not None:
-            client.rows[marker]['all_consumers_new'] = False
-        return ready(client, transaction)
-
-    monkeypatch.setattr(scans, 'consumers_ready', revoke)
+    monkeypatch.setattr(scans, 'enabled', Mock(side_effect=[True, False]))
     assert scans._claim(v.client, v.leader, 2) == ('legacy', None)
     assert all(not v.client.rows[(jobs.COLLECTION, job)].get('scan_epoch') for job in (v.leader, v.follower))
-
-
-def test_unreadable_readiness_retries_instead_of_asserting_consumer_compatibility(monkeypatch, versions):
-    v = versions
-    before = deepcopy(v.client.rows)
-    monkeypatch.setattr(scans, 'consumers_ready', Mock(side_effect=RuntimeError('synthetic control read failed')))
-    with pytest.raises(RuntimeError, match='synthetic control read failed'):
-        scans._claim(v.client, v.leader, 2)
-    assert v.client.rows == before
 
 
 def test_dangling_leader_with_null_epoch_falls_back_without_inheriting_a_cursor(versions):

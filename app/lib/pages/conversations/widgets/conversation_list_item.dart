@@ -1,4 +1,3 @@
-import 'package:clock/clock.dart';
 import 'dart:async';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
@@ -15,13 +14,14 @@ import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/home_feed.dart';
 import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/pages/episodes/episode_page.dart';
-import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
+import 'package:omi/pages/conversation_detail/conversation_live_guard.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
+import 'package:omi/pages/conversations/home_rows.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/pages/paywall/value_moment_paywall.dart';
@@ -48,9 +48,15 @@ import 'package:omi/providers/transcription_pending_conversations.dart';
 /// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
+  if (conversation.isTranscriptionAllowanceHeld &&
+      (conversation.structured.title.trim().isEmpty || TranscriptionPendingConversations.replacesTitle(conversation))) {
+    return l10n.summaryTranscriptionPendingTitle;
+  }
   // A row the server said is not transcribed keeps its own title and the status slot says why,
   // unless the title is only the server's stand-in; then the status is the title.
-  if (conversation.homeStep == 'failed') {
+  if (conversation.homeStep == 'failed' &&
+      !conversation.isAdmittedForTranscription &&
+      !conversation.isTranscriptionAllowanceHeld) {
     if (!TranscriptionPendingConversations.contains(conversation.id)) {
       return l10n.summaryTemplateFailedTitle(l10n.omiAppName);
     }
@@ -62,6 +68,7 @@ String conversationRowTitle(BuildContext context, ServerConversation conversatio
     if (seconds <= 0) return l10n.discardedConversation;
     return l10n.discardedConversationTitle(OmiDuration.compact(seconds, l10n));
   }
+  if (awaitsLiveTitle(conversation, title: conversation.structured.title.decodeString)) return l10n.listening;
   return conversationDisplayTitle(
     conversation,
     l10n,
@@ -618,21 +625,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   style: _metaStyle,
                   maxLines: 1,
                 ),
-              if (_isLive)
-                // The conversation in progress counts from its start, whether or not its transcript
-                // came with the live read.
-                LiveEpisodeClock(
-                  key: const Key('conversation_row_live_length'),
-                  clock: clock.now,
-                  builder: (context, now) {
-                    final start = widget.conversation.startedAt ?? widget.conversation.createdAt;
-                    final seconds = now.difference(start).inSeconds;
-                    return seconds <= 0
-                        ? const SizedBox.shrink()
-                        : Text('• ${OmiDuration.compact(seconds, context.l10n)}', style: _metaStyle, maxLines: 1);
-                  },
-                )
-              else if (duration.isNotEmpty)
+              if (_isLive) ...[
+                // The conversation in progress shows its speech so far, through the same duration
+                // authority as its detail. Counting from its start to now grew it through silence.
+                if (duration.isNotEmpty)
+                  Text('• $duration', key: const Key('conversation_row_live_length'), style: _metaStyle, maxLines: 1),
+              ] else if (duration.isNotEmpty)
                 Text('• $duration', style: _metaStyle, maxLines: 1),
               if (widget.homeCard?.memberCount case final count? when count > 1)
                 Text(context.l10n.homeRecordingsCount(count), style: _metaStyle),
@@ -718,11 +716,15 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         ),
                       ],
                       const SizedBox(height: 3),
-                      _buildMetaRow(context),
-                      if (widget.conversation.processingDeferred && widget.conversation.homeStep != 'failed')
+                      _buildMetaOrStatus(context),
+                      if (widget.conversation.processingDeferred &&
+                          widget.conversation.homeStep != 'failed' &&
+                          !widget.conversation.isTranscriptionAllowanceHeld)
                         const ProcessingDeferredMarker(),
                       OnDeviceProvenanceChip(conversationId: widget.conversation.id),
-                      if ((widget.conversation.showsSummaryRetry || widget.conversation.homeStep == 'failed') &&
+                      if (!widget.conversation.isTranscriptionAllowanceHeld &&
+                          !widget.conversation.isAdmittedForTranscription &&
+                          (widget.conversation.showsSummaryRetry || isFailedConversation(widget.conversation)) &&
                           !TranscriptionPendingConversations.replacesTitle(widget.conversation)) ...[
                         const SizedBox(height: 8),
                         _buildSummaryRetry(context),
@@ -784,9 +786,42 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   /// The same length the detail page shows (`OmiDuration.compact`, hub audit #15).
-  bool get _isLive =>
-      widget.conversation.v3?.tileState == ConversationTileState.live &&
-      (context.read<ConversationsV3Provider?>()?.v3 ?? false);
+  bool get _isLive => conversationIsLiveIn(context, widget.conversation);
+
+  /// A v3 row that is not done shows one quiet line where its time goes: "Listening · 11m",
+  /// "Transcribing…" or "Writing summary…". It cross-fades in place as the conversation moves on.
+  Widget _buildMetaOrStatus(BuildContext context) {
+    final v3 = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false);
+    final state = v3 ? widget.conversation.v3?.tileState : null;
+    final l10n = context.l10n;
+    final style = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
+    if (widget.conversation.isTranscriptionAllowanceHeld) {
+      return Text(l10n.waitingForTranscriptionAllowance, style: style, maxLines: 1);
+    }
+    final Widget child = switch (state) {
+      // Speech so far, through the same duration authority as the meta row and the detail page
+      // (#25725): counting from the start to now would grow it through silence.
+      ConversationTileState.live => Builder(
+          key: const ValueKey('conversation_row_status_live'),
+          builder: (context) {
+            final duration = _getConversationDuration(context);
+            // Keyed like the meta row's live length: the row's one live length, found the same way.
+            // An untitled live row already reads "Listening" as its title: the line under it says Live.
+            if (awaitsLiveTitle(widget.conversation, title: widget.conversation.structured.title.decodeString)) {
+              return Text([l10n.live, if (duration.isNotEmpty) duration].join(' · '),
+                  key: const Key('conversation_row_live_length'), style: style, maxLines: 1);
+            }
+            return Text(duration.isEmpty ? l10n.listening : l10n.listeningWithDuration(duration),
+                key: const Key('conversation_row_live_length'), style: style, maxLines: 1);
+          }),
+      ConversationTileState.transcribing => Text(l10n.homeStepTranscribing,
+          key: const ValueKey('conversation_row_status_transcribing'), style: style, maxLines: 1),
+      ConversationTileState.writing => Text(l10n.writingSummaryStatus,
+          key: const ValueKey('conversation_row_status_writing'), style: style, maxLines: 1),
+      _ => KeyedSubtree(key: const ValueKey('conversation_row_meta'), child: _buildMetaRow(context)),
+    };
+    return OmiCrossFade(child: child);
+  }
 
   String _getConversationDuration(BuildContext context) {
     if (widget.homeCard != null && widget.homeCard!.startedAt == null) return '';
@@ -915,41 +950,41 @@ class _SwipeDeleteRowState extends State<_SwipeDeleteRow> with SingleTickerProvi
           onHorizontalDragEnd: widget.enabled ? _onDragEnd : null,
           child: Stack(
             children: [
-              Positioned.fill(
-                child: Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: Padding(
-                    padding: const EdgeInsetsDirectional.only(end: _inset),
-                    child: AnimatedBuilder(
-                      animation: _offset,
-                      builder: (context, child) {
-                        final t = Curves.easeOut.transform((_offset.value / _open).clamp(0.0, 1.0));
-                        return Opacity(
-                          opacity: t,
-                          child: Transform.scale(scale: 0.6 + 0.4 * t, child: child),
-                        );
-                      },
-                      child: Semantics(
-                        button: true,
-                        label: context.l10n.delete,
-                        child: GestureDetector(
-                          key: _buttonKey,
-                          behavior: HitTestBehavior.opaque,
-                          onTap: _ask,
-                          child: Container(
-                            key: const ValueKey('conversation_swipe_delete'),
-                            width: _button,
-                            height: _button,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(color: OmiColors.danger, shape: BoxShape.circle),
-                            child: const FaIcon(FontAwesomeIcons.trashCan, size: 17, color: Colors.white),
+              if (widget.enabled)
+                Positioned.fill(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Padding(
+                      padding: const EdgeInsetsDirectional.only(end: _inset),
+                      child: AnimatedBuilder(
+                        animation: _offset,
+                        builder: (context, child) {
+                          final t = Curves.easeOut.transform((_offset.value / _open).clamp(0.0, 1.0));
+                          return Opacity(
+                            opacity: t,
+                            child: Transform.scale(scale: 0.6 + 0.4 * t, child: child),
+                          );
+                        },
+                        child: Semantics(
+                          button: true,
+                          label: context.l10n.delete,
+                          child: GestureDetector(
+                            key: _buttonKey,
+                            behavior: HitTestBehavior.opaque,
+                            onTap: _ask,
+                            child: Container(
+                              key: const ValueKey('conversation_swipe_delete'),
+                              width: _button,
+                              height: _button,
+                              decoration: BoxDecoration(color: OmiColors.danger, shape: BoxShape.circle),
+                              child: const FaIcon(FontAwesomeIcons.trashCan, size: 17, color: Colors.white),
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
               AnimatedBuilder(
                 animation: _offset,
                 builder: (context, child) => Transform.translate(

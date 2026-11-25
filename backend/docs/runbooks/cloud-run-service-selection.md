@@ -44,9 +44,12 @@ serving and omitted-service identity/config/traffic before releasing custody.
 A successful build or workflow terminal state alone is not a serving proof.
 Missing API capability or incomplete/mismatched metadata remains refused.
 
-The native traffic snapshot contains only the selected services. Failure or
-cancellation restores that captured named inverse, not `latest` or a rebuilt
-old image. Integration canary recovery retains its private within-run journal;
+Standard named deploys require `selected_rollback_revision`, the exact
+revision admitted at 100% before dispatch. The immutable run name binds it to
+the operation. Before promotion, the native snapshot requires both the full
+observed allocation and the requested restore allocation to resolve to that
+revision at 100%. A mismatch stops promotion. Rollback uses the captured named
+revision and reads back `status.traffic`. Integration canary recovery retains its private within-run journal;
 this selector adds no private journal export or new rollback executor. Release
 alone owns operational use under current source, runtime and guard admission.
 

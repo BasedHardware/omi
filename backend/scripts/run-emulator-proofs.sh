@@ -59,6 +59,8 @@ run_proof() {
 # ordinary unit shards intentionally do not stand up emulator services.
 run_proof "record custody append (committed reply loss, retries, privacy)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_record_custody_append_emulator.py
+run_proof "LLM gateway idempotency (claim, replay, expiry, stale settlement)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_llm_gateway_idempotency_firestore.py
 run_proof "record nojob seal (synthetic cleanup ownership)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/unit/test_record_seal_nojob_emulator.py
 run_proof "pipeline ledger (fence, reopen, ordering, delete, erasure)" \
@@ -97,8 +99,11 @@ run_proof "Dream idle parking keeps every wakeup (park/acquire vs concurrent mar
   "$PYTHON" scripts/dream_park_race_emulator_test.py
 run_proof "summary task recovery, concurrency and expiry" \
   "$PYTHON" -m pytest \
+  tests/integration/test_summary_debt_repair_firestore.py \
   tests/integration/test_summary_task_promotion_emulator.py \
   tests/integration/test_candidate_accept_expiry_emulator.py -q
+run_proof "desktop screen sync frame request delivery, expiry and quota" \
+  "$PYTHON" -m pytest -q tests/integration/test_screen_sync_frame_queue_emulator.py
 
 # Silent receipts can become ready at assignment; keep the paginated follow-up
 # and mixed-completion read guards in the hosted emulator acceptance suite.
@@ -106,6 +111,9 @@ run_proof "batch projection follow-up (silent ready, rollback and mixed completi
   "$PYTHON" -m pytest -q -p no:cacheprovider \
   tests/integration/test_batch_pipeline_projection_followup_firestore.py \
   tests/integration/test_batch_pipeline_silence_sizing_firestore.py
+
+run_proof "held-partial cursor concurrency (advance and wrap fence)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_held_partial_cursor_emulator.py
 
 run_proof "projection ghost-hold release gaps and ready-hint repair follow-up" \
   "$PYTHON" -m pytest -q -rxX -p no:cacheprovider \
@@ -123,7 +131,7 @@ run_proof "privacy cache replay (120-transition smoke and catch proofs)" \
 # Job-store conformance (legacy-retire lane 12): sim + Firestore emulator legs here; the Postgres leg
 # skips in CI (no Postgres service, decision S6) and is proven locally/staging.
 # Includes PL-141/142/143 scheduler pull ownership, expiry and abort/restart recovery.
-run_proof "job-store conformance (sim + emulator, including fenced scheduler pulls)" \
+run_proof "job-store conformance (fenced pulls, projection scan fallback and custody)" \
   env "OMI_REQUIRE_STORE_BACKENDS=${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_store_conformance.py \
   tests/integration/test_recovery_custody_conformance.py
@@ -131,6 +139,9 @@ run_proof "job-store conformance (sim + emulator, including fenced scheduler pul
 run_proof "allowance parking migration (owner concurrency, retry pacing, privacy and replay)" \
   env "OMI_REQUIRE_STORE_BACKENDS=${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_batch_allowance_holds.py -k migration
+run_proof "allowance-held recording release and transcript delivery" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider \
+  tests/integration/test_batch_pipeline_live_firestore.py::test_allowance_held_recording_releases_and_publishes_one_transcript
 
 # Daily parity: real claims/settlement on old Firestore and new Postgres.
 # CI requires sim + emulator; local/staging qualification must require all.
@@ -192,11 +203,29 @@ run_proof "provider merge conformance (sim + emulator required; Postgres when av
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/provider_merge_emulator_test.py
 
+# PL-606/607/608: independent projection clocks cannot hide owed follow-ups.
+run_proof "projection discovery conformance (sim + emulator required; Postgres when available)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/projection_discovery_emulator_test.py
+
+run_proof "stale merge-head promotion (real transactions, privacy fence, stale hints, demotion)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/merge_stale_head_emulator_test.py
+
 run_proof "Firestore read budget: batch unit end-to-end (M3 scenario 1)" \
   "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_batch_unit.py
 run_proof "Firestore read budget: conversation list page (M3 scenario 3)" \
   "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_conversation_page.py
+run_proof "Firestore read budget: sync upload, privacy and status polls" \
+  "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_sync.py
+run_proof "Firestore read budget: idle projection and pending-work backlog" \
+  "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_idle.py
 
+# PL-487/482: durable record settlement and pacing use the real Store on every
+# backend. CI requires sim/emulator; full local qualification requires =all.
+run_proof "record dead-letter and retry conformance (PL-487/482)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/record_dead_letter_emulator_test.py
 
 if (( ${#failures[@]} )); then
   echo

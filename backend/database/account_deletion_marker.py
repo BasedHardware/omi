@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-ACCOUNT_DELETION_COLLECTION = "account_deletions"
+from database.batch_account_authority_schema import ACCOUNT_DELETION_COLLECTION as ACCOUNT_DELETION_COLLECTION
 
 
 def account_deletion_firestore_client(*, firestore_client: Any | None = None) -> Any:

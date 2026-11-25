@@ -158,6 +158,32 @@ def test_stale_outbox_owner_or_token_cannot_record_anything(store, field, value)
     assert store.rows == before
 
 
+def test_strike_is_fenced_to_the_claimed_content_version(store):
+    """A sync append bumps ``version`` without rotating the token; the strike must not follow it."""
+    store.rows[OUTBOX].update(dormant=False, summary_empty_failures=0, version=2)
+    store.rows[CONVERSATION].update(summary_blocked_reason=None, summary_due_at=220)
+    before = deepcopy(store.rows)
+    assert (
+        summary_processing.record_empty_failure(
+            store, outbox.COLLECTION, KEY, 'worker', 'old-token', expected_version=1
+        )
+        is summary_processing.EmptyFailureOutcome.SUPERSEDED
+    )
+    assert store.rows == before
+
+
+def test_strike_records_the_version_it_was_charged_against(store):
+    store.rows[OUTBOX].update(dormant=False, summary_empty_failures=0, version=4)
+    store.rows[CONVERSATION].update(summary_blocked_reason=None, summary_due_at=220)
+    assert (
+        summary_processing.record_empty_failure(
+            store, outbox.COLLECTION, KEY, 'worker', 'old-token', expected_version=4
+        )
+        is summary_processing.EmptyFailureOutcome.RETRY
+    )
+    assert store.rows[OUTBOX]['summary_empty_version'] == 4
+
+
 def test_three_owned_empty_outputs_exhaust_once_and_preserve_structured_content(store):
     store.rows[OUTBOX].update(dormant=False, summary_empty_failures=0)
     store.rows[CONVERSATION].update(summary_blocked_reason=None, summary_due_at=220)
@@ -267,3 +293,72 @@ def test_redirect_custody_cannot_reopen_either_empty_budget(store, monkeypatch, 
     pending = store.rows[OUTBOX]
     assert pending['dormant'] and pending['due_at'] is None
     assert pending['summary_blocked_reason'] == reason and pending['summary_empty_failures'] == 3
+
+
+def _expired_commits(store, monkeypatch, *, failures):
+    """Make the first ``failures`` transaction commits report a retired transaction id.
+
+    The fixture applies a transaction's writes at ``update`` time, so these tests
+    assert the outcome and the restart count, not the row's final counter.
+    """
+    from google.api_core.exceptions import InvalidArgument
+
+    original = store.transaction
+    attempts = {'n': 0}
+
+    def transaction(max_attempts=None):
+        tx = original(max_attempts)
+        attempts['n'] += 1
+        if attempts['n'] <= failures:
+
+            def expired():
+                raise InvalidArgument('The referenced transaction has expired or is no longer valid.')
+
+            tx._commit = expired
+        return tx
+
+    monkeypatch.setattr(store, 'transaction', transaction)
+    return attempts
+
+
+def test_expired_strike_transaction_restarts_with_a_fresh_transaction(store, monkeypatch):
+    """SCA-2865: the SDK replays a retired id; a fresh transaction still records the strike."""
+    store.rows[OUTBOX].update(dormant=False, summary_empty_failures=0)
+    attempts = _expired_commits(store, monkeypatch, failures=1)
+    assert (
+        summary_processing.record_empty_failure(store, outbox.COLLECTION, KEY, 'worker', 'old-token')
+        is summary_processing.EmptyFailureOutcome.RETRY
+    )
+    assert attempts['n'] == 2
+
+
+def test_unavailable_strike_write_returns_unavailable_instead_of_raising(store, monkeypatch):
+    """SCA-2865: a strike write that cannot land must not escape the request as a 500."""
+    store.rows[OUTBOX].update(dormant=False, summary_empty_failures=0)
+    attempts = _expired_commits(store, monkeypatch, failures=99)
+    assert (
+        summary_processing.record_empty_failure(store, outbox.COLLECTION, KEY, 'worker', 'old-token')
+        is summary_processing.EmptyFailureOutcome.UNAVAILABLE
+    )
+    assert attempts['n'] == 3
+
+
+def test_permanent_strike_write_rejection_still_raises(store, monkeypatch):
+    """Only a retryable Firestore fault becomes UNAVAILABLE; a refused write stays a bug."""
+    from google.api_core.exceptions import PermissionDenied
+
+    store.rows[OUTBOX].update(dormant=False, summary_empty_failures=0)
+    original = store.transaction
+
+    def transaction(max_attempts=None):
+        tx = original(max_attempts)
+
+        def denied():
+            raise PermissionDenied('caller does not have permission')
+
+        tx._commit = denied
+        return tx
+
+    monkeypatch.setattr(store, 'transaction', transaction)
+    with pytest.raises(PermissionDenied):
+        summary_processing.record_empty_failure(store, outbox.COLLECTION, KEY, 'worker', 'old-token')

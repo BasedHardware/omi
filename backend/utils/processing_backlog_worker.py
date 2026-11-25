@@ -13,6 +13,7 @@ from google.cloud import firestore
 from database import processing_backlog as store, conversations as conversations_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from models.conversation import Conversation
+from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 from utils import backlog_release, funded_processing
 from utils.processing_backlog import choose, is_active, rolls
 from utils.conversations.process_conversation import process_conversation
@@ -131,6 +132,8 @@ def _process_text(uid, identity) -> AttemptOutcome:
     if not row.get('processing_deferred'):
         store.remove(uid, identity)
         return AttemptOutcome.COMPLETE
+    if not python_owns_finalization(row):
+        return AttemptOutcome.DEFERRED
     lease = store.claim_item(uid, identity)
     if lease is None:
         return AttemptOutcome.RETRY
@@ -139,6 +142,8 @@ def _process_text(uid, identity) -> AttemptOutcome:
             uid, row.get('language') or 'en', Conversation(**row), trigger=ProcessingTrigger.BACKLOG_CHOICE
         )
         return AttemptOutcome.DEFERRED if result.processing_deferred else AttemptOutcome.COMPLETE
+    except FinalizationOwnedElsewhere:
+        return AttemptOutcome.DEFERRED
     finally:
         store.release_item(uid, identity, lease)
 
@@ -404,6 +409,16 @@ async def run(
                 continuation = await work(min(PAGE, max_items - offset))
                 if not continuation or cap_work_budget.exhausted():
                     break
+    except cap_hold_reservations.ReservationBoundExceeded as exc:
+        # A ledger full of live reservations is backpressure, not a worker failure: the hold waits for a
+        # projection to release a slot. Logged without a traceback so the deadlock class stays countable.
+        logger.warning(
+            'event=processing_backlog outcome=reservation_full uid=%s live=%d settled=%d',
+            uid,
+            exc.live,
+            exc.settled,
+        )
+        continuation = await finish()
     except Exception as exc:
         # The traceback names the failing call and, for a rejected query, the
         # server's reason; the type alone could not type the InvalidArgument

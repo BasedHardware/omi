@@ -16,6 +16,10 @@ from utils.executors import db_executor
 KEY = 'allowance_parking_v1'
 
 
+class MigrationOwnerChanged(RuntimeError):
+    """A row's owner moved after discovery. Nothing is parked for that row; replaying the page is safe."""
+
+
 class _Stopped(Exception):
     """Another worker failed; leave this page uncheckpointed."""
 
@@ -90,7 +94,7 @@ def _apply_rows(store, rows, now, concurrency, limiter):
                     _prefetch_row(tx, snapshot.id, owner)
                 job = tx.get('jobs', snapshot.id)
                 if job and owner is not None and job.get('owner_key') != owner:
-                    raise RuntimeError('migration owner changed; retry the page')
+                    raise MigrationOwnerChanged('migration owner changed; retry the page')
                 return park(tx, job, now)
 
             try:
@@ -127,6 +131,7 @@ def _apply_rows(store, rows, now, concurrency, limiter):
             # without the fire-and-forget helper's unrelated BYOK error handling.
             pending.add(db_executor.submit(copy_context().run, process, group, owner))
 
+    failure = None
     try:
         for _ in range(min(concurrency, len(groups))):
             submit_next()
@@ -140,12 +145,20 @@ def _apply_rows(store, rows, now, concurrency, limiter):
             if not stopped.is_set():
                 for _ in done:
                     submit_next()
+    except BaseException as error:
+        failure = error
+        raise
     finally:
         stopped.set()
         # Committing work cannot be cancelled safely. Drain it before returning
         # an error, and never checkpoint a partially successful page.
         if pending:
             wait(pending)
+            if failure is not None:
+                # Only the first failure propagates. Keep the others so the
+                # operator's stop classification sees every owner group's error.
+                siblings = (future.exception() for future in pending if not future.cancelled())
+                setattr(failure, 'migration_sibling_errors', tuple(error for error in siblings if error))
     return parked, fenced
 
 

@@ -208,6 +208,19 @@
       "usage_month_cache": 100,
       "usage_month_total": 100
     },
+    "/environments/prod/cloud_run/services/backend-projection-pump/env": {
+      "all_levers_sha256": "52a61324c78139d523e9f8670d8262409d0f429b785774aff3405ebfb09733c5",
+      "usage_month_cache": 100,
+      "usage_month_total": 100,
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "value": "c2fs_20261026_r1",
+        "category": "rollout"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "value": "60",
+        "category": "rollout"
+      }
+    },
     "/environments/prod/cloud_run/services/backend-sync-backfill/env": {
       "FSR_USAGE_MONTH_TOTAL_EPOCH": {
         "category": "rollout",

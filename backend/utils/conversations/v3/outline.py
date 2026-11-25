@@ -8,6 +8,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 
+from utils.speakers.display import outline_speaker_labels
+
 
 def utc(value):
     if isinstance(value, str):
@@ -29,7 +31,7 @@ SYSTEM_PROMPT = """You outline one stretch of a person's day. The person wears a
 
 The transcript comes from a small microphone worn all day. It has recognition errors. Speaker labels are unreliable: ME is the wearer when the system recognised their voice, and one other person is often split across many S-numbers. The microphone also picks up television, films, music, podcasts and strangers.
 
-You get the complete transcript of the stretch with numbered lines. Split it into conversations, in order, and their subjects as sections. A change of people, place or activity starts a conversation. Dictation to software is its own conversation. An event at one place (talk, panel, class, appointment or visit) is ONE conversation; a live talk is conversation, not media. A tangent is a section, not a conversation. Five minutes of recorded silence is a hard boundary, even if the same people or topic return. Set resumes_previous only to continue the same activity with the same people before that silence boundary. Never infer continuity merely from a similar topic. Nothing runs past two hours: give subject boundaries so the caller can cut near the middle.
+You get the complete transcript of the stretch with numbered lines. Split it into conversations, in order, and their subjects as sections. A change of people, place or activity starts a conversation. Dictation to software is its own conversation. An event at one place (talk, panel, class, appointment or visit) is ONE conversation; a live talk is conversation, not media. A tangent is a section, not a conversation. {silence_boundary} of recorded silence is a hard boundary, even if the same people or topic return. Set resumes_previous only to continue the same activity with the same people before that silence boundary. Never infer continuity merely from a similar topic. Nothing runs past two hours: give subject boundaries so the caller can cut near the middle.
 
 Return one JSON object: {"conversations": [ ... ]} where each conversation has
 - "first_line": the number of its first line. The first chapter starts at line 1.
@@ -47,13 +49,40 @@ Return one JSON object: {"conversations": [ ... ]} where each conversation has
 Write in English unless the speech is mostly in another language."""
 
 SILENCE = timedelta(minutes=5)
+# A silence gap longer than this default (CONVERSATIONS_V3_SILENCE_GAP_SECONDS) cuts at sit-downs: the
+# outline sees pauses as marker lines and finds sit-downs instead of treating silence as a hard boundary.
+GAP_MARK = timedelta(minutes=2)
+
+HARD_BOUNDARY_RULE = (
+    '{silence_boundary} of recorded silence is a hard boundary, even if the same people or topic return. '
+    'Set resumes_previous only to continue the same activity with the same people before that silence boundary.'
+)
+SITDOWN_RULE = (
+    'Find the sit-downs first: stretches where the wearer is with the same people in the same place. '
+    'A pause marked "min without speech", a new topic or a tangent does not end a sit-down; '
+    'people leaving or arriving, a call ending, or getting up to go somewhere else does. '
+    'Unclear, garbled or foreign-language lines between the lines of a sit-down belong to it: use "background" '
+    'only for a stretch in which the wearer takes no part from start to finish. '
+    'Set resumes_previous only to continue the same activity with the same people.'
+)
+
+
+def sitdown(silence_gap):
+    """Sit-down cutting applies whenever the silence gap is longer than the five-minute default."""
+    return silence_gap > SILENCE
 
 
 # Clock slack when matching the same speech captured by two recordings.
 DUPLICATE_OVERLAP_SLACK = timedelta(seconds=2)
 
 
-def stretches(members, now):
+def group_rids(group):
+    return {line['conversation_id'] for line in group['lines']}
+
+
+def stretches(
+    members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_on_landing=False, max_window=timedelta(0)
+):
     lines = []
     seen = []
     for row in sorted(
@@ -106,27 +135,65 @@ def stretches(members, now):
             )
     lines.sort(key=lambda line: (line['start'], line['conversation_id']))
     groups = []
-    manual_cuts = [utc(r['finished_at']) for r in members if r.get('v3_manual_end') and r.get('finished_at')]
+    cuts = iter(sorted(utc(r['finished_at']) for r in members if r.get('v3_manual_end') and r.get('finished_at')))
+    cut = next(cuts, None)
     for line in lines:
+        previous = groups[-1] if groups else None
+        # A segment belongs to the side on which it starts, even if it crosses the cut.
+        while cut is not None and cut <= line['start']:
+            if previous and previous['lines'][0]['start'] < cut:
+                previous['manual_end'] = True
+            cut = next(cuts, None)
+        silence = previous is None or line['start'] - previous['end'] >= silence_gap
+        capped = False
         if (
-            not groups
-            or line['start'] - groups[-1]['end'] >= SILENCE
-            or any(groups[-1]['end'] <= cut < line['start'] for cut in manual_cuts)
+            previous is not None
+            and not silence
+            and not previous['manual_end']
+            and max_window
+            and line['start'] - previous['lines'][0]['start'] >= max_window
         ):
+            previous['window_cap_end'] = True
+            capped = True
+        if silence or capped or (previous and previous['manual_end']):
             key = hashlib.sha256(f"{line['conversation_id']}:{line['start'].isoformat()}".encode()).hexdigest()[:24]
-            groups.append({'key': key, 'end': line['end'], 'lines': []})
+            groups.append(
+                {
+                    'key': key,
+                    'end': line['end'],
+                    'lines': [],
+                    'manual_end': False,
+                    'after_window_cap': capped,
+                    'after_manual_end': bool(previous and previous['manual_end'] and not silence),
+                }
+            )
         group = groups[-1]
         group['lines'].append(line)
         group['end'] = max(group['end'], line['end'])
+    if groups and cut is not None and cut <= now:
+        groups[-1]['manual_end'] = True
     for index, group in enumerate(groups):
-        next_start = (
-            groups[index + 1]['lines'][0]['start'] if index + 1 < len(groups) else now + timedelta(microseconds=1)
-        )
-        group['manual_end'] = any(group['lines'][0]['start'] <= cut < next_start for cut in manual_cuts)
-        continues = any(
+        # Silence, a manual cut or the window cap starts a later stretch, so only the last one can
+        # still be open. Page continuation and future-dated speech must not also hold an earlier one
+        # open: two open stretches never commit (multiple_open_conversations parks the owner).
+        later = index + 1 < len(groups)
+        continues = not later and any(
             r.get('_v3_page_continues') and r['id'] == group['lines'][-1]['conversation_id'] for r in members
         )
-        group['finished'] = (now - group['end'] >= SILENCE and not continues) or group['manual_end']
+        # Under custom timing, lock age counts from the later of the last speech and when it landed:
+        # an offline batch whose speech is already old must not lock the moment it arrives, or each
+        # later batch appends a fresh card behind it.
+        rids = group_rids(group)
+        landed = [
+            r['v3_speech_landed_at']
+            for r in members
+            if r['id'] in rids and isinstance(r.get('v3_speech_landed_at'), datetime)
+        ]
+        group['settle_from'] = max([group['end'], *landed]) if settle_on_landing else group['end']
+        age = now - group['settle_from']
+        group['locked'] = (age >= lock_delay and not continues) or group['manual_end']
+        group['finished'] = later or group['locked']
+        group['outline_ready'] = group['finished'] or (age >= silence_gap and not continues)
         group['fingerprint'] = hashlib.sha256(
             json.dumps(
                 [{k: line[k] for k in ('start', 'end', 'text', 'conversation_id')} for line in group['lines']],
@@ -146,14 +213,104 @@ def wanted(groups, cache):
     ]
 
 
-def messages(group, tz):
-    lines = group['lines']
-    text = '\n'.join(
-        f"[L{i} {line['start'].astimezone(tz):%H:%M}] {line['speaker']}: {line['text']}"
-        for i, line in enumerate(lines, 1)
+def _line_anchors(lines):
+    counts = {}
+    for line in lines:
+        segment_id = line.get('segment', {}).get('id')
+        if isinstance(segment_id, (str, int)) and segment_id != '':
+            key = (line['conversation_id'], 'segment', segment_id)
+        else:
+            key = (line['conversation_id'], 'start', line['start'].isoformat())
+        occurrence = counts.get(key, 0)
+        counts[key] = occurrence + 1
+        yield json.dumps([*key, occurrence], separators=(',', ':'))
+
+
+def _section_line(section):
+    value = section.get('first_line') if isinstance(section, dict) else None
+    return value if type(value) is int else None
+
+
+def preview_anchors(group, entries):
+    """Keep stable coordinates for each selected topic or section, without storing more speech."""
+    anchors = list(_line_anchors(group['lines']))
+    indexes = {entry['first_line'] for entry in entries}
+    indexes.update(
+        index
+        for entry in entries
+        for section in entry.get('sections') or ()
+        if (index := _section_line(section)) is not None
     )
+    return {str(index): anchors[index - 1] for index in indexes if 1 <= index <= len(anchors)}
+
+
+def matching_preview(group, previews):
+    """A revision may move the stretch start. Reuse only an unambiguous anchored preview."""
+    if not previews:
+        return None
+    anchors = set(_line_anchors(group['lines']))
+    scores = {key: len(anchors.intersection(preview['anchors'].values())) for key, preview in previews.items()}
+    best = max(scores.values(), default=0)
+    matches = [key for key, score in scores.items() if score == best and best > 0]
+    return matches[0] if len(matches) == 1 else None
+
+
+def reuse_preview(group, preview):
+    """Rebase the existing outline when revisions or late speech change line numbers."""
+    positions = {anchor: index for index, anchor in enumerate(_line_anchors(group['lines']), 1)}
+    moved = {int(index): positions.get(anchor) for index, anchor in preview['anchors'].items()}
+    entries = []
+    for entry in preview['entries']:
+        position = moved.get(entry['first_line'])
+        if position is None or (entries and position <= entries[-1]['first_line']):
+            continue
+        first = position if entries else 1
+        sections = []
+        for section in entry.get('sections') or ():
+            index = _section_line(section)
+            position = moved.get(index) if index is not None else None
+            if position is not None and position >= first:
+                sections.append({**section, 'first_line': position})
+        entries.append({**entry, 'first_line': first, 'sections': sections})
+    # Drop rebased sections that now belong to a different topic.
+    for entry, following in zip(entries, entries[1:]):
+        entry['sections'] = [
+            section for section in entry['sections'] if section['first_line'] < following['first_line']
+        ]
+    return entries or fallback(group)
+
+
+def _with_gap_marks(lines, rendered):
+    out, previous_end = [], None
+    for line, text in zip(lines, rendered):
+        if previous_end is not None and line['start'] - previous_end >= GAP_MARK:
+            out.append(f"---- {round((line['start'] - previous_end).total_seconds() / 60)} min without speech ----")
+        out.append(text)
+        previous_end = line['end'] if previous_end is None else max(previous_end, line['end'])
+    return out
+
+
+def messages(group, tz, *, cohesion=False, silence_gap=SILENCE):
+    lines = group['lines']
+    if cohesion:
+        labels = outline_speaker_labels([line['segment'] for line in lines])
+        correction = (
+            '\nS1, S2 and so on are diarization labels, not names. S? marks unassigned speech. '
+            'S? can refer to different people and does not by itself mark a change of people. Omi denotes the assistant.'
+        )
+    else:
+        labels = [line['speaker'] for line in lines]
+        correction = ''
+    rendered = [
+        f"[L{i} {line['start'].astimezone(tz):%H:%M}] {label}: {line['text']}"
+        for i, (line, label) in enumerate(zip(lines, labels), 1)
+    ]
+    text = '\n'.join(_with_gap_marks(lines, rendered) if sitdown(silence_gap) else rendered)
+    silence = 'Five minutes' if silence_gap == SILENCE else f'{int(silence_gap.total_seconds())} seconds'
+    template = SYSTEM_PROMPT.replace(HARD_BOUNDARY_RULE, SITDOWN_RULE) if sitdown(silence_gap) else SYSTEM_PROMPT
+    prompt = template.replace('{silence_boundary}', silence)
     return [
-        ('system', SYSTEM_PROMPT),
+        ('system', prompt + correction),
         (
             'human',
             f"Stretch {lines[0]['start'].astimezone(tz):%H:%M} to {group['end'].astimezone(tz):%H:%M}.\n\nTranscript:\n{text}",

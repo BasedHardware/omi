@@ -21,6 +21,7 @@ from config.policy import (
     kill_switch,
 )
 from config.policy.batch import COHORT_SALTS, LEGACY_CORRELATED_COHORTS, SNAPSHOT_ENV_KEYS
+from config.policy.guard import LIVE_OBSERVABILITY_ENV_KEYS, env_reads
 from config.policy.kill_switches import KILL_SWITCHES
 
 from database.batch_pipeline_intake import admit
@@ -98,6 +99,7 @@ def test_cohort_registry_and_live_switch_contract():
             if key
             in {
                 'BATCH_ALLOWANCE_PARK_ENABLED',
+                'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED',
                 'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
                 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
                 'PROJECTION_DRAIN_CLAIM_AWARE',
@@ -474,8 +476,8 @@ def test_getter_guard_covers_new_directories_and_import_aliases():
     )
 
 
-@pytest.mark.parametrize('key', sorted(SNAPSHOT_ENV_KEYS | KILL_SWITCHES.keys()))
-def test_guard_fails_owned_and_live_switch_reads_outside_policy(tmp_path, key):
+@pytest.mark.parametrize('key', sorted(SNAPSHOT_ENV_KEYS | KILL_SWITCHES.keys() | LIVE_OBSERVABILITY_ENV_KEYS))
+def test_guard_fails_owned_and_live_setting_reads_outside_policy(tmp_path, key):
     from config.policy.guard import scan
 
     path = tmp_path / 'backend/utils/new_stage.py'
@@ -517,10 +519,15 @@ def test_guard_ownership_matches_batch_resolver_inputs():
     # otherwise it could incorrectly become an advisory worker-key warning.
     keys = set()
     directory = ROOT / 'backend/config/policy'
+    live_keys = set()
     for filename in ('batch.py', 'stages.py'):
-        tree = ast.parse((directory / filename).read_text())
+        source = (directory / filename).read_text()
+        live_keys.update(key for key in env_reads(source) if isinstance(key, str) and key.startswith('BATCH_PIPELINE_'))
+        tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 if node.value.startswith('BATCH_PIPELINE_') or node.value == 'BATCH_LIVE_STT_RETIRE_PERCENT':
                     keys.add(node.value)
-    assert keys == SNAPSHOT_ENV_KEYS
+    assert live_keys == LIVE_OBSERVABILITY_ENV_KEYS
+    assert live_keys.isdisjoint(SNAPSHOT_ENV_KEYS)
+    assert keys - live_keys == SNAPSHOT_ENV_KEYS

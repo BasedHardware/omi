@@ -53,6 +53,14 @@ class MemoryTransaction:
         ]
         return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
 
+    def pending_page(self, owner_key, limit):
+        jobs = [
+            v
+            for (table, _), v in self.rows.items()
+            if table == 'jobs' and v['owner_key'] == owner_key and v['merge_pending']
+        ]
+        return deepcopy(sorted(jobs, key=lambda v: (v['capture_at'], v['segment_id']))[:limit])
+
     def first_ready_pending(self, owner_key):
         jobs = [
             v
@@ -408,8 +416,8 @@ def test_admission_deferred_re_lease_records_relet_true_first_lease_false(monkey
     # the recorded refusal streak.
     assert second.attempt == 1 and second.token != first.token
     count = 'omi_batch_pipeline_owner_wait_seconds_count'
-    assert registry.get_sample_value(count, {'relet': 'false'}) == 1
-    assert registry.get_sample_value(count, {'relet': 'true'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'false', 'priority': 'deep'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'true', 'priority': 'deep'}) == 1
 
 
 def test_attempt_charged_re_lease_records_relet_true():
@@ -427,8 +435,8 @@ def test_attempt_charged_re_lease_records_relet_true():
     second = queue.pull(186)[0]
     assert second.attempt == 2
     count = 'omi_batch_pipeline_owner_wait_seconds_count'
-    assert registry.get_sample_value(count, {'relet': 'false'}) == 1
-    assert registry.get_sample_value(count, {'relet': 'true'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'false', 'priority': 'deep'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'true', 'priority': 'deep'}) == 1
 
 
 @pytest.mark.parametrize('mode', ['off', 'shadow'])
@@ -472,6 +480,13 @@ def test_enforced_cap_quarantines_at_cap_lease_expiry(mode, monkeypatch):
     assert queue.recover(LEASE_SECONDS + 1) == 1
     held = store.rows['jobs', 'at-cap']
     assert held['state'] == 'quarantined' and held['recovery_state'] == 'held'
+    assert held['quarantine_diagnostic'] == {
+        'exception_class': 'lease_expired',
+        'stage': 'scheduler',
+        'worker_reason': 'unknown',
+        'provider_error': 'unknown',
+        'artifact_kind': 'unknown',
+    }
     assert held['audio_uri']
 
 
@@ -1239,6 +1254,41 @@ def test_post_commit_telemetry_failure_never_drops_an_issued_lease(monkeypatch):
     pulled = queue.pull(1, 2)
     assert [v.item.segment_id for v in pulled] == ['a', 'b']
     assert all(store.rows['jobs', v.item.segment_id]['token'] == v.token for v in pulled)
+
+
+def test_packing_sample_runs_after_commit_and_cohort_completes_once(monkeypatch):
+    from prometheus_client import CollectorRegistry
+    from utils.batch_pipeline import scheduler as module
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    queue = Scheduler(store, metrics=metrics)
+    sampled = []
+
+    def observe(sample_store, owner, segment, priority, attempt, when, ceiling, later):
+        assert sample_store.rows['jobs', segment]['state'] == 'leased'
+        sampled.append(segment)
+        raise RuntimeError('diagnostics unavailable')
+
+    monkeypatch.setattr(module, 'packing_sampled', lambda token, rate: rate > 0)
+    monkeypatch.setattr(metrics.packing, 'observe', observe)
+    monkeypatch.setenv('BATCH_PIPELINE_PACKING_SAMPLE_RATE', '0')
+    queue.enqueue(item('off'), 0)
+    assert queue.pull(1)[0].item.segment_id == 'off'
+    assert sampled == []
+    monkeypatch.setenv('BATCH_PIPELINE_PACKING_SAMPLE_RATE', '0.001')
+    queue.enqueue(item('on', capture=2), 2)
+    store.rows['jobs', 'on']['packing_observation'] = {'version': 1, 'entitlement': 'trial', 'age': '1h_to_6h'}
+    lease = queue.pull(3)[0]
+    assert lease.item.segment_id == 'on' and sampled == ['on']
+    assert 'packing_observation' not in lease.item.to_dict()
+    result = WorkResult('on', 'gs://results/on')
+    assert queue.complete(result, lease.token, 4)
+    assert queue.complete(result, lease.token, 5)
+    labels = {'event': 'completed', 'entitlement': 'trial', 'source_age': '1h_to_6h'}
+    assert registry.get_sample_value('omi_batch_pipeline_packing_cohort_units_total', labels) == 1
 
 
 def test_release_expires_lease_now_with_expiry_semantics_and_fences_stale_tokens():

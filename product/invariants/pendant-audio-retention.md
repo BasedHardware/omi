@@ -27,7 +27,7 @@ The design had been accepted through two review rounds as an "accepted trade." A
 - Surface to the user, when a pause is active, that capture is suspended — the UI must never show a live/listening state while frames are being discarded.
 - Add a regression test for any change that alters when the phone stops consuming pendant audio, asserting either continued delivery or verified device retention.
 
-## Explicit exception: stranded orphan audio older than 45 days
+## Explicit exception: stranded orphan audio older than 67 days
 
 David's 2026-11-17 ruling, item 2 (`ruling-2026-11-17-orphans.md`, recorded in chat;
 source: `omi-workspace/data/run-2026-11-17-pendant-diag/`), authorizes automatic deletion
@@ -35,7 +35,10 @@ without user action or alarming UI only after a **complete census**, with **no r
 anywhere** (all index generations, live/retired/foreign/held rows, ring custody, batch
 journals and owner receipts), excluding working `.part`/`.torn`, `omibatch` and
 `omimobilebatch` files, and only when **both filename capture time and mtime are more
-than 45 days old**. Single-account ownership is explicitly **not required**: references
+than 67 days old** (the 60-day production sync lookback plus the retention contract's
+7-day margin; David's 2026-11-18 decision, item 2, in
+`omi-workspace/data/run-2026-11-18-support-packet/decisions.md`, replaced the ruling's
+original 45 days, which assumed a 30-day lookback). Single-account ownership is explicitly **not required**: references
 protect every account's rows. This exception does not authorize deleting indexed or
 otherwise referenced recordings, including refused uploads.
 

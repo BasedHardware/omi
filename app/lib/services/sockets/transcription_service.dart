@@ -4,14 +4,18 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:omi/backend/http/shared.dart' as http;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/capture_committed_event.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/on_device/on_device_usage.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
@@ -41,6 +45,16 @@ abstract interface class ITransctiptSegmentSocketServiceListener {
   void onConnected();
 
   void onClosed([int? closeCode]);
+}
+
+abstract interface class ListenCustodyReceiptListener {
+  /// Receives a validated receipt with the owner and recording ID of its originating socket.
+  void onCustodyReceipt(
+    TranscriptSegmentSocketService socket,
+    MessageEvent event, {
+    required String owner,
+    String? recordingSessionId,
+  });
 }
 
 class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
@@ -77,8 +91,8 @@ class CustomSttTranscriptSegmentSocketService extends TranscriptSegmentSocketSer
     super.source,
     super.geolocation,
     super.clientConversationId,
-    bool includeSpeechProfile = true,
-  }) : super.create(includeSpeechProfile: includeSpeechProfile, customSttMode: true);
+    super.includeSpeechProfile = true,
+  }) : super.create(customSttMode: true);
 }
 
 enum SocketServiceState { connected, disconnected }
@@ -114,7 +128,15 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   String? source;
   bool customSttMode;
   String? sttConfigId;
-  String? clientConversationId;
+  final String? clientConversationId;
+
+  late final AuthSessionSnapshot? _listenOwner;
+  late final bool audioCustodyEnabled;
+
+  bool hasCurrentListenOwner(String uid) {
+    final owner = _listenOwner;
+    return owner != null && owner.ownerUid == uid && AuthService.instance.isSessionSnapshotCurrent(owner);
+  }
 
   bool onboardingMode;
   bool speechProfileRedo;
@@ -123,6 +145,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   /// This socket declared `local_preview=enabled`: the phone renders an
   /// on-device preview and the server may defer the cloud stream.
   bool localPreview;
+
+  ConversationSessionEvent? _liveRecording;
+  ConversationSessionEvent? get liveRecording => _liveRecording;
 
   /// Reports foreground / live-transcript visibility to the server while connected.
   VoidCallback? _clientStateListener;
@@ -141,8 +166,11 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.geolocation,
     this.clientConversationId,
     this.localPreview = false,
+    AuthSessionSnapshot? custodyOwner,
   }) {
-    var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
+    final uid = SharedPreferencesUtil().uid;
+    _listenOwner = custodyOwner ?? (localPreview ? captureListenOwner(uid) : null);
+    var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=$uid'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
         '&conversation_timeout=${SharedPreferencesUtil().conversationSilenceDuration}';
 
@@ -180,11 +208,29 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       params += '&vad_gate=enabled';
     }
 
-    String url =
-        Env.apiBaseUrl!.replaceFirst('https://', 'wss://').replaceFirst('http://', 'ws://') + 'v4/listen$params';
+    final baseUrl = Env.apiBaseUrl!.replaceFirst('https://', 'wss://').replaceFirst('http://', 'ws://');
+    var url = '${baseUrl}v4/listen$params';
+
+    // Conversation Listen is mono. Multichannel phone calls use their own transport.
+    audioCustodyEnabled = !customSttMode &&
+        custodyOwner != null &&
+        hasCurrentListenOwner(uid) &&
+        // Use the same authority check as buildHeaders for runtime overrides.
+        // ignore: invalid_use_of_visible_for_testing_member
+        (!Env.hasApiBaseUrlOverride || http.shouldAttachOmiCredentials(url));
+    if (audioCustodyEnabled) url += '&audio_custody=1';
 
     _socket = PureSocket(
       url,
+      headersProvider: audioCustodyEnabled
+          ? () => http.buildHeaders(
+                requireAuthCheck: true,
+                url: url,
+                forWebSocket: true,
+                sessionSnapshot: custodyOwner,
+                canSend: () => hasCurrentListenOwner(SharedPreferencesUtil().uid),
+              )
+          : null,
       extraHeaders: {if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation!.toJson())},
     );
     _socket.setListener(this);
@@ -205,8 +251,20 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.clientConversationId,
     this.localPreview = false,
   }) {
+    _listenOwner = null;
+    audioCustodyEnabled = false;
     _socket = socket;
     _socket.setListener(this);
+  }
+
+  static AuthSessionSnapshot? captureListenOwner(String uid) {
+    if (uid.isEmpty) return null;
+    try {
+      return AuthService.instance.captureSessionSnapshot(expectedUid: uid);
+    } catch (_) {
+      // Without auth proof, do not opt into custody receipts or bind a local preview.
+      return null;
+    }
   }
 
   void subscribe(Object context, ITransctiptSegmentSocketServiceListener listener) {
@@ -241,6 +299,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   /// on close instead of holding it open for a reconnect. Drops must not set it.
   Future stop({String? reason, bool userStop = false}) async {
     _stoppedIntentionally = true;
+    _liveRecording = null;
     _detachClientState();
     if (userStop) _sendUserStopReason();
     await _socket.stop();
@@ -273,15 +332,21 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       return;
     }
     if (_socket.status != PureSocketStatus.connected) return;
-    _socket.send(jsonEncode({
+    final evidence = jsonEncode({
       'type': 'capture_evidence_frame',
       'version': 1,
       'capture_root': root,
       'clock_epoch': epoch,
       'source_frame': ordinal,
       'byte_length': frame.payload.length,
-    }));
-    _socket.send(frame.payload);
+    });
+    final socket = _socket;
+    if (socket is CompositeTranscriptionSocket) {
+      socket.sendEvidenceAudioFrame(evidence, frame.payload);
+    } else {
+      socket.send(evidence);
+      socket.send(frame.payload);
+    }
     if (_socket.status == PureSocketStatus.connected) {
       _binaryAudioBytesSent += frame.payload.length;
     }
@@ -332,6 +397,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
   @override
   void onClosed([int? closeCode]) {
+    _liveRecording = null;
     _detachClientState();
     _listeners.forEach((k, v) {
       v.onClosed(closeCode);
@@ -375,8 +441,20 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     }
 
     // Message event
-    if (jsonEvent.containsKey("type")) {
-      var event = MessageEvent.fromJson(jsonEvent);
+    if (jsonEvent is Map<String, dynamic> && jsonEvent.containsKey('type')) {
+      final event = MessageEvent.fromJson(jsonEvent);
+      if (jsonEvent['type'] == 'audio_custody' || jsonEvent['type'] == 'capture_committed') {
+        _dispatchCustodyReceipt(event);
+        return;
+      }
+      if (event is ConversationSessionEvent) {
+        if (event.inProgress) {
+          _liveRecording = event;
+        } else if (_liveRecording?.recordingId == event.recordingId &&
+            _liveRecording?.clientSessionId == event.clientSessionId) {
+          _liveRecording = null;
+        }
+      }
       _listeners.forEach((k, v) {
         v.onMessageEventReceived(event);
       });
@@ -385,6 +463,36 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     Logger.debug(event.toString());
     DebugLogManager.logInfo('transcription_socket_unhandled_message: ${event.toString()}');
+  }
+
+  void _dispatchCustodyReceipt(MessageEvent event) {
+    final owner = _listenOwner?.ownerUid;
+    if (!audioCustodyEnabled ||
+        owner == null ||
+        _stoppedIntentionally ||
+        state != SocketServiceState.connected ||
+        !hasCurrentListenOwner(SharedPreferencesUtil().uid)) {
+      return;
+    }
+    final String? claimedRecordingId;
+    switch (event) {
+      case AudioCustodyEvent(owner: final receiptOwner, :final clientSessionId, :final recordingSessionId)
+          when receiptOwner == owner:
+        claimedRecordingId = clientSessionId ?? recordingSessionId;
+      case CaptureCommittedEvent(channel: 'mono', :final audioCustody, :final recordingSessionId)
+          when audioCustody == null || audioCustody.owner == owner:
+        claimedRecordingId = audioCustody?.clientSessionId ?? recordingSessionId;
+      default:
+        return;
+    }
+    if (clientConversationId != null && claimedRecordingId != null && claimedRecordingId != clientConversationId) {
+      return;
+    }
+    for (final listener in _listeners.values) {
+      if (listener case ListenCustodyReceiptListener custodyListener) {
+        custodyListener.onCustodyReceipt(this, event, owner: owner, recordingSessionId: clientConversationId);
+      }
+    }
   }
 
   List<dynamic> _dropSecretSegments(List<dynamic> segments) {
@@ -469,6 +577,7 @@ class TranscriptSocketServiceFactory {
     Geolocation? geolocation,
     String? clientConversationId,
     bool localPreview = false,
+    AuthSessionSnapshot? custodyOwner,
   }) {
     return TranscriptSegmentSocketService.create(
       sampleRate,
@@ -480,6 +589,7 @@ class TranscriptSocketServiceFactory {
       geolocation: geolocation,
       clientConversationId: clientConversationId,
       localPreview: localPreview,
+      custodyOwner: custodyOwner,
     );
   }
 

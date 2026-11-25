@@ -104,3 +104,29 @@ def quiet_since(clock: Optional[SpeechClock], row_created_at: Optional[datetime]
     if created is not None and created < clock.opened_at and clock.started_at is not None:
         marks.append(clock.started_at)
     return max(marks) if marks else now
+
+
+def rotation_due(
+    clock: Optional[SpeechClock],
+    row_created_at: Optional[datetime],
+    now: float,
+    *,
+    min_age: float,
+    pause: float,
+    max_age: float,
+) -> bool:
+    """Whether a v3 recording should seal now so its transcript keeps flowing during a long capture.
+
+    It seals at the first short pause once `min_age` old, or at `max_age` without one. A row
+    with no speech heard by this clock never rotates. Without a trustworthy clock only the cap
+    applies.
+    """
+    if row_created_at is None:
+        return False
+    created = row_created_at.timestamp()
+    age = now - created
+    if clock is None or clock.failed:
+        return age >= max_age
+    if clock.last_speech_at is None or clock.last_speech_at < max(created, clock.opened_at):
+        return False
+    return age >= max_age or (age >= min_age and now - clock.last_speech_at >= pause)

@@ -235,7 +235,7 @@ void main() {
     await _pump(tester, OnTheWayPage(clock: () => now, pendingWork: store, multiFileSync: true), WalStatus.uploaded,
         recordings: rows());
     expect(find.text('Uploaded, awaiting server'), findsWidgets);
-    expect(find.text('Transcription unavailable'), findsOneWidget);
+    expect(find.text('Your audio is safe on your device or phone'), findsOneWidget);
     expect(find.text('Server-reported work'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await _capture(tester, '001-mobile-ios-pending-work-truth.png');

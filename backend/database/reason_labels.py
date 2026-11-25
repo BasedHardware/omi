@@ -18,6 +18,7 @@ class ReasonFamily(StrEnum):
     WORKER_VALIDATION = 'worker_validation'
     RECOVERY_FAILURE = 'recovery_failure'
     STALE_RECOVERY = 'stale_recovery'
+    RECORDING_ROTATION = 'recording_rotation'
     WORK_OUTCOME = 'work_outcome'
     QUARANTINE = 'quarantine'
     FALLBACK = 'fallback'
@@ -35,6 +36,8 @@ class ReasonFamily(StrEnum):
     NOTES_QUALITY_REPAIR = 'notes_quality_repair'
     SYNC_DISPATCH = 'sync_dispatch'
     SYNC_CAPTURE_TIME = 'sync_capture_time'
+    SYNC_FUTURE_CAPTURE_RECOVERY = 'sync_future_capture_recovery'
+    SYNC_FUTURE_CAPTURE_REQUEST = 'sync_future_capture_request'
     SYNC_BRIDGE_CONTAINMENT = 'sync_bridge_containment'
     SYNC_PROCESSING_HOLD = 'sync_processing_hold'
     APP_REVIEW_CONFIG = 'app_review_config'
@@ -52,7 +55,9 @@ class ReasonFamily(StrEnum):
     JOURNEY_FAILURE = 'journey_failure'
     LISTEN_NO_AUDIO_CLOSE = 'listen_no_audio_close'
     DUE_MARKER_SWEEP = 'due_marker_sweep'
+    SUMMARY_REPAIR_DISCOVERY = 'summary_repair_discovery'
     RECORD_SEAL_REPAIR = 'record_seal_repair'
+    HISTORICAL_SUMMARY_OPEN = 'historical_summary_open'
 
 
 REASON_UNKNOWN_TOTAL = Counter(

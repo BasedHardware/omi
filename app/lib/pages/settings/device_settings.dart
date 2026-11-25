@@ -9,11 +9,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
-import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
-import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
@@ -34,6 +32,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sync_health_watchdog.dart';
@@ -310,14 +309,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     routeToPage(context, FirmwareUpdate(device: provider.pairedDevice, isRollback: true));
   }
 
-  void _openOfflineSync(DeviceProvider provider) {
-    if (!provider.isDeviceStorageSupport) {
-      showOmiAlert(context, title: context.l10n.v2Undetected, message: context.l10n.v2UndetectedMessage);
-      return;
-    }
-    routeToPage(context, provider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage());
-  }
-
   Future<void> _openChargingHelp(DeviceProvider provider) async {
     final deviceName = provider.pairedDevice?.name ?? 'DevKit1';
     if (PlatformService.isIntercomSupported) {
@@ -533,7 +524,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           title: l10n.offlineSync,
           trailing: pendingSeconds > 0 ? _PendingSyncChip(seconds: pendingSeconds) : null,
           showChevron: true,
-          onTap: () => _openOfflineSync(provider),
+          onTap: () => openDeviceOfflineSync(context, provider),
         ),
         // Language is chosen in one place; the device page links to it.
         OmiSettingsRow(
@@ -625,6 +616,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
     final paired = provider.pairedDevice;
     final connected = provider.connectedDevice;
+    final showUnknownBattery = provider.isConnected &&
+        connected != null &&
+        DeviceConnectionFactory.resolveDeviceType(paired?.id == connected.id ? paired! : connected) == DeviceType.omi;
     const gap = SizedBox(height: OmiSpacing.xxl);
 
     final deviceStreaming = capture != null && deviceSource != null && deviceSource != 'phone';
@@ -644,10 +638,14 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           const SizedBox(height: OmiSpacing.xl),
           _liveSections(
             connected: connected != null,
-            batteryLevel: connected == null ? 0 : provider.batteryLevel,
+            batteryLevel: connected == null
+                ? -1
+                : showUnknownBattery
+                    ? provider.settingsBatteryLevel
+                    : provider.batteryLevel,
             isCharging: connected != null && provider.isCharging,
+            showUnknownBattery: showUnknownBattery,
           ),
-          DeviceRecentlyGroup(load: provider.disconnectHistory),
           if (deviceStreaming && canPause) ...[
             DeviceControlsGroup(paused: devicePaused, onToggle: () => _togglePause(capture)),
             gap,
@@ -687,7 +685,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 }
 
 extension _DeviceLiveSections on _DeviceSettingsState {
-  Widget _liveSections({required bool connected, required int batteryLevel, required bool isCharging}) {
+  Widget _liveSections({
+    required bool connected,
+    required int batteryLevel,
+    required bool isCharging,
+    required bool showUnknownBattery,
+  }) {
     const gap = SizedBox(height: OmiSpacing.xxl);
     return Builder(builder: (context) {
       // One WAL pass per sync notification, shared by the stat row's tiles.
@@ -696,15 +699,9 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       // notify reuses the last snapshot instead of rescanning, and the server
       // flag and status line select on their own.
       final l10n = context.l10n;
-      final view = context.select<SyncProvider?, ({DeviceCatchUpLocal local, bool stalled})>((s) {
-        if (s == null) return (local: deviceCatchUpLocal(const [], alreadyCollapsed: true), stalled: false);
-        final rows = s.derivedWals;
-        return (
-          local: deviceCatchUpLocal(rows.pendingWork, alreadyCollapsed: true),
-          stalled: rows.stalledUploadsAt().isNotEmpty
-        );
-      });
-      final local = view.local;
+      final local = context.select<SyncProvider?, DeviceCatchUpLocal>(
+        (s) => deviceCatchUpLocal(s?.derivedWals.pendingWork ?? const [], alreadyCollapsed: true),
+      );
       final serverProcessing = context.select<SyncProvider?, bool>((s) => s?.syncState.isProcessing ?? false);
       // The status line reads sync state only; whether server jobs exist comes
       // from the memoized snapshot, so a progress tick never rescans the inventory.
@@ -727,22 +724,16 @@ extension _DeviceLiveSections on _DeviceSettingsState {
             builder: (context, _) {
               final catchUp =
                   _catchUp(context, local: local, serverProcessing: serverProcessing, syncStatus: syncStatus);
-              Widget stalledDetails() => OmiSettingsGroup(children: [
-                    OmiSettingsRow(
-                      key: const Key('device_stalled_upload_details'),
-                      title: l10n.transcriptionUnavailable,
-                      onTap: () => openOfflineSyncDetails(context, context.read<SyncProvider>()),
-                    ),
-                  ]);
               if (!connected && catchUp == null) {
-                return view.stalled ? Column(children: [stalledDetails(), gap]) : const SizedBox.shrink();
+                return const SizedBox.shrink();
               }
               final online = context.select<ConnectivityProvider?, bool>((c) => c?.isConnected ?? true);
               return Column(children: [
                 Builder(
                     builder: (context) => DeviceStatsRow(
-                          batteryLevel: connected ? batteryLevel : 0,
+                          batteryLevel: batteryLevel,
                           isCharging: isCharging,
+                          showUnknownBattery: showUnknownBattery,
                           heardTodaySeconds: _heardTodaySeconds(context),
                           onDeviceSeconds: local.onDeviceSeconds,
                           phoneQueueSeconds: local.onPhoneSeconds,
@@ -752,7 +743,6 @@ extension _DeviceLiveSections on _DeviceSettingsState {
                           onOpenCatchUp: () => routeToPage(context, OnTheWayPage(pendingWork: _pendingWork)),
                         )),
                 gap,
-                if (view.stalled) ...[stalledDetails(), gap],
               ]);
             },
           ),

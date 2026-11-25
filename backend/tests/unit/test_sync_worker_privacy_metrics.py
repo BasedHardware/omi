@@ -9,6 +9,7 @@ import sys
 from prometheus_client.parser import text_string_to_metric_families
 import pytest
 
+from database.rollout_cohorts import RAMP_NAMES
 from utils.sync.worker_privacy_metrics import WorkerPrivacyMetrics
 
 CHILD = """
@@ -243,7 +244,7 @@ sys.stdin.read()
         assert await asyncio.wait_for(process.stdout.readline(), 30) == b'ready\n'
         rows = [s for f in text_string_to_metric_families(metrics.render().decode()) for s in f.samples]
         values = {s.labels['name']: s.value for s in rows if s.name == 'omi_runtime_percent'}
-        assert len(values) == 6
+        assert set(values) == set(RAMP_NAMES)
         assert values['batch-pipeline'] == 23 and values['new-owner-cell1'] == 17
         assert [row.value for row in rows if row.name == 'privacy_ttl_cache_disabled'] == [0.0]
         assert not any(row.name == 'privacy_ttl_cache_switch_reads_total' for row in rows)

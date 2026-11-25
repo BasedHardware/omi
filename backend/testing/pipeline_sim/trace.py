@@ -53,6 +53,9 @@ _DROP_FIELDS = frozenset(
         'previous',
         'shared_gpu_key',
         'projection_binding',
+        # Scheduling metadata is pinned by outbox conformance and replay tests.
+        'projection_outbox_kind',
+        'projection_outbox_reason',
         'policy',  # metadata, not part of the pre-E1 external behavior trace
         'policy_source',
         'policy_parts',

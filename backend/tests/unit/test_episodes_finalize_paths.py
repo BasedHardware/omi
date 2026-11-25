@@ -11,9 +11,9 @@ import asyncio
 import inspect
 import os
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -29,6 +29,10 @@ from config import episodes as config
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+from utils.conversations.v3 import finish as v3_finish
+from utils.conversations.v3.live import FINISH_FIELDS, FINISH_WINDOW_FIELD
+from tests.unit.test_batch_pipeline_projection import native_finish_completion
 from utils.conversations import finalizer
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.episodes import finalize as episode_finalize
@@ -403,3 +407,383 @@ def test_group_join_schedules_one_group_recovery(monkeypatch):
     )
     episode_finalize.schedule_group_attachments(_UID, ['desktop', 'pendant', 'desktop'])
     assert calls == [(_UID, 'pendant', ProcessingTrigger.CAPTURE_GROUP)]
+
+
+def test_serving_intake_notifies_workerd_only_for_current_bound_revision(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from unittest.mock import Mock
+
+    import httpx
+    from database import _client
+    from utils.episodes import service
+    from utils.sync import worker_client
+
+    monkeypatch.delenv('SYNC_EPISODE_INTAKE_ORIGIN', raising=False)
+    monkeypatch.delenv('WORKER_EPISODE_INTAKE_AUDIENCE', raising=False)
+    monkeypatch.setattr(episode_finalize.client_gate, 'client_seen_cached', lambda _uid: True)
+    canonical = Mock(return_value='joined')
+    monkeypatch.setattr(service, 'attach_synced_intake', canonical)
+    client = Mock()
+    snapshot_get = (
+        client.collection.return_value.document.return_value.collection.return_value.document.return_value.get
+    )
+    snapshot = snapshot_get.return_value
+    snapshot.update_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    snapshot.to_dict.return_value = {'sync_content_revision': 3}
+    firestore_client = Mock(return_value=client)
+    monkeypatch.setattr(_client, 'get_firestore_client', firestore_client)
+    token = Mock(return_value='fixture-token')
+    monkeypatch.setattr(worker_client, 'identity_token', token)
+    request = Mock(return_value=Mock(status_code=200))
+    monkeypatch.setattr(httpx, 'post', request)
+
+    assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 3}) == 'joined'
+    canonical.assert_called_once_with(_UID, 'clip', {'source': None, 'sync_content_revision': 3})
+    firestore_client.assert_not_called()
+    token.assert_not_called()
+    request.assert_not_called()
+
+    monkeypatch.setenv('SYNC_EPISODE_INTAKE_ORIGIN', 'https://workerd.fixture.test')
+    monkeypatch.setenv('WORKER_EPISODE_INTAKE_AUDIENCE', 'fixture-audience')
+    assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 2}) == 'joined'
+    request.assert_not_called()
+    assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 3}) == 'joined'
+    request.assert_called_once_with(
+        'https://workerd.fixture.test/internal/finalization/episode-intake',
+        json={'owner': _UID, 'conversation': 'clip', 'written': snapshot.update_time.isoformat()},
+        headers={'Authorization': 'Bearer fixture-token'},
+        follow_redirects=False,
+        timeout=5.0,
+    )
+    canonical.return_value = 'skipped_discarded'
+    assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 3}) == 'skipped_discarded'
+    token.assert_called_once_with('fixture-audience')
+
+
+@pytest.fixture
+def v3_finish_route(conv, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
+    store = v3_finish.conversations_v3_live
+    now = datetime.now(timezone.utc)
+    window = {
+        'id': 'window',
+        'created_at': now,
+        'started_at': now,
+        'finished_at': now,
+        'structured': {'title': 'Live window'},
+        'status': 'in_progress',
+        'tile_state': 'live',
+        'v3_derived': True,
+        'v3_recording_ids': ['older', 'latest'],
+    }
+    owner_path = ('users', _UID, 'conversations')
+    paths = {name: (*owner_path, name) for name in ('window', 'older', 'latest')}
+    recording = {'recording': True, 'status': 'completed', 'finished_at': now}
+    db = StrictFirestore({paths['window']: window, paths['older']: dict(recording), paths['latest']: recording})
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: db)
+    read_document = StrictFirestoreDocument.get
+
+    def read_finish_fields(ref, *args, field_paths=None, **kwargs):
+        if ref.path == paths['window'] and kwargs.get('transaction') is not None:
+            assert field_paths == FINISH_FIELDS
+        if field_paths in (store.LIVE_FIELDS, FINISH_FIELDS):
+            snapshot = read_document(ref, *args, **kwargs)
+            return type(snapshot)(
+                {key: value for key, value in (snapshot.to_dict() or {}).items() if key in field_paths}
+            )
+        return read_document(ref, *args, field_paths=field_paths, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', read_finish_fields)
+    monkeypatch.setattr(store.firestore, 'transactional', lambda body: body)
+    monkeypatch.setattr(conv, 'retrieve_in_progress_conversation', lambda uid: None)
+    monkeypatch.setattr(v3_finish, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.delenv('CONVERSATIONS_V3_FINISH_NO_POINTER', raising=False)
+    monkeypatch.delenv('CONVERSATIONS_V3_BATCH_MANUAL_END', raising=False)
+
+    def discover(uid, *, now, max_idle, pick):
+        assert uid == _UID
+        row = db.rows.get(paths['window'])
+        return pick([row] if row else [], now)
+
+    monkeypatch.setattr(store, 'live_window', discover)
+    enqueued = []
+    monkeypatch.setattr(v3_finish.triggers, 'enqueue', lambda uid, **kwargs: enqueued.append((uid, kwargs)))
+    app = FastAPI()
+    app.include_router(conv.router)
+    uid_dependency = inspect.signature(conv.process_in_progress_conversation).parameters['uid'].default.dependency
+    app.dependency_overrides[uid_dependency] = lambda: _UID
+    with TestClient(app) as client:
+        yield client, db, paths, enqueued
+
+
+@pytest.mark.parametrize('audio_only', [False, True])
+def test_finish_without_recording_pointer_ends_latest_source_once(v3_finish_route, audio_only):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    if audio_only:
+        latest.update(record_lane_owner='batch_live_v1', server_batch_only=True)
+    for result in (client.post('/v1/conversations', json={}), client.post('/v1/conversations')):
+        assert result.status_code == 200
+        assert result.json()['conversation']['id'] == 'window'
+        assert result.json()['conversation']['status'] == 'processing'
+        assert result.json()['messages'] == []
+    latest = db.rows[paths['latest']]
+    assert db.rows[paths['window']]['status'] == 'in_progress'
+    assert 'v3_manual_end' not in db.rows[paths['older']]
+    assert len(db.transactions) == 2
+    assert len(db.transactions[0].updates) == 1
+    assert not db.transactions[1].updates
+    if audio_only:
+        assert latest['v3_manual_end_requested'] is True
+        assert 'v3_manual_end' not in latest
+        assert 'v3_pending' not in latest
+        assert enqueued == []
+    else:
+        assert latest['v3_manual_end'] is True
+        assert latest['v3_pending'] is True
+        assert latest['v3_pending_since'] is not None
+        assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+
+
+def test_finish_without_pointer_keeps_404_for_non_v3_owner(v3_finish_route, monkeypatch):
+    client, db, _, _ = v3_finish_route
+    monkeypatch.setattr(v3_finish, 'conversations_v3_enabled', lambda uid: False)
+    assert client.post('/v1/conversations', json={}).status_code == 404
+    assert db.transactions == []
+
+
+def test_finish_without_pointer_kill_switch_restores_404(v3_finish_route, monkeypatch):
+    client, db, _, _ = v3_finish_route
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_NO_POINTER', 'off')
+    assert client.post('/v1/conversations', json={}).status_code == 404
+    assert db.transactions == []
+
+
+def test_finish_without_pointer_ignores_other_owners_window_id(v3_finish_route):
+    client, db, paths, _ = v3_finish_route
+    for name, path in paths.items():
+        db.rows['users', 'other-owner', 'conversations', name] = db.rows.pop(path)
+    assert client.post('/v1/conversations', json={'live_conversation_id': 'window'}).status_code == 404
+    assert db.transactions == []
+
+
+def test_finish_without_pointer_rechecks_window_is_live_before_writing(v3_finish_route, monkeypatch):
+    client, db, paths, enqueued = v3_finish_route
+    store = v3_finish.conversations_v3_live
+    discover = store.live_window
+
+    def close_after_lookup(*args, **kwargs):
+        open_snapshot = dict(discover(*args, **kwargs))
+        db.rows[paths['window']].update(status='processing', tile_state='writing')
+        return open_snapshot
+
+    monkeypatch.setattr(store, 'live_window', close_after_lookup)
+    assert client.post('/v1/conversations', json={}).status_code == 404
+    assert 'v3_manual_end' not in db.rows[paths['latest']]
+    assert not enqueued
+
+
+def test_finish_without_pointer_keeps_404_without_a_live_window(v3_finish_route):
+    client, db, paths, _ = v3_finish_route
+    db.rows[paths['window']].update(status='completed', tile_state='done')
+    assert client.post('/v1/conversations', json={}).status_code == 404
+    assert db.transactions == []
+
+
+@pytest.mark.parametrize('unit_count', [1, 2])
+def test_first_finish_after_whole_batch_uses_real_completion_ledger(v3_finish_route, monkeypatch, unit_count):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    latest.update(record_lane_owner='batch_live_v1', server_batch_only=True, record_projection_revision=1)
+    complete, ledger_path, _ = native_finish_completion(monkeypatch, db, _UID, 'latest', unit_count)
+    assert complete(datetime.now(timezone.utc).timestamp())['outcome'] == 'success'
+    assert 'processed_segment_ids' not in db.rows[ledger_path]
+
+    assert client.post('/v1/conversations', json={}).status_code == 200
+    assert latest['v3_manual_end'] and latest['v3_pending']
+    assert client.post('/v1/conversations', json={}).status_code == 200
+    assert not db.transactions[-1].updates
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+
+
+def test_repeat_finish_after_whole_single_unit_projection_cuts(v3_finish_route, monkeypatch):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    latest.update(record_lane_owner='batch_live_v1', server_batch_only=True)
+    complete, _, _ = native_finish_completion(monkeypatch, db, _UID, 'latest', 1)
+    assert client.post('/v1/conversations', json={}).status_code == 200
+    assert latest['v3_manual_end_requested']
+    latest['record_projection_revision'] = 1
+    assert client.post('/v1/conversations', json={}).status_code == 200
+    assert not db.transactions[-1].updates and not enqueued
+
+    assert complete(datetime.now(timezone.utc).timestamp())['outcome'] == 'success'
+    assert client.post('/v1/conversations', json={}).status_code == 200
+    assert latest['v3_manual_end'] and latest['v3_pending']
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+
+
+@pytest.mark.parametrize(
+    'unit_count,empty_outcome,other_content',
+    [
+        (1, 'silence', False),
+        (1, 'no_recoverable_speech', True),
+        (2, 'silence', True),
+    ],
+)
+def test_silent_whole_batch_resolves_deferred_finish(
+    v3_finish_route, monkeypatch, unit_count, empty_outcome, other_content
+):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    latest.update(record_lane_owner='batch_live_v1', server_batch_only=True, has_content=False)
+    if not other_content:
+        db.rows[paths['window']]['v3_recording_ids'] = ['latest']
+    complete, ledger, _ = native_finish_completion(
+        monkeypatch, db, _UID, 'latest', unit_count, empty_outcome=empty_outcome
+    )
+    request = {'live_conversation_id': 'window'}
+    assert client.post('/v1/conversations', json=request).json()['conversation']['tile_state'] == 'transcribing'
+    assert latest['v3_manual_end_requested']
+    assert complete(datetime.now(timezone.utc).timestamp()) is not None
+    assert 'processed_segment_ids' not in db.rows[ledger]
+    assert 'record_projection_revision' not in latest
+    response = client.post('/v1/conversations', json=request)
+    assert response.status_code == 200
+    assert not db.transactions[-1].updates
+    if other_content:
+        assert latest['v3_manual_end'] and latest['v3_pending']
+        assert response.json()['conversation']['tile_state'] == 'writing'
+        assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    else:
+        assert latest['v3_manual_end_requested'] is False and 'v3_manual_end' not in latest
+        assert response.json()['conversation']['status'] == 'completed'
+        assert response.json()['conversation']['tile_state'] == 'done'
+        assert not enqueued
+
+
+@pytest.mark.parametrize('marked_window', ['window', 'previous'])
+def test_finish_rearms_resolved_marker_for_pending_batch(v3_finish_route, monkeypatch, marked_window):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    latest.update(
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        v3_manual_end_requested=False,
+        **{FINISH_WINDOW_FIELD: marked_window},
+    )
+    counter = Mock()
+    monkeypatch.setattr(v3_finish.metrics, 'FINISH_NO_POINTER', counter)
+
+    result = client.post('/v1/conversations', json={})
+    assert result.status_code == 200 and result.json()['conversation']['tile_state'] == 'transcribing'
+    assert db.transactions[-1].updates == [
+        (paths['latest'], {'v3_manual_end_requested': True, FINISH_WINDOW_FIELD: 'window'})
+    ]
+    counter.labels.assert_called_once_with('requested')
+    assert not enqueued
+
+
+@pytest.mark.parametrize('marked_window', ['window', 'previous'])
+def test_finish_counts_new_cut_after_empty_marker(v3_finish_route, monkeypatch, marked_window):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    latest.update(
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        record_projection_revision=1,
+        has_content=True,
+        v3_manual_end_requested=False,
+        **{FINISH_WINDOW_FIELD: marked_window},
+    )
+    complete, _, _ = native_finish_completion(monkeypatch, db, _UID, 'latest', 1)
+    assert complete(datetime.now(timezone.utc).timestamp())['outcome'] == 'success'
+    counter = Mock()
+    monkeypatch.setattr(v3_finish.metrics, 'FINISH_NO_POINTER', counter)
+
+    result = client.post('/v1/conversations', json={})
+    assert result.status_code == 200 and result.json()['conversation']['tile_state'] == 'writing'
+    assert latest['v3_manual_end'] and latest[FINISH_WINDOW_FIELD] == 'window'
+    counter.labels.assert_called_once_with('cut')
+    assert client.post('/v1/conversations', json={}).json()['conversation']['tile_state'] == 'writing'
+    assert not db.transactions[-1].updates
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+
+
+@pytest.mark.parametrize('whole_record_complete', [False, True])
+@pytest.mark.parametrize('previous_end_offset', [-1, 0, 1, None])
+def test_finish_only_retargets_pending_request_to_proven_later_tail(
+    v3_finish_route, monkeypatch, whole_record_complete, previous_end_offset
+):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    end = latest['finished_at']
+    claims = [{'conversation_id': 'window', 'end': end}]
+    if previous_end_offset is not None:
+        claims.append({'conversation_id': 'previous', 'end': end + timedelta(seconds=previous_end_offset)})
+    latest.update(
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        claims=claims,
+        v3_manual_end_requested=True,
+        **{FINISH_WINDOW_FIELD: 'previous'},
+    )
+    if whole_record_complete:
+        latest.update(record_projection_revision=1, has_content=True)
+        complete, _, _ = native_finish_completion(monkeypatch, db, _UID, 'latest', 1)
+        assert complete(datetime.now(timezone.utc).timestamp())['outcome'] == 'success'
+    counter = Mock()
+    monkeypatch.setattr(v3_finish.metrics, 'FINISH_NO_POINTER', counter)
+
+    result = client.post('/v1/conversations', json={})
+    if previous_end_offset == -1:
+        assert result.status_code == 200 and latest[FINISH_WINDOW_FIELD] == 'window'
+        if whole_record_complete:
+            assert latest['v3_manual_end'] and enqueued == [(_UID, {'manual_end_id': 'latest'})]
+            counter.labels.assert_called_once_with('cut')
+        else:
+            assert latest['v3_manual_end_requested'] and not enqueued
+            counter.labels.assert_called_once_with('requested')
+    else:
+        assert result.status_code == 404
+        assert not db.transactions[-1].updates and not enqueued
+        assert latest[FINISH_WINDOW_FIELD] == 'previous'
+        counter.labels.assert_called_once_with('request_conflict')
+
+
+def test_batch_manual_end_switch_disables_deferred_finish(v3_finish_route, monkeypatch):
+    client, db, paths, enqueued = v3_finish_route
+    db.rows[paths['latest']].update(record_lane_owner='batch_live_v1', server_batch_only=True)
+    monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'off')
+    assert client.post('/v1/conversations', json={}).status_code == 404
+    assert not db.transactions[-1].updates and not enqueued
+
+
+def test_finish_uses_explicit_owned_live_window(v3_finish_route, monkeypatch):
+    client, db, paths, enqueued = v3_finish_route
+    alternate = ('users', _UID, 'conversations', 'second')
+    db.rows[alternate] = {**db.rows[paths['window']], 'id': 'second', 'v3_recording_ids': ['older']}
+    monkeypatch.setattr(
+        v3_finish.conversations_v3_live, 'live_window', lambda *a, **kw: pytest.fail('valid hint used fallback')
+    )
+    result = client.post('/v1/conversations', json={'live_conversation_id': 'second'})
+    assert result.status_code == 200 and result.json()['conversation']['id'] == 'second'
+    assert not db.rows[paths['latest']].get('v3_manual_end')
+    assert db.rows[paths['older']]['v3_manual_end']
+    assert enqueued == [(_UID, {'manual_end_id': 'older'})]
+
+
+@pytest.mark.parametrize('owner,status', [('other-owner', 'in_progress'), (_UID, 'completed')])
+def test_finish_falls_back_when_hint_is_foreign_or_stale(v3_finish_route, owner, status):
+    client, db, paths, _ = v3_finish_route
+    db.rows['users', owner, 'conversations', 'hint'] = {**db.rows[paths['window']], 'status': status}
+    result = client.post('/v1/conversations', json={'live_conversation_id': 'hint'})
+    assert result.status_code == 200 and result.json()['conversation']['id'] == 'window'
+
+
+def test_finish_refuses_known_partial_audio_archive(v3_finish_route):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    latest.update(record_lane_owner='batch_live_v1', server_batch_only=True, record_audio_partial=True)
+    assert client.post('/v1/conversations', json={}).status_code == 404
+    assert not db.transactions[-1].updates and not enqueued

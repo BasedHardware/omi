@@ -586,3 +586,32 @@ def test_legacy_rearm_behind_cursor_preserves_obligation_and_restarts_discovery(
     assert _run(armed, 2) == 'purged'
     assert plane.doc('results', 'behind-cursor')['projection_state'] == 'erased'
     assert _obligation(tombstone_db, 'c1') is None
+
+
+@pytest.mark.parametrize('parked', [False, True])
+def test_pending_upload_keeps_purge_and_segment_link_until_replay(
+    monkeypatch, owner, tombstone_db, armed, dispatch, fast_clock, parked
+):
+    plane = owner.plane()
+    plane.add('jobs', 's1', conversation_id='c1', priority=1)
+    plane.add('artifacts', 'a1', segment_id='s1', owner_id=UID, owner_key='parked' if parked else KEY)
+    original = plane.erase_artifact
+
+    def erase(uid, namespace, snapshot, data, delete_uri, fence=None, client=None):
+        if not data.get('erasure_requested'):
+            plane.doc('artifacts', 'a1').update(owner_key=KEY, erasure_requested=True)
+            return True
+        return original(uid, namespace, snapshot, data, delete_uri, fence=fence, client=client)
+
+    monkeypatch.setattr(purge, '_erase_artifact', erase)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert _run(armed, 1) == 'artifact_pending'
+    assert plane.doc('jobs', 's1') is not None
+    assert plane.doc('artifacts', 'a1') is not None
+    assert _obligation(tombstone_db, 'c1') is not None
+
+    _advance(tombstone_db, armed, purge_jobs.ARTIFACT_RETRY_SECONDS + 1)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert _run(armed, 2) == 'purged'
+    assert plane.doc('artifacts', 'a1') is None
+    assert _obligation(tombstone_db, 'c1') is None

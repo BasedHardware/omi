@@ -5,7 +5,6 @@ No cloud fallback. These tests inherit the isolated synthetic project fixture.
 
 from contextlib import contextmanager
 from copy import deepcopy
-from datetime import timedelta
 
 import pytest
 
@@ -46,10 +45,6 @@ def _row(world, job):
     return world.client.collection(jobs.COLLECTION).document(job).get().to_dict()
 
 
-def _marker(world):
-    return world.client.collection(scans.READINESS_COLLECTION).document(scans.READINESS_DOCUMENT)
-
-
 def _redrive(monkeypatch, old, world):
     # This reconciler is unchanged from pre-PR main. Use its old jobs API and
     # replace only Cloud Tasks transport/probing; the SDK due query and claim
@@ -68,14 +63,8 @@ def _redrive(monkeypatch, old, world):
     return queued
 
 
-@pytest.mark.parametrize('marker', ['missing', 'expired', 'false'])
-def test_mixed_roll_refuses_groups_and_both_binaries_finish_redriven_tasks(monkeypatch, world, old, marker):
-    if marker == 'missing':
-        _marker(world).delete()
-    else:
-        _marker(world).update(
-            {'all_consumers_new': marker != 'false', 'valid_until': jobs._now() - timedelta(seconds=1)}
-        )
+def test_disabled_coalescing_allows_both_binaries_to_finish_redriven_tasks(monkeypatch, world, old):
+    monkeypatch.setenv(scans.SWITCH, 'off')
     cids = ['one', 'two', 'three', 'four']
     ids = [world.arm(cid) for cid in cids]
     _seed(world, cids)
@@ -113,9 +102,7 @@ def test_actual_old_delivery_into_leased_group_is_acknowledged_then_redriven(mon
     if role == 'follower':
         assert _old_run(old, world, job, original[job]) == 'superseded'
     assert _row(world, job) and _row(world, leader)['owner_scan']['position']['ns'] == 1
-    # The deployment revokes readiness before routing any old revision. Once
-    # leases expire, acknowledged tasks are redispatched by the old reconciler.
-    _marker(world).delete()
+    # Simulate the pre-floor binary receiving tasks after leases expire.
     _expire(world, scan)
     queued = _redrive(monkeypatch, old, world)
     assert {key for key, _ in queued} == {leader, follower}
@@ -168,8 +155,9 @@ def test_old_takeover_mid_group_then_new_worker_never_rejoins_stale_cursor(monke
 
 
 def test_readiness_metadata_is_never_a_job_for_either_version(monkeypatch, world, old):
-    marker = _marker(world)
-    assert marker.id != jobs.job_id(world.uid, scans.READINESS_DOCUMENT)
+    marker = world.client.collection(jobs.COLLECTION).document('_owner_scan_v1_readiness')
+    marker.set({'all_consumers_new': True})
+    assert marker.id != jobs.job_id(world.uid, marker.id)
     assert old.jobs.claim_dispatch(marker.id, firestore_client=world.client) is None
     assert jobs.claim_dispatch(marker.id, firestore_client=world.client) is None
     assert old.jobs.due_jobs(firestore_client=world.client) == []
@@ -227,8 +215,7 @@ def test_rearm_during_and_after_sealing_is_not_completed_by_old_group(monkeypatc
     _assert_erased(world, [*cids, 'late'])
 
 
-@pytest.mark.parametrize('event', ['revoke', 'expire', 'switch_off'])
-def test_readiness_or_switch_loss_mid_group_hands_journals_back_before_legacy(monkeypatch, world, old, event):
+def test_switch_off_mid_group_hands_journals_back_before_legacy(monkeypatch, world, old):
     cids = ['one', 'two']
     leader, follower = [world.arm(cid) for cid in cids]
     generation = _dispatch(world, leader)
@@ -245,12 +232,7 @@ def test_readiness_or_switch_loss_mid_group_hands_journals_back_before_legacy(mo
                     jobs.segment_records(job, ns, firestore_client=client),
                 )
                 assert before[job][1]
-            if event == 'switch_off':
-                monkeypatch.setenv(scans.SWITCH, 'false')
-            elif event == 'revoke':
-                _marker(world).update({'all_consumers_new': False})
-            else:
-                _marker(world).update({'valid_until': jobs._now() - timedelta(seconds=1)})
+            monkeypatch.setenv(scans.SWITCH, 'false')
         return rows
 
     with monkeypatch.context() as scoped:
@@ -267,12 +249,10 @@ def test_readiness_or_switch_loss_mid_group_hands_journals_back_before_legacy(mo
     _assert_erased(world, cids)
 
 
-def test_frozen_old_rearm_gap_is_why_mixed_rolls_must_not_seal(monkeypatch, world, old):
+def test_frozen_old_rearm_gap_demonstrates_why_the_floor_is_required(monkeypatch, world, old):
     """Reproduce the old binary's limitation on synthetic data, then recover it.
 
-    A new readiness marker cannot teach an old binary to compare arm revisions.
-    This is why Release must drain groups BEFORE restoring old traffic, and why
-    the new consumer refuses new groups throughout a mixed roll.
+    The release floor excludes old binaries that cannot compare arm revisions.
     """
     cids = ['one', 'two']
     leader, follower = [world.arm(cid) for cid in cids]
@@ -280,7 +260,6 @@ def test_frozen_old_rearm_gap_is_why_mixed_rolls_must_not_seal(monkeypatch, worl
     _seed(world, cids)
     _, scan = scans._claim(world.client, leader, generation)
     _expire(world, scan)
-    _marker(world).delete()  # simulate violating drain-before-old-traffic
     rearmed = []
 
     def rearm_after_first_namespace(ns, uid):
@@ -297,8 +276,8 @@ def test_frozen_old_rearm_gap_is_why_mixed_rolls_must_not_seal(monkeypatch, worl
     assert rearmed and not _row(world, leader)
     remaining = world.client.collection(f'{purge.NAMESPACES[0]}_results').document('rearmed-behind-cursor')
     assert remaining.get().to_dict().get('projection_state') != 'erased'
-    # Old completion ignored the re-arm. Readiness denial keeps new consumers
-    # out of shared mode; ordinary legacy recovery can still erase the row.
+    # Old completion ignored the re-arm. The follower's stale delegation keeps
+    # it out of a new group. Per-conversation recovery can still erase the row.
     world.arm('one')
     generation = _dispatch(world, leader)
     assert scans._claim(world.client, leader, generation) == ('legacy', None)
@@ -309,14 +288,10 @@ def test_frozen_old_rearm_gap_is_why_mixed_rolls_must_not_seal(monkeypatch, worl
     _assert_erased(world, cids)
 
 
-@pytest.mark.parametrize('admission', ['unready', 'switch_off'])
 @pytest.mark.parametrize('boundary', ['checkpoint', 'unit', 'completion'])
-def test_new_legacy_rearm_behind_cursor_is_redriven_without_early_completion(monkeypatch, world, admission, boundary):
+def test_new_legacy_rearm_behind_cursor_is_redriven_without_early_completion(monkeypatch, world, boundary):
     """A real fallback traversal passes the new row before its obligation is re-armed."""
-    if admission == 'unready':
-        _marker(world).delete()
-    else:
-        monkeypatch.setenv(scans.SWITCH, 'off')
+    monkeypatch.setenv(scans.SWITCH, 'off')
     leader = world.arm('one')
     _seed(world, ['one'])
     generation = _dispatch(world, leader)

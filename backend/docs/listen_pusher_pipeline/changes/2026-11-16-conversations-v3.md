@@ -72,3 +72,25 @@ outline prompt/context identity versions both caching and paid-attempt budgets.
 
 No intake, STT, speaker assignment, sync merge, audio, wire or service-stage
 change. Rollout still requires the existing beta gates.
+
+## v3 recording rotation (2026-11-18)
+
+A batch-only recording has no transcript until it seals, and in continuous
+noise it never reached the 120 s speech quiet, so a 34-minute cafe capture
+showed nothing on Home until it ended. Listen can now seal a live v3 recording
+(`recording: true`) at the first 1.5 s speech pause after 180 s, or at 300 s.
+It opens the successor first, then retargets frames still addressed to the old
+recording, finishes its custody and seals it. A failed successor keeps the
+current recording and retries after 60 s. The create runs in supersede mode: it
+never resumes the socket's live continuation (that is the row being retired)
+and moves the origin's `live_continuation` pointer to the successor in one
+transaction, so a reconnect resumes the successor. A refused seal retries after
+15, 30, 60 and 120 s; after that, or at teardown, the row stays with the quiet
+check armed at its creation, which finalizes it once its lease expires.
+`omi_listen_v3_rotation_total{outcome}` counts rotated, same_row,
+create_failed, seal_retry, seal_failed and handed_off. Legacy rows, onboarding captures,
+pending stops and boundary holds never rotate. Rotation-sealed rows carry
+`v3_rotation_cap_seconds`; for them only, the v3 loader keeps the stretch open
+while the next recording is live under the cap or sealed and untranscribed for
+up to 15 minutes. Default off (`CONVERSATIONS_V3_RECORDING_ROTATION`), with a
+`v3-recording-rotation` rollout cohort for canaries.

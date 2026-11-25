@@ -107,7 +107,7 @@ class OrphanAudioFile {
     if (seconds < 1704067200 || currentUs > 0x7fffffff * 1000000 || seconds > currentUs / 1000000) {
       return 'unknown_capture_time';
     }
-    const ageUs = 45 * 86400 * 1000000;
+    const ageUs = orphanReclaimAgeSeconds * 1000000;
     if (currentUs - captureUs <= ageUs) return 'capture_too_young';
     if (currentUs - modifiedUs <= ageUs) return 'mtime_too_young';
     return null;
@@ -127,7 +127,25 @@ class OrphanAudioFile {
   }
 }
 
-const orphanRecoveryWindowSeconds = 28 * 86400;
+/// The production server sync lookback (`SYNC_BACKFILL_MAX_AGE_SECONDS`, 60 days since #25677):
+/// uploads whose capture time is older are refused with `backfill_lookback_exceeded`. Orphan
+/// recovery and reclaim both derive from this one value so they cannot drift from it again.
+/// Dev servers keep 30 days; a dev build there only gets refusals for 30–58-day orphans, which
+/// leave the row held and every byte retained.
+const serverSyncLookbackSeconds = 60 * 86400;
+
+/// Automatic orphan recovery: two days inside the lookback, so an adopted file still has time to
+/// drain before the server refuses it (58 days).
+const orphanRecoveryWindowSeconds = serverSyncLookbackSeconds - 2 * 86400;
+
+/// `margin_days` of the backend retention contract (`backend/deploy/storage-lifecycle/
+/// retention_contract.json`): a Delete must be at least the longest hold plus this margin. It
+/// also absorbs phone/server clock skew at the lookback boundary.
+const orphanReclaimMarginSeconds = 7 * 86400;
+
+/// Reclaim deletes an unreferenced orphan only when both its capture time and mtime are strictly
+/// older than this (67 days): never audio the server would still admit or recovery could adopt.
+const orphanReclaimAgeSeconds = serverSyncLookbackSeconds + orphanReclaimMarginSeconds;
 const orphanAudioClasses = ['working', 'unparseable', 'recoverable', 'expired', 'owner_unknown'];
 
 ({List<OrphanAudioFile> files, OrphanAudioFrameCache cache, int reads, int hits}) _classifyOrphans(

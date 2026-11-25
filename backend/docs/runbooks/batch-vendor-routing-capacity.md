@@ -12,8 +12,9 @@ ladder, the failover drills and the guard interlocks. Numbers marked
 
 | Setting | Where | Owner | Rollback |
 | --- | --- | --- | --- |
-| GPU floor (HPA min and baseline) | `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml` `replicaCount` + `autoscaling.minReplicas` | lead, at a worker Helm roll | restore baseline/min 6 and max 12 if GPU queue depth or ready_units climbs back past 50k |
-| L4 node pool minimum | GKE `batch-pipeline-pool` (operator-managed, not in this repo) | lead / op1 | previous minimum |
+| GPU floor (HPA min and baseline) | `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml` `replicaCount` + `autoscaling.minReplicas` | Release, live HPA patch plus the next worker Helm roll | Keep 6 for tuning rollbacks |
+| L4 node pool minimum | GKE `batch-pipeline-pool` total minimum (operator-managed, not in this repo) | Release / op1 | Keep 6 for tuning rollbacks |
+| Worker roll strategy | `templates/deployment.yaml` (RollingUpdate, `maxSurge: 0`) + `rollout.maxUnavailable` | Release, live Deployment patch plus the next worker Helm roll | `rollout.maxUnavailable: 100%`; Recreate only by reverting the chart change |
 | GPU floor share of routed units | route table `gpu_floor_percent`, cohort `batch-vendor-gpu-floor` | lead, runtime config (slice B) | 0 |
 | `provider-stt` queue size | `deploy/ops/prod.yaml` `cloud_tasks.provider-stt` | lead, config-train | previous size |
 | Vendor caps, breaker thresholds | route table `RouteConfig`, `BATCH_VENDOR_HEALTH_THRESHOLDS` | lead, runtime config (slice C) | builtin table |
@@ -23,11 +24,35 @@ config-train change, never a code change.
 
 ## GPU floor
 
-**Current bounds (2026-11-06, David D4 / coordinator ask bc18db): baseline/min 4,
-max 8.** cl2-deploy patched the live HPA at 00:50Z after the transcription
-backlog drained. The chart preserves those bounds; Helm's existing lookup
-preserves the live replica count on upgrades. Rollback: restore baseline/min 6
-and max 12 if GPU queue depth or ready_units climbs back past 50k.
+The pre-November 20 settings were HPA/baseline 4 and node minimum 0
+(`--total-min-nodes 0`). Release may restore those settings only as part of an
+explicit rollback of #25842’s capacity policy approved by the Pipeline owner.
+That rollback removes the six-node stockout protection.
+
+**Current bounds (2026-11-20, David, superseding D4's floor 4 of 2026-11-06):
+baseline/min 6, max 16, and a `batch-pipeline-pool` node minimum of 6.** Over the
+three days before the change the HPA never asked for fewer than 6 workers, so the
+floor adds about zero machine-hours at that demand. Its job is stockout insurance:
+an L4 stockout fails scale-up but does not take back running on-demand nodes,
+so whatever is standing when it starts is what batch has until it ends.
+
+Incident SCA-3274 (2026-11-20) is why the node minimum and the roll strategy sit
+beside the HPA floor. A preserve-live image roll under `Recreate` stopped all ten
+workers at 04:14Z. Nine exited within a minute; one hung for its full 1500 s
+grace, and Recreate creates no replacement until every old pod is gone. The
+cluster autoscaler removed the nine empty L4 nodes ten minutes later, into a
+three-zone stockout, and the pool sat at one node for about 40 minutes. The HPA
+floor did not help: it counts pods, and Recreate had deliberately removed them.
+
+- **Roll strategy:** RollingUpdate with `maxSurge: 0` (never a surge GPU; each pod
+  requests a whole `nvidia.com/gpu`). A replacement is created as soon as its
+  predecessor is told to stop and takes the freed node seconds after that pod
+  exits, so no node is idle long enough for scale-down. `rollout.maxUnavailable`
+  (default 50%: two drain-plus-startup waves, so a roll fits the deploy
+  workflow's rollout wait) bounds how much capacity drains at once.
+- **Node minimum:** the pool minimum equals the HPA floor, so even a roll or
+  manual action that removes every pod cannot return those nodes. With
+  `locationPolicy: ANY` the minimum is regional, not per zone.
 
 These approved bounds are not full-volume capacity qualification. The historical
 3.7x replay's 4/16 hot-minute and catch-up witnesses retain their original
@@ -38,11 +63,13 @@ throughput before expansion; do not change the live bounds to clear a replay.
 
 Current operator checklist:
 
-1. Before a worker roll, confirm HPA min 4 / max 8 and at least 4 Ready on-demand
-   L4 nodes. A later change needs a new lead decision and a fresh capacity read.
-2. Keep chart `replicaCount` and `autoscaling.minReplicas` at 4 together, with
-   `maxReplicas` 8. Let Helm preserve the live replica count; never force it to
-   the baseline during an outage.
+1. Before a worker roll, confirm HPA min 6 / max 16, the pool's total minimum 6,
+   the Deployment strategy RollingUpdate with `maxSurge: 0`, and at least 6 Ready
+   on-demand L4 nodes. If workers are Pending on an L4 stockout, a roll still keeps
+   its nodes, but prefer to wait: a hung drain holds that slot for up to 1500 s.
+2. Keep chart `replicaCount` and `autoscaling.minReplicas` at 6 together, with
+   `maxReplicas` 16, and keep the node minimum equal to the floor. Let Helm
+   preserve the live replica count; never force it to the baseline during an outage.
 3. Use the current chart's scale-in policy. The older sizing, prices,
    recommendations and scale-in procedures below are dated evidence only.
 

@@ -55,18 +55,22 @@ provider's scan: keeping that dependency would strand overflow once Home becomes
    delete: `LocalWalSyncImpl.discardRecording` (`wal_discard.dart`) drops the live tail and the
    WALs of that one recording session, never another recording's. A WAL of it that is uploading
    is not interrupted; it is never picked for upload again and is deleted once that upload settles.
-   With PostHog `custody_capture_committed_release` explicitly true, exact server `capture_committed`
-   source-frame receipts replace the live transcript heuristic for Omi audio sessions. Live Custom STT
-   uses HTTP transcript submission instead of frame receipts: only a confirmation carrying the
-   captured session mode may use saved transcript coverage for its stamped phone safety copies.
-   Current preferences never supply this authority. Partial/interrupted, held, on-device and
-   unlinked copies remain recoverable, and the transfer coordinator still honors the upload choice.
-   Unknown/false keeps the heuristic.
-   Receipt ranges are journaled durably per owner even in shadow; comparisons emit
-   `event=refactor_shadow lane=L5 check=custody_release outcome=agree|disagree`. The union must cover
-   the entire WAL in its capture root, mono channel, clock epoch and (when supplied) recording session.
-   Gaps, foreign owners, missing ordinals and in-flight/manual/on-device WALs never release.
-   A release marks server-confirmed synced retention; only the existing retention policy deletes bytes.
+   With PostHog `custody_durable_audio_release` explicitly true, the phone releases an Omi
+   safety WAL into synced retention after writer-proved original and manifest receipts cover
+   every source ordinal and the independent per-frame digest audit matches the local bytes.
+   `audio_custody` supplies independent proof. A `capture_committed` range contributes only
+   where explicitly bound to committed original-audio evidence. Legacy transcript-only
+   receipts remain readable. The socket owner, device capture root, mono channel, clock epoch
+   and supplied recording session must match. A server recording rollover can retain the
+   phone session only through an explicit client-session binding on the writer receipt.
+   Custom STT sockets do not negotiate receipt release. Gaps, conflicts and unknown mappings keep
+   the repair path open. Receipt ranges are journaled durably per owner in shadow and serve.
+   In-flight, manual and on-device WALs are excluded. The WAL index must persist synced
+   retention successfully. Only the existing retention policy deletes bytes. The existing
+   saved-transcript confirmation for a captured Live Custom STT session continues to honor
+   the user's upload choice. Unknown/false keeps the existing confirmation behavior.
+   `WAL Custody Audit` records aggregate per-frame audit agreement, disagreement, unknown
+   proof and persisted receipt releases by build.
 3. **Owner before anything.** A WAL's `ownerUid` is set before it is listed, played, uploaded or
    deleted. Watch copies take the owner from their iPhone receipt. Other native files take the
    signed-in uid at intake, the same as every other producer. Once registered, the ledger
@@ -114,6 +118,21 @@ that immutable input instead of running speech recognition again and changing an
 The outbox remains on failure and clears only with the durable conversation result. Flag:
 `clients_from_segments_chunks`; guard: `unit/on_device_runner_test.dart` restart test.
 
+## Exclusive live conversation cuts
+
+A conversation close uses `finalizeAndSnapshotSession` followed by `stampConversationSnapshot`,
+not a later time-range scan. Admission synchronously seals the current frame buffer and reserves
+eligible WAL object identities before queued disk I/O. Reserved memory rows cannot extend with
+subsequent ingress, and unresolved earlier cuts cannot be claimed by a later conversation. Tokens
+are bound to one ledger, owner and account generation; reconstructed rows or another ledger do
+not inherit their authority. Generic lifecycle/checkpoint finalization remains separate.
+
+A stamp establishes lineage, not transcript coverage. Existing coverage/receipt confirmation and
+retention rules still decide whether a copy leaves Pending. Uncertain Process Now results remain
+unlinked and recoverable. `unit/conversation_wal_snapshot_test.dart` covers queue barriers,
+post-cut ingress, same-second cuts, owner changes and durable source coordinates; the capture
+architecture documents the per-conversation close lifecycle.
+
 ## Server contract used
 
 `POST /v2/sync-local-files` with the existing parameters (`conversation_id`,
@@ -121,10 +140,9 @@ The outbox remains on failure and clears only with the durable conversation resu
 headers). The server binds by `recording_session_id`, otherwise to the conversation closest in
 time, otherwise it creates one. No backend change is needed.
 
-`capture_committed` listen events are consumed by `capture_committed_custody.dart`;
-`CaptureCommittedJournal` records each receipt before applying it. `confirmSessionTranscription`
-compares exact receipts with the old coverage decision in shadow. The opt-in is identity-fenced and
-off unless explicitly true. S1 source frame ordinals already in the ledger are sent by
+The authenticated mono Listen socket opts in to `audio_custody`. Both receipt types enter
+`CaptureCommittedJournal` through the WAL buffer queue. The phone audits each proposed release
+against the local length-prefixed frames before applying synced retention. S1 source frame ordinals already in the ledger are sent by
 `captureEvidenceUploadHeader` on both batch and single safety-WAL uploads; legacy/unpositioned
 WALs omit claims rather than deriving them from wall clock. Batch must apply L1 coverage before
 the legacy coverage trim is deleted (plan C, C11).
@@ -141,6 +159,15 @@ the legacy coverage trim is deleted (plan C, C11).
 | 6 | `widgets/phone_custody_home_render_test.dart` (real conversations page) |
 
 ## Upload refusals and attention
+
+HTTP 503 `record_capture_pending` asks the app to retain the submitted WALs.
+The upload gate applies the response body's `retry_after_seconds` to that recording,
+using the WAL upload group (conversation, session, batch family, location)
+and bounded backoff with jitter on repeated refusals. WALs without a session
+ID are paced by the submitted file names. The wait survives an app restart for
+the signed-in account. Automatic and single-file
+uploads both respect it. Subsequent sync passes can send the WAL when the
+deadline passes, and acceptance clears the backoff.
 
 HTTP 400/413 is feedback for Omi, not a per-recording user repair. The ledger
 stores only a closed reason token, HTTP status, first refusal time and last
@@ -279,10 +306,13 @@ Stage 1 never deletes or rewrites audio or sidecars. Its adoption proof does not
 license deletion: a local ring receipt, empty index or transport label cannot
 supply server confirmation. The separate [stranded-orphan reclaim](#stranded-orphan-reclaim)
 exception applies only to complete-census, entirely unreferenced audio with both
-clocks older than 45 days, under David’s explicit ruling.
+clocks older than 67 days (`orphanReclaimAgeSeconds`), under David’s explicit ruling.
 
 The ledger's explicit foreground resume/15-minute recovery pass runs only after
-startup admission finishes; headless workers skip it. The shared read-only
+startup admission finishes; headless workers skip it. While live audio is arriving
+(a frame in the last minute) the pass runs at most every two hours instead, because
+its census walks every Documents file on the UI isolate (`orphanRecoveryDue`); it
+still runs, and the delay only defers adoption, never audio retention. The shared read-only
 inventory census runs outside the capture queue and includes active, retired,
 foreign, main, backup, temporary and quarantined rows, batch journals, native
 owner receipts, legacy jobs/preferences, ring checkpoint/download refs and
@@ -301,8 +331,13 @@ file-bound server receipt for a rowless orphan.
 The local-only classifier assigns working (`.part`, `.torn`, `omibatch*`,
 `omimobilebatch*`), unparseable, owner_unknown, expired or recoverable. A complete
 mono filename and strict complete length-prefixed frames establish capture time
-and duration. Automatic recovery requires a plausible capture time within 28
-days, leaving two days inside the server's 30-day admission window. Older audio
+and duration. Automatic recovery requires a plausible capture time within 58
+days (`orphanRecoveryWindowSeconds`), leaving two days inside the server's 60-day
+production admission window (`serverSyncLookbackSeconds`, mirroring
+`SYNC_BACKFILL_MAX_AGE_SECONDS` since #25677). A dev build against a 30-day dev
+server adopts 30–58-day orphans that the server then refuses; the row stays held
+as `outsideRecoveryWindow` and its audio is retained, so that mismatch only costs
+a refused request. Older audio
 stays on disk. Unknown, missing or foreign owners in any custody source, including legacy
 pending-file/job preferences, prevent
 single-owner proof; at least one index/memory row must prove the current owner.
@@ -336,7 +371,7 @@ stable hash of the original basename, keeping same-second/fractional/collision
 files separate in playback/share caches and upload attempts. Source filenames,
 device and capture time stay intact. Existing rows retain their legacy ids. Recovery publishes `heldRevision` after its batched save so an open
 recordings view refreshes. Manual upload uses the existing ledger/uploader;
-if the server rejects a later attempt after 30 days, the existing
+if the server rejects a later attempt past its lookback, the existing
 `outsideRecoveryWindow` status is persisted, the held row stays visible as
 failed, and every audio byte remains retained until explicit user deletion.
 
@@ -410,7 +445,7 @@ surfaced as its held rows; `owner_unknown` remains an aggregate diagnostic.
 
 David's 2026-11-17 ruling item 2 (recorded in chat in
 `omi-workspace/data/run-2026-11-17-pendant-diag/ruling-2026-11-17-orphans.md`)
-is the authority for the [INV-CAP-1 exception](../../../../product/invariants/pendant-audio-retention.md#explicit-exception-stranded-orphan-audio-older-than-45-days).
+is the authority for the [INV-CAP-1 exception](../../../../product/invariants/pendant-audio-retention.md#explicit-exception-stranded-orphan-audio-older-than-67-days).
 Only `LocalWalSyncImpl`'s `wal_orphan_reclaim.dart` may apply it, foreground-only,
 after admission. Existing paced recovery wakes invoke reclaim after recovery settles;
 there is no startup census, separate timer, uploader or UI.
@@ -419,7 +454,14 @@ A complete #25573 census reserves every file named by every current/backup/tmp/q
 index generation, live/retired/foreign/held memory row, ring checkpoint/download receipt,
 batch journal, native owner receipt and legacy file/job preference. Working `.part`,
 `.torn`, `omibatch` and `omimobilebatch` files stay intact. The filename capture time
-and mtime must both be strictly older than 45 days; ambiguous clocks and files outside
+and mtime must both be strictly older than 67 days: the 60-day server lookback plus the
+7-day `margin_days` of `backend/deploy/storage-lifecycle/retention_contract.json`, so reclaim
+never deletes audio the server would still admit or recovery could still adopt. All three
+ages derive from `serverSyncLookbackSeconds` in `orphan_audio_classifier.dart`, and a test
+fails if the reclaim age is not strictly beyond the recovery window plus that margin. The
+2026-11-17 ruling set 45 days on a 30-day lookback; David's 2026-11-18 decision (item 2,
+`omi-workspace/data/run-2026-11-18-support-packet/decisions.md`) replaces that premise.
+Ambiguous clocks and files outside
 Documents stay intact. The deletion predicate is independent of single-owner adoption
 proof: multiple accounts do not prohibit reclaim, but any account's reference does.
 

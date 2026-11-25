@@ -60,6 +60,24 @@ void main() {
     });
   });
 
+  test('removing a WAL snapshot row clears cached stalled work and cancels its deadline', () {
+    fakeAsync((time) {
+      final clock = time.getClock(DateTime(2026, 11, 17, 12));
+      final now = clock.now().millisecondsSinceEpoch ~/ 1000;
+      var notifications = 0;
+      final expiring = _row(now - 60, WalStatus.uploaded)..uploadedAt = now - 86400;
+      final stalled = _row(now - 120, WalStatus.uploaded)..uploadedAt = now - 90000;
+      final views = WalDerivedViews([expiring, stalled], clock: clock.now, onPendingWorkExpired: () => notifications++);
+      expect(views.stalledUploadsAt(nowSeconds: now), catchUpStaleHandleOff ? isEmpty : [stalled]);
+
+      views.sync([]);
+      time.elapse(const Duration(seconds: 2));
+      expect(notifications, 0);
+      expect(views.stalledUploadsAt(nowSeconds: now + 2), isEmpty);
+      views.dispose();
+    });
+  });
+
   test('an injected past clock never re-arms a zero-delay expiry loop', () {
     fakeAsync((time) {
       final clock = time.getClock(DateTime(2026, 11, 17, 12));

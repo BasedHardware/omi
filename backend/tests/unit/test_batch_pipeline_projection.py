@@ -625,6 +625,31 @@ def test_contention_control_retains_existing_expired_transaction_restart(monkeyp
     assert operation.call_args_list[0] != operation.call_args_list[1]
 
 
+@pytest.mark.parametrize('engine', ['go', 'pending'])
+def test_projection_bridge_refuses_foreign_target_before_followup(binding, monkeypatch, engine):
+    from utils.sync import processing_hold
+
+    projector = projection.Projector(Mock(), Mock(), playback=Mock())
+    monkeypatch.setattr(projector.store, 'settle_deleted_output', Mock())
+    monkeypatch.setattr(projector.store, 'mark_enrichment', Mock())
+    receipt = {'state': 'persisted', 'conversation_id': 'donor', 'audio_required': True, 'enrichment_required': True}
+    read = Mock(
+        side_effect=[
+            {'deleted': True, 'sync_merged_into': 'target'},
+            {'finalization_engine': engine, 'finalization_owner_epoch': 1},
+        ]
+    )
+    monkeypatch.setattr(bridge, 'read_metadata', read)
+    policy = resolve_stage_policy(binding.owner_id, 'projection')
+
+    with pytest.raises(processing_hold.ProcessingDeferred, match='finalization_owned_elsewhere'):
+        projector.finish_part(Mock(), binding, receipt, None, policy=policy)
+
+    assert [call.args[2] for call in read.call_args_list] == ['donor', 'target']
+    projector.playback.assert_not_called()
+    projector.store.mark_enrichment.assert_not_called()
+
+
 @pytest.mark.parametrize('enabled', [False, True])
 def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(binding, monkeypatch, caplog, enabled):
 
@@ -656,6 +681,35 @@ def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(bind
         assert 'exception_type=ValueError' in text
     else:
         assert 'event=batch_projection_phase' not in text
+
+
+@pytest.mark.parametrize(
+    'percent,key,expected', [('0', 'unit', False), ('1', 'in', True), ('1', 'out', False), ('100', 'out', True)]
+)
+def test_phase_sampling_keeps_pairs_and_unsampled_errors(monkeypatch, caplog, percent, key, expected):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT', percent)
+    cohort = Mock(side_effect=lambda unit, _: 0.5 if unit == 'in' else 1.5)
+    monkeypatch.setattr(projection, 'cohort_bucket', cohort)
+    policy = Mock(projection_timing=True)
+
+    with caplog.at_level(logging.INFO, logger=projection.__name__):
+        with projection.projection_phase('test_success', policy, unit_key=key):
+            pass
+        with pytest.raises(ValueError):
+            with projection.projection_phase('test_failure', policy, unit_key=key):
+                raise ValueError('private')
+        monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED', 'false')
+        with projection.projection_phase('test_rollback', policy, unit_key=key):
+            pass
+
+    assert ('phase=test_success outcome=started' in caplog.text) is expected
+    assert ('phase=test_success outcome=completed' in caplog.text) is expected
+    assert 'phase=test_failure outcome=error' in caplog.text
+    assert 'private' not in caplog.text
+    assert 'phase=test_rollback outcome=started' in caplog.text
+    assert 'phase=test_rollback outcome=completed' in caplog.text
+    assert cohort.call_count == (2 if percent == '1' else 0)
 
 
 @pytest.mark.parametrize('finish', [False, True])
@@ -1166,3 +1220,106 @@ def test_committed_transcript_signals_episode_before_playback_or_enrichment(bind
     projector.finish_part = lambda *a, **kw: events.append('finish')
     projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding)
     assert events == ['commit', 'signal', 'finish']
+
+
+def native_finish_completion(monkeypatch, db, uid, cid, unit_count, *, empty_outcome=None):
+    """Supply ready sibling fixtures; use the real completion transaction and ledger writer."""
+    from contextlib import nullcontext
+
+    from config.record_audio import record_identity
+    from database import batch_pipeline_projection as completion
+
+    monkeypatch.setattr(completion, 'writing', lambda *_: nullcontext())
+    monkeypatch.setattr(completion, 'record_notes_eager_enabled', lambda: False)
+    monkeypatch.setattr(completion.capture_end, 'enabled', lambda: False)
+    namespace = 'synthetic'
+    content, first = record_identity(uid, cid)
+    binding = ProjectionBinding(
+        uid,
+        'bp_' + content,
+        content,
+        (first, *(f'second-{i}' for i in range(unit_count - 1))),
+        target_conversation_id=cid,
+        record_origin=True,
+        native_record=True,
+    )
+    ledger = sync_content_ledger_ref(db, uid, content)
+    db.rows[ledger.path] = {
+        'status': 'processing',
+        'dispatch_protocol': 'batch_v1',
+        'job_id': binding.job_id,
+        'batch_pipeline': {'segment_ids': list(binding.segment_ids)},
+    }
+    for sid in binding.segment_ids:
+        db.rows[f'{namespace}_jobs', sid] = {'projection_binding': asdict(binding), 'duration_seconds': 3.0}
+        db.rows[f'{namespace}_results', sid] = {
+            'result': {'outcome': empty_outcome or 'success'},
+            'projection': {
+                'state': 'ready',
+                'conversation_id': None if empty_outcome else cid,
+                'created': False,
+                'speech_seconds': 0.0 if empty_outcome else 1.0,
+            },
+        }
+
+    store = _ledger_completion_store(db)
+    session = Mock(job={}, ledger_ref=ledger)
+    session.prepare.side_effect = lambda tx, **_: setattr(session, 'ledger', ledger.get(transaction=tx).to_dict())
+    monkeypatch.setattr(store, 'session', lambda *a, **k: session)
+    monkeypatch.setattr(store, '_observe_transcription', Mock())
+    monkeypatch.setattr(store, '_settle_allowance', Mock())
+    monkeypatch.setattr(store, 'run', lambda operation, **_: operation(db.transaction()))
+    accounting = {'seconds': 0.0 if empty_outcome else float(unit_count), 'updates': {}}
+
+    def complete(now):
+        return store.complete(first, binding, now, accounting)
+
+    return complete, ledger.path, [db.rows[f'{namespace}_results', sid]['projection'] for sid in binding.segment_ids]
+
+
+@pytest.mark.parametrize('marker_mode', ['on', 'off'])
+def test_full_multi_unit_completion_consumes_late_v3_finish_once(monkeypatch, marker_mode):
+    from datetime import datetime, timezone
+
+    from database import batch_pipeline_projection as completion
+    from utils.conversations.v3.live import FINISH_WINDOW_FIELD
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
+    monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', marker_mode)
+    enqueue = Mock()
+    monkeypatch.setattr(completion.v3_triggers, 'enqueue_pending', enqueue)
+
+    uid, cid = 'synthetic-owner', 'capture'
+    path = ('users', uid, 'conversations', cid)
+    db = StrictFirestore(
+        {
+            path: {
+                'recording': True,
+                'status': 'completed',
+                'finished_at': datetime.fromtimestamp(1, timezone.utc),
+                'record_projection_revision': 1,
+                'v3_manual_end_requested': True,
+                FINISH_WINDOW_FIELD: 'visible-window',
+            }
+        }
+    )
+    complete, ledger_path, receipts = native_finish_completion(monkeypatch, db, uid, cid, 2)
+    receipts[1]['state'] = 'persisted'
+    assert complete(2) is None
+    assert 'v3_manual_end' not in db.rows[path]
+    assert not db.transactions[-1].updates
+    enqueue.assert_not_called()
+
+    receipts[1]['state'] = 'ready'
+    db.rows[path]['record_projection_revision'] = 2
+    assert complete(3)['outcome'] == 'success'
+    assert db.rows[ledger_path]['status'] == 'completed'
+    if marker_mode == 'on':
+        assert db.rows[path]['v3_manual_end'] and db.rows[path]['v3_pending']
+        enqueue.assert_called_once_with(uid, manual_end_id=cid)
+    else:
+        assert db.rows[path]['v3_manual_end_requested'] and 'v3_manual_end' not in db.rows[path]
+        enqueue.assert_not_called()
+    assert complete(4)['outcome'] == 'success'
+    assert not db.transactions[-1].updates
+    assert enqueue.call_count == int(marker_mode == 'on')

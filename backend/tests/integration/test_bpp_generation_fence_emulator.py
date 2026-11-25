@@ -37,6 +37,7 @@ def world(monkeypatch):
     token = client.document(f'batch_pipeline_privacy/{privacy.privacy_owner_key(uid)}')
     monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(_client, 'get_data_plane_firestore_client', lambda: client)
+    monkeypatch.setattr(users, 'get_data_plane_firestore_client', lambda: client)
     redis = fakeredis.FakeRedis()
     monkeypatch.setattr(fsr_read_cache, '_redis', lambda: redis)
     for module in (users, conversations):
@@ -236,12 +237,14 @@ def test_actual_writer_rotates_token_in_source_commit_and_revalidates(world, mon
             denial = 'account_deleted'
         elif writer == 'account_marker_complete':
             ref = w.client.document(f'account_deletions/{w.uid}')
-            assert account_deletion_transitions.mark_wipe_completed(w.client.transaction(), ref)
+            assert account_deletion_transitions.mark_wipe_completed(w.client.transaction(), ref, operation_id=writer)
             denial = 'account_deleted'
         elif writer == 'account_marker_late_cleanup':
             ref = w.client.document(f'account_deletions/{w.uid}')
             ref.update({'wipe_status': 'pending'})
-            assert account_deletion_transitions.record_late_agent_vm_cleanup(w.client.transaction(), ref, 'vm', 'zone')
+            assert account_deletion_transitions.record_late_agent_vm_cleanup(
+                w.client.transaction(), ref, 'vm', 'zone', operation_id=writer
+            )
             denial = 'account_deleted'
         elif writer.startswith('grace_'):
             result = account_deletion_grace.mark_user_deletion_grace_intent(
@@ -330,7 +333,22 @@ def test_actual_writer_rotates_token_in_source_commit_and_revalidates(world, mon
             raise AssertionError(writer)
         after = w.token.get().to_dict()
         assert after['memo_token'] != before['memo_token']
-        assert after['generation'] == (8 if writer == 'epoch_advance' else 7)
+        assert after['generation'] == (8 if writer in {'epoch_advance', 'protection_start', 'migration_start'} else 7)
+        certified_advances = {
+            'consent': 1,
+            'protection_start': 1,
+            'migration_start': 1,
+            'migration_complete': 1,
+            'account_marker_create': 1,
+            'account_marker_complete': 1,
+            'account_marker_late_cleanup': 1,
+            'grace_intent': 1,
+            'grace_promote': 2,
+            'grace_actions_complete': 1,
+            'grace_restore': 2,
+        }
+        advances = certified_advances.get(writer)
+        assert after.get('account_epoch') == (7 + advances if advances else None)
         # Every source Commit must contain its token, not an earlier/later RPC.
         changing = [r for r in w.requests if w.fence.authority_tokens(r.writes)]
         assert changing
@@ -481,6 +499,7 @@ def test_real_account_subtree_wipe_keeps_blocked_token_outside_user_walk(world, 
         assert not w.user.get().exists
         after = w.token.get().to_dict()
         assert after['generation'] == 8 and after['blocked'] and not after['purging']
+        assert after['account_epoch'] == 9
         assert after['memo_token'] != before['memo_token']
         with pytest.raises(w.privacy.BatchPrivacyBlocked, match='account_missing'):
             w.check()
@@ -608,3 +627,205 @@ def test_absent_cloud_sync_consent_is_allowed_then_explicit_opt_out_invalidates(
         assert before['generation'] == after['generation'] == 7
         with pytest.raises(world.privacy.BatchPrivacyBlocked, match='recording_privacy_changed'):
             world.check()
+
+
+def test_account_writer_replays_after_later_mutation_and_old_replacement(world):
+    from database.privacy_check_metrics import ACCOUNT_AUTHORITY_WRITES
+
+    w = world
+    observed = ACCOUNT_AUTHORITY_WRITES.labels('users', 'cloud_sync', 'true')
+    before = observed._value.get()
+    w.users.set_user_private_cloud_sync_enabled(w.uid, False, operation_id='first')
+    w.users.set_user_private_cloud_sync_enabled(w.uid, True, operation_id='second')
+    assert observed._value.get() == before + 2
+    with pytest.raises(ValueError, match='different mutation kind'):
+        w.users.set_data_protection_level(w.uid, 'e2ee', operation_id='first')
+    assert w.user.get().to_dict()['data_protection_level'] == 'standard'
+    assert w.token.get().to_dict()['account_epoch'] == 9
+    # This is the old eraser's replacement, which omits the additive epoch.
+    w.token.set({'generation': 8, 'blocked': False, 'purging': False})
+    w.users.set_user_private_cloud_sync_enabled(w.uid, False, operation_id='first')
+    assert w.user.get().to_dict()['private_cloud_sync_enabled'] is True
+    assert observed._value.get() == before + 2
+    w.users.set_user_private_cloud_sync_enabled(w.uid, False, operation_id='third')
+    assert w.token.get().to_dict()['account_epoch'] == 10
+    assert observed._value.get() == before + 3
+
+
+def test_protection_purge_resumes_committed_intent_and_preserves_epoch(world, monkeypatch):
+    from database import batch_pipeline_purge as purge
+
+    w = world
+    w.token.set({'memo_blocked': True, 'other_owner_field': 'kept'}, merge=True)
+    original_purge = purge.purge_batch_owner
+
+    def crash_before_cleanup(uid, **kwargs):
+        assert kwargs['protection_generation'] == 8
+        assert w.user.get().to_dict()['data_protection_level'] == 'enhanced'
+        assert w.token.get().to_dict()['purging'] is True
+        raise RuntimeError('lost purge acknowledgement')
+
+    monkeypatch.setattr(purge, 'purge_batch_owner', crash_before_cleanup)
+    with pytest.raises(RuntimeError, match='lost purge acknowledgement'):
+        w.users.set_data_protection_level(w.uid, 'enhanced', operation_id='protection')
+
+    # The account mutation between begin and finish leaves the original purge fenced.
+    w.users.set_user_private_cloud_sync_enabled(w.uid, False)
+    assert w.token.get().to_dict()['account_epoch'] == 9
+    monkeypatch.setattr(purge, 'purge_batch_owner', original_purge)
+    w.users.set_data_protection_level(w.uid, 'enhanced', operation_id='protection')
+    after = w.token.get().to_dict()
+    assert after['generation'] == 8 and after['purging'] is False
+    assert after['account_epoch'] == 9
+    assert after['memo_blocked'] is True and after['other_owner_field'] == 'kept'
+    w.users.set_data_protection_level(w.uid, 'enhanced', operation_id='protection')
+    assert w.token.get().to_dict() == after
+    assert w.privacy.advance_privacy_generation(w.client, w.uid, blocked=False) == 9
+    legacy_advance = w.token.get().to_dict()
+    assert legacy_advance['account_epoch'] == 9
+    assert legacy_advance['memo_blocked'] is True and legacy_advance['other_owner_field'] == 'kept'
+
+
+def test_grace_restore_keeps_independent_privacy_block(world):
+    from database import account_deletion_grace
+
+    w = world
+    due = datetime.now(timezone.utc) + timedelta(days=1)
+    intent = account_deletion_grace.mark_user_deletion_grace_intent(w.uid, due)
+    assert intent['dispatch_claimed']
+    assert account_deletion_grace.mark_user_deletion_grace_actions_complete(w.uid, intent['wipe_job_id'])
+    assert not account_deletion_grace.mark_user_deletion_grace_intent(w.uid, due)['dispatch_claimed']
+    with pytest.raises(w.privacy.BatchPrivacyBlocked, match='account_deleted'):
+        w.check()
+    assert account_deletion_grace.restore_user_deletion(w.uid) == 'restored'
+    assert w.check() == 7
+    assert w.token.get().to_dict()['account_epoch'] == 9
+
+    intent = account_deletion_grace.mark_user_deletion_grace_intent(w.uid, due)
+    assert intent['dispatch_claimed']
+    assert account_deletion_grace.mark_user_deletion_grace_actions_complete(w.uid, intent['wipe_job_id'])
+    generation = w.privacy.advance_privacy_generation(w.client, w.uid, blocked=True)
+    assert account_deletion_grace.restore_user_deletion(w.uid) == 'restored'
+    w.privacy.finish_privacy_purge(w.client, w.uid, generation)
+    assert w.token.get().to_dict()['blocked'] is True
+    assert w.users.mark_user_deletion_billing_failed(w.uid, None, 'local test') is False
+    with pytest.raises(w.privacy.BatchPrivacyBlocked, match='privacy_generation_changed'):
+        w.check()
+
+
+def test_stale_migration_finalizer_cannot_override_newer_protection(world, monkeypatch):
+    from database import batch_pipeline_purge
+
+    w = world
+    monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda *a, **k: 0)
+    w.users.set_migration_status(w.uid, 'enhanced')
+    w.users.set_data_protection_level(w.uid, 'e2ee')
+    with pytest.raises(w.users.MigrationSuperseded, match='superseded'):
+        w.users.finalize_migration(w.uid, 'enhanced')
+    assert w.user.get().to_dict()['data_protection_level'] == 'e2ee'
+
+
+def test_disabled_writers_stay_visible_to_commit_observer(world, monkeypatch):
+    from database.privacy_check_metrics import ACCOUNT_AUTHORITY_WRITES
+
+    w = world
+    uncertified = ACCOUNT_AUTHORITY_WRITES.labels('users', 'cloud_sync', 'false')
+    before = uncertified._value.get()
+    monkeypatch.setenv('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'off')
+    w.users.set_user_private_cloud_sync_enabled(w.uid, False)
+    assert w.user.get().to_dict()['private_cloud_sync_enabled'] is False
+    assert 'account_epoch' not in w.token.get().to_dict()
+    assert uncertified._value.get() == before + 1
+
+
+def test_deletion_worker_transitions_advance_without_rewriting_purge_fields(world):
+    from google.cloud import firestore
+    from database.batch_account_authority import mutate_account_authority
+    from database.privacy_check_metrics import ACCOUNT_AUTHORITY_WRITES
+
+    w = world
+    marker = w.client.collection('account_deletions').document(w.uid)
+    deletion = ACCOUNT_AUTHORITY_WRITES.labels('account_deletions', 'deletion', 'true')
+    existence = ACCOUNT_AUTHORITY_WRITES.labels('account_deletions', 'existence', 'true')
+    before_deletion, before_existence = deletion._value.get(), existence._value.get()
+
+    @firestore.transactional
+    def create(transaction):
+        return mutate_account_authority(
+            transaction, marker, 'create-marker', {'wipe_status': 'cancelled'}, client=w.client, merge=False
+        )
+
+    def assert_epoch(epoch):
+        owner = w.token.get().to_dict()
+        assert owner['account_epoch'] == epoch
+        assert owner['generation'] == 7
+        assert not owner.get('blocked') and not owner.get('purging')
+
+    assert create(w.client.transaction()).applied
+    assert_epoch(8)
+    assert existence._value.get() == before_existence + 1
+    assert deletion._value.get() == before_deletion
+    w.users.mark_user_deletion_wipe_intent(w.uid)
+    assert_epoch(9)
+    assert deletion._value.get() == before_deletion + 1
+    assert existence._value.get() == before_existence + 1
+    assert w.users.mark_user_deletion_billing_failed(w.uid, None, 'synthetic failure')
+    assert_epoch(10)
+    assert w.check() == 7
+    assert w.users.claim_deletion_wipe_for_task(w.uid) == 'claimed'
+    assert_epoch(11)
+    w.users.mark_user_deletion_wipe_running(w.uid)
+    assert_epoch(12)
+    w.users.heartbeat_user_deletion_wipe(w.uid)
+    assert_epoch(12)
+    w.users.mark_user_deletion_auth_deleted(w.uid)
+    assert_epoch(13)
+    w.users.mark_user_deletion_wipe_failed(w.uid)
+    assert marker.get().to_dict()['wipe_attempts'] == 1
+    assert_epoch(14)
+    assert w.users.claim_deletion_wipe(w.uid) == w.uid
+    assert_epoch(15)
+    assert w.users.mark_user_deletion_wipe_completed(w.uid)
+    assert_epoch(16)
+
+
+def test_deletion_claim_retries_after_lost_commit_response(world, monkeypatch):
+    from database.batch_account_authority import ACCOUNT_OPERATION_RETENTION
+
+    w = world
+    w.users.mark_user_deletion_wipe_intent(w.uid)
+    claim = w.users._claim_deletion_wipe_task_txn
+    before = datetime.now(timezone.utc)
+
+    def retry_after_commit(transaction, *args, **kwargs):
+        assert claim(transaction, *args, **kwargs) == 'claimed'
+        # Commit succeeded but the response was lost. Rerun the same transaction
+        # function with a new SDK transaction and the original operation ID.
+        return claim(w.client.transaction(), *args, **kwargs)
+
+    monkeypatch.setattr(w.users, '_claim_deletion_wipe_task_txn', retry_after_commit)
+    assert w.users.claim_deletion_wipe_for_task(w.uid) == 'claimed'
+    assert w.token.get().to_dict()['account_epoch'] == 9
+    receipts = [row.to_dict() for row in w.token.collection('account_operations').stream()]
+    assert sorted(receipt['account_epoch'] for receipt in receipts) == [8, 9]
+    claim_receipt = next(receipt for receipt in receipts if receipt['account_epoch'] == 9)
+    assert before <= claim_receipt['expires_at'] - ACCOUNT_OPERATION_RETENTION <= datetime.now(timezone.utc)
+
+
+def test_privacy_writers_refuse_to_recreate_erased_user(world):
+    from database import voice_profiles
+    from database.batch_account_authority import ErasedAccountMutationRefused
+
+    w = world
+    w.privacy.advance_privacy_generation(w.client, w.uid, blocked=True)
+    w.user.delete()
+    for mutate in (
+        lambda: w.users.set_user_private_cloud_sync_enabled(w.uid, True),
+        lambda: w.users.set_data_protection_level(w.uid, 'e2ee'),
+        lambda: voice_profiles.set_voice_profile_settings(w.uid, {'save_other_voice_profiles': False}),
+    ):
+        with pytest.raises(ErasedAccountMutationRefused):
+            mutate()
+        assert not w.user.get().exists
+    assert 'account_epoch' not in w.token.get().to_dict()
+    assert not list(w.token.collection('account_operations').stream())

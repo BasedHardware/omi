@@ -172,11 +172,6 @@ _FOLDER = (None, 'folder-1')
 _STARRED = (None, False, True)
 
 
-def _run_v3_live(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
-    _stub(monkeypatch, conversations_router, 'conversations_v3_enabled', lambda uid: True)
-    trial(capture, conversations_router.get_live_conversation, uid='u1', channel=None)
-
-
 def _run_main_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     for statuses, sources in (
         ('completed', _SOURCES_QUERY),
@@ -207,6 +202,25 @@ def _run_main_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> N
                                 rejected_trial(capture, call)
                             else:
                                 trial(capture, call)
+
+    monkeypatch.setattr(conversations_router, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setenv('OMI_HOME_VISIBILITY_INDEX_OWNERS', 'u1')
+    trial(
+        capture,
+        conversations_router.get_conversations,
+        request=SimpleNamespace(headers={'X-Omi-Home-Page-Mode': 'auto'}),
+        response=None,
+        limit=50,
+        offset=0,
+        cursor=None,
+        statuses='processing,completed',
+        sources=None,
+        start_date=None,
+        end_date=None,
+        folder_id=None,
+        starred=None,
+        uid='u1',
+    )
 
 
 def _run_main_count(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
@@ -556,14 +570,6 @@ WITNESSES: dict[str, CallerWitness] = {
     witness.key: witness
     for witness in (
         CallerWitness(
-            'routers/conversations.py:get_live_conversation:database.conversations.get_conversations_without_photos',
-            'database.conversations.get_conversations_without_photos',
-            'database.conversations.get_conversations_without_photos',
-            ('v3-live-conversation',),
-            1,
-            _run_v3_live,
-        ),
-        CallerWitness(
             'routers/support.py:trace_support_recordings:database.conversations.get_conversations',
             'database.conversations.get_conversations',
             'database.conversations.get_conversations',
@@ -575,7 +581,7 @@ WITNESSES: dict[str, CallerWitness] = {
             'routers/conversations.py:get_conversations:database.conversations.get_conversations_without_photos',
             'database.conversations.get_conversations_without_photos',
             'database.conversations.get_conversations_without_photos',
-            ('main-list-single-status', 'main-list-default-or-multi-status'),
+            ('main-list-single-status', 'main-list-default-or-multi-status', 'main-list-indexed-home'),
             1,
             _run_main_list,
         ),

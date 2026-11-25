@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from scripts.redis_pager_route import REDIS_PAGER_RECEIVER, REDIS_PAGER_TARGET, REDIS_PAGER_UID, TELEGRAM_RECEIVER
+
 ROOT = Path(__file__).resolve().parents[3]
 MONITORING = ROOT / 'backend/charts/monitoring'
 NOTIFICATIONS = MONITORING / 'notifications'
@@ -17,20 +19,27 @@ def test_severity_timing_and_actionable_annotations():
     dashboards = {json.loads(path.read_text())['uid'] for path in (MONITORING / 'dashboards').rglob('*.json')}
     for path in [MONITORING / 'alert-rules.json', *sorted((MONITORING / 'alerts').glob('*.json'))]:
         for rule in json.loads(path.read_text()):
-            severity = rule['labels']['severity']
+            uid = rule['uid']
+            labels = rule['labels']
+            severity = labels['severity']
             assert severity in {'critical', 'warning', 'ticket'}, rule['uid']
             wait, interval, repeat = ('30s', '5m', '4h') if severity == 'critical' else ('5m', '1h', '24h')
             settings = dict(rule['notification_settings'])
-            # Agent-tier rules keep the severity timing but are muted for humans
-            # (test_every_alert_rule_declares_tier_owner_and_audience).
-            if rule['labels'].get('tier') == 'agent':
-                assert settings.pop('mute_time_intervals') == ['omi-tier-silent'], rule['uid']
+            receiver = TELEGRAM_RECEIVER
+            if uid == REDIS_PAGER_UID:
+                assert labels.get('paging_target') == REDIS_PAGER_TARGET, uid
+                assert labels.get('tier') == labels.get('audience') == 'agent', uid
+                assert severity == 'critical', uid
+                assert settings.pop('mute_time_intervals', []) == [], uid
+                receiver = REDIS_PAGER_RECEIVER
+            elif labels.get('tier') == 'agent':
+                assert settings.pop('mute_time_intervals') == ['omi-tier-silent'], uid
             else:
                 # A page may explicitly clear an earlier agent mute. Any
                 # nonempty mute on a human rule still violates this contract.
                 assert settings.pop('mute_time_intervals', []) == [], rule['uid']
             assert settings == {
-                'receiver': 'Omi - Services Alerting (Telegram)',
+                'receiver': receiver,
                 'group_by': ['alertname'],
                 'group_wait': wait,
                 'group_interval': interval,

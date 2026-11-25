@@ -109,6 +109,7 @@ enum ConversationReconciliationPolicy {
   static func mergeList(
     server: [ServerConversation],
     current: [ServerConversation],
+    activeLocalCaptureIds: Set<String> = [],
     pendingMutations: [String: ConversationPendingMutation] = [:],
     now: Date = Date(),
     pendingMutationTTL: TimeInterval = 120
@@ -137,7 +138,8 @@ enum ConversationReconciliationPolicy {
     // backend yet. Synced cache rows missing from the server response are not
     // retained, because doing so masks filtered/deleted/backend-updated state.
     let localOnly = current.filter { conversation in
-      !serverIds.contains(conversation.id) && shouldPreserveLocalOnly(conversation)
+      !serverIds.contains(conversation.id)
+        && shouldPreserveLocalOnly(conversation, activeLocalCaptureIds: activeLocalCaptureIds)
     }
     merged.append(contentsOf: localOnly)
 
@@ -229,7 +231,10 @@ enum ConversationReconciliationPolicy {
     )
   }
 
-  private static func shouldPreserveLocalOnly(_ conversation: ServerConversation) -> Bool {
-    conversation.status == .inProgress && !conversation.deleted && !conversation.discarded
+  private static func shouldPreserveLocalOnly(
+    _ conversation: ServerConversation, activeLocalCaptureIds: Set<String>
+  ) -> Bool {
+    activeLocalCaptureIds.contains(conversation.id)
+      && conversation.status == .inProgress && !conversation.deleted && !conversation.discarded
   }
 }

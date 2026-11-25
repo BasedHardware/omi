@@ -24,8 +24,6 @@ CLAIM_SECONDS = 120
 
 def generation(snapshot: dict, now: float) -> str:
     """Effective authority and its reset periods, never usage counters or content."""
-    from utils import backfill_hours_cap
-
     subscription = snapshot.get('subscription') or {}
     end = subscription.get('current_period_end')
     valid = isinstance(end, (int, float)) and end >= now
@@ -42,10 +40,9 @@ def generation(snapshot: dict, now: float) -> str:
         else None
     )
     effective = effective_subscription_payload(subscription, grant, now=clock)
-    # Admission maps the optional backfill day-cap refusal to allowance_exhausted
-    # too. Recheck at its UTC reset even without a plan/month change. Admission
-    # remains authority: a still-capped release may park again, once per day.
-    reset_period = clock.strftime('%Y-%m-%d') if backfill_hours_cap.cap_enabled() else clock.strftime('%Y-%m')
+    # The backfill day cap never parks batch units (it is enforced at sync upload),
+    # so allowance holds reset with the month, as before the cap existed.
+    reset_period = clock.strftime('%Y-%m')
     value = [subscription, valid, promotions, grant_authority, effective, reset_period]
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
 

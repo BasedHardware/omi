@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any, Callable, Optional
 
 from config.episodes import home_neutral_minimum_titles_enabled
+from config.historical_tier import STAND_IN_TITLE_PROVENANCES, TITLE_PROVENANCE
 
 from utils.conversations.deterministic_minimum import fallback_title, first_sentence, truncate_on_word_boundary
 from utils.conversations.summary_delivery import field, present
@@ -86,17 +87,18 @@ def untitled_pending(structured: Any) -> bool:
     return not str(title or '').strip() or notes_pending(structured)
 
 
-def display_title(title: Any, preview: Any) -> Any:
-    """The Home card title: a bare fallback label with no preview is served as untitled."""
-    return '' if is_fallback_title(title) and not (isinstance(preview, str) and preview.strip()) else title
+def display_title(title: Any, preview: Any, *, label_recording: bool = False) -> Any:
+    """Replace a bare fallback with a neutral label only for eligible Home cards."""
+    if is_fallback_title(title) and not (isinstance(preview, str) and preview.strip()):
+        return fallback_title(None) if label_recording else ''
+    return title
 
 
-def placeholder_title_wire(row: dict[str, Any]) -> dict[str, Any]:
-    """Serve a row that carries only a deterministic placeholder as untitled.
+def placeholder_title_wire(row: dict[str, Any], *, label_recording: bool = False) -> dict[str, Any]:
+    """Hide a bare fallback label and keep ready recordings identifiable.
 
-    Capture stubs written 2026-11-16..17 were stamped "Discussion notes" before
-    any notes existed. Read-only: clients keep their own untitled presentation,
-    a user title or any summary keeps the stored title, and nothing is rewritten.
+    The legacy Home list first applies home_step.project. Other readers
+    that do not project a step still serve a bare fallback as untitled.
     """
     structured = row.get('structured')
     if not isinstance(structured, Mapping):
@@ -107,7 +109,12 @@ def placeholder_title_wire(row: dict[str, Any]) -> dict[str, Any]:
         or not notes_pending(structured)
     ):
         return row
-    return {**row, 'structured': {**structured, 'title': ''}}
+    title = display_title(
+        structured.get('title'),
+        '',
+        label_recording=bool(label_recording and row.get('record_projection_revision') and not row.get('is_locked')),
+    )
+    return {**row, 'structured': {**structured, 'title': title}}
 
 
 def is_deferred_preview_title(row: Any) -> bool:
@@ -132,7 +139,7 @@ def is_deferred_preview_title(row: Any) -> bool:
 def title_for_stability(row: Any) -> str:
     """A deterministic/preview title is provisional until real enrichment lands."""
     structured = field(row, 'structured')
-    if field(structured, 'title_provenance') == 'server_minimum' or is_deferred_preview_title(row):
+    if field(structured, 'title_provenance') in STAND_IN_TITLE_PROVENANCES or is_deferred_preview_title(row):
         return ''
     return field(structured, 'title') or ''
 
@@ -167,7 +174,7 @@ def neutralize_minimum_title(
     title = structured.get('title')
     lazy = is_deferred_preview_title(row)
     minimum = (short or floor or summary_owed(row)) and (
-        provenance == 'server_minimum'
+        provenance in STAND_IN_TITLE_PROVENANCES
         or (not provenance and text and title == truncate_on_word_boundary(first_sentence(text)))
     )
     if not minimum and not lazy:
@@ -176,7 +183,8 @@ def neutralize_minimum_title(
     result['structured'] = {
         **structured,
         'title': fallback_title(row.get('started_at') or row.get('created_at'), tz_name=_zone(tz_name_provider)),
-        'title_provenance': 'server_minimum',
+        # A historical stand-in stays historical: it owes no automatic summary, so Home must not read it as one.
+        'title_provenance': provenance if provenance == TITLE_PROVENANCE else 'server_minimum',
     }
     return result
 

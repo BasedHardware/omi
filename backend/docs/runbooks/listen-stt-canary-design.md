@@ -87,8 +87,7 @@ that also builds it. Do not hand-build/push a production image outside Actions.
 The report's earlier `9271b67fcc` head has since advanced and the branch is
 still moving. Resolve its final head/CI at qualification time; preserve report
 §8 gates and review the actual final diff. The inspected branch has no complete
-default-off switch. Existing `STT_ROUTING_MODE=shadow`, on0 and
-`STT_RESILIENT_RECONNECT=false` do not disable cross-provider recovery changes.
+default-off switch. Shadow mode and a zero-percent ramp leave cross-provider recovery active.
 
 Have its author add `STT_FAILOVER_RECOVERY_ENABLED`, default **false**, keeping
 the prior receiver/replay/adapter/rejection behavior for false/unset. True must

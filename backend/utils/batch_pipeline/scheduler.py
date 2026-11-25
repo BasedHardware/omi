@@ -24,6 +24,7 @@ from config.batch_pipeline import (
     skip_unchanged_control_write_enabled,
 )
 from config.policy import resolve_batch_policy
+from config.batch_pipeline_packing import sample_rate as packing_sample_rate
 from config import batch_pipeline_protected_share as protected_share
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations, check_unit_privacy
@@ -31,8 +32,10 @@ from utils.batch_pipeline.correctness_metrics import record as record_correctnes
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
 from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.metrics import QueueMetrics
+from utils.batch_pipeline.packing_counterfactual import job_observation, sampled as packing_sampled
 from utils.batch_pipeline.control import activate, consume_frontier_hint, field, migrate_legacy, read_control
 from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
+from utils.batch_pipeline.held_terminal import retained_digest_changed_held
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 from config.backlog_state_machine import MAX_HELD_REDRIVES, held_redrive_budget_enabled, held_redrive_counter_enabled
 from database import batch_pipeline_allowance_hold as allowance_hold
@@ -156,6 +159,9 @@ class _OwnWrites:
 
     def first_pending(self, owner_key: str) -> dict | None:
         return self._own(self._tx.first_pending(owner_key))
+
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]:
+        return [own for job in self._tx.pending_page(owner_key, limit) if (own := self._own(job)) is not None]
 
     def first_ready_pending(self, owner_key: str) -> dict | None:
         return self._own(self._tx.first_ready_pending(owner_key))
@@ -302,6 +308,31 @@ def _defer(job: dict, now: float, reason: str) -> None:
     )
 
 
+def stored_identity(job: dict) -> dict:
+    """The job as admitted: a demoted row compares against its admission priority."""
+    if 'admitted_priority' not in job:
+        return job
+    return {**job, 'priority': job['admitted_priority']}
+
+
+def requeue_due_retry(tx: Transaction, job: dict, now: float, *, priority: int | None = None) -> str | None:
+    """A due retry row rejoins DRR, or parks if its latest decision is an allowance hold.
+
+    ``priority`` may only lower the service class; the admission priority stays the row's identity."""
+    if job.get('state') != 'retry' or job['available_at'] > now:
+        return None
+    if allowance_hold.enabled() and allowance_hold.park(tx, job, now):
+        return 'allowance_parked'
+    if priority is not None and int(priority) > job['priority']:
+        job.setdefault('admitted_priority', job['priority'])
+        job['priority'] = int(priority)
+    control = read_control(tx, scheduler_control_key(job['owner_key']))
+    job['state'] = 'ready'
+    _append(tx, control, job)
+    tx.put('jobs', job['segment_id'], job)
+    return 'requeued'
+
+
 class Scheduler:
     def __init__(
         self,
@@ -333,7 +364,9 @@ class Scheduler:
         return self.store.run(lambda tx: self.enqueue_in_transaction(tx, item, now))
 
     @staticmethod
-    def enqueue_in_transaction(tx: Transaction, item: WorkItem, now: float, *, policy=None) -> bool:
+    def enqueue_in_transaction(
+        tx: Transaction, item: WorkItem, now: float, *, policy=None, park_allowance: bool = False
+    ) -> bool:
         if getattr(item, 'source_alias_of', None):
             raise ValueError('source aliases cannot enter paid queues')
         if item.shadow:
@@ -349,8 +382,9 @@ class Scheduler:
         ):
             raise ValueError('pending recording owner cannot change')
         if previous and previous.get('state') != 'record_pending':
+            stored = stored_identity(previous)
             if any(
-                previous.get(key, {'unit_kind': 'conversation', 'requires_compute_admission': False}.get(key)) != value
+                stored.get(key, {'unit_kind': 'conversation', 'requires_compute_admission': False}.get(key)) != value
                 for key, value in immutable.items()
                 if not (key == 'privacy_generation' and value is None)
             ):
@@ -360,7 +394,6 @@ class Scheduler:
         key = owner_key(item.owner_id)
         owner = tx.get('owners', key)
         watermark = owner.get('watermark')
-        control = read_control(tx, scheduler_control_key(key))
         job = {
             # Unstamped work keeps the legacy document shape; readers default to None.
             **{key: value for key, value in immutable.items() if key != 'timing_store' or value is not None},
@@ -385,8 +418,18 @@ class Scheduler:
             # Merge class only: fresh rows commit ahead of the owner's catch-up backlog.
             'fresh_capture': now - item.capture_at - item.duration_seconds <= FRESH_CAPTURE_LAG_SECONDS,
         }
-        _append(tx, control, job)
-        tx.put('jobs', item.segment_id, job)
+        parked = (
+            park_allowance
+            and not previous
+            and item.requires_compute_admission
+            and policy.stt_route == 'parakeet'
+            and policy.provider_reason != 'byok'
+            and allowance_hold.park(tx, job, now, at_intake=True)
+        )
+        if not parked:
+            control = read_control(tx, scheduler_control_key(key))
+            _append(tx, control, job)
+            tx.put('jobs', item.segment_id, job)
         # Admission and merge serialize through this fence even for different classes.
         owner['revision'] = owner.get('revision', 0) + 1
         tx.put('owners', key, owner)
@@ -636,7 +679,12 @@ class Scheduler:
                     for _, enqueued_at, relet in receipts:
                         if self.metrics:
                             try:
-                                self.metrics.record('leased', wait_seconds=now - enqueued_at, relet=relet)
+                                self.metrics.record(
+                                    'leased',
+                                    wait_seconds=now - enqueued_at,
+                                    relet=relet,
+                                    priority=priority.name.lower(),
+                                )
                             except Exception:
                                 pass  # Metrics cannot turn an issued lease into a failed pull.
                     return [lease for lease, _, _ in receipts]
@@ -690,6 +738,7 @@ class Scheduler:
         spread = shard_spread_enabled()
         claim_token = uuid.uuid4().hex
         attempt_budgets: list[list[int]] = []
+        packing_rate = packing_sample_rate() if self.metrics else 0.0
 
         def current_time():
             return now + max(0.0, monotonic() - started)
@@ -888,6 +937,10 @@ class Scheduler:
                 )
                 if service is not None:
                     observations.append(('service_' + service, cohort_age))
+                if packing_sampled(token, packing_rate):
+                    observations.append(
+                        ('packing', (job['owner_key'], job['segment_id'], int(priority), job['attempt'], lease_clock))
+                    )
                 # The owner's next head is a different unit: it gets its own
                 # privacy, policy and pool checks before it can be leased.
                 eligible_queues.pop(queue_key, None)
@@ -920,7 +973,21 @@ class Scheduler:
                 if event in {'policy_fallback', 'policy_stage'}:
                     continue
                 try:
-                    if event.startswith('service_'):
+                    if event == 'packing':
+                        owner, segment, lane_priority, attempt, lease_clock = age
+                        # Reconstruct ready candidates leased later by this same
+                        # commit. The projected read sees their new lease state.
+                        later = {}
+                        selected = False
+                        for lease, _, _ in receipts or ():
+                            if selected:
+                                later[lease.item.segment_id] = lease.attempt
+                            elif lease.item.segment_id == segment:
+                                selected = True
+                        self.metrics.packing.observe(
+                            self.store, owner, segment, lane_priority, attempt, lease_clock, max_seconds, later
+                        )
+                    elif event.startswith('service_'):
                         self.metrics.record_service(event[len('service_') :], age=age)
                     else:
                         self.metrics.record_head(event, priority, age=age)
@@ -950,24 +1017,30 @@ class Scheduler:
         def commit(tx):
             job = tx.get('jobs', result.segment_id)
             if job.get('state') in {'result_ready', 'committed'}:
-                return result.matches_persisted(job.get('result')) and job.get('token') == token, False, 0
+                return result.matches_persisted(job.get('result')) and job.get('token') == token, False, 0, {}
             if not owns_lease(job, token, now):
-                return False, False, 0
+                return False, False, 0, {}
             if job.get('requires_compute_admission') and job.get('compute_admission_token') != token:
-                return False, False, 0
+                return False, False, 0, {}
+            packing = job_observation(job)
             job.update(state='result_ready', result=result.to_dict(), ready_at=now)
             job.pop('retry_started_at', None)
             job.pop('admission_refusals', None)
+            job.pop('packing_observation', None)
             tx.put('jobs', result.segment_id, job)
-            return True, True, job['duration_seconds']
+            return True, True, job['duration_seconds'], packing
 
-        accepted, changed, seconds = self.store.run(commit)
+        accepted, changed, seconds, packing = self.store.run(commit)
         if changed and self.metrics:
             self.metrics.record('completed')
             try:
                 self.metrics.record_completed_audio(result.outcome, seconds)
             except Exception:
                 pass  # Duration telemetry cannot undo a fenced completion.
+            try:
+                self.metrics.packing.complete(packing)
+            except Exception:
+                pass  # The intake cohort is optional telemetry.
         return accepted
 
     def fail(
@@ -1005,11 +1078,9 @@ class Scheduler:
             policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates, observations=observations)
             attach_held_vad(job, measured_held_vad_speech_seconds, worker_vad_receipt)
             if quarantine or worker_failure is not None or job['attempt'] >= policy.max_attempts:
-                quarantine_job(tx, job, now, 'worker_failed')
+                quarantine_job(tx, job, now, 'worker_failed', worker_failure=worker_failure)
                 if quarantine and padded_retry in {'empty', 'skipped_oversize', 'skipped_long_speech'}:
                     job['worker_empty_evidence'] = {'padded_retry': padded_retry, 'version': 1}
-                if worker_failure is not None:
-                    job['worker_failure'] = dict(worker_failure)
             else:
                 _defer(job, now, 'worker_failed')
             tx.put('jobs', segment_id, job)
@@ -1160,12 +1231,7 @@ class Scheduler:
                     elif state == 'retry' and job.get('state') == 'retry' and job['available_at'] <= now:
                         if segment_id in protected_ids and not protected_share.eligible(job, now):
                             return None
-                        if allowance_hold.enabled() and allowance_hold.park(tx, job, now):
-                            return ('allowance_parked', 0, None)
-                        control = read_control(tx, scheduler_control_key(job['owner_key']))
-                        job['state'] = 'ready'
-                        _append(tx, control, job)
-                        outcome = ('requeued', 0, None)
+                        return (requeue_due_retry(tx, job, now), 0, None)
                     else:
                         return None
                     tx.put('jobs', segment_id, job)
@@ -1320,6 +1386,10 @@ class Scheduler:
             if checked is None:
                 return None
             job, _ = checked(tx, job['segment_id'])
+            if not operator and retained_digest_changed_held(job):
+                # A repeatedly disagreeing pinned source can never satisfy its
+                # manifest; automatic intake redrive must not spend a requeue.
+                return None
             return Scheduler.requeue_quarantined_in_transaction(tx, job, now)
         control = read_control(tx, scheduler_control_key(job['owner_key']))
         job.update(

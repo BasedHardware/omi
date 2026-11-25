@@ -65,7 +65,10 @@ void main() {
           onPressed: () => showGoalFormSheet(
             context,
             goal: _goal('a', 'Read books'),
-            onSave: (title, current, target, emoji) => saved = title,
+            onSave: (title, current, target, emoji) {
+              saved = title;
+              return true;
+            },
           ),
           child: const Text('open'),
         )));

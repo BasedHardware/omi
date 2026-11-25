@@ -87,7 +87,13 @@ def _live(row: Optional[Mapping[str, Any]]) -> bool:
 
 
 def _joinable(row: Optional[Mapping[str, Any]]) -> bool:
-    return row is not None and _live(row) and not row.get('discarded') and row.get('status') == 'completed'
+    return (
+        row is not None
+        and _live(row)
+        and not row.get('discarded')
+        and not row.get('deferred')
+        and row.get('status') == 'completed'
+    )
 
 
 DUPLICATE_HINT_FIELDS = ('duplicate_capture_of', 'cross_device_duplicate')

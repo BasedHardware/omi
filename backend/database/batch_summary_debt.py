@@ -32,37 +32,11 @@ def arm_projection_summary(uid, client, transaction, payload, current):
         or payload.get('summary_output_present')
     ):
         return
-    job_id = payload.get('finalization_job_id')
-    if job_id is not None and (not isinstance(job_id, str) or '/' in job_id):
-        logger.info('event=batch_summary_debt phase=precommit outcome=refused reason=finalizer_not_eligible')
+    verified, proof = verify_projection_finalization(uid, client, transaction, payload)
+    if not verified:
         return
-    if job_id:
-        job = (
-            client.collection(FINALIZATION_JOBS_COLLECTION).document(job_id).get(transaction=transaction).to_dict()
-            or {}
-        )
-        revision = payload.get('finalization_revision')
-        if not (
-            type(revision) is int
-            and revision > 0
-            and job.get('uid') == uid
-            and job.get('conversation_id') == payload['id']
-            and job.get('finalization_revision') == revision
-            and job.get('status') == 'completed'
-            and job.get('terminal_outcome') == 'success'
-            and job.get('fanout_status') == 'completed'
-            and not job.get('requires_byok')
-        ):
-            reason = (
-                'byok_required'
-                if job.get('requires_byok')
-                else 'missing_finalizer' if not job else 'finalizer_not_eligible'
-            )
-            # This is an eligibility observation, not a durable outcome: a
-            # transaction retry can observe the same refusal more than once.
-            logger.info('event=batch_summary_debt phase=precommit outcome=refused reason=%s', reason)
-            return
-        payload['summary_projection_finalization'] = {'job_id': job_id, 'revision': revision}
+    if proof is not None:
+        payload['summary_projection_finalization'] = proof
     # Assignment has already staged this invalidation. DELETE_FIELD is truthy;
     # eligibility must describe the committed row, not mistake the sentinel
     # for an active local-processing projection.
@@ -79,3 +53,36 @@ def arm_projection_summary(uid, client, transaction, payload, current):
         payload['summary_due_at'] = candidate['summary_due_at']
     if 'summary_lane' in candidate:
         payload['summary_lane'] = candidate['summary_lane']
+
+
+def verify_projection_finalization(uid, client, transaction, row):
+    """Return whether this generation is unbound or proved terminal, and its proof."""
+    job_id = row.get('finalization_job_id')
+    if job_id is not None and (not isinstance(job_id, str) or '/' in job_id):
+        logger.info('event=batch_summary_debt phase=precommit outcome=refused reason=finalizer_not_eligible')
+        return False, None
+    if not job_id:
+        return True, None
+    job = client.collection(FINALIZATION_JOBS_COLLECTION).document(job_id).get(transaction=transaction).to_dict() or {}
+    revision = row.get('finalization_revision')
+    if not (
+        type(revision) is int
+        and revision > 0
+        and job.get('uid') == uid
+        and job.get('conversation_id') == row['id']
+        and job.get('finalization_revision') == revision
+        and job.get('status') == 'completed'
+        and job.get('terminal_outcome') == 'success'
+        and job.get('fanout_status') == 'completed'
+        and not job.get('requires_byok')
+    ):
+        reason = (
+            'byok_required'
+            if job.get('requires_byok')
+            else 'missing_finalizer' if not job else 'finalizer_not_eligible'
+        )
+        # This is an eligibility observation, not a durable outcome: a
+        # transaction retry can observe the same refusal more than once.
+        logger.info('event=batch_summary_debt phase=precommit outcome=refused reason=%s', reason)
+        return False, None
+    return True, {'job_id': job_id, 'revision': revision}

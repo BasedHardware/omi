@@ -561,11 +561,11 @@ class AppLocalizationsFa extends AppLocalizations {
   String get hardwareSection => 'سخت‌افزار';
 
   @override
-  String get v2Undetected => 'V2 شناسایی نشد';
+  String get v2Undetected => 'همگام‌سازی آفلاین در دسترس نیست';
 
   @override
   String get v2UndetectedMessage =>
-      'ما می‌بینیم که شما یک دستگاه V1 دارید یا دستگاه شما متصل نیست. عملکرد کارت SD فقط برای دستگاه‌های V2 دردسترس است.';
+      'برای Offline Sync به یک دستگاه Omi متصل با حافظه SD نیاز است. دستگاه فعلی شما از آن پشتیبانی نمی‌کند.';
 
   @override
   String get endConversation => 'پایان‌دادن به گفتگو';
@@ -1122,6 +1122,11 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get nameUpdatedSuccessfully => 'نام با موفقیت به‌روزرسانی شد!';
+
+  @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'تقویم‌های انتخاب‌شده خوانده می‌شوند. رویدادهای جدید از $calendar استفاده می‌کنند.';
+  }
 
   @override
   String get calendarSettings => 'تنظیمات تقویم';
@@ -7052,6 +7057,26 @@ class AppLocalizationsFa extends AppLocalizations {
   String get authUnexpectedError => 'خطای غیرمنتظره در ورود، لطفاً دوباره تلاش کنید';
 
   @override
+  String get accountSignInMethods => 'روش‌های ورود';
+
+  @override
+  String get accountAddSignInMethod => 'افزودن روش ورود';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'یک روش ورود به این حساب Omi اضافه کنید. طرح، ضبط‌ها و سرویس‌های متصل شما در همین حساب باقی می‌مانند.';
+
+  @override
+  String get accountSignInConflictTitle => 'این روش ورود به حساب دیگری متصل است';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'هنوز وارد همین حساب هستید. هر حساب Omi طرح، ضبط‌ها و سرویس‌های متصل خودش را حفظ می‌کند.';
+
+  @override
+  String get accountSignInMethodAdded => 'روش ورود اضافه شد';
+
+  @override
   String get authFailedToLinkGoogle => 'پیوند با Google ناموفق بود، لطفاً دوباره تلاش کنید.';
 
   @override
@@ -9077,7 +9102,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'این ضبط بارگذاری شده اما Omi هنوز در حال ساخت مکالمه است. اگر اکنون آن را حذف کنید و پردازش ناموفق شود، قابل بازیابی نخواهد بود. به‌هرحال حذف شود؟';
+      'این ضبط قبلاً آپلود شده و Omi در حال پردازش آن است. حذف در اینجا نسخهٔ روی گوشی را پاک می‌کند. اگر پردازش ناموفق باشد، Omi نمی‌تواند از این گوشی دوباره تلاش کند.';
 
   @override
   String get syncCardAllBackedUp => 'همهٔ ضبط‌ها همگام شدند';
@@ -14349,6 +14374,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get processingProgress => 'در حال پردازش ضبط‌های منتظر شما…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'در انتظار سهمیهٔ رونویسی صوت';
+
+  @override
   String get processingDeferred => 'در انتظار پردازش';
 
   @override
@@ -14477,14 +14505,6 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done از $total دقیقه';
-  }
-
-  @override
-  String get deviceRecently => 'اخیراً';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'قطع اتصال به مدت $duration';
   }
 
   @override
@@ -15309,9 +15329,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get stopThese => 'توقف این موارد';
 
   @override
-  String get meetingActionItemsTitle => 'موارد اقدام';
-
-  @override
   String get addToTasks => 'افزودن به وظایف';
 
   @override
@@ -15423,6 +15440,11 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'به‌روزرسانی نصب نشد. آویز شما همچنان با میان‌افزار فعلی ($version) کار می‌کند. لطفاً به‌جای تلاش دوباره برای به‌روزرسانی، با پشتیبانی تماس بگیرید.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15464,7 +15486,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15548,4 +15570,258 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onTheWayServerWork => 'کار گزارش‌شده توسط سرور';
+
+  @override
+  String get finishNothingToProcess => 'هنوز چیزی برای پردازش نیست.';
+
+  @override
+  String get finishStillProcessing => 'هنوز در حال پردازش است. در صفحه اصلی نمایش داده می‌شود.';
+
+  @override
+  String get finishBackToHome => 'بازگشت به صفحه اصلی';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'خلاصه پس از پایان این گفتگو';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'بارگذاری‌های در انتظار در سرور';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'صدای شما روی دستگاه یا گوشی شما در امان است';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'خلاصه تا $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'رونویسی اخیر';
+
+  @override
+  String get finishAlreadySaved => 'قبلاً ذخیره شد. در «خانه» است.';
+
+  @override
+  String get finishAudioNotReceived => 'صدا هنوز در راه است.';
+
+  @override
+  String get finishFailedOffline => 'انجام نشد. صدای شما در امان است.';
+
+  @override
+  String get finishFailed => 'انجام نشد. صدای شما در امان است.';
+
+  @override
+  String get micBlockedCannotRecord => 'برای ضبط، به میکروفون اجازه دهید.';
+
+  @override
+  String get couldNotStartRecording => 'ضبط شروع نشد.';
+
+  @override
+  String get restorePurchasesFailed => 'بررسی برنامهٔ شما ممکن نشد.';
+
+  @override
+  String get firmwareCheckFailed => 'بررسی به‌روزرسانی‌ها ممکن نشد.';
+
+  @override
+  String get conversationStillPublic => 'هنوز با پیوند به اشتراک گذاشته شده است.';
+
+  @override
+  String get goalSaveFailed => 'ذخیرهٔ هدف شما ممکن نشد.';
+
+  @override
+  String get goalDeleteFailed => 'حذف ممکن نشد. هدف بازیابی شد.';
+
+  @override
+  String get goalsLoadFailed => 'بارگذاری اهداف شما ممکن نشد.';
+
+  @override
+  String get missingTargetEndedRecording => 'آن ضبط به پایان رسیده است.';
+
+  @override
+  String get missingTargetMemory => 'این خاطره دیگر وجود ندارد.';
+
+  @override
+  String get missingTargetTask => 'آن وظیفه دیگر موجود نیست.';
+
+  @override
+  String get missingTargetConversation => 'باز کردن این گفتگو ممکن نشد.';
+
+  @override
+  String get couldNotRefreshConversations => 'نوسازی ممکن نشد.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'برای همگام‌سازی، اومی خود را وصل کنید.';
+
+  @override
+  String get useDifferentAccountMessage => 'از حساب خود خارج می‌شوید و تنظیمات اومی این گوشی بازنشانی می‌شود.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'عینک پیدا نشد. آیا روشن است؟';
+
+  @override
+  String get couldNotMoveTask => 'جابه‌جایی وظیفه ممکن نشد.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'حذف شد. $count وظیفهٔ قفل‌شده نگه داشته شد.',
+      one: 'حذف شد. ۱ وظیفهٔ قفل‌شده نگه داشته شد.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'ذخیرهٔ این تغییر ممکن نشد.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'بارگذاری تنظیمات شما ممکن نشد.';
+
+  @override
+  String get waitForOmiToFinish => 'صبر کنید اومی کارش را تمام کند.';
+
+  @override
+  String get voiceNoteTooShort => 'خیلی کوتاه است. برای ضبط نگه دارید.';
+
+  @override
+  String get submitAppMissingFields => 'برای ارسال، نام، توضیحات، تصویر، دسته و قابلیت را اضافه کنید.';
+
+  @override
+  String get appSetupNotFinished => 'راه‌اندازی هنوز کامل نشده است.';
+
+  @override
+  String get finishNothingKeptTitle => 'چیزی برای نگه‌داشتن نیست';
+
+  @override
+  String get submitAppFinishDetails => 'برای ارسال، جزئیات قابلیت و قیمت‌گذاری بالا را تکمیل کنید.';
+
+  @override
+  String get finishNothingNew => 'هنوز چیز جدیدی نیست.';
+
+  @override
+  String get takingLongerThanUsual => 'بیشتر از حالت عادی طول می‌کشد. در «خانه» در دسترس خواهد بود.';
+
+  @override
+  String get couldNotCheckOnIt => 'بررسی آن ممکن نشد. دوباره تلاش کنید.';
+
+  @override
+  String get upgradeToOpenThisOne => 'برای باز کردنش، برنامه را ارتقا دهید.';
+
+  @override
+  String get missingTargetConversationGone => 'آن گفتگو حذف شده است.';
+
+  @override
+  String get cantConnectRightNow => 'در حال حاضر امکان اتصال نیست.';
+
+  @override
+  String get loadOlderFailed => 'بارگذاری موارد قدیمی‌تر ممکن نشد. برای تلاش دوباره ضربه بزنید.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'در حال گوش دادن · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'برای تغییر، صبر کنید تا تمام شود.';
+
+  @override
+  String get finishedSummaryReady => 'خلاصه آماده است';
+
+  @override
+  String get writingSummaryStatus => 'در حال نوشتن خلاصه…';
+
+  @override
+  String get stillWorkingOnIt => 'هنوز روی آن کار می‌کنیم.';
+
+  @override
+  String get deviceReadyToUse => 'آماده برای استفاده';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'میان‌افزار دستگاه شما برای این به‌روزرسانی خیلی قدیمی است. برای دریافت کمک در به‌روزرسانی دستگاه با پشتیبانی تماس بگیرید.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'این به‌روزرسانی میان‌افزار به نسخه جدیدتری از برنامه Omi نیاز دارد. برنامه را از فروشگاه برنامه خود به‌روزرسانی کنید، سپس دوباره بررسی کنید.';
+
+  @override
+  String get quietPayerTitle => '۵ روز است که ضبطی نیست';
+
+  @override
+  String get quietPayerMessage => 'Omi خود را بررسی کنید.';
+
+  @override
+  String get quietPayerCheck => 'بررسی';
+
+  @override
+  String get playManageSubscription => 'مدیریت اشتراک';
+
+  @override
+  String get playBilledByGoogle => 'صورتحساب از طریق Google Play';
+
+  @override
+  String get playPurchasePending => 'پرداخت شما در انتظار است. Omi Pro پس از تأیید Google Play شروع می‌شود.';
+
+  @override
+  String get playPurchaseOtherAccount => 'این خرید Google Play متعلق به حساب Omi دیگری است.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'هنوز نتوانستیم خرید را تأیید کنیم. دوباره خودکار تلاش می‌کنیم.';
+
+  @override
+  String get playRenewalTerms =>
+      'تا زمانی که لغو نکنید، با قیمت نمایش‌داده‌شده خودکار تمدید می‌شود. هر زمان در Google Play مدیریت یا لغو کنید.';
+
+  @override
+  String get playPaidAppUnavailable => 'در Android در دسترس نیست';
+
+  @override
+  String get pageNotAvailableInApp => 'این صفحه در برنامه در دسترس نیست.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'سفارش ثبت شد. ایمیل خود را برای تأییدیه بررسی کنید.';
+
+  @override
+  String get prepaidCodeEntry => 'کد دارید؟';
+
+  @override
+  String get prepaidCodeTitle => 'استفاده از کد';
+
+  @override
+  String get prepaidCodeFieldHint => 'کد خود را وارد کنید';
+
+  @override
+  String get prepaidCodeRedeem => 'استفاده';
+
+  @override
+  String get prepaidCodeRedeemed => 'کد اعمال شد';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'این کد معتبر نیست. آن را بررسی کنید و دوباره امتحان کنید.',
+        'used': 'این کد قبلاً استفاده شده است.',
+        'expired': 'این کد منقضی شده است.',
+        'hasPlan': 'شما از قبل یک طرح دارید. کد شما استفاده نشد. پس از پایان طرحتان از آن استفاده کنید.',
+        'notPrepaid': 'این کد اینجا قابل استفاده نیست. هنگام انتخاب طرح از آن استفاده کنید.',
+        'notEligible': 'این کد در این حساب قابل استفاده نیست.',
+        'rateLimited': 'تلاش‌های زیادی انجام شد. بعداً دوباره امتحان کنید.',
+        'other': 'مشکلی پیش آمد. لطفاً دوباره امتحان کنید.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'صورتحساب از طریق omi.me. هر زمان از اینجا لغو کنید.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'صورتحساب از طریق omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'طرح $plan شما متوقف شده است.';
+  }
 }

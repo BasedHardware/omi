@@ -1,16 +1,11 @@
 # Backend unit-test node IDs grandfathered against BACKEND_FAST_UNIT_FAIL_SECONDS (default 1.0s, local and CI).
 #
-# The duration guard measures per-test CPU time (call phase). CPU time is load-independent, so the
-# guard is deterministic regardless of parallelism. The entries below are genuine unit tests whose
-# measured CPU exceeds the failure threshold. The dominant cause is the file-isolation
-# runner model: each test file runs in its own pytest process, so the first test of a file/class
-# amortizes that process's module import (FastAPI app / router / database graph) into its call.
-# This is structural, not a per-test regression. They STAY in the PR unit lane; this file only
-# suppresses the duration guard for these baseline node IDs. NEW slow tests are still flagged.
-# To shrink this list: (a) migrate the runner to a single pytest session (BACKEND_PYTEST_FILE_ISOLATION=0)
-# so imports are paid once per worker instead of per file, or (b) raise BACKEND_FAST_UNIT_FAIL_SECONDS.
-# Genuinely non-unit tests (real asyncio sleeps, network, stress, codebase greps, full-app wiring,
-# per-test fresh module reload) are marked `slow`/`integration` and are NOT listed here.
+# The guard measures per-test call-phase CPU after subtracting cold module execution.
+# CPU time is less sensitive to load than wall time, but memory contention can still
+# roughly double measured CPU on a saturated runner. CI confirms overruns in isolation.
+# Many entries predate import accounting and reflect the first test paying for the
+# process's cold import graph. The listed tests stay in the PR unit lane with a
+# timing exemption. Genuinely slow or integration tests are marked separately.
 # One full _proxy round trip (metering -> sanitize -> dispatch -> terminal telemetry) with an
 # in-process capturing client; hermetic, but the end-to-end path costs ~0.15-0.19s CPU.
 tests/unit/test_desktop_proxy.py::test_proxy_dispatches_server_paid_bodies_with_the_2048_cap
@@ -44,6 +39,9 @@ tests/unit/test_backend_runtime_env_validator.py::test_repo_parakeet_admission_d
 # remaining hermetic; their CPU cost fluctuates narrowly around the unit guard threshold.
 tests/unit/test_backend_runtime_env_validator.py::test_repo_rendered_cloud_run_artifact_matches_manifest
 tests/unit/test_backend_runtime_env_validator.py::test_parakeet_selected_without_endpoint_is_rejected_for_rendered_cloud_run_state
+# Four inspect_gke_drift passes over the full manifest: 1.06 s and 1.00 s on CI (run 44572244796) after the
+# manifest gained the backend-projection-pump service, under 1.00 s on the two runs before.
+tests/unit/test_check_cloud_run_env_drift.py::test_gke_envfrom_configmap_keys_are_compared
 tests/unit/test_backend_runtime_env_validator.py::test_repo_ilb_endpoints_use_http_scheme[prod]
 tests/unit/test_backend_runtime_env_validator.py::test_prod_rejects_jev_uid_allowlist_declared_on_every_host
 tests/unit/test_backend_runtime_env_validator.py::test_prod_rejects_jev_uid_allowlist_undeclared_in_chart
@@ -317,6 +315,7 @@ tests/unit/test_replay_llm_gateway_fake_upstream_oracle.py::test_loopback_oracle
 # File-isolation amortizes the merge_conversations import (models/database graph) into the first call.
 tests/unit/test_merge_audio_chunk_copy_failure.py::test_merge_propagates_custom_stt_marker_from_any_source
 tests/unit/test_merge_photo_read_failure.py::test_photo_read_failure_keeps_the_sources
+tests/unit/test_historical_tier_merge_and_persistence.py::test_merging_a_historical_source_keeps_the_merged_row_historical
 tests/unit/test_agent_proxy_async_boundaries.py::test_persistent_lease_heartbeat_failure_fails_closed_before_ttl_expires
 # First test amortizes the file-isolated utils.llm.clients import into its call phase.
 tests/unit/test_prompt_cache_wire_payload.py::test_get_llm_forwards_explicit_cache_options_and_production_cache_key
@@ -575,3 +574,17 @@ tests/unit/test_mcp_conversation_detail_paging.py::test_walk_1200_segments_once_
 # First synchronous-finalize test of its file pays the lazy finalize import chain (batch pipeline, STT,
 # scipy/onnxruntime; ~627 modules) in its call phase: 1.04-1.07s CPU on CI runners, ~0.5s locally.
 tests/unit/test_client_processing_finalize.py::test_paid_sync_finalize_projection_is_in_firestore_on_reread
+# First call amortizes the file-isolated utils.other.storage / audio_chunks import (lazy, inside the test) into its call phase:
+# 1.10 s and 1.13 s CPU on CI against 1.00 s (runs 44559705629, 44567333983), exposed by a full-suite PR run.
+tests/unit/test_gcs_http_pool.py::test_private_sync_gets_count_prepared_sdk_requests_and_restore_reader
+# Pipeline lab: the first test of each file drives real product code (push dispatch, task dedup over the
+# vector seam, the STT entry point, the record worker and the sync lane), paying its lazy import chain in the
+# call phase: 1.1-3.2 s CPU locally under load. Hermetic: fakes and synthetic fixtures only.
+tests/unit/test_pipeline_lab_chain_sinks.py::test_real_product_push_lands_in_the_would_have_fired_log
+tests/unit/test_pipeline_lab_chain_vector_product.py::test_without_a_lab_index_task_dedup_is_silently_empty
+tests/unit/test_pipeline_lab_ingest_cassette.py::test_prerecorded_adapter_calls_product_entry_point_with_wav
+tests/unit/test_pipeline_lab_ingest_lanes.py::test_record_lane_runs_real_worker_and_projection
+tests/unit/test_pipeline_lab_ingest_lanes.py::test_sync_lane_records_exact_segments_then_replays_them
+# The first outline-stream case pays the event loop, httpx mock transport and SSE parsing in its call;
+# CI measured 1.13-1.56s CPU on PR #26115 (0.3s locally).
+tests/unit/test_conversations_v3_stream.py::test_paid_outline_stream_deadline_discards_partial_reply_and_closes_stream[False]

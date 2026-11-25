@@ -643,10 +643,15 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'uses_custom_stt',
         # Server-only route arbitration metadata; Conversation marks it excluded from dumps.
         'record_lane_owner',
+        # Server-only finalization ownership. Both fields are excluded from dumps and wire schemas.
+        'finalization_engine',
+        'finalization_owner_epoch',
         # Server-authored partial audio proof metadata, not client display text.
         'record_audio_partial',
         'structured',
         'client_processing',
+        # Server-generated, coverage-validated preview for the authenticated detail route.
+        'live_summary',
         # Authenticated owner-confirmed edits, not device-authored display projections.
         # Corrections deliberately enter summarization; overview is the owned override.
         'user_corrections',
@@ -766,10 +771,23 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # projection-family — it must survive the integration redactor so
         # clients receive it; the model serializer omits it when unset.
         'home_step',
+        # Server read projection (utils/conversations/transcribing_hold.py): the
+        # transcription wait ran out with no failure receipt. Never stored and
+        # never client-authored; NOT projection-family, clients need it to tell a
+        # held recording from a failed one. Omitted when unset.
+        'transcription_wait',
+        # Server-owned app projection from current batch-job evidence, never
+        # stored or accepted from clients. Not a client-processing field.
+        'transcription_admission',
         # Recordings and conversations (v3): written only by the server-side builder,
         # planner and processing settle (utils/conversations/v3/), never client-authored.
         # NOT projection-family: clients need them (Home visibility and tile state).
         'backfilled',
+        # Historical processing tier (T1+): the server-stamped tier marker and the
+        # read-time open projection. Never client-authored; clients need both to
+        # offer the open-time summary, so neither is projection-family.
+        'processing_tier',
+        'summary_on_open',
         'home_hidden',
         'home_hidden_reason',
         'kind',
@@ -2313,6 +2331,30 @@ def test_red_proof_walrus_alias_fails_rebind_scan() -> None:
     assert not [site for site in collect_intent_txn_write_surface(source)[1] if site.startswith('walrus:')]
 
 
+@pytest.mark.parametrize('locked', [False, True])
+def test_live_recap_stays_out_of_lists_and_integrations(render_mod, locked):
+    payload = {
+        'is_locked': locked,
+        'live_summary': {'overview': 'private recap'},
+        'v3_live_summary': {'ciphertext': 'private receipt'},
+    }
+    for redact in (render_mod.redact_conversation_for_list, render_mod.redact_conversation_for_integration):
+        result = redact(dict(payload))
+        assert 'live_summary' not in result
+        assert 'v3_live_summary' not in result
+
+
+def test_integration_hides_generated_live_sections_after_datetime_serialization(render_mod):
+    payload = {
+        'v3_derived': True,
+        'status': 'in_progress',
+        'summary_covers_through': '2026-11-19T12:00:00Z',
+        'structured': {'overview': 'Editable notes', 'sections': [{'body_markdown': 'Generated live recap'}]},
+    }
+    result = render_mod.redact_conversation_for_integration(payload)
+    assert result['structured'] == {'overview': 'Editable notes'}
+
+
 @pytest.mark.parametrize('coverage', ['unknown', 'incomplete', 'mapped', None])
 @pytest.mark.parametrize('locked', [False, True])
 def test_capture_coverage_stays_on_app_views_and_out_of_integrations(render_mod, projection_sink_fns, coverage, locked):
@@ -2331,6 +2373,16 @@ def test_capture_coverage_stays_on_app_views_and_out_of_integrations(render_mod,
     assert conv.capture_coverage == coverage
     public.pop('capture_coverage')
     assert 'capture_coverage' not in render_mod.redact_conversation_for_integration(public)
+
+
+@pytest.mark.parametrize('locked', [False, True])
+def test_transcription_admission_stays_on_app_views_and_out_of_integrations(render_mod, locked):
+    conv = _make_conversation(is_locked=locked)
+    conv.transcription_admission = 'allowance_held'
+    assert 'transcription_admission' not in render_mod.PROJECTION_FAMILY_FIELDS
+    payload = render_mod.conversation_to_dict(conv)
+    assert render_mod.redact_conversation_for_list(dict(payload))['transcription_admission'] == 'allowance_held'
+    assert 'transcription_admission' not in render_mod.redact_conversation_for_integration(payload)
 
 
 @pytest.mark.parametrize('locked', [False, True])

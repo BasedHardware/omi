@@ -11,6 +11,10 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/widgets/freemium_switch_dialog.dart';
+import 'package:omi/pages/conversations/home_rows.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
 import 'package:omi/pages/conversation_detail/widgets/note_sections_sliver.dart';
@@ -203,11 +207,13 @@ class ReprocessDiscardedWidget extends StatelessWidget {
 /// notice once the server said a summary retry cannot help. The held detail copy carries no
 /// Home step and is not retryable, so the not-transcribed answer itself must open the slot;
 /// otherwise the tab would offer "Generate Summary", which can only be answered 409 again.
-bool summaryRetrySlotApplies(ServerConversation conversation) =>
-    TranscriptionPendingConversations.contains(conversation.id) ||
-    conversation.homeStep == 'failed' ||
-    conversation.showsSummaryRetry ||
-    (conversation.status == ConversationStatus.failed && !conversation.discarded && !conversation.isLocked);
+bool summaryRetrySlotApplies(ServerConversation conversation) {
+  if (conversation.isTranscriptionAllowanceHeld || conversation.isAdmittedForTranscription) return false;
+  return TranscriptionPendingConversations.contains(conversation.id) ||
+      (isFailedConversation(conversation) && !conversation.discarded && !conversation.isLocked) ||
+      conversation.showsSummaryRetry ||
+      (conversation.status == ConversationStatus.failed && !conversation.discarded && !conversation.isLocked);
+}
 
 /// "Summary failed" with Retry, for a row the server marked retryable: its summary pass failed on
 /// a transient error, so a reprocess can still succeed. Success replaces the conversation, which
@@ -250,12 +256,15 @@ class SummaryRetryWidget extends StatelessWidget {
   }
 }
 
-/// A centred status with no action: the server is still transcribing, so there is nothing to retry.
+/// A centred status: the server is still transcribing, so there is nothing to retry. A recording
+/// held by the free allowance adds its one action (Upgrade).
 class _SummaryWaitingNotice extends StatelessWidget {
-  const _SummaryWaitingNotice({super.key, required this.title, required this.body});
+  const _SummaryWaitingNotice({super.key, required this.title, required this.body, this.actionLabel, this.onAction});
 
   final String title;
   final String body;
+  final String? actionLabel;
+  final Future<void> Function()? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -267,9 +276,13 @@ class _SummaryWaitingNotice extends StatelessWidget {
           const SizedBox(height: OmiSpacing.xs),
           Text(
             body,
-            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+            style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
             textAlign: TextAlign.center,
           ),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: OmiSpacing.xl),
+            OmiButton.secondary(label: actionLabel!, onPressed: onAction),
+          ],
         ],
       ),
     );
@@ -523,13 +536,30 @@ class GetAppsWidgets extends StatelessWidget {
           final failure = redesign ? provider.summaryFailure : null;
           final selection = provider.getDisplayedSummarySelection();
           if (selection.kind == ConversationSummaryKind.empty) {
-            if (failure != null) return SliverToBoxAdapter(child: SummaryFailureCard(failure: failure));
             final conversation = provider.conversation;
+            if (conversation.isTranscriptionAllowanceHeld) {
+              final l = context.l10n;
+              final upgradeMinutes = heldRecordingUpgradeLimitMinutes(conversation, context.watch<UsageProvider?>());
+              return SliverToBoxAdapter(
+                child: _SummaryWaitingNotice(
+                  key: const Key('conversation_detail_held_recording'),
+                  title: l.summaryTranscriptionPendingTitle,
+                  body: upgradeMinutes == null ? l.waitingForTranscriptionAllowance : l.freeCapTitle(upgradeMinutes),
+                  actionLabel: upgradeMinutes == null ? null : l.upgrade,
+                  onAction: upgradeMinutes == null
+                      ? null
+                      : () => FreemiumSwitchHandler.openHeldRecordingUpgrade(context, source: 'held_recording_detail'),
+                ),
+              );
+            }
+            if (failure != null && !conversation.isAdmittedForTranscription) {
+              return SliverToBoxAdapter(child: SummaryFailureCard(failure: failure));
+            }
             // A failed processing pass can be retried the same way as a failed summary.
             if (summaryRetrySlotApplies(conversation)) {
               return const SliverToBoxAdapter(child: SummaryRetryWidget());
             }
-            if (conversation.status == ConversationStatus.processing) {
+            if (conversation.isAdmittedForTranscription || conversation.status == ConversationStatus.processing) {
               return SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.only(top: 18.0),

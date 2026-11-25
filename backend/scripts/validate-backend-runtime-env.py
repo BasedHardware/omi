@@ -161,7 +161,14 @@ def main() -> int:
     )
     parser.add_argument(
         '--cloud-run-service',
-        choices=('all', 'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'),
+        choices=(
+            'all',
+            'backend',
+            'backend-sync',
+            'backend-sync-backfill',
+            'backend-integration',
+            'backend-projection-pump',
+        ),
         default='all',
     )
     parser.add_argument(

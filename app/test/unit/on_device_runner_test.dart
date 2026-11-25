@@ -17,6 +17,8 @@ import 'package:omi/services/on_device/on_device_projection.dart';
 import 'package:omi/services/on_device/on_device_provenance.dart';
 import 'package:omi/services/on_device/on_device_settings.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
+import 'package:omi/services/on_device/phone_power_source.dart';
+import 'package:omi/services/wals/live_wal_receipt.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -24,6 +26,7 @@ import '../support/on_device_fakes.dart';
 import '../support/refactor_flag_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/wal_file_manager.dart';
 
 class _Listener implements IWalSyncListener {
   @override
@@ -487,5 +490,64 @@ void main() {
     expect(onDeviceTranscriptHash([segment(' hello ')]), onDeviceTranscriptHash([segment('hello')]));
     expect(onDeviceTranscriptHash([segment('hello')]), isNot(onDeviceTranscriptHash([segment('hello', user: true)])));
     expect(onDeviceTranscriptHash([]), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+  });
+
+  test('scheduled processing respects the shared ledger hold after headless receipt replay', () async {
+    await setRefactorFlags({'clients_from_segments_chunks': false});
+    SharedPreferencesUtil().uid = 'synthetic-owner';
+    final bytes = await (await recording()).readAsBytes();
+    final id = LiveWalReceipt.newId();
+    final basename = LiveWalReceipt.uniqueName('audio_phone_pcm16_16000_1_1700000000.bin', id);
+    final audio = File('${directory.path}/$basename');
+    final captured = Wal(
+      timerStart: 1700000000,
+      codec: BleAudioCodec.pcm16,
+      seconds: 61,
+      totalFrames: 6100,
+      status: WalStatus.miss,
+      onDeviceOnly: true,
+      ownerUid: 'synthetic-owner',
+    );
+    await LiveWalReceipt.prepare(audio, captured, id, bytes);
+    await audio.writeAsBytes(bytes, flush: true);
+    final sync = LocalWalSyncImpl(_Listener(), persistWals: (rows) async {
+      expect(await WalFileManager.saveWals(rows), isTrue);
+    });
+    await sync.loadForOnDeviceWorker();
+    final held = sync.testWals.single;
+    expect(held.holdForUser, isTrue);
+    expect(held.ownerUid, 'synthetic-owner');
+    expect(held.onDeviceOnly, isTrue);
+    expect(held.filePath, basename);
+    final controller = OnDeviceTranscriptionController(
+      model: FakeOnDeviceModel(),
+      power: FakePhonePowerSource(const PhonePowerState(isCharging: true, batteryPercent: 100)),
+    )..debugActivate();
+    var cloudSends = 0;
+    final runner = OnDeviceRunner(
+      sync: sync,
+      controller: controller,
+      publish: (_) {},
+      cloudBaseUrl: 'http://127.0.0.1:1/',
+      transcribeChunk: (_, __) async => const OnDeviceBatchResult(
+        engine: 'synthetic',
+        text: 'Synthetic speech',
+        words: [OnDeviceWord('Synthetic speech', 0, 1)],
+      ),
+      send: (request) async {
+        if (request.method == 'POST') cloudSends++;
+        return http.Response('', 503);
+      },
+    );
+    addTearDown(runner.dispose);
+    addTearDown(controller.dispose);
+    await runner.run();
+    expect(cloudSends, 0);
+    expect(await audio.length(), bytes.length);
+    final indexed = (await WalFileManager.loadIndexedWals()).single;
+    expect(indexed.ownerUid, 'synthetic-owner');
+    expect(indexed.filePath, basename);
+    expect(indexed.holdForUser, isTrue);
+    expect(indexed.onDeviceConversation, isNull);
   });
 }

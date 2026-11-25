@@ -9,8 +9,9 @@ from typing import Any, cast
 from fastapi import APIRouter, Depends, Request
 import httpx
 import os
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
+from llm_gateway.gateway import idempotency
 from llm_gateway.gateway.accounting import (
     AccountingContext,
     AttemptTrace,
@@ -86,16 +87,53 @@ async def create_chat_completion(
     caller: ServiceAuthDependency,
     config: GatewayConfig = Depends(get_gateway_config),
     provider_registry: ProviderRegistry = Depends(get_provider_registry),
+) -> Response:
+    if idempotency.HEADER in request.headers:
+        return idempotency.reject_ordinary_post()
+    return await _create_chat_completion(request, caller, config, provider_registry)
+
+
+@router.post('/v1/chat/completions/operations', response_model=None)
+async def create_keyed_chat_completion(
+    request: Request,
+    caller: ServiceAuthDependency,
+    config: GatewayConfig = Depends(get_gateway_config),
+    provider_registry: ProviderRegistry = Depends(get_provider_registry),
+) -> Response:
+    async def invoke(body: dict[str, Any], keyed: idempotency.KeyedRequest) -> JSONResponse:
+        result = await _create_chat_completion(
+            request, caller, config, provider_registry, request_body=body, keyed_request=keyed
+        )
+        # Keyed requests are rejected before entering the streaming branch.
+        return cast(JSONResponse, result)
+
+    return await idempotency.complete(request, caller, _resolve_credentials(request, caller), invoke)
+
+
+@router.get('/v1/chat/completions/operations/{key}', response_model=None)
+async def get_chat_completion_operation(key: str, caller: ServiceAuthDependency) -> Response:
+    return await idempotency.lookup(caller, key)
+
+
+async def _create_chat_completion(
+    request: Request,
+    caller: ServiceAuthDependency,
+    config: GatewayConfig,
+    provider_registry: ProviderRegistry,
+    *,
+    request_body: dict[str, Any] | None = None,
+    keyed_request: idempotency.KeyedRequest | None = None,
 ) -> JSONResponse | StreamingResponse:
     started_at = time_request()
     resolved_route = None
     credential_source = 'unknown'
     is_streaming = False
-    request_id = request_id_for(request)
+    request_id = keyed_request.key if keyed_request else request_id_for(request)
     accounting_context: AccountingContext | None = None
-    attempt_trace = AttemptTrace()
+    attempt_trace = AttemptTrace(keyed=keyed_request is not None)
     try:
-        request_body = await _request_json(request)
+        if request_body is None:
+            request_body = await _request_json(request)
         resolved_route = resolve_chat_completion_route(config, request_body)
         credentials = _resolve_credentials(request, caller)
         credential_source = credentials.source.value
@@ -106,7 +144,18 @@ async def create_chat_completion(
             payer='byok' if credentials.mode.value == 'byok' else 'omi',
             fallback_feature=resolved_route.lane.lane_id,
         )
+        if keyed_request:
+            accounting_context = replace(
+                accounting_context,
+                idempotency_scope=keyed_request.scope,
+                idempotency_environment=keyed_request.environment,
+            )
         proactivity = context_from_request(request, caller, accounting_context)
+        if keyed_request and (
+            proactivity is not None
+            or selected_serving_route(resolved_route).primary.provider not in idempotency.PROVIDERS
+        ):
+            raise GatewayInvalidRequestError('idempotency requires a single-dispatch chat route')
         is_streaming = resolved_route.validated_request.forwarded_params.get('stream') is True
         if proactivity is not None and is_streaming:
             raise GatewayInvalidRequestError(
@@ -128,6 +177,7 @@ async def create_chat_completion(
                 credentials,
                 provider_registry,
                 attempt_trace=attempt_trace,
+                max_provider_attempts=1 if keyed_request else None,
             )
         schedule_attempt_trace(accounting_context, attempt_trace)
         _safe_observe(

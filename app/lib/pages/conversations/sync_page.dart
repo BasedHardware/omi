@@ -11,6 +11,7 @@ import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart' show walAttentionLabel;
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/services.dart';
@@ -28,6 +29,7 @@ import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 import 'widgets/too_old_recording_help.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
+import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
 
 Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
   return Padding(
@@ -61,7 +63,7 @@ class WalListItem extends StatelessWidget {
   (Color, String) _rowStatus(BuildContext context, bool hasError) {
     final l = context.l10n;
     if (wal.status == WalStatus.uploaded && !wal.countsAsPendingWork()) {
-      return (Colors.grey.shade400, l.transcriptionUnavailable);
+      return (Colors.grey.shade400, l.syncDetailsTranscribing);
     }
     final state = wal.syncDisplayState;
     if (state == WalSyncDisplayState.syncing) {
@@ -156,11 +158,12 @@ class WalListItem extends StatelessWidget {
             direction:
                 displayState == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
             confirmDismiss: (direction) {
-              final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
+              final copy =
+                  walDeleteConfirmation(context.l10n, [wal], notUploadedMessage: context.l10n.thisCannotBeUndone);
               return showOmiConfirm(
                 context,
-                title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
-                message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
+                title: copy.title,
+                message: copy.message,
                 confirmLabel: context.l10n.delete,
                 destructive: true,
               );
@@ -435,11 +438,34 @@ class _SyncPageState extends State<SyncPage> {
             confirmLabel: context.l10n.clear,
             destructive: true,
           );
-          if (confirmed && context.mounted) {
+          if (!confirmed || !context.mounted) return;
+          // Ring discovery rebuilds its virtual WAL with a new display timestamp.
+          (WalStorage, bool, String) pendingIdentity(Wal wal) {
+            final ring = wal.storage == WalStorage.sdcard && wal.fileNum == -1;
+            return (wal.storage, ring, ring ? wal.device : wal.id);
+          }
+
+          final targets = provider.pendingDeletableWals.map(pendingIdentity).toSet();
+          if (targets.isEmpty) return;
+          final uid = SharedPreferencesUtil().uid;
+          final hasDeviceRows = targets.any((row) => row.$1 != WalStorage.disk && row.$1 != WalStorage.mem);
+          final firmware = hasDeviceRows ? context.read<DeviceProvider>().currentFirmwareVersion : null;
+          var failed = false;
+          try {
             await provider.deleteAllPendingWals();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.pendingFilesDeleted);
+            if (hasDeviceRows && uid == SharedPreferencesUtil().uid) {
+              await provider.discoverDeviceWals(firmwareVersion: firmware);
             }
+          } catch (error) {
+            failed = true;
+            Logger.debug('Sync clear pending failed: ${error.runtimeType}');
+          }
+          if (!context.mounted || uid != SharedPreferencesUtil().uid) return;
+          final retained = provider.allWals.any((wal) => targets.contains(pendingIdentity(wal)));
+          if (failed || retained) {
+            OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+          } else {
+            OmiFeedback.confirm(context, context.l10n.pendingFilesDeleted);
           }
         },
         onClearAll: () async {
@@ -579,8 +605,8 @@ class _SyncPageState extends State<SyncPage> {
         }
       });
     } else if (syncProvider.derivedWals.stalledUploadsAt().isNotEmpty) {
-      title = l.transcriptionUnavailable;
-      titleColor = Colors.orangeAccent;
+      title = l.deviceUploadsWaitingOnServer;
+      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
     } else {
       title = l.syncCardAllBackedUp;
       titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;

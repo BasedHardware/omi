@@ -140,6 +140,9 @@ class BatchStack(Stack):
         if role == 'batch-serving':
             return {
                 'BATCH_PIPELINE_SERVING_ENABLED': 'true',
+                # Match backend-integration's bounded fresh-transaction retries
+                # when concurrent projection writers contend in the emulator.
+                'SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED': 'true',
                 # Only the owning serving role stamps these onto each job.
                 'BATCH_PIPELINE_RECOVERY_MODE': 'on',
                 'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED': 'true',
@@ -408,7 +411,13 @@ class Upload:
 
 
 def _upload(
-    stack: BatchStack, scenario: str, *, words: str = 'words', latency_ms: float = 0, uid: str | None = None
+    stack: BatchStack,
+    scenario: str,
+    *,
+    words: str = 'words',
+    latency_ms: float = 0,
+    uid: str | None = None,
+    admission_retry_delays: tuple[float, ...] = (),
 ) -> Upload:
     uid = uid or stack.scenario_uid(scenario)
     stack.seed_user(uid)
@@ -435,12 +444,26 @@ def _upload(
     )
     if manifest.status_code != 200:
         raise StackFailure(f'batch capture manifest returned HTTP {manifest.status_code}')
-    response = stack.http.post(
-        stack.admission_url + f'/v2/sync-local-files?conversation_id={conversation_id}',
-        files=[('files', (filename, audio, 'application/octet-stream'))],
-        headers={**headers, 'X-Omi-Sync-Capture-Manifest': manifest.json()['manifest']},
-        timeout=30.0,
-    )
+    upload_headers = {**headers, 'X-Omi-Sync-Capture-Manifest': manifest.json()['manifest']}
+    for delay in (*admission_retry_delays, None):
+        response = stack.http.post(
+            stack.admission_url + f'/v2/sync-local-files?conversation_id={conversation_id}',
+            files=[('files', (filename, audio, 'application/octet-stream'))],
+            headers=upload_headers,
+            timeout=30.0,
+        )
+        if delay is None or response.status_code != 503:
+            break
+        try:
+            unavailable = response.json()
+        except ValueError:
+            break
+        if unavailable != {
+            'code': 'sync_batch_unavailable',
+            'detail': 'Sync is temporarily unavailable; retain local audio',
+        }:
+            break
+        time.sleep(delay)
     if response.status_code != 202:
         raise StackFailure(f'batch admission returned HTTP {response.status_code}: {response.text[:200]}')
     admitted = response.json()
@@ -505,7 +528,10 @@ def _drive_to_status(stack: BatchStack, upload: Upload, wanted: str, *, timeout:
         time.sleep(STATUS_POLL_SECONDS)
         return False
 
-    _wait_until(done, label=f'{upload.job_id} status {wanted} (observed {observed})', timeout=timeout)
+    try:
+        _wait_until(done, label=f'{upload.job_id} status {wanted}', timeout=timeout)
+    except StackFailure as error:
+        raise StackFailure(f'{error} (observed {observed})') from error
     _record_job_event({'event': 'batch_status_path', 'job_id': upload.job_id, 'statuses': observed})
     return result
 
@@ -852,7 +878,9 @@ def _serving_replacement_mid_paid_call(stack: BatchStack) -> None:
 
 
 def _serving_killed_mid_paid_call(stack: BatchStack) -> None:
-    upload = _upload(stack, 'batch-serving-killed', words='empty')
+    # Admission can briefly decline this upload after the preceding serving
+    # replacement. Retry the same capture through one 30 s backoff window.
+    upload = _upload(stack, 'batch-serving-killed', words='empty', admission_retry_delays=(1, 2, 4, 8, 15))
     stack.set_paid(upload.pcm_digest, latency_ms=60000)
     _quarantine(stack, upload)
     task = _await_recovery_task(stack, upload)

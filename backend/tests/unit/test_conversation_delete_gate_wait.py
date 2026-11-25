@@ -351,6 +351,7 @@ def test_default_gate_keeps_fail_fast_contract(gate_client, fast_clock):
 
 
 def _route_app(monkeypatch, body):
+    monkeypatch.setattr(conversations.conversation_tombstones, 'is_deleted', lambda *args: False)
     for name in (
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
@@ -364,6 +365,7 @@ def _route_app(monkeypatch, body):
     ):
         monkeypatch.setattr(conversations, name, MagicMock())
     monkeypatch.setattr(conversations, '_delete_conversation_under_gate', body)
+    monkeypatch.setattr(conversations, '_legal_hold_defers_delete', lambda uid: False)
     monkeypatch.setattr(deletion_batch_purge, 'is_conversation_batch_purge_dispatch_configured', lambda: False)
     app = FastAPI()
     app.include_router(conversations.router)
@@ -509,6 +511,7 @@ def test_obligation_is_written_before_fallible_cleanup(monkeypatch, tombstone_db
 
 def _real_route_app(monkeypatch):
     """Real route + tombstone writer; only storage side effects are stubbed."""
+    monkeypatch.setattr(conversations, '_legal_hold_defers_delete', lambda uid: False)
     for name in (
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',

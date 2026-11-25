@@ -6,7 +6,8 @@ import json
 
 import pytest
 
-from database import home_feed
+from database import conversations, home_feed, home_visibility_index
+from tests.unit.test_fsr_wq4_cursor import CountingQuery
 from utils.home_feed.projection import stamp, reveal_display
 from utils.encryption import encrypt
 
@@ -170,6 +171,60 @@ def drain(store):
     pytest.fail('bounded preparation failed to finish')
 
 
+def test_compact_projection_and_indexed_home_list_keep_independent_visibility(store, monkeypatch):
+    prefix = 'users/u/conversations/'
+    cases = {
+        'visible': {},
+        'list-only': {'sync_merged_into': 'visible'},
+        'discarded': {'discarded': True, 'home_hidden': True},
+        'hidden': {'home_hidden': True},
+        'recording': {'recording': True},
+        'duplicate': {'dream_duplicate_of': 'visible'},
+        'in-progress': {'status': 'in_progress'},
+    }
+    for cid, fields in cases.items():
+        row = {**conversation(id=cid, discarded=False, has_photos=False), **fields}
+        store.put(prefix + cid, home_visibility_index.stamp(row))
+    drain(store)
+
+    assert store.docs[prefix + 'list-only']['home_visible'] is False
+    assert store.docs[prefix + 'list-only']['home_list_visible'] is True
+    assert store.docs[prefix + 'discarded']['home_visible'] is False
+    assert store.docs[prefix + 'discarded']['home_list_visible'] is False
+
+    # Recompute the list bit when a writer clears one of the source flags.
+    ref = store.collection('users').document('u').collection('conversations').document('discarded')
+    tx = Tx(store)
+    tx.update(ref, home_visibility_index.stamp({'home_hidden': False}, store.docs[ref.path]))
+    tx.commit()
+    assert store.docs[ref.path]['home_visible'] is False
+    assert store.docs[ref.path]['home_list_visible'] is True
+
+    data = [store.docs[prefix + cid] for cid in cases]
+    statuses = ['processing', 'completed']
+    expected = [
+        row['id']
+        for row in sorted(data, key=lambda row: (row['created_at'], row['id']), reverse=True)
+        if row['status'] in statuses
+        and row['discarded'] is False
+        and conversations.is_visible_conversation(row, hide_home=True)
+    ]
+    assert expected == ['visible', 'list-only']
+    monkeypatch.setattr(conversations, 'db', CountingQuery(data))
+    page = {}
+    first = conversations.get_conversations_without_photos(
+        'u', limit=1, statuses=statuses, hide_home=True, indexed_home=True, cursor_page=page
+    )
+    second = conversations.get_conversations_without_photos(
+        'u', limit=1, statuses=statuses, hide_home=True, indexed_home=True, cursor=page['next_cursor']
+    )
+    assert [row['id'] for row in first + second] == expected
+    compact = home_feed.feed('u', firestore_client=store)
+    compact_ids = {item['detail_id'] for item in compact['items']}
+    assert 'visible' in compact_ids
+    assert not {'discarded', 'list-only'} & compact_ids
+
+
 def test_prepare_preserves_legacy_missing_started_at_and_late_import_order(store):
     old = conversation('Old imported recording')
     old['started_at'] = AT - timedelta(days=30)
@@ -188,6 +243,71 @@ def test_prepare_preserves_legacy_missing_started_at_and_late_import_order(store
     assert result['items'][0]['sort_at'] == AT
     assert result['items'][1]['started_at'] == old['started_at']
     assert 'recorded_start' not in store.docs['users/u/conversations/legacy']
+
+
+@pytest.mark.parametrize(
+    ('receipt', 'locked', 'preview', 'title'),
+    [
+        ('done', False, '', 'Recording'),
+        (None, False, '', ''),
+        ('done', True, '', ''),
+        ('done', False, 'Useful notes', 'Discussion notes'),
+    ],
+)
+def test_prepared_feed_labels_only_unlocked_receipt_bearing_ready_recordings(store, receipt, locked, preview, title):
+    row = conversation(is_locked=locked)
+    row['record_projection_revision'] = receipt
+    row['structured'] = {'title': 'Discussion notes', 'overview': preview}
+    store.put('users/u/conversations/c', row)
+    drain(store)
+    cards = home_feed.feed('u', firestore_client=store)['items']
+    assert [card['home_step'] for card in cards] == [home_feed.home_step.READY]
+    assert [card['title'] for card in cards] == [title]
+    assert [card['preview'] for card in cards] == [preview]
+
+
+@pytest.mark.parametrize('title', ['Discussion notes', 'Discussion 7'])
+def test_prepared_feed_preserves_an_explicit_fallback_shaped_user_title(store, title):
+    row = conversation(user_title=title)
+    row['structured'] = {'title': 'Generated headline'}
+    store.put('users/u/conversations/c', row)
+    drain(store)
+    cards = home_feed.feed('u', firestore_client=store)['items']
+    assert [card['home_step'] for card in cards] == [home_feed.home_step.READY]
+    assert [card['title'] for card in cards] == [title]
+    assert [card['preview'] for card in cards] == ['']
+
+
+@pytest.mark.parametrize(
+    'notes',
+    [
+        {'sections': [{'body_markdown': 'Section body'}]},
+        {'action_items': [{'description': 'A follow-up'}]},
+        {'events': [{'title': 'A follow-up'}]},
+    ],
+)
+def test_prepared_feed_preserves_the_headline_when_notes_have_no_preview(store, notes):
+    row = conversation()
+    row['structured'] = {'title': 'Discussion notes', **notes}
+    store.put('users/u/conversations/c', row)
+    drain(store)
+    [card] = home_feed.feed('u', firestore_client=store)['items']
+    assert card['home_step'] == home_feed.home_step.READY
+    assert card['title'] == 'Discussion notes'
+    assert card['preview'] == ''
+
+
+def test_prepared_feed_preserves_a_prior_encrypted_headline_when_note_evidence_is_unknown(store):
+    row = conversation()
+    row['structured'] = {'title': 'Discussion notes'}
+    path = 'users/u/conversations/c'
+    store.put(path, row)
+    drain(store)
+    display = reveal_display('u', store.docs[path]['home_display'])
+    display.pop('notes_pending')
+    store.docs[path]['home_display'] = encrypt(json.dumps(display), 'u')
+    [card] = home_feed.feed('u', firestore_client=store)['items']
+    assert card['title'] == 'Discussion notes'
 
 
 def test_projected_get_never_reads_members_transcripts_or_calls_generation(store, monkeypatch):

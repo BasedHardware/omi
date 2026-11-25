@@ -28,6 +28,7 @@ from types import SimpleNamespace
 from typing import Any, Callable, Mapping
 
 from database import conversations as conversations_db
+from models.finalization_owner import python_owns_finalization
 from database._client import transaction_body
 from database.conversation_terminal_effects import stage_terminal_visibility_refresh
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
@@ -391,16 +392,25 @@ def user_time_zone(client: Any, uid: str) -> str | None:
     return zone if isinstance(zone, str) and zone else None
 
 
-def recover_deferred_processing_failure_txn(transaction: Any, conversation_ref: Any) -> bool:
+def recover_deferred_processing_failure_txn(
+    transaction: Any, conversation_ref: Any, expected_admitted_at: datetime | None = None
+) -> bool:
     """Atomically publish a retryable terminal after deferred enrichment fails."""
     snapshot = conversation_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
         return False
     data = snapshot.to_dict() or {}
+    if not python_owns_finalization(data):
+        return False
     if (
         data.get('status') not in {'processing', 'completed'}
         or data.get('discarded')
+        or data.get('deleted')
         or data.get('deferred') is not False
+    ):
+        return False
+    if expected_admitted_at is not None and (
+        data.get('status') != 'processing' or data.get('processing_admitted_at') != expected_admitted_at
     ):
         return False
     terminal = {**data, 'status': 'completed', 'deferred': True}

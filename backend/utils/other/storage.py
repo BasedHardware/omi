@@ -7,6 +7,9 @@ so deployed code must not assume real bucket semantics
 (backend/utils/other/ARCHITECTURE.md).
 """
 
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
+from config.refactor_modes import default_on
+from utils.other.gcs_read_reuse import ReadMemo
 from utils.observability.sync_phases import sync_phase
 import datetime
 import base64
@@ -62,7 +65,7 @@ from database.redis_db import (
 )
 from database.legal_holds import external_write_fence, destructive_operation_gate
 from utils.other import audio_packs
-from database.account_deletion_operational_holds import delete_owner_bucket_prefix
+from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked, delete_owner_bucket_prefix
 from utils import encryption
 from utils.sync.staged_prefetch import MAX_FILE_BYTES, StagedBytes, staged_prefetch
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
@@ -1187,6 +1190,7 @@ def list_audio_chunks(
     include_archive: bool = True,
     client: Any = None,
     source_metadata: bool = False,
+    raw_memo: ReadMemo | None = None,
 ) -> List[Dict[str, Any]]:
     """
     List conversation chunks; ``include_archive=False`` selects encoded inventory only.
@@ -1215,6 +1219,7 @@ def list_audio_chunks(
         blobs = chain(blobs, derived_blobs)
 
     chunks: List[Dict[str, Any]] = []
+    memo = None if include_raw or require_archive or deadline is not None else raw_memo
     for index, blob in enumerate(blobs):
         if max_count is not None and index >= max_count:
             raise TimeoutError('speaker audio listing budget exhausted')
@@ -1225,7 +1230,7 @@ def list_audio_chunks(
             if source_metadata and hasattr(blob, 'metadata'):
                 entry['metadata'] = blob.metadata or {}
                 entry['metageneration'] = getattr(blob, 'metageneration', None)
-            append_projection_entries(chunks, bucket, blob, uid, entry, deadline, max_count, include_raw)
+            append_projection_entries(chunks, bucket, blob, uid, entry, deadline, max_count, include_raw, memo=memo)
 
     if regional and regional != private_cloud_sync_bucket:
         chunks = list({(item['path'], item.get('raw_offset_samples')): item for item in chunks}.values())
@@ -1242,8 +1247,22 @@ def list_audio_chunks(
         max_count=max_count,
         require_archive=require_archive,
         list_raw=list_packs,
+        source_metadata=source_metadata and default_on('BATCH_SOURCE_VERIFIED_METADATA_REUSE_ENABLED'),
+        memo=raw_memo,
     )
     return finish_audio_listing(chunks, raw_chunks, source_identity)
+
+
+def count_retained_raw_conversation_objects(uid: str, conversation_id: str) -> int:
+    """Count raw object versions under this conversation's three storage prefixes."""
+    bucket_names = {private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()}
+    count = 0
+    for bucket_name in filter(None, bucket_names):
+        bucket = _get_storage_client().bucket(bucket_name)
+        listing_kwargs = {'versions': True} if _uses_real_gcs_bucket(bucket) else {}
+        for prefix in ('chunks', 'audio', 'raw-live'):
+            count += sum(1 for _ in bucket.list_blobs(prefix=f'{prefix}/{uid}/{conversation_id}/', **listing_kwargs))
+    return count
 
 
 def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_into: str | None = None) -> None:
@@ -1254,10 +1273,24 @@ def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_in
             audio_packs.link_conversations(canonical, uid, [conversation_id], merged_into)
 
     bucket_names = {private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()}
+    blocked: dict[tuple[str, str, int], str] = {}
+    unverified = 0
     for bucket_name in filter(None, bucket_names):
         bucket = _get_storage_client().bucket(bucket_name)
-        for prefix in ('chunks', 'audio', 'merged', 'playback', 'raw-live', 'audio-outbox', 'record-wal'):
-            _delete_owner_bucket_prefix(bucket, f'{prefix}/{uid}/{conversation_id}/')
+        for prefix in ('chunks', 'audio', 'merged', 'playback', 'raw-live', 'audio-outbox'):
+            try:
+                _delete_owner_bucket_prefix(bucket, f'{prefix}/{uid}/{conversation_id}/')
+            except StoragePrefixPurgeBlocked as error:
+                blocked.update(error.objects)
+                unverified += error.unverified
+        if not blocked:
+            # Keep the existing fail-fast sweep for original-custody WAL objects.
+            delete_owner_bucket_prefix(
+                bucket,
+                f'record-wal/{uid}/{conversation_id}/',
+                real_gcs=_uses_real_gcs_bucket(bucket),
+                tolerate_object_races=False,
+            )
         if bucket_name == private_cloud_sync_bucket:
             # Original sync files may span conversations; deleting a linked
             # conversation removes the shared original too, so its audio cannot
@@ -1272,8 +1305,11 @@ def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_in
                     if metadata.get('conversation_id') == conversation_id or conversation_id in links:
                         blob.delete()
         invalidate_pack_index(bucket, uid, conversation_id)
+    if blocked:
+        raise StoragePrefixPurgeBlocked(blocked, unverified=unverified)
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def download_and_decode_chunk_blob(
     bucket: Any,
     path: str,
@@ -1282,13 +1318,14 @@ def download_and_decode_chunk_blob(
     *,
     download_kwargs: Optional[Dict[str, Any]] = None,
     on_failure: Optional[Callable[[str], None]] = None,
+    raw_memo: ReadMemo | None = None,
 ) -> bytes | None:
     """Download one stored chunk blob (single or batch) and decode/decrypt it by extension to PCM16."""
     if path.startswith(f'raw-live/{uid}/'):
         if not audio_archive.admitted(uid, 'READ'):
             return None
         try:
-            return read_pack(bucket, path, uid, download_kwargs, sample_rate)
+            return read_pack(bucket, path, uid, download_kwargs, sample_rate, memo=raw_memo)
         except Exception:
             if on_failure:
                 on_failure('decode_failed')
@@ -1304,6 +1341,7 @@ def download_and_decode_chunk_blob(
                     uid,
                     blob.metadata,
                     sample_rate,
+                    memo=raw_memo,
                 )
                 if has_frame_receipt(blob)
                 else pcm_for_span(
@@ -1312,6 +1350,7 @@ def download_and_decode_chunk_blob(
                     path.split('/')[2],
                     span,
                     expected_sha256=(blob.metadata or {}).get('pcm_sha256'),
+                    memo=raw_memo,
                 )
             )
             if raw_pcm is not None:
@@ -1370,6 +1409,7 @@ def download_audio_chunk_pcm(uid: str, path: str, sample_rate: int = 16000) -> b
     return download_and_decode_chunk_blob(bucket, path, uid, sample_rate, download_kwargs={'timeout': 5, 'retry': None})
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def download_audio_chunks_and_merge(
     uid: str,
     conversation_id: str,
@@ -1380,6 +1420,7 @@ def download_audio_chunks_and_merge(
     listed_chunks: Optional[List[Dict[str, Any]]] = None,
     chunk_loader: Optional[Callable[[str], bytes | None]] = None,
     strict_sources: bool = False,
+    raw_memo: ReadMemo | None = None,
 ) -> bytes:
     """Merge selected timestamps with main's format priority and gap semantics.
 
@@ -1389,7 +1430,10 @@ def download_audio_chunks_and_merge(
 
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
 
-    actual_chunks = list_audio_chunks(uid, conversation_id) if listed_chunks is None else listed_chunks
+    raw_memo = ReadMemo() if raw_memo is None and chunk_loader is None else raw_memo
+    actual_chunks = (
+        list_audio_chunks(uid, conversation_id, raw_memo=raw_memo) if listed_chunks is None else listed_chunks
+    )
     if strict_sources and (
         listed_chunks is None or chunk_loader is not None or any(not c.get('generation') for c in actual_chunks)
     ):
@@ -1444,6 +1488,7 @@ def download_audio_chunks_and_merge(
             uid,
             sample_rate,
             download_kwargs={'if_generation_match': entry['generation']} if strict_sources else None,
+            raw_memo=raw_memo,
         )
 
     def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:
@@ -1646,6 +1691,7 @@ def get_cached_merged_audio_path(uid: str, conversation_id: str, audio_file_id: 
 
 
 @coalesce_rebuild
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_or_create_merged_audio(
     uid: str,
     conversation_id: str,
@@ -1745,6 +1791,7 @@ def get_or_create_merged_audio(
     return wav_data, False
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_merged_audio_signed_url(uid: str, conversation_id: str, audio_file_id: str) -> str | None:
     """
     Get a signed URL for cached merged audio if it exists and is valid.
@@ -1810,6 +1857,7 @@ def _speaker_embedding_cache_blob(uid: str, conversation_id: str):
     return bucket.blob(f'audio/{uid}/{conversation_id}/{SPEAKER_EMBEDDING_CACHE_NAME}')
 
 
+@object_get_reader(Reader.SPEAKER_EVIDENCE)
 def download_speaker_embedding_cache(uid: str, conversation_id: str) -> Optional[bytes]:
     try:
         encrypted = _speaker_embedding_cache_blob(uid, conversation_id).download_as_bytes()
@@ -1836,6 +1884,7 @@ def _owner_evidence_cache_blob(uid: str, conversation_id: str):
     return bucket.blob(f'audio/{uid}/{conversation_id}/{OWNER_EVIDENCE_CACHE_NAME}')
 
 
+@object_get_reader(Reader.SPEAKER_EVIDENCE)
 def download_owner_evidence_cache(uid: str, conversation_id: str) -> Optional[bytes]:
     try:
         encrypted = _owner_evidence_cache_blob(uid, conversation_id).download_as_bytes()
@@ -1857,6 +1906,7 @@ def _owner_prompt_embedding_cache_blob(uid: str, conversation_id: str):
     return bucket.blob(f'audio/{uid}/{conversation_id}/owner-prompt-embeddings.v1.enc')
 
 
+@object_get_reader(Reader.SPEAKER_EVIDENCE)
 def download_owner_prompt_embedding_cache(uid: str, conversation_id: str) -> Optional[bytes]:
     try:
         encrypted = _owner_prompt_embedding_cache_blob(uid, conversation_id).download_as_bytes()
@@ -1893,6 +1943,7 @@ def _playback_artifact_blob(uid: str, conversation_id: str, audio_file_id: str):
     return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{audio_file_id}.mp3')
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_playback_artifact_signed_url(uid: str, conversation_id: str, audio_file_id: str):
     blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
     if not blob.exists():
@@ -1900,6 +1951,7 @@ def get_playback_artifact_signed_url(uid: str, conversation_id: str, audio_file_
     return _get_signed_url(blob, 60)
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def download_playback_artifact(uid: str, conversation_id: str, audio_file_id: str):
     blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
     try:
@@ -1908,6 +1960,7 @@ def download_playback_artifact(uid: str, conversation_id: str, audio_file_id: st
         return None
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def upload_playback_artifact(uid: str, conversation_id: str, audio_file_id: str, mp3_data: bytes) -> None:
     blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
     with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
@@ -1931,10 +1984,12 @@ def mark_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str
         blob.upload_from_string(reason, content_type='text/plain')
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def is_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str) -> bool:
     return _playback_unavailable_blob(uid, conversation_id, audio_file_id).exists()
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_playback_failure_retry_epoch(
     uid: str, conversation_id: str, audio_file_id: str | None = None, *, fingerprint: str | None = None
 ) -> str | None:
@@ -2059,6 +2114,7 @@ def _conversation_playback_blob(uid: str, conversation_id: str, fingerprint: str
     return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{name}.mp3')
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_conversation_playback_signed_url(uid: str, conversation_id: str, fingerprint: str | None = None):
     blob = _conversation_playback_blob(uid, conversation_id, fingerprint)
     if not blob.exists():
@@ -2066,6 +2122,7 @@ def get_conversation_playback_signed_url(uid: str, conversation_id: str, fingerp
     return _get_signed_url(blob, 60)
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def upload_conversation_playback_artifact(
     uid: str, conversation_id: str, mp3_data: bytes, fingerprint: str | None = None, *, spans=None
 ) -> None:
@@ -2074,6 +2131,7 @@ def upload_conversation_playback_artifact(
         write_once(blob, mp3_data, spans=spans)
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_conversation_playback_manifest(uid: str, conversation_id: str, fingerprint: str):
     blob = _conversation_playback_blob(uid, conversation_id, fingerprint)
     with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
@@ -2093,6 +2151,7 @@ def mark_conversation_playback_unavailable(uid: str, conversation_id: str, finge
         blob.upload_from_string(f'{fingerprint}:{reason}', content_type='text/plain')
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def get_conversation_playback_unavailable_fingerprint(uid: str, conversation_id: str) -> Optional[str]:
     blob = _conversation_playback_unavailable_blob(uid, conversation_id)
     try:
@@ -2132,6 +2191,7 @@ def enqueue_conversation_artifact_build(
         logger.error(f'audio_merge: conversation enqueue failed conv={conversation_id}: {e}')
 
 
+@object_get_reader(Reader.PLAYBACK_MEDIA)
 def download_legacy_merged_wav(uid: str, conversation_id: str, audio_file_id: str):
     """Download a legacy merged WAV cache blob directly — never merges.
 
@@ -2580,6 +2640,7 @@ def archive_capture_bytes(
     return path
 
 
+@object_get_reader(Reader.SYNC_RECOVERY)
 def archive_record_wal_bytes(uid, conversation_id, raw, entry, protection):
     """Create-only original plus a verified generation-bound custody receipt.
 

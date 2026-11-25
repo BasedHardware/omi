@@ -11,6 +11,16 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/api/conversations.dart' show ConversationByIdResult;
+import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
+import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_preview_telemetry.dart';
+import 'package:omi/widgets/transcript.dart';
+import '../support/live_preview_fakes.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -42,7 +52,11 @@ Future<(ConversationDetailProvider, AppLocalizations)> _pumpPage(
   WidgetTester tester,
   ServerConversation initial, {
   ServerConversation? fetched,
-  ConversationTab tab = ConversationTab.summary,
+  ConversationTab? tab = ConversationTab.summary,
+  CaptureProvider? capture,
+  ConversationsV3Provider? v3,
+  bool firstFrameOnly = false,
+  Future<ConversationByIdResult> Function(String)? fetchResult,
 }) async {
   final conversations = ConversationProvider(isSignedIn: () => false)
     ..conversations = [initial]
@@ -54,6 +68,7 @@ Future<(ConversationDetailProvider, AppLocalizations)> _pumpPage(
   final detail = ConversationDetailProvider(
     reprocess: heldWireReprocess(409, heldReprocess409Body),
     fetchConversation: (_) async => fetched ?? initial,
+    fetchConversationResult: fetchResult,
   )..setProviders(apps, conversations);
   addTearDown(() {
     detail.dispose();
@@ -64,11 +79,13 @@ Future<(ConversationDetailProvider, AppLocalizations)> _pumpPage(
       key: _boundary,
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: buildOmiTheme(),
+        theme: buildOmiTheme(brightness: OmiColors.active == OmiPalette.light ? Brightness.light : Brightness.dark),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: MultiProvider(
           providers: [
+            if (capture != null) ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+            if (v3 != null) ChangeNotifierProvider<ConversationsV3Provider>.value(value: v3),
             ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
             ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
             ChangeNotifierProvider<AppProvider>.value(value: apps),
@@ -87,8 +104,7 @@ Future<(ConversationDetailProvider, AppLocalizations)> _pumpPage(
           child: ConversationDetailPage(conversation: initial, initialTab: tab),
         ),
       )));
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 400));
+  if (!firstFrameOnly) await _settle(tester);
   final l10n = AppLocalizations.of(tester.element(find.byType(ConversationDetailPage)));
   return (detail, l10n);
 }
@@ -153,6 +169,40 @@ Future<void> _drain(WidgetTester tester) async {
 /// Title text drawn at rest (the editable field underneath also holds the stored title).
 Finder _shownTitle(String text) => find.byWidgetPredicate((w) => w is Text && w.data == text);
 
+class _LiveCapture extends ChangeNotifier implements CaptureProvider {
+  _LiveCapture(this.livePreview, this.recordingId, this.ownerUid);
+  @override
+  final LivePreviewController livePreview;
+  String? recordingId;
+  void updateRecordingProof(String? id) {
+    recordingId = id;
+    notifyListeners();
+  }
+
+  final String ownerUid;
+  @override
+  List<TranscriptSegment> get segments => const [];
+  @override
+  Iterable<String> get locallyReceivedSegmentIds => const [];
+  @override
+  bool get isPhoneMicBatchRecording => false;
+  @override
+  String? get liveCaptureSource => 'omi';
+  @override
+  String? get activeRecordingId => null;
+  @override
+  bool get pendantCaptureVerified => true;
+  @override
+  bool get localPreviewAdmitted => true;
+  @override
+  String? get verifiedLiveServerRecordingId => SharedPreferencesUtil().uid == ownerUid ? recordingId : null;
+  @override
+  bool hasClosedServerRecording(String recordingId) => false;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   setUpAll(initHeldWireEnv);
   setUp(() async {
@@ -175,6 +225,130 @@ void main() {
     expect(find.text(l10n.errorProcessingConversation), findsNothing);
     // The header no longer says "Couldn't transcribe" above a notice that the summary is coming.
     expect(_shownTitle(TranscriptionPendingConversations.serverHoldTitle), findsNothing);
+  }
+
+  test('listen session requires the exact client recording identifier', () {
+    final payload = {'type': 'conversation_session', 'conversation_id': 'raw-1', 'status': 'in_progress'};
+    expect(MessageEvent.fromJson(payload), isA<UnknownEvent>());
+    final event = MessageEvent.fromJson({...payload, 'recording_session_id': 'capture-1'}) as ConversationSessionEvent;
+    expect(event.clientSessionId, 'capture-1');
+    expect(event.recordingId, 'raw-1');
+  });
+
+  for (final scenario in [
+    'verified',
+    'other recording',
+    'other account',
+    'locked',
+    'no lineage',
+    'denied',
+    'offline'
+  ]) {
+    testWidgets('LIVE route first frame and hydration with $scenario', (tester) async {
+      SharedPreferencesUtil().uid = 'account';
+      SummaryGenerationV2Gate.debugOverride = false;
+      final origin = DateTime.utc(2026, 11, 18);
+      final engine = FakeLivePreviewEngine();
+      final preview = LivePreviewController(
+        engine: engine,
+        telemetry: LivePreviewTelemetry(emit: (_) {}),
+        platform: LivePreviewPlatform.ios,
+        osMajor: 26,
+      )..admit(language: 'en');
+      final capture = _LiveCapture(preview, scenario == 'other recording' ? 'raw-other' : 'raw-1', 'account');
+      final v3 = ConversationsV3Provider(
+        fetchLive: () async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+        cached: 'account:1',
+        uid: () => 'account',
+      );
+      addTearDown(preview.dispose);
+      addTearDown(capture.dispose);
+      addTearDown(v3.dispose);
+      await tester.pump();
+      engine.emit('earlier', 'Earlier window must stay private', true,
+          startedAt: origin.subtract(const Duration(seconds: 5)), endedAt: origin);
+      engine.emit('verified', 'The agenda is ready for review.', true,
+          startedAt: origin.add(const Duration(seconds: 1)), endedAt: origin.add(const Duration(seconds: 3)));
+      ServerConversation row({bool withLines = false}) => ServerConversation.fromJson({
+            ...heldDetail().toJson(),
+            'status': 'in_progress',
+            'started_at': origin.toIso8601String(),
+            'tile_state': 'live',
+            'v3_derived': true,
+            'is_locked': scenario == 'locked',
+            if (scenario != 'no lineage') 'v3_recording_ids': ['raw-1'],
+            'transcript_segments': [
+              if (withLines)
+                for (var index = 0; index < 42; index++)
+                  {
+                    'id': 'speech-$index',
+                    'text': 'Final line $index, a separate discussion point.',
+                    'start': 4 + index * 2,
+                    'end': 5 + index * 2,
+                    'speaker': index.isEven ? 'SPEAKER_00' : 'SPEAKER_01',
+                    'is_user': index.isEven,
+                    'translations': [],
+                  },
+            ],
+          });
+      if (scenario == 'other account') SharedPreferencesUtil().uid = 'another-account';
+      if (scenario == 'verified' && _evidence.isNotEmpty) {
+        await tester.runAsync(_loadEvidenceFonts);
+        final previousPalette = OmiColors.active;
+        OmiColors.active = OmiPalette.light;
+        addTearDown(() => OmiColors.active = previousPalette);
+        tester.view.physicalSize = const Size(393 * 3, 852 * 3);
+        tester.view.devicePixelRatio = 3;
+        addTearDown(tester.view.reset);
+      }
+      final (detail, _) = await _pumpPage(
+        tester,
+        row(),
+        capture: capture,
+        v3: v3,
+        fetched: row(),
+        fetchResult: (_) async => switch (scenario) {
+          'denied' => (item: null, ok: true, inaccessible: true),
+          'offline' => (item: null, ok: false, inaccessible: false),
+          _ => (item: row(), ok: true, inaccessible: false),
+        },
+        tab: null,
+        firstFrameOnly: true,
+      );
+      final text = find.text('The agenda is ready for review.');
+      expect(text, ['verified', 'denied', 'offline'].contains(scenario) ? findsOneWidget : findsNothing);
+      expect(find.text('Earlier window must stay private'), findsNothing);
+      if (scenario == 'verified') await _captureEvidence(tester, 'live-transcript-first-frame');
+      await _settle(tester);
+      expect(text, ['verified', 'offline'].contains(scenario) ? findsOneWidget : findsNothing);
+      if (scenario == 'verified') {
+        await _captureEvidence(tester, 'live-transcript-hydrated');
+        capture.updateRecordingProof('another-window');
+        await _settle(tester);
+        expect(text, findsNothing);
+        capture.updateRecordingProof('raw-1');
+        await _settle(tester);
+        expect(text, findsOneWidget);
+        detail.setCachedConversation(row(withLines: true));
+        await _settle(tester);
+        final list = find.descendant(of: find.byType(TranscriptWidget), matching: find.byType(Scrollable)).first;
+        await tester.drag(list, const Offset(0, -500));
+        await _settle(tester);
+        final position = tester.state<ScrollableState>(list).position;
+        final before = position.pixels;
+        expect(before, greaterThan(100));
+        detail.setCachedConversation(row(withLines: true));
+        await _settle(tester);
+        expect(tester.state<ScrollableState>(list).position.pixels, closeTo(before, 2));
+        detail.setCachedConversation(row());
+        SharedPreferencesUtil().uid = 'another-account';
+        capture.updateRecordingProof('raw-1');
+        await _settle(tester);
+        expect(text, findsNothing);
+      }
+      preview.endCapture();
+      await _drain(tester);
+    });
   }
 
   testWidgets('legacy, opened from the Home row: after the 409 the tab shows the notice and no action', (tester) async {

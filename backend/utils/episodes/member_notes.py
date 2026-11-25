@@ -32,6 +32,7 @@ EXPLICIT = frozenset(
         ProcessingTrigger.CLIENT_FINALIZE,
         ProcessingTrigger.BACKLOG_CHOICE,
         ProcessingTrigger.MERGE,
+        ProcessingTrigger.HISTORICAL_OPEN,
     }
 )
 

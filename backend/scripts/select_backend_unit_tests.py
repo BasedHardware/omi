@@ -17,6 +17,7 @@ from pathlib import PurePosixPath
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = BACKEND_DIR.parent
 WORKFLOW_CONTRACTS_PATH = BACKEND_DIR / 'testing' / 'workflow_contracts.json'
+RUNTIME_IMAGES_PATH = BACKEND_DIR / 'runtime_images.json'
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
@@ -199,6 +200,9 @@ CENSUS_GUARD_PREFIXES = (
     'backend/database/batch_pipeline_',
     'backend/utils/observability/reasons.py',
     'backend/config/batch_census.py',
+    'backend/config/batch_census_selectors.py',
+    'backend/database/jobstore/',
+    'backend/tests/support/batch_census_sql_selectors.py',
     'backend/scripts/batch_pipeline_poll_state_census.py',
 )
 # Census exporter (W3 / SCA-2119): a change to the sampler, the gauge families or
@@ -278,6 +282,8 @@ FIRESTORE_INDEX_GUARD_CONTROL_PATHS = frozenset(
         'backend/tests/unit/conftest.py',
         'backend/tests/unit/memory_import_isolation.py',
         'backend/testing/hermetic_network.py',
+        'backend/config/batch_census_selectors.py',
+        'backend/tests/support/batch_census_selector_guard.py',
     }
 )
 
@@ -306,6 +312,28 @@ LIFECYCLE_SOURCE_REGRESSION_TESTS = {
 }
 
 AREA_TESTS = (
+    # Isolated-router tests stub google.cloud.firestore_v1 as a non-package and load routers.conversations
+    # (or process_conversation) fresh. A module-level import added to these four modules can break them
+    # without the import graph selecting them (main red after #25734, fixed by #25739). Other modules on
+    # that chain are not mapped here.
+    (
+        (
+            'backend/database/conversations_v3.py',
+            'backend/database/conversations_v3_processing.py',
+            'backend/database/home_feed_writer.py',
+            'backend/database/home_feed_fields.py',
+        ),
+        (),
+        (
+            'tests/unit/test_conversations_date_range_validation.py',
+            'tests/unit/test_conversations_merge_duplicate_guard.py',
+            'tests/unit/test_dev_api_lock_bypass.py',
+            'tests/unit/test_lock_bypass_fixes.py',
+            'tests/unit/test_recovery_rule_skip.py',
+            'tests/unit/test_client_processing_finalize.py',
+            'tests/unit/test_process_conversation_duplicate_capture.py',
+        ),
+    ),
     (
         ('backend/scripts/jobstore_operator/',),
         (),
@@ -330,6 +358,8 @@ AREA_TESTS = (
             'tests/unit/test_batch_pipeline_chart.py',
             'tests/unit/test_config_train.py',
             'tests/unit/test_runtime_env_sources.py',
+            # Renders the listen chart for the seal overlap switch; it went stale unselected after #25660.
+            'tests/unit/test_record_seal_cluster_repair_deploy.py',
         ),
     ),
     (
@@ -362,6 +392,14 @@ AREA_TESTS = (
             'tests/unit/test_incluster_guards.py',
             'tests/unit/test_gpu_fleet_retirement.py',
             'tests/unit/test_streaming_gpu_teardown.py',
+        ),
+    ),
+    (
+        ('backend/charts/monitoring/prometheus-adapter/prod_omi_prometheus_adapter.yaml',),
+        (),
+        (
+            'tests/unit/test_batch_pipeline_hpa_retune_replay.py',
+            'tests/unit/test_batch_pipeline_hpa_capacity_replay.py',
         ),
     ),
     (('backend/config/flag_budget.json',), (), FLAG_BUDGET_TESTS),
@@ -493,6 +531,7 @@ AREA_TESTS = (
             'tests/unit/test_monitoring_*.py',
             'tests/unit/test_firestore_unattributed_reads_alert.py',
             'tests/unit/test_timeliness_metrics_are_scraped.py',
+            'tests/unit/test_projection_finish_guard_metrics_are_scraped.py',
             'tests/unit/test_serving_podmonitoring_chart.py',
             'tests/unit/test_firestore_attribution_charts.py',
             'tests/unit/test_backend_secrets_chart.py',
@@ -781,6 +820,33 @@ def workflow_contract_tests_for_path(path: str, all_tests: List[str]) -> Set[str
     return selected
 
 
+def deployment_workflow_contract_errors(
+    registry: dict[str, Any], contracts: list[dict[str, Any]], all_tests: list[str]
+) -> list[str]:
+    """Require explicit, executable selector coverage of the deployment registry.
+
+    #25261 changed a deploy workflow without selecting its contract test;
+    #25272 repaired that instance. Wildcard contracts cannot cover new entries.
+    """
+    workflows = {path for image in registry['images'] for path in image.get('deployment_workflows', [])} | {
+        path
+        for service in registry['services'].values()
+        for path in service.get('current_deploy', [])
+        if path.startswith('.github/workflows/')
+    }
+    discovered = set(all_tests)
+    errors = []
+    for path in sorted(workflows):
+        exact_contracts = [contract for contract in contracts if path in (contract.get('sources') or [])]
+        if not exact_contracts:
+            errors.append(f'{path}: registered deployment workflow has no exact-path workflow contract')
+        elif not any(discovered.intersection(contract.get('tests') or []) for contract in exact_contracts):
+            errors.append(f'{path}: exact-path workflow contracts select no existing discovered backend tests')
+        elif not (REPO_DIR / path).is_file():
+            errors.append(f'{path}: registered deployment workflow does not exist; update registry and exact mapping')
+    return errors
+
+
 def workflow_contract_matches_path(path: str) -> bool:
     for workflow in load_workflow_contracts():
         sources: Tuple[str, ...] = tuple(workflow.get('sources') or ())
@@ -823,6 +889,7 @@ def tests_for_changed_paths(
             test
             for test in (
                 'tests/unit/test_timeliness_metrics_are_scraped.py',
+                'tests/unit/test_projection_finish_guard_metrics_are_scraped.py',
                 'tests/unit/test_enrichment_llm_cost_metrics_are_scraped.py',
             )
             if test in all_tests
@@ -838,7 +905,14 @@ def tests_for_changed_paths(
     if any(path.startswith(('backend/database/', 'backend/utils/')) and path.endswith('.py') for path in changed_paths):
         selected.update(test for test in LIFECYCLE_INVARIANT_TESTS if test in all_tests)
     if any(path.startswith('backend/') and path.endswith('.py') for path in changed_paths):
-        selected.update(test for test in ('tests/unit/test_lifecycle_state_table_writers.py',) if test in all_tests)
+        selected.update(
+            test
+            for test in (
+                'tests/unit/test_lifecycle_state_table_writers.py',
+                'tests/unit/test_batch_account_authority_writers.py',
+            )
+            if test in all_tests
+        )
     for path in changed_paths:
         selected.update(test for test in LIFECYCLE_SOURCE_REGRESSION_TESTS.get(path, ()) if test in all_tests)
     if any(is_sync_legacy_ratchet_path(path) for path in changed_paths):
@@ -961,13 +1035,24 @@ def tests_for_changed_paths(
 def focused_tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> list[str]:
     """Keep known affected contracts even when another path requires broad CI.
 
-    Contracts precede directly changed tests so a bounded local run cannot lose
-    them to a large test-only diff. Each group is stable and deduplicated. This
-    is only pre-push feedback; the ordinary selector retains full-suite fallbacks.
+    Prioritized regressions come first, then other affected contracts, then
+    directly changed tests. Each group is stable and deduplicated. The ordinary
+    CI selector retains its full-suite fallbacks.
     """
     selected, _ = tests_for_changed_paths(changed_paths, all_tests, allow_full_suite=False)
-    changed_tests = {normalize_changed_path(path).removeprefix('backend/') for path in changed_paths}
-    return sorted(set(selected) - changed_tests) + sorted(set(selected) & changed_tests)
+    normalized_paths = {normalize_changed_path(path) for path in changed_paths}
+    changed_tests = {path.removeprefix('backend/') for path in normalized_paths}
+    priority_tests: set[str] = set()
+    if 'backend/utils/other/list_budget.py' in normalized_paths:
+        # CI finds these transitively. Keep them within the pre-push cap even
+        # when the listing change also selects many other affected contracts.
+        priority_tests = {
+            'tests/unit/test_pending_bridge_read_budget.py',
+            'tests/unit/test_retired_list_projection.py',
+        }.intersection(all_tests)
+
+    remaining = set(selected) - priority_tests
+    return sorted(priority_tests) + sorted(remaining - changed_tests) + sorted(remaining & changed_tests)
 
 
 def rotation_slice(test: str, total: int) -> int:
@@ -998,6 +1083,7 @@ def main() -> None:
     mode.add_argument('--all', action='store_true', help='print every backend unit test file')
     mode.add_argument('--changed-files', type=Path, help='file containing repo-relative changed paths')
     mode.add_argument('--from-test-list', type=Path, help='file containing backend-relative test paths')
+    mode.add_argument('--check-deployment-contracts', action='store_true', help='validate deployment selector coverage')
     parser.add_argument('--output', type=Path, help='write selected tests to this file instead of stdout')
     parser.add_argument('--reason-output', type=Path, help='write the selection reason to this file')
     parser.add_argument(
@@ -1026,6 +1112,14 @@ def main() -> None:
             parser.error('--rotation needs N >= 1 and 0 <= K < N')
 
     all_tests = discover_all_tests()
+    errors = deployment_workflow_contract_errors(
+        json.loads(RUNTIME_IMAGES_PATH.read_text(encoding='utf-8')), load_workflow_contracts(), all_tests
+    )
+    if errors:
+        raise SystemExit('\n'.join(errors))
+    if args.check_deployment_contracts:
+        print('Deployment workflow selector contracts passed.')
+        return
     reason = 'full backend unit suite'
     if args.all:
         selected = discover_unit_tests()

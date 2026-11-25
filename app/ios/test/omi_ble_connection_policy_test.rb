@@ -7,11 +7,28 @@ class OmiBleConnectionPolicyTest < Minitest::Test
   IOS_ROOT = File.expand_path('..', __dir__)
   POLICY_SOURCE = File.join(IOS_ROOT, 'Runner', 'Ble', 'OmiBleConnectionPolicy.swift')
 
+  def test_native_launch_registers_the_restorable_central_before_flutter_scene_setup
+    delegate = File.read(File.join(IOS_ROOT, 'Runner/AppDelegate.swift'))
+    launch = delegate[/didFinishLaunchingWithOptions launchOptions:.*?^  }/m]
+    refute_nil launch
+    assert_match(
+      /if OmiBluetoothLaunchDiagnostics\.enabled \{\s+let restoreIDs = [^\n]+\s+if restoreIDs\.contains\(OmiBleManager\.restoreIdentifier\) \|\|\s+!OmiSavedReconnectIntent\(\)\.saved\.isEmpty \{\s+_ = OmiBleManager\.shared\s+\}\s+\}/,
+      launch,
+    )
+    assert_operator launch.index('_ = OmiBleManager.shared'), :<, launch.index('super.application(')
+
+    manager = File.read(File.join(IOS_ROOT, 'Runner/Ble/OmiBleManager.swift'))
+    assert_includes manager, 'CBCentralManagerOptionRestoreIdentifierKey: OmiBleManager.restoreIdentifier'
+    assert_match(/willRestoreState dict:.*?record\("restore_launch"\)/m, manager)
+  end
+
   def test_saved_reconnect_manager_callbacks_with_suspended_timers
     manager = File.read(File.join(IOS_ROOT, 'Runner/Ble/OmiBleManager.swift'))
     signatures = [
       'private func hasEverConnected(', 'private func scheduleSavedRetry(', 'private func setupRetryRemaining(',
-      'private func issueConnect(', 'private func reconcileSavedReconnect(',
+      'private func canConnect(', 'private func issueConnect(', 'private func reconcileSavedReconnect(',
+      'private func cancelConnectionWithoutCapture(', 'func centralManagerDidUpdateState(',
+      'func centralManager(_ central: CBCentralManager, willRestoreState ',
       'private func runSavedScanWindow(', 'private func endSavedScan(',
       'private func updateReconnectScan(', 'private func reportDiscoveryFailure(',
       'private func recoverCaptureConnection(', 'func disconnectPeripheral(',
@@ -28,12 +45,25 @@ class OmiBleConnectionPolicyTest < Minitest::Test
     # Replace only radio/scheduler boundaries, preserving production control flow.
     methods = methods.gsub('private func', 'func')
       .gsub(/\bCBCentralManager\b/, 'TestCentral').gsub(/\bCBPeripheral\b/, 'TestPeripheral')
+      .gsub('UIApplication.shared', 'TestApplication.shared')
+      .gsub('canDrainAfterRelaunch(uuid)', 'canDrainAfterRelaunch(uuid, defaults: reconnectDefaults)')
       .gsub('DispatchWorkItem', 'TestWorkItem')
       .gsub('DispatchQueue.main.asyncAfter', 'self.queue.asyncAfter')
       .gsub('ProcessInfo.processInfo.systemUptime', 'self.queue.now')
       .gsub('.now()', 'self.queue.now').gsub('.milliseconds(200)', '0.2')
     template = File.read(File.join(__dir__, 'omi_saved_reconnect_manager_test.swift'))
     harness = template.sub('    // Production methods are inserted here by the Ruby runner.', methods)
+    drain = File.read(File.join(IOS_ROOT, 'Runner/Limitless/LimitlessFlashDrainEngine.swift'))
+    drain_policy = [
+      drain[/^    private static let limitlessServiceUuid = .*$/],
+      drain[/^    private static let limitlessRxCharUuid = .*$/],
+      drain[/^    private struct Config \{.*?^    \}/m],
+      drain[/^    func canDrainAfterRelaunch\(.*?^    \}/m],
+      drain[/^    private func loadConfig\(.*?^    \}/m],
+    ]
+    refute_includes drain_policy, nil
+    harness = harness.sub('    // Production flash admission is inserted here by the Ruby runner.', drain_policy.join("\n"))
+    assert_match(/didConnect peripheral: CBPeripheral\).*?guard canConnect\(uuid\), !headlessRetiringLinks\.contains\(uuid\) else \{\s+cancelConnectionWithoutCapture.*?discoverServices\(/m, manager)
     Dir.mktmpdir('omi-reconnect-manager') do |directory|
       source = File.join(directory, 'harness.swift')
       binary = File.join(directory, 'test')

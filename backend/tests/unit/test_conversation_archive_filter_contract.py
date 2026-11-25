@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+from utils.other import request_deadline as request_deadline_real
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
@@ -234,6 +235,8 @@ def conversations_db():
         # The write-only restore-obligation lookup imports the real stage
         # helper; load its env-loader dependency before closing utils paths.
         "utils.sync.stage": stage,
+        # The archive read contract does not use the V3 repair ledger.
+        "database.conversations_v3_backfill_runs": ModuleType("database.conversations_v3_backfill_runs"),
         "database.speaker_assignment_effects": AutoMockModule("database.speaker_assignment_effects"),
         # Archive queries never invoke the separate speaker publication/revocation IO seam.
         "database.speaker_auto_enroll": ModuleType("database.speaker_auto_enroll"),
@@ -274,6 +277,7 @@ def conversations_db():
         "utils.other.hume": AutoMockModule("utils.other.hume"),
         "utils.other.list_budget": list_budget_real,
         "utils.other.portability_read": portability_read_real,
+        "utils.other.request_deadline": request_deadline_real,
         "utils.other.storage": AutoMockModule("utils.other.storage"),
     }
 

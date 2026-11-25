@@ -21,7 +21,7 @@ This is the best way to validate backend changes end-to-end on this VM (real rou
 
 ## Unit tests
 
-`bash test.sh` runs each unit-test file in its **own pytest process**, several at a time (`BACKEND_PYTEST_WORKERS`, defaulting to one per CPU). A failing file does not stop the run — the script collects each file's status, reports **all** failing files at the end, and prints a `BACKEND_UNIT_TEST_FILE_LIST=... bash test.sh` command to re-run just those. `BACKEND_PYTEST_FILE_ISOLATION=0` switches to a single pytest invocation, still xdist-parallel unless you also set `BACKEND_PYTEST_XDIST=0`.
+`bash test.sh tests/unit/test_x.py` runs just the files you name; bare `bash test.sh` runs CI's PR selection for this branch (`--changed`), and `--all` is the full suite. It runs each unit-test file in its **own pytest process**, several at a time (`BACKEND_PYTEST_WORKERS`; `auto` is one per CPU in CI and half the CPUs, 2 to 8, elsewhere). A failing file does not stop the run — the script collects each file's status, reports **all** failing files at the end, and prints a `BACKEND_UNIT_TEST_FILE_LIST=... bash test.sh` command to re-run just those. `BACKEND_PYTEST_FILE_ISOLATION=0` switches to a single pytest invocation, still xdist-parallel unless you also set `BACKEND_PYTEST_XDIST=0`.
 
 Do **not** run the whole `tests/unit` dir in one pytest process — many files mutate `sys.modules` at import time, so cross-file contamination causes mass false failures. The per-file isolation is deliberate containment, not a workaround; `backend/docs/test_isolation.md` is the authority on why, carries the current count, and tracks the migration toward single-process safety.
 

@@ -290,6 +290,68 @@ def test_stale_alias_envelope_requires_the_exact_legacy_fallback_witness(defect)
     assert not source_reader_marked({'source_reuse_version': 1}, job)
 
 
+@pytest.mark.parametrize(
+    ('section', 'defect'),
+    [
+        ('job', {'source_alias_of': 'canonical'}),
+        ('job', {'source_alias': {'segment_id': 'canonical'}}),
+        ('job', {'protocol_version': 3}),
+        ('job', {'requires_compute_admission': True}),
+        ('job', {'result': {'segment_id': 'different'}}),
+        ('job', {REQUIRED: {'source_alias_version': 1, 'source_reuse_version': 1, 'future_version': 1}}),
+        ('job', {REQUIRED: {'source_alias_version': 2, 'source_reuse_version': 1}}),
+        ('job', {REQUIRED: {'source_alias_version': True, 'source_reuse_version': 1}}),
+        ('fallback', {'source_segment_id': 'unit'}),
+        ('slot', {'owner_key': 'other'}),
+        ('slot', {'owner_id': 'other'}),
+        ('slot', {'capture_at': 20}),
+        ('slot', {'privacy_generation': 1}),
+        ('slot', {'privacy_generation': False}),
+        ('position', {}),
+        ('slot', {'projection_state': 'erased'}),
+        ('slot', {'projection': {'disposition': 'visible'}}),
+        ('slot', {'result': {'segment_id': 'unit', 'result_uri': 'gs://synthetic/fresh'}}),
+    ],
+)
+def test_historical_dual_alias_envelope_requires_bound_dormant_slot(section, defect):
+    position = {
+        'segment_id': 'unit',
+        'owner_id': 'synthetic-owner',
+        'owner_key': 'synthetic-owner-key',
+        'capture_at': 10,
+        'privacy_generation': 0,
+    }
+    slot = {
+        **position,
+        'projection_state': 'pending',
+        'previous_segment_id': None,
+        'result': {'segment_id': 'unit', 'result_uri': 'gs://synthetic/old'},
+    }
+    fallback = {'source_segment_id': 'canonical', 'log_slot': slot}
+    job = {
+        **position,
+        'protocol_version': 2,
+        'source_reuse_key': 'synthetic',
+        'source_reuse_version': 1,
+        'requires_compute_admission': False,
+        'stt_route': {'stt_route': 'provider'},
+        'result': {'segment_id': 'unit', 'result_uri': 'gs://synthetic/fresh'},
+        REQUIRED: {'source_alias_version': 1, 'source_reuse_version': 1},
+        'source_alias_fallback': fallback,
+    }
+    repaired_markers = {'source_reuse_version': 1}
+    assert merge_markers(job) == repaired_markers
+    assert source_reader_marked(repaired_markers, job)
+    if section == 'position':
+        # Missing on both sides does not witness a privacy fence.
+        job.pop('privacy_generation')
+        slot.pop('privacy_generation')
+    else:
+        {'job': job, 'fallback': fallback, 'slot': slot}[section].update(defect)
+    assert merge_markers(job) is None
+    assert not source_reader_marked(repaired_markers, job)
+
+
 @pytest.mark.parametrize('marker', ["'wrong_marker'", "'future_version'", 'computed_marker'])
 def test_stamp_positional_marker_arguments_are_checked(marker):
     source = "from utils.batch_pipeline.result_protocol import stamp as mark\n" + f"mark(job, {marker})"

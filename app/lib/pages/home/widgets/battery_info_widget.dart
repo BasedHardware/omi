@@ -10,7 +10,11 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/home/device.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
+import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/services/capture/capture_start_errors.dart';
+import 'package:omi/services/capture/finish_outcome.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
@@ -361,9 +365,16 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     if (captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused) {
       // The phone recording is this button's own: finish it (processed, except Transcribe Later,
       // whose local file is finalized on stop), then any pendant it paused resumes.
-      await captureProvider.finishCapture();
-      PlatformManager.instance.analytics.phoneMicRecordingStopped();
-      if (context.mounted) _maybeShowOptionsTip(context);
+      final outcome = await finishLiveCapture(context, captureProvider, episodes: context.read<EpisodeProvider?>());
+      if (outcome is! FinishFailed) PlatformManager.instance.analytics.phoneMicRecordingStopped();
+      if (!context.mounted) return;
+      presentFinishOutcome(
+        context,
+        outcome,
+        entry: FinishEntry.home,
+        onRetry: () => retryFinishFromHome(context, captureProvider),
+      );
+      if (outcome is! FinishFailed) _maybeShowOptionsTip(context);
       return;
     }
     if (captureProvider.isPendantBatchRecording) {
@@ -374,9 +385,17 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     }
     try {
       await captureProvider.streamRecording();
+    } on MicPermissionDenied {
+      if (context.mounted) showMicBlocked(context);
+      return;
     } catch (_) {
       if (context.mounted) {
-        OmiFeedback.error(context, context.l10n.somethingWentWrong);
+        OmiFeedback.error(
+          context,
+          context.l10n.couldNotStartRecording,
+          actionLabel: context.l10n.tryAgain,
+          onAction: () => _startPhoneRecording(context),
+        );
       }
       return;
     }

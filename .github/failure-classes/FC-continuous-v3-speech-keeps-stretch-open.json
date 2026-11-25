@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-continuous-v3-speech-keeps-stretch-open",
+  "family": "work-bounded-resumable",
+  "violated_contract": "A v3 live stretch must reach a terminal boundary even when speech keeps arriving before the silence and lock deadlines.",
+  "canonical_prevention": "Cut the stretch at the first line whose recorded start reaches the duration limit. Carry the cut through the planner and settle the earlier live stretch even when later speech refreshes the same recording's landing clock. Exercise repeated reconcile, a model continuation across the cut, and the disabled switch.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_conversations_v3_engine.py",
+    "backend/tests/unit/test_conversations_v3_live_passes.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/conversations/v3/"],
+  "status": "open"
+}

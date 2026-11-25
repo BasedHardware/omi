@@ -270,10 +270,14 @@ void main() {
       await tester.ensureVisible(find.byKey(const Key('too_old_download')));
       await tester.pumpAndSettle();
       expect(find.text('Download Audio'), findsOneWidget);
+      // The copy names no day count: the server lookback is 60 days in production, 30 on dev.
       expect(
           find.text(
-              "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here."),
+              "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here."),
           findsOneWidget);
+      for (final locale in AppLocalizations.supportedLocales) {
+        expect(lookupAppLocalizations(locale).syncTooOldExplanation, isNot(matches(RegExp(r'\d'))), reason: '$locale');
+      }
       await _frame(tester, scale == 1 ? '001-mobile-ios-too-old-recording' : '002-mobile-ios-too-old-larger-text');
       debugDefaultTargetPlatformOverride = null;
     });
@@ -456,6 +460,74 @@ void main() {
     expect(find.byKey(ValueKey('${sync.wals.first.id}#${sync.wals.first.storage.name}')), findsOneWidget);
     expect(find.text('Failed to delete some items'), findsOneWidget);
   });
+  group('delete confirmation tells the truth about uploaded audio', () {
+    final en = lookupAppLocalizations(const Locale('en'));
+    const uploadedCopy =
+        "This recording is already uploaded and Omi is processing it. Deleting it here removes the phone's copy. If processing fails, Omi can't retry from this phone.";
+
+    Wal phoneWal(int ageMinutes, WalStatus status) => Wal(
+          timerStart: DateTime.now().subtract(Duration(minutes: ageMinutes)).millisecondsSinceEpoch ~/ 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: status,
+          storage: WalStorage.disk,
+          device: 'pendant',
+        );
+
+    Future<void> swipe(WidgetTester tester) async {
+      await tester.drag(find.byType(Dismissible).first, const Offset(-600, 0));
+      await tester.pumpAndSettle();
+    }
+
+    test('the uploaded copy is the phone-only message', () {
+      expect(en.deleteWhileProcessingMessage, uploadedCopy);
+    });
+
+    testWidgets('an uploaded recording says deleting removes the phone copy and a failure cannot be retried',
+        (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+      final sync = await _pump(tester, [phoneWal(10, WalStatus.uploaded)], render: true);
+      await swipe(tester);
+      expect(find.text(en.deleteWhileProcessingTitle), findsOneWidget);
+      expect(find.text(uploadedCopy), findsOneWidget);
+      expect(find.text(en.thisCannotBeUndone), findsNothing);
+      await _frame(tester, '001-mobile-ios-delete-uploaded-phone-copy');
+      await tester.tap(find.text('Delete').last);
+      await tester.pumpAndSettle();
+      expect(sync.deleted, hasLength(1), reason: 'copy only: the delete itself is unchanged');
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets('a recording not yet uploaded keeps the cannot-be-undone warning', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+      await _pump(tester, [phoneWal(10, WalStatus.miss)], render: true);
+      await swipe(tester);
+      expect(find.text(en.deleteRecording), findsOneWidget);
+      expect(find.text(en.thisCannotBeUndone), findsOneWidget);
+      expect(find.text(uploadedCopy), findsNothing);
+      await _frame(tester, '002-mobile-ios-delete-not-uploaded-warning');
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets('a recording with any file not yet uploaded keeps the warning', (tester) async {
+      // Two files one minute apart form one recording; one is uploaded, one is still only on the phone.
+      await _pump(tester, [phoneWal(10, WalStatus.uploaded), phoneWal(11, WalStatus.miss)]);
+      expect(find.byType(Dismissible), findsOneWidget);
+      await swipe(tester);
+      expect(find.text(en.thisCannotBeUndone), findsOneWidget);
+      expect(find.text(uploadedCopy), findsNothing);
+    });
+
+    testWidgets('a recording of uploaded and already processed files shows the phone-only message', (tester) async {
+      await _pump(tester, [phoneWal(10, WalStatus.uploaded), phoneWal(11, WalStatus.synced)]);
+      expect(find.byType(Dismissible), findsOneWidget);
+      await swipe(tester);
+      expect(find.text(uploadedCopy), findsOneWidget);
+    });
+  });
+
   testWidgets('partial bulk Pending cleanup reports failure and keeps the skipped recording', (tester) async {
     final rows = _tooOldAfternoon();
     final kept = rows.first;

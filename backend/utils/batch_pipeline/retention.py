@@ -37,22 +37,12 @@ ARTIFACT_RETENTION = timedelta(hours=24)
 RECEIPT_RETENTION = timedelta(days=45)
 HOLD_RECHECK = timedelta(hours=1)
 logger = logging.getLogger(__name__)
+BATCH_OBJECT_BUCKET_ENV = ('BUCKET_BATCH_PIPELINE', 'BUCKET_TEMPORAL_SYNC_LOCAL')
 
 
-def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, storage_client: Any = None) -> None:
-    """Delete only a configured, owner-scoped object; foreign refs fail closed.
-
-    Inside ``rpc_deadline`` (a gate-held unit) the delete is one attempt with
-    no SDK retry, bounded by the time left; ``storage_client`` lets such a
-    caller reuse a client whose session is bound to that deadline.
-    """
+def batch_object_address(uid: str, uri: str, allowed_buckets: set[str]) -> tuple[str, str, int | None]:
     parsed = urlsplit(uri)
     bucket_name, path = parsed.netloc, parsed.path.lstrip('/')
-    allowed_buckets = {
-        value
-        for name in ('BUCKET_BATCH_PIPELINE', 'BUCKET_TEMPORAL_SYNC_LOCAL')
-        if (value := os.getenv(name, '').strip())
-    }
     wal_original = bucket_name == private_archive_bucket() and path.startswith(f'record-wal/{uid}/')
     if (
         parsed.scheme != 'gs'
@@ -72,6 +62,20 @@ def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, sto
     ):
         raise ValueError('batch object reference outside configured owner storage')
     generation = int(parsed.fragment) if parsed.fragment else None
+    return bucket_name, path, generation
+
+
+def delete_batch_object(
+    uid: str, uri: str, *, timeout: float | None = None, storage_client: Any = None, resolve_generation: bool = False
+) -> None:
+    """Delete only a configured, owner-scoped object; foreign refs fail closed.
+
+    Inside ``rpc_deadline`` (a gate-held unit) the delete is one attempt with
+    no SDK retry, bounded by the time left; ``storage_client`` lets such a
+    caller reuse a client whose session is bound to that deadline.
+    """
+    allowed_buckets = {value for name in BATCH_OBJECT_BUCKET_ENV if (value := os.getenv(name, '').strip())}
+    bucket_name, path, generation = batch_object_address(uid, uri, allowed_buckets)
     if storage_client is None:
         from utils.other.local_storage import create_storage_client
 
@@ -79,6 +83,14 @@ def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, sto
     blob = storage_client.bucket(bucket_name).blob(path, generation=generation)
     left = rpc_deadline.remaining()
     try:
+        if resolve_generation and generation is None:
+            if timeout is None or left is not None:
+                raise ValueError('generation resolution requires a standalone bounded RPC')
+            blob.reload(timeout=timeout, retry=None)
+            generation = blob.generation
+            if not generation:
+                raise RuntimeError('object metadata has no generation')
+            blob = storage_client.bucket(bucket_name).blob(path, generation=generation)
         if left is not None:
             if left <= 0:
                 raise rpc_deadline.RpcDeadlineExceeded('object delete not sent: unit deadline passed')

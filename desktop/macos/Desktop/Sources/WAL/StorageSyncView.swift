@@ -270,7 +270,7 @@ struct StorageSyncView: View {
       // Stop button
       if storageSyncService.isSyncing || wifiSyncService.isSyncing {
         Button(action: {
-          stopSync()
+          Task { await stopSync() }
         }) {
           Image(systemName: "stop.fill")
             .scaledFont(size: OmiType.caption)
@@ -377,9 +377,9 @@ struct StorageSyncView: View {
     }
   }
 
-  private func stopSync() {
+  private func stopSync() async {
     if storageSyncService.isSyncing {
-      storageSyncService.stopSync()
+      await storageSyncService.stopSync()
     }
     if wifiSyncService.isSyncing {
       wifiSyncService.stopSync()

@@ -77,6 +77,17 @@ MCP_TOOL_TRUNCATED_TOTAL: Counter = _registered(
         ['tool'],
     ),
 )
+MCP_MEMORY_WINDOW_END_TOTAL: Counter = _registered(
+    'omi_mcp_memory_window_end_total',
+    Counter,
+    ['tool'],
+    lambda: Counter(
+        'omi_mcp_memory_window_end',
+        'Memory list pages that ended a full bounded source window with no pageable continuation; '
+        'the client may be missing older eligible memories',
+        ['tool'],
+    ),
+)
 
 
 def record_tool_call(
@@ -113,5 +124,16 @@ def record_tool_result(tool_name: Any, result: Mapping[str, Any], payload: Mappi
             MCP_TOOL_RESPONSE_CHARS.labels(tool).observe(len(text))
         if result.get('truncated') is True:
             MCP_TOOL_TRUNCATED_TOTAL.labels(tool).inc()
+        # A full bounded window with no continuation is the exact state that
+        # used to advertise a dangling has_more: the client cannot page further
+        # and global coverage is unknown, so it may be missing older memories.
+        window_limit = result.get('source_window_limit')
+        if (
+            isinstance(window_limit, int)
+            and result.get('has_more') is False
+            and result.get('scan_truncated') is True
+            and result.get('scanned_count') == window_limit
+        ):
+            MCP_MEMORY_WINDOW_END_TOTAL.labels(tool).inc()
     except Exception as exc:  # noqa: BLE001 - telemetry must never fail a tool call
         logger.warning('mcp tool result metric failed error=%s', type(exc).__name__)

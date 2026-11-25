@@ -12,9 +12,10 @@ emitted when `FIRESTORE_READ_LEDGER=1`. The service label is
 use `DD_SERVICE` (`backend-listen` and `pusher`). The ledger reuses the probe's billed
 `amount` and `kind`, scoped to clients in `based-hardware`; unknown client
 projects are counted and mark the day incomplete. It is sampled at p=1, so
-sampling error is zero. `backend` and `backend-listen` must show a snapshot
-in the last 15 minutes of the UTC day; other required services must appear
-at least once. `pusher` stays in the shipped set and its rows still count,
+sampling error is zero. `backend`, `backend-listen` and `backend-projection-pump` must show a
+snapshot in the last 15 minutes of the UTC day; other required services must appear
+at least once. `backend-projection-pump` is required only from 2026-11-22, its first full ledger
+day (`REQUIRED_FROM`); deleting the pump service needs that requirement reverted first. `pusher` stays in the shipped set and its rows still count,
 but prod pusher is still the pre-ledger image, so a missing pusher snapshot
 is a recorded exclusion and does not make the day incomplete. Clear
 `COMPLETENESS_EXCLUDED` in `backend/scripts/firestore_read_reconcile.py`
@@ -172,6 +173,30 @@ topk(20, sum by (caller, collection) (rate(omi_firestore_billed_reads_by_caller_
 
 ## Batch unit-budget and billed-step tickets (SCA-2189)
 
+The batch cost recording group is [source-controlled separately](../charts/monitoring/batch-cost/recording-rules.yaml).
+It evaluates the same settled rolling hour for reads and completed audio, with
+a five-minute offset for Cloud Run sample arrival. Readers can query
+`omi_batch_firestore_reads_per_completed_audio_hour` by `caller_group`.
+`total` combines `batch`, `lifecycle`, and batch `erasure`. The separate
+`packing_probe` group uses the probe's origin and represents measurement overhead.
+Optional groups only publish when their series are observed.
+
+The denominator sums unique fenced completion seconds, including silence,
+across outcome and instance labels before converting to hours. The ratio is
+absent below 50 completed hours or when the core read or completion stream is
+missing. `omi_batch_firestore_cost_status` exposes `denominator_low` and
+`telemetry_missing` explicitly. A ratio of zero requires an observed zero read
+increase. `omi_firestore_attributed_read_coverage_ratio_1h` compares the entire
+instrumented fleet with native billed reads, since native data has no caller
+dimension. It requires all three native read types and at least 58 samples per
+reported series in the aligned window.
+
+The recording group is a GMP `GlobalRules` source artifact. Release owns its
+installation and can withdraw the group independently of the existing alert
+rules. Qualify the settled series against the raw GMP inputs across GKE and
+Cloud Run. Mixed binaries keep the same denominator. Older versions omit the
+new packing series until they are replaced.
+
 `FirestoreBatchReadsPerAudioHourHigh` (`omi-firestore-batch-reads-audio-hour`)
 means batch reads no longer follow completed work: the rolling hourly ratio exceeds
 60,000 reads/audio-hour for 2h, versus a 45,000 budget, with at least 50 audio-hours
@@ -270,6 +295,21 @@ default and is listed in `PRODUCTION_ONLY_IMPORT_UIDS` because the
 `gmp-cloud-run` datasource exists only in production. Neither switch changes
 runtime read behaviour.
 
+### Absolute read gap
+
+`omi-firestore-unattributed-absolute` uses the same 30-minute inputs and
+fires when billed minus instrumented reads stays above 579 reads/s for two
+hours, about 50 million reads/day at that rate. A gap below 3% can still
+cross this threshold. The absolute rule requires fresh LOOKUP, QUERY and
+NOT_FOUND billed series. When billed coverage is incomplete, check
+`omi-firestore-unattributed-reads-blind`.
+
+Margin owns the cost and unattributed-read rules through SCA-3891. Their
+agent-tier Telegram delivery is muted by `omi-tier-silent`. The hourly
+Margin reconciler evaluates the read gap independently and reports to
+SCA-3891. For a sustained gap, compare scheduled operator reads with the
+native and attributed rates. Revert the source PR to roll back the rule.
+
 ## Acceptance
 
 For dashboard investigation only, after deploy each of the three type ratios
@@ -300,6 +340,7 @@ entrypoints do that before they read:
 |---|---|---|
 | backend, backend-listen, backend-sync, backend-sync-backfill | `backend/main.py` | imports `routers`, which import `database` |
 | backend-integration | `backend/main.py` | imports the same database-backed router process and is included in the required ledger service set |
+| backend-projection-pump | `backend/main.py` | `OMI_PROCESS_ROLE=projection_pump` limits startup to the pump; `FIRESTORE_READ_LEDGER_SERVICE=backend-projection-pump`; required and hot-tail from 2026-11-22 |
 | llm_gateway | `backend/llm_gateway/main.py` | Gateway still records provider accounting through its retained accounting boundary |
 | desktop-backend | `backend/desktop_backend.py` | imports `routers` |
 | pusher | `backend/pusher/main.py` | imports `routers.pusher`, which imports `database.users` |

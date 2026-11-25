@@ -3,13 +3,42 @@
 from typing import Literal
 import time
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 
 from config import record_seal_rules
+from config.record_wal_duplicate import MERGE_TARGET_FIELD, RETAINED_DONORS_FIELD, SETTLED_FIELD
+from database.record_wal_merge import RetainedMergeDeferred
 from database import pipeline_ledger
-from database._client import get_firestore_client, run_transactional
+from database._client import get_data_plane_firestore_client, get_firestore_client, run_transactional
 from database import record_token_lease_metrics as lease_metrics
 from database.record_seal_wake import prepare_native_wake
+
+
+def fence_record_audio_removal(uid: str, conversation_id: str, *, firestore_client=None) -> bool:
+    """Return whether published merge custody must be retained before cleanup."""
+    client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
+    user = client.collection('users').document(uid)
+    ref = user.collection('conversations').document(conversation_id)
+
+    @firestore.transactional
+    def claim(tx):
+        current = ref.get(transaction=tx)
+        if not current.exists:
+            # A durable tombstone allows idempotent cleanup without restoring the row.
+            if not user.collection('deleted_conversations').document(conversation_id).get(transaction=tx).exists:
+                raise NotFound('merge audio removal has no source or deletion fence')
+            return False
+        row = current.to_dict() or {}
+        if row.get(SETTLED_FIELD) is True and row.get(MERGE_TARGET_FIELD) and row.get('deleted') is True:
+            return True
+        if row.get(SETTLED_FIELD) or row.get(RETAINED_DONORS_FIELD):
+            raise RetainedMergeDeferred('retained merge is not published')
+        if row.get('record_audio_removal_pending') is not True:
+            tx.update(ref, {'record_audio_removal_pending': True})
+        return False
+
+    return run_transactional(client, claim, transient=True)
 
 
 class RecordUploadCapacityExceeded(ValueError):

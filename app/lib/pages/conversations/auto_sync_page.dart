@@ -28,6 +28,7 @@ import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 import 'widgets/too_old_recording_help.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
+import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
 
 /// The Manage Storage clear actions, each paired with the storage re-read.
 ///
@@ -245,8 +246,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           : l.syncCardReadyCount(groupRecordingBlocks(readyWals).length);
       action = statusActionPill(l.sync, OmiColors.accent, startSync);
     } else if (p.derivedWals.stalledUploadsAt().isNotEmpty) {
-      title = l.transcriptionUnavailable;
-      titleColor = Colors.orangeAccent;
+      title = l.deviceUploadsWaitingOnServer;
+      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
       action = statusActionPill(l.syncDetailsTitle, OmiColors.accent,
           () => showSyncDetailsSheet(context, onHowSyncingWorks: () => _showInfoSheet(context)));
     } else {
@@ -572,11 +573,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 ? DismissDirection.none
                 : DismissDirection.endToStart,
             confirmDismiss: (direction) async {
-              final uploading = block.wals.any((w) => w.syncDisplayState == WalSyncDisplayState.uploaded);
+              final copy =
+                  walDeleteConfirmation(context.l10n, block.wals, notUploadedMessage: context.l10n.thisCannotBeUndone);
               final confirmed = await showOmiConfirm(
                 context,
-                title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
-                message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
+                title: copy.title,
+                message: copy.message,
                 confirmLabel: context.l10n.delete,
                 destructive: true,
               );
@@ -833,7 +835,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
   (Color, String) _rowLabel(Wal wal) {
     if (wal.status == WalStatus.uploaded && !wal.countsAsPendingWork()) {
-      return (OmiColors.textSecondary, context.l10n.transcriptionUnavailable);
+      return (OmiColors.textSecondary, context.l10n.syncDetailsTranscribing);
     }
     final state = wal.syncDisplayState;
     var (color, _, label) = _rowVisual(state, rejectionReason: wal.uploadRejectionReason);

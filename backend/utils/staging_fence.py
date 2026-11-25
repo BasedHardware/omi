@@ -75,6 +75,7 @@ PROD_NETWORKS: tuple[ipaddress.IPv4Network, ...] = tuple(
         '172.16.128.0/20',
         '172.16.144.0/20',
         '172.16.160.0/20',
+        '172.25.29.2/32',  # prod-jobs private endpoint: staging must never reach it, even while the port is paused
         '34.160.137.29/32',
         '34.49.188.104/32',
         '34.54.223.100/32',

@@ -1,5 +1,6 @@
 """Synthetic recorded-clock contracts; no model calls or customer fixtures."""
 
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
 
@@ -39,6 +40,44 @@ def test_five_minute_silence_boundary():
     assert len(outline.stretches([row], NOW + timedelta(hours=1))) == 2
     row['transcript_segments'][1]['start'] = 309.999
     assert len(outline.stretches([row], NOW + timedelta(hours=1))) == 1
+
+
+def test_three_hour_window_cap_is_deterministic_on_the_recorded_clock():
+    def turns(start, stop):
+        return [{'text': str(t), 'start': t, 'end': t + 10} for t in range(start, stop, 60)]
+
+    rows = [
+        recording('a', segments=turns(0, 5400)),
+        recording('b', NOW + timedelta(seconds=5400), segments=turns(0, 5520)),
+    ]
+    now = NOW + timedelta(hours=3, minutes=2)
+    cap = timedelta(hours=3)
+    groups = outline.stretches(rows, now, max_window=cap)
+    assert groups == outline.stretches(rows[::-1], now, max_window=cap)
+    earlier, later = groups
+    assert earlier['finished'] and earlier['outline_ready']
+    assert earlier['window_cap_end'] and not earlier['manual_end']
+    assert len(earlier['lines']) == 180
+    assert later['after_window_cap'] and not later['finished']
+    assert later['lines'][0]['start'] == NOW + cap
+
+    (uncapped,) = outline.stretches(rows, now, max_window=timedelta(0))
+    assert uncapped['key'] == earlier['key']
+    assert uncapped['lines'] == earlier['lines'] + later['lines']
+    assert not uncapped['finished']
+
+
+@pytest.mark.parametrize('cohesion', [False, True])
+def test_resume_does_not_rejoin_the_window_cap(cohesion):
+    # After the existing two-hour card split, the tail and successor fit together
+    # within two hours. Without the cap guard, resumes_previous can join them.
+    row = recording(segments=[{'text': str(t), 'start': t, 'end': t + 10} for t in range(0, 10920, 60)])
+    groups = outline.stretches([row], NOW + timedelta(hours=3, minutes=2), max_window=timedelta(hours=3))
+    windows = planner.windows(
+        groups, [[entry()], [entry(resumes_previous=True)]], cohesion=cohesion, silence_gap=timedelta(minutes=15)
+    )
+    assert [w['lines'][0]['start'] for w in windows] == [NOW, NOW + timedelta(hours=2), NOW + timedelta(hours=3)]
+    assert [w['finished'] for w in windows] == [True, True, False]
 
 
 def test_recorded_clock_and_near_duplicate():
@@ -89,13 +128,143 @@ def test_outline_contract_and_title_cap():
         outline.parse(json.dumps({'conversations': [entry(first=True)]}), group)
 
 
-def test_two_hour_cap_at_nearest_middle_section():
+def test_two_hour_cap_cuts_after_two_hours_whatever_the_outline_sections():
+    # Live speech and outline revisions must not move a cut that locks the prefix (#25829 review).
     row = recording(segments=[{'text': str(i), 'start': i * 60, 'end': i * 60 + 10} for i in range(180)])
     groups = outline.stretches([row], NOW + timedelta(hours=4))
     windows = planner.windows(groups, [[entry(sections=[{'first_line': 91, 'title': 'Next subject'}])]])
     assert len(windows) == 2
-    assert windows[1]['lines'][0]['start'] == NOW + timedelta(minutes=90)
+    assert windows[1]['lines'][0]['start'] == NOW + timedelta(minutes=120)
     assert all(max(line['end'] for line in w['lines']) - w['lines'][0]['start'] <= timedelta(hours=2) for w in windows)
+
+
+def _locked(segments, minutes):
+    return {
+        'id': 'locked',
+        'status': 'completed',
+        'started_at': NOW,
+        'finished_at': NOW + timedelta(minutes=minutes, seconds=10),
+        'transcript_segments': segments,
+    }
+
+
+@pytest.mark.parametrize('cohesion', [False, True])
+def test_a_locked_row_that_holds_none_of_the_stretch_never_cuts_it(cohesion):
+    # A separate locked card ending in a pause 20 minutes into an over-cap stretch owns none of its
+    # speech, so the cap ignores it and cuts at two hours (#25829 review).
+    row = recording(segments=[{'text': str(i), 'start': i * 60, 'end': i * 60 + 10} for i in range(180)])
+    groups = outline.stretches([row], NOW + timedelta(hours=4))
+    unrelated = _locked([{'id': 'elsewhere', 'text': 'other', 'start': 0, 'end': 5}], 20)
+    ownership = planner.Ownership({'locked': unrelated}, {'r': {'claims': []}})
+    windows = planner.windows(groups, [[entry()]], cohesion=cohesion, ownership=ownership)
+    assert [w['lines'][0]['start'] for w in windows] == [NOW, NOW + timedelta(minutes=120)]
+
+
+@pytest.mark.parametrize('cohesion', [False, True])
+def test_a_locked_row_holding_the_stretch_start_keeps_its_cut(cohesion):
+    segments = [{'text': str(i), 'start': i * 60, 'end': i * 60 + 10} for i in range(180)]
+    groups = outline.stretches([recording(segments=segments)], NOW + timedelta(hours=4))
+    prefix = _locked(deepcopy(segments[:21]), 20)
+    ownership = planner.Ownership({'locked': prefix}, {'r': {'claims': []}})
+    windows = planner.windows(groups, [[entry()]], cohesion=cohesion, ownership=ownership)
+    # Its cut stays; the cap then counts from it (159 minutes remain, cut again at 141).
+    assert [w['lines'][0]['start'] for w in windows] == [NOW, NOW + timedelta(minutes=21), NOW + timedelta(minutes=141)]
+    assert windows[0]['finished']
+
+
+def test_an_exact_hold_on_a_later_locked_row_beats_an_earlier_row_claim():
+    # Two locked rows: the earlier one's window and audio claim cover the turn, the later one published
+    # it exactly. Exact holds decide first, for the cap and the projection alike (#25829 review).
+    segments = [{'id': 'x', 'text': 'held turn', 'start': 300, 'end': 330}]
+    groups = outline.stretches([recording(segments=segments)], NOW + timedelta(hours=4))
+    (line,) = groups[0]['lines']
+    wide = {**_locked([], 10), 'id': 'wide', 'v3_recording_ids': ['r']}
+    exact = {
+        'id': 'exact',
+        'status': 'completed',
+        'v3_recording_ids': ['r'],
+        'started_at': NOW + timedelta(seconds=300),
+        'finished_at': NOW + timedelta(seconds=330),
+        'transcript_segments': [{'id': 'x', 'text': 'held turn', 'start': 0.0, 'end': 30.0}],
+    }
+    existing = {'wide': wide, 'exact': exact}
+    recordings = {'r': {'claims': [{'conversation_id': 'wide', 'start': NOW, 'end': NOW + timedelta(minutes=10)}]}}
+    assert planner.Ownership(existing, recordings).owner_of(line)['id'] == 'exact'
+    kept = planner.preserve_finished_windows(planner.windows(groups, [[entry()]]), existing, recordings)
+    assert [w.get('existing_id') for w in kept] == ['exact']
+    # The exact match needs the line's own recording.
+    other = {**exact, 'v3_recording_ids': ['elsewhere']}
+    assert planner.Ownership({'wide': wide, 'exact': other}, recordings).owner_of(line)['id'] == 'wide'
+
+
+def test_a_source_qualified_exact_hold_beats_an_earlier_legacy_one():
+    # A locked legacy row (no v3_recording_ids) and an open v3 row both publish the turn exactly; the
+    # row that names the line's recording owns it, even though locked rows are scanned first.
+    segments = [{'id': 'x', 'text': 'held turn', 'start': 300, 'end': 330}]
+    groups = outline.stretches([recording(segments=segments)], NOW + timedelta(hours=4))
+    (line,) = groups[0]['lines']
+    held = [{'id': 'x', 'text': 'held turn', 'start': 0.0, 'end': 30.0}]
+    span = {'started_at': NOW + timedelta(seconds=300), 'finished_at': NOW + timedelta(seconds=330)}
+    legacy = {'id': 'legacy', 'status': 'completed', 'transcript_segments': held, **span}
+    live = {'id': 'live', 'status': 'in_progress', 'v3_recording_ids': ['r'], 'transcript_segments': held, **span}
+    assert planner.Ownership({'legacy': legacy, 'live': live}, {'r': {'claims': []}}).owner_of(line)['id'] == 'live'
+    # With no source-qualified holder, the legacy exact hold still wins over containment.
+    assert planner.Ownership({'legacy': legacy}, {'r': {'claims': []}}).owner_of(line)['id'] == 'legacy'
+
+
+def _claimed_by(cid, minutes):
+    return {'r': {'claims': [{'conversation_id': cid, 'start': NOW, 'end': NOW + timedelta(minutes=minutes)}]}}
+
+
+def test_a_deleted_open_row_never_owns_a_line():
+    # A deleted open card is left to the time-matched tombstone path, as before: it never takes a line
+    # from the locked row whose claim covers it, even when it lists the exact segment.
+    segments = [{'id': 'x', 'text': 'held turn', 'start': 300, 'end': 330}]
+    groups = outline.stretches([recording(segments=segments)], NOW + timedelta(hours=4))
+    (line,) = groups[0]['lines']
+    locked = {**_locked([], 10), 'v3_recording_ids': ['r']}
+    gone = {
+        'id': 'gone',
+        'status': 'in_progress',
+        'deleted': True,
+        'v3_recording_ids': ['r'],
+        'started_at': NOW + timedelta(seconds=300),
+        'finished_at': NOW + timedelta(seconds=330),
+        'transcript_segments': [{'id': 'x', 'text': 'held turn', 'start': 0.0, 'end': 30.0}],
+    }
+    ownership = planner.Ownership({'locked': locked, 'gone': gone}, _claimed_by('locked', 10))
+    assert ownership.owner_of(line)['id'] == 'locked'
+
+
+def test_an_exact_hold_needs_the_same_timing():
+    # A row holding the same segment id at another time does not hold this line; the claim decides.
+    segments = [{'id': 'x', 'text': 'retimed turn', 'start': 400, 'end': 430}]
+    groups = outline.stretches([recording(segments=segments)], NOW + timedelta(hours=4))
+    (line,) = groups[0]['lines']
+    stale = {
+        'id': 'stale',
+        'status': 'in_progress',
+        'v3_recording_ids': ['r'],
+        'started_at': NOW + timedelta(seconds=300),
+        'finished_at': NOW + timedelta(seconds=500),
+        'transcript_segments': [{'id': 'x', 'text': 'retimed turn', 'start': 0.0, 'end': 30.0}],
+    }
+    locked = {**_locked([], 10), 'v3_recording_ids': ['r']}
+    ownership = planner.Ownership({'locked': locked, 'stale': stale}, _claimed_by('locked', 10))
+    assert ownership.owner_of(line)['id'] == 'locked'
+
+
+@pytest.mark.parametrize('cohesion', [False, True])
+def test_a_tombstone_never_pins_a_cap_cut(cohesion):
+    # A deleted locked card holding the first twenty minutes keeps its speech isolated in routing,
+    # but the cap does not reuse its cut: the stretch is cut at two hours as if it were not there.
+    segments = [{'text': str(i), 'start': i * 60, 'end': i * 60 + 10} for i in range(180)]
+    groups = outline.stretches([recording(segments=segments)], NOW + timedelta(hours=4))
+    tomb = {**_locked(deepcopy(segments[:21]), 20), 'deleted': True}
+    ownership = planner.Ownership({'locked': tomb}, {'r': {'claims': []}})
+    assert ownership.owner_of(groups[0]['lines'][0])['id'] == 'locked'  # routing still sees it
+    windows = planner.windows(groups, [[entry()]], cohesion=cohesion, ownership=ownership)
+    assert [w['lines'][0]['start'] for w in windows] == [NOW, NOW + timedelta(minutes=120)]
 
 
 @pytest.mark.parametrize('gap', [5, 15.056, 20])
@@ -280,6 +449,39 @@ def test_outline_fallback_is_valid_and_deterministic():
     assert outline.parse(json.dumps({'conversations': entries}), group)
 
 
+@pytest.mark.parametrize(
+    'text,words',
+    [
+        ('hello世界', 3),
+        ('会議の時間です。', 7),
+        ('今天开会。', 4),
+        ('カタカナとｶﾅ', 7),
+        ('한국어', 3),
+        ('한국어', 3),
+        ('ภาษาไทย', 7),
+        ('สวัสดี', 4),
+        ('ASCII\twith\nspace !', 4),
+        ('Latin 世界，again', 4),
+        ('', 0),
+    ],
+)
+def test_transcript_word_floor_counts_mixed_script_without_punctuation(text, words):
+    assert planner.word_count([{'text': text}]) == words
+
+
+@pytest.mark.parametrize('letter', ['界', 'あ'])
+@pytest.mark.parametrize('words', [299, 300])
+def test_finished_script_aware_window_respects_home_word_floor(letter, words):
+    row = recording(segments=[{'text': letter * words, 'start': 0, 'end': 10}])
+    group = outline.stretches([row], NOW + timedelta(minutes=10))[0]
+    window = planner.windows([group], [[entry()]])[0]
+    assert window['finished']
+    assert planner.build('u', window, {'r': row})['home_hidden'] is (words < 300)
+    # Some projection callers supply no stretch count and use the copied segments.
+    window.pop('_stretch_words', None)
+    assert planner.build('u', window, {'r': row})['home_hidden'] is (words < 300)
+
+
 @pytest.mark.parametrize('words', [5, 40])
 def test_manual_end_with_any_speech_is_visible_and_sticky(words):
     row = recording(
@@ -298,11 +500,37 @@ def test_manual_end_with_any_speech_is_visible_and_sticky(words):
 
 
 @pytest.mark.parametrize('kind', ['media', 'background'])
-def test_manual_end_does_not_promote_recognized_media_or_background(kind):
+@pytest.mark.parametrize('enabled,expected_hidden', [(True, False), (False, True)])
+def test_manual_end_visibility_preserves_media_and_background_classification(kind, enabled, expected_hidden):
     row = recording(finished_at=NOW + timedelta(seconds=10), v3_manual_end=True)
     group = outline.stretches([row], NOW + timedelta(seconds=11))[0]
-    built = planner.build('u', planner.windows([group], [[entry(kind=kind)]])[0], {'r': row})
-    assert built['manual_end'] is True and built['home_hidden'] is True
+    built = planner.build(
+        'u', planner.windows([group], [[entry(kind=kind)]])[0], {'r': row}, manual_end_home_visible=enabled
+    )
+    assert built['manual_end'] is True and built['home_hidden'] is expected_hidden
+    assert built['kind'] == built['outline_kind'] == kind
+    assert built['home_hidden_reason'] == ('media' if kind == 'media' else 'background_wearer_recognized')
+
+    # Rebuilding a retained row can lack the cut on this pass. The row still owns the manual end.
+    window = planner.windows([group], [[entry(kind=kind)]])[0]
+    window['manual_end'] = False
+    rebuilt = planner.build('u', window, {'r': row}, built, manual_end_home_visible=enabled)
+    assert rebuilt['manual_end'] is True and rebuilt['home_hidden'] is expected_hidden
+
+
+def test_only_final_fragment_of_manual_end_bypasses_classification():
+    row = recording(
+        segments=[
+            {'text': 'broadcast', 'start': 0, 'end': 7190},
+            {'text': 'another broadcast', 'start': 7200, 'end': 7210},
+        ],
+        finished_at=NOW + timedelta(seconds=7210),
+        v3_manual_end=True,
+    )
+    groups = outline.stretches([row], NOW + timedelta(seconds=7211))
+    windows = planner.windows(groups, [[entry(kind='media'), entry(2, kind='media')]])
+    built = [planner.build('u', window, {'r': row}) for window in windows]
+    assert [(r['manual_end'], r['home_hidden']) for r in built] == [(False, True), (True, False)]
 
 
 def test_manual_end_without_speech_creates_no_window():

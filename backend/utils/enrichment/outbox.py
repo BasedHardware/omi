@@ -9,6 +9,7 @@ from __future__ import annotations
 from utils.observability.delivery import record_delivery
 from utils.observability.sweep_age import skip_ancient
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import ConsumerReason
 
 import hashlib
 import math
@@ -52,6 +53,7 @@ from config.record_latency import record_notes_eager_enabled
 from database import record_notes_hold
 from database._client import get_firestore_client
 from database.summary_processing import record_empty_failure, EmptyFailureOutcome
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 
 Row: TypeAlias = dict[str, Any]
 ResultT = TypeVar('ResultT')
@@ -64,12 +66,19 @@ FIRST_SUMMARY_LEASE_SECONDS = 120
 FIRST_SUMMARY_HEARTBEAT_SECONDS = 30
 REPAIR_SECONDS = 1800
 WAKE_CHECK_SECONDS = 300
+OWNERSHIP_PROBE_SECONDS = 3600
 # Both bindings stay valid so rows created before the C3 switch drain on their stored handler.
 HANDLER_PATHS = ('/v2/sync-jobs/run', '/v2/enrichment/run')
 COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into an existing enrichment obligation')
 UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
 # A conversation row at Firestore's 1 MiB ceiling refuses every enrichment write (#23341).
 HELD_DOCUMENT_SIZE_LIMIT = 'document_size_limit'
+V3_CUSTODY_DEFER_REASON = ConsumerReason.V3_CUSTODY_CONFLICT.value
+V3_CUSTODY_MAX_DEFERS = 2
+# A kept first-summary run that returned no summary text. The strike is recorded by
+# ``record_empty_failure``; the row is re-armed for its bounded retry under this cause
+# instead of letting ``SummaryOutputUnavailable`` escape the request as a 500.
+EMPTY_OUTPUT_DEFER_REASON = 'empty_output'
 
 
 def _is_document_size_limit(error: BaseException) -> bool:
@@ -91,6 +100,51 @@ def owns_runtime() -> bool:
     from utils.sync.stage import production_stage
 
     return bool(os.getenv('FIRESTORE_EMULATOR_HOST')) or production_stage()
+
+
+def ownership_parked(row: Row) -> bool:
+    return bool(row.get('dormant') and row.get('finalization_owner_parked'))
+
+
+def park_for_ownership(row: Row, now: float) -> Row:
+    return {
+        **row,
+        'dormant': True,
+        'finalization_owner_parked': True,
+        'deferred_reason': FINALIZATION_OWNER_REFUSAL,
+        'due_at': now + OWNERSHIP_PROBE_SECONDS,
+        'task_due_at': None,
+        'owner': None,
+        'lease_until': 0,
+        'summary_seen_by': None,
+    }
+
+
+def _ownership_released(row: Row, client: Any) -> bool:
+    """Probe parked debt on the same conversation path as its callback."""
+    from database import conversations as conversations_db
+    from utils.sync.bridge_pending import FIELD as bridge_field
+
+    cid = row['conversation_id']
+    uid = row['uid']
+    visited = set()
+    while isinstance(cid, str) and cid and '/' not in cid and cid not in visited and len(visited) < 16:
+        visited.add(cid)
+        current = conversations_db.get_conversation_raw_snapshot(
+            uid,
+            cid,
+            firestore_client=client,
+            field_paths=['finalization_engine', 'finalization_owner_epoch', 'sync_merged_into', bridge_field],
+        )
+        if current is None:
+            return True  # Let normal custody settle a disappeared target.
+        if not python_owns_finalization(current):
+            return False
+        if row.get('effects_only'):
+            return True  # Lazy enrichment acts on this conversation only.
+        bridge = current.get(bridge_field)
+        cid = current.get('sync_merged_into') or (bridge.get('target_id') if isinstance(bridge, dict) else None)
+    return True
 
 
 def _mutate(document_id: str, operation: Callable[[Row | None], tuple[Row | None, ResultT]]) -> ResultT:
@@ -409,6 +463,20 @@ def mark_update(
             stamps.clear()  # A CAS or transaction retry re-runs this operation.
         if old and old.get('summary_blocked_reason') in summary_delivery.EMPTY_BLOCKED_REASONS:
             return old, ({**old, '_wake': False}, True)
+        if old and ownership_parked(old):
+            row = {
+                **old,
+                'language': language,
+                'version': old.get('version', 0) + 1,
+                'latest_pending_at': max(old.get('latest_pending_at', current), current),
+            }
+            if sync_hold or merge_hold:
+                row['sync_hold'] = True
+            if merge_hold:
+                row['merge_hold'] = True
+            if sync_hold and not merge_hold:
+                row['sync_hold_requested'] = True
+            return row, ({**row, '_wake': False}, True)
         row = dict(old or {})
         row.pop('_wake', None)  # Dispatch intent belongs to this CAS result, not its persisted replay.
         row.update(
@@ -466,6 +534,10 @@ def mark_update(
         if old and old.get('dormant'):
             row.pop('merge_hold', None)
             row.pop('sync_hold_requested', None)
+            if old.get('held_reason') == V3_CUSTODY_DEFER_REASON:
+                # A producer admitted new work. Give it a fresh custody budget.
+                for field in ('held_reason', 'held_at', 'v3_custody_defers', 'deferred_reason', 'deferred_since'):
+                    row.pop(field, None)
         if sync_hold or merge_hold:
             row['sync_hold'] = True
             if sync_hold and not merge_hold:
@@ -609,7 +681,8 @@ def _heartbeat(document_id: str, task_token: str, owner: str, context: Row) -> I
 
 
 def run(document_id: str, task_token: str, process: Callable[[str, str, str], Any], *, now: float | None = None) -> str:
-    current = time.time() if now is None else now
+    started = time.time()
+    current = started if now is None else now
     from utils.conversations.demand_processing import admit
     from config.demand_processing import enabled
 
@@ -736,18 +809,50 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 raise
             held_reason = HELD_DOCUMENT_SIZE_LIMIT
         except summary_delivery.SummaryOutputUnavailable:
-            if not process_context:
-                raise
-            empty_outcome = record_empty_failure(get_firestore_client(), COLLECTION, document_id, owner, task_token)
-            if empty_outcome is EmptyFailureOutcome.STALE:
-                return 'stale'
-            if empty_outcome is EmptyFailureOutcome.RETRY:
-                raise
-            if empty_outcome is EmptyFailureOutcome.OWNER_MISMATCH:
-                process_context.update(defer_reason='summary_owner_changed', defer_until=current + LIVE_DEFER_SECONDS)
-            else:
-                record_delivery('summary', 'failed')
-                empty_blocked = True
+            # An already-enriched row (no ``PROCESS_CONTEXT``) has no delivery failure to
+            # record: settle the empty reprocess like a completed one instead of failing
+            # the request and retrying it forever.
+            if process_context:
+                # The deferral clock starts when the callback returned empty, not when this
+                # delivery was claimed: a slow callback must not eat its own backoff.
+                empty_at = current + max(0.0, time.time() - started)
+                empty_outcome = record_empty_failure(
+                    get_firestore_client(),
+                    COLLECTION,
+                    document_id,
+                    owner,
+                    task_token,
+                    expected_version=row.get('version'),
+                )
+                if empty_outcome is EmptyFailureOutcome.STALE:
+                    return 'stale'
+                if empty_outcome is EmptyFailureOutcome.SUPERSEDED:
+                    # New content landed while this attempt ran: no strike, and the
+                    # newer version is due now.
+                    logger.info('event=sync_reprocess outcome=deferred reason=%s', EMPTY_OUTPUT_DEFER_REASON)
+                    process_context.update(defer_reason=EMPTY_OUTPUT_DEFER_REASON, defer_until=empty_at)
+                elif empty_outcome is EmptyFailureOutcome.RETRY:
+                    # The strike is recorded and the debt stays armed. Re-arm the row
+                    # for its bounded retry (the third strike blocks it) instead of
+                    # letting the exception escape the request as a 500.
+                    logger.info('event=sync_reprocess outcome=deferred reason=%s', EMPTY_OUTPUT_DEFER_REASON)
+                    process_context.update(
+                        defer_reason=EMPTY_OUTPUT_DEFER_REASON, defer_until=empty_at + LIVE_DEFER_SECONDS
+                    )
+                elif empty_outcome is EmptyFailureOutcome.UNAVAILABLE:
+                    # The strike write could not land, so nothing was recorded. Re-arm
+                    # the row for a bounded retry instead of failing the request.
+                    logger.warning('event=sync_reprocess outcome=deferred reason=%s', EMPTY_OUTPUT_DEFER_REASON)
+                    process_context.update(
+                        defer_reason=EMPTY_OUTPUT_DEFER_REASON, defer_until=empty_at + LIVE_DEFER_SECONDS
+                    )
+                elif empty_outcome is EmptyFailureOutcome.OWNER_MISMATCH:
+                    process_context.update(
+                        defer_reason='summary_owner_changed', defer_until=empty_at + LIVE_DEFER_SECONDS
+                    )
+                else:
+                    record_delivery('summary', 'failed')
+                    empty_blocked = True
         finally:
             ADMITTED_OWNER.reset(admitted_token)
             summary_delivery.REPAIR_CONTEXT.reset(context_token)
@@ -790,16 +895,22 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     if process_context and process_context.get('redirect_to'):
         from utils.enrichment.custody import transfer_redirect
 
-        pending = transfer_redirect(document_id, task_token, owner, process_context['redirect_to'], now=current)
-        if pending is not None:
-            _enqueue(pending)  # Transactional custody survives a lost enqueue acknowledgement.
-        return 'redirected'
+        try:
+            pending = transfer_redirect(document_id, task_token, owner, process_context['redirect_to'], now=current)
+        except processing_hold.ProcessingDeferred as error:
+            process_context = {'defer_reason': error.reason, 'defer_until': error.available_at}
+        else:
+            if pending is not None:
+                _enqueue(pending)  # Transactional custody survives a lost enqueue acknowledgement.
+            return 'redirected'
 
     if process_context and process_context.get('defer_reason'):
 
         def defer(old: Row | None) -> tuple[Row | None, Row | None]:
             if old is None or old.get('owner') != owner or old.get('task_token') != task_token:
                 return old, None
+            if process_context['defer_reason'] == FINALIZATION_OWNER_REFUSAL:
+                return park_for_ownership(old, current), None
             pending = dict(old)
             since = custody_deferred_since(old, process_context['defer_reason'], current)
             due = custody_defer_until(process_context, since, current)
@@ -961,6 +1072,23 @@ def sweep(
             break
         last = snapshot
         recent: bool | None = None
+        candidate = getattr(snapshot, 'to_dict', lambda: {})() or {}
+
+        def released(old: Row | None) -> tuple[Row | None, bool]:
+            if not old or not ownership_parked(old) or old.get('due_at') != candidate.get('due_at'):
+                return old, False
+            if not _ownership_released(old, client):
+                return park_for_ownership(old, current), False
+            return {
+                **old,
+                'dormant': False,
+                'finalization_owner_parked': False,
+                'deferred_reason': None,
+                'due_at': current,
+                'task_due_at': current,
+                'task_token': uuid.uuid4().hex,
+                'wake_check_after': 0,
+            }, True
 
         def repair(old: Row | None) -> tuple[Row | None, tuple[str, Row | None]]:
             nonlocal recent
@@ -1057,13 +1185,16 @@ def sweep(
             if discard is not None and discard(snapshot.id):
                 counts['discarded'] += 1
                 continue
+            if ownership_parked(candidate):
+                # The existing selector can look ahead during rollback. Never probe early.
+                if candidate['due_at'] > current or not mutate(snapshot.id, released):
+                    continue
             if not injected:
                 from utils.enrichment.age_gate import park_if_expired
 
                 if park_if_expired(snapshot.id, None, now=current, client=bound):
                     continue
             # The existing privacy/parking policies take precedence; gate only remaining open debt.
-            candidate = getattr(snapshot, 'to_dict', lambda: {})() or {}
             if _skip_ancient_fresh(candidate, now=current):
                 continue
             status, row = mutate(snapshot.id, repair)

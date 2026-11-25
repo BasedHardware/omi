@@ -201,7 +201,7 @@ def test_kill_switch_keeps_listing_while_archive_recomputes_overlays(world, monk
         monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
     else:
         monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
-        monkeypatch.setattr(storage, 'list_packs', lambda *_: [])
+        monkeypatch.setattr(storage, 'list_packs', lambda *_, **_kwargs: [])
     cache = projection.PusherAudioProjection('u')
     cache.refresh('c', [world.add(100)])
     cache.refresh('c', [world.add(101)])
@@ -480,7 +480,7 @@ def test_full_listing_race_cannot_clobber_other_pod(world, monkeypatch, mode):
     monkeypatch.setattr(db, 'list_audio_chunks', racing_list)
     if mode == 'archive':
         monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
-        monkeypatch.setattr(storage, 'list_packs', lambda *_: [])
+        monkeypatch.setattr(storage, 'list_packs', lambda *_, **_kwargs: [])
     assert cache.refresh('c', None if mode == 'unknown_paths' else [a]) is True
     assert world.stored[0]['chunk_timestamps'] == [100, 101]
     assert len(world.writes) == 2  # only the peer and the successful rebuild
@@ -621,7 +621,7 @@ def test_fleet_archive_read_recomputes_split_overlays_without_encoded_prefix_lis
     # not just when tests disable the archive phase.
     monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
     packs = [raw_pack(100.0004, 104.0004)]
-    pack_index = MagicMock(side_effect=lambda *_: packs)
+    pack_index = MagicMock(side_effect=lambda *_, **_kwargs: packs)
     monkeypatch.setattr(storage, 'list_packs', pack_index)
     cache = projection.PusherAudioProjection('u')
     cache.refresh('c', [world.add(100.0004)])
@@ -629,6 +629,7 @@ def test_fleet_archive_read_recomputes_split_overlays_without_encoded_prefix_lis
     cache.refresh('c', [world.add(102.0004)])
     assert len(world.lists) == 1
     assert pack_index.call_count == 2  # Existing raw index is consulted each time.
+    assert all(call.kwargs == {'reuse_manifest_bodies': True} for call in pack_index.call_args_list)
     assert all(c['path'].startswith('chunks/') for c in cache.inventory['c'].chunks)
     expected = [af.model_dump() for af in db.create_audio_files_from_chunks('u', 'c')]
     assert world.stored == expected
@@ -640,7 +641,7 @@ def test_fleet_archive_read_recomputes_split_overlays_without_encoded_prefix_lis
 def test_stop_pcm_raw_only_flushes_refresh_pack_projection_without_encoded_lists(world, monkeypatch):
     monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
     packs = [raw_pack(100, 101, 'first')]
-    monkeypatch.setattr(storage, 'list_packs', lambda *_: packs)
+    monkeypatch.setattr(storage, 'list_packs', lambda *_, **_kwargs: packs)
     cache = projection.PusherAudioProjection('u')
     assert cache.refresh('c', [packs[0]['path']]) is True
     assert cache.inventory['c'].chunks == []
@@ -658,7 +659,7 @@ def test_stop_pcm_raw_only_flushes_refresh_pack_projection_without_encoded_lists
 def test_archive_index_failure_uses_full_legacy_fallback_without_caching(world, monkeypatch):
     monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
     packs = [raw_pack(100, 106)]
-    monkeypatch.setattr(storage, 'list_packs', lambda *_: packs)
+    monkeypatch.setattr(storage, 'list_packs', lambda *_, **_kwargs: packs)
     cache = projection.PusherAudioProjection('u')
     cache.refresh('c', [world.add(100)])
     before = deepcopy(world.stored)
@@ -669,7 +670,7 @@ def test_archive_index_failure_uses_full_legacy_fallback_without_caching(world, 
     assert world.stored != before
     assert not cache.inventory.get('c')
     assert cache.close_debt == {'c'}
-    monkeypatch.setattr(storage, 'list_packs', lambda *_: packs)
+    monkeypatch.setattr(storage, 'list_packs', lambda *_, **_kwargs: packs)
     cache.refresh('c', [world.add(103)])
     expected = [af.model_dump() for af in db.create_audio_files_from_chunks('u', 'c')]
     assert world.stored == expected
