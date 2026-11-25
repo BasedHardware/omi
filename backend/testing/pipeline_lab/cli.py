@@ -234,7 +234,10 @@ def dispatch(args: argparse.Namespace, store: Store, registry: Registry, as_json
 
         return write_sample(store), 0
     if command == 'run':
-        return _run(args, store, registry)
+        body, code = _run(args, store, registry)
+        if not as_json:  # the per-stage cache table, for people; the JSON body carries it as stage_report
+            print('\n'.join((body.get('stage_report') or {}).get('table') or []), file=sys.stderr)
+        return body, code
     if command == 'runs':
         return [_run_summary(run) for run in store.list_runs(args.day)], 0
     if command == 'show':

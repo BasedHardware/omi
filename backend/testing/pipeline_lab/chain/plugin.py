@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
@@ -150,12 +151,22 @@ class ChainComposite:
         pipeline, reason = select_pipeline(ctx.overlay or {}, day_has_v3=day_has_v3(ctx.store, ctx.day.day_id))
         ctx.run_extra['pipeline'] = pipeline
         ctx.run_extra['pipeline_reason'] = reason
+        started = time.monotonic()
         code = ctx.run_module(
             entry_module(pipeline), ['--root', str(ctx.store.root), '--run', ctx.run_id, '--engine', ctx.engine]
         )
+        wall = round(time.monotonic() - started, 3)
         summary = read_json(ctx.run_dir / 'chain_entry.json')
         if code != 0 or summary is None:
             raise ChainFailed(f'chain entry exited {code}; traceback in runs/{ctx.run_id}/chain_errors.log')
+        timings = dict(summary.get('timings') or {})
+        timings['process_wall'] = wall
+        if 'entry_total' in timings:  # interpreter start, lab imports and exit, outside chain.entry.run
+            timings['process_overhead'] = round(wall - timings['entry_total'], 3)
+        summary['timings'] = timings
+        from testing.pipeline_lab.store import atomic_write_json
+
+        atomic_write_json(ctx.run_dir / 'chain_entry.json', summary)
         transcripts = summary.get('transcripts') or {}
         if not transcripts.get('replayed'):
             ctx.run_extra.setdefault('stt', 'stored production transcripts')

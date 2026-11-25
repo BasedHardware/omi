@@ -61,6 +61,8 @@ def test_unchanged_rerun_is_all_cache_hits_and_says_so(lab, capsys):
     assert cold['stages']['daily_summary']['report']['llm_calls'] == 1
     assert cold['stages']['discard']['report']['llm_calls'] == 0
     assert all(cold['stages'][s]['unit'] == 'chain' for s in CHAIN)
+    breakdown = cold['stages']['discard']['report']['breakdown']
+    assert {'entry_total', 'process_wall', 'process_overhead', 'baseline_view'} <= set(breakdown)
 
     warm = run(capsys, lab)
     assert caches(warm) == dict.fromkeys(STAGES, 'hit')
@@ -81,6 +83,25 @@ def test_unchanged_rerun_is_all_cache_hits_and_says_so(lab, capsys):
     )
     stored = json.loads((warm_dir / 'run.json').read_text())
     assert stored['stage_report']['all_cached'] and stored['stages']['tasks']['report']['cache'] == 'hit'
+
+
+def test_text_mode_prints_the_stage_table(lab, capsys):
+    argv = ['run', '--day', DAY, '--ref', 'HEAD', '--in-place', '--engine', 'fake', '--llm-upstream', lab['up'].url]
+    capsys.readouterr()
+    assert cli.main(argv) == 0
+    err = capsys.readouterr().err.splitlines()
+    assert err[0].startswith('stage cache: 0 hit, 12 ran') and err[1].split() == [
+        'stage',
+        'cache',
+        'unit',
+        'seconds',
+        'llm',
+        'upstr',
+        'pcache',
+    ]
+    assert [line.split()[0] for line in err[2:14]] == list(STAGES)
+    assert cli.main(argv) == 0
+    assert capsys.readouterr().err.startswith('stage cache: all 12 stages served from the cache')
 
 
 def test_changed_chain_input_reruns_chain_only(lab, capsys):
@@ -254,3 +275,14 @@ def test_code_keys_scope_lane_stages_and_fold_in_dirty_edits():
     assert code.stage_key(['ingest']) != ingest
     code.dirty['backend/utils/llm/goals.py'] = 'sha256:00'
     assert code.tree_key() != tree and code.tree_key().startswith('dirty:')
+
+
+def test_chain_call_attribution_by_feature_then_tag():
+    from testing.pipeline_lab.chain.plugin import attribute_call
+
+    assert attribute_call({'stage': 'finalize', 'feature': 'conv_structure'}) == 'notes'
+    assert attribute_call({'stage': 'finalize', 'feature': 'goals'}) == 'goals'
+    assert attribute_call({'stage': 'open_loops', 'feature': 'open_loop_daily'}) == 'daily_summary'
+    assert attribute_call({'stage': 'notes', 'feature': 'pipeline_lab_fake_notes'}) == 'notes'
+    assert attribute_call({'stage': 'finalize', 'feature': 'something_new'}) == 'discard'
+    assert attribute_call({'feature': 'something_new'}) is None  # the executing stage keeps it

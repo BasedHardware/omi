@@ -2,22 +2,29 @@
 
 ``run_pipeline`` creates ``runs/<run_id>/run.json``, opens the run's spend ledger,
 optionally starts the LLM proxy (its URL goes into the arm env as
-``OMI_LLM_GATEWAY_URL``), then for each selected stage:
+``OMI_LLM_GATEWAY_URL``), then walks the selected stages in **units**: a stage alone, or the
+stages whose drivers share a ``unit`` (the chain composite, ``discard`` .. ``chat_index``),
+which execute and are cached together. For each unit it:
 
-- computes the L12 key from the corpus day hash, every earlier stage's output
-  hash, the driver's own ``inputs(ctx)``, the backend tree, overlay and model config;
-- serves a cacheable stage from ``cache/<stage>/`` when the key hits and the stage
-  is before ``--from-stage`` (``restore`` rewrites run files from the manifest);
-- otherwise calls the registered driver and caches its output manifest.
+- computes the L12 key from the corpus day hash, every earlier stage's output hash and stored
+  artifact digest, the drivers' own ``inputs(ctx)``, the code (the backend tree with uncommitted
+  in-place edits folded in, or for ``scoped_code`` drivers only the files the stage runs, from
+  ``affected``), the overlay and model config (narrowed by a driver's ``key_overlay``);
+- on a hit, writes the entry's stored artifacts back into the run directory, calls each driver's
+  ``restore`` and marks the stages ``cached`` (no driver runs, no LLM call is made);
+- otherwise runs the drivers and stores the outputs plus every run file they wrote (artifacts).
 
-"Re-run from stage X" therefore re-runs X and everything after it; unchanged LLM
-calls inside those stages are still served by the proxy cache. A driver that
-cannot be restored from a manifest (its effect is emulator state) sets
-``cacheable = False`` and always runs.
+``--from-stage X`` re-runs the unit holding X and every unit after it (a unit is never split:
+the run warns when X falls inside one); earlier units are served from the cache when an entry
+exists and are otherwise marked ``skipped`` (``--from-stage discard`` then starts the chain from
+the stored production transcripts, RULINGS 16). Unchanged LLM calls inside re-run stages are
+still served by the proxy cache. ``--no-cache`` runs everything and stores nothing.
 
-Stages before ``--from-stage`` are served from the cache when an entry exists and
-are otherwise marked ``skipped``: in M1 ``--from-stage discard`` starts the chain
-from the stored production transcripts (RULINGS 16).
+Every stage gets a report row in ``run.json`` (``stages.<s>.report``): ``cache`` (hit, miss,
+off, skipped, failed), seconds, LLM calls made during the stage split into upstream and
+proxy-cache hits (a hit reports the ``saved_llm_calls`` of the stored run), and for the chain the
+phase ``breakdown``. ``stage_report`` sums them, says when everything was a hit, and carries the
+printable ``table`` the CLI shows.
 
 Stops: a ledger refusal (or the proxy reporting the cap) marks the run
 ``stopped`` (exit 4); any other driver error marks it ``failed`` (exit 2) with the
@@ -195,7 +202,9 @@ def _stage_inputs(day: CorpusDay, upstream: Mapping[str, Mapping[str, Any]]) -> 
     return inputs
 
 
-# Run files the orchestrator (or the proxy) owns; never stored as a stage's artifacts.
+# Run files the orchestrator (or the proxy) owns, and the run-wide append-only decision log (every
+# stage adds to it, with timestamps); never stored as a stage's artifacts, so a hit does not restore
+# the stored run's decisions.
 RUN_FILES = frozenset({'run.json', 'ledger.json', 'llm_calls.jsonl', 'errors.log', 'decisions.jsonl'})
 
 
@@ -574,8 +583,12 @@ def run_pipeline(
                         raise SpendCapReached('LLM proxy refused a call at the spend cap')
                 llm = {stage: _llm_summary(calls_by_stage.get(stage) or []) for stage in group}
                 for stage in group:
+                    timings = outputs[stage].get('timings') if isinstance(outputs[stage], dict) else None
                     reports[stage] = _report(
-                        'miss' if cacheable else 'off', seconds=run.timings.get(stage, 0.0), **llm[stage]
+                        'miss' if cacheable else 'off',
+                        seconds=run.timings.get(stage, 0.0),
+                        breakdown=timings if isinstance(timings, dict) else None,
+                        **llm[stage],
                     )
                 if cacheable:
                     artifacts = _changed(before, _snapshot(store.run_dir(run_id)))
