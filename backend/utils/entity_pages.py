@@ -7,6 +7,7 @@ so no migration is needed. Summaries are a derived dream cache only.
 
 from utils.conversations.layer import read_product as read_product_conversation
 from datetime import datetime, timezone
+from typing import Any, Optional
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -15,6 +16,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from database import action_items, conversations, knowledge_graph, review_queries, review_store as store, users
 from models.entity_pages import ConversationRef, EntityPage, Fact, FactSource, TaskRef
 from models.review import EntityRef, ReviewItem
+from utils.other.list_budget import ListReadBudget, budgeted_document_get
 
 MAX_RELATED = 30
 # Each page considers at most 20 fact IDs and runs at most 20 fact source
@@ -30,18 +32,21 @@ def _id(value: str) -> str:
     return value
 
 
-def resolve_entity(uid: str, entity_id: str) -> dict:
+def resolve_entity(uid: str, entity_id: str, *, budget: Optional[ListReadBudget] = None) -> dict:
+    # Without a budget the read sequence is the released unbounded one, so the
+    # seam stays call-compatible for unbudgeted callers and their fakes.
+    budget_kwargs: dict[str, Any] = {'budget': budget} if budget is not None else {}
     _id(entity_id)
-    node = knowledge_graph.get_knowledge_node(uid, entity_id) or {}
+    node = knowledge_graph.get_knowledge_node(uid, entity_id, **budget_kwargs) or {}
     seen = set()
     while node.get('redirect_entity_id'):
         if entity_id in seen or len(seen) >= 8:
             raise store.ReviewStale('Entity redirect cycle')
         seen.add(entity_id)
         entity_id = _id(node['redirect_entity_id'])
-        node = knowledge_graph.get_knowledge_node(uid, entity_id) or {}
+        node = knowledge_graph.get_knowledge_node(uid, entity_id, **budget_kwargs) or {}
     if entity_id.startswith('person:'):
-        person = users.get_person(uid, entity_id.removeprefix('person:'))
+        person = users.get_person(uid, entity_id.removeprefix('person:'), **budget_kwargs)
         if not person:
             raise store.ReviewNotFound('Person not found')
         return dict(
@@ -52,7 +57,7 @@ def resolve_entity(uid: str, entity_id: str) -> dict:
             subtitle=person.get('subtitle') or person.get('role'),
             organization_id=person.get('organization_id') or node.get('organization_id'),
         )
-    workstream = store.user(uid).collection('workstreams').document(entity_id).get().to_dict()
+    workstream = budgeted_document_get(store.user(uid).collection('workstreams').document(entity_id), budget).to_dict()
     if workstream and workstream.get('status') not in {'deleted', 'cancelled'}:
         from database.task_intelligence_control import get_task_workflow_control
 

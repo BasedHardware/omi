@@ -3,7 +3,7 @@
 import asyncio
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from config.dream_agent import PASS_TIMEOUT_SECONDS, DRAIN_TIMEOUT_SECONDS
 
 from database.dream_store import AdmissionDenied
@@ -11,15 +11,33 @@ from models.dream_report import DreamRun, DreamRunRequest, DreamRunsResponse
 from utils import dream_agent, dream_report
 from utils.executors import db_executor, run_blocking
 from utils.other import endpoints as auth
+from utils.other.list_budget import ListReadBudgetExhausted, finish_list_budget, list_read_budget_for_request
 
 router = APIRouter()
 MANUAL_DEADLINE_SECONDS = 85
 
 
 @router.get('/v1/dream/runs', response_model=DreamRunsResponse)
-async def get_runs(limit: int = Query(default=10, ge=1, le=20), uid: str = Depends(auth.get_current_user_uid)):
-    await run_blocking(db_executor, dream_report.require_owner, uid)
-    return await run_blocking(db_executor, dream_report.list_runs, uid, limit)
+async def get_runs(
+    request: Request,
+    response: Response,
+    limit: int = Query(default=10, ge=1, le=20),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    # Every Firestore read on this path runs with the request budget's per-RPC
+    # timeout and no retry, so one stalled op ends the list with the runs already
+    # projected plus X-Omi-List-Truncated rather than a bodyless 90 s middleware
+    # 504. The eligibility gate cannot report partial eligibility, so its
+    # deadline is a retryable 503 instead. No docstring: the released OpenAPI
+    # description is pinned, and this route's wire contract does not change.
+    budget = list_read_budget_for_request(request, route='GET /v1/dream/runs')
+    try:
+        await run_blocking(db_executor, dream_report.require_owner, uid, budget=budget)
+    except ListReadBudgetExhausted:
+        raise HTTPException(503, detail='dream_report_unavailable', headers={'Retry-After': '5'}) from None
+    runs = await run_blocking(db_executor, dream_report.list_runs, uid, limit, budget=budget)
+    finish_list_budget(response, budget)
+    return runs
 
 
 @router.post('/v1/dream/runs', response_model=DreamRun)

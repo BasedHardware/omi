@@ -15,6 +15,7 @@ from config.firestore_quick_reads import kg_citation_index_enabled, indexed_stri
 from database.firestore_read_origin import read_origin
 from google.api_core.exceptions import FailedPrecondition
 from utils.observability.fallback import record_fallback
+from utils.other.list_budget import ListReadBudget, budgeted_document_get
 
 logger = logging.getLogger(__name__)
 
@@ -175,11 +176,13 @@ def get_knowledge_nodes(
     return [_typed_doc(doc) for doc in query.stream()]
 
 
-def get_knowledge_node(uid: str, node_id: str, *, db_client: Any = None) -> Optional[Dict[str, Any]]:
+def get_knowledge_node(
+    uid: str, node_id: str, *, db_client: Any = None, budget: Optional[ListReadBudget] = None
+) -> Optional[Dict[str, Any]]:
     client = _firestore_client(db_client)
     user_ref = client.collection(users_collection).document(uid)
     node_ref = user_ref.collection(knowledge_nodes_collection).document(node_id)
-    doc = node_ref.get()
+    doc = budgeted_document_get(node_ref, budget)
     if not doc.exists:
         return None
     return _typed_doc(doc)

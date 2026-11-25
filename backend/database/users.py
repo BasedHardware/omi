@@ -62,6 +62,7 @@ from database.redis_db import (
     try_acquire_user_platform_write_lock,
 )
 from utils.other.request_deadline import request_deadline_remaining_seconds
+from utils.other.list_budget import budgeted_document_get
 from models.users import (
     LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
     LOCATION_CONTEXT_PURPOSE,
@@ -1087,15 +1088,17 @@ def create_person(uid: str, data: dict):
     return data
 
 
-def get_person(uid: str, person_id: str, *, include_dismissed: bool = False):
+def get_person(uid: str, person_id: str, *, include_dismissed: bool = False, budget=None):
     """Return one owner-scoped person, hiding soft-dismissed records by default.
 
     ``include_dismissed`` is reserved for complete-account export paths. Normal
     product reads must not make dismissed people or their voice data visible.
+    ``budget`` bounds the person document read itself; the learning projection
+    it then applies is a pure projection of that document.
     """
 
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_doc = person_ref.get()
+    person_doc = budgeted_document_get(person_ref, budget)
     if not person_doc.exists:
         return None
     person_data = person_doc.to_dict()

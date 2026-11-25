@@ -38,9 +38,9 @@ class Document(StrictFirestoreDocument):
     def collection(self, name):
         return Query(self._database, (*self.path, name))
 
-    def get(self, transaction=None, **kwargs):
+    def get(self, transaction=None, *, timeout=None, retry=None, **kwargs):
         self._database.reads.append(self.path)
-        result = super().get(transaction=transaction)
+        result = super().get(transaction=transaction, timeout=timeout, retry=retry)
         result.reference = self
         result.id = self.id
         return result
@@ -118,15 +118,17 @@ class Query:
         return [(path, row) for path, row in self.database.rows.items() if path[:-1] == self.path]
 
     def count(self):
-        def get(transaction=None):
+        def get(transaction=None, *, timeout=None, retry=None):
             if transaction is not None:
                 assert transaction._database is self.database
                 transaction._assert_read_allowed()
+            if timeout is not None:
+                assert 0 < timeout <= 3
             return [[SimpleNamespace(value=len(self._rows()))]]
 
         return SimpleNamespace(get=get)
 
-    def stream(self, transaction=None, timeout=None):
+    def stream(self, transaction=None, timeout=None, retry=None):
         if timeout is not None:
             assert 0 < timeout <= 3
         assert self.order and self.bound

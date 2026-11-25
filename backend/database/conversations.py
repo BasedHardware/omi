@@ -122,6 +122,7 @@ from database.account_deletion_policy import account_deletion_blocks_access, nor
 from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
+    budgeted_document_get,
     budgeted_get_all,
     budgeted_stream_iter,
     indexed_list_reads_enabled,
@@ -2077,6 +2078,7 @@ def get_conversation_raw_snapshot(
     firestore_client: Any = None,
     field_paths: Optional[List[str]] = None,
     timeout: float | None = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> Optional[Dict[str, Any]]:
     """Return the stored conversation document with no read-path decoding.
 
@@ -2085,13 +2087,20 @@ def get_conversation_raw_snapshot(
     admission. The decoded ``get_conversation`` path would decompress it and
     make every correct recovery look like content drift, so this read is the
     raw ``to_dict()`` snapshot only.
+
+    With a request ``budget`` the read takes the budget's per-RPC timeout and no
+    retry and is charged to it, so one blocked document read surfaces as
+    :class:`ListReadBudgetExhausted` at the budget's deadline.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
-    kwargs = {} if field_paths is None else {'field_paths': field_paths}
-    if timeout is not None:
-        kwargs.update(timeout=timeout, retry=None)
-    snapshot = ref.get(**kwargs)
+    if budget is not None:
+        snapshot = budgeted_document_get(ref, budget, field_paths=field_paths)
+    else:
+        kwargs = {} if field_paths is None else {'field_paths': field_paths}
+        if timeout is not None:
+            kwargs.update(timeout=timeout, retry=None)
+        snapshot = ref.get(**kwargs)
     if not getattr(snapshot, 'exists', False):
         return None
     return snapshot.to_dict()

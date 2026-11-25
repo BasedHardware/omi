@@ -1535,10 +1535,10 @@ def _evidence_items_from_payload(data: Dict[str, Any]) -> List[MemoryEvidence]:
 
 
 def _read_canonical_memory_item(
-    uid: str, memory_id: str, *, db_client: Any, include_inactive: bool = False
+    uid: str, memory_id: str, *, db_client: Any, include_inactive: bool = False, budget: Optional[ListReadBudget] = None
 ) -> Optional[MemoryItem]:
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    snapshot = db_client.document(path).get()
+    snapshot = budgeted_document_get(db_client.document(path), budget)
     if not getattr(snapshot, "exists", False):
         return None
     item = MemoryItem(**_snapshot_payload(snapshot))
@@ -1552,11 +1552,22 @@ def _read_canonical_memory_item(
 
 
 def read_canonical_memory_item(
-    uid: str, memory_id: str, *, db_client: Any = None, include_inactive: bool = False
+    uid: str,
+    memory_id: str,
+    *,
+    db_client: Any = None,
+    include_inactive: bool = False,
+    budget: Optional[ListReadBudget] = None,
 ) -> Optional[MemoryItem]:
-    """Read an active owner item; Review may inspect inactive rows to classify exclusion."""
+    """Read an active owner item; Review may inspect inactive rows to classify exclusion.
+
+    With a request ``budget`` the one document read takes its per-RPC timeout
+    and no retry; a deadline is :class:`ListReadBudgetExhausted`, never a 503.
+    """
     client = db_client if db_client is not None else default_db_client
-    return _read_canonical_memory_item(uid, memory_id, db_client=client, include_inactive=include_inactive)
+    return _read_canonical_memory_item(
+        uid, memory_id, db_client=client, include_inactive=include_inactive, budget=budget
+    )
 
 
 def _canonical_extraction_apply_write(
