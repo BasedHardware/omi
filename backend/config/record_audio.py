@@ -18,6 +18,59 @@ def restore_pending(row: dict, *obligations: dict) -> bool:
     return bool(row.get('discarded') and any(job.get('registration_origin') == 'restore' for job in obligations))
 
 
+BARRIER_BLOCKERS = (
+    'owner_other',
+    'status_not_completed',
+    'producer_tokens',
+    'upload_failed',
+    'partial_invalid',
+    'audio_not_closed',
+)
+TOKEN_KINDS = ('none', 'bare', 'podless', 'abandoned', 'pod', 'other')
+
+
+def _token_kind(sessions) -> str:
+    """The least releasable producer token, from the map's shape only."""
+    if not isinstance(sessions, dict) or not sessions:
+        return 'other' if sessions else 'none'
+    kinds = set()
+    for value in sessions.values():
+        if value is True:
+            kinds.add('bare')
+        elif not isinstance(value, dict):
+            kinds.add('other')
+        elif 'abandoned_at' in value:
+            kinds.add('abandoned')
+        elif value.get('pod') == '':
+            kinds.add('podless')
+        else:
+            kinds.add('pod')
+    for kind in ('other', 'bare', 'podless', 'pod', 'abandoned'):
+        if kind in kinds:
+            return kind
+    return 'none'
+
+
+def barrier_blocker(row) -> tuple[str, str]:
+    """Closed-vocabulary first failing clause of the barrier, plus the token kind.
+
+    Content-free: reads only fields the predicate already reads. Used for
+    counts; never changes the barrier decision.
+    """
+    kind = _token_kind(row.get('record_upload_sessions'))
+    if row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
+        return 'owner_other', kind
+    if row.get('status') != 'completed':
+        return 'status_not_completed', kind
+    if row.get('record_upload_sessions'):
+        return 'producer_tokens', kind
+    if row.get('record_upload_failed'):
+        return 'upload_failed', kind
+    if row.get('record_audio_partial'):
+        return 'partial_invalid', kind
+    return 'audio_not_closed', kind
+
+
 def require_record_audio_barrier(row, *, expected=None):
     snapshot = {
         key: row.get(key)
@@ -41,7 +94,11 @@ def require_record_audio_barrier(row, *, expected=None):
         or row.get('record_upload_sessions')
         or row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}
     ):
-        raise ValueError(BARRIER_NOT_CLOSED)
+        error = ValueError(BARRIER_NOT_CLOSED)
+        # Same type and message as before; the cause rides as attributes so
+        # callers that compare str(error) or log type names are unchanged.
+        error.barrier_blocker, error.barrier_token_kind = barrier_blocker(row)
+        raise error
     if expected is not None and snapshot != expected:
         raise ValueError('capture upload barrier changed during staging')
     return snapshot
