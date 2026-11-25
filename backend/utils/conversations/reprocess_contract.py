@@ -19,9 +19,16 @@ An explicit app selection with empty input or output answers 502
 error contract.
 """
 
+from enum import Enum
 from typing import Any, Iterable, Optional
 
 from utils.conversations.transcript_hash import transcript_sha256
+
+
+class EmptyAppResult(Enum):
+    CONTEXT = 'empty_context'
+    MODEL_OUTPUT = 'empty_model_output'
+
 
 # ``source`` query value that forces Omi's own summary on reprocess.
 FIRST_PARTY_SUMMARY_SOURCE = 'omi'

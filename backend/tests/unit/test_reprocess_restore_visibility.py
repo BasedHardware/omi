@@ -25,6 +25,7 @@ from utils import apps as utils_apps
 from utils.batch_pipeline import live
 from utils.conversations import process_conversation as processor
 from utils.llm import conversation_processing as llm_processing
+from utils.llm.clients import _LLMErrorCallback
 from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 
 APP_ID = 'summary-app'
@@ -159,9 +160,15 @@ def test_reprocess_app_result_failure_keeps_the_row_hidden(
         original = APITimeoutError(request=request)
     elif outcome == 'bug':
         original = RuntimeError(private_message)
+
+    def invoke(_messages):
+        if original is not None:
+            _LLMErrorCallback('openai', feature='conv_app_result').on_llm_error(original)
+            raise original
+        return SimpleNamespace(content=' ``` ``` ')
+
     model = MagicMock()
-    model.invoke.side_effect = original
-    model.invoke.return_value = SimpleNamespace(content=' ``` ``` ')
+    model.invoke.side_effect = invoke
     monkeypatch.setattr(llm_processing, 'get_llm', lambda *a, **k: model)
 
     with pytest.raises(HTTPException) as error:

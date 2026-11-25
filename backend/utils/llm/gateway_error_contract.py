@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from utils.byok import get_byok_key, has_validated_byok_keys
 from utils.conversations.processing_metrics import record_retryable_processing_response
 from utils.conversations.processing_retry import retryable_provider_failure_class
+from utils.conversations.reprocess_contract import EmptyAppResult
 from utils.other.raise_site import raise_site_of, tag_raise_site
 from utils.other.request_deadline import RequestDeadlineExceeded
 
@@ -99,11 +100,6 @@ class ByokProviderFailure(NamedTuple):
 
     failure_class: str
     provider: str
-
-
-class EmptyAppResult(Enum):
-    CONTEXT = 'empty_context'
-    MODEL_OUTPUT = 'empty_model_output'
 
 
 def is_byok_rate_limit_gateway_error(error: BaseException) -> bool:

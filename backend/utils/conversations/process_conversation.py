@@ -148,6 +148,7 @@ from utils.conversations.relevance_jev import jev_discard_probability, jev_tier_
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD
 from utils.conversations.reprocess_contract import (
     DERIVED_EFFECTS_TRANSCRIPT_FIELD,
+    EmptyAppResult,
     derived_effects_transcript_digest,
 )
 from config.jev_decisions import relevance_arm, relevance_experiment_active
@@ -239,7 +240,7 @@ from utils.conversations.notes_task_context import fetch_dedup_candidates_for_qu
 from utils.llm.conversation_prompt_context import ConversationPromptPrefix, build_conversation_prompt_prefix
 from utils.llm.known_spellings import conversation_known_spellings, spelling_context, spelling_context_run
 from utils.conversations.processing_steps import Steps, blocking_step, inline_steps, run_inline
-from utils.llm.gateway_error_contract import EmptyAppResult, conversation_processing_http_exception
+from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.llm.conversation_folder import assign_conversation_to_folder
 from utils.analytics import record_usage
 from utils.llm.usage_tracker import track_usage, Features

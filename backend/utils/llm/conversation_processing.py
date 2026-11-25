@@ -36,9 +36,10 @@ from models.structured_extraction import (
 )
 from .clients import get_llm, get_llm_gateway_chat_structured, parser
 from .discard_parser import DiscardConversation, LenientDiscardParser
-from .gateway_error_contract import EmptyAppResult, is_byok_rate_limit_gateway_error
+from .gateway_error_contract import is_byok_rate_limit_gateway_error
 from utils.byok import has_byok_keys
 from utils.conversations.meeting_participants import MeetingRoster
+from utils.conversations.reprocess_contract import EmptyAppResult
 
 if TYPE_CHECKING:
     from utils.conversations.episode_evidence import EvidenceItem

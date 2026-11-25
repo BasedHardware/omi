@@ -121,6 +121,7 @@ class _HTTPError(Exception):
         self.status_code = status_code
 
 
+@pytest.mark.parametrize('feature', ['memories', 'conv_app_result'])
 @patch('utils.llm.byok_errors.messaging.send_each')
 @patch('utils.llm.byok_errors.notification_db.get_all_tokens', return_value=['token-1'])
 @patch('utils.llm.byok_errors.try_acquire_byok_llm_error_notification_lock', return_value=True)
@@ -132,18 +133,24 @@ def test_handle_llm_error_notifies_actionable_byok_error(
     mock_lock,
     mock_get_tokens,
     mock_send_each,
+    feature,
+    caplog,
 ):
     from utils.llm.byok_errors import handle_llm_error
 
     mock_send_each.return_value = SimpleNamespace(responses=[SimpleNamespace(success=True, exception=None)])
 
-    handle_llm_error(_HTTPError("insufficient_quota", 429), 'openai', feature='memories', model='gpt-test')
+    caplog.set_level('INFO', logger='utils.llm.byok_errors')
+    handle_llm_error(_HTTPError("insufficient_quota", 429), 'openai', feature=feature, model='gpt-test')
 
     mock_lock.assert_called_once_with('user-1', 'openai', 'quota')
     mock_get_tokens.assert_called_once_with('user-1')
     mock_send_each.assert_called_once()
     message = mock_send_each.call_args.args[0][0]
     assert message.data == {'type': 'byok_llm_error', 'provider': 'openai', 'reason': 'quota'}
+    if feature == 'conv_app_result':
+        assert 'user-1' not in caplog.text
+        assert 'byok provider failure' not in caplog.text
 
 
 @patch('utils.llm.byok_errors.messaging.send_each')
