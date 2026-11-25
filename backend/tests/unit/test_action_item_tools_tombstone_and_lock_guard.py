@@ -210,6 +210,35 @@ class TestActionItemsToolServiceLockAndTombstoneGuards:
         assert 'internal firestore detail' not in caplog.text
         assert 'RuntimeError' in caplog.text
 
+    def test_create_and_update_action_item_text_return_fixed_message_on_db_error(
+        self, patched_env, monkeypatch, caplog
+    ):
+        def failing_create(*args, **kwargs):
+            raise RuntimeError('internal firestore detail: projects/secret-create/databases/(default)')
+
+        def failing_update(*args, **kwargs):
+            raise RuntimeError('internal firestore detail: projects/secret-update/databases/(default)')
+
+        monkeypatch.setattr(service.action_items_db, 'create_action_item', failing_create)
+        monkeypatch.setattr(
+            service.action_items_db,
+            'get_action_item',
+            lambda uid, item_id: _make_item(item_id, deleted=False),
+        )
+        monkeypatch.setattr(service.action_items_db, 'update_action_item', failing_update)
+
+        with caplog.at_level('ERROR'):
+            create_out = service.create_action_item_text('uid-1', 'Buy milk')
+            update_out = service.update_action_item_text('uid-1', 'task-1', completed=True)
+
+        assert create_out == 'Error creating action item. Please try again.'
+        assert update_out == 'Error updating action item. Please try again.'
+        for leaked in ('secret-create', 'secret-update', 'internal firestore detail'):
+            assert leaked not in create_out
+            assert leaked not in update_out
+            assert leaked not in caplog.text
+        assert 'RuntimeError' in caplog.text
+
     def test_update_action_item_text_rejects_deleted_tombstone(self, patched_env, monkeypatch):
         monkeypatch.setattr(
             service.action_items_db,

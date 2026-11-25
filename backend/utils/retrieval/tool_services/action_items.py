@@ -240,7 +240,7 @@ def create_action_item_text(
 
     except Exception as e:
         logger.error("create_action_item_text failed uid=%s (error_type=%s)", uid, type(e).__name__)
-        return f"Error creating action item: {e}"
+        return "Error creating action item. Please try again."
 
 
 def update_action_item_text(
@@ -333,4 +333,4 @@ def update_action_item_text(
 
     except Exception as e:
         logger.error("update_action_item_text failed uid=%s (error_type=%s)", uid, type(e).__name__)
-        return f"Error updating action item: {e}"
+        return "Error updating action item. Please try again."
