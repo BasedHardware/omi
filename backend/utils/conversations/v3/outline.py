@@ -342,7 +342,7 @@ def stretches(
         groups[-1]['manual_end'] = True
     # The window the held cut will close: the last one, when the awaited speech joins it.
     closing = groups[-1] if hold is not None and groups and groups[-1].pop('awaits', False) else None
-    if closing is not None and not closing['manual_end']:
+    if hold is not None and closing is not None and not closing['manual_end']:
         closing['finish_held_until'] = hold[1]
     else:
         closing = None
