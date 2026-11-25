@@ -163,6 +163,7 @@ def _job_lease(key, previous, row):
         and type(generation) is int
         and generation >= 0
         and type(row.get('privacy_generation')) is int
+        and row.get('privacy_generation') == generation
         and _nonnegative_number(attempt)
         and type(row.get('attempt')) is int
         and row['attempt'] == attempt + 1

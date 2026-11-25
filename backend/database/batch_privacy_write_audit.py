@@ -84,7 +84,7 @@ def submit(client, hit: Hit) -> None:
 
 def _count_cancelled(future, site):
     if future.cancelled():
-        INCOMPLETE.labels(site, 'dropped')
+        INCOMPLETE.labels(site, 'dropped').inc()
 
 
 def _run(client, hit, budget):

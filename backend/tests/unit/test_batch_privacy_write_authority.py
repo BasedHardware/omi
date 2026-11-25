@@ -1,5 +1,6 @@
 """Tokenless reuse only covers existing scheduling metadata and bounded proof lifetimes."""
 
+from concurrent.futures import Future
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -10,7 +11,7 @@ from database import batch_privacy_write_audit as audit
 from database import batch_privacy_write_cache as cache
 from database.batch_pipeline_store import FirestoreTransaction
 from database.batch_pipeline_transaction_labels import pull_operation
-from database.batch_privacy_write_authority import _only_existing_leases
+from database.batch_privacy_write_authority import _only_existing_leases, authorize_buffered_writes
 
 SHARD = 'scheduler_00'
 
@@ -20,7 +21,9 @@ def view():
     before = {
         ('jobs', 'segment'): {
             'segment_id': 'segment',
+            'owner_id': 'owner',
             'owner_key': 'owner',
+            'conversation_id': 'source',
             'priority': 0,
             'next': '',
             'state': 'ready',
@@ -71,7 +74,6 @@ def test_missing_original_or_unrelated_field_requires_certification(view, table)
     'address,change',
     [
         (('jobs', 'segment'), {'requires_compute_admission': False}),
-        (('jobs', 'segment'), {'privacy_generation': 8}),
         (('jobs', 'segment'), {'unit_kind': 'other'}),
         (('jobs', 'segment'), {'policy_parts': {'scheduler': {}}}),
         (('queues', '0_owner'), {'head': 'another-owner-job'}),
@@ -85,6 +87,18 @@ def test_lease_companions_must_follow_the_scheduler_transition(view, address, ch
     view.writes[address].update(change)
     with pull_operation('pull', SHARD):
         assert not _only_existing_leases(view)
+
+
+@pytest.mark.parametrize('generation,site', [(7, 'lease'), (8, None), (7.0, None)])
+def test_lease_authorization_requires_unchanged_integer_privacy_generation(view, monkeypatch, generation, site):
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":100}')
+    view.writes['jobs', 'segment']['privacy_generation'] = generation
+    view._check_privacy = Mock()
+    with pull_operation('pull', SHARD):
+        authorize_buffered_writes(view)
+    view._check_privacy.assert_called_once_with(
+        'owner', conversation_ids=('source',), expected_generation=generation, site=site
+    )
 
 
 def test_needs_job_lease_and_disallows_external_or_canonical_patches(view):
@@ -125,3 +139,21 @@ def test_audit_saturation_is_not_an_evaluated_comparison(monkeypatch):
     audit.submit(object(), hit)
     submit.assert_called_once()
     assert (dropped.get(), agree.get()) == (before[0] + 1, before[1])
+
+
+@pytest.mark.parametrize('site', ['probe', 'lease'])
+def test_cancelled_audit_sample_is_counted_as_dropped(monkeypatch, site):
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_audit":100}')
+    monkeypatch.setattr(audit.random, 'randrange', lambda _: 0)
+    future = Future()
+    submit = Mock(return_value=future)
+    monkeypatch.setattr(audit.read_cache_shadow_executor, 'submit', submit)
+    hit = audit.Hit('owner', frozenset({'source'}), site, cache.Decision(audit.time.time(), ('token', 'rev', 0), 7))
+    dropped = audit.INCOMPLETE.labels(site, 'dropped')._value
+    before = dropped.get()
+
+    audit.submit(object(), hit)
+    submit.assert_called_once()
+    assert dropped.get() == before
+    assert future.cancel()
+    assert dropped.get() == before + 1
