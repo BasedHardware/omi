@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from google.cloud.firestore_v1.transforms import Increment
 
 from database import _client, account_deletion_marker as deletion, monthly_usage_observation
-from database import desktop_update_policy, serving_query_reads, user_usage, users
+from database import desktop_update_policy, firestore_snapshot_query, serving_query_reads, user_usage, users
 from models.users import PlanType, Subscription
 from services.monthly_usage_shadow import install_month_shadow
 from routers import users as router, payment, desktop_prompts, updates
@@ -377,7 +377,6 @@ def test_fresh_usage_aggregates_hourly_totals_with_rpc_bound(env, monkeypatch, s
 
 @pytest.mark.parametrize('since', [False, True])
 def test_real_projection_cache_compares_hourly_float_sums_as_match(env, monkeypatch, since):
-    from database import firestore_snapshot_query
     from utils import executors, read_cache_shadow as shadow
 
     store, _ = env
@@ -437,7 +436,6 @@ def test_real_projection_cache_compares_hourly_float_sums_as_match(env, monkeypa
 
 @pytest.mark.parametrize('documents', [744, 745, 746])
 def test_usage_document_limit_is_bounded_and_skips_incomplete_comparison(env, monkeypatch, documents):
-    from database import firestore_snapshot_query
     from utils import executors, read_cache_shadow as shadow
 
     store, _ = env
