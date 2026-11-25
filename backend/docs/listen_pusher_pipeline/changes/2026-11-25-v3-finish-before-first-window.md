@@ -7,8 +7,11 @@ live window horizon and refuses a cut when either lookup reaches its cap.
 Payloads with fields keep the existing window lookup. The cut uses the existing v3
 reconcile path. Whole native batch completion consumes the intent for both single-
 and multi-unit records. Terminal silence resolves the intent without cutting unrelated speech.
+If the recording has merged into another row, completion clears the donor's intent
+and counts it as redirected. A redirect does not prove the cut is safe for the
+survivor's later speech.
 
 The Finish counter records the API kill-switch and owner eligibility exits.
-API outcomes, committed whole-record consumption or silence, and first derived
-settlement have separate outcomes.
+API outcomes (including a capped live-window lookup), committed whole-record
+resolution, and first derived settlement have separate outcomes.
 See the [v3 pipeline contract](../../listen_pusher_pipeline.mdx#recording-derived-conversations-v3).

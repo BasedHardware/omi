@@ -487,7 +487,7 @@ def v3_finish_route(conv, monkeypatch):
     def read_finish_fields(ref, *args, field_paths=None, **kwargs):
         if ref.path == paths['window'] and kwargs.get('transaction') is not None:
             assert field_paths == FINISH_FIELDS
-        if field_paths in (store.LIVE_FIELDS, FINISH_FIELDS):
+        if field_paths in (store.LIVE_FIELDS, FINISH_FIELDS, v3_live.FINISH_SOURCE_FIELDS):
             snapshot = read_document(ref, *args, **kwargs)
             return type(snapshot)(
                 {key: value for key, value in (snapshot.to_dict() or {}).items() if key in field_paths}

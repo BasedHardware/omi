@@ -24,6 +24,29 @@ FINISH_FIELDS = [
 ]
 
 
+FINISH_SOURCE_FIELDS = [
+    FINISH_WINDOW_FIELD,
+    FINISH_RECORDING_FIELD,
+    'v3_manual_end_requested',
+    'v3_manual_end',
+    'v3_pending_since',
+    'recording',
+    'status',
+    'finished_at',
+    'record_audio_partial',
+    'record_upload_failed',
+    'is_locked',
+    'deleted',
+    'discarded',
+    'sync_merged_into',
+    'data_protection_level',
+    'record_upload_revision',
+    'record_projection_revision',
+    'has_content',
+    SPEECH_LANDED_FIELD,
+]
+
+
 def has_finish_content(row: Mapping[str, Any], window: Mapping[str, Any], recording_id: str) -> bool:
     # Raw audio custody can set has_content before any transcript lands.
     source_has_speech = row.get('has_content') and (

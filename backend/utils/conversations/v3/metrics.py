@@ -64,6 +64,7 @@ for outcome in (
     'consumed',
     'whole_record_consumed',
     'whole_record_resolved_empty',
+    'whole_record_redirected',
     'settled',
 ):
     FINISH_NO_POINTER.labels(outcome)

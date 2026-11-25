@@ -119,3 +119,108 @@ def test_finish_declines_when_transactional_window_lookup_reaches_its_bound(owne
     outcome, recording = store.request_recording_finish(uid, now=now, firestore_client=client)
     assert (outcome, recording) == ('window_lookup_capped', None)
     assert live.FINISH_RECORDING_FIELD not in source.get().to_dict()
+
+
+@pytest.mark.parametrize('unit_count', [1, 2])
+@pytest.mark.parametrize('receipt_already_canonical', [False, True])
+def test_whole_native_completion_resolves_finish_on_redirect_donor(
+    owner, monkeypatch, unit_count, receipt_already_canonical
+):
+    from contextlib import nullcontext
+    from dataclasses import asdict
+    from unittest.mock import Mock
+
+    from config.policy import ProjectionPolicy
+    from config.record_audio import record_identity
+    from database import batch_pipeline_projection as completion
+    from database.batch_pipeline_store import FirestoreStore
+    from database.sync_ledger import sync_content_ledger_ref
+    from utils.batch_pipeline.contracts import ProjectionBinding
+    from utils.batch_pipeline.scheduler import owner_key
+
+    client, uid, recordings = owner
+    client.collection('users').document(uid).set({'data_protection_level': 'standard'})
+    monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'on')
+    monkeypatch.setattr(completion, 'writing', lambda *_: nullcontext())
+    monkeypatch.setattr(completion, 'record_notes_eager_enabled', lambda: False)
+    monkeypatch.setattr(completion.capture_end, 'enabled', lambda: False)
+    counter, enqueue = Mock(), Mock()
+    monkeypatch.setattr(completion.v3_metrics, 'FINISH_NO_POINTER', counter)
+    monkeypatch.setattr(completion.v3_triggers, 'enqueue_pending', enqueue)
+
+    now = datetime.now(timezone.utc)
+    source = recordings.document('capture')
+    source.set(
+        {
+            **_recording(now),
+            'record_lane_owner': 'batch_live_v1',
+            'server_batch_only': True,
+            'private_cloud_sync_enabled': True,
+            'server_batch_audio_start': now.timestamp() - 30,
+            'server_batch_audio_end': now.timestamp(),
+        }
+    )
+    assert store.request_recording_finish(uid, now=now, firestore_client=client)[0] == 'recording_requested'
+    source.update({'deleted': True, 'discarded': True, 'sync_merged_into': 'survivor'})
+    survivor = recordings.document('survivor')
+    survivor.set(_recording(now + timedelta(minutes=1)))
+    survivor_row = survivor.get().to_dict()
+
+    namespace = f'batch_pipeline_test_{uuid4().hex}'
+    projector = completion.ProjectionStore(FirestoreStore(namespace, firestore_client=client))
+    monkeypatch.setattr(projector, '_observe_transcription', Mock())
+    monkeypatch.setattr(projector, '_settle_allowance', Mock())
+    content, first = record_identity(uid, source.id)
+    ids = (first, *(f'{first}-{unit}' for unit in range(1, unit_count)))
+    binding = ProjectionBinding(
+        uid, 'bp_' + content, content, ids, target_conversation_id=source.id, record_origin=True, native_record=True
+    )
+    ledger = sync_content_ledger_ref(client, uid, content)
+    ledger.set(
+        {
+            'status': 'processing',
+            'dispatch_protocol': 'batch_v1',
+            'job_id': binding.job_id,
+            'batch_pipeline': {'protocol_version': 1, 'namespace': namespace, 'segment_ids': list(ids)},
+        }
+    )
+    result = {'outcome': 'success'}
+    for sid in ids:
+        projector.ref('jobs', sid).set(
+            {
+                'projection_binding': asdict(binding),
+                'owner_id': uid,
+                'privacy_generation': binding.privacy_generation,
+                'capture_at': now.timestamp(),
+                'duration_seconds': 30,
+                'result': result,
+            }
+        )
+        projector.ref('results', sid).set(
+            {
+                'protocol_version': 1,
+                'segment_id': sid,
+                'owner_key': owner_key(uid),
+                'capture_at': now.timestamp(),
+                'previous_segment_id': None,
+                'result': result,
+                'projection': {
+                    'state': 'ready',
+                    'conversation_id': survivor.id if receipt_already_canonical else source.id,
+                    'created': False,
+                    'speech_seconds': 1.0,
+                },
+            }
+        )
+
+    for _ in range(2):
+        assert projector.complete(
+            first, binding, now.timestamp(), {'seconds': float(unit_count), 'updates': {}}, policy=ProjectionPolicy()
+        )['updated_memories'] == [survivor.id]
+    assert ledger.get().to_dict()['status'] == 'completed'
+    donor = source.get().to_dict()
+    assert donor['v3_manual_end_requested'] is False and 'v3_manual_end' not in donor
+    assert survivor.get().to_dict() == survivor_row
+    counter.labels.assert_called_once_with('whole_record_redirected')
+    counter.labels.return_value.inc.assert_called_once_with()
+    enqueue.assert_not_called()

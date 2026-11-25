@@ -27,6 +27,7 @@ from utils.conversations.v3 import metrics as v3_metrics, triggers as v3_trigger
 from utils.conversations.v3.live import (
     FINISH_FIELDS,
     FINISH_RECORDING_FIELD,
+    FINISH_SOURCE_FIELDS,
     FINISH_WINDOW_FIELD,
     active,
     has_finish_content,
@@ -816,7 +817,7 @@ class ProjectionStore:
         sealed_proofs: list[str] = []
         delivered_uploads = []
         completion_upload = {}
-        finish_resolution: list[tuple[str, bool]] = []
+        finish_resolution: list[tuple[str, str]] = []
 
         @firestore.transactional
         def commit(transaction):
@@ -1015,6 +1016,7 @@ class ProjectionStore:
             silent = silent_count == len(binding.segment_ids) or result['outcome'] == 'expected_silence'
             recording_ref = None
             finish_update = {}
+            finish_outcome = 'whole_record_resolved_empty'
             if (
                 cid
                 and binding.native_record
@@ -1027,12 +1029,16 @@ class ProjectionStore:
                     collection = self.client.collection('users').document(binding.owner_id).collection('conversations')
                     recording_ref = collection.document(cid)
                     row = conversation_rows.get(cid)
-                    if row is None and silent:
-                        row = recording_ref.get(transaction=transaction).to_dict()
-                    if silent or len(binding.segment_ids) > 1 or (row or {}).get(FINISH_RECORDING_FIELD):
-                        finish_update = self._v3_finish_update(
-                            transaction, collection, cid, row or {}, silent, session, now
+                    if row is None:
+                        row = (
+                            recording_ref.get(transaction=transaction, field_paths=FINISH_SOURCE_FIELDS).to_dict() or {}
                         )
+                    if silent or len(binding.segment_ids) > 1 or row.get(FINISH_RECORDING_FIELD):
+                        finish_update = self._v3_finish_update(transaction, collection, cid, row, silent, session, now)
+                    if finish_update.get('v3_manual_end'):
+                        finish_outcome = 'whole_record_consumed'
+                    elif row.get('sync_merged_into'):
+                        finish_outcome = 'whole_record_redirected'
             if (
                 record_notes_eager_enabled()
                 and not source_deleted
@@ -1159,7 +1165,7 @@ class ProjectionStore:
                     transaction.set(ref, data)
             if finish_update and recording_ref is not None:
                 transaction.update(recording_ref, finish_update)
-                finish_resolution.append((recording_ref.id, bool(finish_update.get('v3_manual_end'))))
+                finish_resolution.append((recording_ref.id, finish_outcome))
             if not source_deleted:
                 self._commit_usage(
                     transaction, session.ledger_ref, session.ledger, binding, completion_accounting, seconds, now
@@ -1200,9 +1206,9 @@ class ProjectionStore:
         ):
             result, changed, seconds = self.run(commit, policy=policy)
         if finish_resolution:
-            recording_id, cut = finish_resolution[0]
-            v3_metrics.FINISH_NO_POINTER.labels('whole_record_consumed' if cut else 'whole_record_resolved_empty').inc()
-            if cut:
+            recording_id, outcome = finish_resolution[0]
+            v3_metrics.FINISH_NO_POINTER.labels(outcome).inc()
+            if outcome == 'whole_record_consumed':
                 v3_triggers.enqueue_pending(binding.owner_id, manual_end_id=recording_id)
         if changed:
             # Before any notes wake: the woken callback's seal proof reads this stage.
@@ -1236,15 +1242,19 @@ class ProjectionStore:
             not (window_id or row.get(FINISH_RECORDING_FIELD))
             or not row.get('v3_manual_end_requested')
             or row.get('v3_manual_end')
+            or any(row.get(k) for k in ('record_audio_partial', 'record_upload_failed', 'is_locked'))
+            or row.get('data_protection_level') == 'private'
+            or (upload_revision is not None and upload_revision != row.get('record_upload_revision'))
+        ):
+            return {}
+        if row.get('sync_merged_into'):
+            # A redirect proves custody, but the survivor may contain speech beyond this recording's cut.
+            return {'v3_manual_end_requested': False} if row.get(FINISH_RECORDING_FIELD) is True else {}
+        if (
+            row.get('deleted')
             or not row.get('recording')
             or row.get('status') != 'completed'
             or not row.get('finished_at')
-            or any(
-                row.get(k)
-                for k in ('record_audio_partial', 'record_upload_failed', 'is_locked', 'deleted', 'sync_merged_into')
-            )
-            or row.get('data_protection_level') == 'private'
-            or (upload_revision is not None and upload_revision != row.get('record_upload_revision'))
         ):
             return {}
         clock = datetime.fromtimestamp(now, timezone.utc)
@@ -1303,11 +1313,12 @@ class ProjectionStore:
                 )
                 if not row or (row.get('deleted') and not row.get('sync_merged_into')):
                     raise ProjectionBlocked('projected conversation deleted')
-                if not row.get('sync_merged_into'):
-                    if rows_out is not None:
-                        rows_out[cid] = row
+                target = row.get('sync_merged_into')
+                if rows_out is not None and (not target or cid == binding.target_conversation_id):
+                    rows_out[cid] = row
+                if not target:
                     break
-                cid = row['sync_merged_into']
+                cid = target
             if cid:
                 mapped.append((cid, receipt['created'] and cid == original_id))
         new = sorted({cid for cid, created in mapped if created})
