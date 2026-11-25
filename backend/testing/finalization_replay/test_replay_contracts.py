@@ -6,14 +6,38 @@ import json
 import os
 from pathlib import Path
 import tempfile
+from threading import Lock
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+
+from google.auth.credentials import AnonymousCredentials
+from google.cloud.firestore_v1.services.firestore.client import FirestoreClient
+from google.cloud.firestore_v1.types import firestore
 
 from testing.finalization_replay.candidate import _Handler, replay_database
 from testing.finalization_replay.driver import _observe
-from testing.finalization_replay.metrics import _delete_write, _invoke_rpc, _wrap_stream, prompt_token_estimate
-from testing.finalization_replay.state import CaseState
+from testing.finalization_replay.firestore_proxy import FirestoreProxy
+from testing.finalization_replay.metrics import (
+    _delete_write,
+    _invoke_rpc,
+    _wrap_stream,
+    install_firestore_meter,
+    measure,
+    prompt_token_estimate,
+)
+from testing.finalization_replay.state import (
+    CaseState,
+    episode_attach_memo_failure_reason,
+    episode_attach_memo_valid,
+    ordinary_sync_attach_memo_failure_reason,
+)
+from testing.finalization_replay.ordinary_sync_diag_report import (
+    UNREADABLE_RETRY_BUG,
+    enrich as enrich_ordinary_sync_report,
+    is_go_coordination_stamp_difference,
+    is_unreadable_retry_consequence,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 VERIFY_PATH = REPO_ROOT / 'backend-go' / 'tools' / 'replay' / 'verify.py'
@@ -23,6 +47,346 @@ VERIFY_SPEC.loader.exec_module(verify)
 
 
 class ReplayContractTests(unittest.TestCase):
+    def test_sdk_batch_write_requires_explicit_success_for_committed_evidence(self):
+        root = 'projects/demo-replay/databases/(default)/documents'
+        home = f'{root}/users/u/episode_links/c'
+        update = {'update': {'name': home, 'fields': {'home_dirty': {'boolean_value': True}}}}
+        delete = {'delete': home}
+        profile = {'update': {'name': f'{root}/users/u', 'fields': {'ai_user_profile': {'map_value': {}}}}}
+        item = {'update': {'name': f'{root}/users/u/action_items/task'}}
+        statuses = (('failed', [{'code': 7}] * 3, 0), ('missing', [], 0), ('successful', [{}, {}, {}], 1))
+
+        install_firestore_meter()
+        with FirestoreClient(credentials=AnonymousCredentials()) as client:
+            transport = client.transport
+            for bucket, home_write in (('set_true', update), ('deleted', delete)):
+                request = firestore.BatchWriteRequest(
+                    database=root.removesuffix('/documents'), writes=[home_write, profile, item]
+                )
+                for label, entries, expected in statuses:
+                    with self.subTest(home_operation=bucket, status=label):
+                        state = CaseState(Mock(), {'name': 'c', 'uid': 'u'})
+                        response = firestore.BatchWriteResponse(status=entries)
+                        rpc = Mock(return_value=response)
+                        with patch.dict(transport._wrapped_methods, {transport.batch_write: rpc}), measure(state):
+                            self.assertEqual(client.batch_write(request=request), response)
+                        rpc.assert_called_once()
+                        self.assertEqual(state.home_dirty_receipt_trace[bucket], expected)
+                        self.assertEqual(sum(state.home_dirty_receipt_trace.values()), expected)
+                        self.assertEqual(len(state.profile_writes), expected)
+                        self.assertEqual(state.task_writes, ['users/u/action_items/task'] if expected else [])
+                        self.assertEqual(state.firestore_operations['writes'], 2 if bucket == 'deleted' else 3)
+                        self.assertEqual(state.firestore_operations['deletes'], int(bucket == 'deleted'))
+
+    def test_approved_coordination_stamp_rule_requires_exact_name_and_direction(self):
+        for field in (
+            'go_sync_inline_fanout_epoch',
+            'go_sync_inline_fanout_revision',
+            'go_empty_discard_fanout_epoch',
+            'go_sync_empty_discard_home_revision',
+        ):
+            self.assertTrue(
+                is_go_coordination_stamp_difference(
+                    {
+                        'path': f'/conversation/{field}',
+                        'kind': 'missing_in_python',
+                    }
+                )
+            )
+            self.assertFalse(
+                is_go_coordination_stamp_difference(
+                    {
+                        'path': f'/conversation/{field}s',
+                        'kind': 'missing_in_python',
+                    }
+                )
+            )
+            self.assertFalse(
+                is_go_coordination_stamp_difference(
+                    {
+                        'path': f'/conversation/{field}',
+                        'kind': 'different_value',
+                    }
+                )
+            )
+
+    def test_unreadable_retry_rule_labels_only_nine_verified_consequences(self):
+        consequence_rows = [
+            ('/conversation/finalization_status', 'missing_in_python'),
+            ('/derived_documents/sync_reprocess_outbox~1outbox-id', 'missing_in_go'),
+            ('/derived_documents/users~1owner~1processing_attention_items~1item-id', 'missing_in_python'),
+            ('/go/admitted', 'invalid_binding'),
+            ('/python/batch_pipeline_privacy/final', 'missing_document'),
+            ('/python/derived_documents/batch_pipeline_privacy~1hash/memo_token', 'invalid_binding'),
+            ('/python/derived_documents/batch_pipeline_privacy~1hash/memo_schema', 'missing_evidence'),
+            ('/python/batch_pipeline_privacy/final_snapshot', 'invalid_binding'),
+            ('/python/firestore_operations/batch_pipeline_privacy_document', 'invalid_operations'),
+        ]
+        self.assertTrue(
+            all(
+                is_unreadable_retry_consequence({'path': path, 'kind': kind, 'unreadable_terminal_consequence': True})
+                for path, kind in consequence_rows
+            )
+        )
+        self.assertFalse(
+            is_unreadable_retry_consequence(
+                {
+                    'path': '/python/derived_documents/batch_pipeline_privacy~1hash/memo_token',
+                    'kind': 'missing_evidence',
+                    'unreadable_terminal_consequence': True,
+                }
+            )
+        )
+        self.assertFalse(
+            is_unreadable_retry_consequence(
+                {
+                    'path': '/conversation/finalization_status/extra',
+                    'kind': 'missing_in_python',
+                    'unreadable_terminal_consequence': True,
+                }
+            )
+        )
+
+        differences = [
+            {'path': '/status', 'kind': 'different_value', 'unreadable_terminal_consequence': True},
+            *({'path': path, 'kind': kind, 'unreadable_terminal_consequence': True} for path, kind in consequence_rows),
+        ]
+        report = {
+            'commit_sha': 'fixture',
+            'unexplained_differences': len(differences),
+            'cases': [
+                {
+                    'name': 'unreadable-ciphertext-dead-letters',
+                    'errors': {},
+                    'python_status': 'parked',
+                    'go_status': 'failure',
+                    'python_retry': {
+                        'outcome': 'parked',
+                        'reason': 'age_gate_72h',
+                        'ciphertext_kept': True,
+                        'attempts': 869,
+                        'callback_pending_attempts': 868,
+                    },
+                    'go_ciphertext_kept': True,
+                    'differences': differences,
+                }
+            ],
+            'operation_table': [
+                {
+                    'case': 'unreadable-ciphertext-dead-letters',
+                    'difference': 0,
+                }
+            ],
+        }
+        enriched = enrich_ordinary_sync_report(report)
+        labels = [row.get('label') for row in enriched['cases'][0]['differences']]
+        self.assertEqual(labels, [UNREADABLE_RETRY_BUG] * 10)
+        self.assertEqual(
+            enriched['diagnostic']['unexplained_gate']['python_bug_exceptions'],
+            {
+                'unreadable_ciphertext_retry_until_age_gate': 10,
+            },
+        )
+        for row in differences:
+            row.pop('label')
+            row.pop('reason')
+            row.pop('issue')
+        for row in (differences[0], differences[-1]):
+            row.pop('unreadable_terminal_consequence')
+        report['unexplained_differences'] = len(differences)
+        enriched = enrich_ordinary_sync_report(report)
+        self.assertIsNone(differences[0]['label'])
+        self.assertIsNone(differences[-1]['label'])
+        self.assertEqual(enriched['diagnostic']['cohort_gate'], 'closed')
+
+    def test_missing_profile_or_task_write_proof_is_counted_as_go_gap(self):
+        report = {
+            'commit_sha': 'fixture',
+            'unexplained_differences': 2,
+            'cases': [
+                {
+                    'name': 'kept-with-effects',
+                    'errors': {},
+                    'differences': [
+                        {
+                            'path': '/go/profile_refresh',
+                            'kind': 'invalid_binding',
+                            'failure_reason': 'profile_refresh_proof_failed',
+                        },
+                        {
+                            'path': '/go/task_vector',
+                            'kind': 'invalid_binding',
+                            'failure_reason': 'task_vector_proof_failed',
+                        },
+                    ],
+                }
+            ],
+            'operation_table': [{'case': 'kept-with-effects', 'difference': 0}],
+        }
+        enriched = enrich_ordinary_sync_report(report)
+        self.assertEqual(
+            [difference['label'] for difference in enriched['cases'][0]['differences']],
+            ['go_gap', 'go_gap'],
+        )
+
+    def test_episode_attach_memo_evidence_checks_key_owner_and_completion(self):
+        conversation = {'transcript_segments': 'fixture-envelope', 'transcript_segments_compressed': True}
+        link_path = 'users/owner/episode_links/conversation'
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:fixture-key',
+            'attach_completed': 'v2:fixture-key',
+            'attach_finalized': None,
+        }
+        decoded_rows = []
+
+        def decode(uid, raw, compressed):
+            decoded_rows.append((uid, raw, compressed))
+            return [{'text': 'fixture'}]
+
+        def compute_key(row):
+            self.assertEqual(row['transcript_segments'], [{'text': 'fixture'}])
+            return 'v2:fixture-key'
+
+        self.assertTrue(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        self.assertEqual(decoded_rows, [('owner', 'fixture-envelope', True)])
+
+        link['attach_owner_id'] = 'other-episode'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        self.assertEqual(
+            episode_attach_memo_failure_reason(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            ),
+            'owner_binding_mismatch',
+        )
+        link['attach_owner_id'] = 'episode'
+        link['attach_revision'] = 'v2:fixture-key'
+        link['attach_finalized'] = 'stale-finalization'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        link['attach_finalized'] = None
+        link['attach_revision'] = 'stale-key'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+
+    def test_episode_attach_memo_accepts_go_decoded_transcript_segments(self):
+        segments = [{'text': 'fixture', 'start': 0, 'end': 1}]
+        link_path = 'users/owner/episode_links/conversation'
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:fixture-key',
+            'attach_completed': 'v2:fixture-key',
+            'attach_finalized': 'v2:fixture-key',
+        }
+
+        def decode(*_args):
+            self.fail('already-decoded segments must not be decoded again')
+
+        def compute_key(row):
+            self.assertEqual(row['transcript_segments'], segments)
+            return 'v2:fixture-key'
+
+        self.assertTrue(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                {'transcript_segments': segments},
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        link['attach_finalized'] = 'stale-key'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                {'transcript_segments': segments},
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+
+    def test_ordinary_sync_memo_requires_exact_go_key_and_proven_python_cache(self):
+        path = 'users/owner/episode_links/conversation'
+        conversation = {'episode_id': 'episode'}
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:final',
+            'attach_completed': 'v2:final',
+            'attach_finalized': 'v2:final',
+        }
+
+        def check(python_keys=None, *, has_link=True):
+            return ordinary_sync_attach_memo_failure_reason(
+                'owner',
+                'conversation',
+                conversation,
+                {path: link} if has_link else {},
+                python_keys=python_keys,
+                key_fn=lambda *_: 'v2:final',
+            )
+
+        self.assertEqual(check(), '')
+        self.assertEqual(check(has_link=False), 'missing_link')
+        self.assertEqual(check([], has_link=False), '')
+        self.assertEqual(check([]), 'completed_key_mismatch')
+        self.assertEqual(check(['v2:final']), '')
+        link['attach_finalized'] = 'v2:old'
+        self.assertEqual(check(), 'finalized_binding_mismatch')
+        link.update(attach_revision='v2:old', attach_completed='v2:old', attach_finalized=None)
+        self.assertEqual(check(), 'completed_key_mismatch')
+        self.assertEqual(check(['v2:old']), '')
+        self.assertEqual(check(['v2:other']), 'completed_key_mismatch')
+        link.update(attach_revision='v2:final', attach_completed='v2:final', attach_finalized='v2:final')
+        conversation['episode_id'] = 'other'
+        self.assertEqual(check(), 'owner_binding_mismatch')
+        link.clear()
+        self.assertEqual(check([]), '')
+
     def test_database_creation_ignores_hostile_libpq_environment(self):
         observed = {}
 
@@ -79,13 +443,18 @@ class ReplayContractTests(unittest.TestCase):
                 return Snapshot()
 
         state.conversation = Conversation()
-        observation = state.observe('completed', {'derived/doc': {'enabled': True}})
+
+        def unavailable_memo_bindings():
+            raise ValueError('candidate has no serving environment')
+
+        observation = state.observe(
+            'completed', {'derived/doc': {'enabled': True}}, load_memo_bindings=unavailable_memo_bindings
+        )
         self.assertEqual(observation['derived_documents'], {'derived/doc': {'enabled': 1}})
+        self.assertEqual(observation['episode_attach_memo_failure_reason'], 'check_failed')
 
     def test_embedding_meter_counts_pretokenized_batches(self):
         state = CaseState.__new__(CaseState)
-        from threading import Lock
-
         state._metrics_lock = Lock()
         state.provider_calls = []
         state.embedding_tokens = 0
@@ -240,6 +609,26 @@ class ReplayContractTests(unittest.TestCase):
             _invoke_rpc(Meter(), 'get_document', {'get_document'}, fail)
         self.assertEqual(operations['document_reads'], 1)
         self.assertEqual(operations['rpc_calls'], 1)
+
+    def test_both_meters_skip_default_empty_query_documents(self):
+        python_reads = []
+        meter = SimpleNamespace(add_firestore_operations=lambda **counts: python_reads.append(counts))
+        proxy = object.__new__(FirestoreProxy)
+        proxy.privacy_document_path = 'batch_pipeline_privacy/owner'
+        proxy.home_dirty_receipt_path = 'users/u/episode_links/c'
+        proxy._lock = Lock()
+        proxy.reset()
+        responses = [
+            firestore.RunQueryResponse(),
+            firestore.RunQueryResponse(document={}),
+            firestore.RunQueryResponse(document={'name': 'projects/p/databases/(default)/documents/users/u'}),
+        ]
+        list(_wrap_stream(responses, 'run_query', meter))
+        for response in responses:
+            proxy._record_response('run_query', firestore.RunQueryResponse.serialize(response))
+        self.assertEqual(python_reads, [{'query_documents': 1}])
+        self.assertEqual(proxy.counts()['query_documents'], 1)
+        self.assertEqual(proxy.operation_sources(), {'users/u': {'reads': 1, 'writes': 0, 'deletes': 0}})
 
     def test_partial_stream_counts_consumed_results_and_delete_empty_map(self):
         operations = {}

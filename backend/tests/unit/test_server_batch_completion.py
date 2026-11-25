@@ -298,3 +298,46 @@ def test_promotion_after_speech_landed_leaves_the_recording_pending(monkeypatch)
     assert conversations_v3.promote_manual_end(UID, CID, firestore_client=db) is True
     # Its reconcile may already have run without the cut; pending hands it to the sweep.
     assert db.rows[ROW]['v3_manual_end'] is True and db.rows[ROW]['v3_pending'] is True
+
+
+@pytest.mark.parametrize('mode,stamped', [(None, True), ('off', False)])
+def test_capture_close_stamps_settled_not_summarized_and_honours_the_kill_switch(monkeypatch, mode, stamped):
+    if mode is None:
+        monkeypatch.delenv('CONVERSATION_TERMINAL_FAMILY_MODE', raising=False)
+    else:
+        monkeypatch.setenv('CONVERSATION_TERMINAL_FAMILY_MODE', mode)
+    db = StrictFirestore({ROW: capture(), JOB_ROW: job()})
+    monkeypatch.setattr(jobs, '_record_projection_delta', Mock())
+    assert complete(db) == 'completed'
+    assert ('terminal_family_at' in db.rows[ROW]) is stamped
+    assert 'terminal_family' not in db.rows[ROW]
+    if stamped:
+        assert db.rows[ROW]['terminal_family_at'] == NOW
+
+
+def test_capture_close_keeps_an_existing_settle_time(monkeypatch):
+    monkeypatch.delenv('CONVERSATION_TERMINAL_FAMILY_MODE', raising=False)
+    earlier = NOW - timedelta(hours=1)
+    db = StrictFirestore({ROW: {**capture(), 'terminal_family_at': earlier}, JOB_ROW: job()})
+    monkeypatch.setattr(jobs, '_record_projection_delta', Mock())
+    assert complete(db, admitted={**capture(), 'terminal_family_at': earlier}) == 'completed'
+    assert db.rows[ROW]['terminal_family_at'] == earlier
+
+
+@pytest.mark.parametrize('stamped', [False, True])
+def test_discarded_fanout_close_stamps_once_without_a_family(monkeypatch, stamped):
+    monkeypatch.delenv('CONVERSATION_TERMINAL_FAMILY_MODE', raising=False)
+    earlier = NOW - timedelta(hours=1)
+    row = {**capture(), 'discarded': True, **({'terminal_family_at': earlier} if stamped else {})}
+    db = StrictFirestore({ROW: row, JOB_ROW: {**job(), 'fanout_status': 'leased'}})
+    assert jobs._complete_discarded_server_batch_fanout_txn(
+        db.transaction(),
+        db.collection(jobs.FINALIZATION_JOBS_COLLECTION).document(JOB),
+        db.document('/'.join(ROW)),
+        2,
+        4,
+        NOW,
+    )
+    assert db.rows[ROW]['status'] == 'completed'
+    assert db.rows[ROW]['terminal_family_at'] == (earlier if stamped else NOW)
+    assert 'terminal_family' not in db.rows[ROW]

@@ -15842,4 +15842,14 @@ class AppLocalizationsTr extends AppLocalizations {
   String playStripePlanPaused(String plan) {
     return '$plan planın duraklatıldı.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Cihazınız zaten desteklenen en yeni firmware sürümünü kullanıyor';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Önce kayıtlarınızı senkronize edin';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.';
 }

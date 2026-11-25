@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: notifications-job-image-only-tests
+    command: ["python3", ".github/scripts/test_notifications_job_image_only.py"]
+    triggers: ["backend/scripts/notifications_job_image_only*.py", "backend/scripts/render_backend_runtime_env.py", "backend/scripts/verify-llm-gateway-serving.py", "backend/deploy/runtime_env.yaml", "backend/deploy/runtime_env/**", ".github/scripts/test_notifications_job_image_only.py", ".github/workflows/gcp_notifications_job.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-4008: prove the prod notifications image-only path rejects stale writes and preserves the rest of the job"
   - id: worker-image-only-tests
     command: ["python3", ".github/scripts/test_worker_image_only.py"]
     triggers: [".github/scripts/worker_image_only.py", ".github/scripts/test_worker_image_only.py", ".github/workflows/gcp_diarizer.yml", ".github/checks-manifest.yaml", "backend/charts/batch-pipeline-worker/**"]

@@ -4765,5 +4765,8 @@
     "prepaidCodeResult": "{reason, select, invalid{Deze code is ongeldig. Controleer hem en probeer het opnieuw.} used{Deze code is al gebruikt.} expired{Deze code is verlopen.} hasPlan{Je hebt al een abonnement. Je code is niet gebruikt. Wissel hem in als je abonnement afloopt.} notPrepaid{Deze code kan hier niet worden ingewisseld. Gebruik hem wanneer je een abonnement kiest.} notEligible{Deze code kan niet op dit account worden gebruikt.} rateLimited{Te veel pogingen. Probeer het later opnieuw.} other{Er ging iets mis. Probeer het opnieuw.}}",
     "playStripeBilledOnWeb": "Gefactureerd via omi.me. Annuleer hier op elk moment.",
     "playStripeBilledOnWebShort": "Gefactureerd via omi.me.",
-    "playStripePlanPaused": "Je {plan}-abonnement is gepauzeerd."
+    "playStripePlanPaused": "Je {plan}-abonnement is gepauzeerd.",
+    "firmwareNewestSupportedForDevice": "Je apparaat heeft al de nieuwste ondersteunde firmwareversie",
+    "firmwareSyncRecordingsFirstTitle": "Synchroniseer eerst je opnames",
+    "firmwareSyncRecordingsFirstMessage": "Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update."
 }

@@ -5,14 +5,18 @@ A Cloud Tasks or Cloud Scheduler target returns 2xx when the delivery is consume
 and 500 only for an unexpected exception. Never 429 or 503: Cloud Tasks ignores ``Retry-After`` and
 system-throttles a queue that sees fast 5xx (10-18 18:14Z and 10-19 04:52Z stalls).
 
-The database classifier below inspects exceptions without performing I/O.
+The database classifiers below inspect exceptions without performing I/O.
 """
 
 from __future__ import annotations
 
 from fastapi.responses import JSONResponse
 
-from database.firestore_transaction_retry import is_transaction_retry_failure
+from database.firestore_transaction_retry import (
+    FirestoreContentionExhausted,
+    is_expired_transaction,
+    is_transaction_retry_failure,
+)
 from utils.observability.reasons import RetryReason
 
 RETRY_STATUS_CODE = 409
@@ -37,3 +41,18 @@ def firestore_retry_reason(error: BaseException) -> RetryReason | None:
     if is_transaction_retry_failure(error):
         return RetryReason.DEPENDENCY_WARMING
     return None
+
+
+def exhausted_transaction_retry_class(error: BaseException) -> str | None:
+    """Classify only a failed bounded transaction chain, preserving the final cause."""
+    if not isinstance(error, FirestoreContentionExhausted):
+        return None
+    if error.reason == 'deadline_exhausted':
+        return 'transaction_retry_deadline'
+    cause = error.__cause__
+    # The SDK wraps commit-time Aborted in ValueError even with max_attempts=1.
+    if isinstance(cause, ValueError):
+        cause = cause.__cause__
+    if cause is not None and is_expired_transaction(cause):
+        return 'transaction_expired'
+    return 'transaction_contention'

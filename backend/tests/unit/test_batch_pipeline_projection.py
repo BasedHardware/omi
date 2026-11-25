@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from dataclasses import asdict
+from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 from types import SimpleNamespace
 from config.policy import BatchUnitPolicy, ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
@@ -12,12 +13,14 @@ from google.api_core.exceptions import Aborted, InvalidArgument
 import pytest
 
 from utils.batch_pipeline.contracts import ProjectionBinding
+from database import batch_pipeline_projection as completion
 from database.batch_pipeline_projection import ProjectionStore
 from utils.batch_pipeline import projection
 from utils.sync import bridge
 from database.sync_ledger import sync_content_ledger_ref
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.scheduler import owner_key
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD
 from utils.sync.capture import chunk_identity
 
 
@@ -1323,3 +1326,49 @@ def test_full_multi_unit_completion_consumes_late_v3_finish_once(monkeypatch, ma
     assert complete(4)['outcome'] == 'success'
     assert not db.transactions[-1].updates
     assert enqueue.call_count == int(marker_mode == 'on')
+
+
+@pytest.mark.parametrize('unit_count', [1, 2])
+def test_native_completion_resolves_recording_finish_on_the_redirect_donor(monkeypatch, unit_count):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
+    monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'on')
+    counter, enqueue = Mock(), Mock()
+    monkeypatch.setattr(completion.v3_metrics, 'FINISH_NO_POINTER', counter)
+    monkeypatch.setattr(completion.v3_triggers, 'enqueue_pending', enqueue)
+    uid, cid = 'synthetic-owner', 'capture'
+    path = ('users', uid, 'conversations', cid)
+    destination_path = (*path[:-1], 'survivor')
+    end = datetime.fromtimestamp(1, timezone.utc)
+    survivor = {'recording': True, 'status': 'completed', 'finished_at': end + timedelta(seconds=10)}
+    db = StrictFirestore(
+        {
+            path: {
+                'recording': True,
+                'status': 'completed',
+                'finished_at': end,
+                'record_projection_revision': unit_count,
+                'deleted': True,
+                'discarded': True,
+                'sync_merged_into': 'survivor',
+                'v3_manual_end_requested': True,
+                FINISH_RECORDING_FIELD: True,
+            },
+            destination_path: dict(survivor),
+        }
+    )
+    complete, ledger_path, receipts = native_finish_completion(monkeypatch, db, uid, cid, unit_count)
+    receipts[-1]['state'] = 'persisted'
+    assert complete(2) is None
+    assert db.rows[path]['v3_manual_end_requested'] is True
+    counter.labels.assert_not_called()
+
+    receipts[-1]['state'] = 'ready'
+    for now in (3, 4):
+        assert complete(now)['updated_memories'] == ['survivor']
+    assert db.rows[ledger_path]['status'] == 'completed'
+    assert db.rows[path]['v3_manual_end_requested'] is False
+    assert 'v3_manual_end' not in db.rows[path]
+    assert db.rows[destination_path] == survivor
+    counter.labels.assert_called_once_with('whole_record_redirected')
+    counter.labels.return_value.inc.assert_called_once_with()
+    enqueue.assert_not_called()

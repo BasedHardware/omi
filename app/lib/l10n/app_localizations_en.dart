@@ -15815,4 +15815,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String playStripePlanPaused(String plan) {
     return 'Your $plan plan is paused.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Your device is already on its newest supported firmware version';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Sync your recordings first';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.';
 }
