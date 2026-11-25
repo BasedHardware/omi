@@ -118,7 +118,7 @@ def test_replay_counts_unspaced_speech_in_partial_and_final_arrivals():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(('characters', 'visible'), [(299, False), (300, True)])
+@pytest.mark.parametrize(('characters', 'visible'), [(149, False), (150, True)])
 async def test_fake_replay_and_fate_use_script_aware_count(monkeypatch, characters, visible):
     from testing.pipeline_lab.v3 import fake
     from testing.pipeline_lab.v3.run import recording_fate

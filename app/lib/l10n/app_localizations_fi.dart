@@ -15837,4 +15837,14 @@ class AppLocalizationsFi extends AppLocalizations {
   String playStripePlanPaused(String plan) {
     return '$plan-tilauksesi on keskeytetty.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Laiteellasi on jo uusin tuettu laiteohjelmistoversio';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Synkronoi nauhoituksesi ensin';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.';
 }

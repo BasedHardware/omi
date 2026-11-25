@@ -15744,4 +15744,14 @@ class AppLocalizationsAr extends AppLocalizations {
   String playStripePlanPaused(String plan) {
     return 'خطة $plan الخاصة بك متوقفة مؤقتًا.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'جهازك يعمل بالفعل بأحدث إصدار مدعوم من البرنامج الثابت';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'مزامنة تسجيلاتك أولاً';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'لا تزال بعض التسجيلات على جهازك. دعها تكمل المزامنة إلى هاتفك، ثم ابدأ التحديث.';
 }

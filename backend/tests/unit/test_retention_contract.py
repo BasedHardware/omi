@@ -182,7 +182,9 @@ def test_ceilings_report_soft_delete_noncurrent_and_cache_age():
     ]
 
 
-@pytest.mark.parametrize('prefix', ['chunks/', 'chunks/unit/', 'raw-live/', 'raw-live/unit/', ''])
+@pytest.mark.parametrize(
+    'prefix', ['chunks/', 'chunks/unit/', 'raw-live/', 'raw-live/unit/', 'audio-outbox/', 'audio-outbox/unit/', '']
+)
 def test_live_voice_is_kept_until_user_deletion_on_ceiling_side(prefix):
     metadata = {
         'lifecycle': {'rule': [delete(3650, matchesPrefix=[prefix])]},

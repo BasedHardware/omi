@@ -53,7 +53,8 @@ def put_recording(strict, segments, *, status, landed):
     }
 
 
-async def reconcile_at(strict, monkeypatch, now, outline_entries=None, derive_run=None):
+async def reconcile_at(strict, monkeypatch, now, outline_entries=None, derive_run=None, loader=None):
+    """``loader`` replaces the default full read of the fixture (the stub for ``store.load``)."""
     for row in strict.rows.values():
         row['_test_revision'] = 1
 
@@ -81,7 +82,7 @@ async def reconcile_at(strict, monkeypatch, now, outline_entries=None, derive_ru
 
     async def blocking(pool, fn, *args, **kwargs):
         if fn is store.load:
-            return load(*args, **kwargs)
+            return (loader or load)(*args, **kwargs)
         if fn is store.load_derive:
             return load_derive(*args, **kwargs)
         if fn is store.adoptable:

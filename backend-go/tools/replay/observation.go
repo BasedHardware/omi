@@ -3,78 +3,188 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
-	"time"
 )
 
 func compareObservations(python, goRun *observation) []difference {
-	diffs := []difference{}
-	compareValue(&diffs, "/status", python.Status, goRun.Status)
-	compareValue(&diffs, "/conversation", python.Document, goConversation(goRun, python))
-	compareFanout(&diffs, python, goRun)
-	compareObject(&diffs, "/derived_documents", python.Derived, goRun.Derived)
-	compareObject(&diffs, "/effects", python.Effects, goRun.Effects)
-	compareObject(&diffs, "/provider_calls", countProviderCalls(python.ProviderCalls), countProviderCalls(goRun.ProviderCalls))
-	compareObject(&diffs, "/webhooks", webhookGroups(python), webhookGroups(goRun))
-	for i := range diffs {
-		diff := &diffs[i]
-		switch diff.Kind {
-		case "different_value":
-			if diff.Reason == "" {
-				diff.Reason = allowedDifference(diff.Path, python, goRun)
-			}
-		case "missing_in_go":
-			if unported(diff.Path) {
-				diff.Kind = "unported"
-			}
-		}
-	}
-	validateBinding(&diffs, "/python", python, false)
-	validateBinding(&diffs, "/go", goRun, true)
-	if (python.Admitted == nil) != (goRun.Admitted == nil) {
-		addDifference(&diffs, "/admitted", "different_value")
-	} else if python.Admitted != nil {
-		compareValue(&diffs, "/admitted/own_key", python.Admitted.OwnKey, goRun.Admitted.OwnKey)
-	}
+	diffs, _ := compareObservationsForRun(
+		python,
+		goRun,
+		generatedHomeTokenCounts([]replayCase{{Python: python}}, false),
+		generatedHomeTokenCounts([]replayCase{{Go: goRun}}, true),
+	)
 	return diffs
 }
 
-// The Python conversation has no fanout key field. Its queue document owns that
-// binding. Compare Go's stored conversation key to the Python queue key separately.
-func goConversation(goRun, python *observation) any {
-	doc, ok := goRun.Document.(map[string]any)
-	if !ok || python.QueueFanout == "" || documentField(python, "fanout_key") != nil {
-		return goRun.Document
+func compareObservationsForRun(python, goRun *observation, pythonTokens, goTokens map[string]int) ([]difference, map[string]attachMemoCheck) {
+	diffs := []difference{}
+	terminalChecks := terminalMemoChecks(python, goRun)
+	compareValue(&diffs, "/status", python.Status, goRun.Status)
+	compareAdmissions(&diffs, python, goRun)
+	compareValue(&diffs, "/conversation", python.Document, goConversation(goRun))
+	compareDerivedDocuments(&diffs, python, goRun)
+	if terminalChecks != nil {
+		filtered := diffs[:0]
+		for _, diff := range diffs {
+			if episodeAttachMemoField(diff.Path, python) && episodeAttachMemoField(diff.Path, goRun) {
+				continue
+			}
+			filtered = append(filtered, diff)
+		}
+		diffs = filtered
 	}
-	fields := make(map[string]any, len(doc))
-	for name, value := range doc {
-		if name != "fanout_key" {
-			fields[name] = value
+	if terminalChecks == nil {
+		validateGoAttachMemoEvidence(&diffs, goRun)
+	}
+	compareObject(&diffs, "/effects", python.Effects, goRun.Effects)
+	compareObject(&diffs, "/provider_calls", countProviderCalls(python.ProviderCalls), countProviderCalls(goRun.ProviderCalls))
+	compareObject(&diffs, "/webhooks", webhookGroups(python), webhookGroups(goRun))
+	reviewSpeakerDifferences(&diffs, python, goRun)
+	reviewRuledSyncWrites(&diffs, python, goRun)
+	for i := range diffs {
+		diff := &diffs[i]
+		if terminalChecks == nil && diff.Reason == "" {
+			diff.Reason = approvedEpisodeAttachMemoDifference(diff.Path, python, goRun)
+		}
+		if terminalChecks == nil && diff.Reason == "" && goRun.EpisodeAttachMemoExpected && !goRun.EpisodeAttachMemoValid &&
+			episodeAttachMemoField(diff.Path, goRun) {
+			diff.FailureReason = "go_attach_memo_invalid"
+		}
+		switch diff.Kind {
+		case "different_value":
+			if diff.Reason == "" {
+				diff.Reason = approvedTimestampDifference(diff.Path, python, goRun)
+			}
+			if diff.Reason == "" {
+				var failureReason string
+				diff.Reason, failureReason = protectedDifferenceEvidence(diff.Path, python, goRun)
+				if diff.Reason == "" && diff.FailureReason == "" {
+					diff.FailureReason = failureReason
+				}
+			}
+			if diff.Reason == "" {
+				diff.Reason = allowedHomeTokenDifference(diff.Path, python, goRun, pythonTokens, goTokens)
+			}
+			if diff.Reason == "" {
+				diff.Reason = approvedGoOnlyDifference(diff.Path, python, goRun)
+			}
+			if diff.Reason == "" {
+				diff.Reason = approvedBatchPrivacyDifference(diff.Path, python, goRun)
+			}
+			if diff.Reason == "" && webhookMatches(diff.Path, python) && webhookMatches(diff.Path, goRun) {
+				diff.Reason = "both webhook keys bind to their own admitted fanout"
+			}
+		case "missing_in_go":
+			if diff.Reason == "" {
+				var failureReason string
+				diff.Reason, failureReason = protectedDifferenceEvidence(diff.Path, python, goRun)
+				if diff.Reason == "" && diff.FailureReason == "" {
+					diff.FailureReason = failureReason
+				}
+			}
+			if diff.Reason == "" && unported(diff.Path) {
+				diff.Kind = "unported"
+			}
+		case "missing_in_python":
+			if diff.Reason == "" {
+				var failureReason string
+				diff.Reason, failureReason = protectedDifferenceEvidence(diff.Path, python, goRun)
+				if diff.Reason == "" && diff.FailureReason == "" {
+					diff.FailureReason = failureReason
+				}
+			}
+			if diff.Reason == "" {
+				diff.Reason = approvedGoOnlyDifference(diff.Path, python, goRun)
+			}
 		}
 	}
-	return fields
+	validateTimestampEvidence(&diffs, "python", python)
+	validateTimestampEvidence(&diffs, "go", goRun)
+	validateBatchPrivacyEvidence(&diffs, "python", python)
+	validateBatchPrivacyEvidence(&diffs, "go", goRun)
+	validateBatchPrivacyPair(&diffs, python, goRun)
+	validateHomeTokenEvidence(&diffs, "python", python, pythonTokens)
+	validateHomeTokenEvidence(&diffs, "go", goRun, goTokens)
+	validateBinding(&diffs, "/python", python, false)
+	validateBinding(&diffs, "/go", goRun, true)
+	if terminalChecks == nil {
+		validateEpisodeAttachMemoEvidence(&diffs, python, goRun)
+	} else {
+		for _, side := range []string{"python", "go"} {
+			if check := terminalChecks[side]; !check.Valid {
+				diffs = append(diffs, difference{Path: "/" + side + "/episode_attach_memo", Kind: "invalid_binding", FailureReason: check.FailureReason})
+			}
+		}
+	}
+	validateReviewedGoOnlyFields(&diffs, python, goRun)
+	return diffs, terminalChecks
 }
 
-func compareFanout(diffs *[]difference, python, goRun *observation) {
-	if python.Admitted == nil || goRun.Admitted == nil {
+func ordinarySyncDiagnosticPair(python, goRun *observation) bool {
+	return python.OrdinarySyncDiagnostic && goRun.OrdinarySyncDiagnostic
+}
+
+func compareAdmissions(diffs *[]difference, python, goRun *observation) {
+	switch {
+	case python.Admitted != nil && goRun.Admitted != nil:
+		compareValue(diffs, "/admitted/own_key", python.Admitted.OwnKey, goRun.Admitted.OwnKey)
+	case python.Admitted != nil:
+		addDifference(diffs, "/admitted", "missing_in_go")
+	case goRun.Admitted != nil:
+		diff := difference{Path: "/admitted", Kind: "missing_in_python"}
+		if ordinarySyncDiagnosticPair(python, goRun) && goRun.Admitted.Engine == "go" {
+			diff.Reason = "ordinary_sync_python_callback_without_admission"
+		}
+		*diffs = append(*diffs, diff)
+	}
+}
+
+func validateGoAttachMemoEvidence(diffs *[]difference, goRun *observation) {
+	if goRun == nil || goRun.EpisodeAttachMemoValid {
 		return
 	}
-	path := "/fanout_key"
-	actual, ok := documentField(goRun, "fanout_key").(string)
-	if !ok || actual == "" {
-		addDifference(diffs, path, "missing_in_go")
+	conversation, conversationOK := goRun.Document.(map[string]any)
+	needsMemo := conversationOK && hasDocumentField(conversation, "episode_id") &&
+		conversation["transcript_segments"] != nil
+	linkPath := "users/" + goRun.OwnerID + "/episode_links/" + goRun.ConversationID
+	link := goRun.Derived[linkPath]
+	var hasMemo, hasLiveMemo bool
+	for _, field := range []string{"attach_revision", "attach_completed", "attach_finalized", "attach_owner_id"} {
+		hasMemo = hasMemo || hasDocumentField(link, field)
+		hasLiveMemo = hasLiveMemo || objectField(link, field) != nil
+	}
+	if !hasLiveMemo {
+		switch goRun.EpisodeAttachMemoFailureReason {
+		case "missing_transcript", "transcript_decode_failed", "discarded_without_memo", "content_key_unavailable":
+			// An unkeyable row may omit its memo. A stored memo still needs proof.
+			return
+		}
+	}
+	if !hasMemo && !needsMemo {
 		return
 	}
-	if python.QueueFanout == "" || python.QueueFanout != python.Admitted.Fanout ||
-		actual != goRun.Admitted.Fanout || actual != goRun.QueueFanout {
-		addDifference(diffs, path, "invalid_binding")
-	} else if python.QueueFanout != actual {
-		*diffs = append(*diffs, difference{
-			Path: path, Kind: "different_value",
-			Reason: "Python job and Go conversation fanout keys independently match their admitted bindings",
-		})
+	for _, diff := range *diffs {
+		if episodeAttachMemoField(diff.Path, goRun) {
+			return
+		}
 	}
+	path := "/go/derived_documents/" + escapePointer(linkPath) + "/attach_memo_evidence"
+	*diffs = append(*diffs, difference{
+		Path: path, Kind: "invalid_binding", FailureReason: goRun.EpisodeAttachMemoFailureReason,
+	})
+}
+
+// A bound Go fanout key is validated against its own queue and job.
+func goConversation(goRun *observation) any {
+	doc, ok := goRun.Document.(map[string]any)
+	if !ok || !goAdmissionBinds(goRun) {
+		return goRun.Document
+	}
+	fields := maps.Clone(doc)
+	delete(fields, "fanout_key")
+	return fields
 }
 
 func countProviderCalls(calls []string) map[string]any {
@@ -102,20 +212,21 @@ func objectField(value any, field string) any {
 }
 
 func timestampInWindow(run *observation) bool {
-	stamp, ok := objectField(documentField(run, "updated_at"), "$timestamp").(string)
-	if !ok {
-		return false
-	}
-	t, err := time.Parse(time.RFC3339Nano, stamp)
-	return err == nil && run.UpdatedAtChanged && !run.Started.IsZero() && !run.Finished.Before(run.Started) &&
-		!t.Before(run.Started) && !t.After(run.Finished)
+	return run.UpdatedAtChanged && validTimestampValue(run, documentField(run, "updated_at"))
 }
 
 func validateBinding(diffs *[]difference, side string, run *observation, goSide bool) {
-	if run.UpdatedAtChanged && run.Document != nil && !timestampInWindow(run) {
-		addDifference(diffs, side+"/conversation/updated_at", "invalid_clock")
+	if run == nil {
+		return
+	}
+	if goSide {
+		validateGoFenceBinding(diffs, side, run)
+		validateGoMinimumBinding(diffs, side, run)
 	}
 	if run.Admitted == nil {
+		if run.QueueFanout != "" {
+			addDifference(diffs, side+"/admitted", "invalid_binding")
+		}
 		return
 	}
 	ids := run.Admitted
@@ -133,25 +244,6 @@ func validateBinding(diffs *[]difference, side string, run *observation, goSide 
 			addDifference(diffs, fmt.Sprintf("%s/webhooks/%d/idempotency_key", side, i), "invalid_binding")
 		}
 	}
-}
-
-func allowedDifference(path string, python, goRun *observation) string {
-	switch path {
-	case "/conversation/updated_at/$timestamp":
-		if timestampInWindow(python) && timestampInWindow(goRun) {
-			return "both writes occurred within their observed replay windows"
-		}
-	case "/conversation/finalization_job_id":
-		if python.Admitted != nil && goRun.Admitted != nil && python.Admitted.Job != "" && goRun.Admitted.Job != "" &&
-			documentField(python, "finalization_job_id") == python.Admitted.Job &&
-			documentField(goRun, "finalization_job_id") == goRun.Admitted.Job {
-			return "both stored identifiers bind to their own admitted queue job"
-		}
-	}
-	if webhookMatches(path, python) && webhookMatches(path, goRun) {
-		return "both webhook keys bind to their own admitted fanout"
-	}
-	return ""
 }
 
 func webhookGroups(run *observation) map[string]any {

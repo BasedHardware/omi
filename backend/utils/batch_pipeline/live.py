@@ -18,6 +18,7 @@ import random
 import threading
 import time
 
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD
 from utils.conversations import phase_shadow
 
 from config.policy import resolve_batch_policy
@@ -421,8 +422,9 @@ async def _manual_finish_admitted(
         if not manual_end_marker_enabled():
             return
         single = len(units) == 1
+        recording_finish = bool(current.get(FINISH_RECORDING_FIELD))
         promoted = False
-        if single:
+        if single and not recording_finish:
             # Stored before any detached work, so losing the process cannot lose a single-unit cut.
             promoted = await run_blocking(
                 db_executor, conversations_v3.promote_manual_end, uid, conversation_id, firestore_client=store.client
@@ -430,7 +432,14 @@ async def _manual_finish_admitted(
             v3_metrics.BATCH_MANUAL_END.labels('promoted' if promoted else 'not_promoted').inc()
         # ``current`` is a raw row: its stored transcript is opaque here, so this only screens on
         # clear fields. The pass decides on a decoded row.
-        if fast_finish.mode() == 'off' or not fast_finish.candidate(current) or conversation_id in _FAST_FINISH_STARTED:
+        if fast_finish.mode() == 'off':
+            skipped = 'mode_off'
+        else:
+            skipped = fast_finish.candidate_rejection(current)
+            if skipped is None and conversation_id in _FAST_FINISH_STARTED:
+                skipped = 'already_started'
+        if skipped is not None:
+            fast_finish.SKIPPED.labels(skipped).inc()
             if not single:
                 v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
             return
@@ -501,7 +510,8 @@ async def _manual_finish_admitted(
                         # promoted single unit already holds its cut, but still gets its own
                         # manual-end wake after the write: the writer's plain wake shares the owner's
                         # per-minute task name and is skipped when a reconcile already ran that minute.
-                        cut=cut if not single or promoted else None,
+                        # Recording-scoped intent is consumed by the native completion transaction.
+                        cut=cut if not recording_finish and (not single or promoted) else None,
                         privacy=privacy,
                         fence=fence,
                     )

@@ -24,7 +24,14 @@ from utils.batch_pipeline.held_terminal import OPERATOR_INTENTS, held_without_re
 from config.record_audio import record_identity, require_record_audio_barrier
 from config.server_batch import manual_end_marker_enabled
 from utils.conversations.v3 import metrics as v3_metrics, triggers as v3_triggers
-from utils.conversations.v3.live import FINISH_FIELDS, FINISH_WINDOW_FIELD, active, has_finish_content
+from utils.conversations.v3.live import (
+    FINISH_FIELDS,
+    FINISH_RECORDING_FIELD,
+    FINISH_SOURCE_FIELDS,
+    FINISH_WINDOW_FIELD,
+    active,
+    has_finish_content,
+)
 from utils.batch_pipeline.empty_transcription import EMPTY_OUTCOMES
 from database.batch_pipeline_policy import load_stage_policy
 from database.batch_pipeline_delivered_share import delivery_stamp
@@ -1009,11 +1016,11 @@ class ProjectionStore:
             silent = silent_count == len(binding.segment_ids) or result['outcome'] == 'expected_silence'
             recording_ref = None
             finish_update = {}
+            finish_outcome = 'whole_record_resolved_empty'
             if (
                 cid
                 and binding.native_record
                 and not binding.partial_record
-                and (silent or len(binding.segment_ids) > 1)
                 and not (result.get('reason_code') or erased_count or superseded_count or deleted_output_count)
                 and manual_end_marker_enabled()
             ):
@@ -1022,11 +1029,16 @@ class ProjectionStore:
                     collection = self.client.collection('users').document(binding.owner_id).collection('conversations')
                     recording_ref = collection.document(cid)
                     row = conversation_rows.get(cid)
-                    if row is None and silent:
-                        row = recording_ref.get(transaction=transaction).to_dict()
-                    finish_update = self._v3_finish_update(
-                        transaction, collection, cid, row or {}, silent, session, now
-                    )
+                    if row is None:
+                        row = (
+                            recording_ref.get(transaction=transaction, field_paths=FINISH_SOURCE_FIELDS).to_dict() or {}
+                        )
+                    if silent or len(binding.segment_ids) > 1 or row.get(FINISH_RECORDING_FIELD):
+                        finish_update = self._v3_finish_update(transaction, collection, cid, row, silent, session, now)
+                    if finish_update.get('v3_manual_end'):
+                        finish_outcome = 'whole_record_consumed'
+                    elif row.get('sync_merged_into'):
+                        finish_outcome = 'whole_record_redirected'
             if (
                 record_notes_eager_enabled()
                 and not source_deleted
@@ -1153,9 +1165,7 @@ class ProjectionStore:
                     transaction.set(ref, data)
             if finish_update and recording_ref is not None:
                 transaction.update(recording_ref, finish_update)
-                finish_resolution.append(
-                    (recording_ref.id, 'consumed' if finish_update.get('v3_manual_end') else 'resolved_empty')
-                )
+                finish_resolution.append((recording_ref.id, finish_outcome))
             if not source_deleted:
                 self._commit_usage(
                     transaction, session.ledger_ref, session.ledger, binding, completion_accounting, seconds, now
@@ -1195,10 +1205,20 @@ class ProjectionStore:
             else writing('usage_month_cache', binding.owner_id)
         ):
             result, changed, seconds = self.run(commit, policy=policy)
+        # Only a first durable publication owns the upload sample. Observe it
+        # before post-commit work that could fail and leave a replay to finish.
+        observe_completion(
+            completion_upload,
+            delivered_uploads,
+            merged=bool(coalescing_receipts),
+            changed=changed,
+            result=result,
+            now=now,
+        )
         if finish_resolution:
             recording_id, outcome = finish_resolution[0]
             v3_metrics.FINISH_NO_POINTER.labels(outcome).inc()
-            if outcome == 'consumed':
+            if outcome == 'whole_record_consumed':
                 v3_triggers.enqueue_pending(binding.owner_id, manual_end_id=recording_id)
         if changed:
             # Before any notes wake: the woken callback's seal proof reads this stage.
@@ -1215,36 +1235,35 @@ class ProjectionStore:
                 SOURCE_DELETED_JOBS.inc()
                 logger.info('event=batch_projection action=completion outcome=source_deleted')
             record_correctness('projection_completed', seconds=seconds)
-        observe_completion(
-            completion_upload,
-            delivered_uploads,
-            merged=bool(coalescing_receipts),
-            changed=changed,
-            result=result,
-            now=now,
-        )
         return result
 
     def _v3_finish_update(self, transaction, collection, cid, row, silent, session, now):
         window_id = row.get(FINISH_WINDOW_FIELD)
         upload_revision = session.job.get('record_input_upload_revision')
         if (
-            not window_id
+            not (window_id or row.get(FINISH_RECORDING_FIELD))
             or not row.get('v3_manual_end_requested')
             or row.get('v3_manual_end')
-            or not row.get('recording')
-            or row.get('status') != 'completed'
-            or not row.get('finished_at')
-            or any(
-                row.get(k)
-                for k in ('record_audio_partial', 'record_upload_failed', 'is_locked', 'deleted', 'sync_merged_into')
-            )
+            or any(row.get(k) for k in ('record_audio_partial', 'record_upload_failed', 'is_locked'))
             or row.get('data_protection_level') == 'private'
             or (upload_revision is not None and upload_revision != row.get('record_upload_revision'))
         ):
             return {}
+        if row.get('sync_merged_into'):
+            # A redirect proves custody, but the survivor may contain speech beyond this recording's cut.
+            return {'v3_manual_end_requested': False} if row.get(FINISH_RECORDING_FIELD) is True else {}
+        if (
+            row.get('deleted')
+            or not row.get('recording')
+            or row.get('status') != 'completed'
+            or not row.get('finished_at')
+        ):
+            return {}
         clock = datetime.fromtimestamp(now, timezone.utc)
-        if silent:
+        if silent and not window_id:
+            if row.get('discarded') or not has_finish_content(row, {}, cid):
+                return {'v3_manual_end_requested': False}
+        elif silent:
             window = (
                 collection.document(window_id).get(transaction=transaction, field_paths=FINISH_FIELDS).to_dict() or {}
             )
@@ -1296,11 +1315,12 @@ class ProjectionStore:
                 )
                 if not row or (row.get('deleted') and not row.get('sync_merged_into')):
                     raise ProjectionBlocked('projected conversation deleted')
-                if not row.get('sync_merged_into'):
-                    if rows_out is not None:
-                        rows_out[cid] = row
+                target = row.get('sync_merged_into')
+                if rows_out is not None and (not target or cid == binding.target_conversation_id):
+                    rows_out[cid] = row
+                if not target:
                     break
-                cid = row['sync_merged_into']
+                cid = target
             if cid:
                 mapped.append((cid, receipt['created'] and cid == original_id))
         new = sorted({cid for cid, created in mapped if created})

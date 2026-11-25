@@ -135,14 +135,6 @@ KNOWN_RAW = {
         'account_deletions',
         'set',
     ): (1, 'Loopback-only setup and cleanup for synthetic authority fixtures.'),
-    ('scripts/dream_park_race_emulator_test.py', '_reset', 'users', 'set'): (
-        1,
-        'Loopback-only setup and cleanup for synthetic authority fixtures.',
-    ),
-    ('scripts/dream_park_race_emulator_test.py', 'main', 'users', 'delete'): (
-        1,
-        'Loopback-only setup and cleanup for synthetic authority fixtures.',
-    ),
     ('scripts/fsr_people_generation_emulator_test.py', 'main', 'users', 'set'): (
         1,
         'Loopback-only setup and cleanup for synthetic authority fixtures.',

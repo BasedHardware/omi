@@ -470,16 +470,16 @@ def test_transcript_word_floor_counts_mixed_script_without_punctuation(text, wor
 
 
 @pytest.mark.parametrize('letter', ['界', 'あ'])
-@pytest.mark.parametrize('words', [299, 300])
+@pytest.mark.parametrize('words', [149, 150])
 def test_finished_script_aware_window_respects_home_word_floor(letter, words):
     row = recording(segments=[{'text': letter * words, 'start': 0, 'end': 10}])
     group = outline.stretches([row], NOW + timedelta(minutes=10))[0]
     window = planner.windows([group], [[entry()]])[0]
     assert window['finished']
-    assert planner.build('u', window, {'r': row})['home_hidden'] is (words < 300)
+    assert planner.build('u', window, {'r': row})['home_hidden'] is (words < 150)
     # Some projection callers supply no stretch count and use the copied segments.
     window.pop('_stretch_words', None)
-    assert planner.build('u', window, {'r': row})['home_hidden'] is (words < 300)
+    assert planner.build('u', window, {'r': row})['home_hidden'] is (words < 150)
 
 
 @pytest.mark.parametrize('words', [5, 40])
@@ -540,7 +540,7 @@ def test_manual_end_without_speech_creates_no_window():
 
 
 @pytest.mark.parametrize(
-    'recognized,words,expected_hidden', [(False, 300, False), (True, 300, True), (False, 40, True)]
+    'recognized,words,expected_hidden', [(False, 150, False), (True, 150, True), (False, 149, True)]
 )
 def test_background_visibility_requires_wearer_recognition(recognized, words, expected_hidden):
     row = recording(segments=[{'id': 's', 'text': 'speech ' * words, 'start': 0, 'end': 10, 'is_user': recognized}])
@@ -551,7 +551,7 @@ def test_background_visibility_requires_wearer_recognition(recognized, words, ex
     assert result['home_hidden_reason'] == (
         'background_wearer_recognized'
         if recognized
-        else 'wearer_recognition_uncertain' if words >= 300 else 'below_word_minimum'
+        else 'wearer_recognition_uncertain' if words >= 150 else 'below_word_minimum'
     )
 
 

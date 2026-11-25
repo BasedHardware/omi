@@ -28,6 +28,7 @@ import 'package:omi/providers/native_link_reconciler.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
+import 'package:omi/services/devices/firmware_device_session.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
@@ -44,6 +45,7 @@ import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/firmware_install_verification.dart';
 import 'package:omi/utils/firmware_update_battery.dart';
 import 'package:omi/utils/firmware_update_check_session.dart';
+import 'package:omi/utils/firmware_update_hold.dart';
 import 'package:omi/utils/firmware_update_prompt_coordinator.dart';
 import 'package:omi/utils/analytics/device_health_telemetry.dart';
 import 'package:omi/utils/logger.dart';
@@ -1247,6 +1249,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           hardwareRevision: device.hardwareRevision,
           manufacturerName: device.manufacturerName,
           serialNumber: device.serialNumber,
+          bootloaderSha256: await readConnectedBootloaderSha256(device.id),
         ) ??
         {};
 
@@ -1254,6 +1257,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       currentFirmware: device.firmwareRevision,
       latestFirmwareDetails: latestFirmwareDetails,
     );
+    if (hasUpdate && await FirmwareUpdateHold.heldFor(device.id, version)) hasUpdate = false;
     return (message, hasUpdate, version, latestFirmwareDetails);
   }
 
@@ -1641,7 +1645,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Fetch latest stable version for rollback comparison
         String? latestStableFirmwareVersion;
         try {
-          var stableDetails = await getStableFirmwareVersion(deviceModelNumber: pairedDevice?.modelNumber ?? '') ?? {};
+          var stableDetails = await getStableFirmwareVersion(
+                  deviceModelNumber: pairedDevice?.modelNumber ?? '',
+                  bootloaderSha256: await readConnectedBootloaderSha256(pairedDevice?.id ?? '')) ??
+              {};
           if (!_isCurrent(generation) || !_isCurrentFirmwareCheckSession(checkSession)) {
             Logger.debug('Discarding stable firmware result from a stale device session');
             return false;
