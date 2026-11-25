@@ -20,6 +20,34 @@ void main() {
     trace = UploadTrace(now: () => clock);
   });
 
+  test('hold age includes time before dispatch and is recalculated on replay', () {
+    trace.prepare(
+      firstFilePath: '/a.bin',
+      oldestId: 'w1',
+      sealedAtSeconds: 1990,
+      holdState: 'bg300',
+      holdSealedAtMs: 1990123,
+    );
+    final upload = trace.take('/a.bin');
+    clock = at(3190);
+    expect(trace.holdHeadersAtSend(upload, holdEnabled: true), {
+      'X-Omi-Upload-Hold': 'bg300',
+      'X-Omi-Upload-Hold-Age-Ms': '1199877',
+    });
+    clock = at(3210);
+    expect(trace.holdHeadersAtSend(upload, holdEnabled: true)['X-Omi-Upload-Hold-Age-Ms'], '1219877');
+    expect(trace.holdHeadersAtSend(upload, holdEnabled: false), {'X-Omi-Upload-Hold': 'none'});
+  });
+
+  test('hold age clamps clock changes and requires a held file', () {
+    final held = (trace: 'trace', holdState: 'fg60', holdSealedAtMs: 2010000);
+    expect(trace.holdHeadersAtSend(held, holdEnabled: true)['X-Omi-Upload-Hold-Age-Ms'], '0');
+    clock = at(200000);
+    expect(trace.holdHeadersAtSend(held, holdEnabled: true)['X-Omi-Upload-Hold-Age-Ms'], '86400000');
+    final unheld = (trace: 'trace', holdState: 'none', holdSealedAtMs: 2010000);
+    expect(trace.holdHeadersAtSend(unheld, holdEnabled: true), {'X-Omi-Upload-Hold': 'none'});
+  });
+
   test('a first attempt with no gate reports none and one attempt', () {
     trace.prepare(firstFilePath: '/a.bin', oldestId: 'w1', sealedAtSeconds: 1990);
     expect(trace.take('/a.bin')?.trace, 'sealed=1990;first=2000;gate=none;attempts=1');

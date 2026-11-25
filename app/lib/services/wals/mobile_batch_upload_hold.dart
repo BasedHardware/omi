@@ -49,7 +49,11 @@ class MobileBatchUploadHold {
 
   void sealed(Wal wal) {
     if (!enabled() || wal.recordingSessionId?.isNotEmpty != true) return;
-    _pending[wal.id] = _HeldWal(wal, _now());
+    final sealedAt = _now();
+    // Keep the timestamp through process eviction. The stored hint never
+    // reinstates a hold when the WAL index is loaded.
+    wal.mobileBatchHold = (sealedAtMs: sealedAt.millisecondsSinceEpoch, state: _state.header);
+    _pending[wal.id] = _HeldWal(wal, sealedAt);
   }
 
   /// False means this seal uses its original immediate upload wake.
@@ -73,7 +77,21 @@ class MobileBatchUploadHold {
 
   bool isHeld(Wal wal) => _pending.containsKey(wal.id);
 
-  String label(Wal wal) => enabled() ? _released[wal]?.header ?? 'none' : 'none';
+  String label(Wal wal) => enabled() ? _released[wal]?.header ?? indexedLabel(wal) : 'none';
+
+  static String indexedLabel(Wal wal) {
+    final state = wal.mobileBatchHold?.state;
+    return state != null && MobileBatchHoldState.values.any((value) => value.header == state) ? state : 'none';
+  }
+
+  static int? oldestSealedAtMs(Iterable<Wal> files) {
+    int? oldest;
+    for (final wal in files) {
+      final sealedAtMs = wal.mobileBatchHold?.sealedAtMs;
+      if (sealedAtMs != null && (oldest == null || sealedAtMs < oldest)) oldest = sealedAtMs;
+    }
+    return oldest;
+  }
 
   void setForeground(bool foreground) {
     if (_foreground == foreground) return;

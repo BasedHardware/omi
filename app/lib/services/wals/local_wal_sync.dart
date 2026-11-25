@@ -56,6 +56,7 @@ import 'package:omi/services/experiments/wal_delta_index_gate.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/batch_ring_proof.dart';
 import 'package:omi/services/wals/mobile_batch_upload_hold.dart';
+import 'package:omi/services/experiments/mobile_batch_upload_hold_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/deleted_account_uids.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -2449,6 +2450,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
     final batchHold = mobileBatchUploadHold;
     batchHold?.tick();
+    final holdLabel =
+        batchHold?.label ?? (MobileBatchUploadHoldGate.enabled() ? MobileBatchUploadHold.indexedLabel : null);
     final initialNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
     var wals = _wals
         .where((wal) =>
@@ -2540,7 +2543,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       // confirmation the deadline may not survive (#14688).
       final waiting = turnPending.where((wal) => !deferredGroups.contains(groupKeys[wal])).toList();
       final candidates = waiting.isNotEmpty ? waiting : turnPending;
-      var batch = nextSyncUploadBatch(candidates, batchNowSeconds, holdLabel: batchHold?.label);
+      var batch = nextSyncUploadBatch(candidates, batchNowSeconds, holdLabel: holdLabel);
       if (batch.isEmpty) break;
       if (batch
           .any((wal) => wal.status == WalStatus.uploadRejected || isolateAfterRefusal.contains(walAttemptKey(wal)))) {
@@ -2697,7 +2700,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           firstFilePath: files.first.path,
           oldestId: oldest.id,
           sealedAtSeconds: oldest.timerStart + oldest.seconds,
-          holdState: isMobileStandardBatchWal(oldest) ? batchHold?.label(oldest) ?? 'none' : null,
+          holdState: isMobileStandardBatchWal(oldest) ? holdLabel?.call(oldest) ?? 'none' : null,
+          holdSealedAtMs: MobileBatchUploadHold.oldestSealedAtMs(batchWals),
         );
         final result = await _uploadGate.upload(
           files,
@@ -3036,7 +3040,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         firstFilePath: walFile.path,
         oldestId: walToSync.id,
         sealedAtSeconds: walToSync.timerStart + walToSync.seconds,
-        holdState: isMobileStandardBatchWal(walToSync) ? mobileBatchUploadHold?.label(walToSync) ?? 'none' : null,
+        holdState: isMobileStandardBatchWal(walToSync)
+            ? mobileBatchUploadHold?.label(walToSync) ?? MobileBatchUploadHold.indexedLabel(walToSync)
+            : null,
+        holdSealedAtMs: walToSync.mobileBatchHold?.sealedAtMs,
       );
       final result = await _uploadGate.upload(
         [walFile],

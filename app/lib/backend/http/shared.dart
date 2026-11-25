@@ -892,12 +892,18 @@ Future<http.Response> makeMultipartApiCall({
   required String url,
   required List<File> files,
   Map<String, String> headers = const {},
+  Map<String, String> Function()? headersAtSend,
   Map<String, String> fields = const {},
   String fileFieldName = 'files',
   String method = 'POST',
   UploadProgressCallback? onUploadProgress,
   Map<String, File> namedFiles = const {},
 }) async {
+  Future<http.StreamedResponse> send(http.MultipartRequest request) {
+    if (headersAtSend != null) request.headers.addAll(headersAtSend());
+    return _sendMultipartWithProgress(request, onUploadProgress);
+  }
+
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
     Map<String, String> builtHeaders = await buildHeaders(
@@ -917,7 +923,7 @@ Future<http.Response> makeMultipartApiCall({
       namedFiles: namedFiles,
     );
 
-    var streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
+    var streamedResponse = await send(request);
     var response = await _readMultipartBody(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
@@ -936,7 +942,7 @@ Future<http.Response> makeMultipartApiCall({
             method: method,
             namedFiles: namedFiles,
           );
-          streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
+          streamedResponse = await send(request);
           return _readMultipartBody(streamedResponse);
         },
       );

@@ -9,6 +9,7 @@ import 'package:omi/services/wals/mobile_batch_upload_hold.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
+import 'package:omi/services/wals/upload_trace.dart';
 import 'package:omi/services/wals/wal.dart';
 
 import '../../support/custody_test_helpers.dart';
@@ -246,6 +247,7 @@ void main() {
     addTearDown(() => directory.delete(recursive: true));
     final requests = <List<String>>[];
     final claims = <bool>[];
+    final traces = <UploadTraceSnapshot?>[];
     final gate = SyncUploadGate(
       limiter: SyncRateLimiter.instance,
       fairUseStatusLoader: () async => {'stage': 'none'},
@@ -260,6 +262,7 @@ void main() {
           geolocation}) async {
         requests.add(files.map((file) => file.uri.pathSegments.last).toList());
         claims.add(claimLiveCapture);
+        traces.add(UploadTrace.instance.take(files.first.path));
         return UploadFilesResult.queued('synthetic-job');
       },
     );
@@ -294,13 +297,25 @@ void main() {
     expect(file.status, WalStatus.miss);
     expect(await File('${directory.path}/${file.filePath}.batch-journal').exists(), isFalse);
 
-    final restarted = await custodyLedger(gate: gate, now: () => _start);
+    final after = MobileBatchUploadHold(enabled: () => true, wake: () {}, now: () => _start);
+    final restarted = await custodyLedger(gate: gate, now: () => _start)
+      ..mobileBatchUploadHold = after;
     await restarted.syncAll();
     expect(requests, [
       [ready.filePath],
       [file.filePath],
     ]);
     expect((await restarted.getAllWals()).every((wal) => wal.status == WalStatus.uploaded), isTrue);
+    expect(traces.last?.holdState, 'fg60');
+    expect(traces.last?.holdSealedAtMs, _start.millisecondsSinceEpoch);
     expect(await File('${directory.path}/${file.filePath}').readAsBytes(), [1, 0, 0, 0, 1]);
+  });
+
+  test('oldest seal is picked from the actual request even when a later capture sealed first', () {
+    final olderSeal = _wal(10, 1)..mobileBatchHold = (sealedAtMs: 100, state: 'bg300');
+    final excluded = _wal(0, 1)..mobileBatchHold = (sealedAtMs: 50, state: 'bg300');
+    final newerSeal = _wal(1, 1)..mobileBatchHold = (sealedAtMs: 200, state: 'bg300');
+    expect(MobileBatchUploadHold.oldestSealedAtMs([newerSeal, olderSeal]), 100);
+    expect(MobileBatchUploadHold.oldestSealedAtMs([excluded, newerSeal, olderSeal]), 50);
   });
 }

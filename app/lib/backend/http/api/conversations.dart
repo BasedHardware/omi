@@ -28,6 +28,7 @@ import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
 import 'package:omi/services/wals/upload_trace.dart';
+import 'package:omi/services/experiments/mobile_batch_upload_hold_gate.dart';
 
 part 'sync_job_fetch.dart';
 part 'conversation_home_list.dart';
@@ -1241,8 +1242,9 @@ Future<UploadFilesResult> uploadLocalFilesV2(
         if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
         if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
         if (uploadTrace != null) 'X-Omi-Upload-Trace': uploadTrace.trace,
-        if (uploadTrace?.holdState case final state?) 'X-Omi-Upload-Hold': state,
       },
+      headersAtSend: () =>
+          UploadTrace.instance.holdHeadersAtSend(uploadTrace, holdEnabled: MobileBatchUploadHoldGate.enabled()),
       onUploadProgress: onUploadProgress,
     );
 
