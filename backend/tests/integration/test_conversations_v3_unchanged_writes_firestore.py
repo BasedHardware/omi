@@ -121,7 +121,9 @@ async def test_noop_pass_bills_three_lease_writes_and_no_home_dirty_merges(owner
     async def run():
         return await service.run_blocking(service.db_executor, projection_pass, owner, rows, cache, recordings)
 
-    assert await run() == set()
+    with patch.object(metrics, 'projection_writes', wraps=metrics.projection_writes) as observe_rows:
+        assert await run() == set()
+    observe_rows.assert_called_once_with('commit_projection', 0, 27)
     assert card.get().update_time == revision
     assert control.get().to_dict()['ready'] is True
     assert confirmed_paths == ['conversation_v3_leases/builder'] * 3
@@ -291,13 +293,33 @@ def test_pending_without_a_sweep_timestamp_repairs_the_legacy_marker(owner, conf
 
 
 def test_multibatch_projection_reads_back_an_unchanged_prefix(owner, confirmed_paths):
-    _, user = owner
+    client, user = owner
     rows = projection_rows(2)
     projection_pass(owner, rows, [])
     confirmed_paths.clear()
     rows[1]['structured']['title'] = 'Changed in the final batch'
-    with patch.object(store, 'BATCH_ROW_BYTES', 1):
-        projection_pass(owner, rows, [])
+    api = client._firestore_api
+    original_get = api.batch_get_documents
+    prefix_reads = []
+
+    def batch_get(*args, **kwargs):
+        request = kwargs['request']
+        prefix_reads.extend(
+            bool(request.get('transaction'))
+            for document in request['documents']
+            if document.endswith(f'/users/{user.id}/conversations/card-0')
+        )
+        return original_get(*args, **kwargs)
+
+    with (
+        patch.object(store, 'BATCH_ROW_BYTES', 1),
+        patch.object(api, 'batch_get_documents', side_effect=batch_get),
+    ):
+        try:
+            projection_pass(owner, rows, [])
+        finally:
+            # One initial load and two transactional revision fences. No between-batch point read.
+            assert prefix_reads == [False, True, True]
     assert [path for path in confirmed_paths if path.startswith('conversations/')] == ['conversations/card-1']
     assert 'episode_links/card-0' not in confirmed_paths
 

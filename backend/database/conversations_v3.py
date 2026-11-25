@@ -742,7 +742,7 @@ def commit_projection(
     batch_reads = os.getenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'on').strip().lower() != 'off'
     settle_enabled = terminal_settled.serving(uid)
     skip_unchanged = skip_unchanged_writes_enabled()
-    written_count = skipped_count = 0
+    written_rows, skipped_rows = set(), set()
     # What the current transaction attempt writes, kept by reference and sized only after a failure.
     staged = {}
 
@@ -806,16 +806,16 @@ def commit_projection(
         for row in batch_prepared:
             filter_processing_write(tx, user, row)
         skipped_ids = set()
-        skipped_patches = 0
-        written = 0
+        skipped_patches, written = set(), set()
 
-        def update_if_changed(ref, current, patch):
-            nonlocal skipped_patches, written
+        def update_if_changed(ref, current, patch, *, count_row=True):
             if skip_unchanged and write_equality.or_write(write_equality.same_patch, current, patch):
-                skipped_patches += 1
+                if count_row:
+                    skipped_patches.add(ref.id)
                 return
             tx.update(ref, patch)
-            written += 1
+            if count_row:
+                written.add(ref.id)
 
         for raw, row in zip(batch_rows, batch_prepared):
             if raw.get('deleted'):
@@ -834,7 +834,7 @@ def commit_projection(
                 skipped_ids.add(cid)
                 continue
             tx.set(coll.document(cid), row)
-            written += 1
+            written.add(cid)
         for cid, survivor in absorbed.items():
             tx.update(
                 coll.document(cid),
@@ -851,18 +851,17 @@ def commit_projection(
                 },
             )
             tx.set(removal_ref(user, cid), {'absorbed_by_refinement': True})
-            written += 2
+            written.add(cid)
         if final:
             for cid in remove:
                 tx.delete(coll.document(cid))
-                written += 1
+                written.add(cid)
             planned_ids = {r['id'] for r in batch_rows}
             for cid, patch in retire.items():
                 if cid not in planned_ids:
                     update_if_changed(coll.document(cid), observed.get(cid, {}), patch)
                 if cid in retired:
                     tx.set(removal_ref(user, cid), {'retired_by_repair': True})
-                    written += 1
         replaced = {r['id'] for r in batch_rows} | set(absorbed) | (set(remove) | retired if final else set())
         for rid, recording in recordings.items():
             if recording.get('deleted') or recording.get('sync_merged_into'):
@@ -955,8 +954,8 @@ def commit_projection(
         ):
             lease_update['outline_cache'] = lease['outline_cache']
         staged['lease'] = (lease, lease_update)
-        update_if_changed(held, lease, lease_update)
-        return observed, batch_moved, batch_prepared, skipped_ids, written, len(skipped_ids) + skipped_patches
+        update_if_changed(held, lease, lease_update, count_row=False)
+        return observed, batch_moved, batch_prepared, skipped_ids, written, skipped_ids | skipped_patches
 
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
     # Reserve space for all donor writes, including the task-link fences in the survivor's batch.
@@ -1003,8 +1002,8 @@ def commit_projection(
             )
             raise
         moved.update(batch_moved)
-        written_count += written
-        skipped_count += skipped
+        written_rows.update(written)
+        skipped_rows.update(skipped)
 
         for row, _encoded in batch:
             if failure_transitions[row['id']]:
@@ -1067,7 +1066,7 @@ def commit_projection(
                         )
                         raise Conflict('source_changed')
                     existing[raw['id']] = {**raw, '_v3_revision': snapshot.update_time}
-    metrics.projection_writes('commit_projection', written_count, skipped_count)
+    metrics.projection_writes('commit_projection', len(written_rows), len(skipped_rows - written_rows))
     return moved
 
 

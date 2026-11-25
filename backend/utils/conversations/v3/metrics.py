@@ -4,7 +4,7 @@ from contextlib import contextmanager
 
 from prometheus_client import Counter, Histogram, Gauge
 
-from database.firestore_write_probe import count_committed_writes, probe_enabled
+from database.firestore_write_probe import count_committed_writes, probe_enabled, probe_installed
 
 RECONCILES = Counter('omi_conversations_v3_reconciles_total', 'Builder and processing outcomes', ['outcome'])
 BLOCKED = Counter(
@@ -143,15 +143,17 @@ for outcome in ('custody_invalidated', 'held', 'intakes_pending', 'intakes_faile
 
 PROJECTION_ROWS = Histogram(
     'omi_conversations_v3_projection_rows',
-    'Rows written or skipped by a completed projection pass or pending mark, before commit hooks',
+    'Distinct conversation rows written or skipped per completed projection or pending mark, for nonzero outcomes',
     ['caller', 'outcome'],
     buckets=(0, 1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 90, 130),
 )
 
 
 def projection_writes(caller, written, skipped):
-    PROJECTION_ROWS.labels(caller, 'written').observe(written)
-    PROJECTION_ROWS.labels(caller, 'skipped').observe(skipped)
+    if written:
+        PROJECTION_ROWS.labels(caller, 'written').observe(written)
+    if skipped:
+        PROJECTION_ROWS.labels(caller, 'skipped').observe(skipped)
 
 
 EQUALITY_UNAVAILABLE = Counter(
@@ -168,9 +170,19 @@ RECONCILE_BILLED_WRITES = Histogram(
 )
 
 
+RECONCILE_PROBE_MISSING = Counter(
+    'omi_conversations_v3_reconcile_probe_missing_total',
+    'Builder pass chains without an installed Firestore write probe when enabled',
+)
+
+
 @contextmanager
 def measure_reconcile_writes(caller):
     if not probe_enabled():
+        yield
+        return
+    if not probe_installed():
+        RECONCILE_PROBE_MISSING.inc()
         yield
         return
     with count_committed_writes() as writes:

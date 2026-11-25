@@ -1369,7 +1369,16 @@ def test_refinement_preflight_reserves_marker_write(commit_refinement, strict, m
 def test_refinement_batch_reserves_marker_with_donor(commit_refinement, strict, monkeypatch):
     cap = 6
     monkeypatch.setattr(store, 'BATCH_MAX_WRITES', cap)
-    commit_refinement({'id': 'unrelated', 'status': 'completed', 'started_at': AT, 'finished_at': AT})
+    # Give the second batch a real source claim so write elision cannot hide its claim update.
+    commit_refinement(
+        {
+            'id': 'unrelated',
+            'status': 'completed',
+            'started_at': AT + timedelta(seconds=15),
+            'finished_at': AT + timedelta(seconds=20),
+            'v3_recording_ids': ['r0'],
+        }
+    )
 
     batches = [tx for tx in strict.transactions if any('claims' in patch for _, patch in tx.updates)]
     assert len(batches) == 2
@@ -1378,7 +1387,11 @@ def test_refinement_batch_reserves_marker_with_donor(commit_refinement, strict, 
     assert {path('c0'), marker} <= {doc for doc, _ in survivor_batch.sets}
     assert any(doc == path('c1') and patch.get('deleted') for doc, patch in survivor_batch.updates)
     assert path('unrelated') in {doc for doc, _ in other_batch.sets}
-    assert len(survivor_batch.sets) + len(survivor_batch.updates) <= cap
+    assert any(
+        doc == path('r0') and any(claim['conversation_id'] == 'unrelated' for claim in patch.get('claims', ()))
+        for doc, patch in other_batch.updates
+    )
+    assert all(len(tx.sets) + len(tx.updates) + len(tx.deletes) <= cap for tx in batches)
 
 
 @pytest.mark.asyncio

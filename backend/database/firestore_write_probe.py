@@ -74,6 +74,7 @@ __all__ = [
     'FIRESTORE_NOOP_WRITES_BY_CALLER',
     'FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW',
     'install_document_write_probe',
+    'probe_installed',
     'write_op',
 ]
 
@@ -441,6 +442,11 @@ def patch_write_probe(cls: Any, name: str, factory: Callable[[Any], Any]) -> Non
 
 
 _installed = False
+
+
+def probe_installed() -> bool:
+    """Whether the SDK write probe was installed successfully."""
+    return _installed
 
 
 def probe_enabled() -> bool:

@@ -94,10 +94,11 @@ def test_sync_scrape_keeps_projection_histograms():
             assert any(
                 rule['action'] == 'keep' and re.fullmatch(rule['regex'], f'{metric}_{suffix}') for rule in relabeling
             )
-    assert any(
-        rule['action'] == 'keep' and re.fullmatch(rule['regex'], 'omi_conversations_v3_equality_unavailable_total')
-        for rule in relabeling
-    )
+    for counter in ('equality_unavailable', 'reconcile_probe_missing'):
+        assert any(
+            rule['action'] == 'keep' and re.fullmatch(rule['regex'], f'omi_conversations_v3_{counter}_total')
+            for rule in relabeling
+        )
 
 
 @pytest.mark.parametrize('value', ['off', 'false', 'no', '0'])
@@ -153,3 +154,25 @@ def test_unavailable_codec_counts_writes_and_reports_the_fallback_once():
         assert not equality.same_value(2, 2)
     assert metrics.EQUALITY_UNAVAILABLE._value.get() - before == 2
     fallback.assert_called_once()
+
+
+def test_projection_histogram_observes_only_nonzero_outcomes():
+    with patch.object(metrics.PROJECTION_ROWS, 'labels', wraps=metrics.PROJECTION_ROWS.labels) as labels:
+        metrics.projection_writes('mark_pending', 1, 0)
+        labels.assert_called_once_with('mark_pending', 'written')
+        labels.reset_mock()
+        metrics.projection_writes('mark_pending', 0, 1)
+        labels.assert_called_once_with('mark_pending', 'skipped')
+
+
+def test_reconcile_enabled_but_missing_write_probe_does_not_observe_zero():
+    with (
+        patch.object(metrics, 'probe_enabled', return_value=True),
+        patch.object(metrics, 'probe_installed', return_value=False),
+        patch.object(metrics.RECONCILE_PROBE_MISSING, 'inc') as missing,
+        patch.object(metrics.RECONCILE_BILLED_WRITES, 'labels') as labels,
+    ):
+        with metrics.measure_reconcile_writes('builder'):
+            pass
+    missing.assert_called_once_with()
+    labels.assert_not_called()
