@@ -1,6 +1,6 @@
 """Pure boundary and late-speech policy. No switch reads and no IO."""
 
-from utils.conversations.v3.live import FINISH_WINDOW_FIELD
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD
 from utils.conversations.v3 import policy, visibility
 from utils.conversations.v3.outline import SILENCE, playback_origin, sitdown as is_sitdown
 from utils.conversations.v3.word_floor import text_word_count
@@ -524,8 +524,14 @@ def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_
     row['v3_recording_ids'] = list(
         dict.fromkeys([*(existing or {}).get('v3_recording_ids', []), *row['v3_recording_ids']])
     )
+    tail_recording = recordings[lines[-1]['conversation_id']]
     if manual_end and (
-        prior.get(FINISH_WINDOW_FIELD) == cid
+        (
+            window.get('manual_end')
+            and tail_recording.get(FINISH_RECORDING_FIELD)
+            and tail_recording.get('v3_manual_end')
+        )
+        or prior.get(FINISH_WINDOW_FIELD) == cid
         or any(
             recordings.get(rid, {}).get(FINISH_WINDOW_FIELD) == cid and recordings.get(rid, {}).get('v3_manual_end')
             for rid in row['v3_recording_ids']

@@ -1,5 +1,6 @@
 """The write probe must count every committed write once, by collection, op and caller, and never break one."""
 
+import asyncio
 import datetime
 import sys
 import types
@@ -11,9 +12,10 @@ import pytest  # noqa: E402
 
 firestore = pytest.importorskip('google.cloud.firestore')
 from google.auth.credentials import AnonymousCredentials  # noqa: E402
-from google.cloud.firestore_v1.services.firestore import FirestoreClient  # noqa: E402
+from google.cloud.firestore_v1.services.firestore import FirestoreAsyncClient, FirestoreClient  # noqa: E402
 from google.cloud.firestore_v1.types import (  # noqa: E402
     BatchWriteResponse,
+    BeginTransactionResponse,
     CommitResponse,
     Document,
     DocumentMask,
@@ -23,7 +25,9 @@ from google.cloud.firestore_v1.types import (  # noqa: E402
 )
 from google.rpc import status_pb2  # noqa: E402
 
+import database.firestore_document_probe as reads  # noqa: E402
 import database.firestore_write_probe as probe  # noqa: E402
+from database.firestore_read_origin import read_origin  # noqa: E402
 
 ROOT = 'projects/p/databases/(default)/documents'
 
@@ -31,6 +35,10 @@ ROOT = 'projects/p/databases/(default)/documents'
 def _billed(collection, op, database='default'):
     value = probe.FIRESTORE_BILLED_WRITES.labels(collection=collection, op=op, database=database)._value.get()
     return float(value or 0)
+
+
+def _by_origin(collection, op, origin):
+    return probe.FIRESTORE_BILLED_WRITES_BY_ORIGIN.labels(collection=collection, op=op, origin=origin)._value.get()
 
 
 def _by_caller(collection, op, caller):
@@ -58,7 +66,10 @@ class _Transport:
 
     def batch_write(self, client, request=None, **kwargs):
         self.requests.append(request)
-        return BatchWriteResponse(status=[status_pb2.Status(code=code) for code in self.batch_status])
+        return BatchWriteResponse(
+            status=[status_pb2.Status(code=code) for code in self.batch_status],
+            write_results=[WriteResult() for _ in self.batch_status],
+        )
 
 
 @pytest.fixture
@@ -68,10 +79,21 @@ def transport(monkeypatch):
     monkeypatch.setattr(
         FirestoreClient, 'batch_write', lambda self, request=None, **kw: fake.batch_write(self, request, **kw)
     )
+
+    async def async_commit(self, request=None, **kw):
+        return fake.commit(self, request, **kw)
+
+    async def async_begin(self, request=None, **kw):
+        return BeginTransactionResponse(transaction=b'async-tx')
+
+    monkeypatch.setattr(FirestoreAsyncClient, 'commit', async_commit)
+    monkeypatch.setattr(FirestoreAsyncClient, 'begin_transaction', async_begin)
+    monkeypatch.setattr(
+        FirestoreClient, 'begin_transaction', lambda *_args, **_kw: BeginTransactionResponse(transaction=b'tx')
+    )
     monkeypatch.setattr(probe, '_installed', False)
     probe.install_document_write_probe()
     yield fake
-    monkeypatch.setattr(probe, '_installed', False)
 
 
 @pytest.fixture
@@ -105,21 +127,27 @@ def test_write_op_classifies_every_write_shape():
 def test_document_writes_counted_by_op_and_caller(client, transport):
     caller = f'{__name__}:test_document_writes_counted_by_op_and_caller'
     before = {op: _billed('users/conversations', op) for op in ('set', 'merge', 'update', 'create', 'delete')}
-    by_caller = _by_caller('users/conversations', 'set', caller)
+    origin = 'job:write_probe_document_test'
+    expected = {'set': 2, 'update': 1, 'create': 1, 'delete': 1}
+    callers_before = {op: _by_caller('users/conversations', op, caller) for op in expected}
+    origins_before = {op: _by_origin('users/conversations', op, origin) for op in expected}
 
     ref = client.collection('users').document('u1').collection('conversations').document('c1')
-    ref.set({'status': 'in_progress'})
-    ref.set({'status': 'completed'}, merge=True)
-    ref.update({'status': 'processing'})
-    ref.create({'status': 'new'})
-    ref.delete()
+    with read_origin(origin):
+        ref.set({'status': 'in_progress'})
+        ref.set({'status': 'completed'}, merge=True)
+        ref.update({'status': 'processing'})
+        ref.create({'status': 'new'})
+        ref.delete()
 
     assert _billed('users/conversations', 'set') == before['set'] + 1
     assert _billed('users/conversations', 'merge') == before['merge'] + 1
     assert _billed('users/conversations', 'update') == before['update'] + 1
     assert _billed('users/conversations', 'create') == before['create'] + 1
     assert _billed('users/conversations', 'delete') == before['delete'] + 1
-    assert _by_caller('users/conversations', 'set', caller) == by_caller + 1
+    for op, amount in expected.items():
+        assert _by_caller('users/conversations', op, caller) - callers_before[op] == amount
+        assert _by_origin('users/conversations', op, origin) - origins_before[op] == amount
     # The probe observes and never skips: five Commit RPCs still ran.
     assert len(transport.requests) == 5
 
@@ -248,6 +276,152 @@ def test_batch_write_counts_only_applied_writes(transport):
     assert _billed('users/memories', 'delete') == before + 2
 
 
+def test_transaction_counts_staged_writes_once(client, transport):
+    from google.api_core.exceptions import Aborted
+
+    ref = client.document('users/u1/memories/m1')
+    caller = f'{__name__}:test_transaction_counts_staged_writes_once'
+    before = {op: _by_caller('users/memories', op, caller) for op in ('create', 'update', 'delete', 'set')}
+    # Abort the first decorated commit and allow the SDK to retry it.
+    transport.fail = Aborted('retry transaction')
+    attempts = 0
+
+    @firestore.transactional
+    def operation(transaction):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 2:
+            transport.fail = False
+        transaction.create(ref, {'x': 1})
+        transaction.set(ref, {'y': 1}, merge=True)
+        transaction.update(ref, {'x': firestore.Increment(1)})
+        transaction.delete(ref)
+        assert {op: _by_caller('users/memories', op, caller) for op in before} == before
+
+    operation(client.transaction())
+    assert attempts == 2
+    assert len(transport.requests) == 1
+    assert len(transport.requests[0]['writes']) == 4
+    for op, count in before.items():
+        assert _by_caller('users/memories', op, caller) == count + 1
+
+
+@pytest.mark.parametrize('source', [firestore.Client, firestore.AsyncClient])
+def test_bulk_writer_tracks_each_submitter_through_worker_and_retry(transport, source):
+    from google.cloud.firestore_v1.bulk_writer import BulkRetry, BulkWriterOptions
+
+    db = source(project='p', credentials=AnonymousCredentials())
+    writer = db.bulk_writer(options=BulkWriterOptions(retry=BulkRetry.immediate))
+    collection = db.collection('users/u1/memories')
+    transport.batch_status = [0, 10, 7]
+
+    def submit_first():
+        with read_origin('job:bulk_first'):
+            writer.create(collection.document('m1'), {'x': 1})
+
+    def submit_second():
+        with read_origin('job:bulk_second'):
+            writer.update(collection.document('m2'), {'x': 2})
+            writer.delete(collection.document('m3'))
+
+    def retry_only_aborted(error, _writer):
+        if error.code == 10:
+            transport.batch_status = [0]
+            return True
+        return False
+
+    before_create = _by_caller('users/memories', 'create', f'{__name__}:submit_first')
+    before_update = _by_caller('users/memories', 'update', f'{__name__}:submit_second')
+    before_delete = _by_caller('users/memories', 'delete', f'{__name__}:submit_second')
+    origins = (
+        _by_origin('users/memories', 'create', 'job:bulk_first'),
+        _by_origin('users/memories', 'update', 'job:bulk_second'),
+        _by_origin('users/memories', 'delete', 'job:bulk_second'),
+    )
+    writer.on_write_error(retry_only_aborted)
+    submit_first()
+    submit_second()
+    assert not transport.requests
+    with read_origin('job:bulk_flusher'):
+        writer.flush()
+    writer.close()
+    assert len(transport.requests) == 2
+    assert _by_caller('users/memories', 'create', f'{__name__}:submit_first') == before_create + 1
+    assert _by_caller('users/memories', 'update', f'{__name__}:submit_second') == before_update + 1
+    assert _by_caller('users/memories', 'delete', f'{__name__}:submit_second') == before_delete
+    assert _by_origin('users/memories', 'create', 'job:bulk_first') == origins[0] + 1
+    assert _by_origin('users/memories', 'update', 'job:bulk_second') == origins[1] + 1
+    assert _by_origin('users/memories', 'delete', 'job:bulk_second') == origins[2]
+
+
+def test_serial_bulk_retry_does_not_leak_origin_into_callbacks(client, transport):
+    from google.cloud.firestore_v1.bulk_writer import BulkRetry, BulkWriterOptions, SendMode
+
+    writer = client.bulk_writer(options=BulkWriterOptions(mode=SendMode.serial, retry=BulkRetry.immediate))
+    writer.batch_size = 1
+    first = client.document('users/u1/memories/first')
+    second = client.document('users/u1/memories/second')
+    transport.batch_status = [10]
+
+    def on_error(_error, _writer):
+        transport.batch_status = [0]
+        return True
+
+    def on_success(reference, _result, writer):
+        if reference == first:
+            with read_origin('job:serial_bulk_callback'):
+                writer.set(second, {'x': 2})
+
+    def submit():
+        with read_origin('job:serial_bulk_submit'):
+            writer.set(first, {'x': 1})
+
+    writer.on_write_error(on_error)
+    writer.on_write_result(on_success)
+    submit_origin = _by_origin('users/memories', 'set', 'job:serial_bulk_submit')
+    callback_origin = _by_origin('users/memories', 'set', 'job:serial_bulk_callback')
+    callback_caller = _by_caller('users/memories', 'set', f'{__name__}:on_success')
+    submit()
+    writer.close()
+
+    assert len(transport.requests) == 3
+    assert _by_origin('users/memories', 'set', 'job:serial_bulk_submit') == submit_origin + 1
+    assert _by_origin('users/memories', 'set', 'job:serial_bulk_callback') == callback_origin + 1
+    assert _by_caller('users/memories', 'set', f'{__name__}:on_success') == callback_caller + 1
+
+
+def test_async_document_batch_and_transaction_count_once(transport):
+    client = firestore.AsyncClient(project='p', credentials=AnonymousCredentials())
+    ref = client.document('users/u1/memories/m1')
+    origin = 'job:async_write_probe'
+    expected = {'set': 4, 'create': 1, 'update': 2, 'delete': 3}
+    before = {op: _by_origin('users/memories', op, origin) for op in expected}
+
+    @firestore.async_transactional
+    async def operation(transaction):
+        transaction.set(ref, {'a': 1})
+        transaction.set(ref, {'a': 2}, merge=True)
+        transaction.update(ref, {'a': 3})
+        transaction.delete(ref)
+
+    async def write():
+        with read_origin(origin):
+            await ref.set({'a': 1})
+            await ref.create({'a': 1})
+            await ref.update({'a': 2})
+            await ref.delete()
+            batch = client.batch()
+            batch.set(ref, {'a': 3}, merge=True)
+            batch.delete(ref)
+            await batch.commit()
+            await operation(client.transaction())
+
+    asyncio.run(write())
+    assert len(transport.requests) == 6
+    for op, amount in expected.items():
+        assert _by_origin('users/memories', op, origin) - before[op] == amount
+
+
 def test_probe_sees_writes_a_later_commit_patch_appends(transport):
     # database._client installs the probe before memory_change_head, so the head
     # wrapper calls through the probe with its head write already appended.
@@ -283,13 +457,14 @@ def test_install_is_idempotent(transport):
 
 
 @pytest.mark.parametrize('value', ['false', ' FALSE '])
-def test_kill_switch_leaves_the_transport_unwrapped(monkeypatch, value):
+@pytest.mark.parametrize('key', ['FIRESTORE_WRITE_PROBE_ENABLED', 'OMI_FIRESTORE_WRITE_PROBE_ENABLED'])
+def test_kill_switch_leaves_the_transport_unwrapped(monkeypatch, key, value):
     def commit(self, request=None, **kwargs):
         return CommitResponse()
 
     monkeypatch.setattr(FirestoreClient, 'commit', commit)
     monkeypatch.setattr(probe, '_installed', False)
-    monkeypatch.setenv('OMI_FIRESTORE_WRITE_PROBE_ENABLED', value)
+    monkeypatch.setenv(key, value)
     probe.install_document_write_probe()
     assert FirestoreClient.commit is commit
     assert probe._installed is False
@@ -304,12 +479,15 @@ def test_kill_switch_is_on_unless_literal_false(monkeypatch, value):
     assert probe.probe_enabled() is True
 
 
-def test_caller_cap_folds_new_labels_to_other(monkeypatch):
-    monkeypatch.setattr(probe, '_known_callers', {f'm{i}:f' for i in range(probe.MAX_WRITE_CALLERS)})
-    overflow = probe.FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW._value.get()
-    assert probe._bound_caller('database.new_module:new_writer') == 'other'
-    assert probe.FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW._value.get() == overflow + 1
-    assert probe._bound_caller('not a label') == 'other'
+def test_caller_cap_folds_new_labels_to_other(client, monkeypatch):
+    monkeypatch.setattr(reads, '_known_callers', {f'm{i}:f' for i in range(reads.MAX_CALLERS)})
+    overflow = reads.FIRESTORE_CALLER_LABEL_OVERFLOW._value.get()
+    write_overflow = probe.FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW._value.get()
+    before = _by_caller('users/memories', 'set', 'other')
+    client.document('users/u1/memories/m1').set({'x': 1})
+    assert _by_caller('users/memories', 'set', 'other') == before + 1
+    assert reads.FIRESTORE_CALLER_LABEL_OVERFLOW._value.get() == overflow + 1
+    assert probe.FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW._value.get() == write_overflow + 1
 
 
 @pytest.mark.parametrize('method', ['commit', 'batch_write'])
@@ -320,7 +498,7 @@ def test_batch_privacy_fence_preserves_writer_attribution(client, transport, mon
     monkeypatch.setattr(FirestoreClient, 'batch_write', fence._wrap_bulk(FirestoreClient.batch_write))
     caller = f'{__name__}:test_batch_privacy_fence_preserves_writer_attribution'
     source_before = _by_caller('users/conversations', 'set', caller)
-    token_before = _by_caller('batch_pipeline_privacy', 'merge', caller)
+    token_before = _by_caller('batch_pipeline_privacy', 'set', caller)
     if method == 'commit':
         client.document('users/u1/conversations/c1').set({'record_lane_owner': 'batch_live_v1'})
     else:
@@ -331,7 +509,7 @@ def test_batch_privacy_fence_preserves_writer_attribution(client, transport, mon
             }
         )
     assert _by_caller('users/conversations', 'set', caller) == source_before + 1
-    assert _by_caller('batch_pipeline_privacy', 'merge', caller) == token_before + 1
+    assert _by_caller('batch_pipeline_privacy', 'set', caller) == token_before + 1
     assert len(transport.requests) == 1
     assert (
         len(transport.requests[0].writes) == 4

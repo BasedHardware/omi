@@ -566,7 +566,7 @@ def _admit(monkeypatch, current, units, *, fast='written', promoted=True, member
         assert units_ is not units and units_[0][2] is not units[0][2]
         # A single unit is cut by admission before the pass; several units only by the pass itself.
         # A promoted single unit still gets the manual-end wake after a written pass.
-        assert (cut is None) is (len(units) == 1 and not promoted)
+        assert (cut is None) is (len(units) == 1 and not promoted or bool(current.get(live.FINISH_RECORDING_FIELD)))
         if cut is not None and fast == 'written':
             cut()
         return fast
@@ -617,6 +617,13 @@ def test_a_single_unit_that_was_not_promoted_gets_no_manual_end_wake(monkeypatch
 def test_several_units_are_cut_only_by_a_pass_that_wrote_the_whole_transcript(monkeypatch, fast, cuts):
     # Several units project one at a time: cutting on the first would lock a partial window.
     assert _admit(monkeypatch, row(), [UNIT, UNIT], fast=fast) == {'fast': 1, 'promote': 0, 'cut': cuts}
+
+
+@pytest.mark.parametrize('units', [[UNIT], [UNIT, UNIT]])
+def test_recording_scoped_finish_waits_for_native_batch_completion(monkeypatch, units):
+    current = row()
+    current[live.FINISH_RECORDING_FIELD] = True
+    assert _admit(monkeypatch, current, units) == {'fast': 1, 'promote': 0, 'cut': 0}
 
 
 @pytest.mark.parametrize('units,promotes', [([UNIT], 1), ([UNIT, UNIT], 0)])
