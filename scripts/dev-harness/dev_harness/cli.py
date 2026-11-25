@@ -201,7 +201,8 @@ def _service_health(cfg: config.HarnessConfig, service: str) -> tuple[bool, str]
         return _http_ok(str(url))
     if parity_stack.is_process(service):
         record = _service_record(cfg, service)
-        return (True, "running") if record is not None else (False, "not running")
+        alive = record is not None and safety.process_exists(int(record.get("pid", -1)))
+        return (True, "running") if alive else (False, "not running")
     return False, f"unknown service {service!r}"
 
 
@@ -862,6 +863,36 @@ def _start_prod_parity_services(cfg: config.HarnessConfig) -> None:
         )
 
 
+def _process_gone(pid: int) -> bool:
+    """True once a process has exited, including one this invocation started and nobody has reaped yet.
+
+    A finished child stays in the process table until its parent collects it, and a
+    signal-0 probe still finds it there.
+    """
+    if os.name != "nt":
+        try:
+            return os.waitpid(pid, os.WNOHANG)[0] == pid
+        except ChildProcessError:
+            pass  # started by an earlier invocation
+    return not safety.process_exists(pid)
+
+
+def _exited_prod_parity_processes(cfg: config.HarnessConfig) -> list[str]:
+    """Workers with no health route that have already exited (a model that cannot load, a port in use).
+
+    The process manifest keeps live processes only, so the plan is what says which ones are missing.
+    """
+    running = {
+        str(record.get("service")) for record in _process_records(cfg) if not _process_gone(int(record.get("pid", -1)))
+    }
+    return [
+        f"{process.name}: exited after start; the stack runs without it. "
+        f"Check {cfg.layout.logs_dir / (process.name + '.log')}"
+        for process in parity_stack.processes(cfg)
+        if parity_stack.is_process(process.name) and process.name not in running
+    ]
+
+
 def _start_app_services(cfg: config.HarnessConfig) -> None:
     """Start the isolated gateway, backend, and desktop-backend."""
     if parity_stack.enabled():
@@ -1073,6 +1104,9 @@ def cmd_up(args: argparse.Namespace) -> int:
             print(f"  - {failure}")
         print(f"Inspect logs with: make dev-logs OMI_LOCAL_STATE_ROOT={cfg.layout.state_root.parent}")
         return 1
+    if parity_stack.enabled():
+        for item in _exited_prod_parity_processes(cfg):
+            print(f"warning: {item}")
     if _current_scenario_manifest(cfg) is None:
         try:
             memory_scenarios.seed_scenario("happy_path", cfg)
@@ -1196,8 +1230,14 @@ def _reap_detached_port_holders(record: dict[str, object], descendants: tuple[in
             print(f"{service}: detached child {pid} still holds port {port}: {exc}")
 
 
-def _stop_owned(cfg: config.HarnessConfig) -> None:
-    records = _process_records(cfg)
+# What holds the stack's data. `restart` does not stop these (`up` still replaces the
+# Typesense container, which keeps its data folder).
+INFRASTRUCTURE_SERVICES = frozenset({"firestore", "redis", "typesense"})
+
+
+def _stop_owned(cfg: config.HarnessConfig, *, keep: frozenset[str] = frozenset()) -> None:
+    kept = [record for record in _process_records(cfg) if str(record.get("service")) in keep]
+    records = [record for record in _process_records(cfg) if str(record.get("service")) not in keep]
     # Capture the tree while the supervisors are alive; detached children (the
     # Firestore emulator JVM) are unreachable through the process group.
     descendants = {int(record.get("pid", -1)): safety.descendant_pids(int(record.get("pid", -1))) for record in records}
@@ -1232,7 +1272,16 @@ def _stop_owned(cfg: config.HarnessConfig) -> None:
         if safety.process_exists(pid):
             print(f"{record.get('service')}: still running pid={pid}; leaving it for safety inspection")
         _reap_detached_port_holders(record, descendants.get(pid, ()))
-    _save_manifests(cfg, records)
+    _save_manifests(cfg, [*kept, *records])
+
+
+def cmd_restart(args: argparse.Namespace) -> int:
+    """Stop the application services and start them again; the emulators and Redis keep running, so data stays."""
+    cfg = config.load_config(_repo_root(), create_layout=False)
+    if cfg.layout.sentinel_path.is_file():
+        safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
+        _stop_owned(cfg, keep=INFRASTRUCTURE_SERVICES)
+    return cmd_up(args)
 
 
 def cmd_down(args: argparse.Namespace) -> int:
@@ -1303,6 +1352,7 @@ def build_parser() -> argparse.ArgumentParser:
         "status": cmd_status,
         "summary": cmd_summary,
         "down": cmd_down,
+        "restart": cmd_restart,
         "reset": cmd_reset,
         "logs": cmd_logs,
     }.items():

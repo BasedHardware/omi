@@ -7,6 +7,7 @@ files declare, services agree with each other), not today's values.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -161,6 +162,8 @@ def _cfg(monkeypatch, tmp_path) -> config.HarnessConfig:
     monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path))
     monkeypatch.setenv("PROVIDER_MODE", "real")
     monkeypatch.delenv(config.MODEL_ACCESS_TOKEN_ENV, raising=False)
+    # A developer's own keys file must not decide what these tests see.
+    monkeypatch.setattr(config, "secrets_file_path", lambda _cfg: tmp_path / "no-secrets-file")
     return config.load_config(REPO_ROOT, create_layout=True)
 
 
@@ -241,3 +244,39 @@ def test_report_without_a_snapshot_says_what_the_source_is(monkeypatch, tmp_path
     assert "settings that differ from the source: 0" in report
     assert "batch speech worker: NOT RUNNING" in report
     assert findings == 2  # no snapshot, no batch worker; nothing else
+
+
+def test_a_worker_that_exited_is_reported_not_counted_as_running(monkeypatch, tmp_path):
+    cfg = _cfg(monkeypatch, tmp_path)
+    # The manifest holds live processes only: the seal worker's record is already gone.
+    records = [{"service": "scheduler", "pid": os.getpid()}, {"service": "task-queue", "pid": 2_000_000_000}]
+    planned = [
+        parity_stack.Process(name, ["python"], tmp_path, 0)
+        for name in ("svc-sync", "task-queue", "scheduler", "record-seal-worker")
+    ]
+    monkeypatch.setattr(cli, "_process_records", lambda _cfg: records)
+    monkeypatch.setattr(
+        cli, "_service_record", lambda _cfg, name: next((r for r in records if r["service"] == name), None)
+    )
+    monkeypatch.setattr(parity_stack, "processes", lambda _cfg: planned)
+
+    exited = cli._exited_prod_parity_processes(cfg)
+    assert [item.split(":")[0] for item in exited] == ["task-queue", "record-seal-worker"]
+    assert "record-seal-worker.log" in exited[1]
+    assert cli._service_health(cfg, "record-seal-worker") == (False, "not running")
+    assert cli._service_health(cfg, "task-queue") == (False, "not running")
+    assert cli._service_health(cfg, "scheduler") == (True, "running")
+
+
+def test_a_finished_child_counts_as_gone_before_anyone_reaps_it():
+    if os.name == "nt":
+        pytest.skip("POSIX process table semantics")
+    import subprocess
+    import time
+
+    child = subprocess.Popen([sys.executable, "-c", "pass"])
+    deadline = time.time() + 10
+    while time.time() < deadline and not cli._process_gone(child.pid):
+        time.sleep(0.05)
+    assert cli._process_gone(child.pid)
+    assert not cli._process_gone(os.getpid())

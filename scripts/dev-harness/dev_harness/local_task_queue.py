@@ -60,7 +60,7 @@ CA_BUNDLE_ENV = "OMI_HARNESS_CA_BUNDLE"
 CONCURRENCY_ENV = "OMI_HARNESS_TASK_QUEUE_CONCURRENCY"
 
 # Deliveries in flight per queue: production's own limit, capped for one machine
-# (production runs up to 160, spread over many accounts and instances). A harness
+# (production's limits are far higher, spread over many accounts and instances). A harness
 # stack serves a single account whose work all lands in the same few documents,
 # so a high cap mostly produces Firestore-emulator lock contention.
 DEFAULT_CONCURRENCY = 4

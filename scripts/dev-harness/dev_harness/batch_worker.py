@@ -34,7 +34,7 @@ import sys
 
 THREADS_ENV = "OMI_HARNESS_BATCH_WORKER_THREADS"
 WORKERS_ENV = "OMI_HARNESS_BATCH_WORKERS"
-# Production runs four to eight GPU replicas. One CPU process transcribes about
+# Production runs a fleet of GPU replicas (charts/batch-pipeline-worker prod values). One CPU process transcribes about
 # ten times faster than real time but spends several seconds per unit, and a
 # phone uploads a unit every few seconds, so one process falls behind.
 DEFAULT_WORKERS = 3

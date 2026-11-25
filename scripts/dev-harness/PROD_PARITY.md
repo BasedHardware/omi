@@ -91,9 +91,13 @@ make dev-parity
 when nothing but the standing substitutions does. Keep the two variables
 exported for every `make dev-*` command in that shell.
 
-`make dev-down` stops everything and keeps local data. `make dev-up` again
-restarts it, which is also how the services pick up a code change (they do not
-reload). `make dev-reset` clears the local data.
+The services do not reload. After a code or settings change run
+`make dev-restart`: it restarts the application services only, in about ten
+seconds, while the emulators and Redis keep running, so local data stays.
+`make dev-down` stops everything; the emulator's data is exported on the way
+down and imported by the next `make dev-up` (see
+[Troubleshooting](#troubleshooting) for when that export does not happen).
+`make dev-reset` clears the local data.
 
 Logs are one file per process under `.local/dev-harness/<instance>/logs/`:
 
@@ -146,7 +150,7 @@ one with your own read-only `gcloud` access:
 ```bash
 make dev-parity ARGS="snapshot --out ~/omi-prod-snapshots/$(date -u +%Y%m%dT%H%M%SZ)"
 export OMI_HARNESS_PROD_SNAPSHOT=~/omi-prod-snapshots/<the directory it printed>
-make dev-down && make dev-up
+make dev-restart
 ```
 
 Add `--configuration NAME` to read with a gcloud configuration other than the
@@ -167,7 +171,8 @@ What a snapshot holds, and what it never does:
 - Nothing is written to production.
 
 Production deploys several times a day. To see what moved since your snapshot,
-take a new one and compare (names only, never values):
+take a new one and compare (names only, never values; exit status 1 when
+something changed):
 
 ```bash
 make dev-parity ARGS="drift ~/omi-prod-snapshots/OLD ~/omi-prod-snapshots/NEW"
@@ -189,7 +194,7 @@ deployed today, base your branch on the commit the report names.
 | `OMI_HARNESS_TASK_QUEUE_CONCURRENCY` | Cap on deliveries in flight per queue (default 4; production's own limit when lower). |
 | `OMI_HARNESS_SCHEDULER_JOBS=all` | Run every backend-service scheduler job, not only the recording-path ones. That includes agent sweeps that call LLMs. |
 | `OMI_HARNESS_LOG_TIMESTAMPS=1` | Prefix the service, gateway, edge router, task queue and scheduler log lines with UTC time to the millisecond, to time a step. The backend's own log format has no time. |
-| `OMI_HARNESS_PUSHER_PORT` | Pusher port (default 8090). Service ports are the backend port plus 10 to 14, batch workers from plus 15. |
+| `OMI_HARNESS_PUSHER_PORT` | Pusher port (default 8090). Service ports are the backend port plus 10 to 14, batch workers from plus 15. The record seal worker's metrics port is 8080, fixed in backend code. |
 
 The rollout document (`rollout_cohorts/_ramp` in the Firestore emulator) is
 written on first start from the snapshot, or from what the tracked files say
@@ -240,10 +245,29 @@ harness leaves a document it did not write alone.
   libopus is not installed where the services look (`brew install opus`).
 - **`make dev-up` refuses to start.** It lists what is missing. Docker must be
   running for Typesense.
-- **A second harness instance.** Give it its own `OMI_LOCAL_INSTANCE` and
-  `OMI_HARNESS_PORT_OFFSET`, and prefer stopping the first one: two instances
-  on the same Firebase project have been seen to share one emulator hub, so
-  stopping one stopped the other's emulators.
+- **`ERROR ... Stripe price validation failed` at start-up.** Expected: the
+  services run production's start-up checks and payments are off here.
+- **`warning: record-seal-worker: exited after start`.** The seal worker
+  serves its metrics on port 8080, fixed in backend code. If something else
+  holds that port it exits and the stack runs without it; in production its
+  repair switch is off, so it idles there too.
+- **Emulator data is gone after `make dev-down`.** The emulator exports its
+  data when it stops, and it finds itself through a file named after the
+  Firebase project in the system temp folder. If that file is missing when the
+  stack stops (the temp folder was cleaned under a long-running stack, or
+  another harness instance on the same project stopped first), the log says
+  `Did not find any running emulators` and nothing is exported. Prefer
+  `make dev-restart`, which never stops the emulator.
+- **Typesense is not healthy after quick `make dev-down` / `make dev-up`
+  cycles.** Seen when the new container found its data folder still in use by
+  the previous one. `make dev-restart` avoids the cycle.
+- **A second harness instance next to a running one.** Give it its own
+  instance name, ports and temp folder, and export them for every `make dev-*`
+  command of that instance:
+  `OMI_LOCAL_INSTANCE=second OMI_HARNESS_PORT_OFFSET=2000 TMPDIR=/some/private/dir/`.
+  The temp folder keeps the two emulators' project files apart (previous
+  point). Without the instance name, starting the second one replaces the
+  first one's Typesense container.
 
 ## Tests
 

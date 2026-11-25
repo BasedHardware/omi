@@ -14,6 +14,7 @@ SHARED_SOURCES = ("_resolve_python.sh", "_source_local_dev_env.sh")
 CLI_WRAPPERS = (
     ("dev-up.sh", "up"),
     ("dev-down.sh", "down"),
+    ("dev-restart.sh", "restart"),
     ("dev-status.sh", "status"),
     ("dev-summary.sh", "summary"),
     ("dev-reset.sh", "reset"),
