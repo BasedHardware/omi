@@ -384,3 +384,22 @@ def test_other_invalid_arguments_still_raise(monkeypatch):
     monkeypatch.setattr(lifecycle, 'commit_v3_projection', bad)
     with pytest.raises(InvalidArgument):
         REAL_COMMIT('u', 't', {}, {}, [], [])
+
+
+@pytest.mark.asyncio
+async def test_handled_race_still_surfaces_lease_release_failure(builder, monkeypatch):
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': source()}, {}, []))
+    wakes = []
+
+    def conflict(*a, **kw):
+        raise Conflict('source_changed')
+
+    def release_failure(*_args):
+        raise RuntimeError('release failed after race')
+
+    monkeypatch.setattr(service, '_commit', conflict)
+    monkeypatch.setattr(service, 'enqueue', lambda uid, **_kwargs: wakes.append(uid))
+    monkeypatch.setattr(leases, 'release', release_failure)
+    with pytest.raises(RuntimeError, match='release failed after race'):
+        await service.reconcile('u')
+    assert wakes == ['u']

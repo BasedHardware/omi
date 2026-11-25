@@ -262,6 +262,7 @@ async def test_opted_in_background_task_keeps_a_non_provider_failure_loud(caplog
     [
         ('transaction_contention', 'dependency_warming'),
         ('transaction_expired', 'dependency_warming'),
+        ('transaction_retry_deadline', 'dependency_warming'),
         ('processing_source_changed', 'persistence_fenced'),
         ('v3_processing_not_completed', 'persistence_fenced'),
     ],
@@ -273,10 +274,13 @@ async def test_reconcile_counts_expected_task_retries(monkeypatch, reconcile_req
     from utils.conversations.v3 import Conflict, ProcessingPersistenceFenced, metrics
 
     if kind.startswith('transaction_'):
-        error = FirestoreContentionExhausted('retry budget exhausted')
+        error = FirestoreContentionExhausted(
+            'retry budget exhausted',
+            reason='deadline_exhausted' if kind == 'transaction_retry_deadline' else 'attempts_exhausted',
+        )
         error.__cause__ = (
             Aborted('cross-transaction contention')
-            if kind == 'transaction_contention'
+            if kind != 'transaction_expired'
             else InvalidArgument('The referenced transaction has expired or is no longer valid')
         )
     else:
@@ -298,11 +302,12 @@ async def test_reconcile_counts_expected_task_retries(monkeypatch, reconcile_req
 
 
 @pytest.mark.asyncio
-async def test_reconcile_preserves_processing_error_when_summary_lease_release_fails(monkeypatch, reconcile_request):
+@pytest.mark.parametrize('handled', [False, True])
+async def test_summary_lease_release_preserves_only_propagating_failure(monkeypatch, reconcile_request, handled):
     from database.firestore_transaction_retry import FirestoreContentionExhausted
 
     row = {'id': 'c'}
-    failure = ValueError('unexpected processing failure')
+    failure = service.FinalizationOwnedElsewhere() if handled else ValueError('unexpected processing failure')
 
     async def run(_executor, func, *_args):
         if func is service.pending_processing:
@@ -316,6 +321,11 @@ async def test_reconcile_preserves_processing_error_when_summary_lease_release_f
     monkeypatch.setattr(service, '_process_leased', AsyncMock(side_effect=failure))
     monkeypatch.setattr(service, 'reconcile', service.drain_processing)
 
-    with pytest.raises(ValueError) as raised:
-        await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
-    assert raised.value is failure
+    if handled:
+        response = await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
+        assert response.status_code == 409
+        assert response.body == b'{"status":"retry","reason":"dependency_warming"}'
+    else:
+        with pytest.raises(ValueError) as raised:
+            await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
+        assert raised.value is failure

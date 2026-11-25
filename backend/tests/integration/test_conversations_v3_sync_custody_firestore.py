@@ -247,3 +247,117 @@ def test_projection_splits_33_pointer_backed_rows(owner, monkeypatch):
     assert stored['v3_pending'] is False
     assert {claim['conversation_id'] for claim in stored['claims']} == {row['id'] for row in rows}
     assert all(isinstance(coll.document(row['id']).get().get('transcript_segments'), dict) for row in rows)
+
+
+@pytest.fixture
+def processing_store(owner, monkeypatch):
+    from database import conversations as db
+
+    client, user, coll = owner
+    monkeypatch.setattr(db, 'db', client)
+    monkeypatch.setattr(v3, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(leases, 'get_firestore_client', lambda: client)
+    for name in (
+        'stop_quiet_check_for_conversation',
+        '_sync_conversation_search_index',
+        '_delete_conversation_search_index',
+    ):
+        monkeypatch.setattr(db, name, lambda *a, **kw: None)
+    return db, user, coll
+
+
+@pytest.mark.parametrize('decline', ['lease', 'revision', 'deleted', 'missing', 'foreign_owner', 'capture_group'])
+def test_v3_processing_persist_distinguishes_retryable_and_terminal_declines(processing_store, decline):
+    from database import conversations_v3_fence as fence
+    from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD
+    from utils.conversations.v3 import ProcessingPersistenceFenced
+
+    db, user, coll = processing_store
+    cid = 'capture'
+    token = leases.acquire(user.id, 'summary-' + cid)
+    stored = {'status': 'processing', 'sync_content_revision': 2}
+    if decline == 'deleted':
+        stored['deleted'] = True
+    if decline == 'foreign_owner':
+        stored.update({ENGINE_FIELD: 'go', EPOCH_FIELD: 1})
+    if decline != 'missing':
+        coll.document(cid).set(stored)
+    before = coll.document(cid).get().to_dict()
+    kwargs = {'expected_capture_group': ('missing-group', 1)} if decline == 'capture_group' else {}
+    payload = {
+        'id': cid,
+        'status': 'completed',
+        'data_protection_level': 'standard',
+        'sync_content_revision': 1,
+    }
+    # Outside the v3 context, the stale revision or terminal refusal remains False.
+    assert db.persist_processing_result_with_lifecycle(user.id, dict(payload), **kwargs) is False
+    with fence.writer(user.id, cid, 'replaced-token' if decline == 'lease' else token):
+        if decline in {'lease', 'revision'}:
+            with pytest.raises(ProcessingPersistenceFenced, match='v3_processing_not_completed'):
+                db.persist_processing_result_with_lifecycle(user.id, dict(payload), **kwargs)
+        else:
+            assert db.persist_processing_result_with_lifecycle(user.id, dict(payload), **kwargs) is False
+            assert fence.persistence_declined()
+    assert not fence.persistence_declined()
+    assert coll.document(cid).get().to_dict() == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal', [False, True])
+async def test_reconcile_route_uses_real_processing_persistence_outcome(processing_store, monkeypatch, terminal):
+    from unittest.mock import AsyncMock
+
+    import httpx
+    from fastapi import FastAPI
+
+    from routers import conversations_v3_tasks as route
+    from utils.conversations import process_conversation
+    from utils.conversations.v3 import created, metrics, service
+
+    db, user, coll = processing_store
+    now = datetime.now(timezone.utc)
+    row = {
+        'id': 'capture',
+        'created_at': now,
+        'started_at': now,
+        'finished_at': now,
+        'status': 'processing',
+        'sync_content_revision': 1,
+        'v3_derived': True,
+        'manual_end': True,
+        'structured': {},
+    }
+    stored = {**row, 'sync_content_revision': 2, 'deleted': terminal}
+    coll.document(row['id']).set(stored)
+    before_row = coll.document(row['id']).get().to_dict()
+    monkeypatch.setattr(v3, 'backoff_state', lambda *_: (None, None))
+    monkeypatch.setattr(v3, 'load', lambda *_: ({}, {}, []))
+    monkeypatch.setattr(service.context, 'outline_sources', lambda *_: ({}, [], []))
+    monkeypatch.setattr(service, '_commit', lambda *a, **kw: set())
+    monkeypatch.setattr(service, 'pending_processing', lambda *_: [row])
+    monkeypatch.setattr(service, 'has_pending', lambda *_: False)
+    monkeypatch.setattr(service.writers, 'begin_processing', lambda *_: True)
+    monkeypatch.setattr(created, 'deliver', AsyncMock())
+
+    def persist(_uid, _language, conversation, *, persistence_observer, **_kwargs):
+        payload = {**row, 'status': 'completed', 'data_protection_level': 'standard'}
+        persistence_observer(db.persist_processing_result_with_lifecycle(user.id, payload))
+        return conversation.model_copy(update={'status': 'completed'})
+
+    monkeypatch.setattr(process_conversation, 'process_conversation', persist)
+    app = FastAPI()
+    app.include_router(route.router)
+    app.dependency_overrides[route.verify_cloud_tasks_oidc] = lambda: 0
+    counter = metrics.RACES.labels('v3_processing_not_completed')
+    before = counter._value.get()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+        response = await client.post('/v1/conversations-v3/reconcile', json={'uid': user.id})
+
+    if terminal:
+        assert response.status_code == 200 and response.json() == {'outcome': 'committed'}
+    else:
+        assert response.status_code == 409 and response.json() == {'status': 'retry', 'reason': 'persistence_fenced'}
+    assert counter._value.get() == before + (not terminal)
+    assert coll.document(row['id']).get().to_dict() == before_row
+    assert not leases.held(user.id, 'summary-capture')

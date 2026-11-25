@@ -18,7 +18,6 @@ import hashlib
 import json
 import logging
 import re
-from sys import exception
 import time
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -228,12 +227,11 @@ def historical_stretches(eligible, now, *, since, until, internal_end=False):
     return groups
 
 
-async def _release_reconcile_lease(uid, key, token):
-    primary_failure = exception()
+async def _release_reconcile_lease(uid, key, token, *, primary_failed):
     try:
         await run_blocking(db_executor, leases.release, uid, key, token)
     except Exception as error:
-        if primary_failure is None:
+        if not primary_failed:
             raise
         logger.warning('v3 reconcile lease release failed exception_type=%s', type(error).__name__)
 
@@ -281,6 +279,7 @@ async def reconcile(
     if token is None:
         metrics.RECONCILES.labels('busy').inc()
         return 'busy'
+    primary_failed = False
     try:
         cohesion = stretch_cohesion_enabled()
         silence_seconds, lock_seconds = boundary_seconds(cohesion=cohesion and not derive)
@@ -790,6 +789,7 @@ async def reconcile(
         metrics.RECONCILES.labels('committed').inc()
         deferred = preview_wakes(rows, recordings)
     except Conflict as error:
+        primary_failed = True
         reason = str(error)
         if reason in RACES and not derive:
             # Nothing committed, so every pending marker is still owed. Answer the task and wake the
@@ -805,6 +805,7 @@ async def reconcile(
             metrics.RECONCILES.labels('raced').inc()
             metrics.RACES.labels(reason).inc()
             logger.info('v3 reconcile raced reason=%s', reason)
+            primary_failed = False
             return 'raced'
         if reason not in BLOCKED:
             metrics.RECONCILES.labels('error').inc()
@@ -821,11 +822,14 @@ async def reconcile(
             # A backfill conflict must not park the owner's live builder.
             await run_blocking(db_executor, store.record_blocked, uid, token, reason)
         blocked = reason
-    except Exception:
-        metrics.RECONCILES.labels('error').inc()
+        primary_failed = False
+    except BaseException as error:
+        primary_failed = True
+        if isinstance(error, Exception):
+            metrics.RECONCILES.labels('error').inc()
         raise
     finally:
-        await _release_reconcile_lease(uid, key, token)
+        await _release_reconcile_lease(uid, key, token, primary_failed=primary_failed)
     if blocked is not None:
         if not derive and not on_open:
             # Windows earlier passes (or earlier batches) committed still owe their notes.
@@ -1116,12 +1120,16 @@ async def drain_processing(uid):
         if token is None:
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
             continue
+        primary_failed = False
         try:
             await _process_leased(uid, row, token)
         except FinalizationOwnedElsewhere:
             continue
+        except BaseException:
+            primary_failed = True
+            raise
         finally:
-            await _release_reconcile_lease(uid, 'summary-' + row['id'], token)
+            await _release_reconcile_lease(uid, 'summary-' + row['id'], token, primary_failed=primary_failed)
     # Settled notes arm the conversation-created obligation; deliver after every summary lease is released.
     # Imported here: the webhook fanout's LLM/app graph must not join process_conversation's import graph,
     # which loads this module at import time (listen, pusher and sync all import it).
@@ -1183,6 +1191,8 @@ def _process(uid, row, token):
                 # short-clip floor match live notes; process_conversation withholds their derived effects.
                 trigger=ProcessingTrigger.CAPTURE_END,
             )
+            if fence.persistence_declined():
+                return
         if getattr(result.status, 'value', result.status) == 'failed':
             writers.fail_processing(
                 uid, row['id'], token, row.get('sync_content_revision'), content_hash=writers.processing_hash(row)

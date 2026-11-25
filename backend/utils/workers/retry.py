@@ -36,6 +36,8 @@ def exhausted_transaction_retry_class(error: BaseException) -> str | None:
     """Classify only a failed bounded transaction chain, preserving the final cause."""
     if not isinstance(error, FirestoreContentionExhausted):
         return None
+    if error.reason == 'deadline_exhausted':
+        return 'transaction_retry_deadline'
     cause = error.__cause__
     # The SDK wraps commit-time Aborted in ValueError even with max_attempts=1.
     if isinstance(cause, ValueError):

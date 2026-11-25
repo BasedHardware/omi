@@ -1694,8 +1694,10 @@ def persist_processing_result_with_lifecycle(
     source_revision = 0
     family_enabled = terminal_settled.serving(uid)
 
+    from database import conversations_v3_fence
+
     @firestore.transactional
-    def _persist(transaction) -> bool:
+    def _persist(transaction) -> Literal['stored', 'declined', 'fenced']:
         nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal, ledger_stages, source_revision
         terminal_refusal = None
         summary_changed = False
@@ -1709,10 +1711,6 @@ def persist_processing_result_with_lifecycle(
         evidence_refresh = write_data.pop('_notes_evidence_reprocess', False)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
-        from database.conversations_v3_fence import permits
-
-        if not permits(transaction, db, uid, conversation_data['id']):
-            return False
         existing_snapshot = conversation_ref.get(transaction=transaction)
         source_revision = pipeline_ledger.source_revision(existing_snapshot)
         if not getattr(existing_snapshot, 'exists', False):
@@ -1720,22 +1718,22 @@ def persist_processing_result_with_lifecycle(
             # Deleting one is a decision its owner made, and a merge write to a
             # missing document would create it, so a late processor could bring
             # back what they removed and emit derived side effects from it.
-            return False
+            return 'declined'
 
         existing = existing_snapshot.to_dict() or {}
         if not python_owns_finalization(existing):
-            return False
+            return 'declined'
         if existing.get('arrival_at'):
             write_data['arrival_at'] = existing['arrival_at']
         if expected_capture_group is not None:
             expected_group_id, expected_group_revision = expected_capture_group
             current_group = existing.get(CAPTURE_GROUP_FIELD) or {}
             if current_group.get('id') != expected_group_id or current_group.get('revision') != expected_group_revision:
-                return False
+                return 'declined'
         if capture_group_notes_refresh is not None:
             group_id, reservation_id = capture_group_notes_refresh
             if expected_capture_group is None or expected_capture_group[0] != group_id:
-                return False
+                return 'declined'
             notes_refresh_state_write = capture_group_notes.read_success_write(
                 transaction,
                 uid,
@@ -1744,7 +1742,7 @@ def persist_processing_result_with_lifecycle(
                 firestore_client=db,
             )
             if notes_refresh_state_write is None:
-                return False
+                return 'declined'
         preserve_duplicate_hint(write_data, existing)
         if existing.get('record_lane_owner'):
             write_data['record_lane_owner'] = existing['record_lane_owner']
@@ -1758,7 +1756,7 @@ def persist_processing_result_with_lifecycle(
             or summary_delivery.processing_fenced(existing)
             or (evidence_refresh and effective_user_title(existing.get('user_title')))
         ):
-            return False
+            return 'declined'
         if smart_merge_refresh is not None:
             expected_revision, expected_owner = smart_merge_refresh
             merge_state = existing.get('smart_merge') or {}
@@ -1770,18 +1768,20 @@ def persist_processing_result_with_lifecycle(
                 or not isinstance(until, datetime)
                 or until <= datetime.now(timezone.utc)
             ):
-                return False
+                return 'declined'
+        if not conversations_v3_fence.permits(transaction, db, uid, conversation_data['id']):
+            return 'fenced'
         # A processor that read before another sync append cannot replace that
         # transcript or publish a summary derived from an obsolete revision.
         if existing.get('sync_content_revision') is not None and (
             write_data.get('sync_content_revision') != existing['sync_content_revision']
         ):
             stale_sync_revision = True
-            return False
+            return 'fenced'
 
         if not _batch_identity_membership_current(uid, write_data, existing):
             stale_sync_revision = True
-            return False
+            return 'declined'
 
         if write_data.get('discarded') is True and recovery_discard_payload(write_data):
             from utils.conversations.recovery import (
@@ -1956,19 +1956,25 @@ def persist_processing_result_with_lifecycle(
             ConversationStatus.completed,
             ConversationStatus.completed.value,
         ) and write_status in (ConversationStatus.completed, ConversationStatus.completed.value)
-        return True
+        return 'stored'
 
-    from database.conversations_v3_fence import current as v3_writer
     from database.transcript_pointer import run_preloaded_transaction_with_contention_retry
 
-    v3_processing = v3_writer() is not None
+    v3_processing = conversations_v3_fence.current() is not None
     try:
         if v3_processing:
-            persisted = run_preloaded_transaction_with_contention_retry(db, _persist)
+            outcome = run_preloaded_transaction_with_contention_retry(db, _persist)
         else:
-            persisted = run_preloaded_transactional(db, _persist)
+            outcome = run_preloaded_transactional(db, _persist)
     except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
         return False
+    if v3_processing:
+        if outcome == 'fenced':
+            from utils.conversations.v3 import ProcessingPersistenceFenced
+
+            raise ProcessingPersistenceFenced('v3_processing_not_completed')
+        conversations_v3_fence.record_persistence_outcome(declined=outcome == 'declined')
+    persisted = outcome == 'stored'
     if persisted and ledger_stages:
         # After the real commit, in the ledger's own fenced transaction.
         pipeline_ledger.record_summary(
@@ -1997,10 +2003,6 @@ def persist_processing_result_with_lifecycle(
             on_first_completion()
         except Exception:
             pass
-    if v3_processing and not persisted:
-        from utils.conversations.v3 import ProcessingPersistenceFenced
-
-        raise ProcessingPersistenceFenced('v3_processing_not_completed')
     return persisted
 
 
