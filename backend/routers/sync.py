@@ -16,6 +16,7 @@ from utils.sync.future_capture_request import Outcome as FutureCaptureOutcome
 from utils.other.playback_identity import PlaybackSourceChanged
 from utils.capture.coverage_endpoint import router as coverage_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
+from utils.observability.sync_upload import observe_hold_age
 import asyncio
 import json
 import logging
@@ -29,7 +30,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from utils.sync.detached_tasks import consume_detached_outcome as _consume_detached_outcome
-from config.request_clock import started_at
+from config.request_clock import bounded_hold_state, started_at
 from utils.batch_pipeline import upload_entitlement
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request, Response, Header
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -741,6 +742,8 @@ async def sync_local_files_v2(
     x_omi_device_model: Optional[str] = Header(None, alias='X-Omi-Device-Model'),
     x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
     x_omi_upload_trace: Optional[str] = Header(None, alias='X-Omi-Upload-Trace', include_in_schema=False),
+    x_omi_upload_hold: Optional[str] = Header(None, alias='X-Omi-Upload-Hold', include_in_schema=False),
+    x_omi_upload_hold_age_ms: Optional[str] = Header(None, alias='X-Omi-Upload-Hold-Age-Ms', include_in_schema=False),
 ):
     """
     Async version of sync-local-files. Saves raw files and returns 202
@@ -1279,6 +1282,11 @@ async def sync_local_files_v2(
                 intake_context={
                     'upload_arrived_at': upload_arrived_at,
                     'upload_entitlement': await run_blocking(db_executor, upload_entitlement.classify, uid),
+                    **(
+                        {'upload_hold_state': bounded_hold_state(x_omi_upload_hold)}
+                        if isinstance(x_omi_upload_hold, str)
+                        else {}
+                    ),
                     **({'capture_source_conversation_id': recovery_source_id} if recovery_source_id else {}),
                     **({'capture_clock_policy': capture_clock_policy} if capture_clock_policy is not None else {}),
                     **(
@@ -1324,6 +1332,7 @@ async def sync_local_files_v2(
                 # owner is a follow-on, not a batch landing).
                 if intake_evidence.batch_accepted and not intake_evidence.final_pass_owner_followed:
                     record_upload_outcome('batch')
+                    observe_hold_age(x_omi_upload_hold_age_ms, x_omi_upload_hold)
                 return batch_response
             sequencer_registration_started = False
 
