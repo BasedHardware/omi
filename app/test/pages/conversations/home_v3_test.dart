@@ -419,6 +419,7 @@ class _Home {
   /// The live window's start, and whether Home hides it.
   late DateTime liveStart = _now.subtract(const Duration(minutes: 20));
   bool liveHidden = false;
+  bool liveFailed = false;
   List<String> liveRecordingIds = const ['rec-1'];
   final sync = _StubSyncProvider();
   late final _LiveCapture capture = _LiveCapture()
@@ -484,7 +485,7 @@ class _Home {
                   segments: _liveSoFar,
                   v3: ConversationV3Fields(
                     kind: 'conversation',
-                    tileState: ConversationTileState.live,
+                    tileState: liveFailed ? ConversationTileState.failed : ConversationTileState.live,
                     homeHidden: liveHidden,
                     recordingIds: liveRecordingIds,
                   ),
@@ -731,6 +732,27 @@ void main() {
       expect(tester.getRect(find.byType(V3LivePlaceholderRow)).top, greaterThanOrEqualTo(today.bottom));
       expect(find.byType(NoConversationsHero), findsNothing, reason: 'something is being captured: not a new account');
       expect(find.byType(EmptyConversationsWidget), findsNothing);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('v3: a failed live window falls back to one Listening row while streaming', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      final serverRow = find.byKey(const ValueKey('live-1'));
+      final placeholder = find.byType(V3LivePlaceholderRow);
+      expect(serverRow, findsOneWidget);
+      expect(placeholder, findsNothing);
+      final top = tester.getTopLeft(serverRow).dy;
+
+      home.liveFailed = true;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      expect(serverRow, findsNothing);
+      expect(placeholder, findsOneWidget);
+      expect(tester.getTopLeft(placeholder).dy, top);
+
       await _dispose(tester, home);
     });
   });

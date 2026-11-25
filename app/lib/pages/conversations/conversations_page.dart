@@ -27,6 +27,7 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
+import 'v3_live_row_visibility.dart';
 import 'home_rows.dart';
 import 'home_card_rows.dart';
 import 'package:omi/providers/home_feed_provider.dart';
@@ -965,34 +966,24 @@ class _ConversationsPageState extends State<ConversationsPage>
             if (mounted) v3!.acknowledgeManualFinish(manualFinish);
           });
         }
-        // A streaming capture with no server window to show (none yet, between windows, or one Home
-        // hides) is the live placeholder row: first under Today, the slot the server's live row takes
-        // when it arrives, so the row never jumps sections. An Omi call is shown as the call card
-        // instead; the placeholder never doubles it.
         final callActive = context.select<PhoneCallProvider?, bool>((p) => switch (p?.callState) {
               PhoneCallState.active || PhoneCallState.connecting || PhoneCallState.ringing => true,
               _ => false,
             });
-        final v3LiveShown = v3Live != null &&
-            v3Live.v3?.homeHidden != true &&
-            !isFailedConversation(v3Live) &&
-            !v3Live.discarded &&
-            !convoProvider.memoriesToDelete.containsKey(v3Live.id) &&
-            !SharedPreferencesUtil().isConversationDeleteConfirmed(v3Live.id);
-        // A deleted or discarded live window shows nothing (the owner removed it); only a window Home
-        // hides (still below the word minimum, say) is stood in for by the placeholder.
         final liveRemoved = v3Live != null &&
             (v3Live.discarded ||
                 convoProvider.memoriesToDelete.containsKey(v3Live.id) ||
-                SharedPreferencesUtil().isConversationDeleteConfirmed(
-                  v3Live.id,
-                ));
-        final livePlaceholder = v3Home &&
-            streaming &&
-            !v3!.suppressListeningAfterFinish(captureId) &&
-            (v3Live == null || v3Live.v3?.homeHidden == true) &&
-            !liveRemoved &&
-            !callActive;
+                SharedPreferencesUtil().isConversationDeleteConfirmed(v3Live.id));
+        final liveRow = v3HomeLiveRow(
+          v3Home: v3Home,
+          streaming: streaming,
+          serverUsable: v3Live != null && v3Live.v3?.homeHidden != true && !isFailedConversation(v3Live),
+          liveRemoved: liveRemoved,
+          callActive: callActive,
+          listeningSuppressed: v3Home && streaming && v3!.suppressListeningAfterFinish(captureId),
+        );
+        final liveServerRow = liveRow == V3HomeLiveRow.server ? v3Live : null;
+        final livePlaceholder = liveRow == V3HomeLiveRow.placeholder;
         if (v3Home) {
           final waiting = streaming && v3Live == null;
           final signature =
@@ -1069,11 +1060,11 @@ class _ConversationsPageState extends State<ConversationsPage>
                   if (c.id != v3Live?.id && shownOnV3Home(c)) c,
               ],
           };
-          if (v3LiveShown) {
+          if (liveServerRow != null) {
             // The conversation in progress always leads Today, even when it started before midnight:
             // the live row never sits in an earlier day or above the day list (David, 2026-11-21).
             final day = localHomeDay(clock.now());
-            conversationsByDate[day] = [v3Live, ...?conversationsByDate[day]];
+            conversationsByDate[day] = [liveServerRow, ...?conversationsByDate[day]];
           }
         }
         final cardById = <String, HomeFeedCard>{};
@@ -1245,8 +1236,9 @@ class _ConversationsPageState extends State<ConversationsPage>
             ? _withProcessingRows(rowsWithLocalProcessing, [manualFinish], clock.now())
             : rowsWithLocalProcessing;
         // Pin the server live row after inserting Processing, which treats it as an ordinary conversation.
-        final conversationRows =
-            !episodeLive && v3LiveShown ? _pinFirstInDay(rowsWithManualFinish, v3Live.id) : rowsWithManualFinish;
+        final conversationRows = !episodeLive && liveServerRow != null
+            ? _pinFirstInDay(rowsWithManualFinish, liveServerRow.id)
+            : rowsWithManualFinish;
 
         if (showRecordings &&
             !convoProvider.isSelectionModeActive &&
