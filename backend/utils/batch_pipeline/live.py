@@ -18,6 +18,7 @@ import random
 import threading
 import time
 
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD
 from utils.conversations import phase_shadow
 
 from config.policy import resolve_batch_policy
@@ -258,7 +259,16 @@ def register_recording(
 
 
 def retained_record_units(
-    uid, conversation_id, chunks, client, key, *, diagnostics=None, partial=False, decoded_tail=None
+    uid,
+    conversation_id,
+    chunks,
+    client,
+    key,
+    *,
+    diagnostics=None,
+    partial=False,
+    decoded_tail=None,
+    record_source_proof=False,
 ) -> Generator[tuple[float, float, list[dict[str, Any]]], None, None]:
     """Bounded one-hour units; earlier retained objects own overlapping frames."""
     trim_divergent = overlap_trim_enabled()
@@ -279,7 +289,15 @@ def retained_record_units(
             ref, pcm = dict(decoded_tail['ref']), decoded_tail['pcm']
         else:
             pcm = read_reference(
-                client, ref, uid, conversation_id, allowed, key, source_metadata=True, listed_source=chunk
+                client,
+                ref,
+                uid,
+                conversation_id,
+                allowed,
+                key,
+                source_metadata=True,
+                listed_source=chunk,
+                record_source_proof=record_source_proof,
             )
             if decoded_tail is not None and chunk is chunks[-1]:
                 decoded_tail.update(chunk=chunk, ref=dict(ref), pcm=pcm)
@@ -404,8 +422,9 @@ async def _manual_finish_admitted(
         if not manual_end_marker_enabled():
             return
         single = len(units) == 1
+        recording_finish = bool(current.get(FINISH_RECORDING_FIELD))
         promoted = False
-        if single:
+        if single and not recording_finish:
             # Stored before any detached work, so losing the process cannot lose a single-unit cut.
             promoted = await run_blocking(
                 db_executor, conversations_v3.promote_manual_end, uid, conversation_id, firestore_client=store.client
@@ -484,7 +503,8 @@ async def _manual_finish_admitted(
                         # promoted single unit already holds its cut, but still gets its own
                         # manual-end wake after the write: the writer's plain wake shares the owner's
                         # per-minute task name and is skipped when a reconcile already ran that minute.
-                        cut=cut if not single or promoted else None,
+                        # Recording-scoped intent is consumed by the native completion transaction.
+                        cut=cut if not recording_finish and (not single or promoted) else None,
                         privacy=privacy,
                         fence=fence,
                     )
@@ -570,7 +590,11 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         privacy_generation=pending['privacy_generation'],
     )
     protection = await run_blocking(db_executor, artifacts.authorize, seed)
-    iterator = retained_record_units(uid, conversation_id, chunks, client, artifacts.key_for_owner(uid))
+    # These read hints belong to the encrypted worker manifest. Keep the
+    # walker output for operator plans and partial continuations stable.
+    iterator = retained_record_units(
+        uid, conversation_id, chunks, client, artifacts.key_for_owner(uid), record_source_proof=True
+    )
     units = []
     try:
         # Advancing the generator downloads retained objects. Keep that leaf

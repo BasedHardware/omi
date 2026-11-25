@@ -2158,7 +2158,12 @@ def _ingest_conversation_from_segments(
                 existing_conversation.get('status') == ConversationStatus.in_progress
                 and metadata.get('from_segments_client_session_id') == request.client_session_id
             ):
-                resumable_conversation = OmiConversation.model_validate(existing_conversation)
+                # The persisted client projection is display data, not retry
+                # input. Strip it before model validation so a stale projection
+                # cannot prevent admission and transcript reuse.
+                resumable_conversation = OmiConversation.model_validate(
+                    strip_client_processing(dict(existing_conversation))
+                )
             elif _is_stale_from_segments_claim(
                 existing_conversation, request.client_session_id, datetime.now(timezone.utc)
             ):
@@ -2188,9 +2193,9 @@ def _ingest_conversation_from_segments(
     resolved_client_device_id = client_device_id or request.client_device_id
     resolved_client_platform = client_platform or request.client_platform
 
-    # Bind before any persist so the ingest-owner mutation can stamp the
-    # projection onto the processing row. The coordinator's generic persists
-    # never write this field.
+    # Validate against the submitted transcript for the existing content-free
+    # rejection logs. The resume branch below discards the candidate because
+    # it reuses the first attempt's persisted transcript.
     client_projection = _accepted_client_projection(request, transcript_segments)
 
     # Keep original desktop segment IDs before client compaction. Only a bounded,
@@ -2230,7 +2235,12 @@ def _ingest_conversation_from_segments(
             raise HTTPException(status_code=409, detail="Conversation creation already in progress")
         resumable_conversation.status = ConversationStatus.processing
         create_conversation_obj = resumable_conversation
-        client_projection = resumable_conversation.client_processing
+        # The retry resumes the persisted transcript, so discard any projection
+        # from the retry request. The persisted display projection stays on the
+        # row; never read it back into the coordinator. A resumed processing row
+        # does not add a projection write; completed idempotency hits retain the
+        # existing digest-checked late-bind path.
+        client_projection = None
         language_code = resumable_conversation.language or 'en'
     elif conversation_id:
         create_conversation_obj = OmiConversation(

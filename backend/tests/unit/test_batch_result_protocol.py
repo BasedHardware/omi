@@ -200,14 +200,10 @@ def _version_declarations(source):
     return {name for name in declarations if name.endswith('_version')}
 
 
-def test_no_intake_marker_declaration_bypasses_the_registry():
+@pytest.fixture(scope='module')
+def intake_marker_declarations():
     backend = Path(__file__).resolve().parents[2]
-    expected = {
-        ('database/batch_pipeline_intake.py', 'admit.commit', 'source_reuse_version'),
-        ('database/batch_pipeline_source_reuse.py', 'enqueue_alias', 'source_alias_version'),
-        ('database/batch_pipeline_source_fallback.py', 'enqueue', 'source_reuse_version'),
-    }
-    observed = set()
+    declarations = {}
     # Discover protocol/job writers across both layers, including future modules.
     # The cheap text prefilter avoids parsing unrelated account-domain sources.
     for directory in ('database', 'utils/batch_pipeline'):
@@ -219,11 +215,23 @@ def test_no_intake_marker_declaration_bypasses_the_registry():
             ):
                 continue
             relative = path.relative_to(backend).as_posix()
-            allowed = {'protocol_version', *SOURCE_MARKERS, *NON_INTAKE_VERSION_FIELDS.get(relative, set())}
-            assert _version_declarations(source) <= allowed, relative
-            for function, marker in _stamp_calls(source):
-                assert marker in SOURCE_MARKERS, (relative, function, marker)
-                observed.add((relative, function, marker))
+            declarations[relative] = (_version_declarations(source), _stamp_calls(source))
+    return declarations
+
+
+def test_no_intake_marker_declaration_bypasses_the_registry(intake_marker_declarations):
+    expected = {
+        ('database/batch_pipeline_intake.py', 'admit.commit', 'source_reuse_version'),
+        ('database/batch_pipeline_source_reuse.py', 'enqueue_alias', 'source_alias_version'),
+        ('database/batch_pipeline_source_fallback.py', 'enqueue', 'source_reuse_version'),
+    }
+    observed = set()
+    for relative, (versions, calls) in intake_marker_declarations.items():
+        allowed = {'protocol_version', *SOURCE_MARKERS, *NON_INTAKE_VERSION_FIELDS.get(relative, set())}
+        assert versions <= allowed, relative
+        for function, marker in calls:
+            assert marker in SOURCE_MARKERS, (relative, function, marker)
+            observed.add((relative, function, marker))
     assert expected <= observed
     assert {call for call in observed if call[:2] in {entry[:2] for entry in expected}} == expected
 

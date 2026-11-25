@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -68,8 +69,14 @@ func Open(
 	}
 	beat := main.Copy()
 	beat.MaxConns = pg.Int32(min(heartbeatPoolLimit, cfg.Workers))
-	beat.ConnConfig.RuntimeParams["statement_timeout"] = "2000"
-	beat.ConnConfig.RuntimeParams["lock_timeout"] = "1000"
+	// A beat starts one third of the way through the lease. Give it time to wait
+	// for a concurrent Save, with a separate margin for the rest of the statement.
+	// Keep the existing floors for short leases and bound waits on the shared pool
+	// by the work pool's own timeout ceilings.
+	lockTimeout := min(12000, max(1000, (cfg.Lease/2).Milliseconds()))
+	statementTimeout := min(15000, max(2000, (cfg.Lease-cfg.Lease/3).Milliseconds()))
+	beat.ConnConfig.RuntimeParams["lock_timeout"] = strconv.FormatInt(lockTimeout, 10)
+	beat.ConnConfig.RuntimeParams["statement_timeout"] = strconv.FormatInt(statementTimeout, 10)
 	heartbeat, err := pgxpool.NewWithConfig(ctx, beat)
 	if err != nil {
 		pool.Close()

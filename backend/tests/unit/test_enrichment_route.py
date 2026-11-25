@@ -938,27 +938,23 @@ def test_not_due_wake_rearms_and_answers_200_not_due(state, monkeypatch):  # noq
 
 @pytest.mark.asyncio
 async def test_legacy_sync_handler_delegates_to_the_consumer_when_routed(rows, monkeypatch):
-    from routers import batch_pipeline
-
     monkeypatch.setenv('ENRICHMENT_ROUTE', 'enrichment_queue')
     monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: _pending)
-    monkeypatch.setattr(batch_pipeline, 'run_enrichment', Mock(side_effect=AssertionError('legacy run used')))
+    monkeypatch.setattr(route, 'run_enrichment', Mock(side_effect=AssertionError('legacy run used')))
     token = rows[0][KEY]['task_token']
-    response = await batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': token})
+    response = await route.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': token})
     assert response.status_code == 409
     assert json.loads(response.body) == {'status': 'retry', 'reason': 'callback_pending'}
 
 
 @pytest.mark.asyncio
 async def test_legacy_bound_slow_delivery_logs_its_end_too(rows, monkeypatch, caplog):
-    from routers import batch_pipeline
-
     caplog.set_level(logging.INFO)
     monkeypatch.setenv('ENRICHMENT_ROUTE', 'enrichment_queue')
     monkeypatch.setattr(route, 'SLOW_DELIVERY_SECONDS', 0.0)
     monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(return_value=None))
     token = rows[0][KEY]['task_token']
-    response = await batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': token})
+    response = await route.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': token})
     assert response.status_code == 200
     ends = [r.getMessage() for r in caplog.records if r.getMessage().startswith('event=enrichment_delivery ')]
     assert len(ends) == 1 and ends[0].startswith('event=enrichment_delivery outcome=done reason=processed wait_s=')
@@ -969,16 +965,15 @@ async def test_legacy_bound_slow_delivery_logs_its_end_too(rows, monkeypatch, ca
 async def test_legacy_handler_retries_processing_dependency_failures_without_5xx(monkeypatch, status, code):
     """Lane 4 staging replay 10-19: 51/63 sync-jobs deliveries answered 500 on HTTPException from processing."""
     from fastapi import HTTPException
-    from routers import batch_pipeline
 
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
-    monkeypatch.setattr(batch_pipeline, 'run_enrichment', Mock(side_effect=HTTPException(status_code=status)))
+    monkeypatch.setattr(route, 'run_enrichment', Mock(side_effect=HTTPException(status_code=status)))
 
     async def run(_executor, func, *args):
         return func(*args)
 
-    monkeypatch.setattr(batch_pipeline, 'run_blocking', run)
-    response = await batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': 'b' * 32})
+    monkeypatch.setattr(route, 'run_blocking', run)
+    response = await route.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': 'b' * 32})
     assert response.status_code == code
     if code == 409:
         assert json.loads(response.body) == {'status': 'retry', 'reason': 'dependency_warming'}
@@ -1000,19 +995,23 @@ async def test_legacy_handler_records_an_empty_first_summary_instead_of_answerin
     The consumer path already records the strike (``test_empty_output_twice_records_a_bounded_retry_then_blocks``);
     the legacy ``sync_handler`` route used to re-raise on the same strike and answer 500.
     """
-    from routers import batch_pipeline
-
     monkeypatch.delenv('ENRICHMENT_ROUTE', raising=False)
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setattr(callback, 'enrich_conversation', lambda *_: SimpleNamespace(discarded=False, structured={}))
+    # The adapter imports run_enrichment at module scope, so run_enrichment's
+    # by-name discard_blocked binding predates the fixture's custody patch.
+    from utils.batch_pipeline import enrichment
+
+    monkeypatch.setattr(enrichment, 'discard_blocked', lambda _document_id: False)
 
     async def run(_executor, func, *args):
         return func(*args)
 
-    monkeypatch.setattr(batch_pipeline, 'run_blocking', run)
+    # The enrichment HTTP adapter moved out of routers.batch_pipeline into routers.enrichment.
+    monkeypatch.setattr(route, 'run_blocking', run)
     state_rows, _tasks = rows
     token = state_rows[KEY]['task_token']
-    response = await batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': token})
+    response = await route.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': token})
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'deferred'}
     assert state_rows[KEY]['summary_empty_failures'] == 1
@@ -1382,7 +1381,6 @@ def test_other_invalid_argument_rejections_still_surface_from_the_outbox(rows):
 
 @pytest.mark.asyncio
 async def test_legacy_sync_handler_acks_an_oversized_conversation_with_200(rows, monkeypatch):
-    from routers import batch_pipeline
     from utils.batch_pipeline import enrichment
 
     state_rows, _tasks = rows
@@ -1393,13 +1391,13 @@ async def test_legacy_sync_handler_acks_an_oversized_conversation_with_200(rows,
     async def run(_executor, func, *args):
         return func(*args)
 
-    monkeypatch.setattr(batch_pipeline, 'run_blocking', run)
+    monkeypatch.setattr(route, 'run_blocking', run)
     payload = {'kind': 'sync_reprocess', 'key': KEY, 'task_token': state_rows[KEY]['task_token']}
-    response = await batch_pipeline.enrichment_response(payload)
+    response = await route.enrichment_response(payload)
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'held'}
     assert state_rows[KEY]['held_reason'] == 'document_size_limit'
-    redelivery = await batch_pipeline.enrichment_response(payload)
+    redelivery = await route.enrichment_response(payload)
     assert redelivery.status_code == 200
     assert json.loads(redelivery.body) == {'status': 'stale'}
 

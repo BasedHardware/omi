@@ -419,9 +419,13 @@ def test_second_provider_recovers_held_padded_empty_when_terminal_flag_off(repos
     second.assert_called_once()
 
 
-@pytest.mark.parametrize('safety,expected', [('false', 'empty'), ('true', 'failed_held')])
-def test_shadow_terminal_empty_follows_pinned_recovery_policy(repository, monkeypatch, safety, expected):
+@pytest.mark.parametrize(
+    'safety,two_close,expected',
+    [('false', 'false', 'empty'), ('true', 'false', 'failed_held'), ('true', 'true', 'empty')],
+)
+def test_shadow_terminal_empty_follows_pinned_recovery_policy(repository, monkeypatch, safety, two_close, expected):
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', safety)
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', two_close)
     monkeypatch.setenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'true')
     item = running(repository)
     spans = [{'start': 0.0, 'end': 300.0}]
@@ -437,6 +441,35 @@ def test_shadow_terminal_empty_follows_pinned_recovery_policy(repository, monkey
         )
         == expected
     )
+
+
+@pytest.mark.parametrize(
+    'guarded_close,terminal,expected',
+    [('false', 'true', 'failed_held'), ('true', 'true', 'empty'), ('true', 'false', 'failed_held')],
+)
+def test_guarded_shadow_two_empty_answers_follow_the_guarded_close_switch(
+    repository, monkeypatch, guarded_close, terminal, expected
+):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    # The unguarded switch alone never closes a guarded unit.
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED', guarded_close)
+    monkeypatch.setenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', terminal)
+    item = running(repository, duration=20, guarded=True)
+    spans = [{'start': 0, 'end': 4.384}]
+    first, second = (Mock(side_effect=MultilingualEmpty(20, spans)) for _ in range(2))
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+            item.segment_id,
+            stt=first,
+            second_stt=second,
+            inspect=lambda *a: (b'', 20, spans),
+        )
+        == expected
+    )
+    assert first.call_count == second.call_count == 1
 
 
 @pytest.mark.parametrize('failed_provider', ['modulate', 'soniox'])

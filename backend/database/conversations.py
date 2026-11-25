@@ -12,8 +12,8 @@ from utils.conversations import phase_shadow
 
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from database import conversation_recorded_time, conversations_v3_backfill_runs
-from database import pipeline_ledger
-from utils.conversations import summary_delivery, lifecycle_clocks
+from database import home_visibility_index, pipeline_ledger
+from utils.conversations import summary_delivery, lifecycle_clocks, terminal_settled
 from utils.observability.delivery import summary_terminal_outcome
 from utils.sync import processing_hold, bridge_pending
 from config.refactor_modes import serving_for, shadow_or_serve
@@ -386,6 +386,7 @@ def _prepare_conversation_for_write(
     allow_offload: bool = True,
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
+    data.pop(home_visibility_index.FIELD, None)
     data.pop('transcription_admission', None)  # Current authenticated read evidence, never persisted.
 
     # Partial writes cannot certify an entire legacy row. Explicit prepare
@@ -1310,6 +1311,7 @@ def _collect_visible_conversation_page(
     capture_only: bool = False,
     show_held: bool = False,
     hydrate_fields: Optional[List[str]] = None,
+    indexed_home: bool = False,
 ) -> List[Dict[str, Any]]:
     """Page visible rows.
 
@@ -1326,12 +1328,13 @@ def _collect_visible_conversation_page(
     hidden run can cut a page short while more visible rows remain behind it.
     With the cursor lever on it also receives ``next_cursor``.
     """
-    cursor_enabled = _conversation_list_cursor_enabled(uid)
-    scope = (
-        query_scope(dict(uid=uid, sort_field=sort_field, include_discarded=include_discarded, **(cursor_filters or {})))
-        if cursor_enabled
-        else None
-    )
+    cursor_enabled = indexed_home or _conversation_list_cursor_enabled(uid)
+    scope = None
+    if cursor_enabled:
+        filters = dict(uid=uid, sort_field=sort_field, include_discarded=include_discarded, **(cursor_filters or {}))
+        if indexed_home:
+            filters[home_visibility_index.FIELD] = True
+        scope = query_scope(filters)
     visible = _visibility(
         include_discarded=include_discarded,
         presentation=presentation,
@@ -1474,6 +1477,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     summary_changed = False
     ledger_stages: tuple[str, ...] = ()
     source_revision = 0
+    settle_enabled = terminal_settled.serving(uid)
 
     @firestore.transactional
     def _write_processing_result(transaction):
@@ -1557,7 +1561,8 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             summary_changed = processing_backlog.stage_transition(
                 transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
             )
-            transaction.set(conversation_ref, write_data, merge=True)
+            terminal_settled.stamp(existing, write_data, now=datetime.now(timezone.utc), enabled=settle_enabled)
+            transaction.set(conversation_ref, home_visibility_index.stamp(write_data, existing), merge=True)
             return
 
         write_data.setdefault('has_photos', False)
@@ -1572,7 +1577,8 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
         )
-        transaction.set(conversation_ref, with_creation_scope_index(write_data))
+        terminal_settled.stamp({}, write_data, now=datetime.now(timezone.utc), enabled=settle_enabled)
+        transaction.set(conversation_ref, home_visibility_index.stamp(with_creation_scope_index(write_data)))
 
     run_preloaded_transactional(db, _write_processing_result)
     if ledger_stages:
@@ -1686,7 +1692,7 @@ def persist_processing_result_with_lifecycle(
     terminal_refusal = None
     ledger_stages: tuple[str, ...] = ()
     source_revision = 0
-    family_enabled = _terminal_family_serving(uid)
+    family_enabled = terminal_settled.serving(uid)
 
     @firestore.transactional
     def _persist(transaction) -> bool:
@@ -1935,6 +1941,8 @@ def persist_processing_result_with_lifecycle(
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
         )
+        if any(flag in write_data for flag in home_visibility_index.FLAGS):
+            home_visibility_index.stamp(write_data, existing)
         if family_enabled:
             transaction.update(conversation_ref, _processing_result_update_fields(write_data))
         else:
@@ -2005,6 +2013,7 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     summary_receipt = summary_delivery.creation_result(conversation_data, uid)
     delivery_outcome = summary_terminal_outcome({}, conversation_data)
+    terminal_settled.stamp({}, conversation_data, now=datetime.now(timezone.utc), enabled=terminal_settled.serving(uid))
 
     def stage_create(transaction, data):
         if '_notes_identity' in data:
@@ -2494,6 +2503,7 @@ def get_conversations_without_photos(
     cursor: Optional[str] = None,
     page_envelope: bool = False,
     cursor_page: Optional[Dict[str, Any]] = None,
+    indexed_home: bool = False,
 ):
     """
     Same as get_conversations but without loading photos.
@@ -2545,6 +2555,8 @@ def get_conversations_without_photos(
         hydrate_fields = sorted(fields)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if indexed_home:
+        conversations_ref = conversations_ref.where(filter=FieldFilter(home_visibility_index.FIELD, '==', True))
     if sources:
         # Keep the paginated list semantically identical to the count query;
         # see `get_conversations_count` for why a singleton is equality.
@@ -2591,6 +2603,7 @@ def get_conversations_without_photos(
         cursor=cursor,
         cursor_page=cursor_page,
         hydrate_fields=hydrate_fields,
+        indexed_home=indexed_home,
         cursor_filters=dict(
             statuses=statuses,
             sources=sources,
@@ -2740,11 +2753,14 @@ def update_conversation(
         update_data, uid, doc_level, conversation_id=conversation_id, conversation_state=doc_snapshot.to_dict()
     )
     guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
+    changes_visibility = any(flag in prepared_data for flag in home_visibility_index.FLAGS)
+    if changes_visibility:
+        home_visibility_index.stamp(prepared_data, doc_snapshot.to_dict())
     try:
-        if expected_audio_files is None:
+        if expected_audio_files is None and not changes_visibility:
             doc_ref.update(prepared_data)
         else:
-            # Also fence a writer arriving after the read, including label edits.
+            # Fence the source flags and audio inventory against concurrent updates.
             doc_ref.update(
                 prepared_data, option=get_firestore_client().write_option(last_update_time=doc_snapshot.update_time)
             )
@@ -3466,16 +3482,6 @@ def _record_terminal_claim_refusal(family: str, reason: str) -> None:
     ).inc()
 
 
-def _terminal_family_serving(uid: str) -> bool:
-    # The on|off operator surface maps on to the shared serve mode. The shared
-    # parser retains its cohort support for a later ramp without changing defaults.
-    from config.refactor_modes import default_on
-
-    return default_on('CONVERSATION_TERMINAL_FAMILY_MODE') and serving_for(
-        'CONVERSATION_TERMINAL_FAMILY_MODE', uid, default='serve'
-    )
-
-
 def _conversation_claim_matches(current, expected_status, expected_fields=None, *, allow_discarded=False):
     if not python_owns_finalization(current):
         return False
@@ -3582,7 +3588,7 @@ def claim_conversation_status(
             bound_updates = extra_updates_with_bound_client_processing(
                 uid, current, extra_updates, transcript_corrections=corrections
             )
-        family_enabled = _terminal_family_serving(uid)
+        family_enabled = terminal_settled.serving(uid)
         updates = claim_conversation_status_in_txn(
             current,
             expected_status=expected_status.value,

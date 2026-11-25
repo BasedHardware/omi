@@ -39,6 +39,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
+from routers import enrichment as enrichment_adapter
+
 
 @dataclass(frozen=True)
 class QueueConfig:
@@ -343,26 +345,25 @@ def scenario_sync_backfill_0452(enrichment_status: int, *, duration_s: float = 9
 
 
 def enrichment_route_status() -> int:
-    """HTTP status the *current* ``routers.batch_pipeline.enrichment_response`` answers for an
+    """HTTP status the *current* ``routers.enrichment.enrichment_response`` answers for an
     expected first-summary wait (``FirstSummaryCallbackPending``). Real route code; the runtime
     fence and the adapter are the only stand-ins."""
     import asyncio
 
-    from routers import batch_pipeline
     from utils.sync import reprocess
 
     def pending(*_args, **_kwargs):
         raise reprocess.FirstSummaryCallbackPending('no processing output yet')
 
-    saved = (reprocess.owns_runtime, batch_pipeline.run_enrichment)
+    saved = (reprocess.owns_runtime, enrichment_adapter.run_enrichment)
     reprocess.owns_runtime = lambda: True
-    batch_pipeline.run_enrichment = pending
+    enrichment_adapter.run_enrichment = pending
     try:
         response = asyncio.run(
-            batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
+            enrichment_adapter.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
         )
     finally:
-        reprocess.owns_runtime, batch_pipeline.run_enrichment = saved
+        reprocess.owns_runtime, enrichment_adapter.run_enrichment = saved
     return int(response.status_code)
 
 

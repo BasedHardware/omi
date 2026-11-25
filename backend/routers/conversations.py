@@ -31,7 +31,7 @@ import database.redis_db as redis_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
 import database.users as users_db
 from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
-from database import conversation_tombstones
+from database import conversation_tombstones, home_visibility_index
 from database.legal_holds import (
     DestructiveGateTakeover,
     DestructiveOperationInProgress,
@@ -43,6 +43,7 @@ from database.legal_holds import (
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from config import historical_tier
+from config import play_billing as play_billing_config
 from utils.conversations import historical_projection, home_step, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
@@ -186,6 +187,7 @@ from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
 from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
 from utils.conversations.v3 import live as v3_live, policy as v3_policy
+from utils.conversations.v3.finish import finish_live_window
 from database import conversations_v3_live, conversations_v3_processing
 from utils.conversations import list_page_headers
 
@@ -676,6 +678,13 @@ def process_in_progress_conversation(
 ):
     conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
+        response = finish_live_window(
+            uid,
+            request.live_conversation_id if request else None,
+            allow_recording_fallback=request is None or request.empty_body,
+        )
+        if response is not None:
+            return response
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
 
     if is_listen_finalization_dispatch_enabled() and not byok.has_byok_keys():
@@ -1251,7 +1260,20 @@ def get_conversations(
     default_home = not (reveal or start_date or end_date)
     # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
     # legacy sync piece there would duplicate them.
-    show_held = default_home and not conversations_v3_enabled(uid)
+    v3_home = default_home and conversations_v3_enabled(uid)
+    show_held = default_home and not v3_home
+    requested_mode = request.headers.get(list_page_headers.HOME_MODE_HEADER) if request is not None else None
+    first_page = offset == 0 and not cursor
+    indexed_home = (
+        v3_home
+        and (requested_mode == 'indexed' or (requested_mode == 'auto' and first_page))
+        and home_visibility_index.enabled(uid)
+    )
+    if requested_mode == 'indexed' and not indexed_home:
+        # The gate was removed. An indexed continuation cannot use the legacy offset.
+        offset, cursor = 0, None
+    if requested_mode in {'auto', 'legacy', 'indexed'} and response is not None:
+        response.headers[list_page_headers.HOME_MODE_HEADER] = 'indexed' if indexed_home else 'legacy'
     read_started = time.monotonic()
     conversations = conversations_db.get_conversations_without_photos(
         uid,
@@ -1275,6 +1297,7 @@ def get_conversations(
         # so it hides what Home hides. Explicit reveal filters still opt out.
         hide_home=not reveal,
         show_held=show_held,
+        indexed_home=indexed_home,
     )
 
     read_done = time.monotonic()
@@ -1307,9 +1330,10 @@ def get_conversations(
     budget.observe('truncated' if budget.truncated else 'complete')
     # Read meter: what one list page cost. Counts and timings only, never the owner or the query.
     logger.info(
-        'conversation_list_read home=%s paged=%s limit=%d docs=%s storage_rows=%s hidden=%s rows=%d '
+        'conversation_list_read home=%s indexed_home=%s paged=%s limit=%d docs=%s storage_rows=%s hidden=%s rows=%d '
         'truncated=%s read_ms=%d total_ms=%d',
         default_home,
+        indexed_home,
         'cursor' if cursor else ('offset' if offset else 'first'),
         limit,
         getattr(budget, 'docs_scanned', None),
@@ -1978,17 +2002,19 @@ def _delete_conversation_under_gate(
                 logger.error(
                     'event=conversation_delete action=task_vectors outcome=error exception_type=%s', type(e).__name__
                 )
-
-    # Audio is primary content like the transcript, so both cascade modes erase it.
-    # Snapshot merge donors before shared metadata cleanup removes them: their
-    # prefixes and sync uploads hold this conversation's audio.
-    try:
-        raw = conversations_db.get_conversation_raw_snapshot(uid, conversation_id, field_paths=['sync_merged_from'])
-    except Exception as error:
-        raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
-    source_ids = [source for source in (raw or {}).get('sync_merged_from') or [] if isinstance(source, str)]
-    purge_audio = _delete_privacy_audio_after_response if record_event else delete_privacy_conversation_audio
-    background_tasks.add_task(purge_audio, uid, conversation_id, source_ids=source_ids)
+        # Snapshot retained bridge donors before shared metadata cleanup removes them.
+        # A previous lake-purge attempt may already have removed the transcript blob.
+        source_ids = []
+        if os.getenv('BUCKET_CANONICAL_AUDIO'):
+            try:
+                raw = conversations_db.get_conversation_raw_snapshot(
+                    uid, conversation_id, field_paths=['sync_merged_from']
+                )
+            except Exception as error:
+                raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
+            source_ids = (raw or {}).get('sync_merged_from', [])
+        purge_audio = _delete_privacy_audio_after_response if record_event else delete_privacy_conversation_audio
+        background_tasks.add_task(purge_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation
     # content, not cascade-only derived data, so this runs unconditionally
@@ -2911,7 +2937,11 @@ async def _search_conversation_page(
     response_model=ConversationSuggestedAppsResponse,
     tags=['conversations'],
 )
-async def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def get_conversation_suggested_apps(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+):
     conversation_data = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
     conversation = deserialize_conversation(conversation_data)
 
@@ -2927,6 +2957,11 @@ async def get_conversation_suggested_apps(conversation_id: str, uid: str = Depen
 
     hydrated = await asyncio.gather(*(hydrate(app_id) for app_id in conversation.suggested_summarization_apps))
     suggested_apps = [app for app in hydrated if app is not None]
+    # A Google Play build gets no Stripe payment link (config.play_billing.hide_payment_links).
+    if http_request and play_billing_config.hide_payment_links(http_request.headers, uid):
+        for app in suggested_apps:
+            if app.payment_link:
+                app.payment_link = None
 
     return {"suggested_apps": [app.model_dump() for app in suggested_apps], "conversation_id": conversation_id}
 

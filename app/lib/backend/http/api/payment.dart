@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/http/api_result.dart';
-import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/backend/schema/gen/subscription_usage_wire.g.dart' as subscription_wire;
 import 'package:omi/env/env.dart';
@@ -25,7 +24,7 @@ Future<Map<String, dynamic>?> createCheckoutSession({
     body: jsonEncode(body),
   );
   if (response == null) return null;
-  if (response.statusCode == 409 || response.statusCode == 400) {
+  if (response.statusCode == 409 || response.statusCode == 400 || response.statusCode == 403) {
     return _paymentError(response);
   }
   if (response.statusCode == 200) {
@@ -47,17 +46,62 @@ Future<Map<String, dynamic>?> createCheckoutSession({
     }
     return {'url': generated.url, 'session_id': generated.sessionId};
   }
-  return null;
+  return _codedRefusal(response);
 }
 
-Map<String, dynamic> _paymentError(dynamic response) {
-  try {
-    final errorBody = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return {'error': true, 'status_code': response.statusCode, 'detail': errorBody.detail};
-  } catch (_) {
-    return {'error': true, 'status_code': response.statusCode};
-  }
+/// Any other status that still carries a coded refusal (e.g. a retryable Google Play check); else null.
+Map<String, dynamic>? _codedRefusal(dynamic response) {
+  final refusal = _paymentError(response);
+  return refusal['code'] == null ? null : refusal;
 }
+
+Map<String, dynamic> _paymentError(dynamic response) =>
+    paymentErrorFromBody(response.statusCode as int, response.body as String);
+
+final _bareCode = RegExp(r'^[a-z0-9_]{1,64}$');
+
+/// A refused payment call: `error`, `status_code`, `detail` (only readable text, never JSON or a bare
+/// code) and `code`. A coded refusal such as `{"detail": "Subscribe with Google Play in the app.", "code":
+/// "use_google_play"}` (or `{"detail": {"code", "message"}}`) gives its sentence as `detail` and its code.
+Map<String, dynamic> paymentErrorFromBody(int statusCode, String body) {
+  String? code;
+  String? message;
+  try {
+    final decoded = jsonDecode(body);
+    if (decoded is Map) {
+      final detail = decoded['detail'];
+      if (decoded['code'] is String) code = decoded['code'] as String;
+      if (detail is String) {
+        message = detail;
+      } else {
+        final source = detail is Map ? detail : decoded;
+        if (source['code'] is String) code = source['code'] as String;
+        if (source['message'] is String) message = source['message'] as String;
+      }
+    }
+  } catch (_) {
+    // Not JSON: the caller shows its own text.
+  }
+  message = message?.trim();
+  if (message != null && _bareCode.hasMatch(message)) {
+    code ??= message;
+    message = null;
+  }
+  return {
+    'error': true,
+    'status_code': statusCode,
+    if (message != null && message.isNotEmpty) 'detail': message,
+    if (code != null) 'code': code,
+  };
+}
+
+/// The server's own sentence for a coded refusal (Google Play readers, a Play subscription on hold), shown
+/// as is in place of the surface's generic refusal text. Null for any other result.
+/// The server's refusal for a client that must buy through Google Play; the subscription read then carries Play.
+const useGooglePlayCode = 'use_google_play';
+
+String? paymentRefusalMessage(Map<String, dynamic>? result) =>
+    result != null && result['error'] == true && result['code'] is String ? result['detail'] as String? : null;
 
 Future<bool> cancelSubscription({String? reason, String? reasonDetails}) async {
   var response = await makeApiCall(
@@ -151,10 +195,13 @@ Future<Map<String, dynamic>?> upgradeSubscription({
     Logger.debug('upgradeSubscription response: ${response.body}');
     return generated.toJson();
   }
-  if (response.statusCode == 400 || response.statusCode == 402 || response.statusCode == 409) {
+  if (response.statusCode == 400 ||
+      response.statusCode == 402 ||
+      response.statusCode == 403 ||
+      response.statusCode == 409) {
     return _paymentError(response);
   }
-  return null;
+  return _codedRefusal(response);
 }
 
 /// Moves a declined yearly renewal to the same plan's monthly price, charged now (backend
@@ -173,8 +220,10 @@ Future<Map<String, dynamic>?> switchPaymentIssueToMonthly(
     return wire.GeneratedPaymentStatusMessageResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>)
         .toJson();
   }
-  if (response.statusCode == 402 || response.statusCode == 409) return _paymentError(response);
-  return null;
+  if (response.statusCode == 402 || response.statusCode == 403 || response.statusCode == 409) {
+    return _paymentError(response);
+  }
+  return _codedRefusal(response);
 }
 
 Future<Map<String, dynamic>?> getAppSubscription(String appId) async {
