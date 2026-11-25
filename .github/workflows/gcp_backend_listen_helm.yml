@@ -302,7 +302,7 @@ jobs:
         if: ${{ inputs.mode == 'evidence' }}
         env:
           EVIDENCE_REQUEST: ${{ inputs.evidence_request }}
-          LISTEN_PRIVATE_VALUES_YAML: ${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}
+          LISTEN_PRIVATE_VALUES_YAML: ${{ fromJSON(inputs.evidence_request).overlay_state != 'references' && secrets.LISTEN_PRIVATE_VALUES_YAML || '' }}
         run: |
           set -euo pipefail
           umask 077
