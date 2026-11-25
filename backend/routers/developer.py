@@ -2505,7 +2505,11 @@ async def create_conversation_from_segments_user(
     _deadline: Any = Depends(from_segments_request_deadline),
     uid: str = Depends(with_rate_limit(get_current_user_uid, "conversations:from-segments")),
 ):
-    """Persist and process an already-transcribed recording."""
+    """Create a conversation from already-transcribed segments (Firebase-authed).
+
+    Used by clients that transcribe ON-DEVICE (e.g. the macOS desktop app with Parakeet) and need
+    the conversation persisted, processed (memories/summaries), and synced across devices — exactly
+    like a cloud-transcribed conversation, but without the live `/v4/listen` websocket."""
     device_ctx = resolve_client_device_from_request(http_request)
     client_kind = extract_client_kind(http_request)
     keyed = bool(request.client_session_id or request.sent_blank_client_session_id)
