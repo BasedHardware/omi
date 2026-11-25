@@ -111,13 +111,16 @@
     if (s && Array.isArray(s.recordings)) {
       const out = [];
       for (const r of s.recordings) {
-        const [a, z] = r.audio || [null, null];
+        // An audio_file recording may omit `audio` (its span is the file's duration): use the run's own
+        // capture_start and seal events instead.
+        const [a, z] = r.audio || [at('capture_start', r.id), at('seal', r.id)];
         out.push({ label: r.id, origin: r.origin, lane: 'batch', start: a, end: z,
-          sealed: r.sealed_at ?? z, landed: at('transcript', r.id) ?? r.transcript_at ?? null,
+          sealed: r.sealed_at ?? at('seal', r.id) ?? z, landed: at('transcript', r.id) ?? r.transcript_at ?? null,
           provisional: at('admission', r.id), session: r.session });
       }
       for (const r of s.sync || []) {
-        const [a, z] = r.audio || [null, null];
+        const arrived = r.arrives_at ?? at('sync', r.id);
+        const [a, z] = r.audio || [arrived, arrived];
         out.push({ label: r.id, origin: r.origin, lane: 'sync', start: a, end: z, arrives: r.arrives_at ?? at('sync', r.id) });
       }
       return { recs: out, approx: false };

@@ -265,7 +265,12 @@ class HomeRecorder:
         """``on_home`` on each row from the latest capture; disagreements with ``visible`` are kept."""
         annotated = annotate(rows, self._handles)
         found = disagreements(self._label or '', annotated, self._handles)
-        self.disagreements.extend(d for d in found if d not in self.disagreements)
+        new = [d for d in found if d not in self.disagreements]
+        if new:
+            # home.json was written at capture, before this comparison: rewrite it so the file and
+            # result.json report the same disagreements.
+            self.disagreements.extend(new)
+            self.write()
         return annotated
 
     def document(self) -> dict[str, Any]:

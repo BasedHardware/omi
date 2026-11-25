@@ -298,3 +298,26 @@ def test_refresh_mode_reruns_and_failed_chain_results_are_not_stored(lab, capsys
     assert stage.cache_ok({'discard': {'failed': 0}, 'daily_summary': {'status': 'ok'}}) is None
     assert stage.cache_ok({'discard': {'failed': 2}}) == '2 conversations failed to finalize'
     assert stage.cache_ok({'discard': {}, 'daily_summary': {'status': 'failed'}}) == 'daily summary failed'
+    # A v3 replay whose arrival or reconcile event raised finishes partial with no failed conversation: not stored.
+    partial = {'failed': 0, 'v3': {'driver_status': 'partial', 'driver_failed': 1}}
+    assert stage.cache_ok({'discard': partial, 'daily_summary': {'status': 'ok'}}) == (
+        'v3 driver partial (1 events failed)'
+    )
+    clean = {'failed': 0, 'v3': {'driver_status': 'ok', 'driver_failed': 0}}
+    assert stage.cache_ok({'discard': clean, 'daily_summary': {'status': 'ok'}}) is None
+
+
+def test_discard_summary_carries_the_v3_driver_status(tmp_path):
+    import json as _json
+
+    from testing.pipeline_lab.chain.plugin import stage_summary
+
+    entry = {
+        'pipeline': 'v3',
+        'driver': {'summary': {'status': 'partial', 'failed': 2, 'counts': {'arrival': {'error': 2}}}},
+    }
+    (tmp_path / 'chain_entry.json').write_text(_json.dumps(entry))
+    out, _ = stage_summary('discard', tmp_path)
+    assert out['v3']['driver_status'] == 'partial'
+    assert out['v3']['driver_failed'] == 2
+    assert out['v3']['driver'] == {'arrival': {'error': 2}}

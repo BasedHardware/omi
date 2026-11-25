@@ -90,10 +90,13 @@ def stage_summary(stage: str, run_dir: Path) -> tuple[dict[str, Any], list[str]]
             out['timings'] = entry['timings']
         warnings.extend(str(w) for w in entry.get('warnings') or [])
         if entry.get('pipeline') == 'v3':
+            driver = (entry.get('driver') or {}).get('summary') or {}
             out['v3'] = {
                 'visible': sum(1 for c in conversations if (c.get('v3') or {}).get('visible')),
                 'recordings': (entry.get('plan') or {}).get('arrivals'),
-                'driver': (entry.get('driver') or {}).get('counts'),
+                'driver': driver.get('counts'),
+                'driver_status': driver.get('status'),
+                'driver_failed': int(driver.get('failed') or 0),
             }
     elif stage == 'notes':
         titled = sum(1 for c in kept if (c.get('structured') or {}).get('title'))
@@ -210,6 +213,10 @@ class ChainStage:
         failed = int((outputs.get('discard') or {}).get('failed') or 0)
         if failed:
             return f'{failed} conversations failed to finalize'
+        v3 = (outputs.get('discard') or {}).get('v3') or {}
+        if v3.get('driver_status') not in (None, 'ok') or v3.get('driver_failed'):
+            # A v3 arrival or reconcile event raised: the replay finished partial, maybe transiently.
+            return f'v3 driver {v3.get("driver_status")} ({v3.get("driver_failed") or 0} events failed)'
         recap = (outputs.get('daily_summary') or {}).get('status')
         if recap not in (None, 'ok'):
             return f'daily summary {recap}'

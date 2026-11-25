@@ -244,6 +244,10 @@ def test_recorder_records_a_disagreement_once(tmp_path):
             'status': 'completed',
         },
     ]
+    # home.json is written at capture, before annotate_rows finds these: it must be rewritten so the file the
+    # web view reads lists the same disagreements as result.json.
+    doc = json.loads((tmp_path / 'home.json').read_text())
+    assert doc['disagreements'] == rec.disagreements
 
 
 def test_recorder_keeps_running_when_the_route_cannot_be_built(tmp_path):
