@@ -4123,16 +4123,56 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                     return deferred
                 # The original task retains custody until Cloud Tasks accepts
                 # its replacement. Queue submission errors remain retryable.
+                if task_retry_count >= get_sync_tasks_max_attempts() - 1:
+                    logger.error(
+                        'audio_merge_failed_final conversation artifact conv=%s '
+                        'reason=readiness_deferral_enqueue_failed',
+                        conversation_id,
+                    )
+                    try:
+                        await run_blocking(
+                            storage_executor,
+                            mark_conversation_playback_unavailable,
+                            uid,
+                            conversation_id,
+                            fingerprint,
+                            'merge_failed',
+                        )
+                    except DestructiveOperationInProgress:
+                        deferred = await _defer_merge_for_destructive_operation(payload)
+                        if deferred is not None:
+                            return deferred
+                        logger.info(
+                            'audio_merge: unavailable marker deferred reason=destructive_operation conv=%s',
+                            conversation_id,
+                        )
+                        return JSONResponse(status_code=503, content={'status': 'retry'})
+                    except Exception as e:
+                        logger.warning(
+                            'audio_merge: final enqueue failure marker failed exception_type=%s', type(e).__name__
+                        )
+                        return JSONResponse(status_code=503, content={'status': 'retry'})
+                    return JSONResponse(status_code=200, content={'status': 'failed_final'})
                 return JSONResponse(status_code=503, content={'status': 'retry'})
 
-            await run_blocking(
-                storage_executor,
-                mark_conversation_playback_unavailable,
-                uid,
-                conversation_id,
-                fingerprint,
-                'piece_readiness_expired',
-            )
+            try:
+                await run_blocking(
+                    storage_executor,
+                    mark_conversation_playback_unavailable,
+                    uid,
+                    conversation_id,
+                    fingerprint,
+                    'piece_readiness_expired',
+                )
+            except DestructiveOperationInProgress:
+                deferred = await _defer_merge_for_destructive_operation(payload)
+                if deferred is not None:
+                    return deferred
+                logger.info(
+                    'audio_merge: readiness expiry marker deferred reason=destructive_operation conv=%s',
+                    conversation_id,
+                )
+                return JSONResponse(status_code=503, content={'status': 'retry'})
             logger.warning('audio_merge: readiness wait expired reason=v3_piece_not_ready')
             return JSONResponse(status_code=200, content={'status': 'unavailable', 'reason': 'piece_readiness_expired'})
         except FileNotFoundError:

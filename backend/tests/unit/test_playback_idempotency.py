@@ -92,15 +92,21 @@ def route_app():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('scenario', ['metadata', 'chunks', 'window_changed', 'enqueue_failed', 'expired'])
+@pytest.mark.parametrize(
+    'scenario',
+    ['metadata', 'chunks', 'window_changed', 'enqueue_failed', 'enqueue_failed_nonfinal', 'expired', 'expired_held'],
+)
 async def test_v3_merge_waits_for_piece_on_final_attempt(monkeypatch, route_app, scenario):
     from datetime import datetime, timezone
 
     import httpx
+    from database.legal_holds import DestructiveOperationInProgress
     from utils.conversations.v3.audio import playback_piece_scope, playback_snapshot
 
     app, sync = route_app
-    app.dependency_overrides[sync.verify_audio_merge_cloud_tasks_oidc] = lambda: 2
+    app.dependency_overrides[sync.verify_audio_merge_cloud_tasks_oidc] = lambda: (
+        1 if scenario == 'enqueue_failed_nonfinal' else 2
+    )
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
     monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
     monkeypatch.setattr(sync, 'account_deletion_blocks_user_work', lambda *_: False)
@@ -131,9 +137,20 @@ async def test_v3_merge_waits_for_piece_on_final_attempt(monkeypatch, route_app,
 
     fingerprint = playback_snapshot('synthetic', row)['_v3_playback_fingerprint']
     payload = dict(schema_version=2, uid='synthetic', conversation_id='conversation', fingerprint=fingerprint)
-    if scenario == 'enqueue_failed':
+    if scenario in {'enqueue_failed', 'enqueue_failed_nonfinal'}:
         enqueue.side_effect = TimeoutError
-    if scenario == 'expired':
+    if scenario == 'expired_held':
+        marker.side_effect = DestructiveOperationInProgress('synthetic destructive operation')
+
+        async def defer_for_destructive_operation(_):
+            return sync.JSONResponse(status_code=200, content={'status': 'deferred', 'reason': 'destructive_operation'})
+
+        monkeypatch.setattr(
+            sync,
+            '_defer_merge_for_destructive_operation',
+            defer_for_destructive_operation,
+        )
+    if scenario in {'expired', 'expired_held'}:
         payload.update(
             piece_readiness_scope=playback_piece_scope(row),
             piece_readiness_deferrals=sync.AUDIO_MERGE_PIECE_READINESS_DEFERRALS_MAX,
@@ -143,12 +160,24 @@ async def test_v3_merge_waits_for_piece_on_final_attempt(monkeypatch, route_app,
         release.assert_called_once_with('audio:conversation:conversation', 'token')
         upload.assert_not_called()
         stamp.assert_not_called()
-        if scenario == 'enqueue_failed':
+        if scenario == 'enqueue_failed_nonfinal':
             assert result.status_code == 503 and result.json() == {'status': 'retry'}
             marker.assert_not_called()
             return
+        if scenario == 'enqueue_failed':
+            assert result.status_code == 200 and result.json() == {'status': 'failed_final'}
+            marker.assert_called_once_with('synthetic', 'conversation', fingerprint, 'merge_failed')
+            return
         if scenario == 'expired':
             assert result.status_code == 200 and result.json()['reason'] == 'piece_readiness_expired'
+            marker.assert_called_once_with('synthetic', 'conversation', fingerprint, 'piece_readiness_expired')
+            enqueue.assert_not_called()
+            return
+        if scenario == 'expired_held':
+            assert result.status_code == 200 and result.json() == {
+                'status': 'deferred',
+                'reason': 'destructive_operation',
+            }
             marker.assert_called_once_with('synthetic', 'conversation', fingerprint, 'piece_readiness_expired')
             enqueue.assert_not_called()
             return
