@@ -1222,8 +1222,14 @@ class _PageFill:
             self.rows.append(conversation)
 
 
-def _visibility(**options):
-    return lambda conversation: is_visible_conversation(conversation, **options)
+def _visibility(*, include_empty_finish=False, **options):
+    if not include_empty_finish:
+        return lambda conversation: is_visible_conversation(conversation, **options)
+    from utils.conversations.v3.live import has_empty_finish_receipt
+
+    return lambda conversation: is_visible_conversation(conversation, **options) or has_empty_finish_receipt(
+        conversation
+    )
 
 
 class _Scout:
@@ -1264,6 +1270,7 @@ def _collect_cursor_conversation_page(
     bookmark,
     presentation=False,
     include_recordings=False,
+    include_empty_finish=False,
     hide_home=False,
     capture_only=False,
     show_held=False,
@@ -1282,6 +1289,7 @@ def _collect_cursor_conversation_page(
             include_discarded=include_discarded,
             presentation=presentation,
             include_recordings=include_recordings,
+            include_empty_finish=include_empty_finish,
             hide_home=hide_home,
             capture_only=capture_only,
             show_held=show_held,
@@ -1307,6 +1315,7 @@ def _collect_visible_conversation_page(
     sort_field: str = 'created_at',
     presentation: bool = False,
     include_recordings: bool = False,
+    include_empty_finish: bool = False,
     hide_home: bool = False,
     capture_only: bool = False,
     show_held: bool = False,
@@ -1339,6 +1348,7 @@ def _collect_visible_conversation_page(
         include_discarded=include_discarded,
         presentation=presentation,
         include_recordings=include_recordings,
+        include_empty_finish=include_empty_finish,
         hide_home=hide_home,
         capture_only=capture_only,
         show_held=show_held,
@@ -1396,6 +1406,7 @@ def _collect_visible_conversation_page(
                 budget=budget,
                 presentation=presentation,
                 include_recordings=include_recordings,
+                include_empty_finish=include_empty_finish,
                 hide_home=hide_home,
                 capture_only=capture_only,
                 show_held=show_held,
@@ -2504,7 +2515,7 @@ def get_conversations_without_photos(
     page_envelope: bool = False,
     cursor_page: Optional[Dict[str, Any]] = None,
     indexed_home: bool = False,
-):
+) -> List[Dict[str, Any]]:
     """
     Same as get_conversations but without loading photos.
     Much faster for list endpoints and bulk operations where full photo base64 isn't needed.
@@ -2518,6 +2529,7 @@ def get_conversations_without_photos(
     """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     hydrate_fields: Optional[List[str]] = None
+    include_empty_finish = presentation and include_discarded and not (hide_home or capture_only or include_recordings)
     if list_fields_only and indexed_list_reads_enabled():
         # The archive list contract permits omitted transcript detail. Exclude
         # the large blob before download/decompression and correction-overlay
@@ -2551,6 +2563,10 @@ def get_conversations_without_photos(
                 *transcribing_hold.READ_FIELDS,
             }
         )
+        if include_empty_finish:
+            from utils.conversations.v3.live import FINISH_EMPTY_READ_FIELDS
+
+            fields.update(FINISH_EMPTY_READ_FIELDS)
         conversations_ref = conversations_ref.select(sorted(fields))
         hydrate_fields = sorted(fields)
     if not include_discarded:
@@ -2595,6 +2611,7 @@ def get_conversations_without_photos(
         include_discarded=include_discarded,
         presentation=presentation,
         include_recordings=include_recordings,
+        include_empty_finish=include_empty_finish,
         hide_home=hide_home,
         capture_only=capture_only,
         show_held=show_held,
@@ -2615,6 +2632,13 @@ def get_conversations_without_photos(
         ),
     )
 
+    if include_empty_finish:
+        from utils.conversations.v3.live import has_empty_finish_receipt
+
+        # Old Finish polling matches discarded acknowledgements by the original recording ID.
+        rows = [
+            {**row, 'discarded': True, 'tile_state': 'done'} if has_empty_finish_receipt(row) else row for row in rows
+        ]
     return rows
 
 

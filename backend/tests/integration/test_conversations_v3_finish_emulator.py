@@ -14,7 +14,8 @@ from utils.conversations.v3 import live
 
 
 @pytest.fixture
-def owner():
+def owner(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
     endpoint = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if urlparse(f'//{endpoint}').hostname not in {'127.0.0.1', 'localhost', '::1'}:
         pytest.fail('This proof requires the loopback Firestore emulator')
@@ -121,11 +122,7 @@ def test_finish_declines_when_transactional_window_lookup_reaches_its_bound(owne
     assert live.FINISH_RECORDING_FIELD not in source.get().to_dict()
 
 
-@pytest.mark.parametrize('unit_count', [1, 2])
-@pytest.mark.parametrize('receipt_already_canonical', [False, True])
-def test_whole_native_completion_resolves_finish_on_redirect_donor(
-    owner, monkeypatch, unit_count, receipt_already_canonical
-):
+def _pending_native_finish(owner, monkeypatch, unit_count, *, receipt_id, outcome='success'):
     from contextlib import nullcontext
     from dataclasses import asdict
     from unittest.mock import Mock
@@ -153,18 +150,18 @@ def test_whole_native_completion_resolves_finish_on_redirect_donor(
     source.set(
         {
             **_recording(now),
+            'id': source.id,
             'record_lane_owner': 'batch_live_v1',
             'server_batch_only': True,
             'private_cloud_sync_enabled': True,
+            'structured': {},
+            'discarded': False,
+            'data_protection_level': 'standard',
             'server_batch_audio_start': now.timestamp() - 30,
             'server_batch_audio_end': now.timestamp(),
         }
     )
     assert store.request_recording_finish(uid, now=now, firestore_client=client)[0] == 'recording_requested'
-    source.update({'deleted': True, 'discarded': True, 'sync_merged_into': 'survivor'})
-    survivor = recordings.document('survivor')
-    survivor.set(_recording(now + timedelta(minutes=1)))
-    survivor_row = survivor.get().to_dict()
 
     namespace = f'batch_pipeline_test_{uuid4().hex}'
     projector = completion.ProjectionStore(FirestoreStore(namespace, firestore_client=client))
@@ -184,7 +181,7 @@ def test_whole_native_completion_resolves_finish_on_redirect_donor(
             'batch_pipeline': {'protocol_version': 1, 'namespace': namespace, 'segment_ids': list(ids)},
         }
     )
-    result = {'outcome': 'success'}
+    result = {'outcome': outcome}
     for sid in ids:
         projector.ref('jobs', sid).set(
             {
@@ -206,17 +203,38 @@ def test_whole_native_completion_resolves_finish_on_redirect_donor(
                 'result': result,
                 'projection': {
                     'state': 'ready',
-                    'conversation_id': survivor.id if receipt_already_canonical else source.id,
+                    'conversation_id': receipt_id,
                     'created': False,
-                    'speech_seconds': 1.0,
+                    'speech_seconds': float(outcome == 'success'),
                 },
             }
         )
 
+    def complete():
+        seconds = float(unit_count) if outcome == 'success' else 0.0
+        return projector.complete(
+            first, binding, now.timestamp(), {'seconds': seconds, 'updates': {}}, policy=ProjectionPolicy()
+        )
+
+    return complete, source, ledger, counter, enqueue
+
+
+@pytest.mark.parametrize('unit_count', [1, 2])
+@pytest.mark.parametrize('receipt_already_canonical', [False, True])
+def test_whole_native_completion_resolves_finish_on_redirect_donor(
+    owner, monkeypatch, unit_count, receipt_already_canonical
+):
+    _, _, recordings = owner
+    complete, source, ledger, counter, enqueue = _pending_native_finish(
+        owner, monkeypatch, unit_count, receipt_id='survivor' if receipt_already_canonical else 'capture'
+    )
+    source.update({'deleted': True, 'discarded': True, 'sync_merged_into': 'survivor'})
+    survivor = recordings.document('survivor')
+    survivor.set(_recording(datetime.now(timezone.utc) + timedelta(minutes=1)))
+    survivor_row = survivor.get().to_dict()
+
     for _ in range(2):
-        assert projector.complete(
-            first, binding, now.timestamp(), {'seconds': float(unit_count), 'updates': {}}, policy=ProjectionPolicy()
-        )['updated_memories'] == [survivor.id]
+        assert complete()['updated_memories'] == [survivor.id]
     assert ledger.get().to_dict()['status'] == 'completed'
     donor = source.get().to_dict()
     assert donor['v3_manual_end_requested'] is False and 'v3_manual_end' not in donor
@@ -224,3 +242,50 @@ def test_whole_native_completion_resolves_finish_on_redirect_donor(
     counter.labels.assert_called_once_with('whole_record_redirected')
     counter.labels.return_value.inc.assert_called_once_with()
     enqueue.assert_not_called()
+
+
+@pytest.mark.parametrize('outcome', ['silence', 'no_recoverable_speech'])
+def test_terminal_empty_recording_is_discarded_on_the_existing_finish_poll(owner, monkeypatch, outcome):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from database import conversations
+    from routers import conversations as router
+
+    client, uid, _ = owner
+    complete, source, _, counter, enqueue = _pending_native_finish(
+        owner, monkeypatch, 2, receipt_id=None, outcome=outcome
+    )
+    source.update({'has_content': False, 'record_projection_revision': 2, 'record_upload_revision': 1})
+    monkeypatch.setattr(conversations, 'db', client)
+    monkeypatch.setattr(conversations, 'indexed_list_reads_enabled', lambda: True)
+    monkeypatch.setattr(router.transcribing_hold, 'read_admissions', lambda *a, **kw: {})
+    monkeypatch.setattr(router, 'conversations_v3_enabled', lambda uid: False)
+    app = FastAPI()
+    app.include_router(router.router)
+    app.dependency_overrides[router.auth.get_current_user_uid] = lambda: uid
+
+    def rows(http, *, include_discarded):
+        response = http.get('/v1/conversations', params={'limit': 10, 'include_discarded': include_discarded})
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    with TestClient(app) as http:
+        assert rows(http, include_discarded=True) == []
+        assert complete() is not None
+        counter.labels.assert_called_once_with('whole_record_resolved_empty')
+        enqueue.assert_not_called()
+        [ack] = rows(http, include_discarded=True)
+        assert (ack['id'], ack['recording'], ack['discarded'], ack['status'], ack['tile_state']) == (
+            source.id,
+            True,
+            True,
+            'completed',
+            'done',
+        )
+        assert live.FINISH_EMPTY_FIELD not in ack
+        assert rows(http, include_discarded=False) == []
+        stored = source.get().to_dict()
+        assert stored['recording'] and not stored['discarded']
+        source.update({'record_upload_revision': 2})
+        assert rows(http, include_discarded=True) == []

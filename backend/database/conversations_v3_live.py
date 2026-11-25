@@ -422,7 +422,7 @@ def request_recording_finish(uid: str, *, now: datetime, firestore_client: Any =
         ref = collection.document(cid)
         if server_batch.owned(row):
             state = _native_projection_state(client, tx, uid, cid)
-            if state == 'pending' and server_batch.has_audio(row):
+            if state == 'pending' and server_batch.has_retained_audio(row):
                 if not server_batch.manual_end_marker_enabled():
                     return 'batch_disabled', None
                 if row.get('v3_manual_end_requested') is True:

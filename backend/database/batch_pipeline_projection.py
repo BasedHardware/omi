@@ -25,11 +25,13 @@ from config.record_audio import record_identity, require_record_audio_barrier
 from config.server_batch import manual_end_marker_enabled
 from utils.conversations.v3 import metrics as v3_metrics, triggers as v3_triggers
 from utils.conversations.v3.live import (
+    FINISH_EMPTY_FIELD,
     FINISH_FIELDS,
     FINISH_RECORDING_FIELD,
     FINISH_SOURCE_FIELDS,
     FINISH_WINDOW_FIELD,
     active,
+    empty_finish_receipt,
     has_finish_content,
 )
 from utils.batch_pipeline.empty_transcription import EMPTY_OUTCOMES
@@ -1260,7 +1262,7 @@ class ProjectionStore:
         clock = datetime.fromtimestamp(now, timezone.utc)
         if silent and not window_id:
             if row.get('discarded') or not has_finish_content(row, {}, cid):
-                return {'v3_manual_end_requested': False}
+                return {'v3_manual_end_requested': False, FINISH_EMPTY_FIELD: empty_finish_receipt(row)}
         elif silent:
             window = (
                 collection.document(window_id).get(transaction=transaction, field_paths=FINISH_FIELDS).to_dict() or {}

@@ -951,7 +951,45 @@ def test_empty_body_finish_before_first_window_resolves_at_whole_record_completi
         assert latest['v3_manual_end_requested'] is False and 'v3_manual_end' not in latest
         assert second.json()['conversation']['tile_state'] == 'done'
         assert second.json()['conversation']['discarded'] is True
+        assert v3_live.has_empty_finish_receipt(latest) and not latest.get('discarded')
         assert not enqueued
+
+
+def test_finish_accepts_retained_audio_after_first_native_unit_is_silent(pre_window_finish_route, monkeypatch):
+    from config.record_audio import record_identity
+
+    client, db, paths, enqueued = pre_window_finish_route
+    latest = db.rows[paths['latest']]
+    latest.pop('v3_speech_landed_at')
+    latest.update(
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        server_batch_audio_start=1,
+        server_batch_audio_end=2,
+    )
+    complete, ledger, receipts = native_finish_completion(monkeypatch, db, _UID, 'latest', 2)
+    _, first_unit = record_identity(_UID, 'latest')
+    db.rows['synthetic_results', first_unit]['result']['outcome'] = 'silence'
+    receipts[0].update(conversation_id=None, speech_seconds=0.0)
+    receipts[1]['state'] = 'persisted'
+    projected, _ = replace_record(
+        latest,
+        {'started_at': latest['started_at'], 'transcript_segments': []},
+        {
+            'start': latest['started_at'].timestamp(),
+            'end': latest['finished_at'].timestamp(),
+            'terminal_empty_outcome': 'silence',
+        },
+    )
+    latest.update(projected)
+    assert latest['has_content'] is False
+    assert complete(latest['finished_at'].timestamp()) is None
+    assert db.rows[ledger]['status'] == 'processing'
+
+    reply = client.post('/v1/conversations')
+    assert reply.status_code == 200 and reply.json()['conversation']['tile_state'] == 'transcribing'
+    assert latest[FINISH_RECORDING_FIELD] and latest['v3_manual_end_requested'] is True
+    assert 'v3_manual_end' not in latest and not enqueued
 
 
 @pytest.mark.parametrize('use_window', [False, True])
