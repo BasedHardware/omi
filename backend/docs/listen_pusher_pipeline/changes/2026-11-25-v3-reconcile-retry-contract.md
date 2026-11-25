@@ -7,7 +7,9 @@ Each affected Firestore transaction can start up to three fresh attempts with ji
 retry budget and duration reserve limit when a subsequent attempt can start. Rollback and lease
 cleanup preserve a propagating primary error. Projection commits batch revision, tombstone, and
 new-target reads, and split pointer-backed outputs at the shared transcript preload limit.
-Source, deletion, privacy, and custody checks run again on every attempt.
+Source, deletion, privacy, and custody checks run again on every attempt. The writer context
+keeps the first persistence outcome for its leased conversation, including success, so a
+synchronous nested notes refresh cannot replace it.
 
 | HTTP 409 reason | `omi_conversations_v3_races_total` reason | Condition |
 | --- | --- | --- |
@@ -31,7 +33,10 @@ The sweeper sees the cleared pending marker.
 Changes in processing ownership, same-revision repair eligibility, smart-merge authority, or transcript
 identity membership can recover on a new attempt. Live work stays pending with a row-local
 `v3_process_retry_after` timestamp. Owner drain, transaction admission, and sweep honor the
-15-minute cooldown. The existing attempt budget still applies. Backfill uses its own continuation.
+15-minute cooldown. Owner drain walks up to four document-ID-ordered pages of 128 pending
+rows, with at most 512 fetched documents and 128 due results per scan. The first page stays
+sufficient when every row is due. The existing attempt budget still applies. Backfill uses its
+own continuation.
 
 The [Firestore emulator suite](../../../tests/integration/test_conversations_v3_sync_custody_firestore.py)
 covers new transaction IDs, custody, pointer batch splitting, terminal skips, transient cooldown, and

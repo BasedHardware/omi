@@ -307,7 +307,9 @@ def test_v3_processing_persist_distinguishes_retryable_and_terminal_declines(pro
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('outcome', ['stale_revision', 'deleted', 'capture_group', 'transient'])
+@pytest.mark.parametrize(
+    'outcome', ['stale_revision', 'deleted', 'capture_group', 'transient', 'nested_other', 'nested_same']
+)
 async def test_reconcile_route_uses_real_processing_persistence_outcome(processing_store, monkeypatch, outcome):
     db, user, coll = processing_store
     now = datetime.now(timezone.utc)
@@ -330,6 +332,12 @@ async def test_reconcile_route_uses_real_processing_persistence_outcome(processi
     }
     coll.document(row['id']).set(stored)
     before_row = coll.document(row['id']).get().to_dict()
+    if outcome == 'nested_other':
+        coll.document('deleted-primary').set({'deleted': True, 'sync_content_revision': 1})
+    if outcome.startswith('nested_'):
+        # This test exercises persistence and notes settlement without ledger fanout.
+        monkeypatch.setattr(db.pipeline_ledger, 'record_summary', lambda *a, **kw: None)
+        monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *_: None)
     monkeypatch.setattr(v3, 'backoff_state', lambda *_: (None, None))
     monkeypatch.setattr(v3, 'load', lambda *_: ({}, {}, []))
     monkeypatch.setattr(service.context, 'outline_sources', lambda *_: ({}, [], []))
@@ -347,6 +355,13 @@ async def test_reconcile_route_uses_real_processing_persistence_outcome(processi
         payload = {**row, 'status': 'completed', 'data_protection_level': 'standard'}
         kwargs = {'expected_capture_group': ('old-group', 1)} if outcome == 'capture_group' else {}
         persistence_observer(db.persist_processing_result_with_lifecycle(user.id, payload, **kwargs))
+        if outcome.startswith('nested_'):
+            # After the outer persist, report_persistence can dispatch a primary
+            # refresh synchronously, including one for the same conversation.
+            nested = {**payload, 'id': 'deleted-primary' if outcome == 'nested_other' else row['id']}
+            assert not db.persist_processing_result_with_lifecycle(
+                user.id, nested, expected_capture_group=('old-group', 1) if outcome == 'nested_same' else None
+            )
         return conversation.model_copy(update={'status': 'completed'})
 
     monkeypatch.setattr(process_conversation, 'process_conversation', persist)
@@ -369,6 +384,11 @@ async def test_reconcile_route_uses_real_processing_persistence_outcome(processi
         after_row = coll.document(row['id']).get().to_dict()
         assert after_row['v3_process_pending'] is (outcome == 'transient')
         assert original_pending_processing(user.id) == []
+        if outcome.startswith('nested_'):
+            assert after_row['v3_notes_written'] is True
+            assert after_row['v3_created_pending'] is True
+            assert after_row['v3_process_failed'] is False
+            created.deliver.assert_awaited_once_with(user.id)
         if outcome == 'transient':
             assert after_row['v3_process_retry_after'] > datetime.now(timezone.utc)
         enqueued = []
@@ -407,3 +427,39 @@ def test_decline_cannot_settle_replacement_obligation(processing_store):
     )
     assert ref.get().get('v3_process_pending') is True
     assert ref.get().get('tile_state') == 'queued'
+
+
+@pytest.mark.parametrize('cooling_pages', [1, service.PROCESSING_SCAN_MAX_PAGES])
+def test_pending_processing_pages_past_cooldown_within_read_budget(processing_store, monkeypatch, cooling_pages):
+    db, user, coll = processing_store
+    now = datetime.now(timezone.utc)
+    for page in range(cooling_pages):
+        batch = db.db.batch()
+        for offset in range(v3.LIMIT):
+            cid = f'a-{page:02d}-{offset:03d}'
+            batch.set(
+                coll.document(cid),
+                {'v3_process_pending': True, 'v3_process_retry_after': now + timedelta(minutes=15)},
+            )
+        batch.commit()
+    coll.document('z-due').set({'v3_process_pending': True})
+    query_class = type(coll.limit(1))
+    original_stream = query_class.stream
+    reads = []
+
+    def count_reads(query, *args, **kwargs):
+        for snapshot in original_stream(query, *args, **kwargs):
+            reads.append(snapshot.id)
+            yield snapshot
+
+    monkeypatch.setattr(query_class, 'stream', count_reads)
+    monkeypatch.setattr(v3, 'decode_row', lambda _uid, doc, **_kw: doc.id)
+    due = service.pending_processing(user.id)
+
+    if cooling_pages == 1:
+        assert due == ['z-due']
+        assert len(reads) == v3.LIMIT + 1
+    else:
+        assert due == []
+        assert len(reads) == service.PROCESSING_SCAN_MAX_PAGES * v3.LIMIT
+    assert len(reads) == len(set(reads))

@@ -19,16 +19,24 @@ class PersistenceDecline:
     transient: bool = False
 
 
-_declined: ContextVar[PersistenceDecline | None] = ContextVar('conversation_v3_persistence_declined', default=None)
+@dataclass(frozen=True)
+class _PersistenceOutcome:
+    decline: PersistenceDecline | None
 
 
-def record_persistence_outcome(decline: PersistenceDecline | None) -> None:
-    """Report a committed decline while keeping the public persistence result boolean."""
-    _declined.set(decline)
+_outcome: ContextVar[_PersistenceOutcome | None] = ContextVar('conversation_v3_persistence_outcome', default=None)
+
+
+def record_persistence_outcome(uid: str, cid: str, decline: PersistenceDecline | None) -> None:
+    """Keep the first result for the leased row, including a successful persist."""
+    held = current()
+    if held is not None and held[:2] == (uid, cid) and _outcome.get() is None:
+        _outcome.set(_PersistenceOutcome(decline))
 
 
 def persistence_declined() -> PersistenceDecline | None:
-    return _declined.get()
+    outcome = _outcome.get()
+    return outcome.decline if outcome is not None else None
 
 
 def current():
@@ -38,11 +46,11 @@ def current():
 @contextmanager
 def writer(uid, cid, token):
     held = _current.set((uid, cid, token))
-    declined = _declined.set(None)
+    outcome = _outcome.set(None)
     try:
         yield
     finally:
-        _declined.reset(declined)
+        _outcome.reset(outcome)
         _current.reset(held)
 
 

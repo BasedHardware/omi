@@ -1139,17 +1139,33 @@ async def drain_processing(uid):
     await created.deliver(uid)
 
 
+PROCESSING_SCAN_MAX_PAGES = 4
+
+
 def pending_processing(uid):
     client = store.get_firestore_client()
     now = datetime.now(timezone.utc)
-    return [
-        store.decode_row(uid, doc)
-        for doc in store.user_conversations(client, uid)
+    query = (
+        store.user_conversations(client, uid)
         .where(filter=FieldFilter('v3_process_pending', '==', True))
+        .order_by('__name__')
         .limit(store.LIMIT)
-        .stream()
-        if policy.processing_due(doc.to_dict() or {}, now)
-    ]
+    )
+    due = []
+    page = query
+    # At most four pages (512 document reads), and at most 128 decoded results.
+    for _ in range(PROCESSING_SCAN_MAX_PAGES):
+        snapshots = list(page.stream())
+        for doc in snapshots:
+            data = doc.to_dict() or {}
+            if policy.processing_due(data, now):
+                due.append(store.decode_row(uid, doc, data=data))
+                if len(due) == store.LIMIT:
+                    return due
+        if len(snapshots) < store.LIMIT:
+            break
+        page = query.start_after(snapshots[-1])
+    return due
 
 
 def _process(uid, row, token):

@@ -1980,7 +1980,9 @@ def persist_processing_result_with_lifecycle(
         if outcome == 'fenced':
             raise conversations_v3_fence.ProcessingPersistenceFenced('v3_processing_not_completed')
         conversations_v3_fence.record_persistence_outcome(
-            outcome if isinstance(outcome, conversations_v3_fence.PersistenceDecline) else None
+            uid,
+            conversation_data['id'],
+            outcome if isinstance(outcome, conversations_v3_fence.PersistenceDecline) else None,
         )
     persisted = outcome == 'stored'
     if persisted and ledger_stages:
