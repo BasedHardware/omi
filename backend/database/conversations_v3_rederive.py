@@ -20,14 +20,26 @@ from database import conversations_v3_leases as leases
 from database import home_visibility_index
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
-from database.conversation_payload import read_conversation_payload, read_payload_children_for_delete
+from database.conversation_payload import (
+    MAX_ATOMIC_CHUNKS,
+    read_conversation_payload,
+    read_payload_children_for_delete,
+    stage_conversation_payload,
+    v3_payload_writes_enabled,
+)
 from database.conversations import ACTION_ITEMS_EDIT_REVISION, EVENTS_EDIT_REVISION, has_created_calendar_events
 from database.conversations_v3_undo_removals import removal_ref
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.recurring_voice_privacy import filter_processing_write
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
-from utils.conversation_payload import PAYLOAD_FIELD, ConversationProjectionTooLarge, InvalidConversationPayload
+from utils.conversation_payload import (
+    PAYLOAD_FIELD,
+    ConversationProjectionTooLarge,
+    InvalidConversationPayload,
+    pack_conversation,
+)
 from utils.conversations.v3 import Conflict, policy
+from utils.firestore_document_size import estimate_firestore_document_bytes
 
 # Documents (sources and rows) one partition's started_at read may return; more blocks the partition.
 REDERIVE_LIVE_LIMIT = 256
@@ -66,7 +78,7 @@ def live_row_protection(raw, *, since, until, run_id=None):
     """Why a live v3 row must stay exactly as it is during a re-derive (None: it may be rebuilt)."""
     if raw.get('deleted') or raw.get('sync_merged_into'):
         return 'deleted'
-    if PAYLOAD_FIELD in raw:
+    if PAYLOAD_FIELD in raw and not v3_payload_writes_enabled():
         return 'bounded_payload'
     if raw.get('status') == 'in_progress':
         return 'open'
@@ -266,7 +278,11 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
             # Speech a row cannot be rebuilt from stays in that row.
             reason = 'source_missing'
         try:
-            row = store.decode_row(uid, snapshot, firestore_client=client)
+            logical = store.read_projection_snapshot(snapshot, data=raw, firestore_client=client)
+            # Recheck owner-only embedded notes and edits using the stored values, including those in chunks.
+            if reason is None:
+                reason = live_row_protection(logical, since=since, until=until, run_id=run_id)
+            row = store.decode_row(uid, snapshot, data=logical, firestore_client=client)
         except (ValueError, TypeError, FileNotFoundError, TranscriptBlobAbsent, TranscriptShredded, Conflict):
             row = None
         if row is None:
@@ -286,6 +302,8 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
             if not row.get('home_hidden'):
                 count('visible_before')
             existing[cid] = _rederive_live_prior(row, raw)
+            if PAYLOAD_FIELD in raw:
+                existing[cid]['_v3_prior_run'] = run_id
     state = leases.lease_ref(client, uid, store.BACKFILL_LEASE).get().to_dict() or {}
     cache = json.loads(store.decrypt(state['outline_cache'], uid)) if state.get('outline_cache') else []
     return recordings, existing, cache, counts
@@ -467,7 +485,10 @@ def undo_group_fits(entries, *, payload_costs=None):
     """One undo group's restore (rows, their sources and the lease reads) fits one transaction."""
     sources = {c['recording_id'] for e in entries for c in e.get('claims') or []}
     sources.update(rid for e in entries for rid in e.get('sources') or [])
-    size = sum(stored_bytes(e.get('raw') or {}) + stored_bytes(e.get('claims') or []) for e in entries)
+    size = sum(
+        (stored_bytes(e.get('raw') or {}) if not e.get('payload_fields') else 0) + stored_bytes(e.get('claims') or [])
+        for e in entries
+    )
     size += len(sources) * SOURCE_CLAIMS_BYTES
     writes = len(entries) + len(sources) + sum(bool(entry.get('created')) for entry in entries)
     if payload_costs:
@@ -476,6 +497,20 @@ def undo_group_fits(entries, *, payload_costs=None):
             writes += child_writes
             size += child_bytes
     return writes < store.BATCH_MAX_WRITES and size <= UNDO_GROUP_BYTES
+
+
+def _restore_payload_cost(ref, entry, raw):
+    """Budget the exact bounded shape that restores a chunked prior."""
+    if not entry.get('payload_fields'):
+        return 0, 0
+    try:
+        write = pack_conversation(raw, ref.path, spill_fields=entry['payload_fields'], generation='0' * 32)
+        if len(write.chunks) > MAX_ATOMIC_CHUNKS:
+            raise ConversationProjectionTooLarge('undo restore exceeds the chunk budget')
+    except ConversationProjectionTooLarge as exc:
+        raise Conflict('undo_group_too_large') from exc
+    size = estimate_firestore_document_bytes(write.parent, ref.path)
+    return len(write.chunks), size + sum(len(chunk) + 1024 for chunk in write.chunks)
 
 
 def drop_unwritten_priors(uid, run_id, entries, *, firestore_client=None):
@@ -556,11 +591,19 @@ def live_undo_blocker(uid, run_id, entries, *, firestore_client=None, payload_co
                 row, children, size = read(client.transaction(read_only=True))
             except Conflict as exc:
                 return str(exc)
-            if payload_costs is not None:
-                payload_costs[cid] = (len(children), size)
+        else:
+            children, size = (), 0
         if stamp == run_id and owner_changed(row, entry):
             return 'owner_edited_rebuilt_row'
         if stamp == run_id:
+            if payload_costs is not None:
+                try:
+                    writes, restored_bytes = _restore_payload_cost(
+                        ref, entry, home_visibility_index.stamp(dict(entry.get('raw') or {}))
+                    )
+                except Conflict as exc:
+                    return str(exc)
+                payload_costs[cid] = (len(children) + writes, size + restored_bytes)
             named.update(c['recording_id'] for c in entry.get('claims') or [])
             named.update(entry.get('sources') or [])
     if created and store.merge_donors_have_tasks(uid, created, firestore_client=client):
@@ -598,6 +641,27 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
         if any(t.exists for t in tombstones.values()):
             raise Conflict('owner_deleted_rebuilt_row')
         by_id = {e['id']: e for e in entries}
+        for entry in entries:
+            if entry.get('payload_fields'):
+                saved = runs.run_ref(client, uid, run_id).collection(runs.PRIORS).document(entry['id'])
+                stored = saved.get(transaction=tx).to_dict() or {}
+                if stored.get('purged') in PURGED_REASONS:
+                    raise Conflict(PURGED_REASONS[stored['purged']])
+                if stored.get('recorded_at') != entry.get('recorded_at') or not stored.get('payload_fields'):
+                    raise Conflict('undo_source_changed')
+        erase_chunks, payload_costs = {}, {}
+        for cid, row in current.items():
+            if not row or PAYLOAD_FIELD not in row or already_undone(row, by_id[cid], run_id):
+                continue
+            entry = by_id[cid]
+            stamp = row.get('v3_rederive_live_run')
+            own = stamp == run_id
+            old_stamp = (entry.get('raw') or {}).get('v3_rederive_live_run')
+            if own or (entry.get('payload_fields') and stamp == old_stamp):
+                hydrated, children, size = _undo_payload(client, tx, docs[cid], erase=own and not entry.get('created'))
+                current[cid] = hydrated
+                erase_chunks[cid] = children
+                payload_costs[cid] = (len(children), size)
         # An interrupted earlier attempt of this undo: rows it restored or hid are done, not conflicts.
         done = {cid for cid, row in current.items() if already_undone(row, by_id[cid], run_id)}
         if any(
@@ -609,15 +673,6 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
         ours = {
             cid for cid, row in current.items() if cid not in done and row and row.get('v3_rederive_live_run') == run_id
         }
-        erase_chunks, payload_costs = {}, {}
-        for cid in sorted(ours):
-            if PAYLOAD_FIELD in current[cid]:
-                row, children, size = _undo_payload(client, tx, docs[cid], erase=not by_id[cid].get('created'))
-                current[cid] = row
-                erase_chunks[cid] = children
-                payload_costs[cid] = (len(children), size)
-        if not undo_group_fits(entries, payload_costs=payload_costs):
-            raise Conflict('undo_group_too_large')
         if any(owner_changed(current[cid] or {}, by_id[cid]) for cid in ours):
             raise Conflict('owner_edited_rebuilt_row')
         created = [cid for cid in sorted(ours | done) if current[cid] is not None and by_id[cid].get('created')]
@@ -628,8 +683,14 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
         restore = {}
         for entry in entries:
             if entry['id'] in ours and not entry.get('created'):
-                restore[entry['id']] = dict(entry['raw'])
-                filter_processing_write(tx, user, restore[entry['id']])
+                cid = entry['id']
+                restore[cid] = home_visibility_index.stamp(dict(entry['raw']))
+                filter_processing_write(tx, user, restore[cid])
+                writes, size = _restore_payload_cost(coll.document(cid), entry, restore[cid])
+                old_writes, old_bytes = payload_costs.get(cid, (0, 0))
+                payload_costs[cid] = (old_writes + writes, old_bytes + size)
+        if not undo_group_fits(entries, payload_costs=payload_costs):
+            raise Conflict('undo_group_too_large')
         rids = {c['recording_id'] for e in entries if e['id'] in ours for c in e.get('claims') or []}
         rids.update(rid for cid in ours for rid in (current[cid] or {}).get('v3_recording_ids') or [])
         rids.update(rid for e in entries if e['id'] in ours for rid in e.get('sources') or [])
@@ -661,9 +722,20 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
                     },
                 )
             else:
-                for chunk in erase_chunks.get(entry['id'], ()):
-                    tx.delete(chunk)
-                tx.set(coll.document(entry['id']), home_visibility_index.stamp(restore[entry['id']]))
+                cid = entry['id']
+                if entry.get('payload_fields'):
+                    stage_conversation_payload(
+                        tx,
+                        docs[cid],
+                        restore[cid],
+                        spill_fields=entry['payload_fields'],
+                        allow_promotion=True,
+                        retire_children=erase_chunks.get(cid),
+                    )
+                else:
+                    for chunk in erase_chunks.get(cid, ()):
+                        tx.delete(chunk)
+                    tx.set(coll.document(cid), restore[cid])
                 restored += 1
         repaired = 0
         for rid, snapshot in sources.items():

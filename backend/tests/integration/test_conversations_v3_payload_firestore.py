@@ -556,6 +556,148 @@ def test_live_rederive_refuses_to_copy_a_live_payload_generation(row):
     assert set(ref.collection(PAYLOAD_CHUNKS).list_documents()) == chunks
 
 
+def test_live_rederive_rebuilds_and_restores_a_chunked_prior(row, monkeypatch):
+    client, uid, ref = row
+    run_id = 'synthetic-run'
+    run = runs.run_ref(client, uid, run_id)
+    run.create({'mode': runs.LIVE_MODE})
+    source = ref.parent.document('synthetic-source')
+    prior = run.collection(runs.PRIORS).document(ref.id)
+    publish(row, fields={'structured', 'transcript_segments'})
+    ref.update({'v3_recording_ids': [source.id]})
+    source.create(
+        {
+            'recording': True,
+            'status': 'completed',
+            'started_at': AT,
+            'finished_at': AT,
+            'transcript_segments': [{'start': 0.0, 'end': 10.0, 'text': 'Synthetic source'}],
+            'claims': [{'conversation_id': ref.id, 'start': AT, 'end': AT}],
+        }
+    )
+    try:
+        monkeypatch.setenv('OMI_V3_CONVERSATION_PAYLOAD_WRITES', 'on')
+        snapshot = ref.get()
+        original = store.read_projection_snapshot(snapshot, firestore_client=client)
+        original_chunks = set(ref.collection(PAYLOAD_CHUNKS).list_documents())
+        recordings, eligible, _, counts = rederive.load_live_rederive(
+            uid, since=AT, until=AT + timedelta(minutes=1), run_id=run_id, firestore_client=client
+        )
+        assert counts['rows_eligible'] == 1
+        entry = {'id': ref.id, 'raw': eligible[ref.id]['_v3_raw'], 'source_revision': snapshot.update_time}
+
+        token = leases.acquire(uid, store.BACKFILL_LEASE, firestore_client=client)
+        assert token
+        candidate = {
+            'id': ref.id,
+            'status': 'completed',
+            'data_protection_level': 'enhanced',
+            'v3_derived': True,
+            'v3_rederive_live_run': run_id,
+            'v3_recording_ids': [source.id],
+            'created_at': AT,
+            'started_at': AT,
+            'finished_at': AT + timedelta(seconds=10),
+            'transcript_segments': recordings[source.id]['transcript_segments'],
+            'structured': {'title': 'Rebuilt'},
+        }
+
+        def rebuild():
+            return store.commit_projection(
+                uid,
+                token,
+                recordings,
+                eligible,
+                [candidate],
+                [],
+                key=store.BACKFILL_LEASE,
+                firestore_client=client,
+            )
+
+        with pytest.raises(store.Conflict, match='document_too_large'):
+            rebuild()
+        stale = {**entry, 'source_revision': AT}
+        with pytest.raises(store.Conflict, match='source_changed'):
+            runs.save_priors(uid, run_id, [stale], firestore_client=client)
+        assert runs.save_priors(uid, run_id, [entry], firestore_client=client) == 1
+        copy_chunks = set(prior.collection(PAYLOAD_CHUNKS).list_documents())
+        assert copy_chunks and not original_chunks & copy_chunks
+        copy_stamp = prior.get().update_time
+        runs.save_priors(uid, run_id, [entry], firestore_client=client)
+        assert prior.get().update_time == copy_stamp
+        assert runs.get_priors(uid, run_id, [ref.id], firestore_client=client)[0]['raw'] == original
+
+        rebuild()
+        assert not list(ref.collection(PAYLOAD_CHUNKS).list_documents())
+        assert copy_chunks == set(prior.collection(PAYLOAD_CHUNKS).list_documents())
+        assert rederive.record_baselines(uid, run_id, firestore_client=client) == 1
+        entries = runs.list_priors(uid, run_id, firestore_client=client)
+        monkeypatch.setenv('OMI_V3_CONVERSATION_PAYLOAD_WRITES', 'off')
+        costs = {}
+        assert rederive.live_undo_blocker(uid, run_id, entries, firestore_client=client, payload_costs=costs) is None
+        assert costs[ref.id][0] > 0
+        held = [(store.BACKFILL_LEASE, token)]
+        assert rederive.undo_live_rederive(uid, held, run_id, entries, firestore_client=client)['rows_restored'] == 1
+        restored = store.read_projection_snapshot(ref.get(), firestore_client=client)
+        assert rederive.already_undone(restored, entries[0], run_id)
+        assert rederive.undo_live_rederive(uid, held, run_id, entries, firestore_client=client)['rows_restored'] == 0
+    finally:
+        runs.drop_priors(uid, run_id, [ref.id], firestore_client=client)
+        assert not list(prior.collection(PAYLOAD_CHUNKS).list_documents())
+        run.delete()
+        source.delete()
+
+
+@pytest.mark.parametrize('purge', ['protection', 'deleted', 'account'])
+def test_owned_prior_chunks_are_erased(row, purge):
+    client, uid, ref = row
+    run_id = 'synthetic-run'
+    run = runs.run_ref(client, uid, run_id)
+    run.create({'mode': runs.LIVE_MODE})
+    prior = run.collection(runs.PRIORS).document(ref.id)
+    publish(row, fields={'transcript_segments'})
+    snapshot = ref.get()
+    runs.save_priors(
+        uid,
+        run_id,
+        [{'id': ref.id, 'raw': snapshot.to_dict(), 'source_revision': snapshot.update_time}],
+        firestore_client=client,
+    )
+    try:
+        assert list(prior.collection(PAYLOAD_CHUNKS).list_documents())
+        if purge == 'account':
+            # Legacy hard deletes can leave missing ancestors above an existing child.
+            prior.delete()
+            run.delete()
+            conversations.delete_collection_recursive(run.parent, client=client)
+        else:
+            entries = runs.list_priors(uid, run_id, firestore_client=client)
+            if purge == 'protection':
+                assert (
+                    runs.purge_conversation_priors(uid, [ref.id], purge, keep_level='enhanced', firestore_client=client)
+                    == 0
+                )
+                assert list(prior.collection(PAYLOAD_CHUNKS).list_documents())
+            assert (
+                runs.purge_conversation_priors(
+                    uid,
+                    [ref.id],
+                    purge,
+                    keep_level='standard' if purge == 'protection' else None,
+                    firestore_client=client,
+                )
+                == 1
+            )
+            assert set(prior.get().to_dict()) == {'id', 'purged', 'recorded_at'}
+            expected = 'owner_edited_rebuilt_row' if purge == 'protection' else 'owner_deleted_rebuilt_row'
+            with pytest.raises(store.Conflict, match=expected):
+                rederive.undo_live_rederive(uid, [], run_id, entries, firestore_client=client)
+        assert not list(prior.collection(PAYLOAD_CHUNKS).list_documents())
+        assert store.read_projection_snapshot(ref.get(), firestore_client=client)['transcript_segments']
+    finally:
+        conversations.delete_collection_recursive(run.parent, client=client)
+
+
 def test_live_undo_restores_an_inline_prior_and_retires_rebuilt_chunks(row, monkeypatch):
     client, uid, ref = row
     run_id = 'synthetic-run'

@@ -779,8 +779,15 @@ def commit_projection(
                     # unreadable payloads without attempting to decode them.
                     current = raw
                 elif PAYLOAD_FIELD in raw and rid in replacements and not live_builder:
-                    # Re-derive must first support copies reachable by undo.
-                    raise Conflict('document_too_large')
+                    from database import conversations_v3_backfill_runs as runs
+
+                    run_id = row.get('_v3_prior_run')
+                    if key != BACKFILL_LEASE or not run_id or not v3_payload_writes_enabled():
+                        raise Conflict('document_too_large')
+                    prior = runs.run_ref(client, uid, run_id).collection(runs.PRIORS).document(rid).get(transaction=tx)
+                    if not (prior.to_dict() or {}).get('payload_fields'):
+                        raise Conflict('document_too_large')
+                    current = read_projection_snapshot(snapshot, data=raw, firestore_client=client, transaction=tx)
                 else:
                     current = read_projection_snapshot(snapshot, data=raw, firestore_client=client, transaction=tx)
                 if rid in recordings and 'claims' in current and 'claims' not in raw:

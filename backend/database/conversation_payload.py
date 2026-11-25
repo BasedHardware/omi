@@ -107,7 +107,9 @@ def get_conversation_with_payload(client, ref):
     return load(client.transaction(read_only=True))
 
 
-def stage_conversation_payload(transaction, snapshot, prepared, *, spill_fields, allow_promotion=False):
+def stage_conversation_payload(
+    transaction, snapshot, prepared, *, spill_fields, allow_promotion=False, retire_children=None
+):
     """Stage a full prepared row and its chunks alongside the caller's fenced writes.
 
     The switch controls the first spill. Compatible binaries continue to read,
@@ -120,6 +122,11 @@ def stage_conversation_payload(transaction, snapshot, prepared, *, spill_fields,
     if write.chunks and not old_refs and not allow_promotion:
         raise ConversationProjectionTooLarge('conversation payload promotion is disabled')
     cost = _stage_replacement_chunks(transaction, ref, previous, old_refs, write)
+    if retire_children is not None:
+        referenced = set(old_refs)
+        for child in retire_children:
+            if child not in referenced:
+                transaction.delete(child)
     if snapshot.exists:
         transaction.set(ref, write.parent)
     else:

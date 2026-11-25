@@ -639,9 +639,12 @@ def delete_collection_recursive(collection_ref: Any, *, client: Any, batch_size:
     returned by a collection query either). Any caller that deletes a parent
     document must purge its children through this helper.
     """
-    # Conversation payload children can survive a missing parent after a
-    # legacy hard delete. ListDocuments includes those missing ancestors.
-    list_missing = getattr(collection_ref, 'id', None) == 'conversations'
+    # ListDocuments includes missing ancestors of conversation and undo payloads.
+    list_missing = getattr(collection_ref, 'id', None) in {
+        'conversations',
+        'conversations_v3_backfill_runs',
+        'conversations_v3_rederive_priors',
+    }
     if getattr(collection_ref, 'id', None) == 'conversation_payload_chunks':
         # A delete request includes the bytes of the documents being removed.
         batch_size = min(batch_size, 8)

@@ -18,7 +18,12 @@ from google.cloud.firestore_v1 import FieldFilter
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
-from utils.conversation_payload import PAYLOAD_FIELD
+from database.conversation_payload import (
+    read_conversation_payload,
+    read_payload_children_for_delete,
+    stage_conversation_payload,
+)
+from utils.conversation_payload import PAYLOAD_FIELD, ConversationProjectionTooLarge, InvalidConversationPayload
 from utils.conversations.v3 import Conflict
 
 COLLECTION = 'conversations_v3_backfill_runs'
@@ -134,7 +139,7 @@ def clear_start(uid, run_id, *, firestore_client=None):
 # Live re-derive undo ledger: per touched row, its stored document before the run (or that the run
 # created it) and the claims it held, under the run itself so account deletion purges it with the run.
 PRIORS = 'conversations_v3_rederive_priors'
-# Writes per prior transaction; a prior is one conversation document (at most 1 MiB).
+# Page inline priors. A copy of a chunked row gets its own bounded transaction.
 PRIORS_PAGE_BYTES = 4 * 1024 * 1024
 PRIORS_PAGE_DOCS = 100
 
@@ -143,16 +148,28 @@ def _priors(client, uid, run_id):
     return run_ref(client, uid, run_id).collection(PRIORS)
 
 
+def _check_copy_account(tx, client, uid):
+    deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
+    if account_deletion_marker_blocks_access(
+        marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+    ):
+        raise Conflict('account_deletion')
+
+
 def save_priors(uid, run_id, entries, *, firestore_client=None):
-    """Record priors before the commit that changes their rows; a later attempt overwrites its own."""
+    """Record the first prior before the commit that changes its row."""
     client = firestore_client or get_firestore_client()
     coll = _priors(client, uid, run_id)
     pages, page, size = [], [], 0
     for entry in entries:
         if PAYLOAD_FIELD in (entry.get('raw') or {}):
-            # The prior must own its saved values. A live descriptor only
-            # names chunks the next publication may retire.
-            raise Conflict('document_too_large')
+            if entry.get('source_revision') is None:
+                raise Conflict('document_too_large')
+            if page:
+                pages.append(page)
+                page, size = [], 0
+            pages.append([entry])
+            continue
         amount = len(json.dumps(entry, default=str).encode())
         if page and (size + amount > PRIORS_PAGE_BYTES or len(page) >= PRIORS_PAGE_DOCS):
             pages.append(page)
@@ -163,13 +180,11 @@ def save_priors(uid, run_id, entries, *, firestore_client=None):
     @firestore.transactional
     def write(tx, batch):
         # Fenced like the commit: no copy of a row is written once the owner's account deletion began.
-        deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
-        if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
-        ):
-            raise Conflict('account_deletion')
+        _check_copy_account(tx, client, uid)
         # A conversation the owner deleted since the load is never copied (the commit refuses it too).
         user = client.collection('users').document(uid)
+        recorded = {entry['id']: coll.document(entry['id']).get(transaction=tx) for entry in batch}
+        copies = {}
         for entry in batch:
             if user.collection('deleted_conversations').document(entry['id']).get(transaction=tx).exists:
                 raise Conflict('target_deleted')
@@ -181,16 +196,45 @@ def save_priors(uid, run_id, entries, *, firestore_client=None):
             row = (current.to_dict() or {}) if current.exists else {}
             if row.get('deleted'):
                 raise Conflict('target_deleted')
-            if PAYLOAD_FIELD in row:
-                raise Conflict('source_changed')
             level = row.get('data_protection_level', 'standard') if current.exists else None
             if level is not None and level != entry['raw'].get('data_protection_level', 'standard'):
                 raise Conflict('source_changed')
+            if PAYLOAD_FIELD in entry['raw']:
+                if (
+                    not current.exists
+                    or current.update_time != entry['source_revision']
+                    or row.get('is_locked')
+                    or level == 'private'
+                    or row.get(PAYLOAD_FIELD) != entry['raw'][PAYLOAD_FIELD]
+                ):
+                    raise Conflict('source_changed')
+                if not recorded[entry['id']].exists:
+                    try:
+                        logical = read_conversation_payload(client, tx, current)
+                    except (ConversationProjectionTooLarge, InvalidConversationPayload) as exc:
+                        raise Conflict('undo_payload_unavailable') from exc
+                    copies[entry['id']] = {
+                        **entry,
+                        'raw': logical,
+                        'raw_protection_level': level,
+                        'payload_fields': sorted(logical.keys() - row.keys()),
+                    }
+            elif PAYLOAD_FIELD in row:
+                raise Conflict('source_changed')
         # A resumed attempt keeps the first copy: it holds the row and claim positions from before the run.
-        recorded = {entry['id'] for entry in batch if coll.document(entry['id']).get(transaction=tx).exists}
         for entry in batch:
-            if entry['id'] not in recorded:
-                tx.set(coll.document(entry['id']), {**entry, 'recorded_at': datetime.now(timezone.utc)})
+            snapshot = recorded[entry['id']]
+            if snapshot.exists:
+                continue
+            copy = {**copies.get(entry['id'], entry), 'recorded_at': datetime.now(timezone.utc)}
+            copy.pop('source_revision', None)
+            if 'payload_fields' in copy:
+                try:
+                    stage_conversation_payload(tx, snapshot, copy, spill_fields={'raw'}, allow_promotion=True)
+                except ConversationProjectionTooLarge as exc:
+                    raise Conflict('document_too_large') from exc
+            else:
+                tx.set(coll.document(entry['id']), copy)
 
     for batch in [*pages, page] if page else pages:
         write(client.transaction(), batch)
@@ -200,20 +244,48 @@ def save_priors(uid, run_id, entries, *, firestore_client=None):
 PRIORS_READ_PAGE = 200
 
 
+def _write_cleanup_pages(client, operation, ids):
+    def write(page):
+        try:
+            return operation(client.transaction(), page)
+        except ConversationProjectionTooLarge:
+            if len(page) == 1:
+                raise
+            middle = len(page) // 2
+            return write(page[:middle]) + write(page[middle:])
+
+    return sum(write(ids[start : start + PRIORS_PAGE_DOCS]) for start in range(0, len(ids), PRIORS_PAGE_DOCS))
+
+
+def _prior_children_for_cleanup(tx, snapshots):
+    children, size = [], 0
+    for snapshot in snapshots:
+        data = snapshot.to_dict() or {}
+        size += len(json.dumps(data, default=str).encode())
+        if PAYLOAD_FIELD in data:
+            refs, cost = read_payload_children_for_delete(tx, snapshot.reference)
+            children.extend(refs)
+            size += cost
+        if size > PRIORS_PAGE_BYTES or len(children) + len(snapshots) >= 500:
+            raise ConversationProjectionTooLarge('prior cleanup exceeds the transaction budget')
+    return children
+
+
 def drop_priors(uid, run_id, conversation_ids, *, firestore_client=None):
-    """Delete these conversations' priors from one run (blind deletes, a page per transaction)."""
+    """Delete these conversations' priors and their owned chunks from one run."""
     client = firestore_client or get_firestore_client()
     coll = _priors(client, uid, run_id)
     ids = sorted(set(conversation_ids))
 
     @firestore.transactional
     def drop(tx, page):
-        for cid in page:
-            tx.delete(coll.document(cid))
+        refs = [coll.document(cid) for cid in page]
+        children = _prior_children_for_cleanup(tx, [ref.get(transaction=tx) for ref in refs])
+        for ref in [*children, *refs]:
+            tx.delete(ref)
+        return len(refs)
 
-    for start in range(0, len(ids), PRIORS_PAGE_DOCS):
-        drop(client.transaction(), ids[start : start + PRIORS_PAGE_DOCS])
-    return len(ids)
+    return _write_cleanup_pages(client, drop, ids)
 
 
 def _live_run_ids(uid, *, firestore_client=None):
@@ -252,9 +324,9 @@ def purge_conversation_priors(uid, conversation_ids, reason, *, firestore_client
     runs = _live_run_ids(uid, firestore_client=client)
 
     @firestore.transactional
-    def purge(tx, run_id, page):
+    def purge(tx, page, run_id):
         coll = _priors(client, uid, run_id)
-        found = []
+        found = {}
         for cid in page:
             snapshot = coll.document(cid).get(transaction=tx)
             data = (snapshot.to_dict() or {}) if snapshot.exists else None
@@ -264,18 +336,37 @@ def purge_conversation_priors(uid, conversation_ids, reason, *, firestore_client
                 or (keep_level and (data.get('purged') or data.get('created')))
             ):
                 continue
-            if keep_level and (data.get('raw') or {}).get('data_protection_level', 'standard') == keep_level:
+            level = data.get('raw_protection_level', (data.get('raw') or {}).get('data_protection_level', 'standard'))
+            if keep_level and level == keep_level:
                 continue
-            found.append(cid)
+            found[cid] = snapshot
+        for ref in _prior_children_for_cleanup(tx, list(found.values())):
+            tx.delete(ref)
         for cid in found:
             tx.set(coll.document(cid), {'id': cid, 'purged': reason, 'recorded_at': datetime.now(timezone.utc)})
         return len(found)
 
     purged = 0
     for run_id in runs:
-        for start in range(0, len(ids), PRIORS_PAGE_DOCS):
-            purged += purge(client.transaction(), run_id, ids[start : start + PRIORS_PAGE_DOCS])
+        purged += _write_cleanup_pages(client, lambda tx, page: purge(tx, page, run_id), ids)
     return purged
+
+
+def _read_prior(client, uid, snapshot):
+    data = snapshot.to_dict() or {}
+    if PAYLOAD_FIELD not in data:
+        return data
+
+    @firestore.transactional
+    def load(tx):
+        _check_copy_account(tx, client, uid)
+        current = snapshot.reference.get(transaction=tx)
+        try:
+            return read_conversation_payload(client, tx, current)
+        except (ConversationProjectionTooLarge, InvalidConversationPayload) as exc:
+            raise Conflict('undo_payload_unavailable') from exc
+
+    return load(client.transaction(read_only=True))
 
 
 def get_priors(uid, run_id, conversation_ids, *, firestore_client=None):
@@ -285,8 +376,8 @@ def get_priors(uid, run_id, conversation_ids, *, firestore_client=None):
     found = []
     for cid in sorted(set(conversation_ids)):
         snapshot = coll.document(cid).get()
-        if snapshot.exists:
-            found.append({**(snapshot.to_dict() or {}), 'id': cid})
+        if snapshot.exists and (data := _read_prior(client, uid, snapshot)) is not None:
+            found.append({**data, 'id': cid})
     return found
 
 
@@ -299,7 +390,7 @@ def list_priors(uid, run_id, *, firestore_client=None):
         if cursor is not None:
             query = query.start_after(cursor)
         page = list(query.stream())
-        found.extend({**(doc.to_dict() or {}), 'id': doc.id} for doc in page)
+        found.extend({**data, 'id': doc.id} for doc in page if (data := _read_prior(client, uid, doc)) is not None)
         if len(page) < PRIORS_READ_PAGE:
             return found
         cursor = page[-1]
