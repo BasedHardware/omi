@@ -11,13 +11,19 @@
 - ``boundaries`` and ``speakers`` are production's own in M1 (taken from the stored rows); the
   stages report that rather than pretend to replay them.
 
-All four are uncacheable: their effect is files under the run, and each is cheap.
+All four are cacheable stages (orchestrator stage cache). Their keys hash only what each reads:
+``ingest``, ``boundaries`` and ``speakers`` the day's timeline, audio index and baseline rows (no
+overlay); ``transcribe`` also the audio files (size and mtime), the stored cassette set and the
+overlay's ``model_config.stt``. The code part of each key covers only the files the stage runs
+(``scoped_code``: ``affected.PRODUCT_SCOPE``), so a change to chain code keeps them cached.
+``transcribe``'s artifacts (``runs/<id>/ingest/``) are stored with its entry and restored on a hit.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from testing.pipeline_lab import keys
 from testing.pipeline_lab.registry import StageResult, ToolContext
 from testing.pipeline_lab.store import read_json
 
@@ -43,10 +49,26 @@ def _timeline(ctx: Any) -> dict[str, Any]:
     return read_json(path) or build_day_timeline(ctx.day.day_id, root=ctx.store.root)
 
 
+def _day_inputs(ctx: Any) -> dict[str, str]:
+    day_dir = ctx.store.day_dir(ctx.day.day_id)
+    return {
+        'timeline_inputs': keys.hash_files(
+            [day_dir / 'timeline.json', day_dir / 'baseline' / 'conversations.jsonl', day_dir / 'audio' / 'index.json']
+        )
+    }
+
+
 class _Stage:
-    cacheable = False
+    cacheable = True
+    scoped_code = True  # key on the files this stage runs, not the whole backend tree
     schema_version = 1
     stage = ''
+
+    def inputs(self, ctx: Any) -> dict[str, str]:
+        return _day_inputs(ctx)
+
+    def key_overlay(self, overlay: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        return {}, {}  # reads no overlay value
 
 
 class IngestStage(_Stage):
@@ -64,8 +86,36 @@ class IngestStage(_Stage):
         )
 
 
+def cassette_inventory(root: Any) -> str:
+    """Hash of the stored STT cassette set (names, sizes, mtimes): recording one changes the key."""
+    from pathlib import Path
+
+    from testing.pipeline_lab.cassette.format import STAGE_DIR
+
+    base = Path(root) / 'cache' / STAGE_DIR
+    rows = {}
+    if base.is_dir():
+        for path in sorted(base.rglob('*.json')):
+            info = path.stat()
+            rows[path.relative_to(base).as_posix()] = f'{info.st_size}:{info.st_mtime_ns}'
+    return keys.hash_json(rows)
+
+
 class TranscribeStage(_Stage):
     stage = 'transcribe'
+
+    def inputs(self, ctx: Any) -> dict[str, str]:
+        out = _day_inputs(ctx)
+        out['audio'] = keys.hash_dir(ctx.store.audio_dir(ctx.day.day_id), stat_only=True)
+        out['cassettes'] = cassette_inventory(ctx.store.root)
+        return out
+
+    def key_overlay(self, overlay: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        # The replay runs product code under the overlay env; of model_config it reads only ``stt``.
+        return {k: v for k, v in overlay.items() if k != 'model_config'}, {'stt': stt_config(overlay)}
+
+    def restore(self, ctx: Any, output: dict[str, Any]) -> None:
+        ctx.run_extra['stt'] = output.get('stt_label') or 'stored production transcripts'
 
     def run(self, ctx: Any) -> StageResult:
         stt = stt_config(ctx.overlay)
@@ -73,12 +123,14 @@ class TranscribeStage(_Stage):
         if not stt.get('provider') or not stt.get('model'):
             ctx.run_extra['stt'] = 'stored production transcripts'
             return StageResult(
-                output={'source': 'stored', 'reason': 'no model_config.stt in the overlay'},
+                output={'source': 'stored', 'reason': 'no model_config.stt in the overlay', 'stt_label': None},
                 warnings=['no STT selection in the overlay: the chain uses the stored production transcripts'],
             )
         if not coverage.get('with_audio'):
             ctx.run_extra['stt'] = 'stored production transcripts'
-            return StageResult(output={'source': 'stored', 'reason': 'no audio'}, warnings=['no audio to replay'])
+            return StageResult(
+                output={'source': 'stored', 'reason': 'no audio', 'stt_label': None}, warnings=['no audio to replay']
+            )
         ctx.env['OMI_PIPELINE_LAB_ROOT'] = str(ctx.store.root)
         args = [
             'replay',
@@ -112,7 +164,10 @@ class TranscribeStage(_Stage):
             warnings.append(
                 f'{outcomes["failed"]} conversations kept their stored transcript (no cassette or no audio)'
             )
-        return StageResult(output={'source': 'cassette', 'stt': stt, 'outcomes': outcomes}, warnings=warnings)
+        return StageResult(
+            output={'source': 'cassette', 'stt': stt, 'stt_label': stt_label(stt), 'outcomes': outcomes},
+            warnings=warnings,
+        )
 
 
 class ProductionOwnedStage(_Stage):
