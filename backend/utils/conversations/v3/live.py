@@ -8,6 +8,7 @@ from config.conversations_v3 import SPEECH_LANDED_FIELD
 # The v3 window cap: an open conversation idle for longer is not in progress.
 MAX_IDLE = timedelta(hours=2)
 FINISH_WINDOW_FIELD = 'v3_finish_no_pointer_window_id'
+FINISH_RECORDING_FIELD = 'v3_finish_no_pointer_recording'
 FINISH_FIELDS = [
     'started_at',
     'finished_at',

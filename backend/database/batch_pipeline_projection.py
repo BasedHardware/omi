@@ -24,7 +24,13 @@ from utils.batch_pipeline.held_terminal import OPERATOR_INTENTS, held_without_re
 from config.record_audio import record_identity, require_record_audio_barrier
 from config.server_batch import manual_end_marker_enabled
 from utils.conversations.v3 import metrics as v3_metrics, triggers as v3_triggers
-from utils.conversations.v3.live import FINISH_FIELDS, FINISH_WINDOW_FIELD, active, has_finish_content
+from utils.conversations.v3.live import (
+    FINISH_FIELDS,
+    FINISH_RECORDING_FIELD,
+    FINISH_WINDOW_FIELD,
+    active,
+    has_finish_content,
+)
 from utils.batch_pipeline.empty_transcription import EMPTY_OUTCOMES
 from database.batch_pipeline_policy import load_stage_policy
 from database.batch_pipeline_delivered_share import delivery_stamp
@@ -1229,7 +1235,7 @@ class ProjectionStore:
         window_id = row.get(FINISH_WINDOW_FIELD)
         upload_revision = session.job.get('record_input_upload_revision')
         if (
-            not window_id
+            not (window_id or row.get(FINISH_RECORDING_FIELD))
             or not row.get('v3_manual_end_requested')
             or row.get('v3_manual_end')
             or not row.get('recording')
@@ -1244,7 +1250,10 @@ class ProjectionStore:
         ):
             return {}
         clock = datetime.fromtimestamp(now, timezone.utc)
-        if silent:
+        if silent and not window_id:
+            if row.get('discarded') or not has_finish_content(row, {}, cid):
+                return {'v3_manual_end_requested': False}
+        elif silent:
             window = (
                 collection.document(window_id).get(transaction=transaction, field_paths=FINISH_FIELDS).to_dict() or {}
             )

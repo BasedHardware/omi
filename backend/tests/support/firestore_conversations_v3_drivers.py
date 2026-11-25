@@ -4,6 +4,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from tests.support.firestore_query_drivers import (
+    CoveredByEntry,
     DriverEntry,
     SHAPE_UID,
     FROZEN_NOW,
@@ -39,6 +40,10 @@ def _pick_none(rows, now):
 
 def _decode(client):
     return patch('database.conversations_v3.decode_row', side_effect=lambda uid, snapshot: snapshot.to_dict())
+
+
+def _transaction_without_rpc(client):
+    return patch('database.conversations_v3_live.firestore.transactional', side_effect=lambda fn: fn)
 
 
 def entries():
@@ -93,6 +98,16 @@ def entries():
             'database.conversations_v3_live.live_window',
             base={'uid': SHAPE_UID, 'now': FROZEN_NOW, 'max_idle': timedelta(hours=2)},
             neutrals={'pick': (_pick_none, 'row selection only; no window is live, so both bands read')},
+        ),
+        DriverEntry(
+            'database.conversations_v3_live.request_recording_finish',
+            base={'uid': SHAPE_UID, 'now': FROZEN_NOW},
+            patchers=(_transaction_without_rpc,),
+        ),
+        CoveredByEntry(
+            'database.conversations_v3_live._recent_finish_sources',
+            covered_by=('database.conversations_v3_live.request_recording_finish',),
+            reason='The Finish transaction scans the same bounded source query on every call.',
         ),
         DriverEntry(
             'database.conversations_v3.merge_donors_have_tasks',

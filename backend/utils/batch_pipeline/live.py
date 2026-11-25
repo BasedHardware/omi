@@ -18,6 +18,7 @@ import random
 import threading
 import time
 
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD
 from utils.conversations import phase_shadow
 
 from config.policy import resolve_batch_policy
@@ -422,7 +423,7 @@ async def _manual_finish_admitted(
             return
         single = len(units) == 1
         promoted = False
-        if single:
+        if single and not current.get(FINISH_RECORDING_FIELD):
             # Stored before any detached work, so losing the process cannot lose a single-unit cut.
             promoted = await run_blocking(
                 db_executor, conversations_v3.promote_manual_end, uid, conversation_id, firestore_client=store.client
