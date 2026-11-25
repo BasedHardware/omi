@@ -4,7 +4,11 @@ Markers are durable obligations. Dispatch failure never clears one; the sweeper
 retries it. Switching admission off does not stop existing obligations.
 """
 
-from config.llm_spend import background_outline_flex_enabled, outline_cache_prefix_enabled
+from config.llm_spend import (
+    background_outline_flex_enabled,
+    outline_cache_prefix_enabled,
+    v3_summary_first_open_gating_enabled,
+)
 from database import conversations_v3_leases as leases
 
 from database import conversations_v3_processing as writers
@@ -360,7 +364,9 @@ async def reconcile(
             # Rows earlier passes committed still owe notes while the builder is parked.
             await _drain_blocked(uid, parked)
             return 'backoff'
+    first_open_gating = v3_summary_first_open_gating_enabled()
     flex_enabled = background_outline_flex_enabled()
+    retry_failed_outlines = first_open_gating or flex_enabled
     flex_owner_deadline = (
         time.monotonic() + OUTLINE_BACKGROUND_BUDGET_SECONDS
         if background and flex_enabled and not (on_open or derive or internal_end)
@@ -444,7 +450,8 @@ async def reconcile(
             if not groups:
                 return 'stored'
         # Keep a bounded cache; every fingerprint is checked even for finished stretches.
-        cached = [row for row in cached if not any(entry.get('_outline_failed') for entry in row['entries'])]
+        if retry_failed_outlines:
+            cached = [row for row in cached if not any(entry.get('_outline_failed') for entry in row['entries'])]
         saved = {row['fingerprint']: row for row in cached}
         preview_prefix = f'{silence_seconds}:'
         scoped_preview_keys = {f"{preview_prefix}{group['key']}" for group in groups} if custom_timing else set()
@@ -512,10 +519,11 @@ async def reconcile(
                     }
                 ]
             outlines.append(entries)
-            if (group['outline_ready'] or on_open or preview is not None) and not any(
-                entry.get('_outline_failed') for entry in entries
+            outline_failed = any(entry.get('_outline_failed') for entry in entries)
+            if (group['outline_ready'] or on_open or preview is not None) and (
+                not retry_failed_outlines or not outline_failed
             ):
-                if preview_key and not group['locked']:
+                if preview_key and not group['locked'] and not outline_failed:
                     preview_fields = {'preview_key': preview_key, 'anchors': outline.preview_anchors(group, entries)}
                 cache.append({'fingerprint': fingerprint, 'entries': entries, **preview_fields})
 
@@ -705,7 +713,8 @@ async def reconcile(
                     # returns the previous notes and the only automatic rewrite is spent on nothing.
                     row['summary_covers_through'] = None
                 outline_recovered = (
-                    on_open
+                    first_open_gating
+                    and on_open
                     and prior
                     and prior.get('v3_process_failure_reason') == 'outline'
                     and not window.get('_outline_failed')
@@ -717,7 +726,8 @@ async def reconcile(
                     or outline_recovered
                     or (prior or {}).get('tile_state') == 'transcribing'
                 )
-                if prior is not None and was_ended and not needs_processing:
+                keep_prior_status = not needs_processing if first_open_gating else not (rewrite or promoted)
+                if prior is not None and was_ended and keep_prior_status:
                     row['status'] = prior['status']
                     row['tile_state'] = prior.get('tile_state', 'done')
                 waiting = not transcription_failed and any(

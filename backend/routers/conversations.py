@@ -181,6 +181,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from config.llm_spend import v3_summary_first_open_gating_enabled
 from config.conversations_v3 import conversations_v3_enabled, live_recap_enabled
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
@@ -3144,7 +3145,11 @@ async def conversation_summary_stream(
     conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
     reject_live_target(conversation)
     await run_blocking(db_executor, require_generated_compute, uid, 'conversation_v3_summary_open')
-    detail_intent = request.headers.get('X-Omi-Recording-Detail') if request is not None else None
+    detail_intent = (
+        request.headers.get('X-Omi-Recording-Detail')
+        if request is not None and v3_summary_first_open_gating_enabled()
+        else None
+    )
     promote_llm = detail_intent == '1'
     allow_generation = detail_intent != '0'
     if allow_generation and v3_summary.needs_open_reconcile(conversation):

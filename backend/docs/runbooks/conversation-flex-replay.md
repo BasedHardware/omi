@@ -82,3 +82,11 @@ terminal attempts and is only suitable for pre-change windows.
 Release is contingent on the paired gate, SCA-3677 transcript access, SCA-3655
 open promotion, and SCA-3657 chat/search freshness. The local deterministic
 transport and concurrency checks do not measure model quality or served spend.
+
+`OMI_V3_SUMMARY_FIRST_OPEN_GATING` defaults off. With it off, summary
+reads keep the existing generation path, background enrichment proceeds
+without waiting for a detail open, and the existing background processing
+marker retains its queue semantics. Enable only after SCA-3677 preserves
+full MCP and API agent read access to deferred conversations. Set the
+switch back to `off` to restore the default behavior. The switch is
+independent of the background Flex recovery and outline switches.

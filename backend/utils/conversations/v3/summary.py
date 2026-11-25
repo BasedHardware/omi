@@ -17,7 +17,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from config.conversations_v3 import live_recap_enabled
-from config.llm_spend import background_flex_retry_enabled
+from config.llm_spend import background_flex_retry_enabled, v3_summary_first_open_gating_enabled
 from database import conversations_v3 as store
 from models.conversation import Conversation
 from utils.conversations.v3 import models, planner, policy, recap_telemetry, visibility
@@ -36,7 +36,7 @@ def needs_open_reconcile(row):
     return row.get('v3_derived') and (
         row.get('status') == 'in_progress'
         or row.get('v3_unlocked')
-        or row.get('v3_process_failure_reason') == 'outline'
+        or (v3_summary_first_open_gating_enabled() and row.get('v3_process_failure_reason') == 'outline')
     )
 
 

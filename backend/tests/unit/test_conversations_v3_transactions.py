@@ -911,6 +911,7 @@ def test_open_can_promote_summary_only_until_background_result_returns(strict):
 
 @pytest.mark.asyncio
 async def test_preempted_notes_pass_refunds_only_its_attempt(strict, monkeypatch):
+    monkeypatch.setenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', 'true')
     from utils.conversations.v3 import models
 
     uid, cid = 'synthetic', 'conversation'

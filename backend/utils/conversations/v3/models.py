@@ -11,6 +11,7 @@ from typing import Any, Callable
 from langchain_core.callbacks import BaseCallbackHandler
 from openai import APIStatusError, DefaultAsyncHttpxClient
 
+from config.llm_spend import v3_summary_first_open_gating_enabled
 from database import conversations_v3_leases as leases
 from utils.executors import db_executor, run_blocking
 from utils.llm import background_flex
@@ -118,7 +119,7 @@ async def summary_model_attempt():
     key = 'summary-' + cid
     with background_flex.background_flex(closed_at, features=frozenset({feature})):
         # The gateway needs 42s Standard reserve plus 12s of Flex headroom.
-        if background_flex.budget_ms(feature) <= 54_000:
+        if not v3_summary_first_open_gating_enabled() or background_flex.budget_ms(feature) <= 54_000:
             yield
             return
         await run_blocking(db_executor, leases.mark_llm_preemptible, uid, key, token, True)

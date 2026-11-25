@@ -7,6 +7,7 @@ import json
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from fastapi import HTTPException
 
 import pytest
@@ -313,7 +314,35 @@ async def test_summary_route_returns_409_before_streaming_response(monkeypatch, 
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('detail_intent', ['0', '1'])
+async def test_summary_stream_uses_main_generation_path_by_default(monkeypatch, detail_intent):
+    row = {'id': 'c', 'v3_derived': True, 'v3_process_failure_reason': 'outline'}
+    prepare = AsyncMock(return_value='lease')
+
+    async def blocking(_pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.delenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', raising=False)
+    monkeypatch.setattr(routes, 'run_blocking', blocking)
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: row)
+    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
+    monkeypatch.setattr(summary, 'prepare', prepare)
+    monkeypatch.setattr(
+        service, 'reconcile', lambda *a, **kw: pytest.fail('outline failure triggered on-open recovery')
+    )
+
+    response = await routes.conversation_summary_stream(
+        'c', 'u', request=SimpleNamespace(headers={'X-Omi-Recording-Detail': detail_intent})
+    )
+
+    assert response.status_code == 200
+    prepare.assert_awaited_once_with('u', row, promote_llm=False)
+    assert 'v3_process_pending' not in row
+
+
+@pytest.mark.asyncio
 async def test_explicit_read_only_summary_serves_stored_row_without_paid_work(monkeypatch):
+    monkeypatch.setenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', 'true')
     row = {
         'id': 'c',
         'finished_at': AT,
@@ -369,6 +398,7 @@ async def test_legacy_summary_does_not_generate_from_live_v3_rows(monkeypatch, c
 @pytest.mark.asyncio
 @pytest.mark.parametrize('becomes_live', [False, True])
 async def test_legacy_summary_reconciles_other_v3_rows_and_rechecks_live_admission(monkeypatch, becomes_live):
+    monkeypatch.setenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', 'true')
     row = {
         'id': 'c',
         'v3_derived': True,
@@ -1046,6 +1076,7 @@ def test_completed_note_detail_repairs_uuid_citations_without_rewriting_storage(
 @pytest.mark.asyncio
 @pytest.mark.parametrize('detail_intent', [None, '1'])
 async def test_summary_open_locks_configured_preview_with_live_recap_present(monkeypatch, detail_intent):
+    monkeypatch.setenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', 'true')
     row = {
         'id': 'c',
         'v3_derived': True,
@@ -1165,11 +1196,13 @@ def test_outline_only_budgets_finished_automatic_stretches_with_publication_head
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('foreground', [False, True])
-async def test_summary_model_marks_only_the_background_attempt_preemptible(monkeypatch, foreground):
+@pytest.mark.parametrize('gating', [False, True])
+async def test_summary_model_marks_only_the_background_attempt_preemptible(monkeypatch, foreground, gating):
     from utils.conversations.v3 import models
     from utils.llm import background_flex
 
     marks = []
+    monkeypatch.setenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', str(gating))
 
     async def blocking(_pool, fn, *args):
         return fn(*args)
@@ -1183,7 +1216,9 @@ async def test_summary_model_marks_only_the_background_attempt_preemptible(monke
                 assert marks == []
                 assert background_flex.budget_ms('conversation_v3_summary') == 0
             else:
-                assert marks == [('u', 'summary-c', 'token', True)]
+                assert marks == ([('u', 'summary-c', 'token', True)] if gating else [])
                 assert background_flex.budget_ms('conversation_v3_summary') > 54_000
-    assert marks == ([] if foreground else [('u', 'summary-c', 'token', True), ('u', 'summary-c', 'token', False)])
+    assert marks == (
+        [('u', 'summary-c', 'token', True), ('u', 'summary-c', 'token', False)] if gating and not foreground else []
+    )
     assert background_flex.budget_ms('conversation_v3_summary') == 0

@@ -153,6 +153,7 @@ async def test_preceding_outline_context_is_title_and_line(builder, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_malformed_outline_is_published_but_not_cached_and_open_retries(builder, monkeypatch):
+    monkeypatch.setenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', 'true')
     from utils.conversations.v3 import summary
 
     committed, _ = builder
@@ -181,6 +182,7 @@ async def test_malformed_outline_is_published_but_not_cached_and_open_retries(bu
     [('v3_lease_lifetime_exhausted', 200), ('v3_lease_lifetime_exhausted unexpectedly', 500)],
 )
 def test_reconcile_route_falls_back_only_for_exact_lease_exhaustion(builder, monkeypatch, error, status):
+    monkeypatch.setenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', 'true')
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from routers import conversations_v3_tasks as routes
