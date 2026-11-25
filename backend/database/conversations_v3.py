@@ -1402,6 +1402,24 @@ AUDIO_PURGE_INTAKES_FIELD = 'v3_audio_purge_intakes'
 AUDIO_PURGE_DONORS_FIELD = 'v3_audio_purge_source_ids'
 
 
+def _custody_clear(row):
+    """Delete each AUDIO_PURGE_CUSTODY_FIELDS field present on ``row``.
+
+    Keys are spelled out rather than generated so the terminal-writer ratchet
+    can see this patch never carries ``status``.
+    """
+    clear = {
+        SETTLED_FIELD: firestore.DELETE_FIELD,
+        RETAINED_DONORS_FIELD: firestore.DELETE_FIELD,
+        MERGE_TARGET_FIELD: firestore.DELETE_FIELD,
+        MERGE_PLAN_FIELD: firestore.DELETE_FIELD,
+    }
+    for field in list(clear):
+        if field not in row:
+            del clear[field]
+    return clear
+
+
 @dataclass(frozen=True)
 class AudioPurgeClaim:
     """What the purge owes before deleting blobs. ``intakes``: none, inline, pending or done."""
@@ -1482,20 +1500,22 @@ def claim_audio_purge(uid, rid, *, defer_intake_purge=False, firestore_client=No
                     tombstones.document(donor),
                     {'conversation_id': donor, 'deleted_at': now, 'created_at': donor_row.get('created_at')},
                 )
-            stale = {field: firestore.DELETE_FIELD for field in AUDIO_PURGE_CUSTODY_FIELDS if field in donor_row}
+            stale = _custody_clear(donor_row)
             if stale:
                 tx.update(conversations_ref.document(donor), stale)
-        lineage = {
-            field: [value for value in successor.get(field) or [] if value != rid]
-            for field in (RETAINED_DONORS_FIELD, 'sync_merged_from')
-            if rid in (successor.get(field) or [])
-        }
+        lineage = {}
+        retained_lineage = successor.get(RETAINED_DONORS_FIELD) or []
+        if rid in retained_lineage:
+            lineage[RETAINED_DONORS_FIELD] = [value for value in retained_lineage if value != rid]
+        merged_lineage = successor.get('sync_merged_from') or []
+        if rid in merged_lineage:
+            lineage['sync_merged_from'] = [value for value in merged_lineage if value != rid]
         if lineage:
             # The erased donor leaves its successor's lineage, so no later delete or merge resolves it.
             tx.update(successor_ref, lineage)
         updates: dict[str, Any] = {'deleted': True, 'v3_audio_erased': True}
         if custody:
-            updates.update({field: firestore.DELETE_FIELD for field in AUDIO_PURGE_CUSTODY_FIELDS if field in row})
+            updates.update(_custody_clear(row))
         if donors != list(row.get(AUDIO_PURGE_DONORS_FIELD) or []):
             updates[AUDIO_PURGE_DONORS_FIELD] = donors
         if owed == 'inline' and defer_intake_purge:

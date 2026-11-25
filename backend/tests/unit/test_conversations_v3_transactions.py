@@ -368,6 +368,15 @@ def _live(row):
     return {k: v for k, v in row.items() if v is not firestore.DELETE_FIELD}
 
 
+def test_custody_clear_deletes_exactly_the_present_custody_fields():
+    everything = {field: 'x' for field in store.AUDIO_PURGE_CUSTODY_FIELDS} | {'status': 'completed', 'other': 1}
+    assert store._custody_clear(everything) == dict.fromkeys(store.AUDIO_PURGE_CUSTODY_FIELDS, firestore.DELETE_FIELD)
+    assert store._custody_clear({MERGE_TARGET_FIELD: 'successor', 'status': 'completed'}) == {
+        MERGE_TARGET_FIELD: firestore.DELETE_FIELD
+    }
+    assert store._custody_clear({'status': 'completed'}) == {}
+
+
 def _purge_count(outcome):
     return metrics.AUDIO_PURGES.labels(outcome)._value.get()
 
