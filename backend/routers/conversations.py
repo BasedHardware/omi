@@ -54,7 +54,7 @@ from database.vector_db import (
 )
 import database.vector_db as vector_db
 from utils.other.storage import (
-    delete_privacy_conversation_audio,
+    delete_conversation_audio_under_gate,
     delete_owner_prompt_embedding_cache,
     get_app_thumbnail_url,
 )
@@ -135,7 +135,13 @@ from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
-from utils.conversations.deletion_batch_purge import accepts_conversation_deletes, deferred_batch_purges
+from utils.conversations.deletion_batch_purge import (
+    accepts_conversation_deletes,
+    arm_audio_erasure,
+    deferred_batch_purges,
+    durable_audio_erasure,
+    mark_audio_delete_completed,
+)
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
     clamp_conversation_search_pagination,
@@ -1920,10 +1926,18 @@ def erase_accepted_conversation(uid: str, conversation_id: str, audio_source_ids
     )
     with gate, deferred_batch_purges(uid):
         _delete_conversation_under_gate(
-            conversation_id, cleanup, True, None, uid, memory_service, db_client, record_event=False
+            conversation_id,
+            cleanup,
+            True,
+            None,
+            uid,
+            memory_service,
+            db_client,
+            record_event=False,
+            audio_source_ids=audio_source_ids,
         )
     for func, args, kwargs in cleanup.calls:
-        if func is delete_privacy_conversation_audio:
+        if func is delete_conversation_audio_under_gate:
             known = list(kwargs.get('source_ids') or [])
             kwargs = {**kwargs, 'source_ids': known + [source for source in audio_source_ids if source not in known]}
         func(*args, **kwargs)
@@ -1933,7 +1947,7 @@ def _delete_privacy_audio_after_response(uid: str, conversation_id: str, *, sour
     from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked, StoragePrefixPurgeError
 
     try:
-        delete_privacy_conversation_audio(uid, conversation_id, source_ids=source_ids)
+        delete_conversation_audio_under_gate(uid, conversation_id, source_ids=source_ids)
     except StoragePrefixPurgeError as error:
         logger.error(
             'event=conversation_audio_purge uid=%s conversation_id=%s outcome=%s reason=%s',
@@ -1942,10 +1956,35 @@ def _delete_privacy_audio_after_response(uid: str, conversation_id: str, *, sour
             'blocked' if isinstance(error, StoragePrefixPurgeBlocked) else 'failed',
             sanitize(error),
         )
+    except RuntimeError as error:
+        # The whole sweep holds the audio gate: a legal hold (or an unreadable hold authority, or a
+        # busy gate) stops it before any erasure. This best-effort path has no retry, so the audio is
+        # retained and reported (the durable obligation is the retrying path).
+        if type(error).__name__ not in {
+            'LegalHoldActive',
+            'LegalHoldAuthorityUnavailable',
+            'DestructiveOperationInProgress',
+            'DestructiveGateTakeover',
+        }:
+            raise
+        logger.warning(
+            'event=conversation_audio_purge conversation_id=%s outcome=retained reason=%s',
+            conversation_id,
+            type(error).__name__,
+        )
 
 
 def _delete_conversation_under_gate(
-    conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client, *, record_event=True
+    conversation_id,
+    background_tasks,
+    cascade,
+    http_request,
+    uid,
+    memory_service,
+    db_client,
+    *,
+    record_event=True,
+    audio_source_ids=(),
 ):
     logger.info('event=conversation_delete cascade=%s', cascade)
 
@@ -2002,18 +2041,30 @@ def _delete_conversation_under_gate(
                 logger.error(
                     'event=conversation_delete action=task_vectors outcome=error exception_type=%s', type(e).__name__
                 )
-        # Snapshot retained bridge donors before shared metadata cleanup removes them.
-        # A previous lake-purge attempt may already have removed the transcript blob.
-        source_ids = []
-        if os.getenv('BUCKET_CANONICAL_AUDIO'):
-            try:
-                raw = conversations_db.get_conversation_raw_snapshot(
-                    uid, conversation_id, field_paths=['sync_merged_from']
-                )
-            except Exception as error:
-                raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
-            source_ids = (raw or {}).get('sync_merged_from', [])
-        purge_audio = _delete_privacy_audio_after_response if record_event else delete_privacy_conversation_audio
+
+    # Audio is primary content like the transcript, so both cascade modes erase it.
+    # Snapshot merge donors before shared metadata cleanup removes them: their
+    # prefixes and sync uploads hold this conversation's audio.
+    try:
+        raw = conversations_db.get_conversation_raw_snapshot(
+            uid, conversation_id, field_paths=['sync_merged_from', 'sync_content_revision']
+        )
+    except Exception as error:
+        raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
+    source_ids = [source for source in (raw or {}).get('sync_merged_from') or [] if isinstance(source, str)]
+    audio_armed = durable_audio_erasure()
+    if audio_armed:
+        # Owed before the primary row goes, so a retry answered ``already_deleted`` still
+        # leaves it owed; the runner retries holds, in-flight staging and read failures.
+        known = [*source_ids, *(source for source in audio_source_ids if source not in source_ids)]
+        try:
+            arm_audio_erasure(
+                uid, conversation_id, known, sync_sourced=bool((raw or {}).get('sync_content_revision') or known)
+            )
+        except Exception as error:
+            raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
+    else:
+        purge_audio = _delete_privacy_audio_after_response if record_event else delete_conversation_audio_under_gate
         background_tasks.add_task(purge_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation
@@ -2030,6 +2081,15 @@ def _delete_conversation_under_gate(
         delete_conversation_and_frame_evidence(uid, conversation_id)
     except object_lake.LakeFetchError as error:
         raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
+    if audio_armed:
+        # The row is gone: the runner may erase the audio. A request that failed before this
+        # point leaves the marker unset, and the runner waits while the row is still visible.
+        try:
+            mark_audio_delete_completed(uid, conversation_id)
+        except Exception as error:  # noqa: BLE001 - the row is deleted; the runner sees it absent
+            logger.warning(
+                'event=conversation_delete action=audio_marker outcome=error exception_type=%s', type(error).__name__
+            )
 
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)

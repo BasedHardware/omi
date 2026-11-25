@@ -57,7 +57,7 @@ def route(monkeypatch, plane):
     for name in (
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
-        'delete_privacy_conversation_audio',
+        'delete_conversation_audio_under_gate',
         'delete_vector',
         'delete_transcript_chunk_vectors',
         'delete_action_item_vectors_batch',
@@ -829,3 +829,69 @@ def test_unanswered_delete_is_not_settled_by_a_retry_503_real_transport(monkeypa
         server.shutdown()
         server.server_close()
         client.close()
+
+
+def _run_audio(plane, cid, erase):
+    """Claim and run the conversation's audio obligation as the dispatched consumer would."""
+    from database import conversation_batch_purge_jobs as purge_jobs
+
+    job = purge_jobs.audio_job_id(plane.uid, cid)
+    future = purge_jobs._now() + timedelta(hours=2)  # every spread/backoff timer has elapsed
+    claim = purge_jobs.claim_dispatch(job, now=future, collection=purge_jobs.AUDIO_COLLECTION)
+    assert claim is not None
+    return purge_jobs.run_audio_erasure_job(job, claim[0], erase=erase, now=future)
+
+
+def _real_audio_erase(monkeypatch):
+    """The real durable erasure (real audio gate on the emulator); GCS prefix deletion is recorded."""
+    from utils.other import storage
+
+    erased = []
+    monkeypatch.delenv('BUCKET_CANONICAL_AUDIO', raising=False)
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)  # no stage: no sync ledger, no staging
+    monkeypatch.setattr(storage, 'delete_conversation_audio_files', lambda uid, cid, **kwargs: erased.append(cid))
+    return storage.erase_conversation_audio, erased
+
+
+@pytest.mark.parametrize('cascade', ['false', 'true'])
+def test_ordinary_delete_through_the_route_lets_the_runner_erase_audio_and_discharge(
+    monkeypatch, plane, route, cascade
+):
+    from database import conversation_batch_purge_jobs as purge_jobs
+
+    cid = f'conv-{uuid4().hex[:8]}'
+    _conversation(plane, cid)
+    with TestClient(route.app) as client:
+        assert client.delete(f'/v1/conversations/{cid}?cascade={cascade}').status_code == 204
+    user = plane.client.collection('users').document(plane.uid)
+    # What an ordinary delete leaves: tombstone, no primary row, and the obligation marked completed.
+    assert user.collection('deleted_conversations').document(cid).get().exists
+    assert not user.collection('conversations').document(cid).get().exists
+    job = plane.client.collection(purge_jobs.AUDIO_COLLECTION).document(purge_jobs.audio_job_id(plane.uid, cid))
+    assert job.get().to_dict()['delete_completed_at'] is not None
+    erase, erased = _real_audio_erase(monkeypatch)
+    assert _run_audio(plane, cid, erase) == 'erased'
+    assert erased == [cid]
+    assert not job.get().exists  # discharged
+
+
+def test_delete_failing_after_arming_leaves_the_audio_held_for_the_visible_row(monkeypatch, plane, route):
+    from database import conversation_batch_purge_jobs as purge_jobs
+    from utils.other import object_lake
+
+    def lake_down(uid, cid):
+        raise object_lake.LakeFetchError('lake unavailable')
+
+    monkeypatch.setattr(route.routes, 'delete_conversation_and_frame_evidence', lake_down)
+    cid = f'conv-{uuid4().hex[:8]}'
+    _conversation(plane, cid)
+    with TestClient(route.app, raise_server_exceptions=False) as client:
+        assert client.delete(f'/v1/conversations/{cid}?cascade=false').status_code == 503
+    job = plane.client.collection(purge_jobs.AUDIO_COLLECTION).document(purge_jobs.audio_job_id(plane.uid, cid))
+    armed = job.get().to_dict()
+    assert armed is not None and 'delete_completed_at' not in armed
+    erase, erased = _real_audio_erase(monkeypatch)
+    assert _run_audio(plane, cid, erase) == 'conversation_row_live'
+    assert erased == []
+    held = job.get().to_dict()
+    assert held['last_reason'] == 'conversation_row_live' and held['last_outcome'] == 'held'

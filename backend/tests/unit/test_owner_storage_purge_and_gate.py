@@ -57,6 +57,14 @@ class _Client:
         return self.buckets[name]
 
 
+@pytest.fixture(autouse=True)
+def _no_sync_uploads(monkeypatch):
+    # Sync staging lookups read the owner's ledger; these fakes have none unless a test says so.
+    from database.sync_ledger_sources import StagingPlan
+
+    monkeypatch.setattr('database.sync_ledger_sources.staging_plan', lambda *args, **kwargs: StagingPlan())
+
+
 def test_owner_prefix_purge_removes_private_and_non_private_uid_objects(monkeypatch):
     uid = 'uid1'
     buckets = {
@@ -356,3 +364,300 @@ def test_privacy_erases_snapshotted_bridge_donors_only_at_explicit_boundary(monk
     storage_mod.delete_privacy_conversation_audio('u', 'survivor', source_ids=['donor', 'donor'])
     assert erased.call_count == 2
     assert {call.args for call in erased.call_args_list} == {(private, 'u', 'survivor'), (private, 'u', 'donor')}
+
+
+def _staging_buckets(monkeypatch, jobs, *, shared_live=(), in_flight=(), unsettled=()):
+    private = _Bucket({'chunks/u/c/a.bin', 'chunks/u/donor/b.bin', 'chunks/u/other/c.bin'})
+    syncing = _Bucket({'syncing/u/job-a/1.bin', 'syncing/u/job-a/seg_1.wav', 'syncing/u/job-other/2.bin'})
+    syncing.names.add('syncing/stranger/job-a/3.bin')
+    derived = _Bucket({'syncing/u/job-a/4.bin', 'chunks/u/c/d.bin'})
+    for name, bucket in (('private', private), ('syncing', syncing), ('derived', derived)):
+        bucket.name = name
+    monkeypatch.setattr(
+        storage_mod,
+        '_get_storage_client',
+        lambda: _Client({'private': private, 'syncing': syncing, 'derived': derived}),
+    )
+    monkeypatch.setattr(storage_mod, 'private_cloud_sync_bucket', 'private')
+    monkeypatch.setattr(storage_mod, 'syncing_local_bucket', 'syncing')
+    monkeypatch.setenv('BUCKET_AUDIO_DERIVED', 'derived')
+    monkeypatch.delenv('BUCKET_CANONICAL_AUDIO', raising=False)
+    looked_up = []
+
+    from database.sync_ledger_sources import StagingPlan
+
+    def lookup(uid, conversation_ids, **kwargs):
+        looked_up.append((uid, list(conversation_ids), *([kwargs['recorded']] if kwargs.get('recorded') else [])))
+        return StagingPlan(
+            erasable=tuple(jobs),
+            shared_live=tuple(shared_live),
+            in_flight=tuple(in_flight),
+            unsettled=tuple(unsettled),
+        )
+
+    monkeypatch.setattr('database.sync_ledger_sources.staging_plan', lookup)
+    return private, syncing, derived, looked_up
+
+
+def test_privacy_delete_erases_sync_staging_and_donor_prefixes(monkeypatch):
+    private, syncing, derived, looked_up = _staging_buckets(monkeypatch, ['job-a'])
+    storage_mod.delete_privacy_conversation_audio('u', 'c', source_ids=['donor'])
+    assert looked_up == [('u', ['c', 'donor'])]
+    assert private.names == {'chunks/u/other/c.bin'}
+    # Only this owner's staging for the upload that fed the conversation goes.
+    assert syncing.names == {'syncing/u/job-other/2.bin', 'syncing/stranger/job-a/3.bin'}
+    assert derived.names == set()
+
+
+def test_held_sync_staging_is_kept_and_reported_after_every_prefix_is_tried(monkeypatch):
+    private, syncing, derived, _ = _staging_buckets(monkeypatch, ['job-a'])
+    held = 'syncing/u/job-a/1.bin'
+    delete = _Blob.delete
+
+    def delete_with_hold(blob):
+        if blob.name == held:
+            raise Forbidden('held', errors=[{'reason': 'objectUnderActiveHold'}])
+        delete(blob)
+
+    monkeypatch.setattr(_Blob, 'generation', 1, raising=False)
+    monkeypatch.setattr(_Blob, 'delete', delete_with_hold)
+    with pytest.raises(account_deletion_operational_holds.StoragePrefixPurgeBlocked) as error:
+        storage_mod.delete_privacy_conversation_audio('u', 'c')
+    assert error.value.objects == {('syncing', held, 1): 'objectUnderActiveHold'}
+    assert syncing.names == {held, 'syncing/u/job-other/2.bin', 'syncing/stranger/job-a/3.bin'}
+    assert derived.names == set()
+    assert 'chunks/u/c/a.bin' not in private.names
+
+
+def test_no_ledger_upload_leaves_staging_untouched(monkeypatch):
+    _private, syncing, _derived, _ = _staging_buckets(monkeypatch, [])
+    before = set(syncing.names)
+    assert storage_mod.delete_conversation_sync_staging('u', ['c']) == 0
+    assert syncing.names == before
+
+
+def test_staging_a_live_sibling_still_needs_is_kept(monkeypatch):
+    _private, syncing, derived, _ = _staging_buckets(monkeypatch, [], shared_live=['job-a'])
+    before_syncing = set(syncing.names)
+    storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True)
+    assert syncing.names == before_syncing
+    # The conversation's own prefix goes; the shared upload's staging stays in both buckets.
+    assert derived.names == {'syncing/u/job-a/4.bin'}
+
+
+def test_unfinished_upload_staging_is_kept_and_raised_only_for_the_durable_runner(monkeypatch):
+    from database.sync_ledger_sources import StagingInFlight
+
+    private, syncing, _derived, _ = _staging_buckets(monkeypatch, ['job-other'], in_flight=['job-a'])
+    storage_mod.delete_privacy_conversation_audio('u', 'c')
+    assert 'syncing/u/job-a/1.bin' in syncing.names
+    with pytest.raises(StagingInFlight):
+        storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True)
+    # Every other step still ran: the conversation prefix and the erasable upload are gone.
+    assert 'chunks/u/c/a.bin' not in private.names
+    assert 'syncing/u/job-other/2.bin' not in syncing.names
+    assert 'syncing/u/job-a/1.bin' in syncing.names
+
+
+def test_durable_audio_erasure_runs_every_step_under_the_audio_gate(monkeypatch):
+    gates = []
+
+    @contextmanager
+    def gate(uid, *, kind, wait_seconds=0.0, **kwargs):
+        gates.append((uid, kind, wait_seconds))
+        yield 'token'
+
+    erased = []
+    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', gate)
+    monkeypatch.setattr(
+        storage_mod,
+        'delete_privacy_conversation_audio',
+        lambda uid, cid, *, source_ids, strict_staging, recorded_staging, settled_staging, deleted_siblings, ledger: erased.append(
+            (uid, cid, source_ids, strict_staging, len(gates))
+        )
+        or {'shared_live': 0},
+    )
+    assert storage_mod.erase_conversation_audio('u', 'c', ['donor'], staging={'job-a': ['c']}) == {'shared_live': 0}
+    assert gates == [('u', 'audio_conversation_deletion', storage_mod.CONVERSATION_AUDIO_ERASURE_GATE_WAIT_SECONDS)]
+    assert erased == [('u', 'c', ['donor'], True, 1)]
+
+
+def test_recorded_staging_reaches_the_plan_on_the_durable_path(monkeypatch):
+    _private, syncing, _derived, looked_up = _staging_buckets(monkeypatch, ['job-a'])
+    storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True, recorded_staging={'job-a': ['c']})
+    assert looked_up == [('u', ['c'], {'job-a': ['c']})]
+    assert not any(name.startswith('syncing/u/job-a/') for name in syncing.names)
+
+
+def test_held_canonical_pack_is_reported_as_a_blocked_object_and_other_steps_run(monkeypatch):
+    private, syncing, _derived, _ = _staging_buckets(monkeypatch, ['job-a'])
+    canonical = SimpleNamespace(name='canonical')
+    monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
+    monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: canonical)
+
+    def held_pack(bucket, uid, cid):
+        raise Forbidden('held', errors=[{'reason': 'objectUnderActiveHold'}])
+
+    monkeypatch.setattr(storage_mod.audio_packs, 'delete_conversation', held_pack)
+
+    @contextmanager
+    def gate(*args, **kwargs):
+        yield
+
+    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', gate)
+    with pytest.raises(account_deletion_operational_holds.StoragePrefixPurgeBlocked) as error:
+        storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True)
+    pack = storage_mod.audio_packs.owner_prefix(storage_mod.audio_packs.PACK_PREFIX, 'u') + 'c'
+    assert error.value.objects == {('canonical', pack, 0): 'objectUnderActiveHold'}
+    # The held pack did not stop the conversation prefix or the staging purge.
+    assert 'chunks/u/c/a.bin' not in private.names
+    assert not any(name.startswith('syncing/u/job-a/') for name in syncing.names)
+
+
+def test_non_hold_canonical_failure_still_raises(monkeypatch):
+    _staging_buckets(monkeypatch, [])
+    monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
+    monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: SimpleNamespace(name='canonical'))
+
+    def denied(bucket, uid, cid):
+        raise Forbidden('denied', errors=[{'reason': 'insufficientPermissions'}])
+
+    monkeypatch.setattr(storage_mod.audio_packs, 'delete_conversation', denied)
+
+    @contextmanager
+    def gate(*args, **kwargs):
+        yield
+
+    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', gate)
+    with pytest.raises(Forbidden):
+        storage_mod.delete_privacy_conversation_audio('u', 'c')
+
+
+def test_best_effort_audio_sweep_holds_the_audio_gate_and_a_hold_stops_it(monkeypatch):
+    from database.legal_holds import LegalHoldActive
+
+    gates = []
+    swept = MagicMock(return_value={'shared_live': 0})
+    monkeypatch.setattr(storage_mod, 'delete_privacy_conversation_audio', swept)
+
+    @contextmanager
+    def gate(uid, *, kind, wait_seconds=0.0, **kwargs):
+        gates.append((uid, kind))
+        yield 'token'
+
+    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', gate)
+    storage_mod.delete_conversation_audio_under_gate('u', 'c', source_ids=['donor'])
+    assert gates == [('u', 'audio_conversation_deletion')]
+    swept.assert_called_once_with('u', 'c', source_ids=['donor'])
+
+    @contextmanager
+    def held(uid, **kwargs):
+        raise LegalHoldActive('held')
+        yield  # pragma: no cover
+
+    swept.reset_mock()
+    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', held)
+    with pytest.raises(LegalHoldActive):
+        storage_mod.delete_conversation_audio_under_gate('u', 'c')
+    swept.assert_not_called()
+
+
+def test_staging_kept_for_a_live_sibling_but_already_empty_is_not_owed(monkeypatch):
+    """No exit otherwise: a protected prefix that holds nothing keeps nothing for the sibling."""
+    _private, syncing, derived, _ = _staging_buckets(monkeypatch, [], shared_live=['job-gone', 'job-a'])
+    # job-a still has bytes in both buckets; job-gone has none anywhere.
+    assert storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True)['shared_live'] == 1
+    syncing.names = {name for name in syncing.names if not name.startswith('syncing/u/job-a/')}
+    derived.names = {name for name in derived.names if not name.startswith('syncing/u/job-a/')}
+    assert storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True)['shared_live'] == 0
+
+
+def test_empty_prefix_of_an_unsettled_shared_upload_stays_owed(monkeypatch):
+    """An upload still running may yet write staging: an empty prefix proves nothing until it settles."""
+    _staging_buckets(monkeypatch, [], shared_live=['job-gone'], unsettled=['job-gone'])
+    assert storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True)['shared_live'] == 1
+
+
+def test_durable_erasure_reenters_the_real_audio_gate_it_already_holds(monkeypatch):
+    """The obligation's outer audio gate and the canonical-pack step's nested one are the same kind."""
+    from database import legal_holds
+
+    class _Snapshot:
+        def __init__(self, payload):
+            self.exists = payload is not None
+            self._payload = payload
+
+        def to_dict(self):
+            return dict(self._payload or {})
+
+    class _Ref:
+        def __init__(self, client, path):
+            self.client, self.path = client, path
+
+        def get(self, transaction=None):
+            return _Snapshot(self.client.docs.get(self.path))
+
+    class _Collection:
+        def __init__(self, client, path):
+            self.client, self.path = client, path
+
+        def document(self, doc_id):
+            return _Ref(self.client, f'{self.path}/{doc_id}')
+
+    class _Transaction:
+        def __init__(self, client):
+            self.client = client
+
+        def set(self, ref, payload, merge=False):
+            current = dict(self.client.docs.get(ref.path, {})) if merge else {}
+            self.client.docs[ref.path] = {**current, **payload}
+
+    class _Firestore:
+        def __init__(self):
+            self.docs = {}
+
+        def collection(self, path):
+            return _Collection(self, path)
+
+        def transaction(self):
+            return _Transaction(self)
+
+    client = _Firestore()
+    for name in ('_acquire_destructive_operation_transaction', '_finish_destructive_operation_transaction'):
+        monkeypatch.setattr(legal_holds, name, getattr(legal_holds, name).to_wrap)
+    monkeypatch.setattr(legal_holds, 'account_deletion_firestore_client', lambda firestore_client=None: client)
+    private, syncing, _derived, _ = _staging_buckets(monkeypatch, ['job-a'])
+    monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
+    monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: SimpleNamespace(name='canonical'))
+    packs = []
+    monkeypatch.setattr(storage_mod.audio_packs, 'delete_conversation', lambda bucket, uid, cid: packs.append(cid))
+
+    assert storage_mod.erase_conversation_audio('u', 'c', ['donor'], staging={'job-a': ['c']}) == {'shared_live': 0}
+    assert packs == ['c', 'donor']
+    assert 'chunks/u/c/a.bin' not in private.names
+    assert not any(name.startswith('syncing/u/job-a/') for name in syncing.names)
+    gate = client.docs['legal_hold_deletion_gates/u']
+    assert gate['kind'] == 'audio_conversation_deletion' and gate['state'] == 'completed'
+
+
+def _failed_upload(monkeypatch, *, empty):
+    from database.sync_ledger_sources import StagingInFlight, StagingPlan
+
+    _private, syncing, derived, _ = _staging_buckets(monkeypatch, [])
+    if empty:
+        for bucket in (syncing, derived):
+            bucket.names = {name for name in bucket.names if not name.startswith('syncing/u/job-a/')}
+    plan = StagingPlan(in_flight=('job-a',), unsettled=('job-a',), failed=('job-a',))
+    monkeypatch.setattr('database.sync_ledger_sources.staging_plan', lambda *args, **kwargs: plan)
+    return StagingInFlight
+
+
+def test_failed_upload_with_an_empty_prefix_keeps_nothing_and_is_not_waited_on(monkeypatch):
+    _failed_upload(monkeypatch, empty=True)
+    assert storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True)['shared_live'] == 0
+
+
+def test_failed_upload_with_bytes_left_stays_in_flight_for_the_unsettled_escalation(monkeypatch):
+    in_flight = _failed_upload(monkeypatch, empty=False)
+    with pytest.raises(in_flight):
+        storage_mod.delete_privacy_conversation_audio('u', 'c', strict_staging=True)

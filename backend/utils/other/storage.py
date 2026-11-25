@@ -54,7 +54,7 @@ from concurrent.futures import as_completed, wait, FIRST_COMPLETED
 from utils.executors import postprocess_executor, storage_executor
 from utils.other import audio_opus
 from utils.other.audio_opus import decode_opus_to_pcm, encode_pcm_to_opus
-from google.api_core.exceptions import PreconditionFailed
+from google.api_core.exceptions import Forbidden, PreconditionFailed
 from google.cloud.exceptions import NotFound, NotFound as BlobNotFound
 
 from database.redis_db import (
@@ -2805,13 +2805,240 @@ def get_canonical_audio_bucket() -> Any:
         return bucket
 
 
-def delete_privacy_conversation_audio(uid: str, conversation_id: str, *, source_ids: List[str] | None = None) -> None:
-    """Only the explicit privacy endpoint may erase canonical conversation bytes."""
+def delete_privacy_conversation_audio(
+    uid: str,
+    conversation_id: str,
+    *,
+    source_ids: List[str] | None = None,
+    strict_staging: bool = False,
+    recorded_staging: dict[str, List[str]] | None = None,
+    settled_staging: List[str] | None = None,
+    deleted_siblings: List[str] | None = None,
+    ledger: Any = None,
+) -> dict[str, Any]:
+    """Only the explicit privacy endpoint may erase canonical conversation bytes.
+
+    ``strict_staging`` (the durable audio obligation) raises ``StagingInFlight``
+    after every other step when an upload's staging had to stay because the
+    upload has not completed, so the obligation retries it. ``recorded_staging``
+    is the obligation's recorded staging jobs (see ``staging_sources``) and
+    ``settled_staging`` the recorded jobs a pass saw completed, used with the
+    ledger. A held canonical pack object is reported like any held object.
+    ``deleted_siblings`` are fed siblings the obligation already recorded deleted;
+    ``ledger`` is the obligation's ledger read of this pass (not repeated).
+    Returns how many staging directories were kept for a live sibling
+    (``shared_live``), how many wait on siblings not classified this pass
+    (``unchecked_siblings``) and the siblings now known deleted (``deleted_siblings``).
+    """
+    from database.sync_ledger_sources import StagingInFlight
+
+    blocked: dict[tuple[str, str, int], str] = {}
+    unverified = 0
     if os.getenv('BUCKET_CANONICAL_AUDIO'):
         with destructive_operation_gate(uid, kind='audio_conversation_deletion'):
             canonical = get_canonical_audio_bucket()
             conversation_ids: List[str] = [conversation_id]
             conversation_ids.extend(source_ids or [])
-            for cid in set(conversation_ids):
-                audio_packs.delete_conversation(canonical, uid, cid)
-    delete_conversation_audio_files(uid, conversation_id)
+            for cid in sorted(set(conversation_ids)):
+                try:
+                    audio_packs.delete_conversation(canonical, uid, cid)
+                except Forbidden as error:
+                    reason = next((item.get('reason') for item in error.errors or [] if item.get('reason')), '')
+                    if reason not in {'objectUnderActiveHold', 'retentionPolicyNotMet'}:
+                        raise
+                    # Object holds on a pack are retained and reported; the other steps still run.
+                    blocked[
+                        (
+                            getattr(canonical, 'name', 'canonical'),
+                            audio_packs.owner_prefix(audio_packs.PACK_PREFIX, uid) + cid,
+                            0,
+                        )
+                    ] = reason
+    # Merge donors' prefixes hold audio that now belongs to this conversation.
+    # Sync staging is keyed by upload, so every prefix is attempted before a block is raised.
+    owned: List[str] = []
+    for cid in [conversation_id, *(source_ids or [])]:
+        if cid not in owned:
+            owned.append(cid)
+    in_flight: StagingInFlight | None = None
+    shared_live: List[str] = []
+    siblings: dict[str, Any] = {}
+    steps: List[Tuple[Callable[..., Any], Any]] = [(delete_conversation_audio_files, cid) for cid in owned]
+    steps.append(
+        (
+            lambda owner, ids: delete_conversation_sync_staging(
+                owner,
+                ids,
+                strict=strict_staging,
+                retained=shared_live,
+                recorded=recorded_staging,
+                settled=settled_staging,
+                known_deleted=deleted_siblings,
+                siblings=siblings,
+                ledger=ledger,
+            ),
+            owned,
+        )
+    )
+    for purge, target in steps:
+        try:
+            purge(uid, target)
+        except StoragePrefixPurgeBlocked as error:
+            blocked.update(error.objects)
+            unverified += error.unverified
+        except StagingInFlight as error:
+            in_flight = error
+    if blocked:
+        raise StoragePrefixPurgeBlocked(blocked, unverified=unverified)
+    if in_flight is not None:
+        raise in_flight
+    summary: dict[str, Any] = {'shared_live': len(shared_live)}
+    if siblings.get('unchecked'):
+        summary['unchecked_siblings'] = siblings['unchecked']
+    if siblings.get('deleted'):
+        summary['deleted_siblings'] = siblings['deleted']
+    return summary
+
+
+# The durable audio obligation waits this long behind a same-kind audio erasure of the account.
+CONVERSATION_AUDIO_ERASURE_GATE_WAIT_SECONDS = 30.0
+
+
+def erase_conversation_audio(
+    uid: str,
+    conversation_id: str,
+    source_ids: List[str],
+    *,
+    staging: dict[str, List[str]] | None = None,
+    settled: List[str] | None = None,
+    deleted_siblings: List[str] | None = None,
+    ledger: Any = None,
+) -> dict[str, Any]:
+    """The durable audio obligation's erasure of one deleted conversation.
+
+    Every step (canonical packs, conversation and donor prefixes, sync staging)
+    runs under the account's audio deletion gate, whose acquisition refuses an
+    active legal hold, so a hold placed after the delete was accepted stops the
+    erasure. Raises ``StoragePrefixPurgeBlocked`` for held objects and
+    ``StagingInFlight`` for staging still in use; the obligation retries both.
+    """
+    with destructive_operation_gate(
+        uid, kind='audio_conversation_deletion', wait_seconds=CONVERSATION_AUDIO_ERASURE_GATE_WAIT_SECONDS
+    ):
+        return delete_privacy_conversation_audio(
+            uid,
+            conversation_id,
+            source_ids=source_ids,
+            strict_staging=True,
+            recorded_staging=staging,
+            settled_staging=settled,
+            deleted_siblings=deleted_siblings,
+            ledger=ledger,
+        )
+
+
+def delete_conversation_audio_under_gate(
+    uid: str, conversation_id: str, *, source_ids: List[str] | None = None
+) -> dict[str, Any]:
+    """Best-effort audio erasure without an obligation (kill switch off, no dispatch).
+
+    The whole sweep holds the account's audio deletion gate, like the durable
+    erasure, so a legal hold placed after the delete was accepted stops it
+    (acquisition raises ``LegalHoldActive``) instead of racing it.
+    """
+    with destructive_operation_gate(
+        uid, kind='audio_conversation_deletion', wait_seconds=CONVERSATION_AUDIO_ERASURE_GATE_WAIT_SECONDS
+    ):
+        return delete_privacy_conversation_audio(uid, conversation_id, source_ids=source_ids)
+
+
+def _staging_prefix_has_objects(buckets: List[str], prefix: str) -> bool:
+    """Whether any staging bucket still holds an object under ``prefix`` (one bounded list each)."""
+    for name in buckets:
+        if next(iter(_get_storage_client().bucket(name).list_blobs(prefix=prefix, max_results=1)), None) is not None:
+            return True
+    return False
+
+
+def delete_conversation_sync_staging(
+    uid: str,
+    conversation_ids: List[str],
+    *,
+    strict: bool = False,
+    retained: List[str] | None = None,
+    recorded: dict[str, List[str]] | None = None,
+    settled: List[str] | None = None,
+    known_deleted: List[str] | None = None,
+    siblings: dict[str, Any] | None = None,
+    ledger: Any = None,
+) -> int:
+    """Purge the raw sync uploads (``syncing/{uid}/{job_id}/``) owed by these deleted conversations.
+
+    Staging is keyed by upload job and its bucket has no lifecycle delete, so
+    without this the raw audio of a deleted conversation is kept forever. The
+    sync content ledger maps conversations to jobs. A job's directory goes only
+    when every conversation the job fed is tombstoned and the upload completed
+    (``staging_plan``); a live sibling keeps it, and its own deletion erases it.
+    Held objects stay and raise; ``strict`` also raises for in-flight uploads.
+    Jobs kept for a live sibling are appended to ``retained``, unless their
+    settled directory is already empty in every staging bucket (nothing is
+    kept, so nothing stays owed). ``known_deleted`` and ``siblings`` (filled
+    with ``deleted`` and ``unchecked``) carry the per-pass sibling
+    classification (see ``staging_plan``). An upload whose ledger rows ended in a
+    failure state (``plan.failed``) with an already-empty prefix keeps nothing and
+    is not waited on; with bytes left it stays in flight (``staging_unsettled``
+    after 14 days). ``ledger`` is a ``staging_sources`` read from this pass.
+    """
+    from database.sync_ledger_sources import StagingInFlight, staging_plan
+
+    plan = (
+        staging_plan(
+            uid,
+            conversation_ids,
+            recorded=recorded,
+            settled=settled or (),
+            known_deleted=known_deleted or (),
+            fresh=ledger,
+        )
+        if recorded or known_deleted or ledger is not None
+        else staging_plan(uid, conversation_ids)
+    )
+    buckets = list(dict.fromkeys(filter(None, (syncing_local_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()))))
+    if siblings is not None:
+        siblings['deleted'] = sorted(plan.deleted_siblings)
+        siblings['unchecked'] = len(plan.unchecked)
+    if retained is not None:
+        retained.extend(
+            job
+            for job in plan.shared_live
+            if job in plan.unsettled or _staging_prefix_has_objects(buckets, f'syncing/{uid}/{job}/')
+        )
+    in_flight = [
+        job
+        for job in plan.in_flight
+        if job not in plan.failed or _staging_prefix_has_objects(buckets, f'syncing/{uid}/{job}/')
+    ]
+    if plan.shared_live or in_flight or plan.unchecked:
+        logger.info(
+            'event=conversation_sync_staging outcome=retained shared_live=%d in_flight=%d unchecked=%d',
+            len(plan.shared_live),
+            len(in_flight),
+            len(plan.unchecked),
+        )
+    deleted = 0
+    blocked: dict[tuple[str, str, int], str] = {}
+    unverified = 0
+    if plan.erasable:
+        for name in buckets:
+            bucket = _get_storage_client().bucket(name)
+            for job_id in plan.erasable:
+                try:
+                    deleted += _delete_owner_bucket_prefix(bucket, f'syncing/{uid}/{job_id}/')
+                except StoragePrefixPurgeBlocked as error:
+                    blocked.update(error.objects)
+                    unverified += error.unverified
+    if blocked:
+        raise StoragePrefixPurgeBlocked(blocked, unverified=unverified)
+    if strict and in_flight:
+        raise StagingInFlight(len(in_flight))
+    return deleted

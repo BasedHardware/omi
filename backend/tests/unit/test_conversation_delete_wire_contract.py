@@ -66,7 +66,7 @@ def _delete_client(monkeypatch) -> TestClient:
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
         'delete_conversation_and_frame_evidence',
-        'delete_privacy_conversation_audio',
+        'delete_conversation_audio_under_gate',
         'delete_vector',
         'delete_transcript_chunk_vectors',
         'delete_action_item_vectors_batch',
@@ -275,11 +275,11 @@ def test_cascade_retry_preserves_canonical_audio_donors_after_partial_lake_purge
             None,
         ]
         assert client.delete('/v1/conversations/conversation-1?cascade=true').status_code == 503
-        conversations.delete_privacy_conversation_audio.assert_not_called()
+        conversations.delete_conversation_audio_under_gate.assert_not_called()
         assert client.delete('/v1/conversations/conversation-1?cascade=true').status_code == 204
 
     decoded.assert_not_called()
-    conversations.delete_privacy_conversation_audio.assert_called_once_with(
+    conversations.delete_conversation_audio_under_gate.assert_called_once_with(
         'uid-delete-contract', 'conversation-1', source_ids=['donor-a', 'donor-b']
     )
 
@@ -292,8 +292,8 @@ def test_cascade_donor_inventory_read_failure_is_retryable_503(monkeypatch):
         response = client.delete('/v1/conversations/conversation-1?cascade=true')
     assert response.status_code == 503
     assert response.json()['detail'] == 'Conversation storage deletion is busy, please retry'
-    assert read.call_args.kwargs == {'field_paths': ['sync_merged_from']}
-    conversations.delete_privacy_conversation_audio.assert_not_called()
+    assert read.call_args.kwargs == {'field_paths': ['sync_merged_from', 'sync_content_revision']}
+    conversations.delete_conversation_audio_under_gate.assert_not_called()
     conversations.delete_conversation_and_frame_evidence.assert_not_called()
 
 

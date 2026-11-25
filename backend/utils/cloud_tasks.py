@@ -282,39 +282,51 @@ def conversation_erasure_task_id(job_id: str, generation: int) -> str:
     return f'conversation-erasure-{job_id}-g{int(generation)}'
 
 
-def _conversation_batch_purge_task_name(job_id: str, generation: int, erasure: bool) -> str:
+def conversation_audio_erasure_task_id(job_id: str, generation: int) -> str:
+    return f'conversation-audio-erasure-{job_id}-g{int(generation)}'
+
+
+def _conversation_batch_purge_task_name(job_id: str, generation: int, erasure: bool, audio: bool = False) -> str:
+    if audio:
+        return conversation_audio_erasure_task_id(job_id, generation)
     return (conversation_erasure_task_id if erasure else conversation_batch_purge_task_id)(job_id, generation)
 
 
 def enqueue_conversation_batch_purge(
-    job_id: str, generation: int, *, erasure: bool = False, queue: Optional[str] = None
+    job_id: str, generation: int, *, erasure: bool = False, audio: bool = False, queue: Optional[str] = None
 ) -> None:
     """Dispatch one generation of a durable purge (or accepted-delete erasure) obligation to backend-sync.
 
     The payload stays opaque. An erasure carries ``kind``; a consumer that predates
     it looks the id up among purge obligations, answers ``missing``, and the
-    erasure is redriven. ``queue`` defaults to the first of ``conversation_erasure_queues``.
+    erasure is redriven. ``audio`` sends an audio erasure (``kind: audio_erasure``);
+    a consumer that predates it drops the task as an unknown kind and the
+    obligation is redriven. ``queue`` defaults to the first of ``conversation_erasure_queues``.
     """
     payload: dict = {'job_id': job_id, 'generation': int(generation)}
-    if erasure:
+    if audio:
+        payload['kind'] = 'audio_erasure'
+    elif erasure:
         payload['kind'] = 'erasure'
     enqueue_named_task(
         queue or next(iter(conversation_erasure_queues()), ''),
         _conversation_batch_purge_handler_url(),
-        _conversation_batch_purge_task_name(job_id, generation, erasure),
+        _conversation_batch_purge_task_name(job_id, generation, erasure, audio),
         payload,
         audience=_conversation_batch_purge_handler_url(),
         invoker_sa=_invoker_sa(),
     )
 
 
-def conversation_batch_purge_task_pending(job_id: str, generation: int, *, erasure: bool = False) -> bool:
+def conversation_batch_purge_task_pending(
+    job_id: str, generation: int, *, erasure: bool = False, audio: bool = False
+) -> bool:
     """Whether this generation's task is still in a queue (waiting, delivering, or between retries).
 
     Only an authoritative NotFound in every queue that may hold it proves it gone;
     any other probe failure raises.
     """
-    name = _conversation_batch_purge_task_name(job_id, generation, erasure)
+    name = _conversation_batch_purge_task_name(job_id, generation, erasure, audio)
     return any(named_task_exists(queue, name) for queue in conversation_erasure_queues())
 
 

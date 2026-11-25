@@ -418,7 +418,13 @@ _add(
     DriverEntry(
         'database.conversation_batch_purge_jobs.due_jobs',
         neutrals={'now': _NOW, 'limit': _LIMIT},
-        domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
+        domains={
+            'collection': [
+                'conversation_batch_purge_jobs',
+                'conversation_erasure_jobs',
+                'conversation_audio_erasure_jobs',
+            ]
+        },
     )
 )
 # Play billing reconcile: one single-field ``next_check_at`` range, oldest first.
@@ -1501,6 +1507,68 @@ _add(
             ),
             _stub('database.episodes.seal', {'id': 'owner'}),
         ),
+    )
+)
+
+
+def _sync_stage(_fs: Any) -> Any:
+    # Ledger collections are stage-scoped; with no stage there is no ledger and no query.
+    import os
+
+    return unittest.mock.patch.dict(os.environ, {'OMI_ENV_STAGE': 'prod'})
+
+
+for _fn in ('uploads_for_conversations', 'staging_job_ids', 'owed_batch_segments'):
+    _add(
+        DriverEntry(
+            f'database.sync_ledger_sources.{_fn}',
+            base={'uid': UID, 'conversation_ids': ['conv-1']},
+            patchers=(_sync_stage,),
+        )
+    )
+
+
+def _seed_shared_upload(client, combo, trial):
+    """One upload fed conv-1: the per-job ``job_id ==`` lookup of its staging siblings then runs."""
+    row = {'job_id': 'job-1', 'status': 'completed', 'result': {'new_memories': ['conv-1']}}
+    client.queue_results([client.snapshot(f'users/{UID}/sync_content_ledger/content-1', row)])
+    for _ in range(len(importlib.import_module('database.sync_ledger_sources').CONVERSATION_FIELDS) - 1):
+        client.queue_results([])
+    client.queue_results([client.snapshot(f'users/{UID}/sync_content_ledger/content-1', row)])
+
+
+_add(
+    DriverEntry(
+        'database.sync_ledger_sources._job_rows',
+        base={'uid': UID, 'conversation_ids': ['conv-1']},
+        domains={'extra_jobs': [(), ('job-1',)]},
+        setup=_seed_shared_upload,
+        patchers=(_sync_stage,),
+    )
+)
+_add(
+    DriverEntry(
+        'database.sync_ledger_sources.staging_sources',
+        base={'uid': UID, 'conversation_ids': ['conv-1']},
+        domains={'extra_jobs': [(), ('job-1',)]},
+        setup=_seed_shared_upload,
+        patchers=(_sync_stage,),
+    )
+)
+_add(
+    DriverEntry(
+        'database.sync_ledger_sources.staging_plan',
+        base={'uid': UID, 'conversation_ids': ['conv-1']},
+        domains={
+            'recorded': [None, {'job-1': ['conv-1']}],
+            'settled': [(), ('job-1',)],
+            'known_deleted': [(), ('conv-2',)],
+            'max_checks': [0, 200],
+            # A pass's own ledger read: given, the plan issues no ledger query (only sibling point reads).
+            'fresh': [None],
+        },
+        setup=_seed_shared_upload,
+        patchers=(_sync_stage,),
     )
 )
 _add(

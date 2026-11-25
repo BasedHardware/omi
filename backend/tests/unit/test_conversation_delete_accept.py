@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import threading
 import time
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -117,7 +117,7 @@ def cascade(monkeypatch, plane):
     for name in (
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
-        'delete_privacy_conversation_audio',
+        'delete_conversation_audio_under_gate',
         'delete_vector',
         'delete_transcript_chunk_vectors',
         'delete_action_item_vectors_batch',
@@ -144,12 +144,14 @@ def cascade(monkeypatch, plane):
     monkeypatch.setattr(conversations, 'delete_conversation_and_frame_evidence', hard_delete)
     monkeypatch.setattr(deletion_batch_purge, 'is_conversation_batch_purge_dispatch_configured', lambda: True)
     monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_consumer_ready', lambda: True)
-    state.sent = []
+    state.sent, state.audio_sent = [], []
     monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_task_pending', lambda *a, **k: False)
     monkeypatch.setattr(
         deletion_batch_purge,
         'enqueue_conversation_batch_purge',
-        lambda job, gen, erasure=False: state.sent.append((job, gen, erasure)),
+        lambda job, gen, erasure=False, audio=False: (state.audio_sent if audio else state.sent).append(
+            (job, gen) if audio else (job, gen, erasure)
+        ),
     )
     monkeypatch.setattr(
         purge_jobs,
@@ -378,7 +380,7 @@ def test_held_non_cascade_delete_is_hidden_retained_and_arms_no_erasure(plane, c
     assert _hidden(plane, 'c1')
     assert _erasure(plane, 'c1') is None, 'the runner only cascades; a non-cascade delete must not arm it'
     assert cascade.erased == [] and plane.docs.get(_conversation_path('c1')) is not None
-    conversations.delete_privacy_conversation_audio.assert_not_called()
+    conversations.delete_conversation_audio_under_gate.assert_not_called()
     conversations.delete_conversation_screen_frames.assert_not_called()
 
 
@@ -493,9 +495,16 @@ def test_eraser_owes_merge_donor_audio_recorded_at_acceptance(plane, cascade):
     assert _erasure(plane, 'c1')['audio_source_ids'] == ['donor-a']
     plane.docs.pop(GATE_PATH)
     _drain_erasures(plane, cascade, passes=1)
-    audio = conversations.delete_privacy_conversation_audio
-    audio.assert_called_once()
-    assert audio.call_args.kwargs['source_ids'] == ['donor-a']
+    # The cascade owes its audio to the durable audio obligation, donors recorded at acceptance included.
+    conversations.delete_conversation_audio_under_gate.assert_not_called()
+    owed = plane.docs[f'{purge_jobs.AUDIO_COLLECTION}/{purge_jobs.audio_job_id(UID, "c1")}']
+    assert owed['audio_source_ids'] == ['donor-a']
+    cascade.audio_sent.clear()
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    erase = MagicMock()
+    for job, gen in cascade.audio_sent:
+        assert purge_jobs.run_audio_erasure_job(job, gen, erase=erase) == 'erased'
+    erase.assert_called_once_with(UID, 'c1', ['donor-a'], staging={}, settled=[], deleted_siblings=[], ledger=ANY)
 
 
 @pytest.mark.parametrize(
@@ -540,3 +549,48 @@ def test_task_handler_routes_erasures_to_the_eraser(monkeypatch):
     response = asyncio.run(users_router.run_conversation_batch_purge(_Request(), 0))
     assert response.status_code == 200
     assert calls == [('j1', 3, conversations.erase_accepted_conversation)]
+
+
+def test_task_handler_routes_audio_erasures_to_the_audio_eraser(monkeypatch):
+    import asyncio
+
+    from utils.other.storage import erase_conversation_audio
+
+    calls = []
+
+    def run_audio_erasure_job(job, generation, *, erase, enabled):
+        calls.append((job, generation, erase, enabled))
+        return 'erased'
+
+    monkeypatch.setattr(purge_jobs, 'run_audio_erasure_job', run_audio_erasure_job)
+    monkeypatch.setattr(purge_jobs, 'run_erasure_job', MagicMock(side_effect=AssertionError('not a cascade')))
+    monkeypatch.setattr(purge_jobs, 'run_job', MagicMock(side_effect=AssertionError('not a batch purge')))
+
+    class _Request:
+        async def json(self):
+            return {'job_id': 'j1', 'generation': 2, 'kind': 'audio_erasure'}
+
+    response = asyncio.run(users_router.run_conversation_batch_purge(_Request(), 0))
+    assert response.status_code == 200
+    from utils.conversations.deletion_batch_purge import durable_audio_erasure
+
+    assert calls == [('j1', 2, erase_conversation_audio, durable_audio_erasure)]
+
+
+@pytest.mark.parametrize('token', ['off', 'false', '0', 'no', ' OFF '])
+def test_kill_switch_off_arms_no_audio_obligation_and_erases_after_the_response(monkeypatch, plane, cascade, token):
+    """Dispatch is configured, but the switch is off: the default delete keeps the background erasure."""
+    monkeypatch.setenv(deletion_batch_purge.AUDIO_ERASURE_SWITCH, token)
+    with TestClient(cascade.app) as client:
+        assert client.delete('/v1/conversations/c1').status_code == 204
+    assert not any(path.startswith(f'{purge_jobs.AUDIO_COLLECTION}/') for path in plane.docs)
+    conversations.delete_conversation_audio_under_gate.assert_called_once()
+    assert conversations.delete_conversation_audio_under_gate.call_args.args[:2] == (UID, 'c1')
+
+
+def test_kill_switch_on_arms_the_audio_obligation_for_a_default_delete(monkeypatch, plane, cascade):
+    monkeypatch.delenv(deletion_batch_purge.AUDIO_ERASURE_SWITCH, raising=False)
+    with TestClient(cascade.app) as client:
+        assert client.delete('/v1/conversations/c1').status_code == 204
+    assert plane.docs[f'{purge_jobs.AUDIO_COLLECTION}/{purge_jobs.audio_job_id(UID, "c1")}']['conversation_id'] == 'c1'
+    conversations.delete_conversation_audio_under_gate.assert_not_called()

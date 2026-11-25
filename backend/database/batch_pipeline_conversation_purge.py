@@ -40,6 +40,7 @@ from database.batch_pipeline_purge import delete_job as _delete_job
 from database.batch_pipeline_purge import erase_artifact as _erase_artifact
 from database.batch_pipeline_purge import erase_result as _erase_result
 from database.batch_pipeline_purge import row_belongs as _belongs
+from database.sync_ledger_sources import owed_batch_segments
 from database.batch_pipeline_purge import row_references as _references
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
 from database.legal_holds import settles_unknown_erasure
@@ -186,6 +187,52 @@ def purge_conversation(
     )
 
 
+# Owed segment ids are journaled in chunks: one Firestore transaction holds at most 500 writes,
+# and each chunk also renews and proves the run's ownership.
+OWED_JOURNAL_CHUNK = 400
+
+
+def _owed_to_journal(
+    client: Any,
+    key: str,
+    members: Mapping[str, MemberProgress],
+    progress: Progress,
+    owed: Mapping[str, Mapping[str, set[str]]],
+) -> list[tuple[int, str, str, list[str]]]:
+    """Ledger-owed segments not yet journaled that still hold this owner's content: (ns index, ns, cid, ids)."""
+    pending: list[tuple[int, str, str, list[str]]] = []
+    for ns_index, namespace in enumerate(NAMESPACES):
+        wanted = {cid: owed[cid].get(namespace, set()) for cid in members}
+        if not any(wanted.values()):
+            continue
+        known = progress.segments(namespace)
+        for cid, segment_ids in wanted.items():
+            live = []
+            for segment_id in sorted(segment_ids - known):
+                job = client.collection(f'{namespace}_jobs').document(segment_id).get()
+                result = client.collection(f'{namespace}_results').document(segment_id).get()
+                job_data = (job.to_dict() or {}) if job.exists else {}
+                result_data = (result.to_dict() or {}) if result.exists else {}
+                # Owner-scoped like discovery; an erased result is done and never re-journaled.
+                if job_data.get('owner_key') == key or (
+                    result_data.get('owner_key') == key and result_data.get('projection_state') != 'erased'
+                ):
+                    live.append(segment_id)
+            if live:
+                pending.append((ns_index, namespace, cid, live))
+                known.update(live)
+    return pending
+
+
+def _journal_owed(members: Mapping[str, MemberProgress], pending: list[tuple[int, str, str, list[str]]]) -> None:
+    """Journal owed segments in bounded chunks; dependents run only after every chunk is recorded."""
+    for _ns_index, namespace, cid, segment_ids in pending:
+        member = members[cid]
+        for start in range(0, len(segment_ids), OWED_JOURNAL_CHUNK):
+            chunk = segment_ids[start : start + OWED_JOURNAL_CHUNK]
+            member.checkpoint(dict(member.position), add_segments=(namespace, chunk))
+
+
 def purge_conversations(
     uid: str,
     members: Mapping[str, MemberProgress],
@@ -234,9 +281,24 @@ def purge_conversations(
     def belongs(data: dict[str, Any]) -> bool:
         return any(_belongs(data, conversation_id) for conversation_id in members)
 
+    # Sync uploads are keyed by a provisional capture identity; the ledger names
+    # the batch segments that a now fully deleted upload left behind.
+    owed = {cid: owed_batch_segments(uid, [cid], firestore_client=client) for cid in members}
     key = privacy_owner_key(uid)
-    start = dict(progress.position or {})
+    start: dict[str, Any] = dict(progress.position or {})
     start_ns = int(start.get('ns') or 0)
+    # Owed rows are known by id, so a cursor already past their discovery (an
+    # in-flight run from before this rule, or a sibling deleted last) would never
+    # visit them: journal them now and resume that namespace at its dependents.
+    pending_owed = _owed_to_journal(client, key, members, progress, owed)
+    rewind = min((ns_index for ns_index, *_ in pending_owed), default=None)
+    if rewind is not None and (start_ns > rewind or (start_ns == rewind and start.get('phase') in PHASES[1:])):
+        # Persist the rewind before journaling: a crash between chunks resumes at dependents and
+        # re-journals the rest (still unknown), instead of finishing past rows it never discovered.
+        start = {'ns': rewind, 'phase': 'dependents'}
+        start_ns = rewind
+        progress.checkpoint(dict(start))
+    _journal_owed(members, pending_owed)
     erased = 0
 
     def mark(position: dict[str, Any], **kwargs: Any) -> None:
@@ -335,7 +397,9 @@ def purge_conversations(
                                     result = result_ref.get().to_dict() or {}
                                 projection = result.get('projection') or data.get('projection')
                                 for cid in members:
-                                    if _belongs({**data, 'projection': projection}, cid):
+                                    if snapshot.id in owed[cid].get(namespace, ()) or _belongs(
+                                        {**data, 'projection': projection}, cid
+                                    ):
                                         found[cid].append(snapshot.id)
                             if len(members) == 1 and next(iter(members.values())) is progress:
                                 mark(position, add_segments=(namespace, next(iter(found.values()))))
