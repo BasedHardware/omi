@@ -16,9 +16,13 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database import home_visibility_index
-from database.transcript_pointer import run_preloaded_transaction_with_contention_retry
 from database._client import firestore_failure_reason, get_firestore_client
-from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
+from database.transcript_pointer import (
+    MAX_PRELOAD_DOCUMENTS,
+    TranscriptBlobAbsent,
+    TranscriptShredded,
+    run_preloaded_transaction_with_contention_retry,
+)
 from database import conversations, conversations_v3_leases as leases
 from database.conversations_v3_undo_removals import removal_ref
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
@@ -906,16 +910,22 @@ def commit_projection(
     if retired and fixed_writes + bool(rows) > BATCH_MAX_WRITES:
         raise Conflict('backfill_partition_budget')
     max_rows = max(1, BATCH_MAX_WRITES - fixed_writes)
-    batches, current, size = [], [], 0
+    batches, current, size, pointers = [], [], 0, 0
     for raw, encoded in zip(rows, prepared):
         amount = len(json.dumps(encoded, default=str).encode())
+        # Privacy filtering resolves each prepared pointer before the first write.
+        pointer = isinstance(encoded.get('transcript_segments'), dict)
         if current and (
-            size + amount > BATCH_ROW_BYTES or fixed + size + amount > BATCH_WRITE_BYTES or len(current) >= max_rows
+            size + amount > BATCH_ROW_BYTES
+            or fixed + size + amount > BATCH_WRITE_BYTES
+            or len(current) >= max_rows
+            or (pointer and pointers >= MAX_PRELOAD_DOCUMENTS)
         ):
             batches.append(current)
-            current, size = [], 0
+            current, size, pointers = [], 0, 0
         current.append((raw, encoded))
         size += amount
+        pointers += pointer
     if current or not batches:
         batches.append(current)
     for index, batch in enumerate(batches):

@@ -67,6 +67,7 @@ class TranscriptMemoBudgetExceeded(TranscriptPointerFetchError):
     """Retryable operation memory limit; never evict a required read silently."""
 
 
+MAX_PRELOAD_DOCUMENTS = 32
 MAX_MEMO_DECODED_BYTES = 64 * 1024 * 1024
 
 
@@ -102,7 +103,7 @@ class _DecodedMemo(TTLCache):
 
     def __setitem__(self, key, value):
         self.check_budget(key, value)
-        if key not in self and len(self) >= 32:
+        if key not in self and len(self) >= MAX_PRELOAD_DOCUMENTS:
             self.popitem()
         super().__setitem__(key, value)
 
@@ -195,7 +196,7 @@ def resolve_pointer(uid: str, pointer: Mapping) -> list:
             value = memo.decoded[key]
         except KeyError:
             raise TranscriptPointerFetchError('Transcript preload expired before use') from None
-    if _client.in_transaction_body() and len(memo.resolved) < 32:
+    if _client.in_transaction_body() and len(memo.resolved) < MAX_PRELOAD_DOCUMENTS:
         memo.resolved.add(key)
     if isinstance(value, Exception):
         # Cached failures must not accumulate caller tracebacks/plaintext frames.
@@ -325,7 +326,7 @@ def _upload_candidate(uid, conversation_id, plaintext, source_digest, *, cache_d
     # Only direct pre-transaction encodes may warm reads. A transaction
     # candidate must not mask a cold read of an existing identical reference.
     # Cache actual upload bytes, never a later encryption of the same source.
-    if cache_decoded and key not in memo.decoded and len(memo.decoded) < 32:
+    if cache_decoded and key not in memo.decoded and len(memo.decoded) < MAX_PRELOAD_DOCUMENTS:
         memo.decoded[key] = _require_segment_list(json.loads(plaintext))
     memo.uploaded[(uid, conversation_id, source_digest)] = ref
     return ref
@@ -378,7 +379,7 @@ def run_preloaded_operation(operation, *args, **kwargs):
                     for key in superseded:
                         memo.decoded.pop(key, None)
                         preloaded.pop(key)
-                elif len(preloaded) >= 32:
+                elif len(preloaded) >= MAX_PRELOAD_DOCUMENTS:
                     raise TranscriptPointerFetchError('Transcript exceeds bounded preload document limit') from None
                 if content_changes + upload_changes > 3 or attempt == 67:
                     raise TranscriptPointerFetchError('Transcript changed during bounded preload retries') from None

@@ -195,3 +195,55 @@ def test_projection_restarts_with_fresh_transaction(owner, monkeypatch, failure)
     assert len(began) == 2 and began[0] != began[1]
     assert retry_ids == [b'', b'']
     assert coll.document('early').get().to_dict()['v3_pending'] is False
+
+
+def test_projection_splits_33_pointer_backed_rows(owner, monkeypatch):
+    import hashlib
+    import json
+
+    from database._client import in_transaction_body
+    from utils.other import object_lake
+
+    client, user, coll = owner
+    begin, _ = seed(owner)
+    source_ref = coll.document('early')
+    source_ref.update({'v3_pending': True})
+    recording = v3.recording_input(user.id, source_ref.get())
+    token = leases.acquire(user.id, 'builder', firestore_client=client)
+    rows = [
+        {
+            'id': f'derived-{index}',
+            'status': 'completed',
+            'started_at': begin,
+            'finished_at': begin + timedelta(seconds=20),
+            'v3_recording_ids': ['early'],
+            'transcript_segments': recording['transcript_segments'],
+        }
+        for index in range(33)
+    ]
+    bucket = 'test-transcript-lake'
+    monkeypatch.setenv('BUCKET_OBJECT_LAKE', bucket)
+    monkeypatch.setenv('OBJECT_LAKE_READ_ENABLED', 'true')
+    blob = json.dumps(recording['transcript_segments']).encode()
+    digest = hashlib.sha256(blob).hexdigest()
+    reads = []
+
+    def encode(row, uid, *_args, **_kwargs):
+        ref = object_lake.LakeObjectRef(
+            bucket, f'v1/spaces/{uid}/transcript/{row["id"]}/{digest}', digest, len(blob) + 64, 'transcript', 1
+        )
+        return {**row, 'transcript_segments': ref.to_pointer_dict(), 'transcript_segments_compressed': True}
+
+    def read(ref):
+        assert not in_transaction_body()
+        reads.append(ref.key)
+        return blob
+
+    monkeypatch.setattr(v3.conversations, '_prepare_conversation_for_write', encode)
+    monkeypatch.setattr(object_lake, 'get_space_object', read)
+    assert v3.commit_projection(user.id, token, {'early': recording}, {}, rows, [], firestore_client=client) == set()
+    assert len(reads) == len(set(reads)) == 33
+    stored = source_ref.get().to_dict()
+    assert stored['v3_pending'] is False
+    assert {claim['conversation_id'] for claim in stored['claims']} == {row['id'] for row in rows}
+    assert all(isinstance(coll.document(row['id']).get().get('transcript_segments'), dict) for row in rows)
