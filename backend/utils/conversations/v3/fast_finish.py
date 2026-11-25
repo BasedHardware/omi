@@ -65,6 +65,37 @@ for _outcome in (
 ):
     OUTCOMES.labels(_outcome)
 
+# Why a manual finish admitted for batch never started a pass. Fixed reasons only: never a uid,
+# a conversation id or any content.
+SKIPPED = Counter(
+    'omi_conversations_v3_fast_finish_skipped_total',
+    'Manual finishes that never started a fast first transcript, by the first reason',
+    ['reason'],
+)
+# Stored statuses other than these two collapse into ``status_other`` so the label set stays fixed.
+_STATUS_REASONS = {'in_progress': 'status_in_progress', 'processing': 'status_processing'}
+_FLAG_REASONS = (
+    ('deleted', 'deleted'),
+    ('discarded', 'discarded'),
+    ('is_locked', 'locked'),
+    ('uses_custom_stt', 'custom_stt'),
+)
+SKIP_REASONS = (
+    'mode_off',
+    'already_started',
+    'not_recording',
+    'no_manual_end',
+    *_STATUS_REASONS.values(),
+    'status_other',
+    'no_private_cloud_sync',
+    'protection_level',
+    'projection_revision',
+    'audio_partial',
+    *(reason for _, reason in _FLAG_REASONS),
+)
+for _reason in SKIP_REASONS:
+    SKIPPED.labels(_reason)
+
 
 COHORT = 'v3-fast-finish'
 
@@ -81,23 +112,41 @@ def enabled(uid: str) -> bool:
     return current == 'cohort' and in_rollout_cohort(uid, COHORT)
 
 
+def candidate_rejection(row: dict) -> str | None:
+    """The first ``candidate`` predicate ``row`` fails, as a fixed reason; None when it is a candidate.
+
+    Safe on a raw Firestore row: it reads only fields that are stored in the clear.
+    """
+    if row.get('recording') is not True:
+        return 'not_recording'
+    if not (row.get('v3_manual_end_requested') is True or row.get('v3_manual_end') is True):
+        return 'no_manual_end'
+    status = row.get('status')
+    if status != 'completed':
+        return _STATUS_REASONS.get(status, 'status_other') if isinstance(status, str) else 'status_other'
+    if not row.get('private_cloud_sync_enabled'):
+        return 'no_private_cloud_sync'
+    if row.get('data_protection_level', 'enhanced') not in {'standard', 'enhanced'}:
+        return 'protection_level'
+    if row.get('record_projection_revision'):
+        return 'projection_revision'
+    if row.get('record_audio_partial'):
+        return 'audio_partial'
+    for key, reason in _FLAG_REASONS:
+        if row.get(key):
+            return reason
+    return None
+
+
 def candidate(row: dict) -> bool:
     """A sealed, manually ended v3 recording, judged from fields that are stored in the clear.
 
     Safe on a raw Firestore row. It says nothing about the transcript: stored segments are
     compressed (and may be encrypted) even when empty, so only ``eligible`` on a decoded row can
-    tell whether the recording already has one.
+    tell whether the recording already has one. Defined by ``candidate_rejection`` so the two
+    cannot drift.
     """
-    return bool(
-        row.get('recording') is True
-        and (row.get('v3_manual_end_requested') is True or row.get('v3_manual_end') is True)
-        and row.get('status') == 'completed'
-        and row.get('private_cloud_sync_enabled')
-        and row.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}
-        and not row.get('record_projection_revision')
-        and not row.get('record_audio_partial')
-        and not any(row.get(key) for key in ('deleted', 'discarded', 'is_locked', 'uses_custom_stt'))
-    )
+    return candidate_rejection(row) is None
 
 
 def eligible(row: dict) -> bool:

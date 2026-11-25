@@ -131,16 +131,21 @@ def owned(capture: Mapping) -> bool:
     )
 
 
-def has_audio(capture: Mapping) -> bool:
+def has_retained_audio(capture: Mapping) -> bool:
+    # Archive writes stamp these bounds with durable audio. Projection owns has_content.
     start, end = capture.get('server_batch_audio_start'), capture.get('server_batch_audio_end')
-    return bool(
-        capture.get('has_content')
-        and isinstance(start, (int, float))
+    return (
+        isinstance(start, (int, float))
         and isinstance(end, (int, float))
+        and not (isinstance(start, bool) or isinstance(end, bool))
         and math.isfinite(start)
         and math.isfinite(end)
         and start < end
     )
+
+
+def has_audio(capture: Mapping) -> bool:
+    return bool(capture.get('has_content')) and has_retained_audio(capture)
 
 
 def live_audio_uncommitted(capture: Mapping) -> bool:

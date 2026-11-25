@@ -57,6 +57,8 @@ run_proof() {
 
 # These require real transaction retries and the lifecycle network guard;
 # ordinary unit shards intentionally do not stand up emulator services.
+run_proof "v3 Finish (bounded source query and concurrent window fence)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_conversations_v3_finish_emulator.py
 run_proof "record custody append (committed reply loss, retries, privacy)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_record_custody_append_emulator.py
 run_proof "LLM gateway idempotency (claim, replay, expiry, stale settlement)" \
