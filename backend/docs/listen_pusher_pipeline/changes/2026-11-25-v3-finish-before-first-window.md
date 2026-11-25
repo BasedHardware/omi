@@ -7,6 +7,8 @@ live window horizon and refuses a cut when either lookup reaches its cap.
 Payloads with fields keep the existing window lookup. The cut uses the existing v3
 reconcile path. Whole native batch completion consumes the intent for both single-
 and multi-unit records. Terminal silence resolves the intent without cutting unrelated speech.
+The terminal-empty HTTP acknowledgement sets `discarded` so the app can show
+its existing too-short-or-empty notice. It does not discard the stored row.
 If the recording has merged into another row, completion clears the donor's intent
 and counts it as redirected. A redirect does not prove the cut is safe for the
 survivor's later speech.

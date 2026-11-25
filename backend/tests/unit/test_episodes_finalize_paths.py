@@ -685,11 +685,13 @@ def test_silent_whole_batch_resolves_deferred_finish(
     if other_content:
         assert latest['v3_manual_end'] and latest['v3_pending']
         assert response.json()['conversation']['tile_state'] == 'writing'
+        assert response.json()['conversation']['discarded'] is False
         assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
     else:
         assert latest['v3_manual_end_requested'] is False and 'v3_manual_end' not in latest
         assert response.json()['conversation']['status'] == 'completed'
         assert response.json()['conversation']['tile_state'] == 'done'
+        assert response.json()['conversation']['discarded'] is True
         assert not enqueued
 
 
@@ -920,7 +922,49 @@ def test_empty_body_finish_before_first_window_resolves_at_whole_record_completi
     else:
         assert latest['v3_manual_end_requested'] is False and 'v3_manual_end' not in latest
         assert second.json()['conversation']['tile_state'] == 'done'
+        assert second.json()['conversation']['discarded'] is True
         assert not enqueued
+
+
+@pytest.mark.parametrize('use_window', [False, True])
+@pytest.mark.parametrize('empty_outcome', ['silence', 'no_recoverable_speech'])
+def test_first_finish_after_empty_batch_returns_discarded_acknowledgement(
+    v3_finish_route, monkeypatch, use_window, empty_outcome
+):
+    client, db, paths, enqueued = v3_finish_route
+    latest = db.rows[paths['latest']]
+    end = latest['finished_at']
+    latest.update(
+        created_at=end - timedelta(seconds=30),
+        started_at=end - timedelta(seconds=30),
+        source='omi',
+        external_data={'recording_session_id': 'fixture-session'},
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        has_content=False,
+    )
+    if use_window:
+        db.rows[paths['window']]['v3_recording_ids'] = ['latest']
+    else:
+        db.rows.pop(paths['window'])
+
+    complete, _, _ = native_finish_completion(monkeypatch, db, _UID, 'latest', 1, empty_outcome=empty_outcome)
+    assert complete(end.timestamp()) is not None
+    response = client.post('/v1/conversations', json={'live_conversation_id': 'window'} if use_window else {})
+    assert response.status_code == 200
+    body = response.json()
+    conversation = body['conversation']
+    assert body['messages'] == []
+    assert (conversation['id'], conversation['status'], conversation['tile_state'], conversation['discarded']) == (
+        'window' if use_window else 'latest',
+        'completed',
+        'done',
+        True,
+    )
+    assert conversation['recording'] is (None if use_window else True)
+    assert not latest.get('discarded') and not db.transactions[-1].updates and not enqueued
+    if use_window:
+        assert not db.rows[paths['window']].get('discarded')
 
 
 @pytest.mark.parametrize('case', ['ambiguous', 'claimed', 'hinted', 'saturated', 'deleting'])
