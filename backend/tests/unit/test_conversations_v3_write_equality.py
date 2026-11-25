@@ -15,6 +15,7 @@ from google.cloud import firestore
 from config.conversations_v3 import skip_unchanged_writes_enabled
 from database import conversations_v3_write_equality as equality
 from utils.encryption import encrypt
+from utils.home_feed.projection import SCHEMA, reveal_display
 
 
 @pytest.mark.parametrize(
@@ -63,7 +64,7 @@ def test_projected_storage_compares_protected_content_without_losing_real_change
             'transcript_segments_compressed': True,
             'transcript_segments': encrypt(compressed.hex(), uid) if level == 'enhanced' else compressed,
             'structured': {'title': 'Hi'},
-            'home_display': encrypt(display, uid),
+            'home_display': encrypt(json.dumps({**json.loads(display), 'schema': SCHEMA}), uid),
             'home_display_version': uuid4().hex,
         }
 
@@ -96,3 +97,17 @@ def test_sync_scrape_keeps_projection_histograms():
 def test_write_elision_uses_standard_kill_switch_values(monkeypatch, value):
     monkeypatch.setenv('CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES', value)
     assert not skip_unchanged_writes_enabled()
+
+
+def test_home_display_must_be_servable_even_when_the_stored_field_matches():
+    uid = 'synthetic'
+    display = {'schema': SCHEMA, 'title': 'same'}
+    planned = {'home_display': encrypt(json.dumps(display), uid)}
+    oversized = encrypt(' ' * 7000 + json.dumps(display), uid)
+
+    assert reveal_display(uid, planned['home_display']) == display
+    for unreadable in (oversized, json.dumps(display)):
+        assert reveal_display(uid, unreadable) is None
+        stored = {'home_display': unreadable}
+        assert not equality.same_conversation(uid, stored, planned)
+        assert not equality.same_conversation(uid, stored, stored)

@@ -17,7 +17,7 @@ except ImportError:
 from config.speaker_match_scores import FIELD as MATCH_SCORES
 from utils.conversations.speaker_grouping_storage import FIELD as SPEAKER_GROUPING
 from utils.encryption import decrypt
-from utils.home_feed.projection import DISPLAY, VERSION
+from utils.home_feed.projection import DISPLAY, VERSION, reveal_display
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 
 _COMPRESSED_FIELDS = {
@@ -40,7 +40,7 @@ def same_value(left: Any, right: Any) -> bool:
         return Value.pb(encode_value(left)).SerializeToString(deterministic=True) == Value.pb(
             encode_value(right)
         ).SerializeToString(deterministic=True)
-    except (ValueError, TypeError, OverflowError):
+    except (ValueError, TypeError, OverflowError, RecursionError):
         return False
 
 
@@ -119,20 +119,18 @@ def same_conversation(uid: str, stored: dict, planned: dict) -> bool:
             after['home_content_invalidated'] = 'structured' not in after
     if before.keys() != after.keys():
         return False
-    same_display = same_blob(uid, before.get(DISPLAY), after.get(DISPLAY), compressed=False)
+    if DISPLAY in after:
+        stored_display = reveal_display(uid, before[DISPLAY])
+        planned_display = reveal_display(uid, after[DISPLAY])
+        if stored_display is None or planned_display is None or not same_value(stored_display, planned_display):
+            return False
     for field, value in after.items():
         old = before[field]
         if same_value(old, value):
             continue
-        if field == DISPLAY and same_display:
+        if field == DISPLAY:
             continue
-        if (
-            field == VERSION
-            and DISPLAY in after
-            and same_display
-            and _generated_version(old)
-            and _generated_version(value)
-        ):
+        if field == VERSION and DISPLAY in after and _generated_version(old) and _generated_version(value):
             continue
         if field in _COMPRESSED_FIELDS:
             marker = _COMPRESSED_FIELDS[field]

@@ -2,7 +2,7 @@
 
 Projection batches compare the final protected derived documents and recording patches with the
 snapshots read under the existing transaction fences. An unchanged conversation skips the source
-write and its Home dirty receipt. The Home feed hook still handles real changes. Protected blob
+write and its Home dirty receipt. The Home feed hook still handles real changes and repairs of unreadable stored displays. Protected blob
 comparisons are local and require the same storage representation. The owner lease, account deletion,
 tombstone, and recurring voice checks still run. The comparison adds zero Firestore reads.
 

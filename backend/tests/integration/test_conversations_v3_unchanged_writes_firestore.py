@@ -1,6 +1,7 @@
 """Exercise committed v3 writes, including the installed Home commit hook."""
 
 from datetime import datetime, timedelta, timezone
+import json
 import os
 from unittest.mock import patch
 from uuid import uuid4
@@ -8,6 +9,7 @@ from uuid import uuid4
 from google.api_core.exceptions import Aborted, AlreadyExists
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
+from google.cloud.firestore_v1.transaction import Transaction
 import pytest
 
 from database import conversations
@@ -15,6 +17,8 @@ from database import conversations_v3 as store, conversations_v3_leases as lease
 from database.home_feed_writer import CONTROL
 from utils import cloud_tasks
 from utils.conversations.v3 import metrics, service, triggers
+from utils.encryption import encrypt
+from utils.home_feed.projection import DISPLAY, reveal_display
 
 
 @pytest.fixture
@@ -341,3 +345,69 @@ async def test_reconcile_histogram_excludes_notes_followup(owner, confirmed_path
 
     assert confirmed_paths == ['conversation_v3_leases/builder'] * 3 + ['test_followup/notes']
     assert metrics.RECONCILE_BILLED_WRITES.labels('builder')._sum.get() - before == 3
+
+
+def test_reconcile_repairs_equal_but_unreadable_home_display(owner, confirmed_paths):
+    _, user = owner
+    rows = projection_rows(1)
+    projection_pass(owner, rows, [])
+    card = user.collection('conversations').document('card-0')
+    display = reveal_display(user.id, card.get().to_dict()[DISPLAY])
+    assert display is not None
+    oversized = encrypt(' ' * 7000 + json.dumps(display), user.id)
+    assert len(oversized) > 8192
+    assert reveal_display(user.id, oversized) is None
+    card.update({DISPLAY: oversized})
+    control = user.collection('episode_links').document(CONTROL)
+    control.set({'ready': True}, merge=True)
+    generation = control.get().to_dict()['generation']
+    confirmed_paths.clear()
+
+    projection_pass(owner, rows, [])
+
+    assert reveal_display(user.id, card.get().to_dict()[DISPLAY]) == display
+    assert 'conversations/card-0' in confirmed_paths
+    assert 'episode_links/card-0' in confirmed_paths
+    assert control.get().to_dict()['ready'] is False
+    assert control.get().to_dict()['generation'] != generation
+
+
+def test_noop_stages_no_conversation_writes_and_reads_the_same_documents(owner, monkeypatch):
+    client, user = owner
+    rows = projection_rows(1)
+    projection_pass(owner, rows, [])
+    path = user.collection('conversations').document('card-0').path
+    staged = []
+    reads = []
+    api = client._firestore_api
+    original_get = api.batch_get_documents
+    original_set = Transaction.set
+    original_update = Transaction.update
+
+    def batch_get(*args, **kwargs):
+        reads.extend(kwargs['request']['documents'])
+        return original_get(*args, **kwargs)
+
+    def stage(original):
+        def record(tx, ref, *args, **kwargs):
+            staged.append(ref.path)
+            return original(tx, ref, *args, **kwargs)
+
+        return record
+
+    with (
+        patch.object(api, 'batch_get_documents', side_effect=batch_get),
+        patch.object(Transaction, 'set', stage(original_set)),
+        patch.object(Transaction, 'update', stage(original_update)),
+    ):
+        projection_pass(owner, rows, [])
+        assert path not in staged
+        enabled_reads = reads.copy()
+
+        staged.clear()
+        reads.clear()
+        monkeypatch.setenv('CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES', 'off')
+        projection_pass(owner, rows, [])
+        assert staged.count(path) == 1
+        assert len(enabled_reads) == len(reads) == 8
+        assert enabled_reads == reads

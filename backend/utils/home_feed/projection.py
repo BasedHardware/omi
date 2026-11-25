@@ -37,8 +37,11 @@ def reveal_display(uid: str, blob: Any) -> dict[str, Any] | None:
     # decrypt historically returns ciphertext on authentication failure. Never
     # serialize that return value as display text.
     try:
-        value = json.loads(decrypt(blob, uid))
-    except (ValueError, TypeError):
+        plaintext = decrypt(blob, uid)
+        if plaintext == blob:
+            return None
+        value = json.loads(plaintext)
+    except (ValueError, TypeError, RecursionError):
         return None
     if not isinstance(value, dict) or value.get('schema') != SCHEMA:
         return None
