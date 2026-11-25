@@ -10,8 +10,9 @@ from typing import Any
 from uuid import uuid4
 
 from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
-from database.quiet_check_retirement import stop_quiet_checks_for_account
+from database.conversation_finalization_schema import FINALIZATION_JOBS_COLLECTION
 from database._client import get_data_plane_firestore_client, run_transactional
 from database.batch_account_authority import account_authority_writer_enabled, mutate_account_authority
 from database.memory_collections import RELEASED_MEMORY_CHANGE_HEAD
@@ -21,6 +22,24 @@ from database.apps import apps_collection, PUBLIC_APPROVED_APPS_CACHE_KEY, searc
 from database.redis_db import delete_app_cache_by_id, delete_generic_cache
 
 logger = logging.getLogger(__name__)
+
+
+def purge_finalization_jobs(uid: str, client: Any) -> None:
+    """Delete every job owned by uid, including on a retry with no user root."""
+    query = (
+        client.collection(FINALIZATION_JOBS_COLLECTION)
+        .where(filter=FieldFilter('uid', '==', uid))
+        .select([])
+        .limit(450)
+    )
+    while True:
+        page = list(query.stream())
+        if not page:
+            return
+        batch = client.batch()
+        for job in page:
+            batch.delete(job.reference)
+        batch.commit()
 
 
 @invalidate_around_write
@@ -103,5 +122,5 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     evidence_owner = data_plane.collection('users').document(uid)
     for conversation in evidence_owner.collection('conversations').list_documents():
         delete_collection(conversation.collection('speaker_evidence'), client=data_plane)
-    stop_quiet_checks_for_account(uid, firestore_client=client)
+    purge_finalization_jobs(uid, client)
     return {'status': 'ok', 'message': 'Account deleted successfully'}

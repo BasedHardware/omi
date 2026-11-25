@@ -1,10 +1,27 @@
 """Measure server-observed upload admission without reading bodies or changing sync."""
 
+from prometheus_client import Histogram
 from starlette.datastructures import Headers
 
+from config.request_clock import bounded_hold_state
 from utils.observability.fleet import record_upload
 
 UPLOAD_PATHS = frozenset({'/v1/sync-local-files', '/v2/sync-local-files'})
+HOLD_AGE = Histogram(
+    'omi_batch_pipeline_upload_hold_age_seconds',
+    'Client-reported age of the oldest sealed file when a held upload is sent',
+    ['hold_state'],
+    buckets=(1, 5, 15, 30, 60, 120, 300, 360, 600, 900, 1200, 1800, 3600, 7200, 14400, 86400),
+)
+
+
+def observe_hold_age(age_ms, hold_state):
+    # Limit parsing before int() and accept only the client's decimal format.
+    if not isinstance(age_ms, str) or not 1 <= len(age_ms) <= 8 or not age_ms.isascii() or not age_ms.isdecimal():
+        return
+    milliseconds = int(age_ms)
+    if milliseconds <= 86_400_000:
+        HOLD_AGE.labels(bounded_hold_state(hold_state)).observe(milliseconds / 1000)
 
 
 class SyncUploadMetricsMiddleware:

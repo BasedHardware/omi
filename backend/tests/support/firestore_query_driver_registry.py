@@ -248,7 +248,8 @@ BODY_DIGEST = {
     # Re-reviewed 2026-11-04: atomic blocked_byok_at metadata only; query ownership is unchanged.
     # Re-reviewed: the early user-finish admission judges the snapshot already held; no collection query
     # (cohort mode adds one cached point read of the owner's rollout_cohorts document).
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'dc815b20539ecf62552bd9de5e3f2c3842ecc53cb7a7df04a2edb87dd9ff2292',
+    'database.user_data_deletion.purge_user_subtree': 'cf0e4ef71588e28f2e011464b65eee12c081eb27ecd676ccb29cf7a914c126ab',
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': '9fad8023fbdcc5a82898573d30afabcf7829ed2b7a992e3c28d3753fa2154136',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
@@ -519,6 +520,23 @@ _add(
         'database.quiet_check_retirement.stop_quiet_checks_for_account',
         base={'uid': UID},
         neutrals={'page_size': _PAGE},
+    )
+)
+
+_add(
+    DriverEntry(
+        'database.user_data_deletion.purge_finalization_jobs',
+        base={'uid': UID},
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.user_data_deletion.purge_user_subtree',
+        covered_by=('database.user_data_deletion.purge_finalization_jobs',),
+        reason='delegates the finalization jobs query to purge_finalization_jobs',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.user_data_deletion.purge_user_subtree'],
     )
 )
 
