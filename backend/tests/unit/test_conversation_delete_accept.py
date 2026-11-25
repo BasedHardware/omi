@@ -24,6 +24,7 @@ from routers import conversations
 from routers import users as users_router
 from utils import cloud_tasks
 from utils.conversations import deletion_batch_purge
+from utils.other import storage
 from tests.unit.test_conversation_delete_gate_wait import (  # noqa: F401 - fixtures
     GATE_PATH,
     HOLD_PATH,
@@ -32,6 +33,7 @@ from tests.unit.test_conversation_delete_gate_wait import (  # noqa: F401 - fixt
     _gate_doc,
     gate_client,
 )
+from tests.unit.test_owner_storage_purge_and_gate import _Blob, _Bucket, _Client
 
 ERASURES = purge_jobs.ERASURE_COLLECTION
 
@@ -481,6 +483,71 @@ def test_free_gate_keeps_the_synchronous_cascade(plane, cascade):
     assert response.status_code == 204
     assert cascade.erased == ['c1'] and _erasure(plane, 'c1') is None
     assert plane.docs.get(f'{purge_jobs.COLLECTION}/{purge_jobs.job_id(UID, "c1")}')  # batch purge armed
+
+
+@pytest.mark.parametrize('accepted', [False, True], ids=['response-cleanup', 'accepted-eraser'])
+@pytest.mark.parametrize('canonical_enabled', [True, False], ids=['canonical', 'prefix-only'])
+def test_delete_holds_one_audio_gate_through_every_blob_delete(
+    plane, cascade, monkeypatch, accepted, canonical_enabled
+):
+    kind = 'audio_conversation_deletion'
+    objects = {
+        f'{prefix}/{UID}/c1/audio'
+        for prefix in ('chunks', 'audio', 'merged', 'playback', 'raw-live', 'audio-outbox', 'record-wal')
+    } | {f'{prefix}/{UID}/shared/audio' for prefix in ('raw-sync', 'raw-mobile-batch')}
+    private = _Bucket(objects)
+    if canonical_enabled:
+        monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
+    else:
+        monkeypatch.delenv('BUCKET_CANONICAL_AUDIO', raising=False)
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    monkeypatch.setattr(storage, 'private_cloud_sync_bucket', 'private')
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: _Client({'private': private}))
+    monkeypatch.setattr(storage, 'get_canonical_audio_bucket', lambda: 'canonical')
+    monkeypatch.setattr(_Blob, 'metadata', {'conversation_id': 'c1'}, raising=False)
+    monkeypatch.setattr(conversations, 'delete_privacy_conversation_audio', storage.delete_privacy_conversation_audio)
+    place_transaction = legal_holds._place_legal_hold_transaction.to_wrap
+    monkeypatch.setattr(legal_holds, '_place_legal_hold_transaction', place_transaction)
+
+    tokens, deleted = set(), []
+
+    def check_gate():
+        gate = plane.docs[GATE_PATH]
+        assert (gate['kind'], gate['state']) == (kind, 'running')
+        tokens.add(gate['token'])
+
+    def delete_packs(bucket, uid, conversation_id):
+        assert (bucket, uid, conversation_id) == ('canonical', UID, 'c1')
+        check_gate()
+        deleted.append('canonical')
+
+    def delete_blob(blob):
+        if deleted == (['canonical'] if canonical_enabled else []):
+            # Try placing a hold after canonical erasure, just before the first prefix mutation.
+            with pytest.raises(legal_holds.DestructiveOperationInProgress, match='legal hold cannot overtake'):
+                legal_holds.place_legal_hold(UID, issuer='legal_hold_service', firestore_client=plane)
+        check_gate()
+        deleted.append(blob.name)
+        private.names.remove(blob.name)
+
+    monkeypatch.setattr(storage.audio_packs, 'delete_conversation', delete_packs)
+    monkeypatch.setattr(_Blob, 'delete', delete_blob)
+
+    if accepted:
+        plane.docs[GATE_PATH] = _gate_doc()
+    assert _accept_behind_peer(cascade).status_code == 204
+    if accepted:
+        assert not deleted and _erasure(plane, 'c1')
+        plane.docs.pop(GATE_PATH)
+        outcomes, _ = _drain_erasures(plane, cascade, passes=1)
+        assert outcomes == ['erased']
+
+    canonical = ['canonical'] if canonical_enabled else []
+    assert deleted[: len(canonical)] == canonical
+    assert sorted(deleted[len(canonical) :]) == sorted(objects)
+    assert len(tokens) == 1 and plane.docs[GATE_PATH]['token'] in tokens
+    assert plane.docs[GATE_PATH]['state'] == 'completed'
+    assert not private.names and HOLD_PATH not in plane.docs
 
 
 def test_eraser_owes_merge_donor_audio_recorded_at_acceptance(plane, cascade):
