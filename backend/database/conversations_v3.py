@@ -35,6 +35,7 @@ from utils.encryption import encrypt, decrypt
 from utils.home_feed.projection import stamp as stamp_home_display
 from config.record_wal_duplicate import has_retained_custody
 from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
+from utils.conversations import terminal_settled
 from utils.conversations.v3 import Conflict, policy, preview_wakes, request_log_trace_id
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 from utils.conversation_payload import (
@@ -742,6 +743,7 @@ def commit_projection(
         prepared.append(home_visibility_index.stamp(encoded))
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
     batch_reads = os.getenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'on').strip().lower() != 'off'
+    settle_enabled = terminal_settled.serving(uid)
     # What the current transaction attempt writes, kept by reference and sized only after a failure.
     staged = {}
 
@@ -877,6 +879,8 @@ def commit_projection(
             if final and row['id'] in retire:
                 # A live re-derive survivor's bridge list lands with the bridges it names.
                 row = {**row, **retire[row['id']]}
+            # Planned settles close here. The stamp must be included in the size check.
+            row = terminal_settled.stamp(observed.get(row['id']) or {}, dict(row), now=now, enabled=settle_enabled)
             cid = row['id']
             snapshot = snapshots[cid]
             ref = coll.document(cid)

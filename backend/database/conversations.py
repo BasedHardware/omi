@@ -13,7 +13,7 @@ from utils.conversations import phase_shadow
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from database import conversation_recorded_time, conversations_v3_backfill_runs
 from database import home_visibility_index, pipeline_ledger
-from utils.conversations import summary_delivery, lifecycle_clocks
+from utils.conversations import summary_delivery, lifecycle_clocks, terminal_settled
 from utils.observability.delivery import summary_terminal_outcome
 from utils.sync import processing_hold, bridge_pending
 from config.refactor_modes import serving_for, shadow_or_serve
@@ -1491,6 +1491,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     summary_changed = False
     ledger_stages: tuple[str, ...] = ()
     source_revision = 0
+    settle_enabled = terminal_settled.serving(uid)
 
     @firestore.transactional
     def _write_processing_result(transaction):
@@ -1574,6 +1575,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             summary_changed = processing_backlog.stage_transition(
                 transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
             )
+            terminal_settled.stamp(existing, write_data, now=datetime.now(timezone.utc), enabled=settle_enabled)
             transaction.set(conversation_ref, home_visibility_index.stamp(write_data, existing), merge=True)
             return
 
@@ -1589,6 +1591,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
         )
+        terminal_settled.stamp({}, write_data, now=datetime.now(timezone.utc), enabled=settle_enabled)
         transaction.set(conversation_ref, home_visibility_index.stamp(with_creation_scope_index(write_data)))
 
     run_preloaded_transactional(db, _write_processing_result)
@@ -1703,7 +1706,7 @@ def persist_processing_result_with_lifecycle(
     terminal_refusal = None
     ledger_stages: tuple[str, ...] = ()
     source_revision = 0
-    family_enabled = _terminal_family_serving(uid)
+    family_enabled = terminal_settled.serving(uid)
 
     @firestore.transactional
     def _persist(transaction) -> bool:
@@ -2044,6 +2047,7 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     summary_receipt = summary_delivery.creation_result(conversation_data, uid)
     delivery_outcome = summary_terminal_outcome({}, conversation_data)
+    terminal_settled.stamp({}, conversation_data, now=datetime.now(timezone.utc), enabled=terminal_settled.serving(uid))
 
     def stage_create(transaction, data):
         if '_notes_identity' in data:
@@ -3606,16 +3610,6 @@ def _record_terminal_claim_refusal(family: str, reason: str) -> None:
     ).inc()
 
 
-def _terminal_family_serving(uid: str) -> bool:
-    # The on|off operator surface maps on to the shared serve mode. The shared
-    # parser retains its cohort support for a later ramp without changing defaults.
-    from config.refactor_modes import default_on
-
-    return default_on('CONVERSATION_TERMINAL_FAMILY_MODE') and serving_for(
-        'CONVERSATION_TERMINAL_FAMILY_MODE', uid, default='serve'
-    )
-
-
 def _conversation_claim_matches(current, expected_status, expected_fields=None, *, allow_discarded=False):
     if not python_owns_finalization(current):
         return False
@@ -3739,7 +3733,7 @@ def claim_conversation_status(
             bound_updates = extra_updates_with_bound_client_processing(
                 uid, current, extra_updates, transcript_corrections=corrections
             )
-        family_enabled = _terminal_family_serving(uid)
+        family_enabled = terminal_settled.serving(uid)
         updates = claim_conversation_status_in_txn(
             current,
             expected_status=expected_status.value,
