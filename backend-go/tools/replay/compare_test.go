@@ -142,6 +142,30 @@ func TestCompareDifferencesWithIncompatibleJSONShapes(t *testing.T) {
 	}
 }
 
+func TestPairedAdmissionDetectsBYOKSplit(t *testing.T) {
+	py, goRun := ruleRun(), ruleRun()
+	for _, run := range []*observation{py, goRun} {
+		run.Document = map[string]any{"finalization_job_id": "job"}
+		run.QueueFanout = "fanout"
+		run.Admitted = &admission{Job: "job", Fanout: "fanout"}
+	}
+	py.Admitted.OwnKey = true
+	caseData := []replayCase{{Name: "byok-split", Python: py, Go: goRun}}
+	result, err := compare(caseData)
+	if err != nil || result.Matched != 0 || result.Unexplained != 1 ||
+		!hasKindPath(result.Cases[0].Differences, "different_value", "/admitted/own_key") {
+		t.Fatalf("BYOK split did not produce exactly one unexplained admission finding: %+v, %v", result, err)
+	}
+	goRun.Admitted.OwnKey = true
+	if diffs := compareObservations(py, goRun); len(diffs) != 0 {
+		t.Fatalf("matching BYOK admissions produced differences: %+v", diffs)
+	}
+	py.Admitted = nil
+	if diffs := compareObservations(py, goRun); hasKindPath(diffs, "different_value", "/admitted/own_key") {
+		t.Fatalf("absent admission incorrectly produced a BYOK split: %+v", diffs)
+	}
+}
+
 func TestAdmissionIDsAreValidatedPerSideWithoutCrossEngineComparison(t *testing.T) {
 	t.Parallel()
 	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)

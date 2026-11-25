@@ -6,12 +6,16 @@ import json
 import os
 from pathlib import Path
 import tempfile
+from threading import Lock
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from google.cloud.firestore_v1.types import firestore
+
 from testing.finalization_replay.candidate import _Handler, replay_database
 from testing.finalization_replay.driver import _observe
+from testing.finalization_replay.firestore_proxy import FirestoreProxy
 from testing.finalization_replay.metrics import _delete_write, _invoke_rpc, _wrap_stream, prompt_token_estimate
 from testing.finalization_replay.state import (
     CaseState,
@@ -411,8 +415,6 @@ class ReplayContractTests(unittest.TestCase):
 
     def test_embedding_meter_counts_pretokenized_batches(self):
         state = CaseState.__new__(CaseState)
-        from threading import Lock
-
         state._metrics_lock = Lock()
         state.provider_calls = []
         state.embedding_tokens = 0
@@ -567,6 +569,26 @@ class ReplayContractTests(unittest.TestCase):
             _invoke_rpc(Meter(), 'get_document', {'get_document'}, fail)
         self.assertEqual(operations['document_reads'], 1)
         self.assertEqual(operations['rpc_calls'], 1)
+
+    def test_both_meters_skip_default_empty_query_documents(self):
+        python_reads = []
+        meter = SimpleNamespace(add_firestore_operations=lambda **counts: python_reads.append(counts))
+        proxy = object.__new__(FirestoreProxy)
+        proxy.privacy_document_path = 'batch_pipeline_privacy/owner'
+        proxy.home_dirty_receipt_path = 'users/u/episode_links/c'
+        proxy._lock = Lock()
+        proxy.reset()
+        responses = [
+            firestore.RunQueryResponse(),
+            firestore.RunQueryResponse(document={}),
+            firestore.RunQueryResponse(document={'name': 'projects/p/databases/(default)/documents/users/u'}),
+        ]
+        list(_wrap_stream(responses, 'run_query', meter))
+        for response in responses:
+            proxy._record_response('run_query', firestore.RunQueryResponse.serialize(response))
+        self.assertEqual(python_reads, [{'query_documents': 1}])
+        self.assertEqual(proxy.counts()['query_documents'], 1)
+        self.assertEqual(proxy.operation_sources(), {'users/u': {'reads': 1, 'writes': 0, 'deletes': 0}})
 
     def test_partial_stream_counts_consumed_results_and_delete_empty_map(self):
         operations = {}

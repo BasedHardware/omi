@@ -125,6 +125,11 @@ def _field(value, name, default=None):
     return getattr(value, name, default)
 
 
+def query_document_name(response):
+    """A RunQuery response contributes a document read only if it has a document name."""
+    return _field(_field(response, 'document'), 'name', '')
+
+
 def _matches_batch_privacy_document(state, name):
     path = getattr(state, 'batch_privacy_document_path', '')
     if not isinstance(name, str) or not path:
@@ -306,7 +311,7 @@ def _is_read_result(method, item):
         except (AttributeError, ValueError):
             return bool(getattr(item, 'found', None) or getattr(item, 'missing', None))
     if method == 'run_query':
-        return getattr(item, 'document', None) is not None
+        return bool(query_document_name(item))
     if method == 'list_documents':
         return True
     return False

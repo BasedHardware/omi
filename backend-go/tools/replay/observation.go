@@ -21,6 +21,9 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	diffs := []difference{}
 	terminalChecks := terminalMemoChecks(python, goRun)
 	compareValue(&diffs, "/status", python.Status, goRun.Status)
+	if python.Admitted != nil && goRun.Admitted != nil {
+		compareValue(&diffs, "/admitted/own_key", python.Admitted.OwnKey, goRun.Admitted.OwnKey)
+	}
 	compareValue(&diffs, "/conversation", python.Document, goConversation(goRun, python))
 	compareDerivedDocuments(&diffs, python, goRun)
 	if terminalChecks != nil {

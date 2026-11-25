@@ -144,10 +144,12 @@ def replay(cases, jobd, dsn, key):
                 with fakeredis.FakeRedis() as redis, patch.object(redis_db, 'r', redis), patch.object(
                     redis_db, 'create_bounded_redis_client', lambda *_a, **_kw: redis
                 ):
+                    speaker_trace = importlib.import_module('testing.finalization_replay.speaker_trace')
                     for state, output in zip(reference_cases, outputs, strict=True):
                         server.state = state
                         server.errors.clear()
                         with ExitStack() as leaves:
+                            speaker_trace.record_speaker_trace(state, leaves)
                             _observe(state, lambda target: run_reference(target, leaves, url), output, 'python')
                         if server.errors:
                             output['errors']['python'] = 'ReplayProviderError'

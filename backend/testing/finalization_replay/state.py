@@ -436,6 +436,8 @@ class CaseState:
         operation_sources = getattr(self, 'firestore_operation_sources', None)
         if operation_sources:
             observation['firestore_operation_sources'] = operation_sources
+        if hasattr(self, 'speaker_trace'):
+            observation['speaker_trace'] = self.speaker_trace
         return observation
 
     def vector(self, conversation_id):

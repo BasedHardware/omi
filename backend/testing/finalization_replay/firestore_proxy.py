@@ -8,6 +8,8 @@ from threading import Lock
 import grpc
 from google.cloud.firestore_v1.types import firestore
 
+from testing.finalization_replay.metrics import query_document_name
+
 # Bound loopback calls to less than the worker subprocess timeout. grpcio
 # 1.66 returns a finite-looking seconds value (~9e18) when the incoming RPC
 # has no deadline. Passing that value to another RPC immediately expires it.
@@ -271,10 +273,10 @@ class FirestoreProxy:
                 self._add(document_reads=1)
                 self._record_operation_source(getattr(response, 'missing', ''), 'reads')
         elif method == 'run_query':
-            document = getattr(response, 'document', None)
-            if document and document.name:
+            name = query_document_name(response)
+            if name:
                 self._add(query_documents=1)
-                self._record_operation_source(document.name, 'reads')
+                self._record_operation_source(name, 'reads')
         elif method == 'list_documents':
             documents = getattr(response, 'documents', ())
             self._add(query_documents=len(documents))
