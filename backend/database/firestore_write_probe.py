@@ -53,8 +53,10 @@ import functools
 import inspect
 import logging
 import os
+from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Callable, Iterable
+from threading import Lock
 
 from prometheus_client import Counter
 
@@ -72,6 +74,7 @@ __all__ = [
     'FIRESTORE_NOOP_WRITES_BY_CALLER',
     'FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW',
     'install_document_write_probe',
+    'probe_installed',
     'write_op',
 ]
 
@@ -328,11 +331,62 @@ def _record_noops(writes: list, response: Any, caller: str) -> None:
         pass  # Attribution must never affect a write.
 
 
+class CommittedWrites:
+    """Shared by the executor threads in one request context."""
+
+    def __init__(self):
+        self._total = 0
+        self.incomplete = False
+        self._lock = Lock()
+
+    def add(self, count):
+        with self._lock:
+            self._total += count
+
+    @property
+    def total(self):
+        with self._lock:
+            if self.incomplete:
+                raise RuntimeError('Firestore write tally incomplete')
+            return self._total
+
+
+_committed_writes: ContextVar[CommittedWrites | None] = ContextVar('firestore_committed_writes', default=None)
+
+
+@contextmanager
+def count_committed_writes():
+    counter = CommittedWrites()
+    token = _committed_writes.set(counter)
+    try:
+        yield counter
+    finally:
+        _committed_writes.reset(token)
+
+
+@contextmanager
+def suspend_committed_write_count():
+    """Exclude work owned by a different stage from the current count."""
+    token = _committed_writes.set(None)
+    try:
+        yield
+    finally:
+        _committed_writes.reset(token)
+
+
 def _after(writes: list, response: Any, partial: bool) -> None:
     if partial:
         writes = _applied(writes, response)
     if not writes:
         return
+    count = _committed_writes.get()
+    if count is not None:
+        try:
+            count.add(len(writes))
+        except Exception:
+            # The RPC succeeded. Leave its result and the global counters alone;
+            # the guarded per-reconcile observer must not publish a partial total.
+            count.incomplete = True
     caller = write_caller() if bulk_write_attribution.get() is None else _OTHER
     _record(writes, caller)
     if not partial:
@@ -396,6 +450,11 @@ def patch_write_probe(cls: Any, name: str, factory: Callable[[Any], Any]) -> Non
 
 
 _installed = False
+
+
+def probe_installed() -> bool:
+    """Whether the SDK write probe was installed successfully."""
+    return _installed
 
 
 def probe_enabled() -> bool:

@@ -2,6 +2,7 @@
 
 import os
 
+from config.refactor_modes import default_on
 from config.rollout_cohorts import in_rollout_cohort, parse_cohort, valid_uid
 from utils.conversations.v3 import client_capability
 from utils.episodes import client_gate
@@ -22,6 +23,10 @@ def conversations_v3_enabled(uid: str) -> bool:
     if stage == 'all' and client_capability.capable_cached(uid):
         return True
     return in_rollout_cohort(uid, 'conversations-v3')
+
+
+def skip_unchanged_writes_enabled() -> bool:
+    return default_on('CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES')
 
 
 def finish_no_pointer_enabled() -> bool:

@@ -444,6 +444,7 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE` | Default on; include the derived fragment at an explicit manual cut on Home regardless of media or background classification | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
 | `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` | Default 10800 seconds; split v3 recorded-speech stretches at the cap. Set 0 or off to disable. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
 | `CONVERSATIONS_V3_RECONCILE_RETRY_RESPONSE` | Default on; return HTTP 409 for exhausted Firestore contention or expiry and fenced v3 reconcile processing races. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
+| `CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES` | Default on; skip unchanged conversations v3 projection and repeated pending writes using existing Firestore snapshots. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Margin |
 | `CONVERSATIONS_V3_STRETCH_COHESION` | Default on; normalize outline speaker labels and fold short topics within each hard-bounded v3 stretch | backend | env | open | — | — | — | — | keep | keep | — | v3-rollout coordinator |
 | `CONVERSATION_BATCH_PURGE_COALESCING_ENABLED` | Default on; one resumable owner scan for a sealed group of fresh conversation deletion obligations; false/off/0/no restores legacy per-conversation execution | backend | env | open | — | — | — | — | keep | keep | — | batch-custody / lead2 |
 | `CONVERSATION_KNOWN_SPELLINGS` | Default-on grounded spelling hints from Dream vocabulary and active People for conversation summaries, action items and memories; false disables hints and source reads; bounded to 60 terms and 1500 characters | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
@@ -1298,6 +1299,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` — Default 10800 seconds; split v3 recorded-speech stretches at the cap. Set 0 or off to disable. (fail: open)
 - `CONVERSATIONS_V3_RECONCILE_RETRY_RESPONSE` — Default on; return HTTP 409 for exhausted Firestore contention or expiry and fenced v3 reconcile processing races. (fail: open)
 - `CONVERSATIONS_V3_SILENCE_GAP_SECONDS` — Default 300 seconds, bounded 120–1800; controls the v3 recorded-speech grouping gap; above 300 it also switches on sit-down cutting (fail: closed)
+- `CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES` — Default on; skip unchanged conversations v3 projection and repeated pending writes using existing Firestore snapshots. (fail: open)
 - `CONVERSATIONS_V3_STRETCH_COHESION` — Default on; normalize outline speaker labels and fold short topics within each hard-bounded v3 stretch (fail: open)
 - `CONVERSATIONS_V3_TASKS_QUEUE` — Optional dedicated named-task queue; defaults to the conversations-v3 queue (fail: closed)
 - `CONVERSATIONS_V3_TASKS_URL` — Optional dedicated builder origin; otherwise uses the configured sync task origin and identity (fail: closed)
