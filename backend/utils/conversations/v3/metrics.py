@@ -110,3 +110,12 @@ def terminal_failure(reason):
 def observe_word_floor(legacy_below: bool, script_aware_below: bool) -> None:
     for method, below in (('legacy', legacy_below), ('script_aware', script_aware_below)):
         WORD_FLOOR_COMPLETIONS.labels(method, 'below' if below else 'met').inc()
+
+
+AUDIO_PURGES = Counter(
+    'omi_conversations_v3_audio_purges_total',
+    'Released-recording audio purge steps: custody invalidated, intake purge pending or failed, audio erased',
+    ['outcome'],
+)
+for outcome in ('custody_invalidated', 'intakes_pending', 'intakes_failed', 'erased'):
+    AUDIO_PURGES.labels(outcome)

@@ -1379,12 +1379,39 @@ async def drain_backfill(uid, *, deadline, after=None, keep_going=None, concurre
     return counts
 
 
+class AudioPurgeIntakesPending(RuntimeError):
+    """The recording's batch-intake purge obligation has not run yet; the blobs wait for it."""
+
+
 def purge_audio(uid, rid):
+    """Erase a released recording. Custody intakes go before the blobs; any failure raises for the retry."""
+    from utils.cloud_tasks import is_conversation_batch_purge_dispatch_configured
     from utils.other.storage import delete_privacy_conversation_audio
 
-    if store.claim_audio_purge(uid, rid):
+    claim = store.claim_audio_purge(uid, rid, defer_intake_purge=is_conversation_batch_purge_dispatch_configured())
+    if not claim:
+        return
+    if claim.custody_invalidated:
+        metrics.AUDIO_PURGES.labels('custody_invalidated').inc()
+    if claim.intakes == 'pending':
+        metrics.AUDIO_PURGES.labels('intakes_pending').inc()
+        raise AudioPurgeIntakesPending('record WAL intake purge obligation still armed')
+    if claim.intakes == 'inline':
+        from database.batch_pipeline_purge import purge_batch_owner
+
+        # The same per-conversation purge a user delete runs (record_deletion); the claim wrote its tombstone.
+        try:
+            purge_batch_owner(uid, conversation_id=rid)
+        except Exception:
+            metrics.AUDIO_PURGES.labels('intakes_failed').inc()
+            raise
+    if claim.donor_ids:
+        # A merge target's retained donors served only this recording, as a user delete erases them.
+        delete_privacy_conversation_audio(uid, rid, source_ids=list(claim.donor_ids))
+    else:
         delete_privacy_conversation_audio(uid, rid)
-        conversations_db.update_conversation(uid, rid, {'v3_audio_purge_pending': False, 'audio_files': []})
+    conversations_db.update_conversation(uid, rid, {'v3_audio_purge_pending': False, 'audio_files': []})
+    metrics.AUDIO_PURGES.labels('erased').inc()
 
 
 async def measure_legacy_users():

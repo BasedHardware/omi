@@ -619,6 +619,44 @@ def test_duplicate_terminal_receipt_is_purged_with_its_erased_owner(duplicate_wo
     marker.delete()
 
 
+@pytest.mark.parametrize('order', ('settle_then_purge', 'purge_then_settle'))
+def test_v3_audio_purge_invalidates_duplicate_custody_against_settlement(duplicate_world, order):
+    """A released recording's purge outranks duplicate custody on both sides of the race."""
+    from config.record_wal_duplicate import SETTLED_FIELD, has_retained_custody
+    from database import conversations_v3
+    from database import record_wal_duplicate as duplicate
+
+    case = duplicate_world
+    request = case.request('v3-purge')
+    candidate = case.attempt(request, files=case.files)
+    authority = {'expected': candidate.scope, 'files': case.files, 'placements': ['a', 'b'], 'commit': True}
+    case.conversation.update({'recording': True, 'claims': [], 'v3_audio_purge_pending': True})
+    if order == 'settle_then_purge':
+        assert case.attempt(request, **authority)
+        assert case.conversation.get().to_dict()[SETTLED_FIELD] is True
+    claim = conversations_v3.claim_audio_purge(request.uid, case.cid, firestore_client=case.store.client)
+    assert claim and claim.custody_invalidated is (order == 'settle_then_purge')
+    row = case.conversation.get().to_dict()
+    assert row['deleted'] is True and not has_retained_custody(row)
+    if order == 'purge_then_settle':
+        # The claim's tombstone and deleted row refuse a settlement prepared before it.
+        with pytest.raises(BatchPrivacyBlocked):
+            case.attempt(request, **authority)
+        assert not has_retained_custody(case.conversation.get().to_dict())
+        assert claim.intakes == 'none'
+    else:
+        assert claim.intakes == 'inline'
+        purge.purge_batch_owner(
+            request.uid,
+            conversation_id=case.cid,
+            namespaces=(case.store.namespace,),
+            firestore_client=case.store.client,
+            delete_uri=Mock(side_effect=AssertionError('metadata-only witness has no object URI')),
+        )
+    case.user.collection('deleted_conversations').document(case.cid).delete()
+    assert duplicate.terminal_status(case.store, request.uid, case.canonical) == (False, None)
+
+
 @pytest.mark.parametrize('race', ('revision', 'tombstone', 'merge_removal'))
 def test_duplicate_cas_revalidates_source_and_privacy_after_compare(duplicate_world, race):
     case = duplicate_world

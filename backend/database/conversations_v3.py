@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -26,7 +27,13 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD, python_owns_finalization
 from utils.encryption import encrypt, decrypt
 from utils.home_feed.projection import stamp as stamp_home_display
-from config.record_wal_duplicate import has_retained_custody
+from config.record_wal_duplicate import (
+    MERGE_PLAN_FIELD,
+    MERGE_TARGET_FIELD,
+    RETAINED_DONORS_FIELD,
+    SETTLED_FIELD,
+    has_retained_custody,
+)
 from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
 from utils.conversations import terminal_settled
 from utils.conversations.v3 import Conflict, policy, preview_wakes, request_log_trace_id
@@ -1383,11 +1390,40 @@ def delete_backfill_rows(uid, token, ids, *, firestore_client=None):
     return remove(client.transaction())
 
 
-def claim_audio_purge(uid, rid, *, firestore_client=None):
-    """Close the owner before prefix deletion so late sync cannot reuse it."""
+# Record-WAL duplicate custody a user erasure invalidates. The merge plan is
+# job-scoped today; clearing it here keeps a stray row copy from outliving erasure.
+AUDIO_PURGE_CUSTODY_FIELDS = (SETTLED_FIELD, RETAINED_DONORS_FIELD, MERGE_TARGET_FIELD, MERGE_PLAN_FIELD)
+# Batch intakes keyed to the recording (wal_duplicate_<file>, wal_duplicate_terminal_<job>)
+# are owed erasure before the blobs go: 'inline' runs purge_batch_owner in the sweep,
+# 'armed' means a conversation_batch_purge_jobs obligation was written with this marker.
+AUDIO_PURGE_INTAKES_FIELD = 'v3_audio_purge_intakes'
+# A merge target's retained donors, kept from the custody clear until the blob erase runs.
+AUDIO_PURGE_DONORS_FIELD = 'v3_audio_purge_source_ids'
+
+
+@dataclass(frozen=True)
+class AudioPurgeClaim:
+    """What the purge owes before deleting blobs. ``intakes``: none, inline, pending or done."""
+
+    custody_invalidated: bool = False
+    intakes: str = 'none'
+    donor_ids: tuple[str, ...] = ()
+
+
+def claim_audio_purge(uid, rid, *, defer_intake_purge=False, firestore_client=None):
+    """Close the owner before prefix deletion so late sync cannot reuse it.
+
+    A user deletion outranks record-WAL duplicate custody: the same commit that
+    closes the owner clears the custody fields and records that the batch
+    intakes are owed erasure (arming the obligation when ``defer_intake_purge``).
+    Returns False when the row is not purgeable, else an ``AudioPurgeClaim``.
+    """
+    from database.conversation_batch_purge_jobs import arm_fields, job_ref
+
     client = firestore_client or get_firestore_client()
     ref = user_conversations(client, uid).document(rid)
     tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(rid)
+    obligation = job_ref(client, uid, rid)
 
     @firestore.transactional
     def claim(tx):
@@ -1402,13 +1438,38 @@ def claim_audio_purge(uid, rid, *, firestore_client=None):
             or row.get('status') != 'completed'
         ):
             return False
+        custody = has_retained_custody(row) or bool(row.get(MERGE_PLAN_FIELD))
+        owed = row.get(AUDIO_PURGE_INTAKES_FIELD)
+        if custody and owed is None:
+            owed = 'inline'
+        armed = obligation.get(transaction=tx).exists if owed else False
         if not intent.exists:
             tx.set(
                 tombstone,
                 {'conversation_id': rid, 'deleted_at': datetime.now(timezone.utc), 'created_at': row.get('created_at')},
             )
-        tx.update(ref, {'deleted': True, 'v3_audio_erased': True})
-        return True
+        updates = {'deleted': True, 'v3_audio_erased': True}
+        donors = row.get(AUDIO_PURGE_DONORS_FIELD) or []
+        if custody:
+            updates.update({field: firestore.DELETE_FIELD for field in AUDIO_PURGE_CUSTODY_FIELDS if field in row})
+            retained = row.get(RETAINED_DONORS_FIELD)
+            if isinstance(retained, list) and retained and not donors:
+                # The donor list goes with custody; the erase it is owed may run sweeps later.
+                donors = updates[AUDIO_PURGE_DONORS_FIELD] = [d for d in retained if isinstance(d, str) and d]
+        donors = tuple(donors)
+        if owed == 'inline' and defer_intake_purge and not armed:
+            # The tombstone above is the obligation runner's deletion intent.
+            tx.set(obligation, arm_fields(uid, rid))
+            owed, armed = 'armed', True
+        if owed and owed != row.get(AUDIO_PURGE_INTAKES_FIELD):
+            updates[AUDIO_PURGE_INTAKES_FIELD] = owed
+        tx.update(ref, updates)
+        if owed == 'armed':
+            # Without dispatch the sweep erases inline; an absent armed obligation was run to completion.
+            intakes = ('pending' if defer_intake_purge else 'inline') if armed else 'done'
+        else:
+            intakes = owed or 'none'
+        return AudioPurgeClaim(custody_invalidated=custody, intakes=intakes, donor_ids=donors)
 
     return claim(client.transaction())
 
