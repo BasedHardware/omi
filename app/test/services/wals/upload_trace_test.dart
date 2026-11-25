@@ -40,11 +40,11 @@ void main() {
   });
 
   test('hold age clamps clock changes and requires a held file', () {
-    final held = (trace: 'trace', holdState: 'fg60', holdSealedAtMs: 2010000);
+    const held = (trace: 'trace', holdState: 'fg60', holdSealedAtMs: 2010000);
     expect(trace.holdHeadersAtSend(held, holdEnabled: true)['X-Omi-Upload-Hold-Age-Ms'], '0');
     clock = at(200000);
     expect(trace.holdHeadersAtSend(held, holdEnabled: true)['X-Omi-Upload-Hold-Age-Ms'], '86400000');
-    final unheld = (trace: 'trace', holdState: 'none', holdSealedAtMs: 2010000);
+    const unheld = (trace: 'trace', holdState: 'none', holdSealedAtMs: 2010000);
     expect(trace.holdHeadersAtSend(unheld, holdEnabled: true), {'X-Omi-Upload-Hold': 'none'});
   });
 
