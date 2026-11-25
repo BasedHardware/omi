@@ -92,7 +92,7 @@ def enqueue(uid, *, at=None, manual_end_id=None, finish_hold_deadline=False):
         os.getenv('CONVERSATIONS_V3_TASKS_QUEUE', 'conversations-v3'),
         base + '/v1/conversations-v3/reconcile',
         task_id,
-        {'uid': uid},
+        {'uid': uid, **({'finish_hold_deadline': True} if finish_hold_deadline else {})},
         schedule_at=schedule_at,
     )
 

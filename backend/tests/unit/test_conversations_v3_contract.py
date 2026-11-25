@@ -53,6 +53,7 @@ def test_finish_hold_wake_has_its_own_name_at_the_deadline(monkeypatch):
     triggers.enqueue('owner', at=deadline, finish_hold_deadline=True)
     ordinary, expiry, retry = enqueue.call_args_list
     assert ordinary.args[2] != expiry.args[2] == retry.args[2]
+    assert expiry.args[3] == {'uid': 'owner', 'finish_hold_deadline': True}
     assert expiry.kwargs['schedule_at'] == int(deadline.timestamp()) + 1
 
 

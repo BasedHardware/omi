@@ -306,6 +306,18 @@ async def test_reconcile_counts_expected_task_retries(monkeypatch, reconcile_req
 
 
 @pytest.mark.asyncio
+async def test_finish_deadline_retries_a_busy_builder(monkeypatch, reconcile_request):
+    monkeypatch.setattr(service, 'reconcile', AsyncMock(return_value='busy'))
+    ordinary = await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
+    deadline = await route.reconcile(
+        route.ReconcileRequest(uid='u', finish_hold_deadline=True), reconcile_request, _retry=0
+    )
+    assert ordinary == {'outcome': 'busy'}
+    assert deadline.status_code == 409
+    assert deadline.body == b'{"status":"retry","reason":"locked"}'
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('handled', [False, True])
 async def test_summary_lease_release_preserves_only_propagating_failure(monkeypatch, reconcile_request, handled):
     row = {'id': 'c'}

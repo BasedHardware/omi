@@ -25,13 +25,17 @@ router = APIRouter()
 
 class ReconcileRequest(BaseModel):
     uid: str = Field(min_length=1, max_length=128, pattern=r'^[^/]+$')
+    finish_hold_deadline: bool = False
 
 
 @router.post('/v1/conversations-v3/reconcile', include_in_schema=False)
 async def reconcile(body: ReconcileRequest, request: Request, _retry: int = Depends(verify_cloud_tasks_oidc)):
     try:
         with bind_request_log_trace(dict(request.headers.raw)):
-            return {'outcome': await service.reconcile(body.uid)}
+            outcome = await service.reconcile(body.uid)
+        if outcome == 'busy' and body.finish_hold_deadline:
+            return retry_response(RetryReason.LOCKED)
+        return {'outcome': outcome}
     except Exception as error:
         # The composition boundary may already have answered a provider fault
         # with the typed retryable contract (and recorded its metric). Re-raise
