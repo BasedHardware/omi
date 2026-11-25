@@ -11,7 +11,7 @@ from contextlib import contextmanager, nullcontext
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from google.api_core.exceptions import InvalidArgument
@@ -30,7 +30,7 @@ from routers import conversations as conversation_routes
 from scripts import conversations_v3_backfill as script
 from services import conversation_frame_evidence
 from utils.conversations import merge_conversations
-from utils.conversations.v3 import Conflict, backfill, service
+from utils.conversations.v3 import Conflict, backfill, metrics, service
 from utils.other import lake_wipe
 from utils.retrieval.tool_services import action_items as task_service
 from utils.task_intelligence import task_source_validation
@@ -2034,3 +2034,63 @@ async def test_undo_transaction_checks_both_builder_tokens(owner, strict, ledger
     assert backfill.undo_run(UID, RUN, firestore_client=strict) == {'outcome': 'busy', 'reason': 'lease_lost'}
     assert conversations(strict) == before_undo
     assert priors(strict)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('installed', [False, True], ids=['missing-probe-counter', 'billed-write-histogram'])
+async def test_reconcile_runs_when_write_probe_telemetry_raises(owner, strict, installed):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    metric = metrics.RECONCILE_BILLED_WRITES.labels('backfill') if installed else metrics.RECONCILE_PROBE_MISSING
+    with (
+        patch.object(metrics, 'probe_enabled', return_value=True),
+        patch.object(metrics, 'probe_installed', return_value=installed),
+        patch.object(metric, 'observe' if installed else 'inc', side_effect=OSError('metrics unavailable')) as emit,
+    ):
+        outcome, _ = await rederive()
+    emit.assert_called_once()
+    assert outcome == 'committed'
+    assert conversations(strict) != before
+
+
+@pytest.mark.asyncio
+async def test_reconcile_returns_after_post_commit_projection_histogram_raises(owner, strict):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    histogram = metrics.PROJECTION_ROWS.labels('commit_projection', 'written')
+    committed_at_observe = []
+
+    def fail_after_commit(*args):
+        committed_at_observe.append(conversations(strict) != before)
+        raise OSError('metrics unavailable')
+
+    with patch.object(histogram, 'observe', side_effect=fail_after_commit) as observe:
+        outcome, _ = await rederive()
+    observe.assert_called_once()
+    assert committed_at_observe == [True]
+    assert outcome == 'committed'
+    assert conversations(strict) != before
+
+
+@pytest.mark.asyncio
+async def test_reconcile_writes_when_equality_fallback_telemetry_raises(owner, strict):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    equality = store.write_equality
+    with (
+        patch.object(equality, 'same_patch', side_effect=RuntimeError('cannot compare')),
+        patch.object(equality, '_fallback_reported', False),
+        patch.object(metrics.EQUALITY_UNAVAILABLE, 'inc', side_effect=OSError('counter unavailable')) as inc,
+        patch.object(equality, 'record_fallback', side_effect=OSError('event unavailable')) as fallback,
+        patch.object(metrics, '_metric_warning_logged', False),
+        patch.object(metrics.logger, 'warning') as warning,
+    ):
+        outcome, _ = await rederive()
+    assert inc.call_count > 0
+    fallback.assert_called_once()
+    warning.assert_called_once_with('v3 reconcile telemetry failed exception_type=%s', 'OSError')
+    assert outcome == 'committed'
+    assert conversations(strict) != before

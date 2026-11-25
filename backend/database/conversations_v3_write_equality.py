@@ -39,12 +39,16 @@ _fallback_reported = False
 
 def _write_on_uncertainty() -> bool:
     global _fallback_reported
-    metrics.EQUALITY_UNAVAILABLE.inc()
+    metrics.safe_metric(lambda: metrics.EQUALITY_UNAVAILABLE.inc())
     with _fallback_lock:
         if _fallback_reported:
             return False
         _fallback_reported = True
-    record_fallback(component='other', from_mode='elide_write', to_mode='write', reason='other', outcome='degraded')
+    metrics.safe_metric(
+        lambda: record_fallback(
+            component='other', from_mode='elide_write', to_mode='write', reason='other', outcome='degraded'
+        )
+    )
     return False
 
 
