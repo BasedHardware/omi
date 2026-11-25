@@ -26,6 +26,7 @@ from cachetools import TTLCache
 
 from config import object_lake as config
 from database import _client
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from utils import encryption
 from utils.other import object_lake, space_keys
 
@@ -399,8 +400,6 @@ def run_preloaded_transactional(client, fn, *args, **kwargs):
 
 def run_preloaded_transaction_with_contention_retry(client, operation, *args):
     """Load transcript blobs between attempts and start each contention retry with a new ID."""
-    from database.firestore_transaction_retry import run_with_transaction_contention_retry
-
     # Use the shared duration reserve to avoid starting another long chain after
     # a slow failure. The budget does not abort an in-flight transaction.
     retry_deadline = monotonic() + 45.0

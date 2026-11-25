@@ -6,10 +6,10 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from database.conversations_v3_fence import ProcessingPersistenceFenced
 from utils.cloud_tasks import verify_cloud_tasks_oidc
 from utils.conversations.v3 import (
     Conflict,
-    ProcessingPersistenceFenced,
     backfill,
     bind_request_log_trace,
     metrics,

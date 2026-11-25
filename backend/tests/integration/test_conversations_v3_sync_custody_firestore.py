@@ -1,18 +1,32 @@
 """Emulator tests for Firestore revisions and rollback across V3 and sync writers."""
 
+import hashlib
+import json
 import os
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from unittest.mock import AsyncMock
 
+from fastapi import FastAPI
+from google.api_core.exceptions import Aborted, InvalidArgument
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 from google.cloud.firestore_v1.types import BeginTransactionRequest
+import httpx
 import pytest
 
+from database import conversations as db
 from database import conversations_v3 as v3, conversations_v3_leases as leases
+from database import conversations_v3_fence as fence, conversations_v3_processing as writers
+from database._client import in_transaction_body
+from database.conversations_v3_fence import PersistenceDecline, ProcessingPersistenceFenced
 from database.conversations_v3_sync_repair import repair
-from utils.conversations.v3 import Conflict
+from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD
+from routers import conversations_v3_tasks as route
+from utils.conversations import process_conversation
+from utils.conversations.v3 import Conflict, created, metrics, service
+from utils.other import object_lake
 from utils.sync.assignment import assign_in_transaction
 
 
@@ -153,7 +167,6 @@ def test_historical_repair_preview_retry_rollback_and_races(owner):
 
 @pytest.mark.parametrize('failure', ['expired_read', 'aborted_commit'])
 def test_projection_restarts_with_fresh_transaction(owner, monkeypatch, failure):
-    from google.api_core.exceptions import Aborted, InvalidArgument
 
     client, user, coll = owner
     seed(owner)
@@ -198,12 +211,6 @@ def test_projection_restarts_with_fresh_transaction(owner, monkeypatch, failure)
 
 
 def test_projection_splits_33_pointer_backed_rows(owner, monkeypatch):
-    import hashlib
-    import json
-
-    from database._client import in_transaction_body
-    from utils.other import object_lake
-
     client, user, coll = owner
     begin, _ = seed(owner)
     source_ref = coll.document('early')
@@ -251,7 +258,6 @@ def test_projection_splits_33_pointer_backed_rows(owner, monkeypatch):
 
 @pytest.fixture
 def processing_store(owner, monkeypatch):
-    from database import conversations as db
 
     client, user, coll = owner
     monkeypatch.setattr(db, 'db', client)
@@ -268,9 +274,6 @@ def processing_store(owner, monkeypatch):
 
 @pytest.mark.parametrize('decline', ['lease', 'revision', 'deleted', 'missing', 'foreign_owner', 'capture_group'])
 def test_v3_processing_persist_distinguishes_retryable_and_terminal_declines(processing_store, decline):
-    from database import conversations_v3_fence as fence
-    from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD
-    from utils.conversations.v3 import ProcessingPersistenceFenced
 
     db, user, coll = processing_store
     cid = 'capture'
@@ -306,15 +309,6 @@ def test_v3_processing_persist_distinguishes_retryable_and_terminal_declines(pro
 @pytest.mark.asyncio
 @pytest.mark.parametrize('outcome', ['stale_revision', 'deleted', 'capture_group', 'transient'])
 async def test_reconcile_route_uses_real_processing_persistence_outcome(processing_store, monkeypatch, outcome):
-    from unittest.mock import AsyncMock
-
-    import httpx
-    from fastapi import FastAPI
-
-    from routers import conversations_v3_tasks as route
-    from utils.conversations import process_conversation
-    from utils.conversations.v3 import created, metrics, service
-
     db, user, coll = processing_store
     now = datetime.now(timezone.utc)
     row = {
@@ -395,8 +389,6 @@ async def test_reconcile_route_uses_real_processing_persistence_outcome(processi
 
 
 def test_decline_cannot_settle_replacement_obligation(processing_store):
-    from database import conversations_v3_processing as writers
-    from database.conversations_v3_fence import PersistenceDecline
 
     _, user, coll = processing_store
     ref = coll.document('capture')

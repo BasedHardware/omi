@@ -11,7 +11,7 @@ backend/docs/storing-conversations.md).
 from utils.conversations import phase_shadow
 
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
-from database import conversation_recorded_time, conversations_v3_backfill_runs
+from database import conversation_recorded_time, conversations_v3_backfill_runs, conversations_v3_fence
 from database import home_visibility_index, pipeline_ledger
 from utils.conversations import summary_delivery, lifecycle_clocks, terminal_settled
 from utils.observability.delivery import summary_terminal_outcome
@@ -93,6 +93,7 @@ from database.transcript_pointer import (
     TranscriptSegmentsDecodeError,
     decode_stored_transcript as decode_transcript_segments_blob,
     run_preloaded_transactional,
+    run_preloaded_transaction_with_contention_retry,
 )
 
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
@@ -1694,8 +1695,6 @@ def persist_processing_result_with_lifecycle(
     source_revision = 0
     family_enabled = terminal_settled.serving(uid)
 
-    from database import conversations_v3_fence
-
     @firestore.transactional
     def _persist(transaction) -> Literal['stored', 'fenced'] | conversations_v3_fence.PersistenceDecline:
         nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal, ledger_stages, source_revision
@@ -1969,8 +1968,6 @@ def persist_processing_result_with_lifecycle(
         ) and write_status in (ConversationStatus.completed, ConversationStatus.completed.value)
         return 'stored'
 
-    from database.transcript_pointer import run_preloaded_transaction_with_contention_retry
-
     v3_processing = conversations_v3_fence.current() is not None
     try:
         if v3_processing:
@@ -1981,9 +1978,7 @@ def persist_processing_result_with_lifecycle(
         return False
     if v3_processing:
         if outcome == 'fenced':
-            from utils.conversations.v3 import ProcessingPersistenceFenced
-
-            raise ProcessingPersistenceFenced('v3_processing_not_completed')
+            raise conversations_v3_fence.ProcessingPersistenceFenced('v3_processing_not_completed')
         conversations_v3_fence.record_persistence_outcome(
             outcome if isinstance(outcome, conversations_v3_fence.PersistenceDecline) else None
         )

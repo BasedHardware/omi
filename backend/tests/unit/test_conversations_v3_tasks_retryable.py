@@ -25,10 +25,19 @@ import httpx  # noqa: E402
 import openai  # noqa: E402
 import pytest  # noqa: E402
 from fastapi import HTTPException, Request  # noqa: E402
+from google.api_core.exceptions import Aborted, InvalidArgument  # noqa: E402
 
+from database.conversations_v3_fence import ProcessingPersistenceFenced  # noqa: E402
+from database.firestore_transaction_retry import FirestoreContentionExhausted  # noqa: E402
 from routers import conversations_v3_tasks as route  # noqa: E402
 from utils.conversations.processing_metrics import RETRYABLE_PROCESSING_RESPONSES_TOTAL  # noqa: E402
-from utils.conversations.v3 import backfill, request_log_trace_id, service  # noqa: E402
+from utils.conversations.v3 import (  # noqa: E402
+    Conflict,
+    backfill,
+    metrics,
+    request_log_trace_id,
+    service,
+)
 from utils.executors import start_background_task  # noqa: E402
 from utils.llm.gateway_error_contract import (  # noqa: E402
     RETRYABLE_CONVERSATION_PROCESSING_ERROR_CODE,
@@ -268,11 +277,6 @@ async def test_opted_in_background_task_keeps_a_non_provider_failure_loud(caplog
     ],
 )
 async def test_reconcile_counts_expected_task_retries(monkeypatch, reconcile_request, kind, reason):
-    from google.api_core.exceptions import Aborted, InvalidArgument
-
-    from database.firestore_transaction_retry import FirestoreContentionExhausted
-    from utils.conversations.v3 import Conflict, ProcessingPersistenceFenced, metrics
-
     if kind.startswith('transaction_'):
         error = FirestoreContentionExhausted(
             'retry budget exhausted',
@@ -304,8 +308,6 @@ async def test_reconcile_counts_expected_task_retries(monkeypatch, reconcile_req
 @pytest.mark.asyncio
 @pytest.mark.parametrize('handled', [False, True])
 async def test_summary_lease_release_preserves_only_propagating_failure(monkeypatch, reconcile_request, handled):
-    from database.firestore_transaction_retry import FirestoreContentionExhausted
-
     row = {'id': 'c'}
     failure = service.FinalizationOwnedElsewhere() if handled else ValueError('unexpected processing failure')
 

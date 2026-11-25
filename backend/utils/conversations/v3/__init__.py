@@ -29,10 +29,6 @@ class Conflict(RuntimeError):
     """Retryable v3 ownership and source-revision conflicts."""
 
 
-class ProcessingPersistenceFenced(RuntimeError):
-    """The processing write declined a stale or no-longer-authorized result."""
-
-
 def preview_wakes(rows, recordings) -> dict[str, datetime]:
     """Keep one recording pending per preview so the existing sweep can recover its deadline."""
     wakes: dict[str, datetime] = {}

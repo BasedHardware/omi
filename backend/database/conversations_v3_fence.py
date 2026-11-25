@@ -8,6 +8,10 @@ from datetime import datetime, timezone
 _current: ContextVar[tuple[str, str, str] | None] = ContextVar('conversation_v3_writer', default=None)
 
 
+class ProcessingPersistenceFenced(RuntimeError):
+    """The processing write declined a stale or no-longer-authorized result."""
+
+
 @dataclass(frozen=True)
 class PersistenceDecline:
     reason: str
