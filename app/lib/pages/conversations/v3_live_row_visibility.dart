@@ -1,3 +1,5 @@
+// Removed live windows stay hidden, and usable server windows take precedence.
+// Otherwise, streaming shows the placeholder outside calls and post-Finish suppression.
 enum V3HomeLiveRow { none, server, placeholder }
 
 V3HomeLiveRow v3HomeLiveRow({

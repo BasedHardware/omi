@@ -980,7 +980,7 @@ class _ConversationsPageState extends State<ConversationsPage>
           serverUsable: v3Live != null && v3Live.v3?.homeHidden != true && !isFailedConversation(v3Live),
           liveRemoved: liveRemoved,
           callActive: callActive,
-          listeningSuppressed: v3Home && streaming && v3!.suppressListeningAfterFinish(captureId),
+          listeningSuppressed: v3Home && v3!.suppressListeningAfterFinish(captureId),
         );
         final liveServerRow = liveRow == V3HomeLiveRow.server ? v3Live : null;
         final livePlaceholder = liveRow == V3HomeLiveRow.placeholder;

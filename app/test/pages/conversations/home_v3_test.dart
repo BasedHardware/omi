@@ -745,6 +745,14 @@ void main() {
       expect(placeholder, findsNothing);
       final top = tester.getTopLeft(serverRow).dy;
 
+      home.conversations
+        ..conversations.add(_conversation(
+          'live-1',
+          home.liveStart,
+          'Launch checklist',
+          v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.failed),
+        ))
+        ..groupConversationsByDate();
       home.liveFailed = true;
       await home.conversationsV3.refresh();
       await tester.pump();
