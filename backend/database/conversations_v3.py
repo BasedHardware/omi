@@ -19,6 +19,7 @@ from database import home_visibility_index
 from database._client import firestore_failure_reason, get_firestore_client
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from database import conversations, conversations_v3_leases as leases
+from database.conversations_v3_finish_predecessors import attach as attach_finish_predecessors
 from database.conversations_v3_undo_removals import removal_ref
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
@@ -439,6 +440,7 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         if policy.builder_eligible({**unreadable[rid], '_v3_unreadable': False}):
             raise Conflict('recording_decode_unavailable')
     _mark_successor_pending(coll, recordings)
+    attach_finish_predecessors(coll, recordings)
     return {**recordings, **unreadable}, existing, cache
 
 

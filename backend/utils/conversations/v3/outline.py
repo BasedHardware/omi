@@ -8,6 +8,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 
+from utils.conversations.v3 import policy
 from utils.speakers.display import outline_speaker_labels
 
 
@@ -80,9 +81,99 @@ def group_rids(group):
     return {line['conversation_id'] for line in group['lines']}
 
 
+# The longest stream gap between two recordings of one capture origin that still counts as missing
+# audio rather than silence (the longest silence gap the builder can be configured with).
+CAPTURE_GAP_LIMIT = timedelta(minutes=30)
+# Set by the loader on a fresh manual-end recording: preceding sealed recordings still awaiting their
+# batch transcript (light rows, never loaded as sources).
+FINISH_PREDECESSORS = '_v3_finish_predecessors'
+
+
+def capture_origin(row):
+    value = (row.get('external_data') or {}).get('recording_origin_id')
+    return value if isinstance(value, str) and value else None
+
+
+def _bounds(row):
+    return (
+        utc(row.get('started_at')) or utc(row.get('recorded_start')),
+        utc(row.get('finished_at')) or utc(row.get('recorded_end')),
+    )
+
+
+def unrecorded(earlier, later, left, right):
+    """How much of ``[left, right]`` is a stream gap between two recordings of one capture origin.
+
+    The phone lost the stream and reconnected (a new recording of the same origin): nothing was
+    recorded there, so the interval is missing audio, not silence. Bounded by ``CAPTURE_GAP_LIMIT``.
+    """
+    if earlier is None or later is None or earlier is later:
+        return timedelta(0)
+    origin = capture_origin(earlier)
+    if origin is None or origin != capture_origin(later):
+        return timedelta(0)
+    end, start = _bounds(earlier)[1], _bounds(later)[0]
+    if end is None or start is None or not timedelta(0) < start - end <= CAPTURE_GAP_LIMIT:
+        return timedelta(0)
+    return max(timedelta(0), min(right, start) - max(left, end))
+
+
+def _held_cuts(members, lines, now, silence_gap, continuity):
+    """``{cut: until}`` for manual-end cuts that wait for a transcript that has not landed yet.
+
+    Finish means "finish what I was just saying". The cut waits while its own recording, or a
+    preceding recording sealed by the Finish (within the silence gap of the finished speech, or of
+    the same capture origin), still awaits its batch transcript: speech landing after the cut would
+    otherwise fall before a locked window and become a separate card. Bounded by ``policy.FINISH_WAIT``.
+    """
+    if not continuity:
+        return {}
+    by_id = {row['id']: row for row in members}
+    held = {}
+    for row in members:
+        cut = utc(row.get('finished_at')) if row.get('v3_manual_end') else None
+        if cut is None or now - cut >= policy.FINISH_WAIT:
+            continue
+        sealed = row.get('record_sealed_at')
+        if policy.awaiting_batch_transcript(row):
+            held[cut] = cut + policy.FINISH_WAIT
+            continue
+        # Where the finished speech starts: walk back from this recording while speech stays within the gap.
+        chain = _bounds(row)[0] or cut
+        for line in reversed([line for line in lines if line['start'] < cut]):
+            if line['end'] + silence_gap < chain:
+                break
+            chain = min(chain, line['start'])
+        candidates = {r['id']: r for r in row.get(FINISH_PREDECESSORS) or ()}
+        candidates.update({rid: r for rid, r in by_id.items() if rid != row['id']})
+        for other in candidates.values():
+            start, end = _bounds(other)
+            if start is None or end is None or not start < cut or not policy.awaiting_batch_transcript(other):
+                continue
+            other_sealed = other.get('record_sealed_at')
+            if not isinstance(other_sealed, (int, float)) or (
+                isinstance(sealed, (int, float)) and other_sealed > sealed
+            ):
+                continue  # sealed after the Finish (late sync): ordinary late speech
+            same_origin = capture_origin(other) is not None and capture_origin(other) == capture_origin(row)
+            if same_origin or end + silence_gap >= chain:
+                held[cut] = cut + policy.FINISH_WAIT
+                break
+    return held
+
+
 def stretches(
-    members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_on_landing=False, max_window=timedelta(0)
+    members,
+    now,
+    *,
+    silence_gap=SILENCE,
+    lock_delay=SILENCE,
+    settle_on_landing=False,
+    max_window=timedelta(0),
+    continuity=False,
 ):
+    """``continuity`` (``CONVERSATIONS_V3_CAPTURE_CONTINUITY``): a stream gap inside one capture origin
+    is not silence, and a manual-end cut waits for a pending transcript (``_held_cuts``)."""
     lines = []
     seen = []
     for row in sorted(
@@ -135,8 +226,16 @@ def stretches(
             )
     lines.sort(key=lambda line: (line['start'], line['conversation_id']))
     groups = []
-    cuts = iter(sorted(utc(r['finished_at']) for r in members if r.get('v3_manual_end') and r.get('finished_at')))
+    held = _held_cuts(members, lines, now, silence_gap, continuity)
+    cuts = iter(
+        sorted(
+            cut
+            for cut in (utc(r['finished_at']) for r in members if r.get('v3_manual_end') and r.get('finished_at'))
+            if cut not in held
+        )
+    )
     cut = next(cuts, None)
+    rows = {row['id']: row for row in members} if continuity else {}
     for line in lines:
         previous = groups[-1] if groups else None
         # A segment belongs to the side on which it starts, even if it crosses the cut.
@@ -144,7 +243,17 @@ def stretches(
             if previous and previous['lines'][0]['start'] < cut:
                 previous['manual_end'] = True
             cut = next(cuts, None)
-        silence = previous is None or line['start'] - previous['end'] >= silence_gap
+        silence = previous is None
+        if previous is not None:
+            gap = line['start'] - previous['end']
+            if continuity and gap >= silence_gap:
+                gap -= unrecorded(
+                    rows.get(previous['end_rid']),
+                    rows.get(line['conversation_id']),
+                    previous['end'],
+                    line['start'],
+                )
+            silence = gap >= silence_gap
         capped = False
         if (
             previous is not None
@@ -169,9 +278,16 @@ def stretches(
             )
         group = groups[-1]
         group['lines'].append(line)
+        if line['end'] >= group['end'] or not group.get('end_rid'):
+            group['end_rid'] = line['conversation_id']
         group['end'] = max(group['end'], line['end'])
     if groups and cut is not None and cut <= now:
         groups[-1]['manual_end'] = True
+    for held_cut, until in held.items():
+        # The stretch the cut would have closed stays open; the builder wakes again when it expires.
+        closing = [g for g in groups if g['lines'][0]['start'] < held_cut and not g['manual_end']]
+        if closing:
+            closing[-1]['finish_held_until'] = max(until, closing[-1].get('finish_held_until', until))
     for index, group in enumerate(groups):
         # Silence, a manual cut or the window cap starts a later stretch, so only the last one can
         # still be open. Page continuation and future-dated speech must not also hold an earlier one

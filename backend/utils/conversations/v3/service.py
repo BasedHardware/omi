@@ -31,6 +31,7 @@ from config.conversations_v3 import (
     HISTORICAL_SITDOWN_TIMING,
     SPEECH_LANDED_FIELD,
     boundary_seconds,
+    capture_continuity_enabled,
     live_title_enabled,
     manual_end_home_visible_enabled,
     max_window_seconds,
@@ -318,6 +319,8 @@ async def reconcile(
                 lock_delay=lock_delay,
                 settle_on_landing=custom_timing,
                 max_window=timedelta(seconds=max_window_seconds()),
+                # Live passes only: backfill and re-derive keep their windowing (cuts there are long settled).
+                continuity=capture_continuity_enabled() and not derive,
             )
         if live and any(not g['finished'] or (g.get('window_cap_end') and not g['locked']) for g in groups):
             # Speech within five minutes of now is still the live builder's; refuse before any paid call.
@@ -761,7 +764,12 @@ async def reconcile(
                 # Cloud Tasks' completed-name dedupe swallowing the continuation.
                 delay = lock_delay if group['outline_ready'] else min(silence_gap, lock_delay)
                 settle_from = group.get('settle_from', group['end'])
-                await run_blocking(db_executor, enqueue, uid, at=max(settle_from + delay, now + timedelta(minutes=1)))
+                at = settle_from + delay
+                if group.get('finish_held_until'):
+                    # A held manual-end cut applies when its wait ends, even if no transcript lands.
+                    metrics.FINISH_HELD.inc()
+                    at = min(at, group['finish_held_until'])
+                await run_blocking(db_executor, enqueue, uid, at=max(at, now + timedelta(minutes=1)))
         for row in rows:
             prior = existing.get(row['id']) or {}
             if (
