@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"maps"
 	"time"
 
 	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
@@ -104,15 +105,28 @@ func (s Store) Load(ctx context.Context, g queue.Guarded, ref Ref) (Conversation
 		return Conversation{}, classify(err)
 	}
 	var row map[string]any
+	var revision Revision
 	err = s.Docs.Fenced(ctx, g, ref.Owner, func(tx *docstore.Tx) error {
-		var getErr error
-		row, getErr = get(tx, ref, path)
-		return getErr
+		parent, getErr := get(tx, ref, path)
+		if getErr != nil {
+			return getErr
+		}
+		current, revisionErr := rowRevision(ref, parent)
+		if revisionErr != nil {
+			return revisionErr
+		}
+		payload, payloadErr := readPayload(tx, ref, parent)
+		if payloadErr != nil {
+			return payloadErr
+		}
+		maps.Copy(parent, payload.values)
+		row, revision = parent, current
+		return nil
 	})
 	if err != nil {
 		return Conversation{}, classify(err)
 	}
-	result, err := s.decode(ctx, g, ref, row)
+	result, err := s.decode(ctx, g, ref, row, revision)
 	if err != nil {
 		return Conversation{}, classify(err)
 	}
@@ -168,12 +182,21 @@ func (s Store) ApplyFinalization(ctx context.Context, g queue.Guarded, revision 
 		if statusErr := validateStatus(patch); statusErr != nil {
 			return statusErr
 		}
+		payload, payloadErr := readPayload(tx, ref, row)
+		if payloadErr != nil {
+			return payloadErr
+		}
+		maps.Copy(row, payload.values)
 		fields, lifecycleRefused := finalizationFields(row, patch)
 		refused = lifecycleRefused
 		if len(fields) == 0 {
 			return nil
 		}
-		return updateWithHome(tx, ref, path, fields)
+		write, repackErr := payload.repackNotes(fields)
+		if repackErr != nil {
+			return repackErr
+		}
+		return updateWithHome(tx, ref, path, fields, write)
 	})
 	if err == nil && refused {
 		err = ErrLifecycleRefused
@@ -226,6 +249,7 @@ var (
 	// ErrLifecycleRefused reports a refused lifecycle transition after any content commit.
 	ErrLifecycleRefused = errors.New("conversations: terminal lifecycle transition refused")
 	ErrStatus           = errors.New("conversations: invalid lifecycle update")
+	errPayloadWrite     = errors.New("conversations: finalization exceeds atomic payload budget")
 )
 
 // Causes returned by the adapter. Consumers register Causes with their kind.
@@ -238,12 +262,13 @@ const (
 	CausePointer       queue.Cause = "conversation_transcript_pointer"
 	CauseUnreadable    queue.Cause = "conversation_unreadable"
 	CauseRestricted    queue.Cause = "conversation_restricted"
+	CausePayloadWrite  queue.Cause = "conversation_payload_write"
 )
 
 // Causes returns every cause emitted by this adapter.
 func Causes() []queue.Cause {
 	return []queue.Cause{CauseOwnerDeleting, CauseUnavailable, CauseRejected, CauseMissing,
-		CauseChanged, CausePointer, CauseUnreadable, CauseRestricted}
+		CauseChanged, CausePointer, CauseUnreadable, CauseRestricted, CausePayloadWrite}
 }
 
 func classify(err error) error {
@@ -257,6 +282,8 @@ func classify(err error) error {
 		return queue.Classify(err, queue.Fail(CauseMissing))
 	case errors.Is(err, ErrChanged), errors.Is(err, objectlake.ErrChanged):
 		return queue.Classify(err, queue.Retry(CauseChanged, 0))
+	case errors.Is(err, errPayloadWrite):
+		return queue.Classify(err, queue.Hold(CausePayloadWrite, time.Minute))
 	case errors.Is(err, ErrPointer):
 		return queue.Classify(err, queue.Fail(CausePointer))
 	case errors.Is(err, ErrRestricted), errors.Is(err, objectlake.ErrRestricted):

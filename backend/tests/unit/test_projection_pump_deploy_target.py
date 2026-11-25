@@ -215,22 +215,37 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     assert list(services)[: len(FOUR)] == list(FOUR)
     assert pump['secrets'] == integration['secrets']
     assert pump['flags'] == integration['flags']
-    assert pump['forbidden_env'] == integration['forbidden_env']
+    integration_only_logging = {
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT',
+        'BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED',
+    }
+    assert pump['forbidden_env'] == [*integration['forbidden_env'], *sorted(integration_only_logging)]
     assert pump['service_account'] == integration['service_account']
     train_pins = {'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'BATCH_PROJECTION_OUTBOX'}
+    live_title_key = 'CONVERSATIONS_V3_LIVE_TITLE'
     # The dark pump keeps the dark successor's silence-skip value (SCA-3318).
     overridden = (
         set(ACTIVE_OVERRIDES)
+        | integration_only_logging
         | {
             'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED',
             'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED',
             'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+            live_title_key,
         }
         | train_pins
     )
     assert set(pump['env']) - set(integration['env']) <= overridden
     for name in set(integration['env']) - overridden:
         assert pump['env'][name] == integration['env'][name], name
+    # SCA-4316: each lane keeps its serving title setting. Fast Finish uses the cohort default.
+    backfill_env = services['backend-sync-backfill']['env']
+    assert integration['env'][live_title_key]['value'] == 'off'
+    assert backfill_env[live_title_key]['value'] == 'on'
+    assert 'CONVERSATIONS_V3_FAST_FINISH' not in integration['env']
+    assert 'CONVERSATIONS_V3_FAST_FINISH' not in backfill_env
+    assert pump['env'][live_title_key] == {'value': 'on', 'category': 'ops_kill'}
     # SCA-3318 2026-11-22: the pump is back to dark (integration's sweep carries the work).
     for name, value in DARK_OVERRIDES.items():
         assert pump['env'][name]['value'] == value, name

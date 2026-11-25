@@ -2,15 +2,16 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+from datetime import datetime, timezone
 import os
 import json
 import struct
 import time
 from types import SimpleNamespace
 from uuid import uuid4
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
-from google.api_core.exceptions import ServiceUnavailable
+from google.api_core.exceptions import Aborted, ServiceUnavailable
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 import pytest
@@ -378,3 +379,608 @@ def test_sample_slot_only_has_one_winner_across_runtime_namespaces(world, monkey
     assert same == snapshot
     assert reads.issued == 10
     memo.assert_not_called()
+
+
+@pytest.fixture
+def duplicate_world(world, monkeypatch):
+    from config.record_audio import record_identity
+    from config.record_wal_duplicate import SOURCE_FIELD
+    from database import record_wal_duplicate as duplicate
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    client, namespace, uid, cid, conversation, files, _, _ = world
+    store = FirestoreStore(namespace, firestore_client=client)
+    conversation.update({'status': 'completed', 'finished_at': datetime.now(timezone.utc)})
+    record, segment = record_identity(uid, cid)
+    canonical = 'bp_' + record
+    source = {
+        'bucket': 'private',
+        'revision': 7,
+        'units': [segment],
+        'slices': [{'unit': segment, 'path': 'raw-live/example', 'generation': 2, 'first': 0, 'count': 3200}],
+    }
+    client.collection(namespace + '_intakes').document(canonical).set(
+        {
+            'owner_id': uid,
+            'conversation_id': cid,
+            'content_id': record,
+            'segment_ids': [segment],
+            'total_files': 1,
+            'lane': 'fresh',
+            SOURCE_FIELD: source,
+        }
+    )
+    job_ref = client.collection(namespace + '_jobs').document(segment)
+    job_ref.set({'state': 'committed', 'owner_id': uid, 'conversation_id': cid, 'privacy_generation': 0})
+    store.run(
+        lambda tx: tx.put(
+            'content',
+            f'{uid}/{record}',
+            {
+                'job_id': canonical,
+                'dispatch_protocol': 'batch_v1',
+                'status': 'completed',
+                'result': {'total_segments': 1, 'failed_segments': 0, 'errors': [], 'new_memories': [cid]},
+            },
+        )
+    )
+
+    def request(content):
+        return duplicate.Request(uid, cid, 'omi', 'synthetic-device', content, None, 'header-digest')
+
+    def attempt(req, **options):
+        budget = ArtifactReadBudget(time.monotonic() + 10, 0, 0)
+        return duplicate.reconcile(store, duplicate.PointReads(budget), req, **options)
+
+    yield SimpleNamespace(
+        store=store,
+        files=files,
+        request=request,
+        attempt=attempt,
+        canonical=canonical,
+        conversation=conversation,
+        user=client.collection('users').document(uid),
+        cid=cid,
+        intake=client.collection(namespace + '_intakes').document(canonical),
+        job_ref=job_ref,
+    )
+    job_ref.delete()
+
+
+@pytest.mark.parametrize('privacy_shadow', (False, True))
+def test_duplicate_cas_replay_while_disabled_and_rebundle(duplicate_world, monkeypatch, privacy_shadow):
+    from config.record_wal_duplicate import mode
+
+    case = duplicate_world
+    if privacy_shadow:
+        monkeypatch.setattr(privacy, 'lever_enabled', lambda name, *_: name == 'privacy_checks_shadow')
+    first = case.request('first')
+    candidate = case.attempt(first, files=case.files)
+    assert candidate is not None
+    saved = case.attempt(first, files=case.files, expected=candidate.scope, placements=['a', 'b'], commit=True)
+    assert saved.reply['job_id'] == case.canonical
+    monkeypatch.setenv('RECORD_WAL_DUPLICATE_PERCENT', '0')
+    assert mode(first.uid, time.time()) == ('off', None)
+    assert case.attempt(first).reply == saved.reply
+    assert case.attempt(first, files=[{**case.files[0], 'sha256': 'f' * 64}, case.files[1]]) is None
+    rebundle = case.request('second')
+    existing = case.attempt(rebundle, files=case.files[:1])
+    assert len(existing.known) == 1
+    assert (
+        case.attempt(rebundle, files=case.files[:1], expected=existing.scope, placements=['wrong'], commit=True) is None
+    )
+    assert case.attempt(rebundle) is None
+    assert (
+        case.attempt(rebundle, files=case.files[:1], expected=existing.scope, placements=['a'], commit=True).reply
+        == saved.reply
+    )
+    original = case.attempt(first)
+    later = case.attempt(rebundle)
+    assert later.prior['expires_at'] > original.prior['expires_at']
+    assert later.known[later.file_ids[0]]['expires_at'] == later.prior['expires_at']
+    assert original.known[original.file_ids[1]]['expires_at'] == original.prior['expires_at']
+
+
+@pytest.mark.parametrize('winner', ('settlement', 'handoff'))
+def test_phase_one_and_duplicate_receipts_cannot_both_commit(duplicate_world, world, winner):
+    case = duplicate_world
+    client, namespace, uid, cid, conversation, files, begin, originals = world
+    # Same-file reservations already hold duplicate settlement. This race is
+    # between different files that share the canonical record and revision.
+    other_files = [{**entry, 'name': 'handoff-' + entry['name']} for entry in files]
+    pending = begin(other_files)
+    staged = originals(pending)
+    request = case.request('competing-handoff')
+    candidate = case.attempt(request, files=files)
+    assert candidate is not None
+
+    def settle():
+        return case.attempt(request, files=files, expected=candidate.scope, placements=['a', 'b'], commit=True)
+
+    if winner == 'handoff':
+        saved = handoff.commit(client, namespace, pending, staged)
+        assert settle() is None
+        assert case.attempt(request) is None
+        assert handoff.read_status(client, namespace, uid, saved['job_id'])['status'] == 'processing'
+        assert conversation.get().get('record_upload_revision') == 8
+    else:
+        saved = settle()
+        assert saved is not None
+        for operation in (
+            begin,
+            lambda: handoff.check_fence(client, namespace, pending),
+            lambda: handoff.commit(client, namespace, pending, staged),
+        ):
+            with pytest.raises(handoff.HandoffConflict, match='duplicate settlement owns the record'):
+                operation()
+        row = conversation.get().to_dict()
+        assert row['record_upload_revision'] == 7 and 'record_wal_handoff_present' not in row
+        assert handoff.read_status(client, namespace, uid, pending['job_id']) is None
+        assert [
+            doc.to_dict()['kind']
+            for doc in handoff.intake_collection(client, namespace).stream()
+            if doc.id.startswith('wal_file_')
+        ] == [capacity.RESERVATION_KIND] * len(files)
+        assert case.attempt(request).reply == saved.reply
+
+
+def test_duplicate_cas_and_replay_point_reads_are_bounded(duplicate_world):
+    from database import record_wal_duplicate as duplicate
+    from utils.batch_pipeline.record_wal_duplicate import _views
+
+    case = duplicate_world
+    request = case.request('read-budget')
+    budget = ArtifactReadBudget(time.monotonic() + 10, 0, 0)
+    prepare, finish = _views(budget, 'settle')
+    candidate = duplicate.reconcile(case.store, prepare, request, files=case.files)
+    assert candidate is not None
+    saved = duplicate.reconcile(
+        case.store, finish, request, files=case.files, expected=candidate.scope, placements=['a', 'b'], commit=True
+    )
+    assert saved is not None
+    assert 0 < prepare.issued <= 52
+    assert finish.issued == prepare.issued + 1
+    assert 0 < finish.issued <= 53
+    assert prepare.issued + finish.issued <= 105
+
+    replay, _ = _views(budget, 'replay')
+    assert duplicate.reconcile(case.store, replay, request).reply == saved.reply
+    assert 0 < replay.issued <= 56
+
+
+def test_duplicate_terminal_keeps_its_alias_window_after_canonical_expiry(duplicate_world, monkeypatch):
+    from config.record_audio import record_identity
+    from database import record_wal_duplicate as duplicate
+    from utils.batch_pipeline import intake
+    from utils.sync.stage import collection_name
+
+    case = duplicate_world
+    first = case.request('terminal-witness')
+    candidate = case.attempt(first, files=case.files)
+    saved = case.attempt(first, files=case.files, expected=candidate.scope, placements=['a', 'b'], commit=True)
+    assert saved.reply['job_id'] == case.canonical
+    ledger = case.user.collection(collection_name('sync_content_ledger'))
+    alias = ledger.document(first.content_id)
+    witness = case.store.client.collection(case.store.namespace + '_intakes').document(
+        'wal_duplicate_terminal_' + case.canonical
+    )
+    first_expiry = alias.get().to_dict()['expires_at']
+    assert witness.get().to_dict()['expires_at'] == first_expiry
+    case.intake.delete()
+    case.job_ref.delete()
+    ledger.document(record_identity(first.uid, first.cid)[0]).delete()
+    monkeypatch.setenv('RECORD_WAL_DUPLICATE_PERCENT', '0')
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *_: case.store)
+    legacy = Mock(side_effect=AssertionError('legacy status ran'))
+    monkeypatch.setattr(intake, 'durable_status', legacy)
+    assert case.attempt(first).reply == saved.reply
+    assert intake.get_durable_job_status(case.canonical, first.uid) == saved.reply
+    assert legacy.call_count == 0
+    assert witness.get().to_dict()['expires_at'] == first_expiry
+    assert alias.get().to_dict()['expires_at'] == first_expiry
+    assert case.attempt(case.request('late-rebundle'), files=case.files) is None
+
+    # TTL removal is asynchronous. Past the absolute deadline, even retained
+    # documents do not authorize replay.
+    past = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    alias.update({'expires_at': past})
+    assert case.attempt(first) is None
+    witness.update({'expires_at': past})
+    assert duplicate.terminal_status(case.store, first.uid, case.canonical) == (True, None)
+
+
+@pytest.mark.parametrize('erase', ('conversation', 'account'))
+def test_duplicate_terminal_receipt_is_purged_with_its_erased_owner(duplicate_world, erase):
+    from database import record_wal_duplicate as duplicate
+
+    case = duplicate_world
+    request = case.request('purge-witness')
+    candidate = case.attempt(request, files=case.files)
+    assert case.attempt(request, files=case.files, expected=candidate.scope, placements=['a', 'b'], commit=True)
+    assert duplicate.terminal_status(case.store, request.uid, case.canonical)[1]['status'] == 'completed'
+    if erase == 'conversation':
+        marker = case.user.collection('deleted_conversations').document(case.cid)
+        marker.set({'reason': 'synthetic'})
+    else:
+        marker = case.store.client.collection('account_deletions').document(request.uid)
+        marker.set({'wipe_status': 'pending_deletion'})
+    with pytest.raises(BatchPrivacyBlocked):
+        case.attempt(request)
+    with pytest.raises(BatchPrivacyBlocked):
+        duplicate.terminal_status(case.store, request.uid, case.canonical)
+    purge.purge_batch_owner(
+        request.uid,
+        conversation_id=case.cid if erase == 'conversation' else None,
+        namespaces=(case.store.namespace,),
+        firestore_client=case.store.client,
+        delete_uri=Mock(side_effect=AssertionError('metadata-only witness has no object URI')),
+    )
+    assert duplicate.terminal_status(case.store, request.uid, case.canonical) == (False, None)
+    marker.delete()
+
+
+@pytest.mark.parametrize('race', ('revision', 'tombstone', 'merge_removal'))
+def test_duplicate_cas_revalidates_source_and_privacy_after_compare(duplicate_world, race):
+    case = duplicate_world
+    request = case.request('race')
+    old = case.attempt(request, files=case.files)
+    authority = {'expected': old.scope, 'files': case.files, 'placements': ['a', 'b'], 'commit': True}
+    if race == 'tombstone':
+        case.user.collection('deleted_conversations').document(case.cid).set({'reason': 'synthetic'})
+        with pytest.raises(BatchPrivacyBlocked):
+            case.attempt(request, **authority)
+    else:
+        if race == 'revision':
+            case.conversation.update({'record_upload_revision': 8})
+        else:
+            from database.record_audio import fence_record_audio_removal
+
+            fence_record_audio_removal(request.uid, request.cid, firestore_client=case.store.client)
+        assert case.attempt(request, **authority) is None
+        assert case.attempt(request) is None
+
+
+def test_duplicate_shadow_and_mixed_version_leave_no_alias(duplicate_world, monkeypatch):
+    from database import record_wal_duplicate as duplicate
+
+    lifecycle = Mock()
+    monkeypatch.setattr(duplicate, 'lifecycle_rpcs', lifecycle)
+    case = duplicate_world
+    request = case.request('shadow')
+    old = case.attempt(request, files=case.files)
+    snapshot = case.attempt(request, files=case.files, expected=old.scope, placements=['a', 'b'])
+    assert snapshot.reply['job_id'] == case.canonical
+    assert [call.args[1:] for call in lifecycle.labels.call_args_list] == [
+        ('begin', 'attempt'),
+        ('begin', 'success'),
+        ('rollback', 'attempt'),
+        ('rollback', 'success'),
+    ] * 2
+    assert case.attempt(request) is None
+    case.intake.update({'wal_duplicate_source_v1': firestore.DELETE_FIELD})
+    assert case.attempt(request, files=case.files) is None
+
+
+def test_duplicate_settlement_holds_an_unknown_competing_alias(duplicate_world):
+    from config.record_wal_duplicate import RECEIPT_FIELD
+
+    case = duplicate_world
+    request = case.request('unknown-alias')
+    before = case.attempt(request, files=case.files)
+    case.store.run(lambda tx: tx.put('content', f'{request.uid}/{request.content_id}', {RECEIPT_FIELD: {}}))
+    assert case.attempt(request, files=case.files, expected=before.scope, placements=['a', 'b'], commit=True) is None
+
+
+def test_duplicate_competing_concurrent_retries_publish_one_alias(duplicate_world):
+    from google.api_core.exceptions import Aborted
+
+    case = duplicate_world
+    request = case.request('concurrent')
+    old = case.attempt(request, files=case.files)
+
+    def commit():
+        try:
+            return case.attempt(request, files=case.files, expected=old.scope, placements=['a', 'b'], commit=True)
+        except Aborted:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: commit(), range(2)))
+    successful_creates = sum(1 for result in results if result and result.prior is None)
+    assert successful_creates <= 1
+    # A bounded snapshot can refuse both contenders under emulator locks.
+    # The next request still converges on one durable alias.
+    if not successful_creates:
+        assert commit().prior is None
+    assert case.attempt(request).reply['job_id'] == case.canonical
+    assert commit().prior is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('rotate_privacy', (False, True))
+async def test_duplicate_replay_route_never_calls_legacy_status_or_archive(
+    duplicate_world, monkeypatch, tmp_path, rotate_privacy
+):
+    from database import record_wal_handoff as handoff
+
+    case = duplicate_world
+    first = case.request('route')
+    request = type(first)(
+        first.uid, first.cid, first.source, first.device, first.content_id, None, handoff.identity({})
+    )
+    old = case.attempt(request, files=case.files)
+    assert case.attempt(request, files=case.files, expected=old.scope, placements=['a', 'b'], commit=True)
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: case.store)
+    legacy = Mock(side_effect=AssertionError('legacy status ran'))
+    archive = Mock(side_effect=AssertionError('archive ran'))
+    monkeypatch.setattr(live_upload, 'durable_status', legacy)
+    path = tmp_path / 'already-hashed'
+    monkeypatch.setenv('RECORD_WAL_DUPLICATE_PERCENT', '0')
+    if rotate_privacy:
+        case.store.client.collection('batch_pipeline_privacy').document(privacy_owner_key(request.uid)).set(
+            {'generation': 1, 'blocked': False, 'purging': False}
+        )
+    response = await live_upload.registered_record_response(
+        uid=request.uid,
+        conversation_id=request.cid,
+        content_id=request.content_id,
+        paths=[str(path)],
+        source=request.source,
+        client_device_id=request.device,
+        loaded_conversation=case.conversation.get().to_dict(),
+        before_coverage=archive,
+    )
+    if rotate_privacy:
+        assert response.status_code == 503
+    else:
+        assert response.status_code == 202
+        assert json.loads(response.body)['job_id'] == case.canonical
+        assert json.loads(response.body)['status'] == 'completed'
+    legacy.assert_not_called()
+    archive.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_legacy_alias_transaction_retries_after_settlement_wins(duplicate_world, monkeypatch):
+    from config.record_wal_duplicate import RECEIPT_FIELD
+    from database.batch_pipeline_store import FirestoreTransaction
+    from utils.batch_pipeline import record_lease_append
+    from utils.sync.stage import collection_name
+
+    case = duplicate_world
+    request = case.request('legacy-loses')
+    alias = case.user.collection(collection_name('sync_content_ledger')).document(request.content_id)
+    client = case.store.client
+    api = client._firestore_api
+    commit_rpc = api.commit
+    winner = {'dispatch_protocol': 'batch_v1', 'job_id': case.canonical, RECEIPT_FIELD: {'scope': 'synthetic'}}
+    aborted, observed = [], []
+    original_get = FirestoreTransaction.get
+
+    def get(view, table, key):
+        row = original_get(view, table, key)
+        if (table, key) == ('content', f'{request.uid}/{request.content_id}'):
+            observed.append(row)
+        return row
+
+    def interleave(*args, **kwargs):
+        rpc = kwargs.get('request') or args[0]
+        if not aborted and any(write.update.name.endswith('/' + alias.path) for write in rpc['writes']):
+            assert observed == [{}, {}]
+            # The emulator uses read locks. Release the losing transaction
+            # before committing the competing write and reporting contention.
+            api.rollback(
+                request={'database': rpc['database'], 'transaction': rpc['transaction']},
+                metadata=kwargs.get('metadata', ()),
+                timeout=2,
+                retry=None,
+            )
+            aborted.append(True)
+            alias.set(winner)
+            raise Aborted('synthetic competing settlement')
+        return commit_rpc(*args, **kwargs)
+
+    monkeypatch.setattr(FirestoreTransaction, 'get', get)
+    monkeypatch.setattr(api, 'commit', interleave)
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: case.store)
+    monkeypatch.setenv('RECORD_WAL_HANDOFF_ENABLED', 'false')
+    monkeypatch.setattr(live_upload, 'coverage_wait_memo_enabled', lambda: False)
+    monkeypatch.setattr(record_lease_append, 'retain_upload', AsyncMock())
+    monkeypatch.setattr(live_upload, 'artifacts_for', lambda _: object())
+    monkeypatch.setattr(live_upload, '_covered', lambda *_: True)
+    legacy = Mock(side_effect=AssertionError('legacy status must not redrive a settled alias'))
+    monkeypatch.setattr(live_upload, 'durable_status', legacy)
+    response = await live_upload.registered_record_response(
+        uid=request.uid,
+        conversation_id=request.cid,
+        content_id=request.content_id,
+        paths=['synthetic'],
+        source=request.source,
+        client_device_id=request.device,
+        loaded_conversation=case.conversation.get().to_dict(),
+    )
+    assert aborted == [True]
+    assert observed == [{}, {}, winner]
+    assert response.status_code == 503
+    assert alias.get().to_dict() == winner
+    legacy.assert_not_called()
+
+
+def test_merge_removal_cannot_use_missing_source_as_durable_fence(duplicate_world):
+    from google.api_core.exceptions import NotFound
+    from database.record_audio import fence_record_audio_removal
+
+    case = duplicate_world
+    request = case.request('missing-source')
+    case.conversation.delete()
+    with pytest.raises(NotFound):
+        fence_record_audio_removal(request.uid, request.cid, firestore_client=case.store.client)
+    case.user.collection('deleted_conversations').document(case.cid).set({'reason': 'synthetic'})
+    fence_record_audio_removal(request.uid, request.cid, firestore_client=case.store.client)
+    assert not case.conversation.get().exists
+
+
+def _prepare_retained_merge(case, other_id, monkeypatch):
+    from database import conversation_merge_jobs as jobs
+
+    monkeypatch.setattr(jobs, 'stop_quiet_checks_for_job', lambda *args, **kwargs: None)
+    request = case.request('retained')
+    other = case.user.collection('conversations').document(other_id)
+    other.set({'status': 'completed', 'private_cloud_sync_enabled': True})
+    admitted = jobs.admit(request.uid, [request.cid, other_id], False, firestore_client=case.store.client)
+    assert admitted
+    return jobs.claim(admitted['job_id'], firestore_client=case.store.client)
+
+
+def _publish_retained_merge(case, job):
+    from database import review_overlay_merge
+
+    target_id = job['merge_target_id']
+    case.user.collection('conversations').document(target_id).set(
+        {'status': 'completed', 'private_cloud_sync_enabled': True}
+    )
+    assert review_overlay_merge.transfer(
+        job['uid'],
+        job['conversation_ids'],
+        target_id,
+        firestore_client=case.store.client,
+        merge_job_id=job['job_id'],
+        merge_lease_epoch=job['lease_epoch'],
+    )
+    return target_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('erase_end', ['original', 'successor'])
+async def test_duplicate_replays_original_handle_through_preparation_and_two_merges(
+    duplicate_world, monkeypatch, erase_end
+):
+    from config.record_wal_duplicate import MERGE_TARGET_FIELD, RETAINED_DONORS_FIELD
+    from database import conversation_merge_jobs as jobs, conversation_tombstones
+    from database import record_wal_duplicate as duplicate
+    from database.record_audio import fence_record_audio_removal
+
+    case = duplicate_world
+    request = case.request('retained')
+    old = case.attempt(request, files=case.files)
+    assert case.attempt(request, files=case.files, expected=old.scope, placements=['a', 'b'], commit=True)
+    first = _prepare_retained_merge(case, 'first-other', monkeypatch)
+
+    # An interruption after the donor fence leaves the original readable and
+    # refuses new settlements. Cleanup cannot run before publication.
+    assert case.attempt(request).reply['job_id'] == case.canonical
+    assert case.attempt(case.request('new-bundle'), files=case.files) is None
+    from database.record_wal_merge import RetainedMergeDeferred
+
+    with pytest.raises(RetainedMergeDeferred):
+        fence_record_audio_removal(request.uid, request.cid, firestore_client=case.store.client)
+
+    successor = _publish_retained_merge(case, first)
+    assert fence_record_audio_removal(request.uid, request.cid, firestore_client=case.store.client)
+    assert case.attempt(request).reply['job_id'] == case.canonical
+
+    second_other = case.user.collection('conversations').document('second-other')
+    second_other.set({'status': 'completed', 'private_cloud_sync_enabled': True})
+    admitted = jobs.admit(request.uid, [successor, 'second-other'], False, firestore_client=case.store.client)
+    assert admitted
+    second = jobs.claim(admitted['job_id'], firestore_client=case.store.client)
+    final_target = _publish_retained_merge(case, second)
+    assert case.conversation.get().to_dict()[MERGE_TARGET_FIELD] == final_target
+    assert case.user.collection('conversations').document(final_target).get().to_dict()[RETAINED_DONORS_FIELD] == [
+        case.cid
+    ]
+    assert case.user.collection('conversations').document(successor).get().to_dict()['sync_merged_from'] == []
+    monkeypatch.setenv('RECORD_WAL_DUPLICATE_PERCENT', '0')
+    assert case.attempt(request).reply['job_id'] == case.canonical
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: case.store)
+    legacy = Mock(side_effect=AssertionError('legacy poll would redrive'))
+    monkeypatch.setattr(live_upload, 'durable_status', legacy)
+    response = await live_upload.registered_record_response(
+        uid=request.uid,
+        conversation_id=request.cid,
+        content_id=request.content_id,
+        paths=['synthetic'],
+        source=request.source,
+        client_device_id=request.device,
+        loaded_conversation=case.conversation.get().to_dict(),
+    )
+    assert isinstance(response, live_upload.JSONResponse)
+    assert response.status_code == 202
+    assert json.loads(bytes(response.body))['job_id'] == case.canonical
+    legacy.assert_not_called()
+    assert duplicate.terminal_status(case.store, request.uid, case.canonical)[1]['status'] == 'completed'
+
+    erased = case.cid if erase_end == 'original' else final_target
+    conversation_tombstones.accept_deletion(
+        request.uid, erased, firestore_client=case.store.client, legal_hold_deferred=True
+    )
+    with pytest.raises(BatchPrivacyBlocked):
+        case.attempt(request)
+    with pytest.raises(BatchPrivacyBlocked):
+        duplicate.terminal_status(case.store, request.uid, case.canonical)
+    if erase_end == 'successor':
+        from database.conversation_batch_purge_jobs import erasure_job_ref
+
+        owed = erasure_job_ref(case.store.client, request.uid, final_target).get().to_dict()
+        assert owed['audio_source_ids'] == [case.cid]
+
+
+def test_erase_after_merge_preparation_blocks_publication(duplicate_world, monkeypatch):
+    from config.record_wal_duplicate import MERGE_TARGET_FIELD
+    from database.review_store import ReviewConflict
+    from database import conversation_tombstones
+
+    case = duplicate_world
+    request = case.request('retained')
+    old = case.attempt(request, files=case.files)
+    assert case.attempt(request, files=case.files, expected=old.scope, placements=['a', 'b'], commit=True)
+    prepared = _prepare_retained_merge(case, 'other', monkeypatch)
+    conversation_tombstones.accept_deletion(
+        request.uid, request.cid, firestore_client=case.store.client, legal_hold_deferred=True
+    )
+    with pytest.raises(ReviewConflict, match='Merge source unavailable'):
+        _publish_retained_merge(case, prepared)
+    assert MERGE_TARGET_FIELD not in case.conversation.get().to_dict()
+
+
+def test_retained_merge_admit_defers_above_limit_without_changing_donors(duplicate_world, monkeypatch):
+    from config.record_wal_duplicate import MERGE_PLAN_FIELD, SETTLED_FIELD
+    from database import conversation_merge_jobs as jobs
+
+    case = duplicate_world
+    request = case.request('limit')
+    monkeypatch.setattr(jobs, 'stop_quiet_checks_for_job', lambda *args, **kwargs: None)
+    refs = [case.user.collection('conversations').document(f'source-{number:02}') for number in range(17)]
+    for ref in refs:
+        ref.set({'status': 'completed', SETTLED_FIELD: True})
+    assert jobs.admit(request.uid, [ref.id for ref in refs], False, firestore_client=case.store.client) is None
+    assert all(ref.get().to_dict()['status'] == 'completed' for ref in refs)
+    admitted = jobs.admit(request.uid, [ref.id for ref in refs[:16]], False, firestore_client=case.store.client)
+    assert admitted and len(admitted[MERGE_PLAN_FIELD]) == 16
+    claimed = jobs.claim(admitted['job_id'], firestore_client=case.store.client)
+    target = _publish_retained_merge(case, claimed)
+    row = case.user.collection('conversations').document(target).get().to_dict()
+    assert row['sync_merged_from'] == [ref.id for ref in refs[:16]]
+
+
+def test_retained_merge_with_custom_stt_defers_before_claiming_sources(duplicate_world):
+    from config.record_wal_duplicate import SETTLED_FIELD
+    from database import conversation_merge_jobs as jobs
+
+    case = duplicate_world
+    request = case.request('custom-stt')
+    case.conversation.update({SETTLED_FIELD: True})
+    custom = case.user.collection('conversations').document('custom')
+    custom.set({'status': 'completed', 'uses_custom_stt': True})
+    before = [ref.get().to_dict() for ref in (case.conversation, custom)]
+    assert jobs.admit(request.uid, [case.cid, custom.id], False, firestore_client=case.store.client) is None
+    assert [ref.get().to_dict() for ref in (case.conversation, custom)] == before
+
+
+def test_merge_preparation_wins_against_uncommitted_settlement(duplicate_world, monkeypatch):
+    case = duplicate_world
+    request = case.request('retained')
+    old = case.attempt(request, files=case.files)
+    _prepare_retained_merge(case, 'other', monkeypatch)
+    assert case.attempt(request, files=case.files, expected=old.scope, placements=['a', 'b'], commit=True) is None
+    assert case.attempt(request) is None

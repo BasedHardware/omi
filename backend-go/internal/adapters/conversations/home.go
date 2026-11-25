@@ -15,9 +15,12 @@ type homeWrite struct {
 	fields map[string]any
 }
 
-func updateWithHome(tx *docstore.Tx, ref Ref, path docstore.Ref, fields map[string]any) error {
+func updateWithHome(tx *docstore.Tx, ref Ref, path docstore.Ref, fields map[string]any, payload payloadWrite) error {
 	home, err := stageHome(tx, ref, fields)
 	if err != nil {
+		return err
+	}
+	if err := payload.stage(tx, ref); err != nil {
 		return err
 	}
 	if err := tx.Update(path, fields); err != nil {

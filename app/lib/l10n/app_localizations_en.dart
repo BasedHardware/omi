@@ -7052,6 +7052,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authUnexpectedError => 'Unexpected error signing in, please try again';
 
   @override
+  String get accountSignInMethods => 'Sign-in methods';
+
+  @override
+  String get accountAddSignInMethod => 'Add sign-in method';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Add a way to sign in to this Omi account. Your plan, recordings and integrations stay with this account.';
+
+  @override
+  String get accountSignInConflictTitle => 'This sign-in belongs to another account';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'You’re still signed in here. Each Omi account keeps its plan, recordings and integrations.';
+
+  @override
+  String get accountSignInMethodAdded => 'Sign-in method added';
+
+  @override
   String get authFailedToLinkGoogle => 'Failed to link with Google, please try again.';
 
   @override
@@ -14344,6 +14364,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get processingProgress => 'Processing your waiting recordings…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Waiting for transcription allowance';
+
+  @override
   String get processingDeferred => 'Waiting for processing';
 
   @override
@@ -15297,9 +15320,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stopThese => 'Stop These';
 
   @override
-  String get meetingActionItemsTitle => 'Action items';
-
-  @override
   String get addToTasks => 'Add to Tasks';
 
   @override
@@ -15723,4 +15743,76 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Check';
+
+  @override
+  String get playManageSubscription => 'Manage subscription';
+
+  @override
+  String get playBilledByGoogle => 'Billed by Google Play';
+
+  @override
+  String get playPurchasePending => 'Your payment is pending. Omi Pro starts as soon as Google Play confirms it.';
+
+  @override
+  String get playPurchaseOtherAccount => 'This Google Play purchase belongs to another Omi account.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'We couldn\'t confirm your purchase yet. We\'ll try again automatically.';
+
+  @override
+  String get playRenewalTerms =>
+      'Renews automatically at the price shown until you cancel. Manage or cancel anytime in Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Not available on Android';
+
+  @override
+  String get pageNotAvailableInApp => 'This page isn\'t available in the app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Order placed. Check your email for the confirmation.';
+
+  @override
+  String get prepaidCodeEntry => 'Have a code?';
+
+  @override
+  String get prepaidCodeTitle => 'Redeem a code';
+
+  @override
+  String get prepaidCodeFieldHint => 'Enter your code';
+
+  @override
+  String get prepaidCodeRedeem => 'Redeem';
+
+  @override
+  String get prepaidCodeRedeemed => 'Code redeemed';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'This code isn\'t valid. Check it and try again.',
+        'used': 'This code has already been used.',
+        'expired': 'This code has expired.',
+        'hasPlan': 'You already have a plan. Your code was not used. Redeem it after your plan ends.',
+        'notPrepaid': 'This code can\'t be redeemed here. Use it when you choose a plan.',
+        'notEligible': 'This code can\'t be used on this account.',
+        'rateLimited': 'Too many tries. Try again later.',
+        'other': 'Something went wrong. Please try again.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Billed through omi.me. Cancel here anytime.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Billed through omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Your $plan plan is paused.';
+  }
 }

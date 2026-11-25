@@ -64,6 +64,27 @@ def test_projection_cannot_drop_an_uncertified_field():
         pack({'status': 'x' * FIRESTORE_MAX_DOCUMENT_BYTES, 'transcript_segments': 'short'})
 
 
+def test_rejects_spilling_the_indexed_conversation_category():
+    row = {
+        'structured': {'category': 'work', 'overview': 'x' * FIRESTORE_MAX_DOCUMENT_BYTES},
+        'transcript_segments': 'short',
+    }
+
+    with pytest.raises(ConversationProjectionTooLarge, match='category must stay'):
+        pack_conversation(row, PATH, spill_fields=row.keys(), generation=GENERATION)
+
+
+def test_spills_speech_while_preserving_indexed_notes_inline():
+    notes = {'title': 'Synthetic', 'category': 'work'}
+    row = {'structured': notes, 'transcript_segments': 'x' * FIRESTORE_MAX_DOCUMENT_BYTES}
+
+    write = pack_conversation(row, PATH, spill_fields=row.keys(), generation=GENERATION)
+
+    assert write.parent['structured'] == notes
+    assert 'transcript_segments' not in write.parent
+    assert hydrate_conversation(write.parent, write.chunks) == row
+
+
 def test_claim_growth_spills_the_final_row_and_preserves_its_pending_clock():
     row = {'transcript_segments': '', 'claims': [], 'status': 'processing'}
     row['transcript_segments'] = 'x' * (PROJECTION_BYTES - estimate_firestore_document_bytes(row, PATH))

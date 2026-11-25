@@ -42,6 +42,12 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
     FirestoreIndexRequirement(
+        'conversations_v3_home_list_visible_page',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('status'), _asc('home_list_visible'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'conversations_v3_pending_capture_continuation',
         'conversations',
         'COLLECTION',
@@ -2277,6 +2283,8 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('conversations', 'live_transcript_replay_receipt'),
     # Internal, bounded metadata read by document ID only; descendants inherit.
     ('conversations', 'owner_recognition_diagnostics'),
+    ('conversations', '_conversation_payload'),
+    ('conversation_payload_chunks', 'data'),
     # Lease observations are projected from an existing owner index.
     ('batch_pipeline_prod_jobs', 'packing_observation'),
     ('batch_pipeline_dev_jobs', 'packing_observation'),

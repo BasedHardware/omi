@@ -63,7 +63,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   int _streamReactivationAttempts = 0;
   bool _streamHealthCheckInFlight = false;
   LimitlessRealtimeHealth? _customLiveHealth;
-  bool Function(int epoch)? _startCustomLiveWatch;
+  ({bool Function() captureIsCurrent, bool Function(int epoch) start})? _customLiveWatch;
 
   /// Drift of pendant RTC vs phone at connect, before forward clock sync.
   /// Null when no Type-8 clock was observed (fail-open: no correction).
@@ -181,9 +181,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
     required void Function() onEnabled,
     required void Function(LimitlessRealtimeHealthOutcome) report,
   }) {
+    // The existing binding checks the recording, capture policy and STT config.
+    // Keep its timer and spent retry budget while it still owns the link.
+    if (_customLiveHealth?.isClosed != true && (_customLiveWatch?.captureIsCurrent() ?? false)) return;
     stopCustomLiveAudioWatch();
     // The coordinator may install the listener while the first BLE setup settles.
-    _startCustomLiveWatch = (epoch) {
+    bool start(int epoch) {
       bool isCurrent() =>
           _isCurrentSession(epoch) && _isInitialized && !_isBatchMode && !_realtimeSuppressed && captureIsCurrent();
 
@@ -200,12 +203,14 @@ class LimitlessDeviceConnection extends DeviceConnection {
       );
       onEnabled();
       return true;
-    };
-    if (_isInitialized) _startCustomLiveWatch?.call(connectionEpoch);
+    }
+
+    _customLiveWatch = (captureIsCurrent: captureIsCurrent, start: start);
+    if (_isInitialized) start(connectionEpoch);
   }
 
   void stopCustomLiveAudioWatch() {
-    _startCustomLiveWatch = null;
+    _customLiveWatch = null;
     _closeCustomLiveAudioWatch();
   }
 
@@ -531,7 +536,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   void _armStreamHealthWatch({required String reason, bool resetAttempts = true}) {
-    if (_customLiveHealth != null || (_startCustomLiveWatch?.call(connectionEpoch) ?? false)) return;
+    if (_customLiveHealth != null || (_customLiveWatch?.start(connectionEpoch) ?? false)) return;
     _streamHealthGeneration++;
     final generation = _streamHealthGeneration;
     _streamHealthTimer?.cancel();

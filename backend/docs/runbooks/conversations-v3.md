@@ -97,15 +97,42 @@ context, and pre-notes merge work. Finished notes keep the full path.
 Only new `omi`/`phone` capture/sync creates become recordings. Existing documents
 keep their layer through stage changes. A recording is not a product item;
 `home_hidden` only removes a conversation from unfiltered Home and its count.
-A manually ended window with any speech is Home-visible regardless of length,
-unless media or positively recognized background; no speech creates no window.
-The persisted manual_end follows late rewrites, merges and backfill and requires
-full notes even below 20 words. Background hides only with positive wearer
-recognition somewhere in the contributing recordings: is_user:true or a
-segment-bound wearer label from the authoritative speaker-evidence projection.
-Without it, background becomes conversation and uses the normal 300-word rule
-(or the manual-end override). Media stays hidden. home_hidden_reason records
-this decision and outline_kind retains the original classification.
+The derived fragment reaching an explicit manual cut is Home-visible regardless
+of length or media/background classification. The normal delete, discard and
+failed-summary filters still apply. A capture with no speech creates no window.
+The persisted `manual_end` survives rebuilds and allows conversational notes
+even below 20 words. Naturally ended media is hidden. Background hides only
+with positive wearer recognition somewhere in the contributing recordings:
+`is_user: true` or a segment-bound wearer label from authoritative speaker
+evidence. Without it, background becomes conversation and uses the normal
+300-word rule or the manual-end override. `kind`, `outline_kind` and the
+classification reason remain available for analytics.
+Set `CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE=off` on every service that runs the
+v3 reconcile (`backend` for on-open rebuilds, `backend-sync`, `backend-sync-backfill`)
+to restore classification-based hiding for manually ended media and recognized
+background on subsequent projections. The service reads the switch and passes it to
+the pure planner. Previously written rows keep their stored visibility until rebuilt.
+A mobile capture is audio-only when the user finishes it: the transcript is produced by the
+batch pipeline afterwards. The finalization worker closes such a recording through
+`complete_server_batch_capture`, which stores `v3_manual_end_requested` for a `client_finalize` job.
+Record admission promotes the request to `v3_manual_end` when the recording is a single batch unit,
+so the window is cut and locked when its one transcript lands. A recording of several units (an
+audio gap over 30 s, or over an hour) projects one unit at a time; cutting on the first would lock
+a partial window, so it keeps the silence and lock timers unless the fast first transcript below
+takes it. `omi_conversations_v3_batch_manual_end_total{outcome}` counts `promoted`, `fast_finish`,
+`multi_unit_deferred`, `not_promoted` and `error`. Set `CONVERSATIONS_V3_BATCH_MANUAL_END=off` on
+`backend` (finalization worker) and `backend-integration` (record admission) to stop both the
+request and the promotion for later finishes. Stored markers remain.
+`CONVERSATIONS_V3_FAST_FINISH` (default `cohort`: members of the `v3-fast-finish` rollout cohort,
+added with `scripts/rollout_cohort.py --add`, no roll; `on` for every v3 owner; `off`) adds a first
+transcript for a manually finished recording. When batch record admission stages the sealed audio,
+`utils/conversations/v3/fast_finish.py` transcribes it once through the prerecorded provider for the
+recording's language and writes the result with `update_conversation_segments`. That write marks the
+recording pending and wakes reconcile, and the stored manual end cuts the window, so notes start
+without waiting for the batch merge and delivery. The batch record projection later replaces the
+provisional segments; once `record_projection_revision` is set the fast write is refused. Recordings
+over 20 minutes, partial records, custom STT, locked rows and private rows are skipped. Read
+`omi_conversations_v3_fast_finish_total{outcome}` and `omi_conversations_v3_fast_finish_seconds{stage}`.
 Five minutes of placed-speech silence is a hard window boundary. An outline's
 `resumes_previous` may undo a topic split within that interval, never rejoin
 windows across the silence boundary, even with the same people. Short socket
@@ -143,6 +170,17 @@ A lock delay shorter than the silence threshold can finalize an initial card
 while later speech still belongs to the same outline stretch. Later speech
 gets its own continuation. Reconciliation can merge settled cards when the
 outline and the loaded source claims cover the complete merge.
+
+`CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800 (three hours).
+The first transcript line whose recorded start reaches the limit starts a new
+stretch. The earlier live stretch locks and enters normal processing, and the
+successor owns the live row. This boundary applies with either cohesion setting
+and in historical planning. Values from 120 to 10800 set a shorter or equal
+limit. Invalid values use 10800. To roll back, set
+`CONVERSATIONS_V3_MAX_WINDOW_SECONDS=0` on builder and backfill runners
+(`off` is also accepted). Stored windows and claims retain their existing
+ownership. Track `omi_conversations_v3_window_cap_cuts_total` and verify that
+live windows stay within three hours plus the configured lock delay.
 
 A silence gap above 300 seconds also switches on sit-down cutting:
 - The outline sees pauses of 2 minutes or more as `---- N min without speech ----`
@@ -240,9 +278,10 @@ Finished-window copies retain user edits and stable titles. Recordings never
 enter model processing, apps, memories or webhooks. Automatically ended short speech of at least 20
 words uses the existing task extraction rules and memory processing without a
 summary call. Media/background have no derived processing. Summaries reuse the
-existing notes prompt; the v3 background lane is Luna/low, gateway Flex-first,
-then Standard. The on-open lane is Standard. Metering stays in the gateway and
-usage tracker. The section stream uses the chat `data:` / base64 `done:` /
+existing notes prompt; the v3 background lane and the on-open lane are both
+Luna/low on the Standard tier (the background lane left the gateway's Flex-first
+list on 2026-11-24; `LLM_GATEWAY_FLEX_FIRST_LANES` can name it again). Metering
+stays in the gateway and usage tracker. The section stream uses the chat `data:` / base64 `done:` /
 JSON `error:` protocol and stores only a complete revision-fenced result.
 Terminal processing/outline retry exhaustion and affirmative transcription
 failure show tile_state:failed, status:completed and summary_retryable when

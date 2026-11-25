@@ -18,6 +18,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from utils.conversation_payload import PAYLOAD_FIELD
 from utils.conversations.v3 import Conflict
 
 COLLECTION = 'conversations_v3_backfill_runs'
@@ -148,6 +149,10 @@ def save_priors(uid, run_id, entries, *, firestore_client=None):
     coll = _priors(client, uid, run_id)
     pages, page, size = [], [], 0
     for entry in entries:
+        if PAYLOAD_FIELD in (entry.get('raw') or {}):
+            # The prior must own its saved values. A live descriptor only
+            # names chunks the next publication may retire.
+            raise Conflict('document_too_large')
         amount = len(json.dumps(entry, default=str).encode())
         if page and (size + amount > PRIORS_PAGE_BYTES or len(page) >= PRIORS_PAGE_DOCS):
             pages.append(page)
@@ -176,6 +181,8 @@ def save_priors(uid, run_id, entries, *, firestore_client=None):
             row = (current.to_dict() or {}) if current.exists else {}
             if row.get('deleted'):
                 raise Conflict('target_deleted')
+            if PAYLOAD_FIELD in row:
+                raise Conflict('source_changed')
             level = row.get('data_protection_level', 'standard') if current.exists else None
             if level is not None and level != entry['raw'].get('data_protection_level', 'standard'):
                 raise Conflict('source_changed')

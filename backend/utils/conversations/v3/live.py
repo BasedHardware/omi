@@ -3,8 +3,32 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional, Sequence
 
+from config.conversations_v3 import SPEECH_LANDED_FIELD
+
 # The v3 window cap: an open conversation idle for longer is not in progress.
 MAX_IDLE = timedelta(hours=2)
+FINISH_WINDOW_FIELD = 'v3_finish_no_pointer_window_id'
+FINISH_FIELDS = [
+    'started_at',
+    'finished_at',
+    'status',
+    'tile_state',
+    'v3_derived',
+    'recording',
+    'home_hidden',
+    'deleted',
+    'discarded',
+    'is_locked',
+    'v3_recording_ids',
+]
+
+
+def has_finish_content(row: Mapping[str, Any], window: Mapping[str, Any], recording_id: str) -> bool:
+    # Raw audio custody can set has_content before any transcript lands.
+    source_has_speech = row.get('has_content') and (
+        row.get('record_projection_revision') or row.get(SPEECH_LANDED_FIELD)
+    )
+    return bool(source_has_speech or any(rid != recording_id for rid in window.get('v3_recording_ids') or ()))
 
 
 def _aware(value: Any) -> Optional[datetime]:

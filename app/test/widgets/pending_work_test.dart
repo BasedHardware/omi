@@ -32,9 +32,10 @@ class _IdleSync extends ChangeNotifier with WalDerivedSyncViews implements SyncP
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-AttentionItem _item(String id, {String? title, bool seen = false}) => AttentionItem(
+AttentionItem _item(String id, {String? title, bool seen = false, String kind = 'conversation_summary_failed'}) =>
+    AttentionItem(
       id: id,
-      kind: 'conversation_summary_failed',
+      kind: kind,
       conversationId: 'c-$id',
       title: title,
       retryable: true,
@@ -173,8 +174,8 @@ void main() {
       expect(find.byKey(const ValueKey('home_activity_dot')), findsNothing);
     });
 
-    testWidgets('unseen attention lights the warning dot; no recap needed', (tester) async {
-      final store = await _store(attention: [_item('x')]);
+    testWidgets('other unseen attention lights the warning dot even with an unseen summary failure', (tester) async {
+      final store = await _store(attention: [_item('x'), _item('y', kind: 'future_kind')]);
       var stored = DateTime.now().millisecondsSinceEpoch;
       final seen = ActivitySeen(read: () => stored, write: (v) => stored = v, owner: () => 'u');
       await tester.pumpWidget(_app(ActivityBellButton(seen: seen, pendingWork: store)));

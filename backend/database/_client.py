@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
+from itertools import islice
 import logging
 import random
 import re
@@ -638,26 +639,35 @@ def delete_collection_recursive(collection_ref: Any, *, client: Any, batch_size:
     returned by a collection query either). Any caller that deletes a parent
     document must purge its children through this helper.
     """
+    # Conversation payload children can survive a missing parent after a
+    # legacy hard delete. ListDocuments includes those missing ancestors.
+    list_missing = getattr(collection_ref, 'id', None) == 'conversations'
+    if getattr(collection_ref, 'id', None) == 'conversation_payload_chunks':
+        # A delete request includes the bytes of the documents being removed.
+        batch_size = min(batch_size, 8)
     while True:
-        docs = list(collection_ref.limit(batch_size).stream())
-        if not docs:
+        if list_missing:
+            refs = list(islice(collection_ref.list_documents(page_size=batch_size), batch_size))
+        else:
+            refs = [doc.reference for doc in collection_ref.limit(batch_size).stream()]
+        if not refs:
             return
 
-        for doc in docs:
-            for sub in doc.reference.collections():
+        for ref in refs:
+            for sub in ref.collections():
                 delete_collection_recursive(sub, client=client, batch_size=batch_size)
 
         batch = client.batch()
-        for doc in docs:
-            batch.delete(doc.reference)
+        for ref in refs:
+            batch.delete(ref)
         if (
             getattr(collection_ref, 'id', None) == 'people'
             and getattr(getattr(getattr(collection_ref, 'parent', None), 'parent', None), 'id', None) == 'users'
         ):
-            bump_people_generation(batch, docs[0].reference)
+            bump_people_generation(batch, refs[0])
         batch.commit()
 
-        if len(docs) < batch_size:
+        if len(refs) < batch_size:
             return
 
 

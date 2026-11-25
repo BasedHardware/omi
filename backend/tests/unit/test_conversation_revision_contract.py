@@ -393,6 +393,7 @@ def test_processing_transaction_reloads_user_fields_when_firestore_retries(monke
 def test_title_mutation_records_a_durable_override(monkeypatch):
     ref = _ConversationRef(_Snapshot({'id': 'conversation-1'}))
     monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda fn: fn)
 
     conversations_db.update_conversation_title('user-1', 'conversation-1', 'Renamed')
 

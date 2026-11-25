@@ -71,14 +71,18 @@ def test_donor_tombstone_retires_debt_in_redirect_payload(owners):
 def test_title_endpoint_retires_debt_without_an_extra_read(owners, monkeypatch, title):
     row = debt()
     ref = Mock()
-    ref.get.return_value = SimpleNamespace(exists=True)
+    ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: row)
     client = Mock()
+    tx = client.transaction.return_value
     client.collection.return_value.document.return_value.collection.return_value.document.return_value = ref
     monkeypatch.setattr(owners.conversations, 'db', client)
+    monkeypatch.setattr(owners.conversations.firestore, 'transactional', lambda fn: fn)
     monkeypatch.setattr(owners.conversations, '_sync_conversation_search_index', lambda *args: None)
     owners.conversations.update_conversation_title.__wrapped__('synthetic', 'target', title)
-    ref.get.assert_called_once_with()
-    assert_retired(row, ref.update.call_args.args[0])
+    ref.get.assert_called_once_with(transaction=tx)
+    target, patch = tx.update.call_args.args
+    assert target is ref
+    assert_retired(row, patch)
 
 
 @pytest.mark.parametrize('title', ['', 'Manual title'])

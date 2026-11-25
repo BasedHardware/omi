@@ -22,21 +22,18 @@ void openHeldAudioPlans(BuildContext context) {
   unawaited(openContextualPlans(context, source: 'held_audio', trigger: 'usage_budget'));
 }
 
-/// Allowance answers that mean this month's cloud minutes are spent (`resolve_transcription_allowance`,
-/// the same answer batch admission holds recordings on).
-const _spentAllowanceReasons = {'plan_allowance_exhausted', 'usage_budget_exhausted'};
-
-/// A recording held by the free plan's monthly allowance: the server says its transcription wait ran
-/// out with no failure receipt, and this free plan's cloud minutes are spent. A paid or unknown plan,
-/// an unloaded subscription and an older server (no `transcription_wait`) all answer false and keep
-/// the failed row with Try Again.
-bool heldByFreeAllowance(ServerConversation conversation, UsageProvider? usage) {
-  if (conversation.transcriptionWait != 'overdue' || usage == null || !usage.showSubscriptionUI) return false;
+/// The current Basic limit is useful for the Upgrade action on a confirmed hold.
+/// A recording stays held until its own admission changes, even when the plan has minutes again.
+int? heldRecordingUpgradeLimitMinutes(ServerConversation conversation, UsageProvider? usage) {
+  if (!conversation.isTranscriptionAllowanceHeld || usage == null || !usage.showSubscriptionUI) return null;
   final subscription = usage.subscription;
-  final plan = subscription?.subscription.plan;
-  if (subscription == null || plan == null || plan.isPaid || plan.isUnknown) return false;
+  if (subscription == null || subscription.subscription.plan != PlanType.basic) return null;
+  final limitMinutes = (subscription.transcriptionSecondsLimit / 60).round();
   final allowance = subscription.transcriptionAllowance;
-  return allowance != null && !allowance.isManaged && _spentAllowanceReasons.contains(allowance.reason);
+  if (limitMinutes <= 0 || allowance == null || allowance.isManaged || allowance.reason != 'plan_allowance_exhausted') {
+    return null;
+  }
+  return limitMinutes;
 }
 
 /// Recordings still waiting for a plan or an allowance, as locked rows. A running release shows none.

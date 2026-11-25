@@ -9,11 +9,7 @@ import (
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
 
-func (s Store) decode(ctx context.Context, g queue.Guarded, ref Ref, row map[string]any) (Conversation, error) {
-	revision, err := rowRevision(ref, row)
-	if err != nil {
-		return Conversation{}, err
-	}
+func (s Store) decode(ctx context.Context, g queue.Guarded, ref Ref, row map[string]any, revision Revision) (Conversation, error) {
 	transcript, err := s.snapshotTranscript(ctx, g, ref, row)
 	if err != nil {
 		return Conversation{}, err

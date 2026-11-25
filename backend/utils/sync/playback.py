@@ -12,6 +12,7 @@ from pydub import AudioSegment
 
 from config.repeat_work import playback_on_demand
 from config.pusher_record import close_fast_path_enabled
+from utils.other.gcs_read_reuse import ReadMemo
 from utils.other.playback_identity import resolve_sources, validate_sources
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.executors import postprocess_executor, storage_executor, submit_with_context
@@ -681,11 +682,16 @@ def download_audio_file_response(
 
 
 def _merge_playback_sources(
-    uid: str, conversation_id: str, timestamps: list[float], selected: list[dict[str, Any]] | None
+    uid: str,
+    conversation_id: str,
+    timestamps: list[float],
+    selected: list[dict[str, Any]] | None,
+    *,
+    raw_memo: ReadMemo | None = None,
 ) -> bytes:
     if selected is None:
         return download_audio_chunks_and_merge(
-            uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
+            uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE, raw_memo=raw_memo
         )
     return download_audio_chunks_and_merge(
         uid,
@@ -695,6 +701,7 @@ def _merge_playback_sources(
         sample_rate=AUDIO_SAMPLE_RATE,
         listed_chunks=selected,
         strict_sources=True,
+        raw_memo=raw_memo,
     )
 
 
@@ -704,9 +711,12 @@ def build_playback_artifact(
     """Merge chunks (download -> decrypt -> decode -> gap-fill) and encode MP3 ~48kbps mono."""
     source = [{'chunk_timestamps': timestamps, 'source_fingerprint': source_fingerprint}]
     selected = None
+    raw_memo = ReadMemo()
     if source_fingerprint:
-        selected = resolve_sources(source[0], list_audio_chunks(uid, conversation_id, source_identity=True))
-    pcm_data = _merge_playback_sources(uid, conversation_id, timestamps, selected)
+        selected = resolve_sources(
+            source[0], list_audio_chunks(uid, conversation_id, source_identity=True, raw_memo=raw_memo)
+        )
+    pcm_data = _merge_playback_sources(uid, conversation_id, timestamps, selected, raw_memo=raw_memo)
     if source_fingerprint:
         validate_sources(source, list_audio_chunks(uid, conversation_id, source_identity=True))
     if not pcm_data:
@@ -746,15 +756,16 @@ def build_conversation_playback_artifact(
     )
     verified = (strict_sources or playback_on_demand()) and any(af.get('source_fingerprint') for af in parts)
     resolved: list[list[dict[str, Any]] | None] = [None] * len(parts)
+    raw_memo = ReadMemo()
     if verified:
-        listing = list_audio_chunks(uid, conversation_id, source_identity=True)
+        listing = list_audio_chunks(uid, conversation_id, source_identity=True, raw_memo=raw_memo)
         resolved = [resolve_sources(af, listing) if af.get('source_fingerprint') else None for af in parts]
     pcm_buf = bytearray()
     spans: list[dict] = []
     for af, selected in zip(parts, resolved):
         timestamps = sorted(af['chunk_timestamps'])
         try:
-            pcm = _merge_playback_sources(uid, conversation_id, timestamps, selected)
+            pcm = _merge_playback_sources(uid, conversation_id, timestamps, selected, raw_memo=raw_memo)
         except FileNotFoundError:
             if strict_sources or playback_on_demand():
                 raise

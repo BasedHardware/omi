@@ -48,6 +48,9 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+          value: 'off'
+          category: rollout
         # Unlimited backfill day cap (retryable 503 backfill_capacity until the next UTC day; David 2026-11-18,
         # support-packet decision 13). Listen also admits sync backfill uploads (/v2/sync-local-files), so this
         # pin leaves listen admission uncapped exactly as it is today: serving image 44d0a4f runs it 'false'.
@@ -108,6 +111,13 @@ overlay:
         EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
         CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
         QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+        # SCA-4019: a phone/pendant socket drop holds its mobile server-batch capture open for the
+        # 120 s reconnect grace instead of finalizing it, so a resumed recording stays one
+        # conversation. The producer drain releases the recording-session lease and persists a
+        # deadline, so the quiet check seals a held row at the deadline (the Nov 16 no-exit hold
+        # cannot recur). Activation gate met: every listen pod has run this code since 2026-11-22.
+        # Rollback: set 'false' on backend-listen and backend-sync in one config train.
+        LISTEN_BATCH_RECONNECT_ENABLED: {value: 'true', category: rollout}
         BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
@@ -328,6 +338,9 @@ overlay:
           category: rollout
     pusher:
       env:
+        CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+          value: 'off'
+          category: rollout
         # The conversations v3 reconcile dispatch (utils/conversations/v3/triggers.py) runs on the
         # recording writes pusher makes. Without this binding each enqueue raised RuntimeError and the
         # owner waited for the 5-minute sweeper (rows pending 10+ minutes). HANDLER_URL/INVOKER_SA come
@@ -586,8 +599,6 @@ overlay:
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         - DREAM_AGENT_PAID_PERCENT
-        # SCA-3555 preserves the serving revision, where poll backoff has no percent key.
-        - SYNC_POLL_BACKOFF_PERCENT
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -636,7 +647,29 @@ overlay:
           MCP_OAUTH_CLIENTS_JSON:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
+          # Google Play Billing account-id HMAC key. Create the secret (32+ random chars) and grant
+          # backend-runtime@ secretAccessor before the first deploy of this config.
+          PLAY_ACCOUNT_ID_HMAC_KEY:
+            secret: PLAY_ACCOUNT_ID_HMAC_KEY
+            version: latest
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
+          # Google Play Billing (Android). ANDROID_BILLING=stripe keeps new purchases on Stripe ('play' = everyone).
+          # Test accounts go in the android-play-billing rollout cohort (Firestore), never here.
+          ANDROID_BILLING: {value: stripe, category: rollout}
+          # RTDN push and reconcile identities:
+          PLAY_RTDN_OIDC_AUDIENCE: {value: 'https://api.omi.me/v2/internal/play-billing/rtdn', category: service_discovery}
+          PLAY_RTDN_PUSH_SA: {value: play-billing-rtdn-push@based-hardware.iam.gserviceaccount.com, category: service_discovery}
+          PLAY_RECONCILE_OIDC_AUDIENCE: {value: 'https://api.omi.me/v2/internal/play-billing/reconcile', category: service_discovery}
+          PLAY_RECONCILE_INVOKER_SA: {value: play-billing-reconcile@based-hardware.iam.gserviceaccount.com, category: service_discovery}
+          # First Android version code with the Play Billing hardening (1616 predates it). Below it, or with no
+          # cohort membership and ANDROID_BILLING=stripe, nobody is sent to Google Play.
+          ANDROID_PLAY_BILLING_MIN_BUILD: {value: '1617', category: rollout}
+          # Empty: cohort members come from the android-play-billing rollout cohort document instead.
+          ANDROID_PLAY_BILLING_COHORT: {value: '', category: rollout}
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -696,7 +729,9 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          # SCA-3504: client job-status GETs are served by backend. Rollback sets enabled to false.
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
           # Read-only referral campaign preview for Nik's three accounts (#24560). Claims, attribution and
           # grants stay off until OMI_REFERRAL_CAMPAIGN_ENABLED. Rollback: drop this key.
           OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS:
@@ -928,6 +963,9 @@ overlay:
             value: price_1TuIa81F8wnoWYvw0iX0j5M8
           STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
             value: price_1TuIap1F8wnoWYvwHWq0EvNU
+          # No-card prepaid Pro code redemption: cohort = only members of the prepaid-code-redeem rollout
+          # cohort (one internal test account). Rollback: set 'off' and deploy.
+          PREPAID_CODE_REDEEM: {value: 'cohort', category: rollout}
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
@@ -1039,6 +1077,9 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -1074,6 +1115,10 @@ overlay:
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+          # SCA-4019: the quiet-check reconciler and finalization jobs read the same reconnect
+          # protocol as listen, so a drained hold seals at its producer deadline. Keep this equal
+          # to backend-listen; rollback sets 'false' on both in one config train.
+          LISTEN_BATCH_RECONNECT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
@@ -1474,6 +1519,10 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
           # SCA-2283: retain the behavior of the serving pre-flag image until custody admission.
           BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
           BATCH_PROJECTION_OUTBOX: {value: 'false', category: ops_kill}
@@ -1864,6 +1913,10 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'off', category: ops_kill}
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -2020,6 +2073,11 @@ overlay:
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED:
             value: 'true'
             category: rollout
+          # SCA-3664: carry the approved logging reductions on integration through the next deploy.
+          # Rollback: disable sampling and change-only kill-switch logging independently.
+          BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT: {value: '1', category: ops_kill}
+          BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_API_URL:
             value: 'https://backend-sync-hhibjajaja-uc.a.run.app'
             category: service_discovery
@@ -2186,7 +2244,16 @@ overlay:
       # Ramp and rollback: docs/listen_pusher_pipeline/changes/2026-11-19-projection-pump-deploy-target.md.
       backend-projection-pump:
         derive_from: backend-integration
+        # These logging controls are carried by integration only; strip them from the inherited pump env.
+        forbidden_env:
+        - BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED
+        - BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT
+        - BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
           # The two custody switches (BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED, BATCH_PROJECTION_OUTBOX)
           # are inherited from integration's false pins: David 2026-11-21 ~03:45Z (SCA-3318) keeps
           # both off for the pump split; enabling either is its own custody admission.

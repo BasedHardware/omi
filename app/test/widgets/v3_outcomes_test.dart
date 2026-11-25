@@ -1,5 +1,5 @@
 // V3 (recordings and conversations) outcomes, audit 2026-11-19 (v3-audit.md) and David's rulings of
-// the same day: X5, X6, X7, X9, X10, X11, X14, X17, the Home row status line and swipe-to-Finish.
+// the same day: X5, X6, X7, X9, X10, X11, X14, X17, the Home row status line and swipe behavior.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -13,7 +13,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/activity/activity_bell_button.dart';
 import 'package:omi/pages/activity/past_processing_section.dart';
@@ -28,7 +27,6 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
-import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -37,7 +35,8 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 /// The decoder fixture: a v3 conversation as the server sends it. [tile] null is a document with no
 /// tile state (an older server).
-ServerConversation _decoded(String? tile, {String id = 'c1', String status = 'completed'}) =>
+ServerConversation _decoded(String? tile,
+        {String id = 'c1', String status = 'completed', Map<String, dynamic> extra = const {}}) =>
     ServerConversation.fromJson({
       'id': id,
       'created_at': '2026-11-01T10:00:00Z',
@@ -51,6 +50,7 @@ ServerConversation _decoded(String? tile, {String id = 'c1', String status = 'co
       ],
       'kind': 'conversation',
       if (tile != null) 'tile_state': tile,
+      ...extra,
     });
 
 ConversationsV3Provider _v3(bool on) => ConversationsV3Provider(
@@ -102,7 +102,7 @@ class _Wal implements IWalService {
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 
-/// This phone is capturing the live conversation (its segment `s1`); Finish answers [answer].
+/// The active capture ID matches the live row's source recording.
 class _Capture extends CaptureProvider {
   _Capture()
       : super(
@@ -115,32 +115,13 @@ class _Capture extends CaptureProvider {
           bleListeners: _NoopBle(),
           inProgressConversationLoader: () async {},
           localSegmentStore: LocalSegmentStore.disabled(),
-        ) {
-    segments = [
-      TranscriptSegment(
-          id: 's1',
-          text: 'Synthetic speech.',
-          speaker: 'SPEAKER_00',
-          isUser: true,
-          personId: null,
-          start: 0,
-          end: 4,
-          translations: []),
-    ];
-  }
-
-  CreateConversationResponse? answer;
-  var finishes = 0;
+        );
 
   @override
-  String? get liveCaptureSource => 'omi';
+  String get activeRecordingId => 'capture-1';
 
   @override
-  Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
-    finishes++;
-    final reply = answer;
-    return InProgressProcessOutcome(response: reply, absence: reply == null ? ProcessAbsence.transport : null);
-  }
+  String get liveCaptureSource => 'omi';
 }
 
 void main() {
@@ -150,7 +131,7 @@ void main() {
     PlatformManager.initializeForLocalHarness();
   });
 
-  group('X5: a failed conversation leaves Home for Activity and lights the bell', () {
+  group('X5: a failed conversation leaves Home for Activity without lighting the bell', () {
     test('one predicate reads the tile state first, then the legacy fields', () {
       expect(isFailedConversation(_decoded('failed')), isTrue, reason: 'status completed, tile failed');
       expect(isFailedConversation(_decoded('done', status: 'failed')), isFalse, reason: 'the tile wins');
@@ -158,17 +139,17 @@ void main() {
       expect(isFailedConversation(_decoded(null)), isFalse);
     });
 
-    // Tile state → (on Home, in Activity, bell dot).
-    const table = <(String, bool, bool, bool)>[
-      ('live', true, false, false),
-      ('transcribing', true, false, false),
-      ('writing', true, false, false),
-      ('done', true, false, false),
-      ('failed', false, true, true),
+    // Tile state → (on Home, in Activity).
+    const table = <(String, bool, bool)>[
+      ('live', true, false),
+      ('transcribing', true, false),
+      ('writing', true, false),
+      ('done', true, false),
+      ('failed', false, true),
     ];
 
     test('Home and Activity, per tile state', () {
-      for (final (tile, home, activity, _) in table) {
+      for (final (tile, home, activity) in table) {
         final c = _decoded(tile);
         expect(shownOnV3Home(c), home, reason: '$tile on Home');
         expect(failedActivityConversations(pending: const [], conversations: [c], v3Only: true).isNotEmpty, activity,
@@ -176,8 +157,8 @@ void main() {
       }
     });
 
-    testWidgets('the bell, per tile state; Activity having shown it clears the dot', (tester) async {
-      for (final (tile, _, _, dot) in table) {
+    testWidgets('summary tile states do not light the bell', (tester) async {
+      for (final (tile, _, _) in table) {
         final conversations = ConversationProvider(isSignedIn: () => false)..conversations = [_decoded(tile)];
         final store = _store();
         await tester.pumpWidget(_app(
@@ -187,20 +168,14 @@ void main() {
             ChangeNotifierProvider<ConversationsV3Provider>.value(value: _v3(true)),
           ],
         ));
-        expect(find.byKey(const ValueKey('home_activity_attention_dot')), dot ? findsOneWidget : findsNothing,
-            reason: '$tile dot');
-        if (dot) {
-          store.markFailedConversationsSeen(['c1']);
-          await tester.pump();
-          expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
-        }
+        expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing, reason: '$tile dot');
         await tester.pumpWidget(const SizedBox());
         conversations.dispose();
       }
     });
   });
 
-  testWidgets('a dismissed Needs attention conversation that is still failed does not light the bell', (tester) async {
+  testWidgets('an unseen or dismissed summary failure does not light the bell', (tester) async {
     final conversations = ConversationProvider(isSignedIn: () => false)..conversations = [_decoded('failed')];
     final store = PendingWorkStore(
       loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
@@ -212,10 +187,10 @@ void main() {
                 kind: 'conversation_summary_failed',
                 conversationId: 'c1',
                 retryable: true,
-                seen: true,
+                seen: false,
                 retryState: AttentionRetryState.none),
           ],
-          unseenCount: 0)),
+          unseenCount: 1)),
       dismiss: (_) async => const ApiSuccess(null),
       loadDismissed: (_) => const [],
       saveDismissed: (_, __) {},
@@ -228,7 +203,6 @@ void main() {
         ChangeNotifierProvider<ConversationsV3Provider>.value(value: _v3(true)),
       ],
     ));
-    // Listed under its attention row in Activity, never as a failed row: no dot owed for it.
     expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
     await store.dismiss(store.attention.single);
     await tester.pump();
@@ -473,28 +447,22 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
     }
 
-    testWidgets('swipe left on the live row reveals Finish; a tap finishes once; a failure says so', (tester) async {
+    testWidgets('a live row this phone is capturing does not swipe or expose Finish', (tester) async {
       final capture = _Capture();
       addTearDown(capture.dispose);
-      await pumpRow(tester, _decoded('live'), capture: capture);
-      final finishButton = find.byKey(const ValueKey('conversation_swipe_finish'));
-      double finishOpacity() =>
-          tester.widget<Opacity>(find.ancestor(of: finishButton, matching: find.byType(Opacity)).first).opacity;
-      expect(finishOpacity(), 0, reason: 'no button on the row at rest');
-
-      // A long swipe opens the row; it never fires Finish on its own.
-      await swipe(tester, -600);
-      expect(capture.finishes, 0);
-      expect(finishOpacity(), greaterThan(0.9));
+      await pumpRow(
+          tester,
+          _decoded('live', extra: {
+            'v3_recording_ids': [capture.activeRecordingId],
+          }),
+          capture: capture);
+      final card = find.byKey(const ValueKey('conversation_card'));
+      final rest = tester.getRect(card);
+      await swipe(tester, -200);
+      expect(tester.getRect(card), rest);
+      expect(find.text('Finish'), findsNothing);
+      expect(find.byKey(const ValueKey('conversation_swipe_finish')), findsNothing);
       expect(find.byKey(const ValueKey('conversation_swipe_delete')), findsNothing);
-
-      await tester.tap(find.byKey(const ValueKey('conversation_swipe_finish')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(capture.finishes, 1);
-      expect(find.text("Didn't go through. Your audio is safe."), findsOneWidget);
-      expect(find.byType(ConversationListItem), findsOneWidget, reason: 'the row stays live');
-      await tester.pump(const Duration(seconds: 9));
       await tester.pumpWidget(const SizedBox());
     });
 

@@ -434,6 +434,12 @@ class ServerConversation {
   /// receipt, so the audio is kept and still waiting. Null on every other row and from older servers.
   final String? transcriptionWait;
 
+  /// Server-authored admission for this recording. Older servers omit it.
+  final String? transcriptionAdmission;
+
+  bool get isTranscriptionAllowanceHeld => transcriptionAdmission == 'allowance_held';
+  bool get isAdmittedForTranscription => transcriptionAdmission == 'processing';
+
   /// Authoritative episode membership, including before the episode list arrives.
   final String? episodeId;
 
@@ -494,6 +500,7 @@ class ServerConversation {
     this.excludedSpeakers,
     this.homeStep,
     this.transcriptionWait,
+    this.transcriptionAdmission,
     this.episodeId,
     this.v3,
   });
@@ -551,6 +558,7 @@ class ServerConversation {
         captureCoverage: captureCoverage,
         homeStep: homeStep ?? this.homeStep,
         transcriptionWait: transcriptionWait,
+        transcriptionAdmission: transcriptionAdmission,
         episodeId: episodeId,
         v3: v3,
       )..isNew = isNew;
@@ -596,6 +604,8 @@ class ServerConversation {
       processingDeferred: json['processing_deferred'] == true,
       homeStep: json['home_step'] is String ? json['home_step'] as String : null,
       transcriptionWait: json['transcription_wait'] is String ? json['transcription_wait'] as String : null,
+      transcriptionAdmission:
+          json['transcription_admission'] is String ? json['transcription_admission'] as String : null,
       onDeviceProvenance:
           json['on_device_provenance'] is Map ? Map<String, dynamic>.from(json['on_device_provenance']) : null,
       clientProcessing: json['client_processing'] is Map ? Map<String, dynamic>.from(json['client_processing']) : null,
@@ -616,6 +626,7 @@ class ServerConversation {
     Map<String, dynamic>? clientProcessing,
     String? homeStep,
     String? transcriptionWait,
+    String? transcriptionAdmission,
     ConversationV3Fields? v3,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
@@ -667,6 +678,7 @@ class ServerConversation {
       excludedSpeakers: generated.excludedSpeakers,
       homeStep: homeStep,
       transcriptionWait: transcriptionWait,
+      transcriptionAdmission: transcriptionAdmission,
       episodeId: generated.episodeId,
       v3: v3,
     );

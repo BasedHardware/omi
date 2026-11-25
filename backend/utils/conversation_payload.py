@@ -42,6 +42,7 @@ def pack_conversation(
     *,
     spill_fields: Collection[str],
     generation: str,
+    force_spill: bool = False,
 ) -> ConversationWrite:
     """Plan a full write from its final prepared values, after applying any patch.
 
@@ -51,13 +52,22 @@ def pack_conversation(
     if PAYLOAD_FIELD in prepared:
         raise ValueError('expected a hydrated conversation')
     parent = dict(prepared)
-    if estimate_firestore_document_bytes(parent, document_path) <= PROJECTION_BYTES:
+    if not force_spill and estimate_firestore_document_bytes(parent, document_path) <= PROJECTION_BYTES:
         return ConversationWrite(parent)
 
     if not _GENERATION.fullmatch(generation):
         raise ValueError('invalid conversation payload generation')
+    structured = parent.get('structured')
+    keep_indexed_category = (
+        'structured' in spill_fields and isinstance(structured, Mapping) and 'category' in structured
+    )
+    if keep_indexed_category:
+        # Conversation filters and counts use this nested Firestore index.
+        spill_fields = set(spill_fields) - {'structured'}
     payload = {key: parent.pop(key) for key in spill_fields if key in parent}
     if not payload:
+        if keep_indexed_category:
+            raise ConversationProjectionTooLarge('conversation category must stay in the indexed parent')
         raise ConversationProjectionTooLarge('conversation has no eligible payload fields')
 
     wire_value = MapValue(fields=_helpers.encode_dict(payload))
@@ -69,6 +79,8 @@ def pack_conversation(
         'sha256': hashlib.sha256(wire_bytes).digest(),
     }
     if estimate_firestore_document_bytes(parent, document_path) > PROJECTION_BYTES:
+        if keep_indexed_category:
+            raise ConversationProjectionTooLarge('conversation category must stay in the indexed parent')
         raise ConversationProjectionTooLarge('conversation projection exceeds its byte budget')
 
     chunks = tuple(wire_bytes[offset : offset + CHUNK_BYTES] for offset in range(0, len(wire_bytes), CHUNK_BYTES))
@@ -86,24 +98,7 @@ def hydrate_conversation(
     if PAYLOAD_FIELD not in result:
         return result
 
-    descriptor = result.pop(PAYLOAD_FIELD)
-    if not isinstance(descriptor, Mapping):
-        raise InvalidConversationPayload('invalid conversation payload descriptor')
-    version = descriptor.get('version')
-    generation = descriptor.get('generation')
-    size = descriptor.get('size')
-    digest = descriptor.get('sha256')
-    if (
-        type(version) is not int
-        or version != _FORMAT_VERSION
-        or not isinstance(generation, str)
-        or not _GENERATION.fullmatch(generation)
-        or type(size) is not int
-        or size <= 0
-        or not isinstance(digest, bytes)
-        or len(digest) != hashlib.sha256().digest_size
-    ):
-        raise InvalidConversationPayload('invalid conversation payload descriptor')
+    _, size, digest = payload_descriptor(result.pop(PAYLOAD_FIELD))
 
     wire = bytearray()
     for chunk in chunks:
@@ -127,3 +122,26 @@ def hydrate_conversation(
         raise InvalidConversationPayload('invalid conversation payload fields') from exc
     result.update(payload)
     return result
+
+
+def payload_descriptor(descriptor: Any) -> tuple[str, int, bytes]:
+    """Validate metadata before deriving Firestore child paths from it."""
+    if not isinstance(descriptor, Mapping):
+        raise InvalidConversationPayload('invalid conversation payload descriptor')
+    version = descriptor.get('version')
+    generation = descriptor.get('generation')
+    size = descriptor.get('size')
+    digest = descriptor.get('sha256')
+    if (
+        type(version) is not int
+        or version != _FORMAT_VERSION
+        or not isinstance(generation, str)
+        or not _GENERATION.fullmatch(generation)
+        or type(size) is not int
+        or size <= 0
+        or not isinstance(digest, bytes)
+        or len(digest) != hashlib.sha256().digest_size
+    ):
+        raise InvalidConversationPayload('invalid conversation payload descriptor')
+
+    return generation, size, digest

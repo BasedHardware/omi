@@ -713,7 +713,7 @@ class TestLifecycleWiring:
         monkeypatch.setattr(conversations_lifecycle.conversations_db, "delete_conversation_photos", photos)
         monkeypatch.setattr(
             conversations_lifecycle,
-            "_discard_unreferenced_audio",
+            "_log_retained_empty_recording_audio",
             MagicMock(side_effect=lambda *a: order.append("audio")),
         )
 

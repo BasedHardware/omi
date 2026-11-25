@@ -31,6 +31,7 @@ from llm_gateway.gateway.errors import (
     GatewayProviderRequestRejectedError,
 )
 from llm_gateway.gateway.metrics import (
+    CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL,
     FLEX_FIRST_TOTAL,
     KEYED_PROVIDER_ATTEMPTS_TOTAL,
     LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL,
@@ -62,6 +63,7 @@ from llm_gateway.gateway.reserved_fallback import can_try_next_provider, record_
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
 from utils.log_sanitizer import sanitize
+from utils.observability.reasons import ConvStructureFlexFallbackReason
 
 logger = logging.getLogger(__name__)
 monotonic = time.monotonic
@@ -126,7 +128,8 @@ async def execute_chat_completion(
     attempt_trace: AttemptTrace | None = None,
     max_provider_attempts: int | None = None,
 ) -> ExecutorResult:
-    if current_attempt() is not None:
+    # The builder durably claims only one paid attempt for a live title.
+    if current_attempt() is not None or resolved_route.active_route.lane_id == 'omi:auto:conversation-v3-live-title':
         max_provider_attempts = 1
     serving_route = _select_serving_route(resolved_route)
     if serving_route.lane_id in DREAM_LANES:
@@ -483,11 +486,12 @@ PROVIDER_429_BACKOFF_CAP_SECONDS = 60.0
 # Flex cap leaves Standard well above its own 7d p99 (conv-structure 35.9s,
 # memory-l1 18.8s): 60-15=45s and 60-10=50s. A Flex 429 returns fast and costs
 # almost none of that. Kill switch: LLM_GATEWAY_FLEX_FIRST_LANES=off.
+#
+# omi:auto:conversation-v3-summary is deliberately not on the list: Flex answered only about 5%
+# of its summaries in prod, so v3 summaries go straight to Standard.
 FLEX_FIRST_LANES_ENV_VAR = 'LLM_GATEWAY_FLEX_FIRST_LANES'
 FLEX_FIRST_TIMEOUT_MS_ENV_VAR = 'LLM_GATEWAY_FLEX_FIRST_TIMEOUT_MS'
-DEFAULT_FLEX_FIRST_LANES = frozenset(
-    {'omi:auto:conv-structure', 'omi:auto:memory-l1', 'omi:auto:conversation-v3-summary'}
-)
+DEFAULT_FLEX_FIRST_LANES = frozenset({'omi:auto:conv-structure', 'omi:auto:memory-l1'})
 DEFAULT_FLEX_FIRST_TIMEOUT_MS = 10_000
 FLEX_FIRST_LANE_TIMEOUT_MS = {'omi:auto:conv-structure': 15_000, 'omi:auto:memory-l1': 10_000}
 
@@ -789,6 +793,18 @@ async def _attempt_provider(
                 # Any Flex failure (capacity 429, slow, rejected) goes straight to
                 # Standard with no backoff; the user-visible path never depends on Flex.
                 FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome='fallback_standard').inc()
+                if route.lane_id == 'omi:auto:conv-structure':
+                    CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL.labels(
+                        reason=(
+                            ConvStructureFlexFallbackReason.TIMEOUT.value
+                            if exc.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT
+                            else (
+                                ConvStructureFlexFallbackReason.HTTP_429.value
+                                if exc.failure_class == FailureClass.PROVIDER_429_OMI_PAID
+                                else ConvStructureFlexFallbackReason.OTHER.value
+                            )
+                        ),
+                    ).inc()
                 continue
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 return None, error

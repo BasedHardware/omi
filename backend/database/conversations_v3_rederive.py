@@ -17,6 +17,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
+from database import home_visibility_index
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.conversations import ACTION_ITEMS_EDIT_REVISION, EVENTS_EDIT_REVISION, has_created_calendar_events
@@ -24,6 +25,7 @@ from database.conversations_v3_undo_removals import removal_ref
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.recurring_voice_privacy import filter_processing_write
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
+from utils.conversation_payload import PAYLOAD_FIELD
 from utils.conversations.v3 import Conflict, policy
 
 # Documents (sources and rows) one partition's started_at read may return; more blocks the partition.
@@ -63,6 +65,8 @@ def live_row_protection(raw, *, since, until, run_id=None):
     """Why a live v3 row must stay exactly as it is during a re-derive (None: it may be rebuilt)."""
     if raw.get('deleted') or raw.get('sync_merged_into'):
         return 'deleted'
+    if PAYLOAD_FIELD in raw:
+        return 'bounded_payload'
     if raw.get('status') == 'in_progress':
         return 'open'
     started, finished = raw.get('started_at'), raw.get('finished_at')
@@ -224,7 +228,7 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
     recordings, blocked = {}, set()
     for rid, snapshot in sources.items():
         reason = live_source_block(raws[rid])
-        row = None if reason else store.recording_input(uid, snapshot)
+        row = None if reason else store.recording_input(uid, snapshot, firestore_client=client)
         if not reason and (row is None or row.get('_v3_unreadable')):
             reason = 'unreadable'
         if reason or row is None:
@@ -261,7 +265,7 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
             # Speech a row cannot be rebuilt from stays in that row.
             reason = 'source_missing'
         try:
-            row = store.decode_row(uid, snapshot)
+            row = store.decode_row(uid, snapshot, firestore_client=client)
         except (ValueError, TypeError, FileNotFoundError, TranscriptBlobAbsent, TranscriptShredded, Conflict):
             row = None
         if row is None:
@@ -354,7 +358,7 @@ def already_undone(row, entry, run_id):
     """This run's undo already handled the row: restored to its prior, or hidden awaiting erasure.
 
     The Firestore commit hook stamps home feed versions onto every conversation write, so a restored
-    row equals its prior apart from those fields.
+    row equals its prior apart from those fields and the derived Home index bit.
     """
     if row is None:
         return True
@@ -364,17 +368,19 @@ def already_undone(row, entry, run_id):
 
 
 def _unstamped(row):
-    return {k: v for k, v in row.items() if k not in COMMIT_STAMPED_FIELDS}
+    return {k: v for k, v in row.items() if k not in COMMIT_STAMPED_FIELDS and k != home_visibility_index.FIELD}
 
 
 # A prior the owner's deletion or protection change emptied: the run can no longer be undone exactly.
 PURGED_REASONS = {'deleted': 'owner_deleted_rebuilt_row', 'protection': 'owner_edited_rebuilt_row'}
 
 
-def purged_reason(entries):
+def undo_prior_blocker(entries):
     for entry in entries:
         if entry.get('purged'):
             return PURGED_REASONS.get(entry['purged'], 'owner_edited_rebuilt_row')
+        if PAYLOAD_FIELD in (entry.get('raw') or {}):
+            return 'document_too_large'
     return None
 
 
@@ -475,8 +481,8 @@ def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
     client = firestore_client or store.get_firestore_client()
     coll = store.user_conversations(client, uid)
     deleted = client.collection('users').document(uid).collection('deleted_conversations')
-    if purged_reason(entries):
-        return purged_reason(entries)
+    if reason := undo_prior_blocker(entries):
+        return reason
     named = set()
     created = []
     for entry in entries:
@@ -497,6 +503,10 @@ def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
         stamp = row.get('v3_rederive_live_run')
         if stamp not in (None, run_id):
             return 'undo_newer_run_first'
+        if stamp == run_id and PAYLOAD_FIELD in row:
+            # A legacy undo must neither replace a payload-bearing row nor
+            # validate the owner's edits against its partial parent.
+            return 'document_too_large'
         if stamp == run_id and owner_changed(row, entry):
             return 'owner_edited_rebuilt_row'
         if stamp == run_id:
@@ -536,8 +546,8 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
         docs = {cid: coll.document(cid).get(transaction=tx) for cid in ids}
         tombstones = {cid: deleted.document(cid).get(transaction=tx) for cid in ids}
         current = {cid: (snapshot.to_dict() or {}) if snapshot.exists else None for cid, snapshot in docs.items()}
-        if purged_reason(entries):
-            raise Conflict(purged_reason(entries))
+        if reason := undo_prior_blocker(entries):
+            raise Conflict(reason)
         if any(t.exists for t in tombstones.values()):
             raise Conflict('owner_deleted_rebuilt_row')
         by_id = {e['id']: e for e in entries}
@@ -552,6 +562,8 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
         ours = {
             cid for cid, row in current.items() if cid not in done and row and row.get('v3_rederive_live_run') == run_id
         }
+        if any(PAYLOAD_FIELD in current[cid] for cid in ours):
+            raise Conflict('document_too_large')
         if any(owner_changed(current[cid] or {}, by_id[cid]) for cid in ours):
             raise Conflict('owner_edited_rebuilt_row')
         created = [cid for cid in sorted(ours | done) if current[cid] is not None and by_id[cid].get('created')]
@@ -590,11 +602,12 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
                         'discarded': True,
                         'v3_derived': False,
                         'home_hidden': True,
+                        home_visibility_index.FIELD: False,
                         'v3_rederive_live_undone': run_id,
                     },
                 )
             else:
-                tx.set(coll.document(entry['id']), restore[entry['id']])
+                tx.set(coll.document(entry['id']), home_visibility_index.stamp(restore[entry['id']]))
                 restored += 1
         repaired = 0
         for rid, snapshot in sources.items():

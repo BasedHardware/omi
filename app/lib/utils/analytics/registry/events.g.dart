@@ -2701,6 +2701,42 @@ final class UpgradeSucceededAttributed extends RegisteredEvent {
   Map<String, Object> get properties => {"plan": plan.wireName, "billing_interval": billingInterval.wireName};
 }
 
+enum UpgradeBillingProviderProvider {
+  stripe("stripe"),
+  play("play");
+  const UpgradeBillingProviderProvider(this.wireName);
+  final String wireName;
+}
+
+enum UpgradeBillingProviderStage {
+  selected("selected"),
+  succeeded("succeeded"),
+  cancelled("cancelled"),
+  pending("pending"),
+  failed("failed");
+  const UpgradeBillingProviderStage(this.wireName);
+  final String wireName;
+}
+
+enum UpgradeBillingProviderBillingInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const UpgradeBillingProviderBillingInterval(this.wireName);
+  final String wireName;
+}
+
+final class UpgradeBillingProvider extends RegisteredEvent {
+  const UpgradeBillingProvider({required this.provider, required this.stage, required this.billingInterval});
+  final UpgradeBillingProviderProvider provider;
+  final UpgradeBillingProviderStage stage;
+  final UpgradeBillingProviderBillingInterval billingInterval;
+  @override
+  String get wireName => "Upgrade Billing Provider";
+  @override
+  Map<String, Object> get properties => {"provider": provider.wireName, "stage": stage.wireName, "billing_interval": billingInterval.wireName};
+}
+
 enum SubscriptionPlanChangedPreviousPlan {
   basic("basic"),
   plus("plus"),
@@ -3727,4 +3763,17 @@ final class OrphanAudioReclaim extends RegisteredEvent {
   String get wireName => "Orphan Audio Reclaim";
   @override
   Map<String, Object> get properties => {"deleted_files": deletedFiles, "deleted_bytes": deletedBytes, "working": working, "unknown_capture_time": unknownCaptureTime, "capture_too_young": captureTooYoung, "mtime_too_young": mtimeTooYoung, "outside_documents": outsideDocuments, "pass_cap": passCap, "sources_changed": sourcesChanged, "referenced": referenced, "file_changed": fileChanged, "sidecar_type": sidecarType, "duration_ms": durationMs, "result": result.wireName, "census_complete": censusComplete};
+}
+
+final class WalCustodyAudit extends RegisteredEvent {
+  const WalCustodyAudit({required this.agreeCovered, required this.agreePending, required this.disagree, required this.unknown, required this.released});
+  final int agreeCovered;
+  final int agreePending;
+  final int disagree;
+  final int unknown;
+  final int released;
+  @override
+  String get wireName => "WAL Custody Audit";
+  @override
+  Map<String, Object> get properties => {"agree_covered": agreeCovered, "agree_pending": agreePending, "disagree": disagree, "unknown": unknown, "released": released};
 }

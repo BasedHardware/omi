@@ -26,6 +26,51 @@ LABELS = Counter(
 CONFLICT_HOLDS = Counter(
     'omi_batch_pipeline_projection_conflict_holds_total', 'Observed assignment conflict holds', ['subtype']
 )
+# One sample per committed recovery settlement: what each paid recognizer
+# answered, how much speech our own detectors measured, and how the unit ended.
+RECOGNIZER_OUTCOMES = Counter(
+    'omi_batch_pipeline_recovery_recognizer_outcomes_total',
+    'Committed recovery settlements by recognizer answers, measured held speech and result',
+    ['modulate', 'soniox', 'speech', 'language_guarded', 'result'],
+)
+RECOGNIZER_ANSWERS = frozenset({'words', 'empty', 'error', 'refused', 'started'})
+SETTLEMENT_RESULTS = frozenset({'words', 'silence', 'no_recoverable_speech', 'failed_held'})
+# Vendor recovery skips units below this much strict-VAD speech (BATCH_VENDOR_MIN_SPEECH_SECONDS default).
+SHORT_SPEECH_SECONDS = 2.0
+
+
+def speech_bucket(seconds) -> str:
+    """Held speech census (the largest validated measure) as a closed label."""
+    from config.batch_language_recovery import below_silence_threshold
+
+    if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or seconds != seconds or seconds < 0:
+        return 'unmeasured'
+    if below_silence_threshold(seconds):
+        return 'none'
+    return 'under_2s' if seconds < SHORT_SPEECH_SECONDS else '2s_or_more'
+
+
+def record_recovery_settlement(recognizers, speech_seconds, language_guarded, result) -> None:
+    """Never raises: telemetry follows a committed settlement and cannot undo it."""
+    try:
+        if not enabled():
+            return
+        receipts = recognizers if isinstance(recognizers, dict) else {}
+
+        def answer(provider):
+            receipt = receipts.get(provider)
+            outcome = receipt.get('outcome') if isinstance(receipt, dict) else None
+            return outcome if outcome in RECOGNIZER_ANSWERS else 'not_called'
+
+        RECOGNIZER_OUTCOMES.labels(
+            answer('modulate'),
+            answer('soniox'),
+            speech_bucket(speech_seconds),
+            'true' if language_guarded else 'false',
+            result if result in SETTLEMENT_RESULTS else 'other',
+        ).inc()
+    except Exception:
+        pass
 
 
 def record_conflict_hold(subtype: object) -> None:

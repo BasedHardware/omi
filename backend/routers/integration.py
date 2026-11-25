@@ -11,6 +11,7 @@ import utils.apps as apps_utils
 from utils.apps import verify_api_key
 import database.redis_db as redis_db
 from database._client import db as firestore_db
+from database.conversation_recorded_time import IntegrationAccountDeleting
 from utils.memory.memory_service import MemoryService, truncate_locked_memory_preview
 from database.redis_db import get_enabled_apps
 import database.action_items as action_items_db
@@ -138,9 +139,12 @@ async def create_conversation_via_integration(
     create_conversation.app_id = app_id
 
     # Process
-    conversation = await run_blocking(
-        postprocess_executor, process_conversation, uid, language_code, create_conversation
-    )
+    try:
+        conversation = await run_blocking(
+            postprocess_executor, process_conversation, uid, language_code, create_conversation
+        )
+    except IntegrationAccountDeleting as error:
+        raise HTTPException(status_code=403, detail='Account is unavailable') from error
 
     # Always trigger integration
     await trigger_external_integrations(uid, conversation)

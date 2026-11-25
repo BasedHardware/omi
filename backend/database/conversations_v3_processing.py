@@ -1,6 +1,7 @@
 """Conversation summary persistence and content-scoped retry fences."""
 
 from database import conversations_v3_leases as leases
+from utils.conversations.v3.live import FINISH_WINDOW_FIELD
 from utils.conversations.v3 import metrics
 
 import hashlib
@@ -12,9 +13,12 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import conversations, conversations_v3 as store
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from database.conversation_payload import stage_conversation_payload_patch, v3_payload_writes_enabled
 from models.finalization_owner import python_owns_finalization
 from utils.conversations.v3 import Conflict, policy
 from utils.conversations.summary_delivery import present
+from utils.conversation_payload import PAYLOAD_FIELD, ConversationProjectionTooLarge
+from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.encryption import encrypt, decrypt
 
 _LIVE_INPUT_SCOPE = (
@@ -115,6 +119,25 @@ def _strict_live_append(frozen, current):
     return True
 
 
+def _stage_summary_patch(tx, ref, snapshot, raw, current, patch):
+    has_payload = PAYLOAD_FIELD in raw
+    allow_promotion = bool(raw.get('v3_derived')) and v3_payload_writes_enabled()
+    if not has_payload and not allow_promotion:
+        tx.update(ref, patch)
+        return
+    try:
+        stage_conversation_payload_patch(
+            tx,
+            snapshot,
+            current,
+            patch,
+            overflow_fields={'structured'} if has_payload else {'transcript_segments'},
+            allow_promotion=allow_promotion,
+        )
+    except ConversationProjectionTooLarge as error:
+        raise Conflict('document_too_large') from error
+
+
 def store_summary(uid, cid, token, revision, structured, covers, *, live_input=None, firestore_client=None):
     client = firestore_client or store.get_firestore_client()
     ref, held = store.user_conversations(client, uid).document(cid), leases.lease_ref(client, uid, 'summary-' + cid)
@@ -140,34 +163,36 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
         snapshot = ref.get(transaction=tx)
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
         ):
             raise Conflict('account_deletion')
         lease = held.get(transaction=tx).to_dict() or {}
-        current = snapshot.to_dict() or {}
+        raw = snapshot.to_dict() or {}
         if (
             not snapshot.exists
-            or not python_owns_finalization(current)
-            or current.get('deleted')
-            or current.get('is_locked')
+            or not python_owns_finalization(raw)
+            or raw.get('deleted')
+            or raw.get('is_locked')
             or lease.get('token') != token
             or not lease.get('until')
             or lease['until'] <= datetime.now(timezone.utc)
         ):
             raise Conflict('summary_source_changed')
+        current = store.read_projection_snapshot(snapshot, data=raw, firestore_client=client, transaction=tx)
         if live_input is not None:
             if not policy.live_summary_target(current) or (
                 snapshot.update_time != revision
-                and not _strict_live_append(live_input, store.decode_row(uid, snapshot))
+                and not _strict_live_append(live_input, store.decode_row(uid, snapshot, data=current))
             ):
                 raise Conflict('summary_source_changed')
-            tx.update(ref, {policy.LIVE_SUMMARY_FIELD: live_cache})
+            _stage_summary_patch(tx, ref, snapshot, raw, current, {policy.LIVE_SUMMARY_FIELD: live_cache})
             return False
         if snapshot.update_time != revision:
             raise Conflict('summary_source_changed')
+        notes = dict(patch['structured'])
         if current.get('title_locked'):
-            patch['structured']['title'] = (current.get('structured') or {}).get('title', '')
-            patch['structured']['emoji'] = (current.get('structured') or {}).get('emoji', '')
+            notes['title'] = (current.get('structured') or {}).get('title', '')
+            notes['emoji'] = (current.get('structured') or {}).get('emoji', '')
         # The scoped reconcile may time out while its outline is still running.
         # A successful scoped reconcile can also have locked the card before notes are written.
         # Finish either explicit Open path here while retaining any other owed processing.
@@ -192,16 +217,21 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
                 {**current, **open_lock, 'v3_notes_written': True, 'v3_process_failed': False, 'tile_state': 'done'}
             )
         )
-        tx.update(
+        _stage_summary_patch(
+            tx,
             ref,
+            snapshot,
+            raw,
+            current,
             {
                 **patch,
+                'structured': notes,
                 **open_lock,
                 'summary_covers_through': covers,
                 **({'tile_state': 'done', 'v3_process_failed': False, 'summary_retryable': False} if settled else {}),
                 **(
                     {'title_locked': True}
-                    if current.get('v3_derived') and not current.get('home_hidden') and patch['structured'].get('title')
+                    if current.get('v3_derived') and not current.get('home_hidden') and notes.get('title')
                     else {}
                 ),
                 **({'v3_notes_written': True} if settled else {}),
@@ -245,15 +275,40 @@ def settle_processing(
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
             raise Conflict('processing_source_changed')
         if not row or not python_owns_finalization(row):
-            return False, False
+            return False, False, None, False
+        if not row.get('deleted') and not row.get('is_locked'):
+            row = store.read_projection_snapshot(snapshot, data=row, firestore_client=client, transaction=tx)
         if not skipped and not row.get('deleted') and row.get('sync_content_revision') != revision:
-            decoded = store.decode_row(uid, snapshot)
+            decoded = store.decode_row(uid, snapshot, data=row, firestore_client=client, transaction=tx)
             if not content_hash or processing_hash(decoded) != content_hash:
                 raise Conflict('processing_source_changed')
         written = bool(notes and not skipped and not row.get('deleted'))
         armed = written and policy.created_eligible(
             {**row, 'v3_notes_written': True, 'v3_process_failed': False, 'v3_process_pending': False}
         )
+        settled = (
+            not skipped
+            and not row.get('deleted')
+            and row.get('status') == 'completed'
+            and row.get('v3_process_pending') is True
+        )
+        manual_visibility = None
+        if (
+            settled
+            and row.get('v3_derived')
+            and row.get('manual_end')
+            and not row.get('backfilled')
+            and not row.get('discarded')
+            and not row.get('v3_manual_end_home_counted')
+        ):
+            # Same row filters as the Home feed (database/home_feed._visible) for a derived row.
+            visible = (
+                not row.get('sync_merged_into')
+                and not is_relevance_discarded(row)
+                and conversations.is_visible_conversation(row, hide_home=True, presentation=True)
+            )
+            kind = row.get('kind') if row.get('kind') in metrics.MANUAL_END_KINDS else 'other'
+            manual_visibility = ('visible' if visible else 'hidden', kind)
         tx.update(
             ref,
             {
@@ -271,17 +326,17 @@ def settle_processing(
                 ),
                 **({'v3_notes_written': True} if written else {}),
                 **({'v3_created_pending': True} if armed else {}),
+                # First settlement only: a late rewrite re-settles the same row and must not count again.
+                **({'v3_manual_end_home_counted': True} if manual_visibility is not None else {}),
             },
         )
-        settled = (
-            not skipped
-            and not row.get('deleted')
-            and row.get('status') == 'completed'
-            and row.get('v3_process_pending') is True
-        )
-        return armed, settled
+        return armed, settled, manual_visibility, manual_visibility is not None and row.get(FINISH_WINDOW_FIELD) == cid
 
-    armed, settled = settle(client.transaction())
+    armed, settled, manual_visibility, finish_settled = settle(client.transaction())
+    if manual_visibility is not None:
+        metrics.MANUAL_END_HOME.labels(*manual_visibility).inc()
+    if finish_settled:
+        metrics.FINISH_NO_POINTER.labels('settled').inc()
     if settled and word_floor_outcomes is not None:
         metrics.observe_word_floor(*word_floor_outcomes)
     return armed
@@ -487,7 +542,11 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
             tx.update(ref, {'v3_process_pending': False, 'tile_state': 'done', 'v3_process_failed': False})
             return False
         if row.get('sync_content_revision') != revision:
-            if not content_hash or processing_hash(store.decode_row(uid, snapshot)) != content_hash:
+            if (
+                not content_hash
+                or processing_hash(store.decode_row(uid, snapshot, firestore_client=client, transaction=tx))
+                != content_hash
+            ):
                 raise Conflict('processing_source_changed')
         tx.update(ref, failure_patch(retryable=retryable))
         return not row.get('v3_process_failed')

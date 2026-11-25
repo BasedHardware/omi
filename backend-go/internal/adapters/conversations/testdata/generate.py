@@ -13,6 +13,7 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import UUID
+import zlib
 
 OWNER = 'conversation-fixture-owner'
 KEY = 'conversation adapter synthetic fixture key'
@@ -65,6 +66,45 @@ def main():
     (HERE / 'python_wire.json').write_text(
         json.dumps(fixture, default=wire, sort_keys=True, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
     )
+    generate_payload_fixture()
+
+
+def generate_payload_fixture():
+    from utils import conversation_payload
+
+    fixtures = {}
+    for name in ('transcript', 'structured'):
+        # Both fixtures cross the service limit. The structured fixture
+        # also packs the notes and their unrelated metadata.
+        structured = name == 'structured'
+        padding = conversation_payload.FIRESTORE_MAX_DOCUMENT_BYTES
+        row = {
+            'status': 'processing',
+            'transcript_segments': [
+                {
+                    'id': 's1',
+                    'text': 'synthetic note ☕',
+                    'start': 0.25,
+                    'end': 2.5,
+                    'is_user': True,
+                    'padding': '_' * padding,
+                }
+            ],
+        }
+        if structured:
+            row['structured'] = {
+                'title': 'Spilled title',
+                'overview': 'Spilled overview',
+                'metadata': {'tag': '原文', 'count': 7, 'absent_value': None},
+            }
+        packed = conversation_payload.pack_conversation(
+            row,
+            'users/synthetic/conversations/test',
+            spill_fields=set(row) - {'status'},
+            generation='a' * 32,
+        )
+        fixtures[name] = [base64.b64encode(zlib.compress(chunk)).decode('ascii') for chunk in packed.chunks]
+    (HERE / 'python_payload.json').write_text(json.dumps(fixtures, indent=2) + '\n', encoding='utf-8')
 
 
 def collect(docs, formats, speech, started, finished, conversations, decode_stored_transcript):

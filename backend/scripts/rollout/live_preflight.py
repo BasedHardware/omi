@@ -33,6 +33,7 @@ RAMP_NAMES = frozenset(
         'legacy-sync',
         'batch-vendor-routing',
         'new-owner-cell1',
+        'go-finalization',
     }
 )
 
