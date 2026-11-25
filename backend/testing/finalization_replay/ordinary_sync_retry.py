@@ -10,7 +10,13 @@ import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import yaml
+
+from routers import enrichment
+from testing.fakes.cloud_tasks_queue import CloudTasksQueue, QueueConfig
 from testing.finalization_replay.metrics import suspend_meter
+from utils import cloud_tasks
+from utils.enrichment import age_gate, outbox
 
 UNREADABLE = 'unreadable-ciphertext-dead-letters'
 
@@ -28,16 +34,6 @@ def check_ciphertext(before, after):
 
 
 def retry_to_park(state, worker_backend):
-    import yaml
-
-    from routers import enrichment
-
-    # The shared fake imports the enrichment router. Load it only after the
-    # diagnostic selects the pinned worker's Python packages.
-    from testing.fakes.cloud_tasks_queue import CloudTasksQueue, QueueConfig
-    from utils import cloud_tasks
-    from utils.enrichment import age_gate, outbox
-
     with suspend_meter():
         original = state.conversation.get().to_dict()
     created = original['created_at'].timestamp()

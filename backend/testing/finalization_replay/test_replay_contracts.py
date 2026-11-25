@@ -79,13 +79,17 @@ class ReplayContractTests(unittest.TestCase):
             ('/python/firestore_operations/batch_pipeline_privacy_document', 'invalid_operations'),
         ]
         self.assertTrue(
-            all(is_unreadable_retry_consequence({'path': path, 'kind': kind}) for path, kind in consequence_rows)
+            all(
+                is_unreadable_retry_consequence({'path': path, 'kind': kind, 'unreadable_terminal_consequence': True})
+                for path, kind in consequence_rows
+            )
         )
         self.assertFalse(
             is_unreadable_retry_consequence(
                 {
                     'path': '/python/derived_documents/batch_pipeline_privacy~1hash/memo_token',
                     'kind': 'missing_evidence',
+                    'unreadable_terminal_consequence': True,
                 }
             )
         )
@@ -94,13 +98,14 @@ class ReplayContractTests(unittest.TestCase):
                 {
                     'path': '/conversation/finalization_status/extra',
                     'kind': 'missing_in_python',
+                    'unreadable_terminal_consequence': True,
                 }
             )
         )
 
         differences = [
-            {'path': '/status', 'kind': 'different_value'},
-            *({'path': path, 'kind': kind} for path, kind in consequence_rows),
+            {'path': '/status', 'kind': 'different_value', 'unreadable_terminal_consequence': True},
+            *({'path': path, 'kind': kind, 'unreadable_terminal_consequence': True} for path, kind in consequence_rows),
         ]
         report = {
             'commit_sha': 'fixture',
@@ -138,6 +143,17 @@ class ReplayContractTests(unittest.TestCase):
                 'unreadable_ciphertext_retry_until_age_gate': 10,
             },
         )
+        for row in differences:
+            row.pop('label')
+            row.pop('reason')
+            row.pop('issue')
+        for row in (differences[0], differences[-1]):
+            row.pop('unreadable_terminal_consequence')
+        report['unexplained_differences'] = len(differences)
+        enriched = enrich_ordinary_sync_report(report)
+        self.assertIsNone(differences[0]['label'])
+        self.assertIsNone(differences[-1]['label'])
+        self.assertEqual(enriched['diagnostic']['cohort_gate'], 'closed')
 
     def test_missing_profile_or_task_write_proof_is_counted_as_go_gap(self):
         report = {

@@ -89,8 +89,4 @@ if [[ $compare_status -gt 2 ]]; then
 fi
 
 "$python_bin" -I "$repo/backend/testing/finalization_replay/ordinary_sync_diag_report.py" "$output"
-if grep -q '"failed_cases": [1-9]' "$output"; then
-    echo 'Ordinary-sync execution errors: cost comparisons are invalid.' >&2
-    exit 2
-fi
 echo "Ordinary-sync diagnostic complete for $worker_ref; this target is not the lane 7 gate."

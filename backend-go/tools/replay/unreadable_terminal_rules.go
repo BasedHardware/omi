@@ -24,6 +24,7 @@ func markUnreadableTerminalConsequences(entry *caseReport, python, goRun *observ
 		return
 	}
 	terminalPaths := map[string]string{
+		"/status":                           "different_value",
 		"/conversation/finalization_status": "missing_in_python",
 		"/go/admitted":                      "invalid_binding",
 	}

@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"maps"
 	"strings"
 	"testing"
 )
@@ -237,6 +238,30 @@ func TestTranscriptComparesSemanticFieldsAndPreservesNonDefaults(t *testing.T) {
 	mustMap(goRun.Document)["transcript_segments"] = encryptedTranscript(t, goSegments, 23)
 	if diffs := compareObservations(python, goRun); !hasUnexplainedAt(diffs, "/conversation/transcript_segments") {
 		t.Fatalf("different transcript text was excused: %+v", diffs)
+	}
+}
+
+func TestTranscriptRejectsNonDefaultGoValuesAgainstExplicitAndOmittedDefaults(t *testing.T) {
+	for _, explicit := range []bool{true, false} {
+		py, goRun := ruleRun(), ruleRun()
+		pySegment := map[string]any{
+			"text": "capture", "start": json.Number("0"), "end": json.Number("1"), "is_user": false,
+		}
+		goSegment := maps.Clone(pySegment)
+		if explicit {
+			pySegment["person_id"] = nil
+		}
+		goSegment["person_id"] = "wrong-person"
+		py.Document = map[string]any{
+			"transcript_segments": encryptedTranscript(t, []any{pySegment}, 25), "transcript_segments_compressed": true,
+		}
+		goRun.Document = map[string]any{
+			"transcript_segments": encryptedTranscript(t, []any{goSegment}, 26), "transcript_segments_compressed": true,
+		}
+		diffs := compareObservations(py, goRun)
+		if !hasUnexplainedAt(diffs, "/conversation/transcript_segments") {
+			t.Fatalf("Go person_id was excused (explicit Python default %t): %+v", explicit, diffs)
+		}
 	}
 }
 

@@ -56,6 +56,7 @@ REVIEWED_GO_GAP_ROWS = {
     ('transcript-whitespace', '/conversation', 'transcript_segments'),
 }
 UNREADABLE_RETRY_CONSEQUENCE_PATHS = {
+    '/status': 'different_value',
     '/conversation/finalization_status': 'missing_in_python',
     '/go/admitted': 'invalid_binding',
     '/python/batch_pipeline_privacy/final': 'missing_document',
@@ -191,6 +192,8 @@ def is_go_coordination_stamp_difference(difference: dict) -> bool:
 
 
 def is_unreadable_retry_consequence(difference: dict) -> bool:
+    if difference.get('unreadable_terminal_consequence') is not True:
+        return False
     path = difference.get('path', '')
     kind = difference.get('kind')
     if UNREADABLE_RETRY_CONSEQUENCE_PATHS.get(path) == kind:
@@ -319,6 +322,7 @@ def enrich(report: dict) -> dict:
     home_receipt_rows = 0
     home_receipt_side_traces = {}
     raw_unexplained = report.get('unexplained_differences', 0)
+    failed_cases = report.get('failed_cases', 0)
     operation_table = []
     operation_overages = []
     provided_operation_rows = {row.get('case'): row for row in report.get('operation_table', [])}
@@ -366,10 +370,12 @@ def enrich(report: dict) -> dict:
         else:
             operation_row = dict(operation_row)
         operation_table.append(operation_row)
-        if operation_row['difference'] > 0:
+        if case.get('errors'):
+            operation_row['label'] = None
+        elif operation_row['difference'] > 0:
             operation_overages.append({'case': operation_row['case'], 'difference': operation_row['difference']})
 
-        unreadable_park = validate_unreadable_park(case)
+        unreadable_park = not case.get('errors') and validate_unreadable_park(case)
         captured_receipt_trace = case.get('home_dirty_receipt_trace') or {}
         case['home_dirty_receipt_trace'] = {side: captured_receipt_trace.get(side, {}) for side in ('python', 'go')}
         case.pop('cost', None)
@@ -419,10 +425,6 @@ def enrich(report: dict) -> dict:
             elif is_go_coordination_stamp_difference(difference):
                 label = 'by_design:go_coordination_stamp'
                 difference['reason'] = 'go_coordination_stamp'
-            elif unreadable_park and difference.get('path') == '/status':
-                label = UNREADABLE_RETRY_BUG
-                difference['issue'] = UNREADABLE_RETRY_ISSUE
-                difference['reason'] = UNREADABLE_PARK_RULE
             elif unreadable_park and is_unreadable_retry_consequence(difference):
                 label = UNREADABLE_RETRY_BUG
                 difference['issue'] = UNREADABLE_RETRY_ISSUE
@@ -483,7 +485,7 @@ def enrich(report: dict) -> dict:
             'label': 'go_gap:ops',
             'over_budget_case_count': len(operation_overages),
             'over_budget_cases': operation_overages,
-            'status': 'blocked' if operation_overages else 'pass',
+            'status': 'invalid' if failed_cases else 'blocked' if operation_overages else 'pass',
         },
         'unexplained_gate': {
             'rule': 'go_gap + unlabelled; python_bug exceptions are reported separately',
@@ -522,7 +524,7 @@ def enrich(report: dict) -> dict:
                 int(group['group']) for group in pass3_groups if not pass3_matches_by_group[group['group']]
             ],
         },
-        'cohort_gate': 'closed' if unexplained_gate_count or operation_overages else 'open',
+        'cohort_gate': 'closed' if failed_cases or unexplained_gate_count or operation_overages else 'open',
         'raw_unexplained_differences': raw_unexplained,
         'allowed_by_rule': dict(sorted(allowed_by_rule.items())),
         'approved_rule_reference': 'backend-go/tools/replay/comparison-rules.md',
@@ -596,6 +598,9 @@ def main():
         f"R7: {enriched['diagnostic']['r7_operation_budget']['over_budget_case_count']} cases over "
         f"Go <= Python; cohort gate {enriched['diagnostic']['cohort_gate']}"
     )
+    if enriched.get('failed_cases', 0):
+        print('Ordinary-sync execution errors: cost comparisons are invalid.', file=sys.stderr)
+        raise SystemExit(2)
 
 
 if __name__ == '__main__':

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -166,6 +167,9 @@ func approvedTimestampDifference(path string, python, goRun *observation) string
 			}
 			return ""
 		}
+		if timestampPreserved(python, "", field) || timestampPreserved(goRun, "", field) {
+			return ""
+		}
 		if approvedConversationUnixSecondFields[field] {
 			pyValue, pyOK := nestedField(python.Document, field)
 			goValue, goOK := nestedField(goRun.Document, field)
@@ -190,6 +194,9 @@ func approvedTimestampDifference(path string, python, goRun *observation) string
 	docPath := parts[1]
 	field := strings.Join(parts[2:], "/")
 	field = strings.TrimSuffix(field, "/$timestamp")
+	if timestampPreserved(python, docPath, field) || timestampPreserved(goRun, docPath, field) {
+		return ""
+	}
 	if memoryItemDocumentPath(docPath) && field == "expires_at" {
 		pyDoc, pyOK := python.Derived[docPath].(map[string]any)
 		goDoc, goOK := goRun.Derived[docPath].(map[string]any)
@@ -216,6 +223,12 @@ func approvedTimestampDifference(path string, python, goRun *observation) string
 	return ""
 }
 
+// A clock qualifies as preserved only with positive evidence from the seed
+// snapshot. For the conversation, the observation uses an empty document key.
+func timestampPreserved(run *observation, docPath, field string) bool {
+	return slices.Contains(run.PreservedFields[docPath], field)
+}
+
 func validateTimestampEvidence(diffs *[]difference, side string, run *observation) {
 	if run == nil {
 		return
@@ -231,12 +244,12 @@ func validateTimestampEvidence(diffs *[]difference, side string, run *observatio
 		addDifference(diffs, "/"+side+"/conversation/updated_at", "invalid_clock")
 	}
 	for field := range approvedConversationTimestampFields {
-		if value, exists := conversation[field]; exists && !validTimestampValue(run, value) {
+		if value, exists := conversation[field]; exists && !timestampPreserved(run, "", field) && !validTimestampValue(run, value) {
 			addDifference(diffs, "/"+side+"/conversation/"+field, "invalid_clock")
 		}
 	}
 	for field := range approvedConversationUnixSecondFields {
-		if value, exists := conversation[field]; exists && !validUnixSecondValue(run, value) {
+		if value, exists := conversation[field]; exists && !timestampPreserved(run, "", field) && !validUnixSecondValue(run, value) {
 			addDifference(diffs, "/"+side+"/conversation/"+field, "invalid_clock")
 		}
 	}
@@ -322,8 +335,9 @@ func validateNestedTimestampFields(diffs *[]difference, side string, run *observ
 			fieldPath = prefix + "/" + field
 		}
 		if rule, ok := timestampRuleForDocument(docPath, fieldPath); ok {
-			if !validTimestampValueWithin(run, value, rule.kind == firestoreTimestamp, rule.grace) ||
-				!additionalTimestampRuleValid(run, docPath, docAtPath(root, strings.Split(fieldPath, "/")), field) {
+			if !timestampPreserved(run, docPath, fieldPath) &&
+				(!validTimestampValueWithin(run, value, rule.kind == firestoreTimestamp, rule.grace) ||
+					!additionalTimestampRuleValid(run, docPath, docAtPath(root, strings.Split(fieldPath, "/")), field)) {
 				addDifference(diffs, "/"+side+"/derived_documents/"+escapePointer(docPath)+"/"+fieldPath, "invalid_clock")
 			}
 			continue

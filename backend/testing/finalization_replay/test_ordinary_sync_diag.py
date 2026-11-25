@@ -1,4 +1,10 @@
+import ast
 from concurrent.futures import ThreadPoolExecutor
+import json
+from pathlib import Path
+import subprocess
+import sys
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 
@@ -8,6 +14,33 @@ from testing.finalization_replay.ordinary_sync_diag_report import enrich, family
 
 
 class OrdinarySyncDiagnosticTests(unittest.TestCase):
+    def test_pinned_replay_bindings_have_no_function_local_imports(self):
+        for module in ('ordinary_sync_diag', 'ordinary_sync_runtime', 'ordinary_sync_retry', 'memo_bindings', 'state'):
+            source = Path(__file__).with_name(f'{module}.py')
+            for node in ast.walk(ast.parse(source.read_text(encoding='utf-8'))):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    self.assertFalse(
+                        any(isinstance(child, (ast.Import, ast.ImportFrom)) for child in ast.walk(node)),
+                        f'{module}:{node.lineno} imports inside {node.name}',
+                    )
+
+    def test_failed_case_closes_report_gate_and_exits_nonzero(self):
+        # Use the unreadable fixture to prove execution failure also bypasses
+        # exception validation and still persists the report for inspection.
+        report = {
+            'failed_cases': 1,
+            'cases': [{'name': 'unreadable-ciphertext-dead-letters', 'errors': {'go': 'UnexpectedGoOutcome'}}],
+        }
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / 'report.json'
+            path.write_text(json.dumps(report), encoding='utf-8')
+            script = Path(__file__).with_name('ordinary_sync_diag_report.py')
+            result = subprocess.run([sys.executable, '-I', script, path], capture_output=True, check=False)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            diagnostic = json.loads(path.read_text(encoding='utf-8'))['diagnostic']
+        self.assertEqual(diagnostic['cohort_gate'], 'closed')
+        self.assertEqual(diagnostic['r7_operation_budget']['status'], 'invalid')
+
     def test_memo_probe_suspends_only_its_own_meter(self):
         state = SimpleNamespace(cost_measured=False)
         with measure(state), ThreadPoolExecutor(max_workers=1) as executor:
@@ -130,7 +163,7 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
                         'callback_pending_attempts': 2,
                     },
                     'differences': [
-                        {'path': '/status', 'kind': 'different_value'},
+                        {'path': '/status', 'kind': 'different_value', 'unreadable_terminal_consequence': True},
                         {'path': '/conversation/transcript_segments', 'kind': 'different_value'},
                     ],
                 }
@@ -328,7 +361,9 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
                         },
                     }
                 )
-                differences.append({'path': '/status', 'kind': 'different_value'})
+                differences.append(
+                    {'path': '/status', 'kind': 'different_value', 'unreadable_terminal_consequence': True}
+                )
             differences.append(
                 {
                     'path': f'/go/derived_documents/users~1replay-{name}~1episode_links~1{name}/attach_memo_evidence',

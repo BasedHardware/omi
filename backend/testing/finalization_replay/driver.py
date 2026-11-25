@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack, redirect_stdout, redirect_stderr
 from datetime import datetime, timezone
+import importlib
 import json
 import logging
 import os
@@ -34,7 +35,8 @@ def _observe(state, run, output, side, *, setup=None):
                     setup(state)
             status = run(state)
         with suspend_meter():
-            output[side] = state.observe(status, before)
+            bindings = importlib.import_module('testing.finalization_replay.memo_bindings')
+            output[side] = state.observe(status, before, memo_bindings=bindings)
     except Exception as error:
         output['errors'][side] = type(error).__name__
         finished = datetime.now(timezone.utc)

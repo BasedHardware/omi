@@ -109,10 +109,10 @@ func protectedDifferenceEvidence(path string, python, goRun *observation) (strin
 		if !transcriptSemanticsEqual(pyPlain, goPlain) {
 			return "", "transcript_semantics_mismatch"
 		}
-		if !goPreservesPythonStoredFields(pyPlain, goPlain) {
-			return "", "python_stored_segment_field_missing_in_go"
+		if !transcriptStoredFieldsEqual(pyPlain, goPlain) {
+			return "", "transcript_stored_fields_mismatch"
 		}
-		return "transcript semantic fields match and Go preserves every non-default Python segment field", ""
+		return "transcript semantic and non-default stored fields match", ""
 	case "user_corrections":
 		if !equalReplayValue(pyPlain, goPlain) {
 			return "", "corrections_plaintext_mismatch"
@@ -287,7 +287,7 @@ func transcriptSemanticsEqual(python, goRun any) bool {
 	return true
 }
 
-func goPreservesPythonStoredFields(python, goRun any) bool {
+func transcriptStoredFieldsEqual(python, goRun any) bool {
 	pySegments, pyOK := python.([]any)
 	goSegments, goOK := goRun.([]any)
 	if !pyOK || !goOK || len(pySegments) != len(goSegments) {
@@ -299,14 +299,21 @@ func goPreservesPythonStoredFields(python, goRun any) bool {
 		if !pyOK || !goOK {
 			return false
 		}
-		for field, value := range py {
-			if isTranscriptDefault(field, value, py) {
-				continue
-			}
-			goValue, exists := goSegment[field]
-			if !exists || !equalReplayValue(value, goValue) {
-				return false
-			}
+		if !segmentFieldsMatch(py, goSegment) || !segmentFieldsMatch(goSegment, py) {
+			return false
+		}
+	}
+	return true
+}
+
+func segmentFieldsMatch(left, right map[string]any) bool {
+	for field, value := range left {
+		other, exists := right[field]
+		if exists && equalReplayValue(value, other) {
+			continue
+		}
+		if !isTranscriptDefault(field, value, left) || (exists && !isTranscriptDefault(field, other, right)) {
+			return false
 		}
 	}
 	return true

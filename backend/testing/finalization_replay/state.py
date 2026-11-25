@@ -8,6 +8,7 @@ import re
 from threading import Lock
 
 from testing.finalization_replay.corpus import FIXED_DATE, pack, seed_document
+from testing.finalization_replay.metrics import embedding_token_estimate, prompt_token_estimate, token_estimate
 
 # Python stores its queue and queue metrics projection in Firestore. Go stores
 # the queue in Postgres. The disposition is compared separately from these rows.
@@ -50,6 +51,19 @@ def _same_snapshot_value(left, right):
     return left == right
 
 
+def _preserved_fields(before, after, prefix=''):
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        return
+    for field in sorted(before.keys() & after.keys()):
+        # Timestamp rules address nested fields with slash-separated paths.
+        if '/' in field:
+            continue
+        path = prefix + field
+        if _same_snapshot_value(before[field], after[field]):
+            yield path
+        yield from _preserved_fields(before[field], after[field], path + '/')
+
+
 def _documents(collection):
     # list_documents also returns missing parents that own populated subcollections.
     for ref in collection.list_documents():
@@ -65,11 +79,6 @@ def _episode_attach_memo_failure_reason(
 ):
     """Return a value-free failure code when this side's attach memo check fails."""
     try:
-        if transcript_decoder is None:
-            from database.conversations import decode_transcript_segments_verified as transcript_decoder
-        if content_key_fn is None:
-            from utils.conversations.episode_attach_key import content_key as content_key_fn
-
         link_path = f'users/{uid}/episode_links/{cid}'
         link = derived_documents.get(link_path)
         if not isinstance(link, dict):
@@ -132,10 +141,8 @@ def episode_attach_memo_failure_reason(
     )
 
 
-def ordinary_sync_attach_memo_failure_reason(uid, cid, conversation, documents, *, python_keys=None, key_fn=None):
+def ordinary_sync_attach_memo_failure_reason(uid, cid, conversation, documents, *, key_fn, python_keys=None):
     """Verify final Go memo binding or the proven Python skip-cache fallthrough."""
-    if key_fn is None:
-        from database.episode_attach_memo import current_key as key_fn
     final_key = key_fn(uid, conversation)
     link = documents.get(f'users/{uid}/episode_links/{cid}')
     if link is None and python_keys is not None:
@@ -209,8 +216,6 @@ class CaseState:
         self.home_dirty_receipt_trace = {'set_true': 0, 'set_false': 0, 'deleted': 0, 'other_write': 0}
 
     def record_provider_call(self, feature, prompt, completion):
-        from testing.finalization_replay.metrics import prompt_token_estimate, token_estimate
-
         prompt_tokens = prompt_token_estimate(prompt)
         completion_tokens = token_estimate(completion)
         with self._metrics_lock:
@@ -220,8 +225,6 @@ class CaseState:
         return prompt_tokens, completion_tokens
 
     def record_embedding_request(self, values):
-        from testing.finalization_replay.metrics import embedding_token_estimate
-
         if not isinstance(values, list):
             values = [values]
         with self._metrics_lock:
@@ -323,7 +326,8 @@ class CaseState:
         }
 
     def start(self):
-        self.initial_updated_at = (self.conversation.get().to_dict() or {}).get('updated_at')
+        self.initial_conversation = self.conversation.get().to_dict() or {}
+        self.initial_updated_at = self.initial_conversation.get('updated_at')
         self.batch_privacy_seed = self.batch_privacy_snapshot()
         self.started_at = datetime.now(timezone.utc)
 
@@ -332,7 +336,7 @@ class CaseState:
         snapshot = self.client.collection(collection).document(document).get()
         return {'exists': snapshot.exists, 'fields': pack(snapshot.to_dict() or {})}
 
-    def observe(self, status, before):
+    def observe(self, status, before, *, memo_bindings=None):
         after = self.documents()
         changed_documents = {
             path: after.get(path)
@@ -350,6 +354,12 @@ class CaseState:
         else:
             derived_documents = changed_documents
         document = self.conversation.get().to_dict()
+        preserved_fields = {
+            path: fields
+            for path, row in derived_documents.items()
+            if (fields := list(_preserved_fields(before.get(path), row)))
+        }
+        preserved_fields[''] = list(_preserved_fields(pack(getattr(self, 'initial_conversation', {})), pack(document)))
         memo_expected = False
         side = getattr(self, 'replay_side', None)
         if side in {'python', 'go'}:
@@ -360,10 +370,9 @@ class CaseState:
                 stored,
                 derived_documents,
                 python_keys=self.episode_attach_memo_writer_keys if side == 'python' else None,
+                key_fn=memo_bindings.current_key,
             )
             if side == 'go':
-                from utils.conversations.episode_attach_key import memo_eligible
-
                 link = derived_documents.get(self.home_dirty_receipt_path) or {}
                 memo_expected = bool(
                     link.get('attach_finalized') is not None
@@ -371,7 +380,7 @@ class CaseState:
                         status == 'completed'
                         and stored.get('episode_id')
                         and stored.get('summary_output_present') is True
-                        and memo_eligible(stored)
+                        and memo_bindings.memo_eligible(stored)
                     )
                 )
         else:
@@ -380,6 +389,8 @@ class CaseState:
                 getattr(self, 'cid', ''),
                 document or {},
                 derived_documents,
+                transcript_decoder=memo_bindings.decode_transcript_segments_verified if memo_bindings else None,
+                content_key_fn=memo_bindings.content_key if memo_bindings else None,
             )
         empty_privacy = {'exists': False, 'fields': {}}
         privacy_seed = getattr(self, 'batch_privacy_seed', None) or empty_privacy
@@ -391,6 +402,7 @@ class CaseState:
             'status': status,
             'queue_fanout_key': self.queue_fanout_key,
             'updated_at_changed': (document or {}).get('updated_at') != self.initial_updated_at,
+            'preserved_fields': preserved_fields,
             'admitted': self.admitted,
             'episode_attach_memo_valid': not memo_failure_reason,
             'episode_attach_memo_expected': memo_expected,

@@ -43,6 +43,7 @@ type observation struct {
 	SeededTokenHashes              []string                   `json:"seeded_token_hashes"`
 	QueueFanout                    string                     `json:"queue_fanout_key"`
 	UpdatedAtChanged               bool                       `json:"updated_at_changed"`
+	PreservedFields                map[string][]string        `json:"preserved_fields,omitempty"`
 	Admitted                       *admission                 `json:"admitted"`
 	EpisodeAttachMemoValid         bool                       `json:"episode_attach_memo_valid"`
 	EpisodeAttachMemoExpected      bool                       `json:"episode_attach_memo_expected,omitempty"`

@@ -1,10 +1,45 @@
 package main
 
 import (
+	"encoding/json"
+	"maps"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestPreservedClocksCompareLiterallyAndCannotExcuseWrites(t *testing.T) {
+	const doc = "users/u/episodes/e"
+	py, goRun := ruleRun(), ruleRun()
+	historical := wrappedStamp(ruleStart.Add(-time.Hour))
+	historicalUnix := json.Number(strconv.FormatInt(ruleStart.Add(-time.Hour).Unix(), 10))
+	for _, run := range []*observation{py, goRun} {
+		run.Document = map[string]any{"notes_written_at": historical, "summary_completed_at": historicalUnix}
+		run.Derived[doc] = map[string]any{"title_changed_at": historical}
+		run.PreservedFields = map[string][]string{
+			"":  {"notes_written_at", "summary_completed_at"},
+			doc: {"title_changed_at"},
+		}
+	}
+	if diffs := compareObservations(py, goRun); len(diffs) != 0 {
+		t.Fatalf("unchanged historical clocks generated findings: %+v", diffs)
+	}
+
+	// Even a preserved timestamp that falls inside the window cannot excuse a write.
+	inWindow := wrappedStamp(ruleStart.Add(time.Minute))
+	mustMap(py.Document)["notes_written_at"] = inWindow
+	mustMap(goRun.Document)["notes_written_at"] = wrappedStamp(ruleStart.Add(2 * time.Minute))
+	goRun.PreservedFields = maps.Clone(goRun.PreservedFields)
+	goRun.PreservedFields[""] = []string{"summary_completed_at"}
+	goRun.PreservedFields[doc] = nil
+	mustMap(goRun.Derived[doc])["title_changed_at"] = wrappedStamp(ruleStart.Add(-2 * time.Hour))
+	diffs := compareObservations(py, goRun)
+	if !hasUnexplainedAt(diffs, "/conversation/notes_written_at/$timestamp") ||
+		!hasKindPath(diffs, "invalid_clock", "/go/derived_documents/"+escapePointer(doc)+"/title_changed_at") {
+		t.Fatalf("a preserved clock cleared a written clock: %+v", diffs)
+	}
+}
 
 func TestPostFinishClockGraceIsFiveSecondsAndFieldScoped(t *testing.T) {
 	for _, test := range []struct {

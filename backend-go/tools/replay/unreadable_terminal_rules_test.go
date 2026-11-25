@@ -19,6 +19,7 @@ func TestUnreadableTerminalConsequencesSurviveValueFreeReport(t *testing.T) {
 		Differences: []difference{
 			{Path: "/go/admitted", Kind: "invalid_binding"},
 			{Path: "/go/admitted/other", Kind: "invalid_binding"},
+			{Path: "/status", Kind: "different_value"},
 		},
 	}
 	markUnreadableTerminalConsequences(&entry, python, goRun)
@@ -26,7 +27,7 @@ func TestUnreadableTerminalConsequencesSurviveValueFreeReport(t *testing.T) {
 	stripReportValues(&out)
 	got := out.Cases[0]
 	if got.Python != nil || got.Go != nil || !got.Differences[0].UnreadableTerminalConsequence ||
-		got.Differences[1].UnreadableTerminalConsequence {
+		got.Differences[1].UnreadableTerminalConsequence || !got.Differences[2].UnreadableTerminalConsequence {
 		t.Fatalf("value-free report lost exact terminal evidence: %+v", got)
 	}
 
