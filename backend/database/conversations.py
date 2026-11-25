@@ -48,6 +48,7 @@ from database.conversation_payload import (
     get_conversation_with_payload,
     integration_payload_writes_enabled,
     read_conversation_payload,
+    read_list_conversation_payload,
     stage_conversation_notes_patch,
     stage_conversation_payload_patch,
     v3_payload_writes_enabled,
@@ -1096,11 +1097,12 @@ class _PageFill:
     would charge every full page one more read to save that rare request.
     """
 
-    def __init__(self, conversations_ref, *, limit, budget, visible, scout=None):
+    def __init__(self, conversations_ref, *, limit, budget, visible, read_row, scout=None):
         self.conversations_ref = conversations_ref
         self.limit = limit
         self.budget = budget
         self.visible = visible
+        self.read_row = read_row
         # Lean refills (see :class:`_Scout`); None keeps full-document refills.
         self.scout = scout if scout is not None and hasattr(conversations_ref, 'select') else None
         # Hidden rows of the first, full window that the scout's flags alone would have caught.
@@ -1128,9 +1130,9 @@ class _PageFill:
             fetched = 0
             for doc in budgeted_stream_iter(query, self.budget):
                 fetched += 1
+                conversation = self.read_row(doc)
                 self.consumed += 1
                 self.last_doc = doc
-                conversation = document_data_with_revision(doc)
                 if conversation is None or not self.visible(conversation):
                     self.skipped += 1
                     if self.scout is not None and conversation is not None and self.scout.hidden(conversation):
@@ -1196,7 +1198,7 @@ class _PageFill:
                             break
                         continue
                     if rewind is None:
-                        rewind = (self.consumed, self.last_doc)
+                        rewind = (self.consumed, self.last_doc, self.skipped)
                     self.consumed += 1
                     self.last_doc = doc
                     pending.append(doc)
@@ -1206,7 +1208,7 @@ class _PageFill:
                 self._hydrate(pending)
             except ListReadBudgetExhausted:
                 if rewind is not None:
-                    self.consumed, self.last_doc = rewind
+                    self.consumed, self.last_doc, self.skipped = rewind
                 raise
             if len(self.rows) >= self.limit or self.skipped >= self.cap:
                 # A full page, or the hidden-row cap: more may follow.
@@ -1227,13 +1229,25 @@ class _PageFill:
             )
         }
         self.hydrated += len(pending)
+        rows, skipped = [], 0
         for doc in pending:
             snapshot = snapshots.get(doc.id)
-            conversation = document_data_with_revision(snapshot) if snapshot is not None else None
+            conversation = self.read_row(snapshot) if snapshot is not None else None
             if conversation is None or not self.visible(conversation):
-                self.skipped += 1
+                skipped += 1
                 continue
-            self.rows.append(conversation)
+            rows.append(conversation)
+        # The lean refill rewinds this batch if any of its reads exhaust the budget.
+        self.rows.extend(rows)
+        self.skipped += skipped
+
+
+def _list_conversation_row(snapshot, *, budget, field_paths, hidden):
+    row = document_data_with_revision(snapshot)
+    if row is None or PAYLOAD_FIELD not in row or hidden(row):
+        return row
+    stored = read_list_conversation_payload(db, snapshot, budget, field_paths=field_paths)
+    return _stamp_conversation_revision(stored, snapshot)
 
 
 def _visibility(**options):
@@ -1276,6 +1290,7 @@ def _collect_cursor_conversation_page(
     include_discarded,
     budget,
     bookmark,
+    read_row,
     presentation=False,
     include_recordings=False,
     hide_home=False,
@@ -1292,6 +1307,7 @@ def _collect_cursor_conversation_page(
         conversations_ref,
         limit=limit,
         budget=budget,
+        read_row=read_row,
         visible=_visibility(
             include_discarded=include_discarded,
             presentation=presentation,
@@ -1357,18 +1373,15 @@ def _collect_visible_conversation_page(
         capture_only=capture_only,
         show_held=show_held,
     )
-
-    # Only budgeted list routes refill lean; internal full-document callers keep their reads.
-    scout = (
-        _Scout(
-            sort_field=sort_field,
-            include_recordings=include_recordings,
-            hide_home=hide_home,
-            hydrate_fields=hydrate_fields,
-        )
-        if budget is not None and not include_discarded and _lean_skip_enabled()
-        else None
+    visibility_flags = _Scout(
+        sort_field=sort_field,
+        include_recordings=include_recordings,
+        hide_home=hide_home,
+        hydrate_fields=hydrate_fields,
     )
+    read_row = partial(_list_conversation_row, budget=budget, field_paths=hydrate_fields, hidden=visibility_flags.hidden)
+    # Only budgeted list routes refill lean; internal full-document callers keep their reads.
+    scout = visibility_flags if budget is not None and not include_discarded and _lean_skip_enabled() else None
 
     def finish(rows, last_doc, *, storage_rows, has_more, hidden_rows=0):
         if cursor_page is not None:
@@ -1408,6 +1421,7 @@ def _collect_visible_conversation_page(
                 limit=limit,
                 include_discarded=include_discarded,
                 budget=budget,
+                read_row=read_row,
                 presentation=presentation,
                 include_recordings=include_recordings,
                 hide_home=hide_home,
@@ -1425,8 +1439,8 @@ def _collect_visible_conversation_page(
         has_more = False
         try:
             for doc in budgeted_stream_iter(conversations_ref, budget):
+                conversation = read_row(doc)
                 last_doc = doc
-                conversation = document_data_with_revision(doc)
                 if conversation is None or not visible(conversation):
                     continue
                 if skipped_visible < offset:
@@ -1449,9 +1463,9 @@ def _collect_visible_conversation_page(
             # Nothing was read, so there is no position to resume from; a retry
             # would pay the same charge and stop here again.
             return finish([], None, storage_rows=0, has_more=False)
-    fill = _PageFill(conversations_ref, limit=limit, budget=budget, visible=visible, scout=scout).run(
-        conversations_ref.limit(limit).offset(offset), limit
-    )
+    fill = _PageFill(
+        conversations_ref, limit=limit, budget=budget, visible=visible, read_row=read_row, scout=scout
+    ).run(conversations_ref.limit(limit).offset(offset), limit)
     return finish(
         fill.rows, fill.last_doc, storage_rows=fill.consumed, has_more=fill.has_more, hidden_rows=fill.skipped
     )
@@ -2442,7 +2456,7 @@ def get_conversations(
             for doc in conversations_ref.select(fields).limit(limit).offset(offset).stream()
         ]
 
-    rows = _collect_visible_conversation_page(
+    return _collect_visible_conversation_page(
         conversations_ref,
         limit=limit,
         offset=offset,
@@ -2461,19 +2475,6 @@ def get_conversations(
             starred=starred,
         ),
     )
-    visible_rows = []
-    for row in rows:
-        if PAYLOAD_FIELD in row:
-            ref = db.collection('users').document(uid).collection(conversations_collection).document(row['id'])
-            hydrated, snapshot = get_conversation_with_payload(db, ref)
-            hydrated = _stamp_conversation_revision(hydrated, snapshot)
-            # Keep query membership and visibility tied to the selected revision.
-            # A replacement or deletion after page selection is picked up on refresh.
-            if hydrated is None or hydrated.get('updated_at') != row.get('updated_at'):
-                continue
-            row = hydrated
-        visible_rows.append(row)
-    return visible_rows
 
 
 def get_conversations_count(
@@ -2604,6 +2605,7 @@ def get_conversations_without_photos(
         fields.update(
             {
                 'data_protection_level',
+                PAYLOAD_FIELD,
                 'user_title',
                 'user_corrections_compressed',
                 'deleted',

@@ -1,6 +1,7 @@
 """V3 summary and projection compatibility against a loopback Firestore."""
 
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from random import Random
 from uuid import uuid4
@@ -26,6 +27,7 @@ from utils.conversations.v3 import triggers
 from utils.conversation_payload import PAYLOAD_FIELD
 from utils import conversation_payload as payload_codec
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
+from utils.other.list_budget import ListReadBudget
 
 AT = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -224,6 +226,86 @@ def test_projected_readers_keep_their_field_masks_for_spilled_values(row, monkey
     monkeypatch.setattr(client, 'transaction', revoke_before_snapshot)
     monkeypatch.setattr(client, 'get_all', lambda *_a, **_kw: pytest.fail('read chunks after revoking access'))
     assert conversations.get_public_shared_conversation_bounded(uid, ref.id, firestore_client=client) is None
+
+
+def test_home_and_full_lists_read_chunked_rows_without_advancing_past_the_budget(row, monkeypatch):
+    client, uid, ref = row
+    monkeypatch.setattr(conversations, 'db', client)
+    monkeypatch.setattr(conversations, 'indexed_list_reads_enabled', lambda: True)
+    publish(row, fields={'transcript_segments', 'structured'})
+    ref.update({'discarded': False})
+
+    def home(budget, page, **filters):
+        return conversations.get_conversations_without_photos(
+            uid, limit=1, list_fields_only=True, budget=budget, cursor_page=page, **filters
+        )
+
+    budget = ListReadBudget(deadline_monotonic=time.monotonic() + 10, max_documents=10, strict_documents=True)
+    page = {}
+    [card] = home(budget, page)
+    assert page['storage_rows'] == 1 and budget.docs_scanned > 2
+    assert card['structured']['title'] == 'Locked title'
+    assert 'transcript_segments' not in card
+    assert PAYLOAD_FIELD not in card
+
+    budget = ListReadBudget(deadline_monotonic=time.monotonic() + 10, max_documents=2, strict_documents=True)
+    page = {}
+    assert home(budget, page) == []
+    assert page['storage_rows'] == 0
+    assert budget.exhaustion_reason == 'documents'
+
+    [full] = conversations.get_conversations(uid, limit=1)
+    assert full['structured']['title'] == card['structured']['title']
+    assert full['transcript_segments']
+
+
+def test_home_list_does_not_return_chunks_from_a_replaced_parent_revision(row, monkeypatch):
+    client, uid, ref = row
+    monkeypatch.setattr(conversations, 'db', client)
+    monkeypatch.setattr(conversations, 'indexed_list_reads_enabled', lambda: True)
+    publish(row, fields={'transcript_segments', 'structured'})
+    ref.update({'discarded': False})
+    load = conversations.read_list_conversation_payload
+
+    def replace(client, snapshot, budget, *, field_paths):
+        ref.update({'deleted': True})
+        return load(client, snapshot, budget, field_paths=field_paths)
+
+    monkeypatch.setattr(conversations, 'read_list_conversation_payload', replace)
+    assert conversations.get_conversations_without_photos(uid, limit=1, list_fields_only=True) == []
+
+
+def test_lean_home_refill_skips_hidden_chunks_and_hydrates_the_visible_card(row, monkeypatch):
+    client, uid, ref = row
+    hidden = ref.parent.document('synthetic-hidden')
+    try:
+        monkeypatch.setattr(conversations, 'db', client)
+        monkeypatch.setattr(conversations, 'indexed_list_reads_enabled', lambda: True)
+        monkeypatch.setattr(conversations, '_lean_skip_enabled', lambda: True)
+        publish(row, fields={'transcript_segments', 'structured'})
+        publish((client, uid, hidden), fields={'transcript_segments'}, recording=True)
+        ref.update({'discarded': False})
+        hidden.update({'discarded': False, 'created_at': AT + timedelta(minutes=1)})
+        load = conversations.read_list_conversation_payload
+        reads = []
+
+        def hydrate(client, snapshot, budget, *, field_paths):
+            reads.append(snapshot.id)
+            return load(client, snapshot, budget, field_paths=field_paths)
+
+        monkeypatch.setattr(conversations, 'read_list_conversation_payload', hydrate)
+        budget = ListReadBudget(deadline_monotonic=time.monotonic() + 10, max_documents=16, strict_documents=True)
+        page = {}
+        [card] = conversations.get_conversations_without_photos(
+            uid, limit=1, list_fields_only=True, budget=budget, cursor_page=page
+        )
+        assert reads == [ref.id]
+        assert card['structured']['title'] == 'Locked title'
+        assert page['hidden_rows'] == 1 and page['storage_rows'] == 2
+    finally:
+        for chunk in hidden.collection(PAYLOAD_CHUNKS).list_documents():
+            chunk.delete()
+        hidden.delete()
 
 
 def test_public_reader_refuses_oversized_payload_before_loading_chunks(row, monkeypatch):

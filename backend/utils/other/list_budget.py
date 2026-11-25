@@ -383,7 +383,12 @@ def budgeted_stream_list(query: Any, budget: Optional[ListReadBudget]) -> List[A
 
 
 def budgeted_get_all(
-    client: Any, refs: Iterable[Any], budget: Optional[ListReadBudget], *, field_paths: Optional[List[str]] = None
+    client: Any,
+    refs: Iterable[Any],
+    budget: Optional[ListReadBudget],
+    *,
+    field_paths: Optional[List[str]] = None,
+    transaction: Any = None,
 ) -> List[Any]:
     """Materialize ``client.get_all(refs)`` under the budget.
 
@@ -391,6 +396,8 @@ def budgeted_get_all(
     """
     ref_list = list(refs)
     projection = {'field_paths': field_paths} if field_paths else {}
+    if transaction is not None:
+        projection['transaction'] = transaction
     if budget is None:
         return list(client.get_all(ref_list, **projection))
     timeout = budget.rpc_timeout()
@@ -415,9 +422,17 @@ def budgeted_get_all(
     return snapshots
 
 
-def budgeted_document_get(reference: Any, budget: Optional[ListReadBudget], *, transaction: Any = None) -> Any:
+def budgeted_document_get(
+    reference: Any,
+    budget: Optional[ListReadBudget],
+    *,
+    transaction: Any = None,
+    field_paths: Optional[List[str]] = None,
+) -> Any:
     """``reference.get()`` under the budget."""
     read_options = {'transaction': transaction} if transaction is not None else {}
+    if field_paths is not None:
+        read_options['field_paths'] = field_paths
     if budget is None:
         return reference.get(**read_options)
     timeout = budget.rpc_timeout()

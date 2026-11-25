@@ -23,6 +23,7 @@ from utils.conversation_payload import (
     payload_descriptor,
 )
 from utils.firestore_document_size import estimate_firestore_document_bytes
+from utils.other.list_budget import ListReadBudgetExhausted, budgeted_document_get, budgeted_get_all
 
 PAYLOAD_CHUNKS = 'conversation_payload_chunks'
 # Limit the single-row atomic path to 2 MiB of new chunks, with the same bound
@@ -63,12 +64,13 @@ def read_conversation_payload(
     if max_wire_bytes is not None and payload_descriptor(parent[PAYLOAD_FIELD])[1] > max_wire_bytes:
         raise ConversationProjectionTooLarge('conversation payload exceeds the reader byte budget')
     refs = _chunk_refs(snapshot.reference, parent)
-    if read_budget is not None:
-        read_budget.charge(len(refs))
+    if read_budget is not None and len(refs) > read_budget.remaining_documents:
+        read_budget.mark_exhausted('documents')
+        raise ListReadBudgetExhausted('documents')
     # BatchGet does not guarantee request order.
     chunks = {
         chunk.reference.id: (chunk.to_dict() or {}).get('data')
-        for chunk in client.get_all(refs, transaction=transaction)
+        for chunk in budgeted_get_all(client, refs, read_budget, transaction=transaction)
     }
     if any(ref.id not in chunks for ref in refs):
         raise InvalidConversationPayload('conversation payload chunk is unavailable')
@@ -103,6 +105,19 @@ def get_conversation_with_payload(client, ref):
         # may have been retired between the initial point read and this read.
         current = ref.get(transaction=transaction)
         return read_conversation_payload(client, transaction, current), current
+
+    return load(client.transaction(read_only=True))
+
+
+def read_list_conversation_payload(client, snapshot, budget, *, field_paths=None):
+    """Read chunks for the selected list revision, preserving its mask and budget."""
+
+    @firestore.transactional
+    def load(transaction):
+        current = budgeted_document_get(snapshot.reference, budget, field_paths=field_paths, transaction=transaction)
+        if not current.exists or current.update_time != snapshot.update_time:
+            return None
+        return read_conversation_payload(client, transaction, current, read_budget=budget, field_paths=field_paths)
 
     return load(client.transaction(read_only=True))
 
