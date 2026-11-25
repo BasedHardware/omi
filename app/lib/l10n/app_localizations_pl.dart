@@ -14032,6 +14032,15 @@ class AppLocalizationsPl extends AppLocalizations {
   String get summaryFailedTitle => 'Nie udało się podsumować';
 
   @override
+  String get summaryProviderQuota => 'Doładuj konto u dostawcy AI lub sprawdź limit użycia.';
+
+  @override
+  String get summaryProviderRateLimit => 'Twój dostawca AI ogranicza częstotliwość żądań. Spróbuj ponownie później.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Zaktualizuj klucz API dostawcy AI w ustawieniach.';
+
+  @override
   String get summaryFailedBody => 'Coś poszło nie tak podczas podsumowywania tej rozmowy.';
 
   @override

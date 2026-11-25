@@ -13982,6 +13982,16 @@ class AppLocalizationsEt extends AppLocalizations {
   String get summaryFailedTitle => 'Kokkuvõtet ei õnnestunud teha';
 
   @override
+  String get summaryProviderQuota => 'Lisa oma tehisintellekti teenusepakkuja kontole krediiti või kontrolli kvooti.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Sinu tehisintellekti teenusepakkuja piirab päringute sagedust. Proovi hiljem uuesti.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Uuenda seadetes oma tehisintellekti teenusepakkuja API-võtit.';
+
+  @override
   String get summaryFailedBody => 'Selle vestluse kokkuvõtte tegemisel läks midagi valesti.';
 
   @override

@@ -13986,6 +13986,16 @@ class AppLocalizationsFa extends AppLocalizations {
   String get summaryFailedTitle => 'خلاصه‌سازی انجام نشد';
 
   @override
+  String get summaryProviderQuota => 'حساب ارائه‌دهندهٔ هوش مصنوعی خود را شارژ کنید یا سهمیهٔ آن را بررسی کنید.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'ارائه‌دهندهٔ هوش مصنوعی شما نرخ درخواست‌ها را محدود کرده است. بعداً دوباره تلاش کنید.';
+
+  @override
+  String get summaryProviderInvalidKey => 'کلید API ارائه‌دهندهٔ هوش مصنوعی خود را در تنظیمات به‌روزرسانی کنید.';
+
+  @override
   String get summaryFailedBody => 'هنگام خلاصه‌سازی این گفتگو مشکلی پیش آمد.';
 
   @override

@@ -13971,6 +13971,15 @@ class AppLocalizationsHi extends AppLocalizations {
   String get summaryFailedTitle => 'सारांश नहीं बन सका';
 
   @override
+  String get summaryProviderQuota => 'अपने एआई प्रदाता के खाते में बैलेंस जोड़ें या उसका कोटा देखें।';
+
+  @override
+  String get summaryProviderRateLimit => 'आपका एआई प्रदाता अनुरोधों की दर सीमित कर रहा है। बाद में फिर कोशिश करें।';
+
+  @override
+  String get summaryProviderInvalidKey => 'सेटिंग में अपने एआई प्रदाता की API कुंजी अपडेट करें।';
+
+  @override
   String get summaryFailedBody => 'इस बातचीत का सारांश बनाते समय कुछ गलत हो गया।';
 
   @override

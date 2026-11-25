@@ -14001,6 +14001,17 @@ class AppLocalizationsTr extends AppLocalizations {
   String get summaryFailedTitle => 'Özetlenemedi';
 
   @override
+  String get summaryProviderQuota =>
+      'Yapay zekâ sağlayıcınızdaki hesabınıza bakiye yükleyin veya kotanızı kontrol edin.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Yapay zekâ sağlayıcınız istek sıklığını sınırlıyor. Daha sonra tekrar deneyin.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Yapay zekâ sağlayıcınızın API anahtarını Ayarlar’da güncelleyin.';
+
+  @override
   String get summaryFailedBody => 'Bu konuşma özetlenirken bir sorun oluştu.';
 
   @override

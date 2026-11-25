@@ -13994,6 +13994,15 @@ class AppLocalizationsFi extends AppLocalizations {
   String get summaryFailedTitle => 'Tiivistäminen epäonnistui';
 
   @override
+  String get summaryProviderQuota => 'Lisää saldoa tekoälypalvelusi tilille tai tarkista käyttökiintiö.';
+
+  @override
+  String get summaryProviderRateLimit => 'Tekoälypalvelusi rajoittaa pyyntöjen tahtia. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Päivitä tekoälypalvelusi API-avain asetuksissa.';
+
+  @override
   String get summaryFailedBody => 'Jokin meni vikaan tätä keskustelua tiivistettäessä.';
 
   @override

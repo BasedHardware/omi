@@ -11701,6 +11701,9 @@
     "summaryLimitTitle": "Naabot na ang limitasyon ng buod",
     "summaryLimitBody": "Ilang beses ka nang gumawa muli ng buod sa nakaraang oras. Subukan muli mamaya.",
     "summaryFailedTitle": "Hindi ma-summarize",
+    "summaryProviderQuota": "Magdagdag ng balanse sa account mo sa AI provider o tingnan ang quota nito.",
+    "summaryProviderRateLimit": "Nililimitahan ng AI provider mo ang dalas ng mga request. Subukan ulit mamaya.",
+    "summaryProviderInvalidKey": "I-update ang API key ng AI provider mo sa Mga Setting.",
     "summaryFailedBody": "Nagkaproblema habang ini-summarize ang usapang ito.",
     "noContentToDisplay": "Walang content na ipapakita",
     "@noContentToDisplay": {

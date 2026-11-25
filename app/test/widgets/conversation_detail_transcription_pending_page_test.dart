@@ -57,6 +57,8 @@ Future<(ConversationDetailProvider, AppLocalizations)> _pumpPage(
   ConversationsV3Provider? v3,
   bool firstFrameOnly = false,
   Future<ConversationByIdResult> Function(String)? fetchResult,
+  ConversationReprocessCall? reprocess,
+  Locale? locale,
 }) async {
   final conversations = ConversationProvider(isSignedIn: () => false)
     ..conversations = [initial]
@@ -66,7 +68,7 @@ Future<(ConversationDetailProvider, AppLocalizations)> _pumpPage(
     ..conversationDetailsFetcherOverride = (_) async => fetched ?? initial;
   final apps = AppProvider();
   final detail = ConversationDetailProvider(
-    reprocess: heldWireReprocess(409, heldReprocess409Body),
+    reprocess: reprocess ?? heldWireReprocess(409, heldReprocess409Body),
     fetchConversation: (_) async => fetched ?? initial,
     fetchConversationResult: fetchResult,
   )..setProviders(apps, conversations);
@@ -79,6 +81,7 @@ Future<(ConversationDetailProvider, AppLocalizations)> _pumpPage(
       key: _boundary,
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
+        locale: locale,
         theme: buildOmiTheme(brightness: OmiColors.active == OmiPalette.light ? Brightness.light : Brightness.dark),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
@@ -424,4 +427,34 @@ void main() {
     await _drain(tester);
     TranscriptionPendingConversations.reset();
   });
+
+  for (final redesigned in [false, true]) {
+    for (final (code, localizedMessage) in <(String, String Function(AppLocalizations))>[
+      ('byok_quota', (l10n) => l10n.summaryProviderQuota),
+      ('byok_rate_limit', (l10n) => l10n.summaryProviderRateLimit),
+      ('byok_invalid_key', (l10n) => l10n.summaryProviderInvalidKey),
+    ]) {
+      testWidgets('French provider account message for $code (redesign=$redesigned)', (tester) async {
+        SummaryGenerationV2Gate.debugOverride = redesigned;
+        const rawMessage = 'Raw gateway text';
+        final (detail, l10n) = await _pumpPage(
+          tester,
+          heldDetail(),
+          locale: const Locale('fr'),
+          reprocess: heldWireReprocess(429, {
+            'detail': {'code': code, 'message': rawMessage},
+          }),
+        );
+
+        expect(await detail.reprocessConversation(appId: 'omi-default-summary'), isFalse);
+        await _settle(tester);
+
+        expect(l10n.localeName, 'fr');
+        expect(localizedMessage(l10n), isNot(localizedMessage(lookupAppLocalizations(const Locale('en')))));
+        expect(find.text(localizedMessage(l10n)), findsOneWidget);
+        expect(find.text(rawMessage), findsNothing);
+        await _drain(tester);
+      });
+    }
+  }
 }

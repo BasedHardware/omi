@@ -1631,8 +1631,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
             final failedId = detailProvider.lastFailedReprocessConversationId;
             if (failedId == null || failedId != detailProvider.conversationOrNull?.id) break;
             final failure = detailProvider.summaryFailure;
-            if (failure?.kind == SummaryFailureKind.providerAccount) {
-              OmiFeedback.error(context, failure?.providerMessage ?? context.l10n.summaryFailedBody);
+            if (failure != null && failure.kind == SummaryFailureKind.providerAccount) {
+              OmiFeedback.error(context, failure.providerAccountMessage(context.l10n));
               break;
             }
             final appId = detailProvider.lastFailedReprocessAppId;

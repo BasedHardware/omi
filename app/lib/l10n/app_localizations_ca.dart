@@ -14060,6 +14060,16 @@ class AppLocalizationsCa extends AppLocalizations {
   String get summaryFailedTitle => 'No s\'ha pogut resumir';
 
   @override
+  String get summaryProviderQuota => 'Recarrega el compte del teu proveïdor d’IA o comprova’n la quota.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'El teu proveïdor d’IA limita la freqüència de les sol·licituds. Torna-ho a provar més tard.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Actualitza la clau API del teu proveïdor d’IA a la configuració.';
+
+  @override
   String get summaryFailedBody => 'Alguna cosa ha anat malament en resumir aquesta conversa.';
 
   @override

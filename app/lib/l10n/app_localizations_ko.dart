@@ -13797,6 +13797,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get summaryFailedTitle => '요약하지 못함';
 
   @override
+  String get summaryProviderQuota => 'AI 제공업체 계정을 충전하거나 사용량 한도를 확인하세요.';
+
+  @override
+  String get summaryProviderRateLimit => 'AI 제공업체가 요청 빈도를 제한하고 있습니다. 나중에 다시 시도하세요.';
+
+  @override
+  String get summaryProviderInvalidKey => '설정에서 AI 제공업체의 API 키를 업데이트하세요.';
+
+  @override
   String get summaryFailedBody => '이 대화를 요약하는 중 문제가 발생했습니다.';
 
   @override

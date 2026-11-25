@@ -14036,6 +14036,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get summaryFailedTitle => 'Не удалось обобщить';
 
   @override
+  String get summaryProviderQuota => 'Пополните баланс у поставщика ИИ или проверьте квоту.';
+
+  @override
+  String get summaryProviderRateLimit => 'Ваш поставщик ИИ ограничивает частоту запросов. Повторите попытку позже.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Обновите API-ключ поставщика ИИ в настройках.';
+
+  @override
   String get summaryFailedBody => 'При обобщении этого разговора что-то пошло не так.';
 
   @override

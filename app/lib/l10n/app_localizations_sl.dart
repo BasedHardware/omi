@@ -14017,6 +14017,15 @@ class AppLocalizationsSl extends AppLocalizations {
   String get summaryFailedTitle => 'Povzemanje ni uspelo';
 
   @override
+  String get summaryProviderQuota => 'Dopolnite dobroimetje pri ponudniku UI ali preverite kvoto.';
+
+  @override
+  String get summaryProviderRateLimit => 'Vaš ponudnik UI omejuje pogostost zahtev. Poskusite znova pozneje.';
+
+  @override
+  String get summaryProviderInvalidKey => 'V nastavitvah posodobite ključ API svojega ponudnika UI.';
+
+  @override
   String get summaryFailedBody => 'Pri povzemanju tega pogovora je prišlo do napake.';
 
   @override

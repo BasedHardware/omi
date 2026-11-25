@@ -13996,6 +13996,16 @@ class AppLocalizationsSv extends AppLocalizations {
   String get summaryFailedTitle => 'Det gick inte att sammanfatta';
 
   @override
+  String get summaryProviderQuota => 'Fyll på saldot hos din AI-leverantör eller kontrollera din kvot.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Din AI-leverantör begränsar hur ofta du kan skicka förfrågningar. Försök igen senare.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Uppdatera API-nyckeln för din AI-leverantör i inställningarna.';
+
+  @override
   String get summaryFailedBody => 'Något gick fel när det här samtalet skulle sammanfattas.';
 
   @override

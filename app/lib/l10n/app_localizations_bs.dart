@@ -14018,6 +14018,16 @@ class AppLocalizationsBs extends AppLocalizations {
   String get summaryFailedTitle => 'Sažimanje nije uspjelo';
 
   @override
+  String get summaryProviderQuota => 'Dopunite stanje na računu kod AI pružaoca usluge ili provjerite kvotu.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Vaš AI pružalac usluge ograničava učestalost zahtjeva. Pokušajte ponovo kasnije.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Ažurirajte API ključ svog AI pružaoca usluge u postavkama.';
+
+  @override
   String get summaryFailedBody => 'Nešto je pošlo po zlu prilikom sažimanja ovog razgovora.';
 
   @override

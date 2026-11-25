@@ -13997,6 +13997,15 @@ class AppLocalizationsMr extends AppLocalizations {
   String get summaryFailedTitle => 'सारांश करता आला नाही';
 
   @override
+  String get summaryProviderQuota => 'तुमच्या एआय प्रदात्याच्या खात्यात शिल्लक भरा किंवा त्याचा कोटा तपासा.';
+
+  @override
+  String get summaryProviderRateLimit => 'तुमचा एआय प्रदाता विनंत्यांचा दर मर्यादित करत आहे. नंतर पुन्हा प्रयत्न करा.';
+
+  @override
+  String get summaryProviderInvalidKey => 'सेटिंग्जमध्ये तुमच्या एआय प्रदात्याची API की अपडेट करा.';
+
+  @override
   String get summaryFailedBody => 'हे संभाषण सारांशित करताना काहीतरी चूक झाली.';
 
   @override

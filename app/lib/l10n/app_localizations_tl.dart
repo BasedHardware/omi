@@ -14098,6 +14098,16 @@ class AppLocalizationsTl extends AppLocalizations {
   String get summaryFailedTitle => 'Hindi ma-summarize';
 
   @override
+  String get summaryProviderQuota => 'Magdagdag ng balanse sa account mo sa AI provider o tingnan ang quota nito.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Nililimitahan ng AI provider mo ang dalas ng mga request. Subukan ulit mamaya.';
+
+  @override
+  String get summaryProviderInvalidKey => 'I-update ang API key ng AI provider mo sa Mga Setting.';
+
+  @override
   String get summaryFailedBody => 'Nagkaproblema habang ini-summarize ang usapang ito.';
 
   @override

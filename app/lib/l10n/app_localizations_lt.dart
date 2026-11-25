@@ -14014,6 +14014,15 @@ class AppLocalizationsLt extends AppLocalizations {
   String get summaryFailedTitle => 'Nepavyko apibendrinti';
 
   @override
+  String get summaryProviderQuota => 'Papildykite paskyros balansą pas DI paslaugų teikėją arba patikrinkite kvotą.';
+
+  @override
+  String get summaryProviderRateLimit => 'Jūsų DI paslaugų teikėjas riboja užklausų dažnį. Bandykite dar kartą vėliau.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Nustatymuose atnaujinkite DI paslaugų teikėjo API raktą.';
+
+  @override
   String get summaryFailedBody => 'Apibendrinant šį pokalbį kažkas nutiko.';
 
   @override

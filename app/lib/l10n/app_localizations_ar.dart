@@ -13912,6 +13912,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get summaryFailedTitle => 'تعذر التلخيص';
 
   @override
+  String get summaryProviderQuota => 'اشحن رصيد حسابك لدى مزوّد الذكاء الاصطناعي أو تحقّق من حصته.';
+
+  @override
+  String get summaryProviderRateLimit => 'يفرض مزوّد الذكاء الاصطناعي حدًا على معدل الطلبات. حاول مجددًا لاحقًا.';
+
+  @override
+  String get summaryProviderInvalidKey => 'حدّث مفتاح API لمزوّد الذكاء الاصطناعي في الإعدادات.';
+
+  @override
   String get summaryFailedBody => 'حدث خطأ ما أثناء تلخيص هذه المحادثة.';
 
   @override

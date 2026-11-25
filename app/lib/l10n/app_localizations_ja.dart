@@ -13792,6 +13792,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get summaryFailedTitle => '要約できませんでした';
 
   @override
+  String get summaryProviderQuota => 'AIプロバイダーのアカウントにチャージするか、利用枠を確認してください。';
+
+  @override
+  String get summaryProviderRateLimit => 'AIプロバイダーがリクエストの頻度を制限しています。時間をおいて再試行してください。';
+
+  @override
+  String get summaryProviderInvalidKey => '設定でAIプロバイダーのAPIキーを更新してください。';
+
+  @override
   String get summaryFailedBody => 'この会話の要約中に問題が発生しました。';
 
   @override

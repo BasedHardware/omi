@@ -14052,6 +14052,16 @@ class AppLocalizationsMk extends AppLocalizations {
   String get summaryFailedTitle => 'Не може да се сумира';
 
   @override
+  String get summaryProviderQuota => 'Надополнете ја сметката кај вашиот давател на ВИ или проверете ја квотата.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Вашиот давател на ВИ ја ограничува зачестеноста на барањата. Обидете се повторно подоцна.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Ажурирајте го API-клучот на вашиот давател на ВИ во поставките.';
+
+  @override
   String get summaryFailedBody => 'Нешто тргна наопаку при сумирањето на овој разговор.';
 
   @override

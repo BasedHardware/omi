@@ -16935,6 +16935,18 @@
     "@summaryFailedTitle": {
         "description": "Heading when summarizing the conversation failed for an unknown reason."
     },
+    "summaryProviderQuota": "Top up your AI provider account or check its quota.",
+    "@summaryProviderQuota": {
+        "description": "Reprocess summary failure when the configured AI provider account is out of credit or quota."
+    },
+    "summaryProviderRateLimit": "Your AI provider is rate limiting requests. Try again later.",
+    "@summaryProviderRateLimit": {
+        "description": "Reprocess summary failure when the AI provider is rate limiting requests."
+    },
+    "summaryProviderInvalidKey": "Update your AI provider’s API key in Settings.",
+    "@summaryProviderInvalidKey": {
+        "description": "Reprocess summary failure when the AI provider rejected the API key."
+    },
     "summaryFailedBody": "Something went wrong while summarizing this conversation.",
     "@summaryFailedBody": {
         "description": "Body when summarizing the conversation failed for an unknown reason."

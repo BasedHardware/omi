@@ -14025,6 +14025,16 @@ class AppLocalizationsNl extends AppLocalizations {
   String get summaryFailedTitle => 'Samenvatten mislukt';
 
   @override
+  String get summaryProviderQuota => 'Waardeer je tegoed bij je AI-aanbieder op of controleer je quotum.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Je AI-aanbieder beperkt hoe vaak je verzoeken kunt versturen. Probeer het later opnieuw.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Werk de API-sleutel van je AI-aanbieder bij in Instellingen.';
+
+  @override
   String get summaryFailedBody => 'Er ging iets mis bij het samenvatten van dit gesprek.';
 
   @override

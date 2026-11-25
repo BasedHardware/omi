@@ -14023,6 +14023,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String get summaryFailedTitle => 'Neizdevās apkopot';
 
   @override
+  String get summaryProviderQuota => 'Papildiniet sava MI pakalpojumu sniedzēja konta atlikumu vai pārbaudiet kvotu.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Jūsu MI pakalpojumu sniedzējs ierobežo pieprasījumu biežumu. Mēģiniet vēlreiz vēlāk.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Iestatījumos atjauniniet sava MI pakalpojumu sniedzēja API atslēgu.';
+
+  @override
   String get summaryFailedBody => 'Apkopojot šo sarunu, radās kļūda.';
 
   @override

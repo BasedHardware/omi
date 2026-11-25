@@ -326,7 +326,7 @@ class SummaryFailureCard extends StatelessWidget {
         ),
       SummaryFailureKind.providerAccount => (
           l10n.summaryFailedTitle,
-          failure.providerMessage ?? l10n.summaryFailedBody,
+          failure.providerAccountMessage(l10n),
           l10n.ok,
           () async => provider.dismissSummaryFailure(),
           null,

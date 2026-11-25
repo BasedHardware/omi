@@ -14003,6 +14003,15 @@ class AppLocalizationsId extends AppLocalizations {
   String get summaryFailedTitle => 'Tidak dapat meringkas';
 
   @override
+  String get summaryProviderQuota => 'Isi saldo akun penyedia AI Anda atau periksa kuotanya.';
+
+  @override
+  String get summaryProviderRateLimit => 'Penyedia AI Anda membatasi frekuensi permintaan. Coba lagi nanti.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Perbarui kunci API penyedia AI Anda di Pengaturan.';
+
+  @override
   String get summaryFailedBody => 'Terjadi kesalahan saat meringkas percakapan ini.';
 
   @override

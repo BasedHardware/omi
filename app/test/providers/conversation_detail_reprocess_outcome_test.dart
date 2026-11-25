@@ -104,13 +104,16 @@ void main() {
       expect((result as ReprocessRateLimited).retryAfter, const Duration(minutes: 2));
     });
 
-    for (final code in ['byok_quota', 'byok_rate_limit', 'byok_invalid_key']) {
-      test('429 $code keeps the provider account message', () {
-        const message = 'Check the configured provider account.';
+    for (final (wireCode, code) in [
+      ('byok_quota', ReprocessProviderAccountCode.quota),
+      ('byok_rate_limit', ReprocessProviderAccountCode.rateLimit),
+      ('byok_invalid_key', ReprocessProviderAccountCode.invalidKey),
+    ]) {
+      test('429 $wireCode preserves the provider account code without a message', () {
         final result = reprocessResultFromResponse(_json(429, {
-          'detail': {'code': code, 'message': message},
+          'detail': {'code': wireCode},
         }));
-        expect(result, isA<ReprocessProviderAccountFailure>().having((result) => result.message, 'message', message));
+        expect(result, isA<ReprocessProviderAccountFailure>().having((result) => result.code, 'code', code));
       });
     }
 

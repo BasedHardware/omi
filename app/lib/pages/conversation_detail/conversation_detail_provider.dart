@@ -1193,7 +1193,7 @@ class ConversationDetailProvider extends ChangeNotifier
             _ when appId != null => SummaryFailureKind.template,
             _ => SummaryFailureKind.generic,
           },
-          providerMessage: result is ReprocessProviderAccountFailure ? result.message : null,
+          providerAccountCode: result is ReprocessProviderAccountFailure ? result.code : null,
         );
         return false;
       }
@@ -1272,12 +1272,13 @@ class ConversationDetailProvider extends ChangeNotifier
     reprocessConversationId = '';
   }
 
-  void _failReprocess(ServerConversation target, String? appId, SummaryFailureKind kind, {String? providerMessage}) {
+  void _failReprocess(ServerConversation target, String? appId, SummaryFailureKind kind,
+      {ReprocessProviderAccountCode? providerAccountCode}) {
     _finishReprocessLoading();
     lastFailedReprocessConversationId = target.id;
     lastFailedReprocessAppId = appId;
     recordSummaryFailure(
-      SummaryFailure(conversationId: target.id, kind: kind, appId: appId, providerMessage: providerMessage),
+      SummaryFailure(conversationId: target.id, kind: kind, appId: appId, providerAccountCode: providerAccountCode),
     );
     // Not transcribed is not an error: a summary retry cannot change it.
     kind == SummaryFailureKind.transcriptionPending
