@@ -94,7 +94,12 @@ def test_walk_1200_segments_once_with_one_existing_read_per_page(stored, output_
     assert fetch.call_count == len(pages)
     for call in fetch.call_args_list:
         assert call.args == (OWNER, [CID])
-        assert call.kwargs == {'include_transcript': True, 'include_discarded': False, 'extra_field_paths': None}
+        assert call.kwargs == {
+            'include_transcript': True,
+            'include_discarded': False,
+            'extra_field_paths': None,
+            'allow_published_recording': True,
+        }
 
 
 def test_char_budget_keeps_whole_segments_when_possible(stored):

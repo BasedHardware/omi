@@ -270,6 +270,15 @@ def assign_in_transaction(
     rows and refuses the whole assignment when that proof no longer holds, so a
     late append can never turn a partial overlap into a merge.
     """
+    from database.batch_pipeline_publication_authority import (
+        assert_writer_unblocked,
+        publication_writer_fence_enabled,
+    )
+
+    if publication_writer_fence_enabled(user_ref.id):
+        # Before any writes, including creation of an absent ID or updates to
+        # assignment indexes. Refuse the whole owner write set in the pilot.
+        assert_writer_unblocked(user_ref._client, getattr(transaction, 'read_transaction', transaction), user_ref.id)
     # The SDK may retry this body after contention; only its winning plan may log success.
     finish_size_attempt(logger, committed=False)
     if absorbed is not None:
