@@ -235,8 +235,8 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.fresh_pending': 'd9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
     'database.batch_pipeline_store.FirestoreStore.ready_owners': 'b5d53e56900da07d2069cd1068218cb1515895a8dfd35f91dab9d06390cd02cf',
     'database.batch_pipeline_store.FirestoreStore.held_merge_owners': '55ac8d67e8e3e3fb689c9e9e086084a6acbcd7f5bb3b0b3f6186f5014cafc143',
-    # Removing idle parking changes the write condition for eligible owners. Reads are unchanged.
-    'database.dream_scheduler.discover': '21aeade67276cccc50e12a1153e8786b2b4c886f482f1d84823f1a2335478ab3',
+    # Discovery schedules each unqueued eligible owner on the size-based cadence. Reads are unchanged.
+    'database.dream_scheduler.discover': '181a3b7a0aab77caaa4908b554df6eaac7a6781084d228c2316a5c9a07134839',
     'database.proactivity_producers.mentor_history_query': '716c4f332e0ff0cf6fda3bcea41f479ce3bb7eb2956c8bfe37c61e0baabbfdb3',
     'database.proactivity_producers.recent_mentor_query': 'dc28a1084121daa40a430764d1c638ec4fe090e66dff499e0bec152444035dee',
     'database.proactivity_producers.task_items_query': '9e98b929e35f9118cdb76076bb526e41a5383d94d0304f098d17a0a2a3bc3cb5',
