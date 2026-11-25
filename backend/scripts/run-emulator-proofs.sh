@@ -85,8 +85,8 @@ if [[ "$FIRESTORE_EMULATOR_HOST" == 127.0.0.1:* || "$FIRESTORE_EMULATOR_HOST" ==
     tests/integration/test_conversation_purge_coalescing_emulator.py \
     tests/integration/test_conversation_purge_mixed_version_emulator.py \
     tests/unit/test_record_wal_handoff_emulator.py
-  run_proof "PL-767 conversation erasure follows upload-keyed batch rows" \
-    "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_conversation_erasure_ledger_emulator.py
+  run_proof "PL-767 upload-keyed batch erasure (Firestore; PostgreSQL when available)" \
+    "$PYTHON" -m pytest -q -rs -p no:cacheprovider tests/integration/test_conversation_erasure_ledger_emulator.py
 else
   echo "FAIL conversation purge and PL-767: a loopback Firestore emulator is required" >&2
   failures+=("conversation purge and PL-767: loopback emulator required")
