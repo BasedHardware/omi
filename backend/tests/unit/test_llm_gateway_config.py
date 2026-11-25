@@ -321,3 +321,24 @@ def route_artifact(route_artifact_id: str, *, model: str = 'gpt-4.1-mini') -> di
 def write_yaml(path: Path, payload: dict) -> None:
     with path.open('w', encoding='utf-8') as handle:
         yaml.safe_dump(payload, handle, sort_keys=False)
+
+
+def test_v3_lanes_preserve_legacy_catalog_and_separate_foreground_tier():
+    from llm_gateway.gateway.executor import DEFAULT_FLEX_FIRST_LANES
+
+    config = load_gateway_config(prod_mode=True)
+    assert 'conversation_v3_summary' not in get_all_configured_features()
+    for feature, effort in [
+        ('conversation_v3_live_title', 'none'),
+        ('conversation_v3_outline', 'none'),
+        ('conversation_v3_summary', 'low'),
+        ('conversation_v3_summary_open', 'low'),
+    ]:
+        lane = config.lanes['omi:auto:' + feature.replace('_', '-')]
+        route = config.route_artifacts[lane.active_route]
+        assert route.primary.model == LUNA_MODEL
+        assert route.provider_options['reasoning_effort'] == effort
+        assert lane.capabilities.structured_output != StructuredOutputMode.NONE
+    # Neither summary lane tries Flex first; both stay separate lanes so background and on-open usage are metered apart.
+    assert 'omi:auto:conversation-v3-summary' not in DEFAULT_FLEX_FIRST_LANES
+    assert 'omi:auto:conversation-v3-summary-open' not in DEFAULT_FLEX_FIRST_LANES

@@ -4,12 +4,15 @@ import io
 import logging
 import wave
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, RedirectResponse
 from pydub import AudioSegment
 
 from config.repeat_work import playback_on_demand
+from config.pusher_record import close_fast_path_enabled
+from utils.other.gcs_read_reuse import ReadMemo
 from utils.other.playback_identity import resolve_sources, validate_sources
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.executors import postprocess_executor, storage_executor, submit_with_context
@@ -37,7 +40,15 @@ AUDIO_SAMPLE_RATE = 16000
 AUDIO_URLS_POLL_AFTER_MS = 3000
 
 
+def _has_recording_pieces(conversation: dict[str, Any] | None) -> bool:
+    # v3 rows carry a recording_pieces list (even empty); ordinary rows written through the
+    # Conversation model carry recording_pieces: None and stay on the legacy path.
+    return bool(conversation) and conversation.get('recording_pieces') is not None
+
+
 def conversation_merge_fingerprint(conversation: dict[str, Any], *, demand: bool) -> str:
+    if conversation.get('_v3_playback_fingerprint'):
+        return conversation['_v3_playback_fingerprint']
     if demand:
         return compute_audio_files_fingerprint(
             conversation['audio_files'],
@@ -157,6 +168,26 @@ def _run_parallel_precache(
 def precache_audio_files(
     uid: str, conversation_id: str, audio_files: list[dict[str, Any]], *, playback_epoch: str | None = None
 ) -> dict[str, Any]:
+    if any(af.get('recording_id') for af in audio_files):
+        from utils.conversations.v3.audio import resolve
+        from database import conversations as conversations_db
+
+        owner = conversations_db.get_conversation(uid, conversation_id)
+        if not owner or owner.get('deleted') or owner.get('is_locked'):
+            raise HTTPException(404, 'Conversation not found')
+        for alias in audio_files:
+            rid, original, recording = resolve(uid, owner, alias)
+            precache_audio_files(
+                uid,
+                rid,
+                [original],
+                **(
+                    {'playback_epoch': recording['playback_eager_epoch']}
+                    if recording.get('playback_eager_epoch')
+                    else {}
+                ),
+            )
+        return {'status': 'started', 'audio_file_count': len(audio_files)}
     if not audio_files:
         return {"status": "no_audio", "message": "No audio files in conversation"}
 
@@ -191,7 +222,10 @@ def _conversation_audio_urls_entry(
     lifecycle) falls through to pending + re-enqueue under a fingerprint-named
     task, making staleness self-healing.
     """
-    if playback_on_demand():
+    v3 = _has_recording_pieces(conversation)
+    if v3:
+        fingerprint = conversation_merge_fingerprint(conversation or {}, demand=True)
+    elif playback_on_demand():
         fingerprint = compute_audio_files_fingerprint(
             audio_files, origin=(conversation or {}).get('started_at') or (conversation or {}).get('created_at')
         )
@@ -199,7 +233,7 @@ def _conversation_audio_urls_entry(
         fingerprint = compute_audio_files_fingerprint(audio_files)
     stamp = (conversation or {}).get('conversation_audio') or {}
     cached_fingerprint = fingerprint
-    immutable = playback_on_demand()
+    immutable = v3 or playback_on_demand()
     stamped = stamp.get('audio_files_fingerprint')
     if not immutable and isinstance(stamped, str) and len(stamped) == 64:
         source_fingerprint = compute_audio_files_fingerprint(
@@ -211,13 +245,17 @@ def _conversation_audio_urls_entry(
             cached_fingerprint, immutable = source_fingerprint, True
     artifact_fingerprint = (conversation or {}).get('conversation_audio_artifact_fingerprint')
     current_artifact = (
-        compute_audio_files_fingerprint(
-            audio_files,
-            origin=(conversation or {}).get('started_at') or (conversation or {}).get('created_at'),
-            source_identity=True,
+        fingerprint
+        if v3
+        else (
+            compute_audio_files_fingerprint(
+                audio_files,
+                origin=(conversation or {}).get('started_at') or (conversation or {}).get('created_at'),
+                source_identity=True,
+            )
+            if artifact_fingerprint
+            else None
         )
-        if artifact_fingerprint
-        else None
     )
     if stamped == cached_fingerprint and artifact_fingerprint == current_artifact:
         signed_url = get_conversation_playback_signed_url(
@@ -412,8 +450,53 @@ def get_audio_signed_urls(
     audio_files: list[dict[str, Any]],
     conversation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if _has_recording_pieces(conversation) or any(af.get('recording_id') for af in audio_files):
+        from utils.conversations.v3.audio import playback_snapshot
+        from database import conversations as conversations_db
+
+        owner = conversation or conversations_db.get_conversation(uid, conversation_id)
+        if not owner or owner.get('deleted'):
+            raise HTTPException(404, 'Conversation not found')
+        owner = playback_snapshot(uid, owner)
+        entry = _conversation_audio_urls_entry(uid, conversation_id, owner.get('audio_files') or [], owner)
+        return {
+            'audio_files': (
+                [
+                    {'id': af['id'], 'status': entry['status'], 'signed_url': None, 'duration': af.get('duration', 0)}
+                    for af in owner.get('audio_files') or []
+                ]
+                if entry['status'] != 'cached'
+                else []
+            ),
+            'conversation_audio': entry,
+            'poll_after_ms': AUDIO_URLS_POLL_AFTER_MS if entry['status'] == 'pending' else None,
+        }
     if not audio_files:
-        return {"audio_files": []}
+        if (
+            close_fast_path_enabled()
+            and conversation
+            and conversation.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}
+        ):
+            from concurrent.futures import TimeoutError
+            from utils.sync.playback_metadata import refresh_on_open
+
+            try:
+                repaired = refresh_on_open(uid, conversation_id)
+            except TimeoutError as pending:
+                from utils.observability.fallback import record_fallback
+
+                record_fallback(
+                    component='audio_merge',
+                    from_mode='playback_metadata',
+                    to_mode='pending',
+                    reason=getattr(pending, 'reason', 'timeout'),
+                    outcome='degraded',
+                )
+                return {'audio_files': [], 'poll_after_ms': 5000}
+            conversation = {**conversation, **repaired}
+            audio_files = repaired.get('audio_files') or []
+        if not audio_files:
+            return {"audio_files": []}
 
     if is_audio_merge_dispatch_enabled():
         return _get_audio_urls_via_artifacts(uid, conversation_id, audio_files, conversation)
@@ -533,6 +616,9 @@ def _stream_audio_response(
     )
 
 
+SIGNED_AUDIO_HOST = 'storage.googleapis.com'
+
+
 def download_audio_file_response(
     uid: str,
     conversation_id: str,
@@ -543,6 +629,23 @@ def download_audio_file_response(
     *,
     playback_epoch: str | None = None,
 ) -> Response:
+    if audio_file.get('recording_id'):
+        from database import conversations as conversations_db
+
+        owner = conversations_db.get_conversation(uid, conversation_id)
+        if not owner or owner.get('deleted') or owner.get('is_locked'):
+            raise HTTPException(404, 'Conversation not found')
+        response = get_audio_signed_urls(uid, conversation_id, owner.get('audio_files') or [], owner)
+        entry = response['conversation_audio']
+        if url := entry.get('signed_url'):
+            # Redirect only to a Cloud Storage signed URL, never to a location from anywhere else.
+            parts = urlsplit(url)
+            if parts.scheme != 'https' or parts.hostname != SIGNED_AUDIO_HOST:
+                raise HTTPException(502, 'Audio location unavailable')
+            return RedirectResponse(url, status_code=307)
+        return JSONResponse(
+            status_code=202, content={'status': entry['status'], 'poll_after_ms': AUDIO_URLS_POLL_AFTER_MS}
+        )
     try:
         if not audio_file.get('chunk_timestamps'):
             raise HTTPException(status_code=500, detail="Audio file has no chunk timestamps")
@@ -579,11 +682,16 @@ def download_audio_file_response(
 
 
 def _merge_playback_sources(
-    uid: str, conversation_id: str, timestamps: list[float], selected: list[dict[str, Any]] | None
+    uid: str,
+    conversation_id: str,
+    timestamps: list[float],
+    selected: list[dict[str, Any]] | None,
+    *,
+    raw_memo: ReadMemo | None = None,
 ) -> bytes:
     if selected is None:
         return download_audio_chunks_and_merge(
-            uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
+            uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE, raw_memo=raw_memo
         )
     return download_audio_chunks_and_merge(
         uid,
@@ -593,6 +701,7 @@ def _merge_playback_sources(
         sample_rate=AUDIO_SAMPLE_RATE,
         listed_chunks=selected,
         strict_sources=True,
+        raw_memo=raw_memo,
     )
 
 
@@ -602,9 +711,12 @@ def build_playback_artifact(
     """Merge chunks (download -> decrypt -> decode -> gap-fill) and encode MP3 ~48kbps mono."""
     source = [{'chunk_timestamps': timestamps, 'source_fingerprint': source_fingerprint}]
     selected = None
+    raw_memo = ReadMemo()
     if source_fingerprint:
-        selected = resolve_sources(source[0], list_audio_chunks(uid, conversation_id, source_identity=True))
-    pcm_data = _merge_playback_sources(uid, conversation_id, timestamps, selected)
+        selected = resolve_sources(
+            source[0], list_audio_chunks(uid, conversation_id, source_identity=True, raw_memo=raw_memo)
+        )
+    pcm_data = _merge_playback_sources(uid, conversation_id, timestamps, selected, raw_memo=raw_memo)
     if source_fingerprint:
         validate_sources(source, list_audio_chunks(uid, conversation_id, source_identity=True))
     if not pcm_data:
@@ -644,15 +756,16 @@ def build_conversation_playback_artifact(
     )
     verified = (strict_sources or playback_on_demand()) and any(af.get('source_fingerprint') for af in parts)
     resolved: list[list[dict[str, Any]] | None] = [None] * len(parts)
+    raw_memo = ReadMemo()
     if verified:
-        listing = list_audio_chunks(uid, conversation_id, source_identity=True)
+        listing = list_audio_chunks(uid, conversation_id, source_identity=True, raw_memo=raw_memo)
         resolved = [resolve_sources(af, listing) if af.get('source_fingerprint') else None for af in parts]
     pcm_buf = bytearray()
     spans: list[dict] = []
     for af, selected in zip(parts, resolved):
         timestamps = sorted(af['chunk_timestamps'])
         try:
-            pcm = _merge_playback_sources(uid, conversation_id, timestamps, selected)
+            pcm = _merge_playback_sources(uid, conversation_id, timestamps, selected, raw_memo=raw_memo)
         except FileNotFoundError:
             if strict_sources or playback_on_demand():
                 raise

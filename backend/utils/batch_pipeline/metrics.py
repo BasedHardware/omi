@@ -4,6 +4,7 @@ import logging
 import math
 import threading
 import time
+from enum import Enum
 
 from config.firestore_read_levers import lever_enabled
 from config.policy.kill_switches import kill_switch
@@ -23,13 +24,16 @@ from database.batch_pipeline_store import (
     PROJECTION_OBLIGATION_STATES,
     timeliness_all_time_counts,
     timeliness_sample,
+    allowance_held_count,
 )
 from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS, TIMELINESS_METRICS, LeaderLease
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
 from utils.lifecycle_metrics import PhaseMetrics
-from utils.batch_pipeline import vendor_route_metrics as vendor_metrics
+from utils.batch_pipeline import vendor_route_metrics as vendor_metrics, record_wal_metrics
 from utils.batch_pipeline.fresh_guard import FreshGuard
+from utils.batch_pipeline.delivered_share import DeliveredShare
+from utils.batch_pipeline.packing_counterfactual import PackingMetrics
 
 PROJECTION_FINISH_READS = Counter(
     'omi_batch_projection_finish_reads_total',
@@ -39,6 +43,56 @@ PROJECTION_FINISH_COMPLETED = Counter(
     'omi_batch_projection_finish_completed_total',
     'Finish-page rows completed by the projection sweep',
 )
+PROJECTION_FINISH_CLASSIFIED = Counter(
+    'omi_batch_projection_finish_classified_total',
+    'Legacy async finish clocks successfully classified by the sweep',
+)
+PROJECTION_FINISH_CLASSIFICATION_FAILURES = Counter(
+    'omi_batch_projection_finish_classification_failures_total',
+    'Legacy async finish clock classification attempts that raised; rows remain eligible',
+)
+_SILENT_READ_SKIPS = Counter(
+    'omi_batch_pipeline_silent_read_skips_total',
+    'Silent projection read decisions by stage and outcome',
+    ['stage', 'outcome'],
+)
+_SILENT_READS_AVOIDED = Counter(
+    'omi_batch_pipeline_silent_read_skip_reads_avoided_total',
+    'Fixed Firestore document lookups avoided by silent projection. Excludes variable per-sibling speech rechecks.',
+    ['stage'],
+)
+
+
+# Bounded owner-wait queue classes (config.batch_pipeline.Priority names).
+_OWNER_WAIT_PRIORITIES = frozenset(p.name.lower() for p in Priority)
+
+
+class SilentReadStage(Enum):
+    ASSIGNMENT_PRECHECK = 'projection_session_prepare'
+    READY_ACK = 'projection_ready'
+    ACCOUNTING = 'prepare_accounting'
+    COMPLETION_SNAPSHOT = 'completion_snapshot'
+    COMPLETION_PRIVACY = 'privacy_read'
+
+
+class SilentReadOutcome(Enum):
+    SKIPPED = 'skipped'
+    NOT_SILENT = 'not_silent'
+    DISABLED = 'disabled'
+
+
+def record_silent_read_skip(stage: SilentReadStage, outcome: SilentReadOutcome) -> None:
+    _SILENT_READ_SKIPS.labels(stage.value, outcome.value).inc()
+    if stage is SilentReadStage.COMPLETION_SNAPSHOT and outcome is SilentReadOutcome.SKIPPED:
+        # The completion commit reuses its current unit's job and result snapshots.
+        _SILENT_READS_AVOIDED.labels(stage.value).inc(2)
+
+
+def record_silent_completion_reads(outcome: SilentReadOutcome) -> None:
+    record_silent_read_skip(SilentReadStage.COMPLETION_SNAPSHOT, outcome)
+    record_silent_read_skip(SilentReadStage.COMPLETION_PRIVACY, outcome)
+
+
 PROJECTION_DRAIN_CLAIM_HELD = Counter(
     'omi_batch_projection_drains_skipped_total', 'Owner drain admissions deferred because the fleet claim is held'
 )
@@ -139,6 +193,8 @@ class QueueMetrics:
     ):
         self.timeliness_leader = timeliness_leader
         self.fresh_guard = FreshGuard(registry)
+        self.delivered_share = DeliveredShare(registry)
+        self.packing = PackingMetrics(registry)
         self._timeliness_lock = threading.Lock()
         self._timeliness_all_time_visible = False
         self._timeliness_visible = False
@@ -237,6 +293,13 @@ class QueueMetrics:
             ['leg'],
             registry=registry,
             fresh=self._timeliness_sample_visible,
+        )
+        self._allowance_due = self._allowance_expires = 0.0
+        self.allowance_held = _FreshQueueGauge(
+            'omi_batch_allowance_held_units',
+            'Policy parked stock, separate from lateness; hourly leader-only aggregate, no job reads',
+            registry=registry,
+            fresh=lambda: self._timeliness_sample_visible() and time.monotonic() < self._allowance_expires,
         )
         self.timeliness_all_time = _FreshQueueGauge(
             'omi_batch_timeliness_all_time_units',
@@ -340,9 +403,34 @@ class QueueMetrics:
         )
         self.owner_wait = Histogram(
             'omi_batch_pipeline_owner_wait_seconds',
-            'Per-item admission to lease wait; no owner labels; relet="true" is a re-lease, not fresh wait',
-            ['relet'],
+            'Per-item admission to lease wait; no owner labels; relet="true" is a re-lease, not fresh wait; '
+            'priority is the leased queue class (fresh|recent|deep|unknown)',
+            ['relet', 'priority'],
             buckets=(1, 10, 30, 60, 300, 3600, 43200, 86400, 604800),
+            registry=registry,
+        )
+        self.scheduler_leases = Counter(
+            'omi_batch_pipeline_scheduler_leases_total',
+            'Lease opportunities by service; recent/deep are explicit residual service, not compute authorization',
+            ['service'],
+            registry=registry,
+        )
+        self.protected_cohort_leases = Counter(
+            'omi_batch_pipeline_protected_cohort_leases_total',
+            'Eligible immutable capture-end cohort at lease, through any service',
+            registry=registry,
+        )
+        self.protected_cohort_age = Histogram(
+            'omi_batch_pipeline_protected_cohort_age_seconds',
+            'Immutable capture-end to lease age; not transcript delivery latency',
+            buckets=(0, 60, 300, 600, 1800, 3600, 5400, 7200),
+            registry=registry,
+        )
+        self.protected_discovery_reads = Histogram(
+            'omi_batch_pipeline_protected_discovery_reads',
+            'Discovery document read upper bound per cycle including transaction retries; excludes control/claim/privacy',
+            ['phase'],
+            buckets=(0, 1, 8, 16, 32, 64, 100, 128, 256, 384, 768, 1920),
             registry=registry,
         )
         self.events = Counter(
@@ -383,12 +471,45 @@ class QueueMetrics:
             buckets=(1, 10, 30, 60, 120, 300, 600, 900, 3600, 86400),
             registry=registry,
         )
+        self.gpu_depth_held_age = Histogram(
+            'omi_batch_pipeline_gpu_depth_held_age_seconds',
+            'Age source of GPU rows refused by the projection depth gate at a merge attempt',
+            ['worker_release', 'namespace', 'age_source'],
+            buckets=(60, 600, 3600, 10800, 21600, 43200, 86400, 259200),
+            registry=registry,
+        )
+        self.gpu_aged_releases = Counter(
+            'omi_batch_pipeline_gpu_aged_releases_total',
+            'Aged GPU catch-up rows released through the projection depth gate',
+            ['worker_release', 'namespace'],
+            registry=registry,
+        )
+        self.gpu_aged_release_age = Histogram(
+            'omi_batch_pipeline_gpu_aged_release_age_seconds',
+            'Age of GPU catch-up rows when released through the projection depth gate',
+            ['worker_release', 'namespace', 'age_source'],
+            buckets=(3600, 21600, 43200, 86400, 259200, 604800),
+            registry=registry,
+        )
         self.head_parked = Counter(
             'omi_batch_pipeline_head_parked_total',
             'Owner queue visits parked behind an unleasable head, by bounded reason',
             ['priority', 'reason', 'worker_release', 'namespace'],
             registry=registry,
         )
+
+    def record_service(self, service: str, *, age: float | None = None) -> None:
+        if service not in ('fresh', 'protected', 'recent', 'deep'):
+            raise ValueError('static scheduler service required')
+        self.scheduler_leases.labels(service).inc()
+        if age is not None:
+            self.protected_cohort_leases.inc()
+            self.protected_cohort_age.observe(age)
+
+    def record_discovery(self, phase: str, reads: int) -> None:
+        if phase not in ('ready', 'retry'):
+            raise ValueError('static discovery phase required')
+        self.protected_discovery_reads.labels(phase).observe(reads)
 
     def record_head(self, event: str, priority: Priority, *, age: float | None = None) -> None:
         if event == 'ready_age' and age is not None:
@@ -570,6 +691,7 @@ class QueueMetrics:
         interval = timeliness_interval_seconds()
         self._timeliness_due = now + interval
         if not batch_timeliness_alarm_enabled():
+            record_wal_metrics.deactivate()
             self.timeliness_samples.labels('disabled').inc()
             return
         elected = lever_enabled('batch_timeliness_leader')
@@ -587,7 +709,12 @@ class QueueMetrics:
                 # at most one lease check per minute and never sample on loss.
                 self._timeliness_due = now + min(interval, TIMELINESS_LEASE_GRACE_SECONDS)
                 self._timeliness_visible = False
+                record_wal_metrics.deactivate()
                 return
+        if elected:
+            record_wal_metrics.refresh(store, now, expires_at=sample_expires)
+        else:
+            record_wal_metrics.deactivate()
         # Companion counts need leader mode and this replica's lease, so a fleet
         # never runs them on every replica. Election off means no companion counts.
         all_time_counts = elected and kill_switch('BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED', log=False)
@@ -624,6 +751,17 @@ class QueueMetrics:
         self._timeliness_expires = sample_expires
         self._timeliness_visible = True
         self.timeliness_samples.labels('ok').inc()
+        if elected and now >= self._allowance_due:
+            self._allowance_due = now + 3600
+            try:
+                self.allowance_held.set(allowance_held_count(store.client, store.namespace))
+                self._allowance_expires = time.monotonic() + 3600 + interval
+            except Exception as error:
+                self._allowance_expires = 0.0
+                self._allowance_due = now + 300
+                logging.getLogger(__name__).warning(
+                    'event=batch_allowance_count outcome=unavailable exception_type=%s', type(error).__name__
+                )
         # Companion counts run only after the epoch gauges above are published,
         # so a slow or failed COUNT can never delay or stale the epoch series.
         if all_time_counts:
@@ -666,12 +804,14 @@ class QueueMetrics:
         wait_seconds: float | None = None,
         relet: bool = False,
         reason: str | None = None,
+        priority: str | None = None,
     ) -> None:
         if event not in {
             'leased',
             'completed',
             'retry',
             'requeued',
+            'allowance_parked',
             'lease_expired',
             'dead',
             'committed',
@@ -683,7 +823,8 @@ class QueueMetrics:
             raise ValueError('metric event must be a static worker transition')
         self.events.labels(event).inc()
         if event == 'leased' and wait_seconds is not None:
-            self.owner_wait.labels('true' if relet else 'false').observe(max(0.0, wait_seconds))
+            queue_class = priority if priority in _OWNER_WAIT_PRIORITIES else 'unknown'
+            self.owner_wait.labels('true' if relet else 'false', queue_class).observe(max(0.0, wait_seconds))
         if event == 'admission_policy_deferred' and reason:
             self.admission_hold_reasons.labels(
                 reason=reason_label(ReasonFamily.ADMISSION_HOLD, reason, AdmissionHoldReason)

@@ -187,7 +187,12 @@ void main() {
     final amounts = SyncPipelineAmounts.of([
       onDevice,
       Wal(timerStart: 2, codec: BleAudioCodec.opus, seconds: 720, status: WalStatus.miss, storage: WalStorage.disk),
-      Wal(timerStart: 3, codec: BleAudioCodec.opus, seconds: 2460, status: WalStatus.uploaded),
+      Wal(
+          timerStart: 3,
+          codec: BleAudioCodec.opus,
+          seconds: 2460,
+          status: WalStatus.uploaded,
+          uploadedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000),
       Wal(timerStart: 4, codec: BleAudioCodec.opus, seconds: 99, status: WalStatus.synced),
     ]);
     expect(amounts.onDeviceSeconds, 360);

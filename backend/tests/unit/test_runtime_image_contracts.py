@@ -1,3 +1,4 @@
+import gc
 import importlib.util
 import json
 import os
@@ -7,6 +8,7 @@ import subprocess
 import sys
 import tomllib
 from dataclasses import replace
+from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -38,6 +40,47 @@ def dependencies_module():
     finally:
         sys.path.remove(str(SCRIPT_PATH.parent))
     return runtime_image_dependencies
+
+
+@pytest.fixture(scope='module')
+def checkout_graph_cache(contracts_module):
+    # Parse the immutable real checkout once. Mutation tests do not use these
+    # caches: they continue exercising fresh scans after each source change.
+    trees, dependency_trees = {}, {}
+    cached = {}
+    with pytest.MonkeyPatch.context() as patch:
+        for name in ('_module_path', '_find_module_source', '_module_or_namespace_exists', '_imported_modules'):
+            cached[name] = lru_cache(maxsize=None)(getattr(contracts_module, name))
+            patch.setattr(contracts_module, name, cached[name])
+        for contract in contracts_module.load_contracts():
+            contracts_module.first_party_import_closure(contract, contract.entrypoints, _import_trees=trees)
+            contracts_module.first_party_import_closure(contract, contract.smoke_entrypoints, _import_trees=trees)
+            contracts_module.third_party_dependency_modules(contract, _trees=dependency_trees)
+    # Finish collecting the checkout scan's temporary objects during setup.
+    # Otherwise a later small test can be charged for collecting across both AST caches.
+    gc.collect()
+    return cached, trees, dependency_trees
+
+
+@pytest.fixture
+def checkout_graph(contracts_module, checkout_graph_cache, monkeypatch):
+    cached, trees, dependency_trees = checkout_graph_cache
+    for name, function in cached.items():
+        monkeypatch.setattr(contracts_module, name, function)
+    return trees, dependency_trees
+
+
+@pytest.fixture
+def omitted_pusher_surface(contracts_module, checkout_graph, tmp_path):
+    pusher = _contract(contracts_module, 'pusher')
+    dockerfile = _dockerfile_without(pusher.dockerfile, 'COPY backend/services/ ./services/\n', tmp_path / 'Dockerfile')
+    contract = replace(pusher, dockerfile=dockerfile)
+    staged = tmp_path / 'runtime'
+    contracts_module.stage_runtime_sources(contract, staged)
+    trees, _ = checkout_graph
+    # Prime real input lookups only. The test recomputes the closure verdict.
+    contracts_module.source_closure_errors(contract, _import_trees=trees, _runtime_root=staged)
+    return contract, staged
 
 
 def _contract(contracts_module, name):
@@ -160,34 +203,38 @@ def test_x_connector_sync_import_smoke_supplies_its_required_nonproduction_confi
     }
 
 
-def test_registered_import_smokes_declare_their_import_time_environment(contracts_module):
-    assert contracts_module.import_smoke_environment_errors(contracts_module.load_contracts()) == []
+@pytest.mark.parametrize(
+    'image_name',
+    sorted(image['name'] for image in json.loads((BACKEND_DIR / 'runtime_images.json').read_text())['images']),
+)
+def test_registered_import_smokes_declare_their_import_time_environment(contracts_module, checkout_graph, image_name):
+    trees, _ = checkout_graph
+    assert (
+        contracts_module.import_smoke_environment_errors([_contract(contracts_module, image_name)], _import_trees=trees)
+        == []
+    )
 
 
-def test_import_smoke_reaching_encryption_without_its_secret_is_rejected(contracts_module):
+def test_import_smoke_reaching_encryption_without_its_secret_is_rejected(contracts_module, checkout_graph):
+    trees, _ = checkout_graph
     notifications_job = _contract(contracts_module, 'notifications-job')
     assert 'utils.encryption' in contracts_module.first_party_import_closure(
-        notifications_job, notifications_job.smoke_entrypoints
+        notifications_job, notifications_job.smoke_entrypoints, _import_trees=trees
     )
 
     undeclared = replace(notifications_job, smoke_environment=())
 
-    errors = contracts_module.import_smoke_environment_errors([undeclared])
+    errors = contracts_module.import_smoke_environment_errors([undeclared], _import_trees=trees)
 
     assert len(errors) == 1
     assert 'utils.encryption' in errors[0]
     assert 'ENCRYPTION_SECRET' in errors[0]
 
 
-def test_pusher_contract_rejects_omitted_shared_package(contracts_module, tmp_path):
-    pusher = _contract(contracts_module, 'pusher')
-    dockerfile = _dockerfile_without(
-        pusher.dockerfile,
-        'COPY backend/services/ ./services/\n',
-        tmp_path / 'Dockerfile',
-    )
-
-    errors = contracts_module.source_closure_errors(replace(pusher, dockerfile=dockerfile))
+def test_pusher_contract_rejects_omitted_shared_package(contracts_module, checkout_graph, omitted_pusher_surface):
+    trees, _ = checkout_graph
+    contract, staged = omitted_pusher_surface
+    errors = contracts_module.source_closure_errors(contract, _import_trees=trees, _runtime_root=staged)
 
     assert any('services.conversation_finalization' in error for error in errors)
 
@@ -248,6 +295,14 @@ def test_shared_import_parse_keeps_lazy_imports_and_each_image_copy_surface(cont
     package.mkdir()
     (package / '__init__.py').write_text('', encoding='utf-8')
     (package / 'child.py').write_text('import json\n', encoding='utf-8')
+    template = replace(
+        _contract(contracts_module, 'pusher'),
+        target=None,
+        build_context=tmp_path,
+        source_root=tmp_path,
+        entrypoint_source_root=tmp_path,
+        entrypoints=('main',),
+    )
     contracts = []
     for name, copies in (
         ('complete', 'COPY added.py ./\nCOPY package/ ./package/\n'),
@@ -256,18 +311,7 @@ def test_shared_import_parse_keeps_lazy_imports_and_each_image_copy_surface(cont
     ):
         dockerfile = tmp_path / name
         dockerfile.write_text('FROM python\nWORKDIR /app\nCOPY main.py ./\n' + copies, encoding='utf-8')
-        contracts.append(
-            replace(
-                _contract(contracts_module, 'pusher'),
-                name=name,
-                dockerfile=dockerfile,
-                target=None,
-                build_context=tmp_path,
-                source_root=tmp_path,
-                entrypoint_source_root=tmp_path,
-                entrypoints=('main',),
-            )
-        )
+        contracts.append(replace(template, name=name, dockerfile=dockerfile))
 
     errors = contracts_module.check_source_closures(contracts)
     assert not any(error.startswith('complete:') for error in errors)
@@ -358,10 +402,11 @@ def test_shared_import_summary_observes_edits_and_invalid_syntax(contracts_modul
         contracts_module.first_party_import_closure(contract, ('main',), _import_trees=trees)
 
 
-def test_pusher_dependency_probe_includes_jsonschema(contracts_module):
+def test_pusher_dependency_probe_includes_jsonschema(contracts_module, checkout_graph):
+    trees, dependency_trees = checkout_graph
     pusher = _contract(contracts_module, 'pusher')
-    dependencies = contracts_module.third_party_dependency_modules(pusher)
-    closure = contracts_module.first_party_import_closure(pusher, pusher.entrypoints)
+    dependencies = contracts_module.third_party_dependency_modules(pusher, _trees=dependency_trees)
+    closure = contracts_module.first_party_import_closure(pusher, pusher.entrypoints, _import_trees=trees)
 
     assert 'jsonschema' in dependencies
     assert not any(
@@ -404,6 +449,10 @@ assert structured.ActionItem.__module__ == "models.structured"
 assert structured.Event.__module__ == "models.structured"
 assert structured.Section.__module__ == "models.structured"
 assert structured.Structured(title="fallback").title == "fallback"
+# Runtime images load this fallback: stored v3 rows with {'name'} participants must read back.
+legacy = structured.Structured(participants=[{"name": "A"}, {"name": "B", "source": "roster"}])
+assert [(p.name, p.source) for p in legacy.participants] == [("A", "transcript"), ("B", "roster")]
+assert "source" in structured.Participant.model_json_schema()["required"]
 '''
     environment = dict(os.environ)
     environment['PYTHONPATH'] = str(tmp_path)
@@ -596,7 +645,13 @@ def _requirement_pin(requirements_text: str, package: str) -> str:
     raise AssertionError(f'{package} pin missing from requirements')
 
 
-def test_pusher_installs_typesense_because_finalization_indexes_conversations():
+@pytest.fixture(scope='module')
+def pusher_lock_packages() -> dict[str, str]:
+    lock = tomllib.loads((BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8'))
+    return {package['name']: package['version'] for package in lock['packages']}
+
+
+def test_pusher_installs_typesense_because_finalization_indexes_conversations(pusher_lock_packages):
     """process_conversation → lifecycle → typesense_index is reachable in the pusher image.
 
     Auto-deploy smoke failed from 2026-09-01 onward with
@@ -606,8 +661,7 @@ def test_pusher_installs_typesense_because_finalization_indexes_conversations():
     pusher = (BACKEND_DIR / 'pusher' / 'requirements.txt').read_text(encoding='utf-8')
     backend = (BACKEND_DIR / 'requirements.txt').read_text(encoding='utf-8')
     assert _requirement_pin(pusher, 'typesense') == _requirement_pin(backend, 'typesense')
-    pylock = (BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8')
-    assert 'name = "typesense"' in pylock
+    assert 'typesense' in pusher_lock_packages
 
 
 def test_pusher_imageio_ffmpeg_exclusion_keeps_its_system_ffmpeg_fallback():
@@ -631,18 +685,16 @@ def test_pusher_imageio_ffmpeg_exclusion_keeps_its_system_ffmpeg_fallback():
     assert 'install --no-install-recommends ffmpeg' in dockerfile
 
 
-def test_pusher_posthog_pin_matches_backend_cohort_flag_client():
+def test_pusher_posthog_pin_matches_backend_cohort_flag_client(pusher_lock_packages):
     """PR #20533 enabled cohort dispatch, but pusher lacked the lazy PostHog SDK."""
     pusher = (BACKEND_DIR / 'pusher' / 'requirements.txt').read_text(encoding='utf-8')
     backend = (BACKEND_DIR / 'requirements.txt').read_text(encoding='utf-8')
     pin = _requirement_pin(backend, 'posthog')
     assert _requirement_pin(pusher, 'posthog') == pin
-    lock = tomllib.loads((BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8'))
-    packages = {package['name']: package['version'] for package in lock['packages']}
-    assert packages['posthog'] == pin.split('==', 1)[1]
+    assert pusher_lock_packages['posthog'] == pin.split('==', 1)[1]
 
 
-def test_pusher_lock_covers_mentor_v2_lazy_imports():
+def test_pusher_lock_covers_mentor_v2_lazy_imports(pusher_lock_packages):
     """Packages audited in the pusher-only venv, including function-local imports.
 
     PR #20533's cohort dispatch exposed a missing lazy PostHog import that the
@@ -687,9 +739,9 @@ def test_pusher_lock_covers_mentor_v2_lazy_imports():
         'typesense': 'typesense',
         'ulid': 'python-ulid',
     }
-    lock = tomllib.loads((BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8'))
-    installed_packages = {package['name'] for package in lock['packages']}
-    missing = {module: package for module, package in module_distributions.items() if package not in installed_packages}
+    missing = {
+        module: package for module, package in module_distributions.items() if package not in pusher_lock_packages
+    }
     assert not missing, f'Mentor v2 modules missing from pusher lock: {missing}'
 
 
@@ -1069,29 +1121,31 @@ def test_build_only_entries_are_validated(contracts_module, tmp_path, override, 
         ('nllb-translation', {'omi_logging'}),
     ],
 )
-def test_copied_gpu_shims_do_not_probe_checkout_only_imports(contracts_module, name, excluded_modules):
+def test_copied_gpu_shims_do_not_probe_checkout_only_imports(contracts_module, checkout_graph, name, excluded_modules):
+    _, dependency_trees = checkout_graph
     contract = _contract(contracts_module, name)
     assert excluded_modules <= contract.dependency_probe_exclusions
-    dependencies = contracts_module.third_party_dependency_modules(contract)
+    dependencies = contracts_module.third_party_dependency_modules(contract, _trees=dependency_trees)
     assert not any(
         module == shim or module.startswith(shim + '.') for module in dependencies for shim in excluded_modules
     )
 
 
-def test_gpu_batch_retry_cap_does_not_reach_cloud_tasks(contracts_module):
+def test_gpu_batch_retry_cap_does_not_reach_cloud_tasks(contracts_module, checkout_graph):
+    trees, dependency_trees = checkout_graph
     contract = _contract(contracts_module, 'batch-pipeline-worker')
     # The image also hosts the separate CPU seal-sweeper CronJob. Preserve this
     # process boundary on the GPU entrypoint rather than unioning both hosts.
     gpu_contract = replace(contract, entrypoints=('diarizer.batch_pipeline_runtime',))
-    closure = contracts_module.first_party_import_closure(gpu_contract, gpu_contract.entrypoints)
+    closure = contracts_module.first_party_import_closure(gpu_contract, gpu_contract.entrypoints, _import_trees=trees)
     assert 'utils.capture.retry_cap' in closure
     assert 'utils.sync.retry_hygiene' not in closure
     assert 'utils.cloud_tasks' not in closure
     assert not any(
         module.startswith('google.cloud.tasks')
-        for module in contracts_module.third_party_dependency_modules(gpu_contract)
+        for module in contracts_module.third_party_dependency_modules(gpu_contract, _trees=dependency_trees)
     )
-    sweeper = contracts_module.first_party_import_closure(contract, ('scripts.record_seal_sweep',))
+    sweeper = contracts_module.first_party_import_closure(contract, ('scripts.record_seal_sweep',), _import_trees=trees)
     assert 'utils.batch_pipeline.record_seal_repair' in sweeper
     assert 'diarizer.batch_pipeline_runtime' not in sweeper
     assert 'diarizer.batch_pipeline_models' not in sweeper
@@ -1339,14 +1393,21 @@ def test_third_party_closure_excludes_lock_entries_whose_marker_misses_the_image
     assert not applies("extra == 'gpu'")  # undecidable here: never credited
 
 
-def test_registered_image_dependency_sets_are_classified(contracts_module, dependencies_module):
-    # The full closure walk runs in the backend-runtime-image-third-party-closure
-    # manifest check; this pins which registered images it judges.
-    closed = {
+@pytest.fixture(scope='module')
+def registered_closed_images(contracts_module, dependencies_module):
+    # Registry/Dockerfile/lock parsing is immutable inventory setup. Keep every
+    # registered image and use the real installed-dependency parser.
+    return {
         contract.name
         for contract in contracts_module.load_contracts()
         if not dependencies_module.installed_dependencies(contract).open_reasons
     }
+
+
+def test_registered_image_dependency_sets_are_classified(registered_closed_images):
+    # The full closure walk runs in the backend-runtime-image-third-party-closure
+    # manifest check; this pins which registered images it judges.
+    closed = registered_closed_images
     assert {'batch-pipeline-worker', 'backend', 'backend-api', 'backend-pusher', 'pusher'} <= closed
     assert 'parakeet' not in closed and 'plugins' not in closed
 

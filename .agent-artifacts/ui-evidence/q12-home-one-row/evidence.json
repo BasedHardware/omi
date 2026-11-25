@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-with-live.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic native iOS 27.2 Home: Listening, one Transcribing row for 27 recordings, and a finished episode. Captured through agent-flutter.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-processing-details.png",
+      "platform": "mobile-ios",
+      "description": "The synthetic aggregate page retains links to five real source episode fixtures and all 27 recordings. Native agent-flutter capture.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-home-without-live.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic native iOS 27.2 Home without live capture: one Processing row first under Today, then the separate finished episode. Captured through agent-flutter.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

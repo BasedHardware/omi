@@ -78,6 +78,19 @@ class FreemiumTranscriptionService extends ChangeNotifier {
     return selected.isEmpty ? 'multi' : selected;
   }
 
+  /// Language for live on-device transcription past the cloud cap: the reader's primary
+  /// language, else (iOS, where Apple's recognizer needs one locale and `multi` resolves to
+  /// English) the phone's own language, else `multi` (Whisper detects the language itself).
+  static String liveOnDeviceLanguage({String? primary, String? deviceLocale, bool? isIOS}) {
+    final chosen = (primary ?? SharedPreferencesUtil().userPrimaryLanguage).trim();
+    if (chosen.isNotEmpty && chosen != 'multi') return chosen;
+    if (isIOS ?? Platform.isIOS) {
+      final code = (deviceLocale ?? Platform.localeName).split(RegExp('[_-]')).first.toLowerCase();
+      if (RegExp(r'^[a-z]{2,3}$').hasMatch(code)) return code;
+    }
+    return 'multi';
+  }
+
   Future<FreemiumReadiness> checkReadiness({String? language}) async {
     if (iosOverride ?? Platform.isIOS) {
       appleReadiness =

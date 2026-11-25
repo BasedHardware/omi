@@ -351,6 +351,7 @@ def test_default_gate_keeps_fail_fast_contract(gate_client, fast_clock):
 
 
 def _route_app(monkeypatch, body):
+    monkeypatch.setattr(conversations.conversation_tombstones, 'is_deleted', lambda *args: False)
     for name in (
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
@@ -364,6 +365,7 @@ def _route_app(monkeypatch, body):
     ):
         monkeypatch.setattr(conversations, name, MagicMock())
     monkeypatch.setattr(conversations, '_delete_conversation_under_gate', body)
+    monkeypatch.setattr(conversations, '_legal_hold_defers_delete', lambda uid: False)
     monkeypatch.setattr(deletion_batch_purge, 'is_conversation_batch_purge_dispatch_configured', lambda: False)
     app = FastAPI()
     app.include_router(conversations.router)
@@ -509,6 +511,7 @@ def test_obligation_is_written_before_fallible_cleanup(monkeypatch, tombstone_db
 
 def _real_route_app(monkeypatch):
     """Real route + tombstone writer; only storage side effects are stubbed."""
+    monkeypatch.setattr(conversations, '_legal_hold_defers_delete', lambda uid: False)
     for name in (
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
@@ -579,6 +582,8 @@ def dispatch(monkeypatch):
     sent = []
     monkeypatch.setattr(deletion_batch_purge, 'is_conversation_batch_purge_dispatch_configured', lambda: True)
     monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_consumer_ready', lambda: True)
+    # Default: the previous generation's task is gone (ran, exhausted, or never enqueued).
+    monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_task_pending', lambda *a, **k: False)
     monkeypatch.setattr(
         deletion_batch_purge,
         'enqueue_conversation_batch_purge',
@@ -657,6 +662,88 @@ def test_lost_or_exhausted_task_is_redriven_under_a_fresh_name(monkeypatch, tomb
     assert _obligation(tombstone_db, 'c1')
     assert purge_jobs.run_job(armed, 2) == 'purged'
     assert _obligation(tombstone_db, 'c1') is None
+
+
+def test_generation_still_in_its_queue_is_not_redriven(monkeypatch, tombstone_db, armed, dispatch):
+    """A backlog past the redrive delay must not add a second task per waiting obligation (prod 2026-11-14)."""
+    _purge(monkeypatch)
+    probes = []
+
+    def pending(job, generation, erasure=False):
+        probes.append((job, generation, erasure))
+        return True
+
+    monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_task_pending', pending)
+    deletion_batch_purge.reconcile_conversation_batch_purges()  # generation 1 waits in a backed-up queue
+    _advance(tombstone_db, armed, purge_jobs.REDRIVE_SECONDS + 1)
+    result = deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert result['queued'] == 1 and result['dispatched'] == 0
+    assert dispatch == [(armed, 1)] and probes == [(armed, 1, False)]
+    row = _obligation(tombstone_db, 'c1')
+    assert row['generation'] == 1 and row['attempts'] == 1
+    assert row['due_at'] > purge_jobs._now() + purge_jobs.timedelta(seconds=purge_jobs.REDRIVE_SECONDS - 5)
+    assert purge_jobs.run_job(armed, 1) == 'purged'  # the waiting task still owns the obligation
+    assert _obligation(tombstone_db, 'c1') is None
+
+
+def test_generation_gone_from_its_queue_is_redriven(monkeypatch, tombstone_db, armed, dispatch):
+    _purge(monkeypatch)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    _advance(tombstone_db, armed, purge_jobs.REDRIVE_SECONDS + 1)
+    assert deletion_batch_purge.reconcile_conversation_batch_purges()['dispatched'] == 1
+    assert dispatch == [(armed, 1), (armed, 2)]
+
+
+def test_unanswered_probe_redrives_rather_than_strand(monkeypatch, tombstone_db, armed, dispatch):
+    _purge(monkeypatch)
+    fallback = MagicMock()
+    monkeypatch.setattr(deletion_batch_purge, 'record_fallback', fallback)
+    monkeypatch.setattr(
+        deletion_batch_purge,
+        'conversation_batch_purge_task_pending',
+        MagicMock(side_effect=RuntimeError('tasks api down')),
+    )
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    _advance(tombstone_db, armed, purge_jobs.REDRIVE_SECONDS + 1)
+    result = deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert dispatch == [(armed, 1), (armed, 2)] and result['probe_failed'] == 1
+    assert fallback.call_args.kwargs['to_mode'] == 'blind_redrive'
+    assert fallback.call_args.kwargs['outcome'] == 'degraded'
+
+
+def test_one_unanswered_probe_per_pass(monkeypatch, tombstone_db, dispatch):
+    _purge(monkeypatch)
+    jobs = []
+    for conversation_id in ('c1', 'c2', 'c3'):
+        with conversation_tombstones.defer_batch_purges(UID):
+            conversation_tombstones.record_deletion(UID, conversation_id)
+        jobs.append(purge_jobs.job_id(UID, conversation_id))
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    for job in jobs:
+        _advance(tombstone_db, job, purge_jobs.REDRIVE_SECONDS + 1)
+    probe = MagicMock(side_effect=TimeoutError('tasks api timeout'))
+    monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_task_pending', probe)
+    monkeypatch.setattr(deletion_batch_purge, 'record_fallback', MagicMock())
+    assert deletion_batch_purge.reconcile_conversation_batch_purges()['dispatched'] == 3
+    assert probe.call_count == 1
+
+
+def test_running_generation_is_skipped_without_a_probe(monkeypatch, tombstone_db, armed, dispatch):
+    probe = MagicMock(return_value=True)
+    monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_task_pending', probe)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    row = _obligation(tombstone_db, 'c1')
+    row['due_at'] = purge_jobs._now() - purge_jobs.timedelta(seconds=1)  # lease renewals never move due_at
+    row['lease_until'] = purge_jobs._now() + purge_jobs.timedelta(seconds=60)
+    assert deletion_batch_purge.reconcile_conversation_batch_purges()['skipped'] == 1
+    probe.assert_not_called()
+
+
+def test_queued_hold_never_touches_a_newer_generation(tombstone_db, armed):
+    row = _obligation(tombstone_db, 'c1')
+    row['generation'], due = 2, row['due_at']
+    purge_jobs.defer(armed, purge_jobs.REDRIVE_SECONDS, generation=1)
+    assert _obligation(tombstone_db, 'c1')['due_at'] == due
 
 
 def test_held_obligation_is_redriven_automatically_after_release(monkeypatch, tombstone_db, armed, dispatch):
@@ -765,20 +852,55 @@ class _Request:
     [
         (lambda *a: 'purged', 200, 'done'),
         (lambda *a: 'held', 200, 'done'),
+        (lambda *a: 'busy', 200, 'done'),  # lost the gate to a same-account peer: redriven, not retried
         (MagicMock(side_effect=RuntimeError('firestore down')), 500, 'retry'),
     ],
 )
 def test_task_handler_maps_run_outcomes_to_queue_retry(monkeypatch, effect, status, body_status):
-    monkeypatch.setattr(purge_jobs, 'run_job', effect)
+    monkeypatch.setattr(users_router.batch_pipeline_conversation_purge_scans, 'run_job', effect)
     response = asyncio.run(users_router.run_conversation_batch_purge(_Request({'job_id': 'j1', 'generation': 1}), 0))
     assert response.status_code == status
     assert body_status.encode() in response.body
 
 
+def test_task_handler_logs_why_a_run_failed(monkeypatch, caplog):
+    """Every 500 carries its reason: the obligation kind, generation, error type and sanitized message."""
+    secret = 'tok_9f8e7d6c5b4a3f2e1d0c'
+    error = legal_holds.DestructiveOperationInProgress(f'another destructive operation owns the account gate {secret}')
+    monkeypatch.setattr(users_router.batch_pipeline_conversation_purge_scans, 'run_job', MagicMock(side_effect=error))
+    with caplog.at_level('WARNING', logger='routers.users'):
+        response = asyncio.run(
+            users_router.run_conversation_batch_purge(_Request({'job_id': 'j1', 'generation': 4}), 2)
+        )
+    assert response.status_code == 500
+    line = next(record.getMessage() for record in caplog.records if 'attempt 3 failed' in record.getMessage())
+    assert 'kind=batch_purge job=j1 generation=4' in line
+    assert 'DestructiveOperationInProgress: another destructive operation owns the account gate' in line
+    assert secret not in line
+
+
+def test_task_handler_runs_on_its_own_pool_not_the_account_wipe_pool(monkeypatch):
+    from utils import executors
+
+    pools = []
+
+    async def run_blocking(pool, fn, *args):
+        pools.append(pool)
+        return fn(*args)
+
+    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router.batch_pipeline_conversation_purge_scans, 'run_job', lambda *a: 'purged')
+    asyncio.run(users_router.run_conversation_batch_purge(_Request({'job_id': 'j1', 'generation': 1}), 0))
+    assert pools == [executors.erasure_executor]
+    assert executors.erasure_executor is not executors.cleanup_executor
+    # Every task the conversation-erasure queue delivers at once gets a thread on one instance.
+    assert executors.erasure_executor._max_workers == 20
+
+
 @pytest.mark.parametrize('payload', [{'job_id': 'j1'}, {'generation': 1}, {'job_id': 'j1', 'generation': 0}, ['x']])
 def test_task_handler_drops_invalid_payloads(monkeypatch, payload):
     runner = MagicMock()
-    monkeypatch.setattr(purge_jobs, 'run_job', runner)
+    monkeypatch.setattr(users_router.batch_pipeline_conversation_purge_scans, 'run_job', runner)
     response = asyncio.run(users_router.run_conversation_batch_purge(_Request(payload), 0))
     assert response.status_code == 200
     runner.assert_not_called()
@@ -795,11 +917,76 @@ def test_handler_route_verifies_its_own_task_audience():
 def purge_env(monkeypatch):
     monkeypatch.setenv('ACCOUNT_DELETION_DISPATCH_MODE', 'cloud_tasks')
     monkeypatch.setenv('ACCOUNT_DELETION_TASKS_QUEUE', 'account-deletion')
+    monkeypatch.delenv('CONVERSATION_ERASURE_TASKS_QUEUE', raising=False)  # unset: the shared queue, as before
     monkeypatch.setenv(
         'ACCOUNT_DELETION_HANDLER_URL', 'https://backend-sync.example.invalid/v1/users/account-deletion-wipes/run'
     )
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
     return 'https://backend-sync.example.invalid/v1/conversations/deletion-batch-purges/run'
+
+
+def test_units_ride_the_conversation_erasure_queue_apart_from_account_wipes(monkeypatch, purge_env):
+    enqueue = MagicMock()
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    monkeypatch.setenv('CONVERSATION_ERASURE_TASKS_QUEUE', 'conversation-erasure')
+    assert cloud_tasks.conversation_erasure_queues() == ('conversation-erasure', 'account-deletion')
+    cloud_tasks.enqueue_conversation_batch_purge('j1', 3)
+    cloud_tasks.enqueue_conversation_batch_purge('j2', 1, erasure=True)
+    assert [call.args[0] for call in enqueue.call_args_list] == ['conversation-erasure', 'conversation-erasure']
+    assert enqueue.call_args.args[2] == 'conversation-erasure-j2-g1'
+    cloud_tasks.enqueue_account_deletion_wipe('wipe-1')
+    assert enqueue.call_args.args[0] == 'account-deletion'  # wipes stay alone on their queue
+    cloud_tasks.enqueue_conversation_batch_purge('j3', 1, queue='account-deletion')
+    assert enqueue.call_args.args[0] == 'account-deletion'
+
+
+def test_task_probe_looks_in_the_erasure_queue_then_the_shared_one(monkeypatch, purge_env):
+    monkeypatch.setenv('CONVERSATION_ERASURE_TASKS_QUEUE', 'conversation-erasure')
+    probes = []
+    held_by = {'account-deletion'}  # dispatched by a revision that predates the split
+
+    def exists(queue, task_id):
+        probes.append((queue, task_id))
+        return queue in held_by
+
+    monkeypatch.setattr(cloud_tasks, 'named_task_exists', exists)
+    assert cloud_tasks.conversation_batch_purge_task_pending('j1', 2) is True
+    assert probes == [
+        ('conversation-erasure', 'conversation-batch-purge-j1-g2'),
+        ('account-deletion', 'conversation-batch-purge-j1-g2'),
+    ]
+    held_by.clear()
+    assert cloud_tasks.conversation_batch_purge_task_pending('j1', 2, erasure=True) is False
+    assert probes[-1] == ('account-deletion', 'conversation-erasure-j1-g2')
+
+    def denied(queue, task_id):
+        raise PermissionError('denied')
+
+    monkeypatch.setattr(cloud_tasks, 'named_task_exists', denied)
+    with pytest.raises(PermissionError):
+        cloud_tasks.conversation_batch_purge_task_pending('j1', 2)  # unknown is never "gone"
+
+
+def test_missing_erasure_queue_keeps_units_on_the_shared_queue(monkeypatch, purge_env):
+    from google.api_core.exceptions import NotFound
+
+    monkeypatch.setenv('CONVERSATION_ERASURE_TASKS_QUEUE', 'conversation-erasure')
+    sent = []
+
+    def enqueue(job, generation, erasure=False, queue=None):
+        if queue is None:
+            raise NotFound('queue conversation-erasure')
+        sent.append((job, generation, erasure, queue))
+
+    fallback = MagicMock()
+    monkeypatch.setattr(deletion_batch_purge, 'enqueue_conversation_batch_purge', enqueue)
+    monkeypatch.setattr(deletion_batch_purge, 'record_fallback', fallback)
+    deletion_batch_purge._enqueue('j1', 1, True)
+    assert sent == [('j1', 1, True, 'account-deletion')]
+    assert fallback.call_args.kwargs['to_mode'] == 'account_deletion_queue'
+    monkeypatch.delenv('CONVERSATION_ERASURE_TASKS_QUEUE')
+    with pytest.raises(NotFound):
+        deletion_batch_purge._enqueue('j1', 1, True)  # no second queue to fall back to
 
 
 def test_enqueue_sends_an_opaque_generation_task_with_its_own_audience(monkeypatch, purge_env):

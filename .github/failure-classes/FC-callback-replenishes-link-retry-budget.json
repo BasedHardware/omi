@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-callback-replenishes-link-retry-budget",
+  "family": "work-bounded-resumable",
+  "violated_contract": "A retry limit must bound the complete connection lifetime, including callback-triggered re-entry. A local three-attempt loop in update_conn_params did not bound calls from each high-interval parameter update, so a central that kept granting a high interval could cause requests indefinitely and sleep in the Bluetooth RX callback.",
+  "canonical_prevention": "Charge every explicit API call, including immediate failures and callback-driven requests, to one per-connection budget. Reset only at connection lifecycle boundaries, never on a favorable intermediate result. Keep callback retries nonblocking and test repeated central refusal, API failures, and same-slot reconnects against the production callback and request bodies.",
+  "canonical_prevention_artifact": [
+    "omi/firmware/omi/tests/host/conn_params_regression.c",
+    "omi/firmware/omi/tests/run_host_regressions.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "omi/firmware/omi/src/lib/core/transport.c"
+  ],
+  "status": "open"
+}

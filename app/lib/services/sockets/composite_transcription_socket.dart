@@ -3,11 +3,14 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/hard_secret_detector.dart';
 import 'package:omi/utils/logger.dart';
+
+const customLiveCaptureFixEnabled = bool.fromEnvironment('OMI_CUSTOM_LIVE_CAPTURE_FIX', defaultValue: true);
 
 class CompositeTranscriptionSocket implements IPureSocket {
   final IPureSocket primarySocket;
@@ -328,15 +331,14 @@ class CompositeTranscriptionSocket implements IPureSocket {
     onError(err, trace);
   }
 
+  bool get _routesOmiControls => customLiveCaptureFixEnabled && sttProvider == SttProvider.customLive.name;
+
   @override
   void send(dynamic message) {
     if (_status != PureSocketStatus.connected) {
       return;
     }
-    // Every custom STT primary (polling, streaming, Gemini) accepts audio only. Text frames are Omi
-    // control messages (capture evidence, client state, speaker assignments) for the Omi socket;
-    // handing them to the primary only logged 'Unsupported message type: String' per frame (#24191).
-    if (message is List<int>) {
+    if (!_routesOmiControls || message is List<int>) {
       primarySocket.send(message);
     }
     if (_secondaryDegraded) {
@@ -344,6 +346,17 @@ class CompositeTranscriptionSocket implements IPureSocket {
     }
     if (forwardRawAudioToSecondary || message is! List<int>) {
       secondarySocket.send(message);
+    }
+  }
+
+  /// Source evidence describes the next binary frame on the Omi connection.
+  /// Keep the pair together and honor the same raw-audio consent as [send].
+  void sendEvidenceAudioFrame(String evidence, List<int> audio) {
+    if (_status != PureSocketStatus.connected) return;
+    primarySocket.send(audio);
+    if (_status == PureSocketStatus.connected && !_secondaryDegraded && forwardRawAudioToSecondary) {
+      secondarySocket.send(evidence);
+      secondarySocket.send(audio);
     }
   }
 

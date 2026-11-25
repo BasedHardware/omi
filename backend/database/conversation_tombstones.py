@@ -5,8 +5,9 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any, Iterator, List, Optional, Tuple
 
-from google.api_core.exceptions import AlreadyExists
+from google.api_core.exceptions import AlreadyExists, NotFound
 
+from config.parked_conversations import parked_terminal_status_enabled
 from database._client import db
 from database.fsr_read_cache import cache_writer
 from database import privacy_check_metrics as metrics
@@ -59,7 +60,14 @@ def _tombstone_payload(conversation_id: str, row: dict) -> dict:
 
 
 @cache_writer('tombstone_negative_cache')
-def accept_deletion(uid: str, conversation_id: str, *, firestore_client: Any = None) -> None:
+def accept_deletion(
+    uid: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any = None,
+    legal_hold_deferred: bool = False,
+    arm_erasure: bool = True,
+) -> None:
     """Accept a delete without the account gate: hide it now, owe its erasure durably.
 
     One transaction writes the tombstone (kept if a retry already wrote it), marks
@@ -68,12 +76,20 @@ def accept_deletion(uid: str, conversation_id: str, *, firestore_client: Any = N
     which also arms the batch purge. Nothing is erased here. An active legal hold
     rejects the request as before; a hold placed after this commit stops the
     erasure and the conversation stays hidden but retained.
+
+    ``legal_hold_deferred`` is the held-account path (P7 Decision 4: a hold
+    blocks physical disposal, never product access): the caller has confirmed
+    an active hold, so the delete is accepted, hidden and retained instead of
+    rejected. The tombstone records it so release can account for it. With
+    ``arm_erasure=False`` (a non-cascade delete) no cascade obligation is
+    armed, because the runner's erasure is a cascade the user did not ask for.
     """
     from database._client import get_firestore_client
     from database.conversation_batch_purge_jobs import accept_fields, erasure_job_ref
     from database.legal_holds import assert_account_deletion_permitted
 
-    assert_account_deletion_permitted(uid)
+    if not legal_hold_deferred:
+        assert_account_deletion_permitted(uid)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user = client.collection('users').document(uid)
     conversation_ref = user.collection('conversations').document(conversation_id)
@@ -82,21 +98,44 @@ def accept_deletion(uid: str, conversation_id: str, *, firestore_client: Any = N
 
     def body(transaction):
         row_snapshot = conversation_ref.get(
-            field_paths=['external_data', 'created_at', 'deleted', 'sync_merged_from'], transaction=transaction
+            field_paths=['external_data', 'created_at', 'deleted', 'sync_merged_from', 'status'],
+            transaction=transaction,
         )
-        tombstone_exists = tombstone_ref.get(transaction=transaction).exists
-        owed = obligation_ref.get(transaction=transaction)
+        tombstone = tombstone_ref.get(transaction=transaction)
+        tombstone_exists = tombstone.exists
+        owed = obligation_ref.get(transaction=transaction) if arm_erasure else None
+        # A held non-cascade delete arms nothing, but an obligation an earlier accept armed still erases it.
+        prior_owed = (
+            obligation_ref.get(transaction=transaction).exists if legal_hold_deferred and not arm_erasure else False
+        )
         row = (row_snapshot.to_dict() or {}) if row_snapshot.exists else {}
         # Merge donors are read now, while the row exists: their canonical audio is erased with it.
         # A retry after the row is gone keeps the donors an earlier acceptance recorded.
-        sources = list((owed.to_dict() or {}).get('audio_source_ids') or []) if owed.exists else []
+        sources = list((owed.to_dict() or {}).get('audio_source_ids') or []) if owed is not None and owed.exists else []
         for source in row.get('sync_merged_from') or []:
             if source and source != conversation_id and str(source) not in sources:
                 sources.append(str(source))
         if not tombstone_exists:
-            transaction.create(tombstone_ref, _tombstone_payload(conversation_id, row))
-        if row_snapshot.exists and not row.get('deleted'):
-            transaction.update(conversation_ref, {'deleted': True})
+            payload = _tombstone_payload(conversation_id, row)
+            if legal_hold_deferred:
+                payload['legal_hold_deferred'] = True
+                payload['erasure_armed'] = arm_erasure or prior_owed
+            transaction.create(tombstone_ref, payload)
+        elif legal_hold_deferred:
+            # A held retry (or a cascade after a held non-cascade delete) must stay
+            # visible to release follow-up, and armed erasure is never un-armed.
+            existing = tombstone.to_dict() or {}
+            armed = existing.get('erasure_armed') is True or arm_erasure or prior_owed
+            if existing.get('legal_hold_deferred') is not True or existing.get('erasure_armed') is not armed:
+                transaction.update(tombstone_ref, {'legal_hold_deferred': True, 'erasure_armed': armed})
+        if row_snapshot.exists:
+            updates: dict[str, str | bool] = {} if row.get('deleted') else {'deleted': True}
+            if row.get('status') == 'processing' and parked_terminal_status_enabled():
+                updates['status'] = 'completed'
+            if updates:
+                transaction.update(conversation_ref, updates)
+        if owed is None:
+            return
         owed_fields = accept_fields(uid, conversation_id, audio_source_ids=sources)
         if owed.exists:
             transaction.update(obligation_ref, owed_fields)  # generation/attempts/lease survive a re-accept
@@ -104,6 +143,18 @@ def accept_deletion(uid: str, conversation_id: str, *, firestore_client: Any = N
             transaction.set(obligation_ref, owed_fields)
 
     _in_transaction(client, body)
+
+
+def clear_legal_hold_deferral(uid: str, conversation_id: str, *, firestore_client: Any = None) -> None:
+    """The held accept fell through to a normal delete: release follow-up no longer owes it."""
+    from database._client import get_firestore_client
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    tombstone_ref = client.collection('users').document(uid).collection(COLLECTION).document(conversation_id)
+    try:
+        tombstone_ref.update({'legal_hold_deferred': False})
+    except NotFound:
+        pass  # Gone already (an account wipe or another delete): nothing left to reconcile.
 
 
 def _in_transaction(client: Any, body: Any) -> Any:
@@ -150,6 +201,10 @@ def record_deletion(uid: str, conversation_id: str) -> None:
     from database.from_segments_chunks import purge_chunks
 
     purge_chunks(uid, conversation_id, firestore_client=db)
+    if row.get('v3_derived') or row.get('recording_pieces'):
+        from database.conversations_v3 import release_claims
+
+        release_claims(uid, {**row, 'id': conversation_id}, firestore_client=db)
     if deferred is not None:
         return
     # Intent remains durable if storage cleanup fails, and retry runs the purge

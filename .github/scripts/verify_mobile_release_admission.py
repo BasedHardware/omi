@@ -134,6 +134,7 @@ def validate_mobile_job_results(job_results: object) -> None:
         "android-emulator-checks",
         "ios-compile-check",
         "dart-tests-kiritimati",
+        "dart-tests-pago-pago",
     }
     values = _require_object(job_results, label="mobile_aggregate.job_results")
     if set(values) != expected_jobs:

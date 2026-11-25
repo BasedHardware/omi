@@ -196,3 +196,29 @@ class TestGetConversationsPoisonPage:
         with _card_page(conversations):
             result = rest.get_conversations(_response(), uid=UID)
         assert [c.id for c in result] == ['conv-1', 'conv-2']
+
+
+def _v3_row(conv_id='conv-v3'):
+    """A v3 row as stored before its summary: structured carries no category."""
+    row = _conversation(conv_id)
+    del row['structured']['category']
+    return row
+
+
+class TestV3RowWithoutCategory:
+    """A v3 row written before its summary must not be dropped or 404'd on the MCP read paths."""
+
+    def test_list_keeps_the_row(self):
+        with _card_page([_v3_row()]):
+            result = rest.get_conversations(_response(), uid=UID)
+        assert [c.id for c in result] == ['conv-v3']
+        assert result[0].structured.category.value == 'other'
+
+    def test_detail_serves_the_row(self):
+        row = _v3_row()
+        with patch.object(
+            rest.mcp_conversation_handlers, 'fetch_conversation_for_detail', return_value=dict(row)
+        ), patch.object(rest, 'populate_speaker_names', lambda *a, **k: None):
+            result = rest.get_conversation_by_id('conv-v3', uid=UID)
+        assert result.id == 'conv-v3'
+        assert result.structured.category.value == 'other'

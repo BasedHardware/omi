@@ -26,6 +26,27 @@ struct bt_conn {
 struct bt_gatt_attr {
     int unused;
 };
+#define BT_CONN_TYPE_LE 1
+#define BT_CONN_STATE_CONNECTED 2
+struct bt_conn_le_phy_info {
+    uint8_t tx_phy, rx_phy;
+};
+struct bt_conn_info {
+    uint8_t type, state;
+    struct {
+        uint16_t interval, latency, timeout;
+        struct bt_conn_le_phy_info *phy;
+    } le;
+};
+static struct bt_conn_le_phy_info phy = {2, 4};
+static struct bt_conn_info link = {BT_CONN_TYPE_LE, BT_CONN_STATE_CONNECTED, {36, 7, 600, &phy}};
+static int info_error;
+static int bt_conn_get_info(struct bt_conn *conn, struct bt_conn_info *info)
+{
+    (void) conn;
+    *info = link;
+    return info_error;
+}
 static uint8_t bt_conn_index(struct bt_conn *c)
 {
     return c->index;
@@ -75,7 +96,7 @@ static uint32_t rd(const uint8_t *p)
 static void *stress(void *arg)
 {
     struct bt_conn *c = arg;
-    uint8_t b[25];
+    uint8_t b[OMI_DIAGNOSTICS_SIZE];
     for (unsigned i = 0; i < 10000; i++) {
         assert(diagnostics_read_handler(c, 0, b, 22, 0) == 22);
         omi_diagnostics_inc_storage_error();
@@ -94,7 +115,7 @@ static void *reset_stress(void *arg)
 int main(void)
 {
     struct bt_conn a = {0}, b = {1}, invalid = {2};
-    uint8_t av[25], bv[25], v[25];
+    uint8_t av[OMI_DIAGNOSTICS_SIZE], bv[OMI_DIAGNOSTICS_SIZE], v[OMI_DIAGNOSTICS_SIZE];
     for (unsigned i = 0; i < 255; i++)
         omi_diagnostics_inc_storage_error();
     assert(diagnostics_read_handler(&a, 0, av, 22, 0) == 22);
@@ -105,10 +126,26 @@ int main(void)
     assert(diagnostics_read_handler(&b, 0, bv + 22, 3, 22) == 3);
     assert(rd(av + 21) == 255 && rd(bv + 21) == 256);
     /* Invalid offsets cannot invalidate the pinned snapshot. */
-    assert(diagnostics_read_handler(&a, 0, v, 25, 26) == -7);
+    assert(diagnostics_read_handler(&a, 0, v, OMI_DIAGNOSTICS_SIZE, OMI_DIAGNOSTICS_SIZE + 1) == -7);
     assert(diagnostics_read_handler(&a, 0, av + 21, 4, 21) == 4 && rd(av + 21) == 255);
-    assert(diagnostics_read_handler(&a, 0, v, 25, 25) == 0);
-    assert(diagnostics_read_handler(&a, 0, v, 25, 0) == 25 && rd(v + 21) == 257);
+    assert(diagnostics_read_handler(&a, 0, v, OMI_DIAGNOSTICS_SIZE, OMI_DIAGNOSTICS_SIZE) == 0);
+    assert(diagnostics_read_handler(&a, 0, v, OMI_DIAGNOSTICS_SIZE, 0) == OMI_DIAGNOSTICS_SIZE && rd(v + 21) == 257);
+    assert(v[30] == 36 && v[32] == 7 && v[34] == 0x58 && v[35] == 2 && v[36] == 2 && v[37] == 4);
+    /* Split read pins the link too, even when params/PHY change mid-read. */
+    link.le.interval = 48;
+    link.le.timeout = 500;
+    phy.tx_phy = 1;
+    assert(diagnostics_read_handler(&a, 0, v + 30, 8, 30) == 8 && v[30] == 36 && v[36] == 2);
+    assert(diagnostics_read_handler(&a, 0, v, sizeof(v), 0) == sizeof(v));
+    assert(v[30] == 48 && v[34] == 0xf4 && v[35] == 1 && v[36] == 1);
+    link.le.phy = NULL;
+    assert(diagnostics_read_handler(&a, 0, v, sizeof(v), 0) == sizeof(v));
+    assert(v[30] == 48 && v[36] == 0xff && v[37] == 0xff);
+    info_error = -1;
+    assert(diagnostics_read_handler(&a, 0, v, sizeof(v), 0) == sizeof(v));
+    for (unsigned i = 30; i < sizeof(v); i++)
+        assert(v[i] == 0xff);
+    info_error = 0;
     /* Simulate disconnect then same-index reconnect; no pointer is retained. */
     diagnostics_reset_read_cache(&a);
     struct bt_conn replacement = {0};
@@ -116,9 +153,10 @@ int main(void)
     assert(diagnostics_read_handler(&replacement, 0, v + 21, 4, 21) == 4 && rd(v + 21) == 258);
     omi_diagnostics_inc_storage_error();
     assert(diagnostics_read_handler(&replacement, 0, v + 21, 4, 21) == 4 && rd(v + 21) == 258);
-    assert(diagnostics_read_handler(&replacement, 0, v, 25, 0) == 25 && rd(v + 21) == 259);
-    assert(diagnostics_read_handler(0, 0, v, 25, 0) == -14);
-    assert(diagnostics_read_handler(&invalid, 0, v, 25, 0) == -14);
+    assert(diagnostics_read_handler(&replacement, 0, v, OMI_DIAGNOSTICS_SIZE, 0) == OMI_DIAGNOSTICS_SIZE &&
+           rd(v + 21) == 259);
+    assert(diagnostics_read_handler(0, 0, v, OMI_DIAGNOSTICS_SIZE, 0) == -14);
+    assert(diagnostics_read_handler(&invalid, 0, v, OMI_DIAGNOSTICS_SIZE, 0) == -14);
     diagnostics_reset_read_cache(0);
     diagnostics_reset_read_cache(&invalid);
     pthread_t t1, t2, t3;

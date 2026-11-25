@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-apple-sign-in-screen.png",
+      "platform": "mobile-ios",
+      "description": "Sign-in screen before the tap, prod flavor debug build (local_prod profile, backend on a dead loopback port). iPhone 17 Pro simulator, iOS 26.4, no Apple Account.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-apple-sign-in-failed-message.png",
+      "platform": "mobile-ios",
+      "description": "After tapping Sign in with Apple: Apple returns AuthorizationError 1000 (the production failure code), and the app shows Sign in with Apple didn't work. Try again or continue with Google. Repeated three times with the same result.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

@@ -267,11 +267,13 @@ _KNOWN_NAME_BOUNDARY = r'(?<![A-Za-z0-9_-]){}(?![A-Za-z0-9_-])'
 # env.BACKEND_LISTEN_SOURCE_SHA != '' and rollback gains no new failure mode.
 LISTEN_WORKFLOW = 'gcp_backend_listen_helm.yml'
 _LISTEN_SOURCE_ATOM = ('env.BACKEND_LISTEN_SOURCE_SHA', '!=', '')
+_NOTIFICATIONS_FORWARD_ATOM = ('inputs.mode', '!=', 'image-only-rollback')
 _SUPPORTED_GATE_ATOMS = frozenset(
     {
         ('steps.admitted_source.outputs.superseded', '!=', 'true'),
         ('inputs.mode', '==', 'prove'),
         _LISTEN_SOURCE_ATOM,
+        _NOTIFICATIONS_FORWARD_ATOM,
     }
 )
 _UNSUPPORTED_SCOPE = frozenset({('@unsupported', '==', '@')})
@@ -771,6 +773,14 @@ def _gate_errors(step: dict, expanded: list[dict], index: int, job: dict, job_id
         errors.append('readiness gate condition must be unconditional or a supported lane predicate')
     elif _LISTEN_SOURCE_ATOM in gate_key and not is_listen:
         errors.append('env.BACKEND_LISTEN_SOURCE_SHA gating is only valid in gcp_backend_listen_helm.yml')
+    is_notifications_image_only = pathlib.Path(name).name == 'gcp_notifications_job.yml' and job_id == 'image-only'
+    if is_notifications_image_only:
+        if gate_key != frozenset({_NOTIFICATIONS_FORWARD_ATOM}):
+            errors.append('notifications image-only readiness must gate validate and apply while allowing rollback')
+        if (step.get('with') or {}).get('source_sha') != '${{ inputs.release_sha }}':
+            errors.append('notifications image-only readiness must use inputs.release_sha')
+    elif gate_key and _NOTIFICATIONS_FORWARD_ATOM in gate_key:
+        errors.append('notifications forward gating is only valid in the notifications image-only job')
     if is_listen and gate_key != frozenset({_LISTEN_SOURCE_ATOM}):
         errors.append('listen readiness gate must be conditioned on env.BACKEND_LISTEN_SOURCE_SHA != \'\'')
     with_block = step.get('with') or {}
@@ -1041,7 +1051,9 @@ def workflow_gate_violations(
             if not gate_errors:
                 scope = _gate_scope(step) or frozenset()
                 valid_gates.append((index, step, scope))
-                gate_jobs.add(job_id)
+                # This job can succeed in rollback mode without running readiness.
+                if _NOTIFICATIONS_FORWARD_ATOM not in scope:
+                    gate_jobs.add(job_id)
 
         gate_positions = [(index, scope) for index, _step, scope in valid_gates]
         if is_listen:

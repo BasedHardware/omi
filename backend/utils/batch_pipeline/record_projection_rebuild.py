@@ -1,4 +1,4 @@
-"""Socket-independent playback metadata discovery; no audio decoding or custody."""
+"""Socket-independent playback discovery and bounded original validation; no custody authority."""
 
 from typing import Literal
 
@@ -6,6 +6,8 @@ from config import audio_archive
 from database import conversations as conversations_db, conversation_tombstones, record_projection_rebuild as jobs
 from database._client import get_firestore_client
 from utils.other import storage, raw_audio_read
+from utils.other.relay_archive_recovery import validated_uncovered_packs
+from utils.other.relay_recovery_metrics import SAMPLES
 
 
 def projection_owner_gone(uid: str, conversation_id: str) -> bool:
@@ -23,14 +25,23 @@ def projection_owner_gone(uid: str, conversation_id: str) -> bool:
     return not doc.exists
 
 
-def projected_chunks(uid, cid, chunks):
+def projected_chunks(uid, cid, chunks, *, validate_raw=False, diagnostics=None, reuse_manifest_bodies=False):
     if not audio_archive.admitted(uid, 'READ'):
         return chunks
-    packs = storage.list_packs(storage.get_private_cloud_sync_bucket(), uid, cid)
+    if validate_raw:
+        raw = validated_uncovered_packs(storage.get_private_cloud_sync_bucket(), uid, cid, chunks)
+        if diagnostics is not None:
+            diagnostics['samples'] = sum(item['span']['samples'] for item in raw)
+        return sorted([*chunks, *raw], key=lambda chunk: chunk['timestamp'])
+    packs = storage.list_packs(
+        storage.get_private_cloud_sync_bucket(), uid, cid, reuse_manifest_bodies=reuse_manifest_bodies
+    )
     return sorted([*chunks, *raw_audio_read.uncovered_raw_packs(packs, chunks)], key=lambda chunk: chunk['timestamp'])
 
 
-def discover(uid, cid, *, strict_raw=False, fallback=None):
+def discover(
+    uid, cid, *, strict_raw=False, fallback=None, validate_raw=False, diagnostics=None, reuse_manifest_bodies=False
+):
     """Snapshot before LIST; share the full rebuild with pusher's live cache."""
     owner = conversations_db.get_conversation_raw_snapshot(uid, cid, field_paths=['audio_files', 'deleted'])
     if owner is None or owner.get('deleted'):
@@ -39,7 +50,11 @@ def discover(uid, cid, *, strict_raw=False, fallback=None):
     chunks = storage.list_audio_chunks(uid, cid, source_identity=True, include_archive=False)
     raw_complete = True
     try:
-        listed = projected_chunks(uid, cid, chunks)
+        listed = (
+            projected_chunks(uid, cid, chunks, validate_raw=True, diagnostics=diagnostics)
+            if validate_raw
+            else projected_chunks(uid, cid, chunks, reuse_manifest_bodies=reuse_manifest_bodies and not strict_raw)
+        )
     except Exception:
         if strict_raw:
             raise
@@ -59,22 +74,28 @@ def discover(uid, cid, *, strict_raw=False, fallback=None):
 def rebuild(uid: str, cid: str) -> bool | Literal['no_objects'] | None:
     """Full metadata rebuild with deletion/privacy and prior projection CAS.
 
-    None retains debt for incomplete discovery. No PCM or audio object is read,
-    created, rewritten or deleted; raw coverage uses the existing pack index.
+    None retains debt for incomplete discovery. Uncovered originals are decoded
+    under fixed budgets; no audio object is created, rewritten or deleted.
     """
     if projection_owner_gone(uid, cid):
         return False
+    if not jobs.preflight_projection(uid, cid):
+        return None  # Privacy/consent holds forbid original reads and retain debt.
     for _ in range(2):
-        discovery = discover(uid, cid, strict_raw=True)
+        diagnostics = {}
+        discovery = discover(uid, cid, strict_raw=True, validate_raw=True, diagnostics=diagnostics)
         if discovery is None:
             return False
         expected, _, files, _ = discovery
         if not files:
             return 'no_objects'
         try:
-            return jobs.apply_projection(
+            applied = jobs.apply_projection(
                 uid, cid, {'audio_files': [af.model_dump() for af in files]}, expected_audio_files=expected
             )
+            if applied is True:
+                SAMPLES.labels(stage='recovered').inc(diagnostics.get('samples', 0))
+            return applied
         except conversations_db.AudioFilesChanged:
             continue
     raise RuntimeError('audio projection refresh exhausted')

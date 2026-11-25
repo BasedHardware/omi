@@ -393,7 +393,8 @@ def columns():
                    overrides=[color("Hardware", REVENUE), color("Plan prepay (cash)", MUTED),
                               hidden("Devices"), prop("Devices", ("unit", "short"))],
                    extra=barchart_options(time_x=True))),
-        (4, variable_margin_stat()),
+        (3, variable_margin_stat()),
+        (1, margin_source_line()),
         (8, margin_by_plan()),
     ]
     health = [
@@ -402,8 +403,11 @@ def columns():
              [("headline", "netCost", "All-in/day", "currencyUSD", 2),
               ("uptime", "headline", "Uptime", "percent", 1)]),
         (12, chart("Cost vs revenue",
-                   ALL_IN + "Settled through D−2. Measured/invoiced lines are solid blue-greys: STT measured is the Soniox prepaid-balance delta plus measured Deepgram usage only; STT cash is Mercury vendor cash; measured SaaS (Mercury) is the daily SaaS aggregate. Modulate modelled (measured volume × committed price), STT est. (Soniox console) and SaaS est. (fixed) are sand-colored because they are not measured. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2× and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR ÷ 30.4.",
+                   ALL_IN + "Settled through D−2. Seven legend entries group the same costs: GCP; LLM (Vertex, OpenAI, Anthropic); STT actual (Soniox/Deepgram measured plus Mercury cash); STT est/model (Soniox console estimate plus Modulate modelled); measured SaaS (Mercury); SaaS est.; Revenue. Actual/invoiced groups are blue-grey; estimates and models stay sand-colored. Provider detail remains in the tooltip. Modulate modelled is measured volume × committed price, not measured spend. Grouping never changes the cost total. One-time GCP spikes (a service-day above 2× and $500 over its 14-day median) are excluded. Revenue (violet line) = FinOps MRR ÷ 30.4.",
                    [target("health", "cost", [DATE, ("gcp", "GCP", "number"),
+                                              ("llmUsd", "LLM", "number"),
+                                              ("sttActualUsd", "STT actual", "number"),
+                                              ("sttEstimatedUsd", "STT est/model", "number"),
                                               ("vertexLlm", "Vertex LLM", "number"),
                                               ("openai", "OpenAI", "number"), ("anthropic", "Anthropic", "number"),
                                               ("sttMeasuredUsd", "STT measured", "number"),
@@ -418,11 +422,15 @@ def columns():
                    # Legend under the plot, not beside it: Health is a 4-column
                    # panel, and a right-hand legend left the 35 days ~100px wide.
                    unit="currencyUSD", draw="bars", stack=True, time_from="35d",
-                   overrides=[*[short_label(color(n, h), STACK_LABELS[n]) for n, h in COST.items()],
-                              *[short_label(color(n, h), STACK_LABELS[n]) for n, h in MEASURED.items()],
-                              *[short_label(estimate(n, h), STACK_LABELS[n]) for n, h in ESTIMATE.items()],
+                   overrides=[color("GCP", COST["GCP"]), color("LLM", COST["Vertex LLM"]),
+                              color("STT actual", MEASURED["STT measured"]),
+                              estimate("STT est/model", ESTIMATE["STT est."]),
+                              short_label(color("SaaS measured (Mercury)", MEASURED["SaaS measured (Mercury)"]), "SaaS meas."),
+                              estimate("SaaS est.", ESTIMATE["SaaS est."]),
+                              *[cost_tooltip_detail(n) for n in ("Vertex LLM", "OpenAI", "Anthropic", "STT measured",
+                                                               "STT cash (Mercury)", "Modulate modelled", "STT est.")],
                               line("Revenue", REVENUE, 3),
-                              hidden("One-time excluded"), hidden("All-in total")])),
+                              hidden("One-time excluded"), hidden("All-in total")], extra=cost_groups)),
         (10, chart("Uptime by journey",
                    UPTIME + "One point per UTC day (that day's settled attempts); the white line is all journeys "
                    "together. A journey with no settled attempts that day draws nothing, not 0%. Attempts and "
@@ -501,9 +509,10 @@ VARIABLE_MARGIN = ("Variable margin (approved 2026-10-24, definition 2026-10-23)
                    "fees. The development project's GCP is excluded. It excludes "
                    "marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). "
                    "MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure "
-                   "and counted in the variableMarginStatus frame of /api/omi/stats/wall/series/health. The headline is the live estimate (est.) for "
-                   "today: the margin meter's newest hourly row (omi_finops.margin_meter_hourly) while it is under 3 hours old, "
-                   "else the metered Cloud Monitoring estimate lagged 5 minutes when there is one, else no value. "
+                   "and counted in the variableMarginStatus frame of /api/omi/stats/wall/series/health. The headline uses "
+                   "the margin meter's newest hourly row (omi_finops.margin_meter_hourly) while it is under 3 hours old, "
+                   "else the metered Cloud Monitoring estimate lagged 5 minutes when there is one, else the latest settled day's margin. "
+                   "The visible line below names Hourly meter, Live estimate or Settled and its date; a stale meter is named. "
                    "The meter's figure is its own 24-hour basis, so the last point can step away from the "
                    "trailing-7d sparkline; the variableMarginStatus frame names the meter hour, or how long it has been stale. "
                    "Settled through D−2 beneath it; "
@@ -519,9 +528,9 @@ def variable_margin_stat():
     The reducer is `last`, NOT `lastNotNull`: a day without an MRR book
     snapshot nulls that day's margin, and the headline must show that absence
     (the explicit no-value marker) rather than an older non-null margin."""
-    panel = {"type": "stat", "title": "Variable margin (live est.)", "description": VARIABLE_MARGIN, "datasource": DS,
+    panel = {"type": "stat", "title": "Variable margin", "description": VARIABLE_MARGIN, "datasource": DS,
              "targets": [target("health", "variableMargin", [("marginPct", "Variable margin", "number")])],
-             "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "noValue": "no live est.",
+             "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "noValue": "no margin",
                                           # Below the goal is red; at/above is green.
                                           "color": {"mode": "thresholds"},
                                           "thresholds": {"mode": "absolute", "steps": [
@@ -535,6 +544,44 @@ def variable_margin_stat():
                          "text": {"titleSize": STAT_LABEL_SIZE, "valueSize": STAT_VALUE_SIZE}},
              "timeFrom": "62d", "hideTimeOverride": True}
     return panel
+
+
+def margin_source_line():
+    """Visible provenance for the numeric tile, including its settled fallback."""
+    panel = delta_strip("margin", ["text"], "Source and date of the Variable margin number above; settled is never labelled live.")
+    panel["targets"] = [target("health", "variableMarginSource", [("text", "Source", "string")])]
+    panel["transformations"] = []
+    panel["fieldConfig"]["defaults"]["mappings"] = []
+    panel["fieldConfig"]["defaults"]["noValue"] = "Source unavailable"
+    return panel
+
+
+def cost_tooltip_detail(name):
+    """Keep provider values hoverable without stacking them a second time.
+
+    Grafana removes viz-hidden fields from its tooltip. An invisible unstacked
+    line retains the field, on the same dollar scale, with no visible marks.
+    """
+    return prop(name, ("custom.drawStyle", "line"), ("custom.lineWidth", 0),
+                ("custom.fillOpacity", 0), ("custom.showPoints", "never"),
+                ("custom.stacking", {"mode": "none", "group": "A"}),
+                ("custom.hideFrom", {"legend": True, "tooltip": False, "viz": False}))
+
+
+def cost_groups(panel):
+    """Group the existing API fields in Infinity's JSONata backend parser.
+
+    Keeping grouping here makes automatic board provisioning compatible with
+    the already-serving API. Null optional fragments contribute no stack height,
+    just as before; the original fields remain available for tooltip detail.
+    """
+    panel["targets"][0]["root_selector"] = (
+        'frames.cost.($merge([$, {'
+        '"llmUsd": $sum([vertexLlm ? vertexLlm : 0, openai ? openai : 0, anthropic ? anthropic : 0]), '
+        '"sttActualUsd": $sum([sttMeasuredUsd ? sttMeasuredUsd : 0, sttCashUsd ? sttCashUsd : 0]), '
+        '"sttEstimatedUsd": $sum([sttEstimateUsd ? sttEstimateUsd : 0, sttModulateModelledUsd ? sttModulateModelledUsd : 0])'
+        '}]))'
+    )
 
 
 def estimate(name, hex_):

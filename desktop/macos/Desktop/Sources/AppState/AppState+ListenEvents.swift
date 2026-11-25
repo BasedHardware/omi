@@ -299,6 +299,7 @@ extension AppState {
           speakerLabel: segment.speaker,
           translationsJson: translationsJson
         )
+        await RewindDatabase.shared.reportQuerySuccess()
       } catch {
         logError("Transcription: Failed to persist segment to DB", error: error)
         await RewindDatabase.shared.reportQueryError(error)

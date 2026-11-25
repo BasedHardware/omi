@@ -9,9 +9,9 @@ import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/firmware_update_battery.dart';
-import 'package:omi/utils/firmware_install_verification.dart';
 import 'firmware_update_dialog.dart';
 
 class FirmwareUpdate extends StatefulWidget {
@@ -29,53 +29,110 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   String updateMessage = '';
   bool isLoading = false;
 
+  /// The firmware check got no answer.
+  bool checkFailed = false;
+
+  /// The check confirmed the device needs nothing (latest, or already on stable). Any other answer without
+  /// an offer shows [updateMessage] instead of "up to date".
+  bool isConfirmedCurrent = false;
+
   // Store reference to provider for safe disposal
   DeviceProvider? _deviceProvider;
 
+  /// Asks the server which firmware is current. A check that got no answer shows an error state
+  /// with Try Again, never "Your device is up to date" (ux-contract §17.2).
+  /// A lookup that throws (a malformed answer) is a failed check, never an endless spinner (D1).
+  Future<bool> _answered(Future<bool> Function() lookup) async {
+    try {
+      return await lookup();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _check() async {
+    final device = widget.device!;
+    setState(() {
+      isLoading = true;
+      checkFailed = false;
+      isConfirmedCurrent = false;
+    });
+
+    if (widget.isRollback) {
+      final answered = await _answered(() => getStableVersion(deviceModelNumber: device.modelNumber));
+      if (!answered) return _failCheck();
+      final stableVersion = latestFirmwareDetails['version']?.toString();
+      final alreadyStable = DeviceUtils.isValidFirmwareVersion(device.firmwareRevision) &&
+          device.firmwareRevision.trim() == stableVersion?.trim();
+      if (mounted) {
+        setState(() {
+          shouldUpdate = DeviceUtils.isValidFirmwareVersion(stableVersion) && !alreadyStable;
+          isConfirmedCurrent = alreadyStable;
+          updateMessage = alreadyStable
+              ? context.l10n.alreadyOnStableFirmware
+              : shouldUpdate
+                  ? ''
+                  : context.l10n.noStableFirmwareFound;
+          isLoading = false;
+        });
+      }
+    } else {
+      // The API rejects an unreadable revision. Explain the device-side failure before requesting;
+      // repeating that request cannot recover the BLE revision read.
+      if (!DeviceUtils.isValidFirmwareVersion(device.firmwareRevision)) {
+        if (!mounted) return;
+        setState(() {
+          shouldUpdate = false;
+          updateMessage = context.l10n.unableToDetermineFirmwareVersion;
+          isLoading = false;
+        });
+        return;
+      }
+      final answered = await _answered(() => getLatestVersion(
+            deviceModelNumber: device.modelNumber,
+            firmwareRevision: device.firmwareRevision,
+            hardwareRevision: device.hardwareRevision,
+            manufacturerName: device.manufacturerName,
+            serialNumber: device.serialNumber,
+          ));
+      if (!answered) return _failCheck();
+      final result = await checkFirmwareUpdate(currentFirmware: widget.device!.firmwareRevision);
+      // An answer with no usable release (empty, draft, unparsable) is as inconclusive as no answer.
+      if (result.status == FirmwareUpdateCheck.releaseUnavailable) return _failCheck();
+      if (mounted) {
+        setState(() {
+          shouldUpdate = result.status == FirmwareUpdateCheck.updateAvailable;
+          isConfirmedCurrent = result.status == FirmwareUpdateCheck.upToDate;
+          // An unreadable device revision gets no Try Again: a re-check would reuse the same revision.
+          updateMessage = switch (result.status) {
+            FirmwareUpdateCheck.currentVersionUnknown => context.l10n.unableToDetermineFirmwareVersion,
+            FirmwareUpdateCheck.firmwareTooOld => context.l10n.firmwareUpdateFirmwareTooOld,
+            FirmwareUpdateCheck.appUpdateRequired => context.l10n.firmwareUpdateAppRequired,
+            FirmwareUpdateCheck.updateAvailable ||
+            FirmwareUpdateCheck.upToDate ||
+            FirmwareUpdateCheck.releaseUnavailable =>
+              '',
+          };
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _failCheck() {
+    if (!mounted) return;
+    setState(() {
+      shouldUpdate = false;
+      checkFailed = true;
+      isLoading = false;
+    });
+  }
+
   @override
   void initState() {
-    var device = widget.device!;
-
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       Provider.of<DeviceProvider>(context, listen: false).setOnFirmwareUpdatePage(true);
-      setState(() {
-        isLoading = true;
-      });
-
-      if (widget.isRollback) {
-        await getStableVersion(deviceModelNumber: device.modelNumber);
-        final stableVersion = latestFirmwareDetails['version']?.toString();
-        final alreadyStable =
-            isKnownFirmwareVersion(device.firmwareRevision) && device.firmwareRevision.trim() == stableVersion?.trim();
-        if (mounted) {
-          setState(() {
-            shouldUpdate = isKnownFirmwareVersion(stableVersion) && !alreadyStable;
-            updateMessage = alreadyStable
-                ? context.l10n.alreadyOnStableFirmware
-                : shouldUpdate
-                    ? ''
-                    : context.l10n.noStableFirmwareFound;
-            isLoading = false;
-          });
-        }
-      } else {
-        await getLatestVersion(
-          deviceModelNumber: device.modelNumber,
-          firmwareRevision: device.firmwareRevision,
-          hardwareRevision: device.hardwareRevision,
-          manufacturerName: device.manufacturerName,
-          serialNumber: device.serialNumber,
-        );
-        var result = await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision);
-        if (mounted) {
-          setState(() {
-            shouldUpdate = result.$2;
-            updateMessage =
-                widget.device!.firmwareRevision.isEmpty ? context.l10n.unableToDetermineFirmwareVersion : result.$1;
-            isLoading = false;
-          });
-        }
-      }
+      await _check();
     });
     super.initState();
   }
@@ -251,7 +308,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       FirmwareUpdateFailure.download => context.l10n.firmwareDownloadFailedMessage,
       FirmwareUpdateFailure.install => context.l10n.firmwareUpdateFailedMessage,
       FirmwareUpdateFailure.notInstalled =>
-        context.l10n.firmwareUpdateNotInstalledMessage(observedFirmwareVersion ?? ''),
+        firmwareNotInstalledMessage(context.l10n, widget.device, observedFirmwareVersion ?? ''),
       FirmwareUpdateFailure.noReconnect => context.l10n.firmwareUpdateUnconfirmedMessage,
     };
     return Column(
@@ -383,8 +440,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Up to date status (only when not needing update)
-        if (!shouldUpdate) ...[
+        // Up to date status (only when the check confirmed it)
+        if (!shouldUpdate && isConfirmedCurrent) ...[
           Padding(
             padding: const EdgeInsets.only(left: OmiSpacing.xxs, bottom: OmiSpacing.sm),
             child: Row(
@@ -397,6 +454,21 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                 ),
                 const SizedBox(width: OmiSpacing.xs),
                 FaIcon(FontAwesomeIcons.circleCheck, color: OmiColors.success, size: 14),
+              ],
+            ),
+          ),
+        ] else if (!shouldUpdate) ...[
+          Padding(
+            key: const Key('firmware_update_check_not_confirmed'),
+            padding: const EdgeInsets.only(left: OmiSpacing.xxs, bottom: OmiSpacing.sm),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Flexible(
+                  child: Text(updateMessage, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                ),
+                const SizedBox(width: OmiSpacing.xs),
+                FaIcon(FontAwesomeIcons.circleExclamation, color: OmiColors.warning, size: 14),
               ],
             ),
           ),
@@ -531,13 +603,19 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.md),
             child: isLoading
                 ? _buildLoadingSection()
-                : busy
-                    ? _buildProgressSection()
-                    : isInstalled
-                        ? _buildSuccessSection()
-                        : failure != null
-                            ? _buildFailedSection(failure)
-                            : _buildUpdateSection(),
+                : checkFailed
+                    ? OmiErrorState(
+                        key: const Key('firmware_check_failed'),
+                        message: context.l10n.firmwareCheckFailed,
+                        onRetry: _check,
+                      )
+                    : busy
+                        ? _buildProgressSection()
+                        : isInstalled
+                            ? _buildSuccessSection()
+                            : failure != null
+                                ? _buildFailedSection(failure)
+                                : _buildUpdateSection(),
           ),
         ),
       ),

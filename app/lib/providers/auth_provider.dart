@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -21,6 +22,7 @@ import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
+import 'package:omi/utils/auth/sign_in_failure.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -227,20 +229,28 @@ class AuthenticationProvider extends BaseProvider {
     setLoadingState(false);
   }
 
+  /// Google's own account sheet (true) or the web flow. The native sheet answers null when the
+  /// reader closed it.
+  @visibleForTesting
+  bool get googleUsesNativeSheet => PlatformService.isMobile && !Env.useWebAuth;
+
+  /// Asks Google (or the web flow) for a credential. Tests stand in for the platform here.
+  @visibleForTesting
+  Future<UserCredential?> requestGoogleCredential() => googleUsesNativeSheet
+      ? AuthService.instance.signInWithGoogleMobile()
+      : AuthService.instance.authenticateWithProvider('google');
+
   Future<void> onGoogleSignIn(Function() onSignIn) async {
-    final useWebAuth = Env.useWebAuth;
     if (!loading) {
       setLoadingState(true);
       PlatformManager.instance.analytics.signInStarted('google');
       try {
-        UserCredential? credential;
-        if (PlatformService.isMobile && !useWebAuth) {
-          credential = await AuthService.instance.signInWithGoogleMobile();
-        } else {
-          credential = await AuthService.instance.authenticateWithProvider('google');
-        }
+        final credential = await requestGoogleCredential();
         if (credential != null && _hasFirebaseUser) {
           await _signIn(onSignIn, credential: credential, authProvider: 'google');
+        } else if (credential == null && googleUsesNativeSheet) {
+          // The reader closed Google's sheet: nothing to say, the same as cancelling Apple (D2).
+          PlatformManager.instance.analytics.signInFailed('google', cancelled: true);
         } else {
           PlatformManager.instance.analytics.signInFailed('google', cancelled: true);
           AppSnackbar.showSnackbarError(
@@ -251,6 +261,10 @@ class AuthenticationProvider extends BaseProvider {
       } catch (e) {
         Logger.debug('OAuth Google sign in error: $e');
         PlatformManager.instance.analytics.signInFailed('google', error: e);
+        if (isSignInCancellation(e)) {
+          setLoadingState(false);
+          return;
+        }
         AppSnackbar.showSnackbarError(
           globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
         );
@@ -259,18 +273,21 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
+  /// Asks Apple (or the web flow) for a credential. Tests stand in for the platform here.
+  @visibleForTesting
+  Future<UserCredential?> requestAppleCredential() {
+    if (PlatformService.isMobile && !Env.useWebAuth && !Platform.isAndroid) {
+      return AuthService.instance.signInWithAppleMobile();
+    }
+    return AuthService.instance.authenticateWithProvider('apple');
+  }
+
   Future<void> onAppleSignIn(Function() onSignIn) async {
-    final useWebAuth = Env.useWebAuth;
     if (!loading) {
       setLoadingState(true);
       PlatformManager.instance.analytics.signInStarted('apple');
       try {
-        UserCredential? credential;
-        if (PlatformService.isMobile && !useWebAuth && !Platform.isAndroid) {
-          credential = await AuthService.instance.signInWithAppleMobile();
-        } else {
-          credential = await AuthService.instance.authenticateWithProvider('apple');
-        }
+        final credential = await requestAppleCredential();
         if (credential != null && _hasFirebaseUser) {
           await _signIn(onSignIn, credential: credential, authProvider: 'apple');
         } else {
@@ -280,12 +297,17 @@ class AuthenticationProvider extends BaseProvider {
                 'Failed to sign in with Apple, please try again.',
           );
         }
-      } catch (e) {
-        Logger.debug('OAuth Apple sign in error: $e');
+      } catch (e, stackTrace) {
         PlatformManager.instance.analytics.signInFailed('apple', error: e);
-        AppSnackbar.showSnackbarError(
-          globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
-        );
+        if (isSignInCancellation(e)) {
+          Logger.debug('Apple sign in cancelled');
+        } else {
+          Logger.handle(e, stackTrace, message: 'Apple sign in failed');
+          AppSnackbar.showSnackbarError(
+            globalNavigatorKey.currentContext?.l10n.authAppleSignInFailedUseGoogle ??
+                "Sign in with Apple didn't work. Try again or continue with Google.",
+          );
+        }
       }
       setLoadingState(false);
     }
@@ -359,12 +381,15 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
+  static const termsOfServiceUrl = 'https://www.omi.me/pages/terms-of-service';
+  static const privacyPolicyUrl = 'https://www.omi.me/pages/privacy';
+
   void openTermsOfService() {
-    _launchUrl('https://www.omi.me/pages/terms-of-service');
+    _launchUrl(termsOfServiceUrl);
   }
 
   void openPrivacyPolicy() {
-    _launchUrl('https://www.omi.me/pages/privacy');
+    _launchUrl(privacyPolicyUrl);
   }
 
   void _launchUrl(String url) async {
@@ -377,41 +402,32 @@ class AuthenticationProvider extends BaseProvider {
     await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
   }
 
-  Future<void> linkWithGoogle() async {
-    setLoading(true);
-    try {
-      final result = await completeProviderLinkAndMigrate(
-        linkProvider: AuthService.instance.linkWithGoogle,
-        migrate: migrateAppOwnerId,
-      );
-      if (result == null) {
-        setLoading(false);
-        return;
-      }
-    } catch (e) {
-      AppSnackbar.showSnackbarError(
-        globalNavigatorKey.currentContext?.l10n.authFailedToLinkGoogle ??
-            'Failed to link with Google, please try again.',
-      );
-      rethrow;
-    } finally {
-      setLoading(false);
-    }
-  }
+  Future<ProviderLinkResult?> linkWithGoogle({
+    String? expectedOwnerUid,
+    ProviderLinkAuthorization? authorization,
+  }) =>
+      _linkProvider(
+          () => AuthService.instance.linkWithGoogle(expectedOwnerUid: expectedOwnerUid, authorization: authorization));
 
-  Future<void> linkWithApple() async {
+  Future<ProviderLinkResult?> linkWithApple({
+    String? expectedOwnerUid,
+    ProviderLinkAuthorization? authorization,
+  }) =>
+      _linkProvider(
+          () => AuthService.instance.linkWithApple(expectedOwnerUid: expectedOwnerUid, authorization: authorization));
+
+  Future<ProviderLinkResult?> _linkProvider(Future<ProviderLinkResult?> Function() link) async {
+    if (loading) return null;
     setLoading(true);
     try {
-      await completeProviderLinkAndMigrate(
-        linkProvider: AuthService.instance.linkWithApple,
-        migrate: migrateAppOwnerId,
-      );
-    } catch (e) {
-      Logger.debug('Error linking with Apple: $e');
-      AppSnackbar.showSnackbarError(
-        globalNavigatorKey.currentContext?.l10n.authFailedToLinkApple ?? 'Failed to link with Apple, please try again.',
-      );
-      rethrow;
+      final result = await completeProviderLinkAndMigrate(linkProvider: link, migrate: migrateAppOwnerId);
+      final destination = result?.destinationSession;
+      if (destination != null && AuthService.instance.isSessionSnapshotCurrent(destination)) {
+        // The UID is unchanged on ordinary links, so the UID-distinct streams
+        // won't publish the updated sign-in methods for the account view.
+        user = _auth.currentUser;
+      }
+      return result;
     } finally {
       setLoading(false);
     }

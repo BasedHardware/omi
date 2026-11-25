@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -12,9 +13,12 @@ import 'package:omi/services/wals/mobile_standard_batch.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_frame_encoder.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
+import 'package:omi/services/capture/capture_end.dart';
+import 'package:omi/services/experiments/mobile_batch_file_cap_gate.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import '../../support/on_device_fakes.dart';
+import '../../support/faulting_wal_writer.dart';
 import '../../support/capture/capture_replay_world.dart';
 import '../../support/capture/scripted_device_connection.dart';
 
@@ -31,6 +35,33 @@ class FakeVad implements MobileBatchVad {
 
   @override
   Future<void> close() async {}
+}
+
+// Pause a real directory snapshot so capture can append while its delivery is
+// blocked; subsequent reads use the real current disk inventory.
+class _PausedDirectory implements Directory {
+  _PausedDirectory(this.source);
+  final Directory source;
+  final started = Completer<void>();
+  final release = Completer<void>();
+  bool _first = true;
+  @override
+  String get path => source.path;
+  @override
+  Stream<FileSystemEntity> list({bool recursive = false, bool followLinks = true}) async* {
+    if (_first) {
+      _first = false;
+      final snapshot = await source.list(recursive: recursive, followLinks: followLinks).toList();
+      started.complete();
+      await release.future;
+      yield* Stream.fromIterable(snapshot);
+    } else {
+      yield* source.list(recursive: recursive, followLinks: followLinks);
+    }
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class RecordingWedgeMonitor extends CaptureWedgeMonitor {
@@ -181,6 +212,55 @@ void main() {
         encodeWalFrames(List.generate(6000, (_) => [0])));
   });
 
+  test('a 15-second cap seals four files where the default seals one, losing no frame', () async {
+    buffer.maxFileSeconds = MobileBatchFileCapGate.shortFileSeconds;
+    await enable();
+    for (var i = 0; i < 6000; i++) {
+      expect(route(i % 251), true);
+      await lane.pendingInference;
+    }
+    await buffer.pending;
+    expect(published.map((wal) => wal.seconds), [15, 15, 15, 15]);
+    expect(published.expand((wal) => readFrames(File('${directory.path}/${wal.filePath}'))).toList(),
+        List.generate(6000, (i) => [i % 251]));
+  });
+
+  test('lowering the cap seals an open file that is already longer, and an invalid cap is ignored', () async {
+    await enable();
+    for (var i = 0; i < 2000; i++) {
+      expect(route(0), true);
+      await lane.pendingInference;
+    }
+    buffer.maxFileSeconds = 0;
+    buffer.maxFileSeconds = 61;
+    expect(buffer.maxFileSeconds, MobileBatchBuffer.defaultMaxFileSeconds);
+    buffer.maxFileSeconds = 15;
+    expect(route(0), true);
+    await lane.pendingInference;
+    await buffer.pending;
+    expect(published.single.totalFrames, 2001);
+  });
+
+  test('the file limit scales with a shorter cap so the same span of capture is admitted', () async {
+    final small = MobileBatchBuffer(directory: directory, maxFiles: 1, publish: (wal) async => published.add(wal));
+    await small.initialize();
+    small.maxFileSeconds = 15;
+    for (var file = 0; file < 4; file++) {
+      for (var i = 0; i < 1500; i++) {
+        expect(small.append([file], uid: uid, codec: BleAudioCodec.opus, now: clock), true);
+      }
+    }
+    expect(small.append([9], uid: uid, codec: BleAudioCodec.opus, now: clock), false);
+    await small.close();
+    expect(published.map((wal) => wal.seconds), [15, 15, 15, 15]);
+  });
+
+  test('only an explicit true shortens the file cap', () async {
+    expect(await MobileBatchFileCapGate.maxFileSeconds(readFlag: (_) async => true), 15);
+    expect(await MobileBatchFileCapGate.maxFileSeconds(readFlag: (_) async => false), 60);
+    expect(await MobileBatchFileCapGate.maxFileSeconds(readFlag: (_) async => throw StateError('offline')), 60);
+  });
+
   test('VAD hangover prioritizes speech at two seconds without discarding padding', () async {
     await enable();
     vad.value = 0.4;
@@ -195,6 +275,195 @@ void main() {
       [1],
       [0]
     ]);
+  });
+
+  test('speech is reported with its capture time, and the two-second seal does not un-report it', () async {
+    final heard = <(String?, DateTime)>[];
+    lane.onSpeech = (recording, at) => heard.add((recording, at));
+    lane.authorize(true);
+    await lane.pendingInitialization;
+    vad.value = 0.9;
+    final spoke = clock;
+    expect(lane.route([1], codec: BleAudioCodec.opus, realtimeConsumer: false, recordingSessionId: 'rec'), true);
+    await lane.pendingInference;
+    vad.value = 0;
+    clock = clock.add(const Duration(seconds: 3));
+    expect(lane.route([2], codec: BleAudioCodec.opus, realtimeConsumer: false, recordingSessionId: 'rec'), true);
+    await lane.pendingInference;
+    expect(heard, [('rec', spoke)]);
+  });
+
+  test('an end report observes unregistered audio and never seals or moves a chunk boundary', () async {
+    final sent = <int>[];
+    final reporter = CaptureEndReporter(
+      post: (signal, {required pendingWals, required sentAt}) async {
+        sent.add(pendingWals);
+        return true;
+      },
+      pendingWals: (signal) => buffer.pendingJournalCount(signal.recordingSessionId, through: signal.decidedAt),
+      disabled: () async => false,
+    );
+    lane.authorize(true);
+    await lane.pendingInitialization;
+    vad.value = 0.9; // speech throughout, so the VAD's own 2 s silence seal never fires
+    expect(lane.route([1], codec: BleAudioCodec.opus, realtimeConsumer: false, recordingSessionId: 'rec'), true);
+    await lane.pendingInference;
+    expect(await buffer.pendingJournalCount('rec'), 1);
+    expect(await buffer.pendingJournalCount('other'), 0);
+
+    // The end is reported while the final chunk is still open.
+    final end = CaptureEndSignal(
+        recordingSessionId: 'rec', type: CaptureEndType.userInitiated, lastSpeechAt: clock, decidedAt: clock);
+    await reporter.report(end);
+    expect(sent, [1], reason: 'the open chunk is pending; the marker cannot say zero');
+    expect(published, isEmpty, reason: 'reporting an end sealed nothing');
+
+    // Capture goes on untouched: the next frame lands in the same chunk.
+    expect(lane.route([2], codec: BleAudioCodec.opus, realtimeConsumer: false, recordingSessionId: 'rec'), true);
+    await lane.pendingInference;
+    await reporter.uploadAccepted('rec');
+    expect(sent, [1], reason: 'still open, still pending, nothing resent');
+    expect(published, isEmpty);
+
+    // The capture lifecycle seals; only then does the audio become a file.
+    buffer.seal();
+    await buffer.pending;
+    expect(readFrames(File('${directory.path}/${published.single.filePath}')), [
+      [1],
+      [2]
+    ]);
+    expect(await buffer.pendingJournalCount('rec'), 0);
+    await reporter.uploadAccepted('rec');
+    expect(sent, [1, 0], reason: 'zero only after the final audio is registered and accepted');
+  });
+
+  test('a chunk whose publish fails stays counted as unregistered', () async {
+    final failing =
+        MobileBatchBuffer(directory: directory, publish: (wal) async => throw StateError('index unavailable'));
+    await failing.initialize();
+    expect(failing.append([1], uid: uid, codec: BleAudioCodec.opus, now: clock, recordingSessionId: 'rec'), true);
+    failing.seal();
+    await failing.pending;
+    expect(failing.failed, isTrue);
+    expect(await failing.pendingJournalCount('rec'), 1, reason: 'its audio is in the journal, not the file index');
+    expect(await failing.pendingJournalCount('rec', ownerUid: uid), 1);
+    expect(await failing.pendingJournalCount('rec', ownerUid: 'next-account'), 0,
+        reason: 'another account can never upload this journal, so it must not hold that account\'s recording open');
+    await File('${directory.path}/unknown.batch-journal').writeAsString('{');
+    expect(await failing.pendingJournalCount('rec', ownerUid: 'next-account'), 1,
+        reason: 'a journal with unreadable ownership still counts for every account');
+  });
+
+  test('unknown-clock audio stays in the end watermark before and during a failed index publication', () async {
+    final failing =
+        MobileBatchBuffer(directory: directory, publish: (wal) async => throw StateError('index unavailable'));
+    await failing.initialize();
+    final future = DateTime.utc(2038);
+    expect(failing.append([1], uid: uid, codec: BleAudioCodec.opus, now: future, recordingSessionId: 'rec'), true);
+    expect(await failing.pendingJournalCount('rec', through: clock, now: clock), 1);
+    expect(published, isEmpty, reason: 'the watermark must never seal or publish audio');
+    failing.seal();
+    await failing.pending;
+    expect(await failing.pendingJournalCount('rec', through: clock, now: clock), 1);
+    // If the clock is trusted, a chunk after the decided end is trailing silence.
+    expect(await failing.pendingJournalCount('rec', through: clock, now: future), 0);
+    expect(failing.failed, isTrue);
+  });
+
+  for (final operation in ['periodic flush', 'write']) {
+    test('append $operation failure retains earlier accepted audio in the disk count', () async {
+      late FaultingWalWriter writer;
+      final broken = MobileBatchBuffer(
+          directory: directory,
+          publish: (_) async => fail('failed append must not publish'),
+          openWriter: (file) => writer = FaultingWalWriter(file));
+      await broken.initialize();
+      expect(broken.append([1], uid: uid, codec: BleAudioCodec.opus, now: clock, recordingSessionId: 'rec'), true);
+      if (operation == 'periodic flush') {
+        for (var i = 1; i < BleAudioCodec.opus.getFramesPerSecond() - 1; i++) {
+          expect(broken.append([1], uid: uid, codec: BleAudioCodec.opus, now: clock, recordingSessionId: 'rec'), true);
+        }
+        writer.failFlush = true;
+      } else {
+        writer.failWrite = true;
+      }
+      expect(broken.append([2], uid: uid, codec: BleAudioCodec.opus, now: clock, recordingSessionId: 'rec'),
+          operation == 'periodic flush');
+      expect(broken.failed, isTrue);
+      expect(broken.hasFrames, isFalse);
+      expect(await broken.pendingJournalCount('rec'), 1);
+      final fresh = MobileBatchBuffer(directory: directory, publish: (_) async {});
+      expect(await fresh.pendingJournalCount('rec'), 1);
+      expect(await MobileBatchBuffer.recover(directory, []), hasLength(1));
+    });
+  }
+
+  test('process loss before seal and journal replay retain pending evidence without a memory set', () async {
+    await buffer.initialize();
+    expect(buffer.append([1], uid: uid, codec: BleAudioCodec.opus, now: clock, recordingSessionId: 'rec'), true);
+    final fresh = MobileBatchBuffer(directory: directory, publish: (_) async {});
+    expect(await fresh.pendingJournalCount('rec'), 1);
+    final recovered = await MobileBatchBuffer.recover(directory, []);
+    expect(recovered.single.recordingSessionId, 'rec');
+    expect(await fresh.pendingJournalCount('rec'), 1, reason: 'replay does not erase the retained journal');
+    expect(
+        await fresh.pendingJournalCount('rec',
+            acceptedFileBytes: {recovered.single.filePath!: recovered.single.storageTotalBytes}),
+        0);
+    expect(buffer.append([2], uid: uid, codec: BleAudioCodec.opus, now: clock, recordingSessionId: 'rec'), true);
+    expect(
+        await fresh.pendingJournalCount('rec',
+            acceptedFileBytes: {recovered.single.filePath!: recovered.single.storageTotalBytes}),
+        1,
+        reason: 'acceptance of a prefix cannot hide a later append to the replayed journal');
+    expect(await fresh.pendingJournalCount('other'), 0);
+    expect(published, isEmpty, reason: 'the observer never seals or publishes');
+  });
+
+  test('unreadable journal metadata over-counts and unreadable directory omits the end marker', () async {
+    await File('${directory.path}/unknown.batch-journal').writeAsString('{');
+    expect(await buffer.pendingJournalCount('rec'), 1);
+    final missing = MobileBatchBuffer(directory: Directory('${directory.path}/unavailable'), publish: (_) async {});
+    final sent = <int>[];
+    final reporter = CaptureEndReporter(
+        post: (signal, {required pendingWals, required sentAt}) async {
+          sent.add(pendingWals);
+          return true;
+        },
+        pendingWals: (_) => missing.pendingJournalCount('rec'),
+        disabled: () async => false);
+    await reporter.report(CaptureEndSignal(
+        recordingSessionId: 'rec', type: CaptureEndType.userInitiated, lastSpeechAt: clock, decidedAt: clock));
+    expect(sent, isEmpty, reason: 'an unknown disk inventory cannot assert zero');
+    await missing.initialize();
+    await reporter.uploadAccepted('rec');
+    expect(sent, [0], reason: 'a later successful observation can clear the end');
+  });
+
+  test('an append during an empty directory snapshot defers the marker instead of reporting zero', () async {
+    final paused = _PausedDirectory(directory);
+    final observer = MobileBatchBuffer(directory: paused, publish: (_) async {});
+    final sent = <int>[];
+    final reporter = CaptureEndReporter(
+        post: (signal, {required pendingWals, required sentAt}) async {
+          sent.add(pendingWals);
+          return true;
+        },
+        pendingWals: (_) => observer.pendingJournalCount('rec'),
+        observationVersion: () => MobileBatchBuffer.journalRevision,
+        disabled: () async => false);
+    final reporting = reporter.report(CaptureEndSignal(
+        recordingSessionId: 'rec', type: CaptureEndType.userInitiated, lastSpeechAt: clock, decidedAt: clock));
+    await paused.started.future;
+    expect(buffer.append([1], uid: uid, codec: BleAudioCodec.opus, now: clock, recordingSessionId: 'rec'), true);
+    paused.release.complete();
+    await reporting;
+    expect(sent, isEmpty);
+    await reporter.uploadAccepted('rec');
+    expect(sent, [1]);
+    await buffer.close();
+    await reporter.uploadAccepted('rec');
+    expect(sent, [1, 0]);
   });
 
   test('bounded capacity preserves backlog and refuses new batch admission', () async {

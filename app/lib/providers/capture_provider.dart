@@ -29,6 +29,9 @@ class CaptureProvider extends CaptureController {
     super.deviceMuteReader,
     super.deviceMuteWriter,
     super.processInProgressOutcome,
+    super.processRequestSender,
+    super.deleteDiscardedConversation,
+    super.discardDeleteRetryDelays,
     super.deviceConnectionLoader,
     super.pendantReconnect,
     super.pendantReconnectBlocked,
@@ -52,6 +55,24 @@ class CaptureProvider extends CaptureController {
   Future<void> _liveSegmentWrite = Future<void>.value();
 
   Future<void> get pendingLiveSegmentWrite => _liveSegmentWrite;
+
+  /// A discarded recording also drops its live-caption snapshot on disk, which would otherwise wait
+  /// for a projection that never comes. A write already queued lands first, so the release is last.
+  @override
+  Future<bool> discardPhoneRecording() async {
+    final sessions = {activeCaptureSessionId, activeRecordingId}.whereType<String>().toList();
+    final discarded = await super.discardPhoneRecording();
+    if (!discarded || !localSegmentStore.enabled) return discarded;
+    try {
+      await _liveSegmentWrite;
+      for (final session in sessions) {
+        await localSegmentStore.release(session);
+      }
+    } catch (e) {
+      Logger.debug('Error releasing discarded live segments: $e');
+    }
+    return discarded;
+  }
 
   void _persistLiveSegments() {
     if (!localSegmentStore.enabled) return;

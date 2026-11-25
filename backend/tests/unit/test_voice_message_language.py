@@ -202,7 +202,12 @@ async def test_stream_routes_storage_and_transcription_to_owned_executors(chat, 
 
     monkeypatch.setattr(chat, "run_blocking", fake_run_blocking)
 
-    chunks = [chunk async for chunk in chat.process_voice_message_segment_stream("audio.wav", "uid", "en")]
+    chunks = [
+        chunk
+        async for chunk in chat.process_voice_message_segment_stream(
+            "audio.wav", "uid", "en", register_answer=lambda *_: None
+        )
+    ]
 
     assert chunks == []
     assert [(executor, func) for executor, func, _, _ in calls] == [
@@ -236,7 +241,12 @@ async def test_silent_stream_still_schedules_temporary_audio_cleanup(chat, monke
 
     monkeypatch.setattr(chat, "run_blocking", fake_run_blocking)
 
-    chunks = [chunk async for chunk in chat.process_voice_message_segment_stream("audio.wav", "uid", "en")]
+    chunks = [
+        chunk
+        async for chunk in chat.process_voice_message_segment_stream(
+            "audio.wav", "uid", "en", register_answer=lambda *_: None
+        )
+    ]
 
     assert chunks == []
     sign.assert_called_once_with("audio.wav")

@@ -1,0 +1,4 @@
+{
+  "change": "Improved pendant reconnection when the app is reopened in the background.",
+  "platforms": ["ios"]
+}

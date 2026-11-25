@@ -93,7 +93,11 @@ def _patch_document_merge_preserves_subcollections():
 
     _original_document_set = FakeDocumentReference.set
 
-    def _set(self, data: dict, merge: bool = False, timeout: Optional[float] = None) -> None:
+    def _set(self, data: dict, merge: bool = False, timeout: Optional[float] = None, *, retry=None) -> None:
+        # Real bounded writers explicitly disable RPC retries. This in-memory
+        # adapter performs no RPC, and the third-party fake has no retry keyword.
+        if retry is not None:
+            raise NotImplementedError('hermetic Firestore set does not model RPC retry policies')
         if not merge:
             return _original_document_set(self, data, merge=merge, timeout=timeout)
 

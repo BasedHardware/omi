@@ -55,7 +55,7 @@ def test_soniox_utc_days_decimal_costs_and_no_double_count(stt, monkeypatch):
 
 def test_soniox_multiple_stt_models_and_zero_days(stt, monkeypatch):
     payload = fixture("soniox_summary.json")
-    payload["models"].append({"model": "stt-rt-v5", "days": ["2026-04-01"], "cost_usd": ["1.2"]})
+    payload["models"].append({"model": "stt-rt-v6", "days": ["2026-04-01"], "cost_usd": ["1.2"]})
     monkeypatch.setattr(stt, "get_json", lambda *args: payload)
     assert stt.soniox_costs("2026-04-01", "2026-04-03", "test")["2026-04-01"] == "1.2409000000"
     payload["models"] = []

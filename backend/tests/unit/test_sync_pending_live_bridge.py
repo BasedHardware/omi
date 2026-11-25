@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 import re
 import threading
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -169,9 +168,6 @@ def test_default_home_http_list_hides_pending_row(monkeypatch, pending, indexed)
     store, _, _, _ = pending
     _install_listing(monkeypatch, _rows_from_store(store))
     monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
-    monkeypatch.setattr(
-        routes.ListVersionCheck, 'start', lambda *a: SimpleNamespace(not_modified=None, finish=lambda *a, **kw: None)
-    )
     app = FastAPI()
     app.include_router(routes.router)
     app.dependency_overrides[auth.get_current_user_uid] = lambda: 'u'
@@ -627,7 +623,8 @@ def _declared_off_values(path: Path) -> int:
 
 def test_mode_surfaces_agree_on_off_and_the_three_values():
     assert _declared_off_values(REPO_ROOT / 'backend/deploy/runtime_env/_base.yaml') == 5
-    assert _declared_off_values(REPO_ROOT / 'backend/deploy/runtime_env.yaml') == 10
+    # Per environment: one GKE host and the four Cloud Run services; prod adds the projection pump (SCA-3120).
+    assert _declared_off_values(REPO_ROOT / 'backend/deploy/runtime_env.yaml') == 11
 
     for chart in ('dev', 'prod'):
         text = (REPO_ROOT / f'backend/charts/backend-listen/{chart}_omi_backend_listen_values.yaml').read_text(
@@ -690,3 +687,20 @@ def test_flags_off_preserve_standalone_intake_and_skip_target_recovery(monkeypat
     monkeypatch.setattr(bridge, '_finish_pending_live_bridge', recover)
     assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
     recover.assert_not_called()
+
+
+def test_pending_enrichment_bridge_yields_before_assigning_a_foreign_target(monkeypatch):
+    from unittest.mock import call
+
+    source = {'id': 'wal', bridge_pending.FIELD: {'target_id': 'live'}}
+    target = {'id': 'live', 'status': 'completed', 'finalization_engine': 'go', 'finalization_owner_epoch': 1}
+    snapshot = MagicMock(side_effect=[source, target])
+    assign = MagicMock()
+    monkeypatch.setattr(bridge.conversations_db, 'get_conversation', snapshot)
+    monkeypatch.setattr(bridge.conversations_db, 'assign_sync_conversation', assign)
+
+    with pytest.raises(bridge.processing_hold.ProcessingDeferred, match='finalization_owned_elsewhere'):
+        bridge._finish_pending_live_bridge('u', 'wal', require_python_owner=True)
+
+    assert snapshot.call_args_list == [call('u', 'wal'), call('u', 'live')]
+    assign.assert_not_called()

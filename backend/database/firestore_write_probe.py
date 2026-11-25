@@ -11,8 +11,7 @@ It wraps the GAPIC transport methods ``FirestoreClient.commit`` and
 ``update`` use), ``Transaction._commit``, ``DocumentReference.delete`` and
 ``BulkWriter``. Counting at the transport means the probe sees the request as
 sent, including writes that commit-boundary patches append to it
-(``database.list_projection`` rows and versions, ``database.memory_change_head``
-heads). ``database._client`` installs this probe before those patches, so the
+(such as the ``database.memory_change_head`` writes). ``database._client`` installs this probe before those patches, so the
 change-head wrapper calls through it with its heads already appended.
 
 Billing assumptions (Cloud Firestore Standard pricing, encoded, not measured):
@@ -142,10 +141,10 @@ MAX_WRITE_CALLERS = 2048
 _WRITE_PLUMBING_MODULES = frozenset(
     {
         __name__,
-        'database.list_projection',
         'database.memory_change_head',
         'database.action_item_write_fence',
         'database.batch_privacy_write_fence',
+        'database.home_feed_writer',
         # The transactional callback has returned before the SDK commits, so the
         # retry helper would otherwise be the first frame for every caller of it
         # (~50% of Cloud Run writes on 2026-11-01).

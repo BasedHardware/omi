@@ -41,6 +41,7 @@ def test_gaps_and_overlap_never_fabricate_contiguous_clock(tmp_path):
 def test_short_gap_is_silence_with_capture_clock_preserved(tmp_path):
     units = list(capture_decode.decode_units([pcm(tmp_path, 1750000100, 16000), pcm(tmp_path, 1750000102, 16000)]))
     assert len(units) == 1 and units[0].duration_seconds == 3
+    assert units[0].source_frames == 32000
     with wave.open(io.BytesIO(units[0].wav)) as stream:
         data = stream.readframes(stream.getnframes())
     assert data[32000:64000] == b'\0' * 32000
@@ -114,6 +115,7 @@ def test_early_capture_batch_keeps_raw_identity_and_order_with_receipt_clock(tmp
     assert [u.capture_at for u in units] == [788918400, 788918500]
     assert [u.stored_capture_at for u in units] == [receipt - 2, receipt - 1]
     assert [u.duration_seconds for u in units] == [1, 1]
+    assert [u.source_frames for u in units] == [None, None]
     assert units[-1].stored_capture_at + units[-1].duration_seconds == receipt
 
 

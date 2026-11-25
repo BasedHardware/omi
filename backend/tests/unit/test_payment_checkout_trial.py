@@ -48,6 +48,7 @@ def _checkout(trial_days, existing_customer_id):
         patch.object(payment.subscription_utils, 'new_buyer_single_plan_violation', return_value=None),
         patch.object(payment, '_try_reactivate_subscription', return_value=None),
         patch.object(payment.users_db, 'get_stripe_customer_id', return_value=existing_customer_id),
+        patch.object(payment.play_subscriptions_db, 'is_play_customer', return_value=False),
         patch.object(payment.stripe_utils, 'create_subscription_checkout_session', side_effect=create_session),
     ):
         result = payment.create_checkout_session_endpoint(
@@ -85,6 +86,7 @@ def test_first_time_buyer_omi_pro_trial_through_the_single_plan_guard(monkeypatc
         patch.object(payment.subscription_utils.users_db, 'get_user_valid_subscription', return_value=None),
         patch.object(payment, '_try_reactivate_subscription', return_value=None),
         patch.object(payment.users_db, 'get_stripe_customer_id', return_value=None),
+        patch.object(payment.play_subscriptions_db, 'is_play_customer', return_value=False),
         patch.object(payment.stripe_utils, 'create_subscription_checkout_session', side_effect=create_session),
     ):
         result = payment.create_checkout_session_endpoint(

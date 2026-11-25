@@ -17,3 +17,13 @@ def payment_recovery_notification_enabled() -> bool:
         'off',
         'no',
     }
+
+
+def payment_issue_monthly_switch_enabled() -> bool:
+    """On unless set off; off hides payment_issue.monthly_switch and refuses the switch endpoint."""
+    return os.getenv('PAYMENT_ISSUE_MONTHLY_SWITCH_ENABLED', 'true').strip().lower() not in {
+        '0',
+        'false',
+        'off',
+        'no',
+    }

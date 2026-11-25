@@ -110,8 +110,10 @@ def disabled() -> bool:
             return _kill_state[0][1]
     try:
         off = _read_kill_flag()
+        result = 'disabled' if off else 'clear'
     except Exception:
         off = True
+        result = 'error'
     with _kill_lock:
         _kill_state[:] = [(now + KILL_POLL_SECONDS, off)]
     if off:
@@ -120,6 +122,7 @@ def disabled() -> bool:
         from database import privacy_check_metrics as metrics
 
         metrics.ttl_kill_state(off)
+        metrics.ttl_switch_read(result)
     except Exception:
         pass
     return off

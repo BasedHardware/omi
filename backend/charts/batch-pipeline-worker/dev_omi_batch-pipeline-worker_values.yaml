@@ -28,6 +28,8 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  RECORD_FRESH_MERGE_ENABLED: false
+  # Staged OFF until every merge writer runs the sibling guard.
   heldDeadLetterEnabled: true
   inputExpiringEnabled: true
   servingMetricsMinRefreshSeconds: 30

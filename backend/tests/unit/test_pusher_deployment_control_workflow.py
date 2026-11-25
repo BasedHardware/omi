@@ -261,7 +261,8 @@ def test_prod_pusher_requires_successful_dev_attestation_and_never_rebuilds() ->
 
 
 def test_prod_evidence_failure_halts_before_any_registry_or_helm_mutation() -> None:
-    qualification_verifier = MANUAL.index("verify_pusher_promotion_evidence.py")
+    selection = MANUAL.index("Select development-qualified Pusher digest for production")
+    qualification_verifier = MANUAL.index("verify_pusher_promotion_evidence.py", selection)
     registry_mutation = MANUAL.index("gcloud container images add-tag --quiet")
     canary_verifier = MANUAL.index("verify_pusher_promotion_evidence.py", qualification_verifier + 1)
     config_mutation = MANUAL.index("Apply non-secret pusher runtime config")

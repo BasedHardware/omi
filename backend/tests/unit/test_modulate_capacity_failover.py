@@ -1,7 +1,7 @@
 """A local window refusal must not strand live sessions behind a serving bench."""
 
 import asyncio
-import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -84,15 +84,11 @@ async def test_capacity_refusal_reaches_serving_benched_soniox(monkeypatch):
 @pytest.mark.parametrize('revision', ['6a26acc', 'afa7800', '0ba6edb'])
 @pytest.mark.parametrize('previous_soniox', [False, True])
 async def test_historical_open_window_and_soniox_exhaust_with_failed_modulate(revision, previous_soniox):
-    source = subprocess.run(
-        ['git', 'show', f'{revision}:backend/utils/stt/live_chain.py'],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    fixture = Path(__file__).resolve().parents[1] / 'fixtures' / 'live_chain_history' / f'{revision}.py'
+    source = fixture.read_text(encoding='utf-8')
     source = source.replace('fallback_reason_for_typed_death', 'fallback_metric_reason')
     namespace = {'__name__': f'historical_chain_{revision}'}
-    exec(compile(source, f'{revision}/live_chain.py', 'exec'), namespace)
+    exec(compile(source, str(fixture), 'exec'), namespace)
     # Historical source predates the additive cohort label. Bind its counter
     # to a child without changing the historical selection/recovery behavior.
     namespace['CHAIN_EXHAUSTED'] = CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')

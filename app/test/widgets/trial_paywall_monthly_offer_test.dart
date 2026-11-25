@@ -55,7 +55,7 @@ class _Usage extends UsageProvider {
   String? refreshError;
 
   @override
-  Future<void> fetchSubscription() async {
+  Future<void> fetchSubscription({bool fresh = false}) async {
     fetches++;
     await refresh;
     debugSetSubscription(server);
@@ -64,13 +64,17 @@ class _Usage extends UsageProvider {
 
 /// Stands in for Stripe Checkout: records each price it opened and answers with the next outcome.
 class _Checkout {
-  _Checkout(this.outcomes);
+  _Checkout(this.outcomes, {this.gate});
 
   final List<PaywallCheckoutOutcome> outcomes;
+
+  /// Holds the session request open so a test can act while the handoff is pending.
+  final Completer<void>? gate;
   final opened = <PaywallPrice>[];
 
   Future<PaywallCheckoutOutcome> call(BuildContext context, PaywallPrice price, String tierId) async {
     opened.add(price);
+    if (gate != null) await gate!.future;
     return outcomes.removeAt(0);
   }
 }
@@ -260,6 +264,51 @@ void main() {
     expect(find.text(_title), findsNothing);
     expect(usage.fetches, 0);
     expect(await offerEvents(tester), isEmpty);
+  });
+
+  // Play review evidence paired "7 days free, then US$269.91/year" with a monthly Stripe cart.
+  // Tapping the Monthly card must move the trial line to the monthly price before any checkout,
+  // so a paywall that shows the yearly price can never be followed by a monthly cart from the CTA.
+  testWidgets('tapping Monthly moves the trial line to the monthly price and the CTA opens monthly', (tester) async {
+    final usage = _Usage(_subscription());
+    final checkout = _Checkout([PaywallCheckoutOutcome.cancelled]);
+    await _open(tester, usage, checkout);
+
+    expect(_terms(tester), '7 days free, then US\$269.91/year', reason: 'Yearly is preselected');
+
+    await _chooseMonthlyCard(tester);
+    expect(_terms(tester), '7 days free, then US\$29.99/month');
+    expect(find.text('7 days free, then US\$269.91/year'), findsNothing, reason: 'no stale yearly line remains');
+
+    await _tapCta(tester);
+    expect(checkout.opened, hasLength(1));
+    expect(identical(checkout.opened.last, _offer.monthly), isTrue, reason: 'the CTA opens the monthly price');
+    expect(find.text(_title), findsNothing, reason: 'leaving a monthly checkout offers nothing');
+  });
+
+  testWidgets('the plan cards are inert while the checkout request is in flight', (tester) async {
+    final usage = _Usage(_subscription());
+    final gate = Completer<void>();
+    final checkout = _Checkout([PaywallCheckoutOutcome.cancelled], gate: gate);
+    await _open(tester, usage, checkout);
+
+    await _chooseMonthlyCard(tester);
+    expect(_terms(tester), '7 days free, then US\$29.99/month');
+
+    // Press the CTA: the request captures the monthly price and stays pending, so the
+    // paywall is still on screen while the session is being created.
+    await tester.tap(find.byKey(const Key('trial_paywall_cta')));
+    await tester.pump();
+
+    // Changing the selection in that window used to redraw the terms for the other plan
+    // while the captured plan's cart opened. The cards must be inert until it settles.
+    await tester.tap(find.byKey(const Key('trial_paywall_yearly')), warnIfMissed: false);
+    await tester.pump();
+    expect(_terms(tester), '7 days free, then US\$29.99/month', reason: 'the selection is frozen during the handoff');
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(checkout.opened, [_offer.monthly], reason: 'the cart is the plan the terms showed');
   });
 
   testWidgets('a completed or failed yearly checkout offers nothing', (tester) async {

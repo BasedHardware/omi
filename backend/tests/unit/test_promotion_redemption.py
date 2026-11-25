@@ -229,12 +229,43 @@ def test_redemption_preserves_conflicting_existing_order_provenance():
 
     assert result['status'] == 'applied'
     metadata = env.sub_modify.call_args.kwargs['metadata']
-    assert metadata['shopify_order_id'] == original['shopify_order_id']
-    assert metadata['bundle_promotion_code_id'] == 'promo_original'
-    assert metadata['bundle_redemption_role'] == 'unknown'
+    assert metadata == original
     assert 'uid' not in metadata
     assert 'sub_type' not in metadata
     assert env.sub_modify.call_args_list[0].kwargs['metadata']['redeemed_promotion_code_id'] == 'promo_1'
+    assert subscription['metadata'] == {'uid': 'uid_1', 'sub_type': 'unlimited', **original}
+
+
+@pytest.mark.parametrize('line', [None, '67890', 'invalid'])
+def test_direct_redemption_optional_line_propagation(line):
+    metadata = {k: v for k, v in ISSUANCE.items() if k != 'bundle_order_line_item_id'}
+    if line is not None:
+        metadata['bundle_order_line_item_id'] = line
+    with _Env(promos=[_promo(metadata=metadata)]) as env:
+        result = redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
+    assert result['status'] == 'applied'
+    expected = {} if line == 'invalid' else {**metadata, 'bundle_promotion_code_id': 'promo_1'}
+    assert env.claim.call_args.kwargs['attribution'] == expected
+    assert env.sub_modify.call_count == (2 if expected else 1)
+    if expected:
+        assert env.sub_modify.call_args.kwargs['metadata'] == expected
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_matching_partial_coupon_changes_only_optional_attribution_write(monkeypatch, enabled):
+    monkeypatch.setenv('CONVERSION_BUNDLE_ATTRIBUTION_ENABLED', 'on' if enabled else 'off')
+    promo = _promo(metadata=ISSUANCE, coupon={'id': 'coupon_full', 'metadata': {'attribution_schema': '1'}})
+    with _Env(promos=[promo]) as env:
+        result = redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
+    assert result['status'] == 'applied'
+    assert env.claim.call_args.kwargs['attribution'] == (ATTRIBUTION if enabled else {})
+    assert env.sub_modify.call_count == (2 if enabled else 1)
+    assert env.sub_modify.call_args_list[0].kwargs == {
+        'discounts': [{'coupon': 'coupon_full'}],
+        'metadata': {'redeemed_promotion_code_id': 'promo_1'},
+    }
+    assert env.promo_modify.call_count == 1
+    env.release.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -297,3 +328,20 @@ def test_optional_attribution_write_failure_does_not_undo_code_benefit(failure):
     env.release.assert_not_called()
     assert env.promo_modify.call_count == 1
     assert env.promo_modify.call_args.kwargs['active'] is False
+
+
+def test_a_prepaid_plan_refuses_another_code_and_the_code_is_not_consumed():
+    # A "once" prepaid plan after its first invoice: active, no discount left, the redeem marker set.
+    prepaid = _subscription(
+        price={'id': 'price_month', 'product': 'prod_unlimited', 'currency': 'usd', 'unit_amount': 2999},
+        status='active',
+        metadata={'uid': 'uid_1', 'prepaid_code_redemption': '1'},
+        cancel_at=1_900_000_000,
+    )
+    with _Env(subscription=prepaid) as env:
+        with pytest.raises(RedemptionError) as error:
+            redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
+    assert error.value.status_code == 409
+    env.claim.assert_not_called()
+    env.promo_modify.assert_not_called()
+    env.sub_modify.assert_not_called()

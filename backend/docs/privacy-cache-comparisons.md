@@ -27,7 +27,7 @@ same evidence as labels for every completed comparison, with `family` and
 
 | Field | Closed values / meaning |
 | --- | --- |
-| `candidate_source` | `ttl_hit`, `token_hit` (Redis), `session_hit`, `fresh_read`, `unknown` |
+| `candidate_source` | `ttl_hit`, `token_hit` (Redis), `session_hit`, `owner_hit`, `fresh_read`, `unknown` |
 | `cache_age` | `lt_1s`, `1_10s`, `10_30s`, `30_60s`, `expired`, `unknown`; age of an examined TTL entry or reused token/session entry |
 | `token_versions` | `same`, `changed`, `unavailable`, `unknown`; live versus candidate token/server-revision observations |
 | `generation_versions` | Same closed relations, for the corresponding generation observations |

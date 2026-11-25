@@ -52,9 +52,10 @@ class _FCMNotificationService with WidgetsBindingObserver implements Notificatio
     readToken: _firebaseMessaging.getToken,
     readTimeZone: getTimeZone,
     requiresApns: Platform.isIOS,
-    persist: (token, zone, owner) async {
+    persist: (token, zone, owner, canLogDiagnostic) async {
       bool current() => AuthService.instance.isSessionSnapshotCurrent(owner);
-      final accepted = await saveFcmTokenServer(token: token, timeZone: zone, canSend: current);
+      final accepted =
+          await saveFcmTokenServer(token: token, timeZone: zone, canSend: current, canLogDiagnostic: canLogDiagnostic);
       if (!accepted || !current()) return false;
       unawaited(Future<void>.sync(() async {
         try {

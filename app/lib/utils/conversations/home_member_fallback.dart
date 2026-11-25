@@ -40,6 +40,9 @@ Map<String, List<ServerConversation>> acknowledgeLoadedHomeMembers(
 /// row ordinary; only completed, otherwise empty captures await speech here.
 bool awaitingHomeTranscript(ServerConversation c) =>
     c.status == ConversationStatus.completed &&
+    // A list payload can omit all content for a settled no-speech result.
+    // Never reinterpret the server's terminal/notes step as missing speech.
+    !const {'ready', 'noise', 'failed', 'writing_notes'}.contains(c.homeStep) &&
     !c.isHiddenFromDefaultList &&
     !c.isLocked &&
     !c.summaryRetryable &&

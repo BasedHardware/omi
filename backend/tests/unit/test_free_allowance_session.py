@@ -234,6 +234,20 @@ def test_live_reservation_uses_billing_exposure_instead_of_socket_age(policy):
     assert ledger.reserve.call_args.kwargs['elapsed_seconds'] == 2.75
 
 
+def test_unattributable_call_is_unbound_not_an_allowance_refusal(policy):
+    decisions = Mock()
+    monkey = pytest.MonkeyPatch()
+    try:
+        monkey.setattr(watch, 'LEASE_DECISIONS', decisions)
+        monkey.setattr(watch, 'entitlement', Mock(return_value=('identity_unavailable', None)))
+        watch.observe_unbound(None, 'prerecorded', 'soniox', 4)
+        decisions.labels.assert_called_once_with('prerecorded', 'identity_unavailable')
+        watch.emit.assert_called_once_with('prerecorded', 'soniox', 'unbound', 4)
+        ledger.reserve.assert_not_called()
+    finally:
+        monkey.undo()
+
+
 def test_unbound_free_provider_cannot_treat_a_snapshot_as_reservation_permission(policy):
     decisions = Mock()
     monkey = pytest.MonkeyPatch()
